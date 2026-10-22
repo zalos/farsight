@@ -6,7 +6,7 @@ import { basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildClosure } from './pack-preflight.mjs';
 
-const all = () => ({ validate: true, e2e: true, echo: true, sentinel: true, isolation: true });
+const all = () => ({ validate: true, e2e: true, echo: true, sentinel: true, isolation: true, recovery: true });
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -44,7 +44,7 @@ export function selectChecks(paths, { packageInputs, isolationInputs } = {}) {
     inputs = packageInputs ?? sentinelPackageInputs();
     isolation = isolationInputs ?? sentinelIsolationInputs();
   } catch { return all(); } // unreadable manifests: everything
-  const checks = { validate: false, e2e: false, echo: false, sentinel: false, isolation: false };
+  const checks = { validate: false, e2e: false, echo: false, sentinel: false, isolation: false, recovery: false };
   for (const path of paths) {
     // These Markdown files are shipped in the Echo tarball, so still check packaging.
     if (['docs/ECHO.md', 'packages/echo/README.md', 'scripts/pack-echo.mjs',
@@ -77,6 +77,8 @@ export function selectChecks(paths, { packageInputs, isolationInputs } = {}) {
       return all(); // includes build/config/dependencies, workflows and this selector
     }
   }
+  // The recovery smoke runs the coordinator over the same execution and store code as the isolation canaries.
+  checks.recovery = checks.isolation;
   return checks;
 }
 
@@ -110,7 +112,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, output);
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Affected checks\n\n${reason}.\n\n` +
-      Object.entries(checks).map(([name, run]) => `- ${{ echo: 'echo-package', sentinel: 'sentinel-package', isolation: 'sentinel-isolation' }[name] ?? name}: ${run ? 'run' : 'skip'}`).join('\n') +
+      Object.entries(checks).map(([name, run]) => `- ${{ echo: 'echo-package', sentinel: 'sentinel-package', isolation: 'sentinel-isolation', recovery: 'sentinel-recovery' }[name] ?? name}: ${run ? 'run' : 'skip'}`).join('\n') +
       '\n\nSecret scanning and PR commit conventions run independently.\n');
   }
 }

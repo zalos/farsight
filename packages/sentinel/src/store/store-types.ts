@@ -155,6 +155,50 @@ export interface AdmitSnapshotInput {
   idempotency?: IdempotencyRef;
 }
 
+export interface AdmitPlanInput {
+  runId: Id;
+  revision: Ordinal;
+  kind: 'bootstrap' | 'analysis';
+  /** The plan revision's own digest. */
+  digest: Digest;
+  /** The digest of revision - 1 of this run; null exactly for revision 1. */
+  previous: Digest | null;
+  /** The canonical JSON of the exact plan revision. */
+  plan: ArtifactId;
+  /** The pinned rule lock and effective policy: both for an analysis revision, neither for a bootstrap one. */
+  ruleLock: ArtifactId | null;
+  policy: ArtifactId | null;
+  /** The trusted execution profile the plan was made and is run under. */
+  profile: ArtifactId;
+  /** The admitted snapshot an analysis revision pins; null for a bootstrap revision. */
+  snapshotId: Id | null;
+  /** Unbound stages of this epoch holding exactly the receipts' artifacts, the plan linking each pinned one. */
+  stageIds: StageId[];
+  receipts: ObjectReceipt[];
+  idempotency?: IdempotencyRef;
+}
+
+export interface PlanRecord {
+  runId: Id;
+  revision: Ordinal;
+  kind: 'bootstrap' | 'analysis';
+  digest: Digest;
+  previous: Digest | null;
+  plan: ArtifactId;
+  ruleLock: ArtifactId | null;
+  policy: ArtifactId | null;
+  profile: ArtifactId;
+  snapshotId: Id | null;
+  sequence: Count;
+  admittedAt: Timestamp;
+}
+
+/** Artifacts accepted with an attempt's start (its invocation record and what it links), from one unbound stage. */
+export interface AttemptRecords {
+  stageId: StageId;
+  receipts: ObjectReceipt[];
+}
+
 export interface SnapshotRecord {
   snapshotId: Id;
   manifest: ArtifactId;
@@ -183,14 +227,33 @@ export interface EndAttemptInput {
   endedAt: Timestamp;
   /** The work's state afterwards: retry-eligible (`ready`) or terminal (`failed`). */
   workState: 'ready' | 'failed';
+  /**
+   * Why it ended, recorded in the final envelope (code, retryable) and, bounded, beside it (detail). The detail is
+   * safe structured context, at most 4 KiB as JSON; never an input's contents or a credential.
+   */
+  error?: AttemptError;
   /** The usage observed at the end; `canceled-after-spend` needs confirmed usage, here or from the start. */
   usage?: AttemptUsage;
   idempotency?: IdempotencyRef;
 }
 
+/** An ended attempt's recorded failure. */
+export interface AttemptError {
+  /** A catalog key (sentinel.<area>.<word>). */
+  code: string;
+  retryable: boolean;
+  /** An accepted artifact holding longer diagnostics, when there is one. */
+  diagnostics?: ArtifactId;
+  detail?: Record<string, unknown>;
+}
+
+/** A work revision's held or released state, set by the coordinator from the plan's dependency decisions. */
+export type WorkTransition = 'ready' | 'blocked' | 'disabled-by-policy';
+
 export const LEDGER_EVENT_KINDS = [
   'epoch-opened', 'run-created', 'run-state', 'work-created', 'attempt-started', 'attempt-ended',
-  'work-published', 'staging-registered', 'staging-aborted', 'report-pinned', 'snapshot-admitted',
+  'work-published', 'staging-registered', 'staging-aborted', 'report-pinned', 'snapshot-admitted', 'work-state',
+  'plan-admitted', 'run-plan-advanced',
 ] as const;
 export type LedgerEventKind = (typeof LEDGER_EVENT_KINDS)[number];
 
@@ -265,7 +328,7 @@ export interface OpenLedgerOptions {
 
 export type LedgerFailpoint =
   | 'backup:before' | 'backup:after-copy' | 'migrate:after-sql' | 'publish:before-commit' | 'staging:before-commit'
-  | 'snapshot:before-commit';
+  | 'snapshot:before-commit' | 'plan:before-commit';
 
 export interface MigrationReport {
   from: Count;

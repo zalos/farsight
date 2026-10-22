@@ -283,6 +283,8 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   const adapterAnswer = (id: Id): { digest: Digest } | { reasonCode: string } => {
     if (!profile.registry.ids.includes(id)) return { reasonCode: 'sentinel.plan.adapterNotRegistered' };
     const adapter = profile.registry.get(id);
+    // A bootstrap operation checks nothing: it is never a rule's adapter.
+    if (adapter.kind === 'operation') return { reasonCode: 'sentinel.plan.adapterNotRegistered' };
     if (adapter.kind === 'external') {
       const entries = lock.tools.filter(t => t.adapterId === id);
       if (entries.length === 0) return { reasonCode: 'sentinel.plan.adapterNotLocked' };

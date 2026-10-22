@@ -84,8 +84,17 @@ process.stdin.on('data', b => {
   buffered += b.toString('utf8');
   for (let nl; (nl = buffered.indexOf('\n')) >= 0;) { lines.push(JSON.parse(buffered.slice(0, nl))); buffered = buffered.slice(nl + 1); wake?.(); }
 });
+// The worker contract: a worker whose stdin ends before its start has lost its coordinator and exits, having read
+// and written nothing (only the deliberate outlier, linger-ok, breaks it).
+let started = false;
+process.stdin.on('end', () => { if (!started && behavior !== 'linger-ok') process.exit(0); });
+process.stdout.on('error', () => { if (!started && behavior !== 'linger-ok') process.exit(0); });
 const next = async () => { while (!lines.length) await new Promise(r => { wake = r; }); return lines.shift(); };
-const awaitStart = async () => { const w = await next(); if (w.type !== 'welcome') process.exit(9); return next(); };
+const awaitStart = async () => { const w = await next(); if (w.type !== 'welcome') process.exit(9); const s = await next(); started = true; return s; };
+
+// A worker that outlives a dead coordinator: a timer keeps it alive after its stdin closes.
+// It also ignores the broken pipe it meets once the coordinator is gone, so only recovery can stop it.
+if (behavior === 'linger-ok') { setTimeout(() => {}, 30_000); process.stdout.on('error', () => {}); }
 
 switch (behavior) {
   case 'no-hello': await sleep(60_000); break;
@@ -106,6 +115,28 @@ switch (behavior) {
     const start = await awaitStart();
     switch (behavior) {
       case 'ok': result(start, honestWork(start)); break;
+      case 'fail-once': {
+        // Fails its first attempt (a retryable exit), then succeeds; the marker is a synthetic scratch file.
+        if (!existsSync(argument)) { writeFileSync(argument, 'attempted'); process.exit(5); }
+        result(start, honestWork(start)); break;
+      }
+      case 'covering-ok': {
+        // Reports full coverage of the checks and scopes its start assigned, with its coverage evidence produced.
+        const a = honestWork(start);
+        result(start, a, { granularity: argument === 'coarse' ? 'aggregate' : 'per-file-per-rule', scannedSet: start.scopes ?? [], coveredChecks: (start.checks ?? []).map(checkId => ({ checkId, coverage: a[0].id })) }); break;
+      }
+      case 'skip-scope': {
+        const a = honestWork(start);
+        result(start, a, { granularity: 'per-file-per-rule', scannedSet: [], skipped: (start.scopes ?? []).map(scopeId => ({ scopeId, reasonCode: 'sentinel.coverage.unsupported' })),
+          coveredChecks: (start.checks ?? []).map(checkId => ({ checkId, coverage: a[0].id })) }); break;
+      }
+      case 'big-artifact': {
+        // One artifact larger than the object store's 16 MiB decoded cap: verified here, refused when stored.
+        const bytes = Buffer.alloc(17 * 1024 * 1024, 3);
+        result(start, [writeArtifact(bytes)]); break;
+      }
+      case 'linger-ok': result(start, honestWork(start)); await sleep(20); process.exit(0);
+      case 'slow-ok': await sleep(1500); result(start, honestWork(start)); break;
       case 'stderr-some': process.stderr.write('d'.repeat(2000)); result(start, honestWork(start)); break;
       case 'stderr-flood': process.stderr.write('E'.repeat(1024 * 1024)); result(start, honestWork(start)); break;
       case 'progress-then-ok': send({ protocol: P, type: 'progress', ...bound(start), completed: 1, planned: 2 }); result(start, honestWork(start)); break;

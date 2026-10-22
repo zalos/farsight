@@ -8,22 +8,36 @@
 // input fingerprint, and every artifact it lists is re-read and hashed from the output folder, with nothing
 // unlisted, linked or oversized there.
 //
+// Authorization, never time, in two layers. A built-in worker process starts in the launch gate (launch-gate.ts),
+// which loads the adapter only after reading its authorization line; the supervisor writes that line only once the
+// worker's identity with its pid is durable in the worker journal. So a process launched by a coordinator that died
+// before recording its pid never runs adapter code, however late it execs. Then the adapter is authorized for an
+// attempt only by its start message, which answers a hello read only after the attempt is durable in the ledger
+// (onWorker); a worker whose coordinator dies before then reads end of stream and, by the worker contract
+// (StartMessage), exits. Even a worker that broke that contract holds no binding: the ledger has no attempt for it
+// to publish under, and the new owner's epoch fences any it had.
+//
 // Ending: a result, an acknowledged cancel, the deadline, a cancel the worker ignores past its grace, a protocol
 // or framing error, an output or stdout budget, or the worker exiting. Every path stops the worker, removes its
 // container by exact identity and confirms the removal; the owner's close path does the same synchronously.
 import { createHash, randomUUID } from 'node:crypto';
-import { chmodSync, closeSync, constants, copyFileSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, realpathSync, rmSync } from 'node:fs';
+import { chmodSync, closeSync, constants, copyFileSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ArtifactId, Digest, Id, WorkRef } from '../contracts/common.js';
+import type { ArtifactId, Digest, Id, ScopeId, WorkRef } from '../contracts/common.js';
 import type { AttemptWorker } from '../contracts/attempt.js';
 import type { ProtocolMessage, ResultMessage } from '../contracts/protocol.js';
+import type { ResourcePolicy } from '../contracts/work.js';
+import type { WorkerJournal, WorkerIdentity } from './recovery.js';
+import { kernelStartOf, launchAuthorization, tokenArgument } from './recovery.js';
+import { launchGateUrl } from './assets.js';
+import { syncDirectory } from './durability.js';
 import type { OwnedResource } from '../store/owner.js';
 import { canonicalJsonBytes } from '../store/objects.js';
-import { ExecutionError, type ExecutionErrorCode } from './errors.js';
+import { ExecutionError, isExecutionError, type ExecutionErrorCode } from './errors.js';
 import { ContainerBackend, containerUser, intentDetail, ownerNonce, type BackendFacts, type CleanupState, type ImagePin } from './isolation.js';
 import { BoundedCapture, spawnWorker, type WorkerProcess } from './processes.js';
 import { encodeFrame, FrameDecoder, WorkerSession } from './protocol.js';
-import { moduleDigestOf, type AdapterRegistry, type TrustedAdapter } from './registry.js';
+import { effectiveLimits, moduleDigestOf, type AdapterRegistry, type TrustedAdapter } from './registry.js';
 
 /** The part of the store owner the supervisor needs; a StoreOwner satisfies it. */
 export interface SupervisorOwner {
@@ -51,6 +65,22 @@ export interface AttemptRequest {
   /** Required for external adapters; built-in workers run without one. */
   backend?: ContainerBackend;
   signal?: AbortSignal;
+  /**
+   * Called once the worker exists (container created and verified, or child spawned) and before it may do any work.
+   * The coordinator records the attempt in the ledger here, so the ledger's fence exists before the worker acts.
+   * Throwing stops and removes the worker; the error is rethrown.
+   */
+  onWorker?: (worker: AttemptWorker, invocation: { digest: Digest; record: InvocationRecord }) => void | Promise<void>;
+  /** The plan's checks and scopes this attempt covers; carried by the start and recorded in the invocation. */
+  assignment?: { checks: Id[]; scopes: ScopeId[] };
+  /** A durable journal of container intents (recovery, PR 08): recorded before a create, settled once removed. */
+  intents?: IntentJournal;
+  /** A durable journal of built-in worker identities: recorded after spawn and before the worker acts. */
+  workers?: WorkerJournal;
+  /** The work's own resource policy; it lowers the adapter's limits (never raises them) for this attempt. */
+  resources?: ResourcePolicy;
+  /** Test seam: called with the worker's durable identity in place, just before and just after it is started. */
+  hooks?: { at?(boundary: 'before-spawn' | 'after-spawn'): void };
 }
 
 export type OutcomeState = 'succeeded' | 'failed' | 'canceled' | 'timed-out';
@@ -88,6 +118,16 @@ export interface WorkerOutcome {
   workDir: string;
 }
 
+/** A container create's whole intent: name, owner nonce and the ownership labels (see isolation.intentDetail). */
+export type ContainerIntent = ReturnType<typeof intentDetail>;
+
+export interface IntentJournal {
+  /** Durable before it returns: the create may happen right after. */
+  record(intent: ContainerIntent): void;
+  /** The container is confirmed removed or was never made; the intent may be forgotten. */
+  settle(intent: ContainerIntent): void;
+}
+
 /** Everything that decided this invocation. Hashed; its digest labels the container. No credential, ever. */
 export interface InvocationRecord {
   format: 'sentinel-invocation/draft-1';
@@ -104,6 +144,7 @@ export interface InvocationRecord {
   inputFingerprint: Digest;
   inputs: ArtifactId[];
   deadlineAt: string;
+  assignment?: { checks: Id[]; scopes: ScopeId[] };
 }
 
 const sha256 = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
@@ -122,6 +163,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   const { owner, registry } = request;
   owner.assertHeld();
   const adapter = registry.get(request.adapterId);
+  // A bootstrap operation is the coordinator's own work over the store; nothing is started for it.
+  if (adapter.kind === 'operation') throw new ExecutionError('sentinel.execution.adapterInvalid', { reason: 'an operation is not a worker' });
   if (adapter.kind === 'external' && !request.backend) {
     // No backend means no isolation, and there is no host fallback.
     throw new ExecutionError('sentinel.execution.isolationUnavailable', { reason: 'no container backend' });
@@ -135,7 +178,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   for (const input of request.inputs) copyVerified(input, join(inputDir, hexOf(input.id)));
   sealInputs(inputDir);
 
-  const limits = adapter.limits;
+  const limits = effectiveLimits(adapter.limits, request.resources);
+  const token = randomUUID();
   const deadlineAt = new Date(Date.now() + limits.timeoutMs).toISOString();
   const inputFingerprint = inputFingerprintOf(inputs);
   let image: ImagePin | undefined;
@@ -143,7 +187,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   if (adapter.kind === 'built-in' && moduleDigestOf(adapter.module) !== adapter.moduleDigest) {
     throw new ExecutionError('sentinel.execution.adapterIdentityMismatch', { adapter: adapter.id });
   }
-  const argv = adapter.kind === 'external' ? [...adapter.command] : [process.execPath, adapter.module, inputDir, outputDir];
+  const builtInArgs = adapter.kind === 'built-in' ? [process.execPath, '--import', launchGateUrl(), adapter.module, inputDir, outputDir, tokenArgument(token)] : [];
+  const argv = adapter.kind === 'external' ? [...adapter.command] : builtInArgs;
   const environmentNames = adapter.kind === 'external'
     ? ['HOME', 'SENTINEL_INPUT', 'SENTINEL_OUTPUT', 'SENTINEL_ADAPTER_ID', 'SENTINEL_ADAPTER_DIGEST']
     : ['SENTINEL_INPUT', 'SENTINEL_OUTPUT', 'SENTINEL_ADAPTER_ID', 'SENTINEL_ADAPTER_DIGEST'];
@@ -152,11 +197,12 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     coordinatorEpoch: owner.epoch, adapter: { id: adapter.id, version: adapter.version, digest: adapter.digest },
     isolation: adapter.isolation, ...(image ? { image: { reference: image.reference, id: image.id, architecture: image.architecture } } : {}),
     argv, environmentNames, limits, inputFingerprint, inputs: [...inputs].sort(), deadlineAt,
+    ...(request.assignment ? { assignment: { checks: [...request.assignment.checks], scopes: [...request.assignment.scopes] } } : {}),
   };
   const invocationDigest = sha256(canonicalJsonBytes(record));
   const session = new WorkerSession({
     attemptId: request.attemptId, work: request.work, coordinatorEpoch: owner.epoch, adapterId: adapter.id,
-    adapterDigest: adapter.digest, inputFingerprint, inputs, deadlineAt,
+    adapterDigest: adapter.digest, inputFingerprint, inputs, deadlineAt, ...(request.assignment ? { assignment: request.assignment } : {}),
   });
   const outcome: WorkerOutcome = {
     state: 'failed', attemptId: request.attemptId, work: { ...request.work }, coordinatorEpoch: owner.epoch,
@@ -174,6 +220,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   const labels = { owner: nonce, store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch, invocation: invocationDigest };
   let containerId: string | undefined;
   let proc: WorkerProcess;
+  let identity: WorkerIdentity | undefined;
   const guard: { ownerClosed: boolean; createPending: boolean; id?: string; proc?: WorkerProcess } = { ownerClosed: false, createPending: false };
   const backend = request.backend;
   const unregister = owner.registerResource({
@@ -195,7 +242,10 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   });
   if (adapter.kind === 'external') {
     const b = backend!;
+    const intent = intentDetail({ labels });
     try {
+      request.intents?.record(intent);
+      request.hooks?.at?.('before-spawn');
       guard.createPending = true;
       containerId = await b.create({
         image: image!, command: adapter.command, limits, inputDir, outputDir, adapter: { id: adapter.id, digest: adapter.digest }, user: containerUser(), labels,
@@ -213,21 +263,57 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
         throw new ExecutionError(gone === 'cleanup-failed' ? 'sentinel.execution.cleanupFailed' : 'sentinel.execution.isolationMismatch',
           gone === 'cleanup-failed' ? { container: containerId, owner: nonce } : { setting: 'mount identity' });
       }
+      outcome.container = { id: containerId, image: image! };
+      outcome.worker = { kind: 'owned-container', containerId, ownershipLabels: { store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch } };
+      request.hooks?.at?.('after-spawn');
+      await request.onWorker?.(outcome.worker, outcome.invocation);
     } catch (error) {
+      // A container that exists is removed before the error leaves; its intent is settled only when that is confirmed.
+      if (containerId) {
+        const gone = await b.remove(containerId, labels).catch(() => 'cleanup-failed' as const);
+        if (gone !== 'cleanup-failed') request.intents?.settle(intent);
+      } else if (!isExecutionError(error, 'sentinel.execution.reconciliationPending') && !isExecutionError(error, 'sentinel.execution.cleanupFailed')) {
+        // The create was refused or reconciled (found and removed); nothing remains under this intent.
+        if (isExecutionError(error, 'sentinel.execution.commandFailed') || isExecutionError(error, 'sentinel.execution.canceled')) request.intents?.settle(intent);
+      }
       unregister();
       throw error;
     }
     const id = containerId;
-    outcome.container = { id, image: image! };
-    outcome.worker = { kind: 'owned-container', containerId: id, ownershipLabels: { store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch } };
     proc = b.startAttached(id);
   } else {
+    // Durable before the process exists: its random token, so a worker started just before a crash can be found by
+    // the token in its kernel argument list even though its process id was never recorded.
+    identity = { attempt: request.attemptId, store: owner.storeId, epoch: owner.epoch, pid: 0, token, kernelStart: '' };
+    request.workers?.record(identity);
+    request.hooks?.at?.('before-spawn');
     // A built-in worker inherits nothing: its environment is exactly these four names.
-    proc = spawnWorker(process.execPath, [adapter.module, inputDir, outputDir], { cwd: workDir, env: {
+    // The launch gate runs first and loads the adapter only once it reads its authorization (launch-gate.ts).
+    proc = spawnWorker(process.execPath, builtInArgs.slice(1), { cwd: workDir, env: {
       SENTINEL_INPUT: inputDir, SENTINEL_OUTPUT: outputDir, SENTINEL_ADAPTER_ID: adapter.id, SENTINEL_ADAPTER_DIGEST: adapter.digest,
     } });
+    // The owner's guard holds the process from the instant it exists, so closing the store at any later moment
+    // (including from the callback below) stops exactly this process.
+    guard.proc = proc;
     const pid = proc.child.pid;
     if (pid) outcome.worker = { kind: 'owned-child', pid, processStartedAt: proc.startedAt.toISOString() };
+    try {
+      if (!outcome.worker || !pid) throw new ExecutionError('sentinel.execution.workerExited', { reason: 'no process id' });
+      // Now with its process id and, on Linux, its exact kernel start; still before the attempt is recorded.
+      identity = { attempt: request.attemptId, store: owner.storeId, epoch: owner.epoch, pid, token, kernelStart: kernelStartOf(pid) ?? '' };
+      request.workers?.record(identity);
+      // Durable with its pid, so recovery can find and verify it: only now may it load the adapter.
+      proc.child.stdin.write(launchAuthorization(token));
+      request.hooks?.at?.('after-spawn');
+      await request.onWorker?.(outcome.worker, outcome.invocation);
+      if (guard.ownerClosed) throw new ExecutionError('sentinel.execution.canceled', { reason: 'the store closed while the attempt was being recorded' });
+    } catch (error) {
+      proc.kill();
+      await proc.exited;
+      if (identity) request.workers?.settle(identity);
+      unregister();
+      throw error;
+    }
   }
   guard.proc = proc;
 
@@ -240,12 +326,15 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     proc.kill();
     const exit = await proc.exited;
     outcome.exit = { exitCode: exit.exitCode, exitSignal: exit.exitSignal };
+    // Reaped: the pid may now be anyone's, and the worker has no identity left to verify.
+    if (identity) request.workers?.settle(identity);
     if (containerId) {
       const backend = request.backend!;
       const state = await backend.state(containerId, labels).catch(() => null);
       if (state) outcome.container!.state = { exitCode: state.exitCode, oomKilled: state.oomKilled };
       if (state?.oomKilled && outcome.state === 'failed') setFailure(outcome, 'sentinel.execution.resourceExceeded', {}, true);
       outcome.cleanup = await backend.remove(containerId, labels).catch(() => 'cleanup-failed' as const);
+      if (outcome.cleanup !== 'cleanup-failed') request.intents?.settle(intentDetail({ labels }));
     }
     unregister();
   }
@@ -270,6 +359,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   if (outcome.state !== 'succeeded') delete outcome.result;
   return outcome;
 }
+
 
 function setFailure(outcome: WorkerOutcome, code: ExecutionErrorCode, detail: Record<string, unknown>, override = false): void {
   if (outcome.code && !override) return;
@@ -456,7 +546,7 @@ export function verifyOutputs(dir: string, result: ResultMessage, limit: number)
     if (digestFile(path) !== a.id) mismatch('output digest differs');
     outputs.push({ id: a.id, mediaType: a.mediaType, bytes: a.bytes, path });
   }
-  try { const fd = openSync(dir, constants.O_RDONLY); try { fsyncSync(fd); } finally { closeSync(fd); } } catch { /* best effort */ }
+  syncDirectory(dir);
   return outputs;
 }
 

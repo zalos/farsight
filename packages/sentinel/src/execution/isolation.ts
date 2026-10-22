@@ -167,7 +167,7 @@ export class ContainerBackend {
    * configuration. Refuses a remote endpoint, an unqualified combination or missing resource controllers.
    * `runner` is the package-internal test seam (see DockerRunner); production never passes one.
    */
-  static async connect(options: { privateDir: string; policy?: IsolationPolicy; docker?: string; signal?: AbortSignal; runner?: DockerRunner }): Promise<ContainerBackend> {
+  static async connect(options: { privateDir: string; policy?: IsolationPolicy; docker?: string; signal?: AbortSignal; runner?: DockerRunner; wrapRunner?: (runner: DockerRunner) => DockerRunner }): Promise<ContainerBackend> {
     let runner = options.runner;
     if (!runner) {
       const docker = options.docker ?? locateDocker();
@@ -175,6 +175,8 @@ export class ContainerBackend {
       const config = mkdtempSync(join(options.privateDir, 'docker-config-'));
       runner = clientRunner(docker, { PATH: SAFE_PATH, DOCKER_HOST: endpoint, DOCKER_CONFIG: config });
     }
+    // Package-internal fault injection around the real client (lost replies, delayed commits); never in production.
+    if (options.wrapRunner) runner = options.wrapRunner(runner);
     const version = await runner.run(['version', '--format', '{{json .Server}}'], options.signal);
     if (!succeeded(version)) unavailable('docker server unreachable');
     const info = await runner.run(['info', '--format', '{{json .}}'], options.signal);
@@ -273,6 +275,27 @@ export class ContainerBackend {
     }
     if (uncertain.size) throw new ExecutionError('sentinel.execution.cleanupFailed', { ...intent, container: [...uncertain].join(', ') });
     if (!removed) throw new ExecutionError('sentinel.execution.reconciliationPending', intent);
+  }
+
+  /**
+   * Recovery's question about a journaled intent from an earlier epoch: is its container there, and if so remove it
+   * (by the generated name and by the labels, exact ID only). `not-found` is not proof of absence; the caller keeps
+   * the intent.
+   */
+  async settleIntent(intent: { name: string; owner: string; store: Id; attempt: Id; epoch: Id; invocation: string }, signal?: AbortSignal): Promise<'removed' | 'not-found' | 'uncertain'> {
+    const labels = { owner: intent.owner, store: intent.store, attempt: intent.attempt, epoch: intent.epoch, invocation: intent.invocation };
+    let removed = false;
+    const byName = await this.#runner.run(['inspect', '--type', 'container', '--format', '{{json .}}', intent.name], signal);
+    if (succeeded(byName)) {
+      let c: { Id?: string } | undefined;
+      try { c = JSON.parse(byName.stdout.toString('utf8')); } catch { return 'uncertain'; }
+      if (!c || !labelsMatch(c as never, null, labels)) return 'uncertain';
+      if (await this.remove(String(c.Id), labels, signal) !== 'removed-owned-container') return 'uncertain';
+      removed = true;
+    } else if (!absentContainer(byName)) return 'uncertain';
+    const swept = await this.reconcileOwned(labels, signal);
+    if (swept.uncertain.length) return 'uncertain';
+    return removed || swept.removed.length ? 'removed' : 'not-found';
   }
 
   /** Start the created container attached: stdin carries coordinator frames, stdout worker frames, stderr diagnostics. */
@@ -484,7 +507,7 @@ export function validateContainer(c: Record<string, unknown>, spec: ContainerSpe
   if (host.IpcMode !== 'none') fail('ipc');
   if (host.PidMode || host.UTSMode || host.UsernsMode === 'host' || host.CgroupnsMode === 'host') fail('namespaces');
   if (host.Memory !== l.memoryBytes || host.MemorySwap !== l.memoryBytes) fail('memory');
-  if (host.NanoCpus !== l.cpus * 1_000_000_000) fail('cpus');
+  if (host.NanoCpus !== Math.round(l.cpus * 1_000_000_000)) fail('cpus');
   if (host.PidsLimit !== l.pids) fail('pids');
   if ((host.Devices ?? []).length || (host.DeviceRequests ?? []).length) fail('devices');
   if (Object.keys(host.PortBindings ?? {}).length || host.PublishAllPorts === true) fail('ports');

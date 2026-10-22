@@ -309,10 +309,101 @@ ${APPEND_ONLY('snapshots', 'DELETE')}
 ${APPEND_ONLY('snapshots', 'UPDATE')}
 `;
 
+// Durable execution (PR 08): a reason beside a held work state, a bounded error detail beside an ended attempt,
+// and the event log rebuilt (as in V2) to admit the work-state event.
+const EVENT_KINDS_V3 = `${EVENT_KINDS_V2},'work-state'`;
+const V3 = `
+ALTER TABLE work_units ADD COLUMN state_reason TEXT
+  CHECK (state_reason IS NULL OR (length(state_reason) BETWEEN 1 AND 128));
+ALTER TABLE attempts ADD COLUMN error_detail TEXT
+  CHECK (error_detail IS NULL OR (json_valid(error_detail) AND length(CAST(error_detail AS BLOB)) <= 4096));
+CREATE TABLE events_next (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL CHECK (kind IN (${EVENT_KINDS_V3})),
+  run_id TEXT REFERENCES runs(id),
+  work_id TEXT,
+  work_revision INTEGER,
+  coordinator_epoch TEXT NOT NULL REFERENCES epochs(epoch),
+  at TEXT NOT NULL,
+  payload TEXT NOT NULL CHECK (json_valid(payload) AND length(CAST(payload AS BLOB)) <= 16384),
+  FOREIGN KEY (work_id, work_revision) REFERENCES work_units(id, revision),
+  CHECK ((work_id IS NULL) = (work_revision IS NULL))
+) STRICT;
+INSERT INTO events_next (sequence, kind, run_id, work_id, work_revision, coordinator_epoch, at, payload)
+  SELECT sequence, kind, run_id, work_id, work_revision, coordinator_epoch, at, payload FROM events ORDER BY sequence;
+DROP TABLE events;
+ALTER TABLE events_next RENAME TO events;
+CREATE INDEX events_by_run ON events(run_id, sequence);
+${APPEND_ONLY('events', 'DELETE')}
+${APPEND_ONLY('events', 'UPDATE')}
+`;
+
+// Plan admission (PR 08 with PR 06): an admitted plan revision per run, with its plan, rule lock, effective policy
+// and execution profile artifacts as roots; a run's current plan revision may advance one admitted revision at a
+// time (its creation envelope stays as recorded); and the event log rebuilt (as in V2) for the two new events.
+const EVENT_KINDS_V4 = `${EVENT_KINDS_V3},'plan-admitted','run-plan-advanced'`;
+const V4 = `
+CREATE TABLE events_next (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL CHECK (kind IN (${EVENT_KINDS_V4})),
+  run_id TEXT REFERENCES runs(id),
+  work_id TEXT,
+  work_revision INTEGER,
+  coordinator_epoch TEXT NOT NULL REFERENCES epochs(epoch),
+  at TEXT NOT NULL,
+  payload TEXT NOT NULL CHECK (json_valid(payload) AND length(CAST(payload AS BLOB)) <= 16384),
+  FOREIGN KEY (work_id, work_revision) REFERENCES work_units(id, revision),
+  CHECK ((work_id IS NULL) = (work_revision IS NULL))
+) STRICT;
+INSERT INTO events_next (sequence, kind, run_id, work_id, work_revision, coordinator_epoch, at, payload)
+  SELECT sequence, kind, run_id, work_id, work_revision, coordinator_epoch, at, payload FROM events ORDER BY sequence;
+DROP TABLE events;
+ALTER TABLE events_next RENAME TO events;
+CREATE INDEX events_by_run ON events(run_id, sequence);
+${APPEND_ONLY('events', 'DELETE')}
+${APPEND_ONLY('events', 'UPDATE')}
+
+-- One admitted plan revision. The run need not exist yet (a run is created once its snapshot is captured); the
+-- revision chain is exact: revision 1 has no predecessor, every later one names the digest of the one before.
+CREATE TABLE plans (
+  run_id TEXT NOT NULL,
+  revision INTEGER NOT NULL CHECK (revision >= 1),
+  kind TEXT NOT NULL CHECK (kind IN ('bootstrap','analysis')),
+  digest TEXT NOT NULL CHECK (${DIGEST('digest')}),
+  previous TEXT CHECK (previous IS NULL OR (${DIGEST('previous')})),
+  plan_id TEXT NOT NULL REFERENCES artifacts(id),
+  rule_lock_id TEXT REFERENCES artifacts(id),
+  policy_id TEXT REFERENCES artifacts(id),
+  profile_id TEXT NOT NULL REFERENCES artifacts(id),
+  snapshot_id TEXT REFERENCES snapshots(id),
+  coordinator_epoch TEXT NOT NULL REFERENCES epochs(epoch),
+  sequence INTEGER NOT NULL UNIQUE REFERENCES events(sequence),
+  admitted_at TEXT NOT NULL,
+  PRIMARY KEY (run_id, revision),
+  UNIQUE (run_id, digest),
+  CHECK ((revision = 1) = (previous IS NULL)),
+  CHECK ((kind = 'bootstrap') = (snapshot_id IS NULL)),
+  CHECK ((kind = 'bootstrap') = (rule_lock_id IS NULL AND policy_id IS NULL))
+) STRICT;
+${APPEND_ONLY('plans', 'DELETE')}
+${APPEND_ONLY('plans', 'UPDATE')}
+
+-- The run's plan revision moves forward only, one admitted revision at a time; everything else stays immutable.
+DROP TRIGGER runs_identity;
+CREATE TRIGGER runs_identity BEFORE UPDATE OF id, parent_id, snapshot_id, coordinator_epoch, envelope, created_at ON runs
+  BEGIN SELECT RAISE(ABORT, 'sentinel.store.appendOnly: runs identity'); END;
+CREATE TRIGGER runs_plan_advance BEFORE UPDATE OF plan_revision ON runs
+  WHEN NEW.plan_revision <> OLD.plan_revision + 1
+    OR NOT EXISTS (SELECT 1 FROM plans WHERE run_id = NEW.id AND revision = NEW.plan_revision)
+  BEGIN SELECT RAISE(ABORT, 'sentinel.store.appendOnly: a run advances one admitted plan revision at a time'); END;
+`;
+
 /** The shipped migrations, in order. Never edit a released step: add the next number. */
 export const LEDGER_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: 'foundation', sql: V1 },
   { version: 2, name: 'snapshot-admission', sql: V2 },
+  { version: 3, name: 'durable-execution', sql: V3 },
+  { version: 4, name: 'plan-admission', sql: V4 },
 ]);
 
 export const migrationChecksum = (m: Migration): string =>

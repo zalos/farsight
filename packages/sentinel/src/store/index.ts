@@ -68,7 +68,8 @@ export interface OpenStoreOptions {
 export type StoreLedger = Pick<Ledger,
   | 'createRun' | 'setRunState' | 'createWork' | 'startAttempt' | 'endAttempt' | 'registerStaging' | 'abortStaging'
   | 'publish' | 'pinReport' | 'readEvents' | 'getWork' | 'getAttempt' | 'getPublication' | 'objectsOf'
-  | 'currentSequence' | 'admitSnapshot' | 'getSnapshot'>;
+  | 'currentSequence' | 'admitSnapshot' | 'getSnapshot' | 'admitPlan' | 'getPlan' | 'latestPlan' | 'listPlans' | 'advanceRunPlan' | 'setWorkState' | 'interruptStaleAttempts' | 'getRun'
+  | 'listAttempts' | 'countAttempts' | 'listOpenStages'>;
 
 export interface StoreObjects {
   /** The artifact id and size of bytes, computed without writing. */
@@ -160,7 +161,7 @@ export async function openStore(storePath: string, options: OpenStoreOptions = {
 const LEDGER_METHODS = [
   'createRun', 'setRunState', 'createWork', 'startAttempt', 'endAttempt', 'registerStaging', 'abortStaging',
   'publish', 'pinReport', 'readEvents', 'getWork', 'getAttempt', 'getPublication', 'objectsOf', 'currentSequence',
-  'admitSnapshot', 'getSnapshot',
+  'admitSnapshot', 'getSnapshot', 'admitPlan', 'getPlan', 'latestPlan', 'listPlans', 'advanceRunPlan', 'setWorkState', 'interruptStaleAttempts', 'getRun', 'listAttempts', 'countAttempts', 'listOpenStages',
 ] as const satisfies readonly (keyof StoreLedger)[];
 
 const objectRef = (receipt: StoredObject) => {

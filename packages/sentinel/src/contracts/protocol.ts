@@ -46,6 +46,11 @@ export interface RefuseMessage {
   supported: ProtocolVersion[];
 }
 
+/**
+ * The worker's only authorization. Before its start a worker holds no attempt binding, so nothing it sends can be
+ * accepted, and it must not read its inputs or write its outputs. A worker whose stdin ends before its start has
+ * lost its coordinator (the start can never arrive: the coordinator's write end was the only one) and must exit.
+ */
 export interface StartMessage extends AttemptBinding {
   protocol: 'sentinel-worker/draft-1';
   type: 'start';
@@ -53,6 +58,14 @@ export interface StartMessage extends AttemptBinding {
   /** @maxItems 1024 */
   inputs: ArtifactId[];
   deadlineAt: Timestamp;
+  /**
+   * The plan's checks this attempt is to cover, and the scopes they are over. A result claims coverage only in these
+   * terms; anything else it reports is not coverage of the plan.
+   * @maxItems 2048
+   */
+  checks?: Id[];
+  /** @maxItems 256 */
+  scopes?: ScopeId[];
 }
 
 export interface CancelMessage extends AttemptBinding {

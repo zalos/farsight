@@ -722,3 +722,6 @@ export async function retainSnapshotAnalysis(
     throw error;
   }
 }
+
+/** The file this implementation runs from (moved by the packer into a bundle chunk): its bytes are the operation adapter's digest. */
+export const PARSE_IMPLEMENTATION_URL: string = import.meta.url;

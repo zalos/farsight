@@ -1,0 +1,181 @@
+// The admitted plan, bound once to what will execute.
+//
+// The coordinator runs only a plan revision admitted in the ledger (plans.ts). At open, that revision and the
+// profile it was admitted with are read back and checked, and every unit is bound exactly, through PR 06's canonical
+// boundary (planBoundaryFor / workEnvelopesFor, verifyWorkEnvelope, verifyInputSet):
+//   - its work envelope is the plan's canonical one, naming the canonical influence manifest (influenceManifestOf);
+//   - its adapter is the registered one the plan pins, by digest: a check adapter for a check unit, the bootstrap
+//     operation of exactly its stage for a capture, parse or inventory unit; a unit with no operation stays held;
+//   - a check unit's captured inputs are exactly the plan's, read from a restore of the pinned snapshot.
+// Work an earlier revision published and this one reuses must already be published, in this run.
+//
+// The execution binding is a separate record, never the plan's manifest: it names the canonical manifest's id, the
+// adapter digest, the exact inputs and the PR 07 protocol fingerprint the worker's start carries and its result must
+// repeat. It is accepted with every attempt's start (linked from its invocation record), failed attempts included.
+import { createHash, randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import type { ArtifactId, Digest, Id, WorkRef } from '../contracts/common.js';
+import type { PlanCheck, PlanWork } from '../contracts/plan.js';
+import type { ResultMessage } from '../contracts/protocol.js';
+import type { RunEnvelope } from '../contracts/run.js';
+import type { WorkEnvelope } from '../contracts/work.js';
+import { planBoundaryFor, verifyInputSet, verifyWorkEnvelope, workEnvelopesFor, canonicalArtifactId, influenceManifestOf, type InfluenceManifest } from '../planner/boundary.js';
+import { openSnapshot } from '../snapshot/materialize.js';
+import type { SentinelStore } from '../store/index.js';
+import { canonicalJsonBytes } from '../store/objects.js';
+import { ExecutionError } from './errors.js';
+import type { AdmittedPlan } from './plans.js';
+import { checkProfileRegistry } from './profile.js';
+import type { AdapterRegistry, TrustedAdapter } from './registry.js';
+import { orderPlan } from './scheduler.js';
+import { inputFingerprintOf, type CapturedInput } from './supervisor.js';
+
+export const EXECUTION_BINDING_SCHEMA = 'sentinel-execution-binding/draft-1';
+/** A coordinator's input restore under its scratch root: `inputs.<epoch>.<uuid>`. */
+export const RESTORE_PREFIX = 'inputs.';
+
+export interface ExecutionBinding {
+  schema: typeof EXECUTION_BINDING_SCHEMA;
+  plan: { runId: Id; revision: number; digest: Digest };
+  work: WorkRef;
+  /** The canonical influence manifest's artifact id (the work envelope's influenceManifest). */
+  influenceManifest: ArtifactId;
+  adapter: { id: Id; digest: Digest };
+  inputs: ArtifactId[];
+  /** inputFingerprintOf(inputs): what the worker protocol carries. */
+  protocolFingerprint: Digest;
+  /** The plan's own input fingerprint for the unit (wider than the inputs). */
+  inputFingerprint: Digest;
+}
+
+export interface ExecutableUnit {
+  readonly work: Readonly<WorkEnvelope>;
+  readonly unit: Readonly<PlanWork>;
+  /** Null for a unit the plan holds (no bound operation). */
+  readonly adapter: TrustedAdapter | null;
+  readonly inputs: readonly CapturedInput[];
+  readonly manifest: Readonly<InfluenceManifest>;
+  readonly checks: readonly Readonly<PlanCheck>[];
+}
+
+export interface ValidatedPlan {
+  /** The run as executed: its recorded envelope with its current plan revision. */
+  readonly run: Readonly<RunEnvelope>;
+  readonly admitted: Readonly<AdmittedPlan>;
+  readonly works: readonly Readonly<WorkEnvelope>[];
+  /** Published work of earlier revisions this one depends on. */
+  readonly external: ReadonlySet<string>;
+  unitOf(ref: WorkRef): ExecutableUnit;
+  bindingOf(ref: WorkRef): Readonly<ExecutionBinding>;
+  /** Where the coordinator restores the pinned snapshot for the check units' inputs (null for a bootstrap revision). */
+  readonly restored: string | null;
+}
+
+const key = (r: WorkRef) => `${r.id}@${r.revision}`;
+const refuse = (reason: string): never => { throw new ExecutionError('sentinel.execution.planInvalid', { reason }); };
+
+function deepFreeze<T>(v: T): T {
+  if (v && typeof v === 'object' && !Object.isFrozen(v)) { Object.freeze(v); for (const x of Object.values(v as object)) deepFreeze(x); }
+  return v;
+}
+
+export function executionBinding(plan: AdmittedPlan['plan'], work: WorkEnvelope, adapter: TrustedAdapter, inputs: readonly ArtifactId[]): ExecutionBinding {
+  const sorted = [...inputs].sort();
+  return { schema: EXECUTION_BINDING_SCHEMA, plan: { runId: plan.runId, revision: plan.revision, digest: plan.digest }, work: { id: work.id, revision: work.revision },
+    influenceManifest: work.influenceManifest, adapter: { id: adapter.id, digest: adapter.digest }, inputs: sorted,
+    protocolFingerprint: inputFingerprintOf(sorted), inputFingerprint: work.inputFingerprint };
+}
+
+export const bindingId = (b: ExecutionBinding): ArtifactId => `sha256:${createHash('sha256').update(canonicalJsonBytes(b)).digest('hex')}`;
+
+/**
+ * What actually ran must be what the plan bound: the invocation's adapter digest, its exact inputs and the protocol
+ * fingerprint the result repeated. Returns a reason when it differs.
+ */
+export function bindingMismatch(binding: ExecutionBinding, invocation: { adapter: { digest: Digest }; inputs: readonly ArtifactId[]; inputFingerprint: Digest }, result: ResultMessage): string | undefined {
+  if (invocation.adapter.digest !== binding.adapter.digest) return 'the invocation ran another adapter';
+  if (JSON.stringify([...invocation.inputs].sort()) !== JSON.stringify(binding.inputs)) return 'the invocation read other inputs';
+  if (invocation.inputFingerprint !== binding.protocolFingerprint || result.inputFingerprint !== binding.protocolFingerprint) return 'the result names other inputs';
+  return undefined;
+}
+
+/** Bind an admitted plan revision for execution in `run`. Restores the pinned snapshot under scratchRoot when needed. */
+export async function executablePlan(store: SentinelStore, admitted: AdmittedPlan, recordedRun: RunEnvelope, currentRevision: number,
+  registry: AdapterRegistry, scratchRoot: string): Promise<ValidatedPlan> {
+  const plan = admitted.plan;
+  checkProfileRegistry(admitted.profile, registry);
+  if (plan.runId !== recordedRun.id || plan.revision !== currentRevision) refuse('the plan is not the run\'s current revision');
+  const run = deepFreeze({ ...structuredClone(recordedRun), planRevision: currentRevision });
+  if (!store.ledger.getSnapshot(run.snapshotId)) refuse('the run names a snapshot that was not admitted in this store');
+  // The envelopes' epoch and time are the run's; each work revision is created under the epoch that creates it.
+  const conversion = { coordinatorEpoch: run.coordinatorEpoch, createdAt: run.createdAt, execution: { resources: admitted.profile.resources } };
+  let works: WorkEnvelope[];
+  let inputsOf = (_w: WorkEnvelope): CapturedInput[] => [];
+  let restored: string | null = null;
+  if (plan.kind === 'analysis') {
+    if (plan.pins.snapshotId !== run.snapshotId) refuse('the plan pins another snapshot than the run');
+    const { snapshot } = await openSnapshot(store, run.snapshotId);
+    // Where the coordinator restores the pinned snapshot while it may start attempts (restoreSnapshot puts each
+    // source at <target>/<sourceId>); named by this owner's epoch so recovery can tell a dead owner's restore apart.
+    restored = join(scratchRoot, `${RESTORE_PREFIX}${store.epoch}.${randomUUID()}`);
+    const root = restored;
+    const sources = new Set(snapshot.sources.map(s => s.sourceId));
+    const boundary = planBoundaryFor(plan, { run, conversion, snapshot,
+      pathOf: i => join(root, sources.has(i.sourceId) ? i.sourceId : refuse(`no captured source ${i.sourceId}`), ...i.relativePath.split('/')) });
+    works = [...boundary.works];
+    const held = new Set(works.filter(w => w.state === 'blocked').map(key));
+    inputsOf = w => (held.has(key(w)) ? [] : boundary.inputsFor(w).map(i => ({ id: i.id, path: i.path })));
+  } else {
+    works = workEnvelopesFor(plan, conversion).map(c => c.envelope);
+  }
+  orderPlan(works, new Set(plan.reused.map(key)));
+  for (const r of plan.reused) {
+    const row = store.ledger.getWork(r);
+    if (!row || row.runId !== run.id || !store.ledger.getPublication(r)) refuse(`reused work ${key(r)} is not published in this run`);
+  }
+  const units = new Map<string, ExecutableUnit>();
+  const bindings = new Map<string, ExecutionBinding>();
+  for (const w of works) {
+    verifyWorkEnvelope(plan, w);
+    const unit = plan.units.find(u => u.id === w.id && u.revision === w.revision)!;
+    const manifest = influenceManifestOf(plan, unit);
+    if (canonicalArtifactId(manifest) !== w.influenceManifest) refuse(`work ${key(w)} does not name its canonical influence manifest`);
+    let adapter: TrustedAdapter | null = null;
+    if (unit.adapterId !== null) {
+      adapter = registry.get(unit.adapterId);
+      if (adapter.digest !== unit.implementationDigest) refuse(`work ${key(w)} names implementation ${unit.implementationDigest}, not adapter ${adapter.id}`);
+      if (unit.stage === 'check' ? adapter.kind === 'operation' : adapter.kind !== 'operation' || adapter.operation !== unit.stage) {
+        refuse(`work ${key(w)} is a ${unit.stage} stage and ${adapter.id} is not its operation`);
+      }
+    }
+    const inputs = deepFreeze(inputsOf(w));
+    if (unit.stage === 'check' && adapter) verifyInputSet(plan, w, inputs);
+    const checks = plan.checks.filter(c => c.state === 'planned' && c.unit?.id === w.id && c.unit.revision === w.revision);
+    units.set(key(w), deepFreeze({ work: deepFreeze(structuredClone(w)), unit, adapter, inputs, manifest, checks }));
+    if (adapter) bindings.set(key(w), deepFreeze(executionBinding(plan, w, adapter, inputs.map(i => i.id))));
+  }
+  const get = <T>(m: Map<string, T>, r: WorkRef): T => m.get(key(r)) ?? refuse(`work ${key(r)} is not in the plan`);
+  return Object.freeze({
+    run, admitted: deepFreeze(structuredClone(admitted)), works: Object.freeze(works.map(w => units.get(key(w))!.work)),
+    external: new Set(plan.reused.map(key)), restored,
+    unitOf: (r: WorkRef) => get(units, r), bindingOf: (r: WorkRef) => get(bindings, r),
+  });
+}
+
+const RUN_IDENTITY = ['id', 'parentId', 'baselineId', 'snapshotId', 'planRevision', 'ruleLockDigest', 'toolLockDigest', 'policyRevisionDigest', 'promptPolicyDigest', 'requestedScope', 'budgets'] as const;
+const WORK_IDENTITY = ['id', 'revision', 'runId', 'planRevision', 'stage', 'inputFingerprint', 'influenceManifest', 'dependencies', 'resources'] as const;
+const same = (a: unknown, b: unknown) => Buffer.from(canonicalJsonBytes(a ?? null)).equals(canonicalJsonBytes(b ?? null));
+
+/** A requested run must be the recorded run, field for field (state, epoch and times aside). */
+export function checkRecordedRun(requested: RunEnvelope, recorded: RunEnvelope | undefined): void {
+  if (!recorded) return;
+  for (const f of RUN_IDENTITY) if (!same((requested as unknown as Record<string, unknown>)[f], (recorded as unknown as Record<string, unknown>)[f])) refuse(`run ${requested.id} is recorded with another ${f}`);
+}
+
+/** A recorded work revision must be this plan's, for this run, field for field (state, epoch and times aside). */
+export function checkRecordedWork(plan: ValidatedPlan, ref: WorkRef, recorded: { runId: Id; envelope: WorkEnvelope } | null): void {
+  if (!recorded) return;
+  if (recorded.runId !== plan.run.id) refuse(`work ${key(ref)} belongs to run ${recorded.runId}; reuse across runs needs a satisfied-by-reuse lineage`);
+  const w = plan.unitOf(ref).work;
+  for (const f of WORK_IDENTITY) if (!same((w as unknown as Record<string, unknown>)[f], (recorded.envelope as unknown as Record<string, unknown>)[f])) refuse(`work ${key(ref)} is recorded with another ${f}`);
+}

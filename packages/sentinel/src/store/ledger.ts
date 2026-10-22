@@ -14,13 +14,15 @@ import { canonicalJson, digestOf } from './ledger-json.js';
 import { LEDGER_MIGRATIONS, migrateLedger, type LedgerGuard } from './migrations.js';
 import {
   ARTIFACT_CODECS, ARTIFACT_PRIVACY, LedgerError, MAX_ARTIFACT_BYTES, MAX_EVENT_PAGE, MAX_SNAPSHOT_ARTIFACTS,
-  type AdmitSnapshotInput, type SnapshotRecord, type ArtifactPrivacy, type EndAttemptInput, type EventPage, type GcSnapshot, type IdempotencyRef, type LedgerEvent,
+  type AdmitSnapshotInput, type SnapshotRecord, type AdmitPlanInput, type PlanRecord, type AttemptRecords, type ArtifactPrivacy, type AttemptError, type EndAttemptInput, type WorkTransition, type EventPage, type GcSnapshot, type IdempotencyRef, type LedgerEvent,
   type LedgerEventKind, type LedgerFailpoint, type LedgerOwner, type MigrationReport, type ObjectVerifier,
   type ObjectReceipt, type OpenLedgerOptions, type PublicationReceipt, type PublishInput, type StageId,
   type StagedArtifact, type VerifiedObject,
 } from './store-types.js';
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+const CATALOG_KEY = /^sentinel\.[a-z][A-Za-z0-9]*(\.[a-z][A-Za-z0-9]*)+$/;
+const MAX_ERROR_DETAIL_BYTES = 4096;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const MAX_STAGED = 4096;
 const MAX_PAYLOAD_BYTES = 16384;
@@ -325,6 +327,8 @@ export class Ledger {
       if (run.parentId && !this.#get('SELECT 1 AS x FROM runs WHERE id = ?', run.parentId)) {
         throw new LedgerError('sentinel.store.notFound', 'the parent run is not in the ledger');
       }
+      // A run whose plans were admitted starts at one of them, and every analysis revision it has binds its snapshot.
+      if (this.migration.to >= 4) this.#checkRunPlans(run.id, run.planRevision, run.snapshotId);
       this.#run(`INSERT INTO runs (id, parent_id, snapshot_id, plan_revision, coordinator_epoch, state, envelope,
         created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, run.id, run.parentId, run.snapshotId, run.planRevision,
       run.coordinatorEpoch, run.state, JSON.stringify(run), run.createdAt);
@@ -343,20 +347,28 @@ export class Ledger {
       if ((to === 'completed') !== (opts.outcome !== undefined)) throw invalid('an outcome is given exactly when completing');
       this.#run('UPDATE runs SET state = ?, outcome = ?, completed_at = ? WHERE id = ?', to, opts.outcome ?? null,
         to === 'completed' ? this.#now() : null, runId);
-      return { runId, state: to, sequence: this.#event('run-state', runId, null, { from, to }) };
+      return { runId, state: to, sequence: this.#event('run-state', runId, null, { from, to, ...(opts.outcome ? { outcome: opts.outcome } : {}) }) };
     });
   }
 
   // ---- work and attempts ----
 
   /** Appends a work revision. Revisions of one ID are contiguous: the next is always the highest plus one. */
-  createWork(envelope: WorkEnvelope, opts: { idempotency?: IdempotencyRef } = {}): { work: WorkRef; sequence: number } {
+  createWork(envelope: WorkEnvelope, opts: { idempotency?: IdempotencyRef; records?: AttemptRecords } = {}): { work: WorkRef; sequence: number } {
     const work = contract('work', envelope);
-    return this.#mutate('createWork', work, opts.idempotency, () => {
+    // The influence manifest the work names may be accepted with it, so the root it names is a stored record.
+    const records = opts.records ? this.#checkUnboundStage(opts.records, 'work records') : null;
+    if (records && !records.receipts.some(r => r.id === work.influenceManifest)) throw invalid('work records must hold the work\'s influence manifest');
+    return this.#mutate('createWork', records ? { work, records: { stageId: records.stageId, receipts: records.receipts } } : work, opts.idempotency, () => {
       if (work.state !== 'pending' && work.state !== 'ready') throw invalid('new work starts pending or ready');
       this.#requireCurrentEpoch(work.coordinatorEpoch, 'the work');
-      const run = this.#get('SELECT state FROM runs WHERE id = ?', work.runId);
+      const run = this.#get('SELECT state, plan_revision FROM runs WHERE id = ?', work.runId);
       if (!run) throw new LedgerError('sentinel.store.notFound', 'the work names an unknown run');
+      // A run with admitted plans takes work only from an admitted revision no later than its current one.
+      if (this.migration.to >= 4 && this.#get('SELECT 1 AS x FROM plans WHERE run_id = ?', work.runId)
+        && (work.planRevision > Number(run.plan_revision) || !this.#get('SELECT 1 AS x FROM plans WHERE run_id = ? AND revision = ?', work.runId, work.planRevision))) {
+        throw new LedgerError('sentinel.store.wrongState', 'the work names a plan revision this run has not admitted');
+      }
       if (run.state === 'completed' || run.state === 'canceled') {
         throw new LedgerError('sentinel.store.wrongState', 'the run has ended');
       }
@@ -373,7 +385,9 @@ export class Ledger {
           VALUES (?, ?, ?, ?)`, work.id, work.revision, dep.id, dep.revision);
       }
       const ref = { id: work.id, revision: work.revision };
-      return { work: ref, sequence: this.#event('work-created', work.runId, ref, { state: work.state }) };
+      const sequence = this.#event('work-created', work.runId, ref, { state: work.state });
+      if (records) this.#acceptUnboundStages([records.stageId], records.receipts, [work.influenceManifest], sequence);
+      return { work: ref, sequence };
     });
   }
 
@@ -381,10 +395,16 @@ export class Ledger {
    * Starts an attempt on a ready work revision. With `supersede`, a running revision's current attempt is marked
    * interrupted and replaced; the old attempt can then never publish, even within this epoch.
    */
-  startAttempt(envelope: AttemptEnvelope, opts: { supersede?: boolean; idempotency?: IdempotencyRef } = {}):
+  startAttempt(envelope: AttemptEnvelope, opts: { supersede?: boolean; idempotency?: IdempotencyRef; records?: AttemptRecords } = {}):
     { attemptId: Id; work: WorkRef; superseded: Id | null; sequence: number } {
     const attempt = contract('attempt', envelope);
-    return this.#mutate('startAttempt', { attempt, supersede: !!opts.supersede }, opts.idempotency, () => {
+    // The invocation record (and what it links) is accepted with the start, so an attempt that later fails, is
+    // canceled or is interrupted still names a durable record of what it was asked to run.
+    const records = opts.records ? this.#checkUnboundStage(opts.records, 'attempt records') : null;
+    if (records && (attempt.invocation === undefined || !records.receipts.some(r => r.id === attempt.invocation))) {
+      throw invalid('attempt records must hold the attempt\'s invocation record');
+    }
+    return this.#mutate('startAttempt', { attempt, supersede: !!opts.supersede, records: records ? { stageId: records.stageId, receipts: records.receipts } : null }, opts.idempotency, () => {
       if (attempt.state !== 'running') throw invalid('a new attempt starts running');
       if (attempt.worker.kind === 'external-claim') throw invalid('external claims are not admitted by this ledger yet');
       this.#requireCurrentEpoch(attempt.coordinatorEpoch, 'the attempt');
@@ -409,6 +429,7 @@ export class Ledger {
       this.#run("UPDATE work_units SET state = 'running', active_attempt_id = ? WHERE id = ? AND revision = ?",
         attempt.id, ref.id, ref.revision);
       const sequence = this.#event('attempt-started', String(work.run_id), ref, { attemptId: attempt.id, superseded });
+      if (records) this.#acceptUnboundStages([records.stageId], records.receipts, [attempt.invocation!], sequence);
       return { attemptId: attempt.id, work: { id: ref.id, revision: ref.revision }, superseded, sequence };
     });
   }
@@ -421,14 +442,41 @@ export class Ledger {
    * at an instant before the start (clock skew) is recorded at the start.
    */
   #finishAttempt(attemptId: Id, state: AttemptEnvelope['state'], endedAt: string, usage: AttemptUsage | undefined,
-    outputs: string[], clampToStart = false): void {
+    outputs: string[], clampToStart = false, error?: AttemptError): void {
     const row = this.#get("SELECT envelope FROM attempts WHERE id = ? AND state = 'running'", attemptId);
     if (!row) throw new LedgerError('sentinel.store.notActiveAttempt', 'the attempt is not running');
     const start = JSON.parse(String(row.envelope)) as AttemptEnvelope;
     const at = clampToStart && compareTimestamps(endedAt, start.startedAt) < 0 ? start.startedAt : endedAt;
-    const final = contract('attempt', { ...start, state, endedAt: at, outputs, usage: usage ?? start.usage });
-    this.#run('UPDATE attempts SET state = ?, ended_at = ?, final_usage_certainty = ?, final_envelope = ? WHERE id = ?',
-      state, at, final.usage.certainty, JSON.stringify(final), attemptId);
+    const recorded = error ? { error: { code: error.code, retryable: error.retryable, ...(error.diagnostics ? { diagnostics: error.diagnostics } : {}) } } : {};
+    const final = contract('attempt', { ...start, state, endedAt: at, outputs, usage: usage ?? start.usage, ...recorded });
+    // The detail column exists from schema 3; an end without one writes only the foundation columns.
+    if (error?.detail) {
+      this.#run(`UPDATE attempts SET state = ?, ended_at = ?, final_usage_certainty = ?, final_envelope = ?, error_detail = ?
+        WHERE id = ?`, state, at, final.usage.certainty, JSON.stringify(final), canonicalJson(error.detail), attemptId);
+    } else {
+      this.#run('UPDATE attempts SET state = ?, ended_at = ?, final_usage_certainty = ?, final_envelope = ? WHERE id = ?',
+        state, at, final.usage.certainty, JSON.stringify(final), attemptId);
+    }
+  }
+
+  #checkError(error: AttemptError | undefined): AttemptError | undefined {
+    if (error === undefined) return undefined;
+    if (!error || typeof error !== 'object' || !CATALOG_KEY.test(String(error.code)) || typeof error.retryable !== 'boolean') {
+      throw invalid('an attempt error is a catalog code and whether it is retryable');
+    }
+    if (error.diagnostics !== undefined) {
+      checkDigest(error.diagnostics, 'error diagnostics');
+      if (!this.#get('SELECT 1 AS x FROM artifacts WHERE id = ?', error.diagnostics)) {
+        throw new LedgerError('sentinel.store.notFound', 'error diagnostics name an artifact that is not accepted');
+      }
+    }
+    if (error.detail !== undefined) {
+      const text = canonicalJson(error.detail);
+      if (typeof error.detail !== 'object' || Array.isArray(error.detail) || Buffer.byteLength(text, 'utf8') > MAX_ERROR_DETAIL_BYTES) {
+        throw invalid(`an attempt error detail is a JSON object of at most ${MAX_ERROR_DETAIL_BYTES} bytes`);
+      }
+    }
+    return error;
   }
 
   /** The fence every attempt-scoped write passes: exact revision, its active attempt, running, this epoch. */
@@ -461,15 +509,69 @@ export class Ledger {
     if (input.workState !== 'ready' && input.workState !== 'failed') throw invalid('work ends ready or failed');
     checkTime(input.endedAt, 'endedAt');
     const request = { work: ref, attemptId: input.attemptId, state: input.state, endedAt: input.endedAt,
-      workState: input.workState, usage: input.usage ?? null };
+      workState: input.workState, usage: input.usage ?? null, error: input.error ?? null };
     return this.#mutate('endAttempt', request, input.idempotency, () => {
+      const error = this.#checkError(input.error);
       const { runId } = this.#fenceAttempt(ref, input.attemptId);
-      this.#finishAttempt(input.attemptId, input.state, input.endedAt, input.usage, []);
+      this.#finishAttempt(input.attemptId, input.state, input.endedAt, input.usage, [], false, error);
       this.#run('UPDATE work_units SET state = ?, active_attempt_id = NULL WHERE id = ? AND revision = ?',
         input.workState, ref.id, ref.revision);
       return { attemptId: input.attemptId,
-        sequence: this.#event('attempt-ended', runId, ref, { attemptId: input.attemptId, state: input.state }) };
+        sequence: this.#event('attempt-ended', runId, ref, { attemptId: input.attemptId, state: input.state, ...(error ? { code: error.code } : {}) }) };
     });
+  }
+
+  /**
+   * Releases or holds a work revision that has no active attempt: pending or blocked → ready, and pending, ready or
+   * blocked → blocked / disabled-by-policy with a catalog reason. A held revision never starts; a running, leased,
+   * published or failed one is not moved here.
+   */
+  setWorkState(ref: WorkRef, to: WorkTransition, opts: { reasonCode?: string; idempotency?: IdempotencyRef } = {}):
+    { work: WorkRef; state: WorkTransition; sequence: number } {
+    checkRef(ref);
+    if (!['ready', 'blocked', 'disabled-by-policy'].includes(to)) throw invalid('work moves to ready, blocked or disabled-by-policy');
+    const held = to !== 'ready';
+    if (held !== (opts.reasonCode !== undefined)) throw invalid('a reason is given exactly when holding work');
+    if (held && (!CATALOG_KEY.test(String(opts.reasonCode)) || String(opts.reasonCode).length > 128)) throw invalid('the reason is a catalog key');
+    return this.#mutate('setWorkState', { ref, to, reason: opts.reasonCode ?? null }, opts.idempotency, () => {
+      const row = this.#get(`SELECT w.state, w.run_id, r.state AS run_state FROM work_units w JOIN runs r ON r.id = w.run_id
+        WHERE w.id = ? AND w.revision = ?`, ref.id, ref.revision);
+      if (!row) throw new LedgerError('sentinel.store.notFound', 'no such work revision');
+      const from = String(row.state);
+      if (!['pending', 'ready', 'blocked'].includes(from) || from === to) {
+        throw new LedgerError('sentinel.store.wrongState', `work cannot move ${from} → ${to}`);
+      }
+      if (row.run_state === 'completed' || row.run_state === 'canceled') throw new LedgerError('sentinel.store.wrongState', 'the run has ended');
+      this.#run('UPDATE work_units SET state = ?, state_reason = ? WHERE id = ? AND revision = ?', to, opts.reasonCode ?? null, ref.id, ref.revision);
+      return { work: { id: ref.id, revision: ref.revision }, state: to,
+        sequence: this.#event('work-state', String(row.run_id), ref, { from, to, ...(held ? { reason: opts.reasonCode } : {}) }) };
+    });
+  }
+
+  /**
+   * Ends every attempt still running under an earlier epoch as interrupted, under this epoch's fence. Its work
+   * becomes ready while its run can still admit work (planned, running, pausing, paused) and failed once the run
+   * is canceling or has ended, since no attempt could start for it again. Each is recorded with an attempt-ended
+   * event marked stale; nothing from the earlier epoch can publish afterwards.
+   */
+  interruptStaleAttempts(): Array<{ attemptId: Id; work: WorkRef; epoch: Id; workState: 'ready' | 'failed' }> {
+    return this.#transaction(() => {
+      const rows = this.#all(`SELECT a.id, a.work_id, a.work_revision, a.coordinator_epoch, w.run_id, r.state AS run_state
+        FROM attempts a JOIN work_units w ON w.id = a.work_id AND w.revision = a.work_revision JOIN runs r ON r.id = w.run_id
+        WHERE a.state = 'running' AND a.coordinator_epoch <> ? ORDER BY a.started_at, a.id`, this.epoch);
+      const out: Array<{ attemptId: Id; work: WorkRef; epoch: Id; workState: 'ready' | 'failed' }> = [];
+      for (const r of rows) {
+        const ref = { id: String(r.work_id), revision: Number(r.work_revision) };
+        const workState = ['planned', 'running', 'pausing', 'paused'].includes(String(r.run_state)) ? 'ready' as const : 'failed' as const;
+        this.#finishAttempt(String(r.id), 'interrupted', this.#now(), undefined, [], true,
+          { code: 'sentinel.store.staleEpoch', retryable: workState === 'ready' });
+        this.#run(`UPDATE work_units SET state = ?, active_attempt_id = NULL WHERE id = ? AND revision = ? AND active_attempt_id = ?`,
+          workState, ref.id, ref.revision, String(r.id));
+        this.#event('attempt-ended', String(r.run_id), ref, { attemptId: String(r.id), state: 'interrupted', stale: true, epoch: String(r.coordinator_epoch) });
+        out.push({ attemptId: String(r.id), work: ref, epoch: String(r.coordinator_epoch), workState });
+      }
+      return out;
+    }, true);
   }
 
   // ---- staging and publication ----
@@ -540,6 +642,7 @@ export class Ledger {
   }
 
   #checkReceipt(r: ObjectReceipt): void {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) throw invalid('a receipt is an object');
     checkDigest(r.id, 'receipt artifact');
     checkDigest(r.storedDigest, 'receipt stored digest');
     if (!ARTIFACT_CODECS.includes(r.codec)) throw invalid('receipt codec');
@@ -779,6 +882,184 @@ export class Ledger {
       inventoryDigest: String(row.inventory_digest), sequence: Number(row.sequence), admittedAt: String(row.admitted_at) };
   }
 
+  // ---- plans ----
+
+  /**
+   * Admits one plan revision in one transaction: the chain (revision 1 has no predecessor; every later revision
+   * names the digest of the revision before it, which must be admitted), a non-null snapshot already admitted, the
+   * pins a kind requires, and unbound stages of this epoch holding exactly the receipts' artifacts, every one durable
+   * and reachable from the plan through the staged links. The plan artifact becomes a collection root; the rule
+   * lock, policy and profile stay reachable through its links. Rows are immutable. What the plan says is checked by
+   * the caller (execution/plans.ts); the ledger records the exact artifacts and their binding.
+   */
+  admitPlan(input: AdmitPlanInput): PlanRecord {
+    checkId(input.runId, 'run id');
+    if (!Number.isInteger(input.revision) || input.revision < 1 || input.revision > 2147483647) throw invalid('plan revision');
+    if (input.kind !== 'bootstrap' && input.kind !== 'analysis') throw invalid('plan kind');
+    checkDigest(input.digest, 'plan digest');
+    if ((input.revision === 1) !== (input.previous === null)) throw invalid('exactly revision 1 has no previous plan');
+    if (input.previous !== null) checkDigest(input.previous, 'previous plan');
+    checkDigest(input.plan, 'plan artifact');
+    checkDigest(input.profile, 'profile artifact');
+    const pinned = input.kind === 'analysis';
+    if (pinned !== (input.ruleLock !== null) || pinned !== (input.policy !== null) || pinned !== (input.snapshotId !== null)) {
+      throw invalid('an analysis plan pins a rule lock, a policy and a snapshot; a bootstrap plan pins none');
+    }
+    if (input.ruleLock !== null) checkDigest(input.ruleLock, 'rule lock artifact');
+    if (input.policy !== null) checkDigest(input.policy, 'policy artifact');
+    if (input.snapshotId !== null) checkId(input.snapshotId, 'snapshot id');
+    const required = [input.plan, input.profile, ...(input.ruleLock ? [input.ruleLock] : []), ...(input.policy ? [input.policy] : [])];
+    if (new Set(required).size !== required.length) throw invalid('the plan and its pinned artifacts are distinct artifacts');
+    const stage = this.#checkUnboundStages(input.stageIds, input.receipts, 'plan admission');
+    const request = { runId: input.runId, revision: input.revision, kind: input.kind, digest: input.digest, previous: input.previous,
+      plan: input.plan, ruleLock: input.ruleLock, policy: input.policy, profile: input.profile, snapshotId: input.snapshotId,
+      stageIds: stage.stageIds, receipts: stage.receipts.map(r => ({ ...r })) };
+    return this.#mutate('admitPlan', request, input.idempotency, () => {
+      if (this.#get('SELECT 1 AS x FROM plans WHERE run_id = ? AND revision = ?', input.runId, input.revision)) {
+        throw new LedgerError('sentinel.store.conflict', 'this plan revision was already admitted');
+      }
+      if (input.previous !== null) {
+        const prior = this.#get('SELECT digest FROM plans WHERE run_id = ? AND revision = ?', input.runId, input.revision - 1);
+        if (!prior || prior.digest !== input.previous) throw new LedgerError('sentinel.store.conflict', 'the previous plan revision is not the admitted one');
+      }
+      if (input.snapshotId !== null && !this.#get('SELECT 1 AS x FROM snapshots WHERE id = ?', input.snapshotId)) {
+        throw new LedgerError('sentinel.store.notFound', 'the plan pins a snapshot that was not admitted');
+      }
+      // A run is bound to one snapshot for good: a later analysis revision of an existing run pins that snapshot.
+      // Changed source is a new, linked run.
+      const run = this.#get('SELECT snapshot_id FROM runs WHERE id = ?', input.runId);
+      if (run && input.snapshotId !== null && input.snapshotId !== run.snapshot_id) {
+        throw new LedgerError('sentinel.store.conflict', 'an analysis revision of an existing run pins the run\'s own snapshot');
+      }
+      const sequence = this.#event('plan-admitted', null, null, { runId: input.runId, revision: input.revision, digest: input.digest });
+      this.#acceptUnboundStages(stage.stageIds, stage.receipts, required, sequence, input.plan);
+      const admittedAt = this.#now();
+      this.#run(`INSERT INTO plans (run_id, revision, kind, digest, previous, plan_id, rule_lock_id, policy_id, profile_id,
+        snapshot_id, coordinator_epoch, sequence, admitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      input.runId, input.revision, input.kind, input.digest, input.previous, input.plan, input.ruleLock, input.policy,
+      input.profile, input.snapshotId, this.epoch, sequence, admittedAt);
+      return { runId: input.runId, revision: input.revision, kind: input.kind, digest: input.digest, previous: input.previous,
+        plan: input.plan, ruleLock: input.ruleLock, policy: input.policy, profile: input.profile, snapshotId: input.snapshotId, sequence, admittedAt };
+    }, 'plan:before-commit');
+  }
+
+  /** An admitted plan revision's record, or undefined. */
+  getPlan(runId: Id, revision: number): PlanRecord | undefined {
+    checkId(runId, 'run id');
+    const row = this.#read(() => this.#get('SELECT * FROM plans WHERE run_id = ? AND revision = ?', runId, revision));
+    return row ? toPlanRecord(row) : undefined;
+  }
+
+  /** A run's latest admitted plan revision, or undefined. */
+  latestPlan(runId: Id): PlanRecord | undefined {
+    checkId(runId, 'run id');
+    const row = this.#read(() => this.#get('SELECT * FROM plans WHERE run_id = ? ORDER BY revision DESC LIMIT 1', runId));
+    return row ? toPlanRecord(row) : undefined;
+  }
+
+  /** Every admitted plan revision of a run, oldest first. */
+  listPlans(runId: Id): PlanRecord[] {
+    checkId(runId, 'run id');
+    return this.#read(() => this.#all('SELECT * FROM plans WHERE run_id = ? ORDER BY revision', runId)).map(toPlanRecord);
+  }
+
+  /** Moves an active run to its next admitted plan revision (the analysis after its bootstrap, a new rule lock). */
+  advanceRunPlan(runId: Id, revision: number, opts: { idempotency?: IdempotencyRef } = {}): { runId: Id; planRevision: number; sequence: number } {
+    checkId(runId, 'run id');
+    return this.#mutate('advanceRunPlan', { runId, revision }, opts.idempotency, () => {
+      const run = this.#get('SELECT state, plan_revision FROM runs WHERE id = ?', runId);
+      if (!run) throw new LedgerError('sentinel.store.notFound', 'no such run');
+      if (run.state === 'completed' || run.state === 'canceled' || run.state === 'canceling') throw new LedgerError('sentinel.store.wrongState', 'the run has ended');
+      if (revision !== Number(run.plan_revision) + 1) throw new LedgerError('sentinel.store.conflict', `the run's next plan revision is ${Number(run.plan_revision) + 1}`);
+      const plan = this.#get('SELECT snapshot_id FROM plans WHERE run_id = ? AND revision = ?', runId, revision);
+      if (!plan) throw new LedgerError('sentinel.store.notFound', 'that plan revision was not admitted');
+      const snapshot = this.#get('SELECT snapshot_id FROM runs WHERE id = ?', runId)!.snapshot_id;
+      if (plan.snapshot_id !== null && plan.snapshot_id !== snapshot) {
+        throw new LedgerError('sentinel.store.conflict', 'the revision pins another snapshot than the run');
+      }
+      this.#run('UPDATE runs SET plan_revision = ? WHERE id = ?', revision, runId);
+      return { runId, planRevision: revision, sequence: this.#event('run-plan-advanced', runId, null, { from: Number(run.plan_revision), to: revision }) };
+    });
+  }
+
+  /**
+   * Inside a transaction: when plans were admitted for this run id, the revision a run is created at must be one of
+   * them, and every admitted analysis revision must pin the run's snapshot. A run with no admitted plan is the
+   * ledger's own lower-level record and is not checked here (the coordinator executes only admitted revisions).
+   */
+  #checkRunPlans(runId: Id, revision: number, snapshotId: Id): void {
+    const plans = this.#all('SELECT revision, snapshot_id FROM plans WHERE run_id = ?', runId);
+    if (plans.length === 0) return;
+    if (!plans.some(p => Number(p.revision) === revision)) {
+      throw new LedgerError('sentinel.store.wrongState', `the run starts at plan revision ${revision}, which was not admitted`);
+    }
+    if (plans.some(p => p.snapshot_id !== null && p.snapshot_id !== snapshotId)) {
+      throw new LedgerError('sentinel.store.conflict', 'an admitted analysis revision pins another snapshot than the run');
+    }
+  }
+
+  /** Shape checks shared by admissions from unbound stages, before any transaction; verifies every object. */
+  #checkUnboundStages(stageIds: unknown, given: unknown, what: string): { stageIds: StageId[]; receipts: ObjectReceipt[] } {
+    if (!Array.isArray(stageIds) || stageIds.length === 0 || stageIds.length > MAX_SNAPSHOT_ARTIFACTS || new Set(stageIds).size !== stageIds.length) {
+      throw invalid('stage ids');
+    }
+    stageIds.forEach(id => checkId(id, 'stage id'));
+    if (!Array.isArray(given) || given.length === 0 || given.length > MAX_STAGED) throw invalid('receipts');
+    (given as ObjectReceipt[]).forEach(r => this.#checkReceipt(r));
+    const receipts = [...(given as ObjectReceipt[])].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : a.codec < b.codec ? -1 : 1));
+    this.#verifyReceipts(receipts, what);
+    return { stageIds: [...(stageIds as StageId[])].sort(), receipts };
+  }
+
+  #checkUnboundStage(records: AttemptRecords, what: string): { stageId: StageId; receipts: ObjectReceipt[] } {
+    const { stageIds, receipts } = this.#checkUnboundStages([records?.stageId], records?.receipts, what);
+    return { stageId: stageIds[0]!, receipts };
+  }
+
+  /**
+   * Inside a transaction: the stages are open, unbound and of this epoch, their artifacts are exactly the receipts',
+   * every required artifact is among them, and (with a root) every one is reachable from the root through the staged
+   * links; then they are accepted with their links and the stages released.
+   */
+  #acceptUnboundStages(stageIds: readonly StageId[], receipts: readonly ObjectReceipt[], required: readonly string[], sequence: number, root?: string): void {
+    const staged = new Map<string, Row>();
+    const links: Array<[string, string]> = [];
+    for (const stageId of stageIds) {
+      const stage = this.#get('SELECT coordinator_epoch, work_id, attempt_id FROM staging WHERE stage_id = ?', stageId);
+      if (!stage) throw new LedgerError('sentinel.store.stagingMismatch', 'no such stage');
+      if (stage.coordinator_epoch !== this.epoch || stage.work_id !== null || stage.attempt_id !== null) {
+        throw new LedgerError('sentinel.store.stagingMismatch', 'records are accepted only from unbound stages of this epoch');
+      }
+      for (const row of this.#all('SELECT artifact_id, schema, privacy FROM staging_artifacts WHERE stage_id = ?', stageId)) {
+        const id = String(row.artifact_id);
+        const prior = staged.get(id);
+        if (!prior || privacyRank(row.privacy as ArtifactPrivacy) > privacyRank(prior.privacy as ArtifactPrivacy)) staged.set(id, row);
+      }
+      for (const l of this.#all('SELECT parent_id, child_id FROM staging_links WHERE stage_id = ?', stageId)) links.push([String(l.parent_id), String(l.child_id)]);
+    }
+    const received = new Set(receipts.map(r => r.id));
+    if (received.size !== staged.size || [...received].some(id => !staged.has(id))) {
+      throw new LedgerError('sentinel.store.stagingMismatch', 'receipts do not match the staged artifacts');
+    }
+    if (required.some(id => !staged.has(id))) throw new LedgerError('sentinel.store.stagingMismatch', 'a required record was not staged');
+    if (root !== undefined) {
+      const reached = new Set([root]);
+      for (let grew = true; grew;) {
+        grew = false;
+        for (const [p, c] of links) if (reached.has(p) && !reached.has(c)) { reached.add(c); grew = true; }
+      }
+      if ([...staged.keys()].some(id => !reached.has(id))) throw new LedgerError('sentinel.store.stagingMismatch', 'an admitted record is not reachable from its root');
+    }
+    this.#acceptArtifacts(receipts, staged, sequence);
+    for (const [p, c] of links) {
+      if (!staged.has(c) && !this.#get('SELECT 1 AS x FROM artifacts WHERE id = ?', c)) {
+        throw new LedgerError('sentinel.store.stagingMismatch', 'a record links an artifact that is neither staged nor accepted');
+      }
+      this.#run('INSERT OR IGNORE INTO artifact_links (parent_id, child_id) VALUES (?, ?)', p, c);
+    }
+    for (const stageId of stageIds) this.#run('DELETE FROM staging WHERE stage_id = ?', stageId);
+  }
+
   /** Pins a retained report's artifact closure roots. Every artifact must already be accepted. */
   pinReport(reportId: Id, runId: Id, artifacts: string[]): { reportId: Id; sequence: number } {
     checkId(reportId, 'report id');
@@ -833,22 +1114,63 @@ export class Ledger {
     return { events, cursor: events.at(-1)?.sequence ?? after, more };
   }
 
-  getWork(ref: WorkRef): { work: WorkRef; runId: Id; state: string; activeAttemptId: Id | null } | null {
+  /** A work revision as recorded: its current state, and the envelope it was created with (immutable identity). */
+  getWork(ref: WorkRef): { work: WorkRef; runId: Id; state: string; activeAttemptId: Id | null; reason: string | null; envelope: WorkEnvelope } | null {
     checkRef(ref);
-    const r = this.#read(() => this.#get('SELECT run_id, state, active_attempt_id FROM work_units WHERE id = ? AND revision = ?',
+    const r = this.#read(() => this.#get('SELECT run_id, state, active_attempt_id, state_reason, envelope FROM work_units WHERE id = ? AND revision = ?',
       ref.id, ref.revision));
     return r ? { work: { id: ref.id, revision: ref.revision }, runId: String(r.run_id), state: String(r.state),
-      activeAttemptId: r.active_attempt_id === null ? null : String(r.active_attempt_id) } : null;
+      activeAttemptId: r.active_attempt_id === null ? null : String(r.active_attempt_id), reason: r.state_reason === null ? null : String(r.state_reason),
+      envelope: JSON.parse(String(r.envelope)) as WorkEnvelope } : null;
+  }
+
+  /** A run as recorded: its state, its outcome once completed, and its envelope. */
+  /** A run: its state, and `planRevision`, the current one (its envelope keeps the revision it was created at). */
+  getRun(id: Id): { id: Id; state: RunState; outcome: RunOutcome | null; completedAt: string | null; epoch: Id; planRevision: number; envelope: RunEnvelope } | null {
+    checkId(id, 'run id');
+    const r = this.#read(() => this.#get('SELECT state, outcome, completed_at, coordinator_epoch, plan_revision, envelope FROM runs WHERE id = ?', id));
+    return r ? { id, state: r.state as RunState, outcome: (r.outcome ?? null) as RunOutcome | null, completedAt: r.completed_at === null ? null : String(r.completed_at),
+      epoch: String(r.coordinator_epoch), planRevision: Number(r.plan_revision), envelope: JSON.parse(String(r.envelope)) as RunEnvelope } : null;
+  }
+
+  /**
+   * One page of a work revision's attempts, by ordinal: those after `afterOrdinal`, at most `limit` (≤ 500, default
+   * 500). Page with the last ordinal returned; countAttempts() gives the exact total.
+   */
+  listAttempts(ref: WorkRef, opts: { afterOrdinal?: number; limit?: number } = {}): Array<{ id: Id; ordinal: number; state: string; epoch: Id }> {
+    checkRef(ref);
+    const after = opts.afterOrdinal ?? 0;
+    const limit = opts.limit ?? MAX_EVENT_PAGE;
+    if (!Number.isSafeInteger(after) || after < 0) throw invalid('afterOrdinal');
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_EVENT_PAGE) throw invalid(`limit is 1..${MAX_EVENT_PAGE}`);
+    return this.#read(() => this.#all('SELECT id, ordinal, state, coordinator_epoch FROM attempts WHERE work_id = ? AND work_revision = ? AND ordinal > ? ORDER BY ordinal LIMIT ?',
+      ref.id, ref.revision, after, limit)).map(r => ({ id: String(r.id), ordinal: Number(r.ordinal), state: String(r.state), epoch: String(r.coordinator_epoch) }));
+  }
+
+  /** The exact number of attempts a work revision has had. */
+  countAttempts(ref: WorkRef): number {
+    checkRef(ref);
+    return Number(this.#read(() => this.#get('SELECT count(*) AS n FROM attempts WHERE work_id = ? AND work_revision = ?', ref.id, ref.revision))?.n ?? 0);
+  }
+
+  /** Stages still open (registered, neither published nor aborted), oldest first, at most `limit` (≤ 500). */
+  listOpenStages(limit = 500): Array<{ stageId: Id; epoch: Id; work: WorkRef | null; attemptId: Id | null; createdAt: string }> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_EVENT_PAGE) throw invalid(`limit is 1..${MAX_EVENT_PAGE}`);
+    return this.#read(() => this.#all('SELECT stage_id, coordinator_epoch, work_id, work_revision, attempt_id, created_at FROM staging ORDER BY created_at, stage_id LIMIT ?', limit))
+      .map(r => ({ stageId: String(r.stage_id), epoch: String(r.coordinator_epoch),
+        work: r.work_id === null ? null : { id: String(r.work_id), revision: Number(r.work_revision) },
+        attemptId: r.attempt_id === null ? null : String(r.attempt_id), createdAt: String(r.created_at) }));
   }
 
   /** An attempt as recorded: its final envelope once ended, else its start envelope. */
-  getAttempt(id: Id): { id: Id; work: WorkRef; state: string; epoch: Id; envelope: AttemptEnvelope } | null {
+  getAttempt(id: Id): { id: Id; work: WorkRef; state: string; epoch: Id; envelope: AttemptEnvelope; errorDetail: Record<string, unknown> | null } | null {
     checkId(id, 'attempt id');
     const r = this.#read(() => this.#get(
-      'SELECT work_id, work_revision, state, coordinator_epoch, envelope, final_envelope FROM attempts WHERE id = ?', id));
+      'SELECT work_id, work_revision, state, coordinator_epoch, envelope, final_envelope, error_detail FROM attempts WHERE id = ?', id));
     return r ? { id, work: { id: String(r.work_id), revision: Number(r.work_revision) }, state: String(r.state),
       epoch: String(r.coordinator_epoch),
-      envelope: JSON.parse(String(r.final_envelope ?? r.envelope)) as AttemptEnvelope } : null;
+      envelope: JSON.parse(String(r.final_envelope ?? r.envelope)) as AttemptEnvelope,
+      errorDetail: r.error_detail === null ? null : JSON.parse(String(r.error_detail)) as Record<string, unknown> } : null;
   }
 
   getPublication(ref: WorkRef): (PublicationReceipt & { outputs: Array<{ id: string; schema: string; privacy: ArtifactPrivacy }> }) | null {
@@ -884,7 +1206,7 @@ export class Ledger {
         sequence,
         // Accepted references: publication outputs and links, and every admitted snapshot's manifest and materialization.
         referenced: col(`SELECT artifact_id FROM artifact_refs UNION SELECT manifest_id FROM snapshots
-          UNION SELECT materialization_id FROM snapshots ORDER BY 1`),
+          UNION SELECT materialization_id FROM snapshots ${this.migration.to >= 4 ? 'UNION SELECT plan_id FROM plans' : ''} ORDER BY 1`),
         staged: col('SELECT DISTINCT artifact_id FROM staging_artifacts ORDER BY artifact_id'),
         reports: col('SELECT DISTINCT artifact_id FROM report_artifacts ORDER BY artifact_id'),
         retained: [...retained].sort(),
@@ -996,3 +1318,10 @@ const toReceipt = (r: Row): ObjectReceipt => ({
   id: String(r.artifact_id), codec: r.codec as ObjectReceipt['codec'], storedDigest: String(r.stored_digest),
   rawSize: Number(r.raw_size), storedSize: Number(r.stored_size),
 });
+
+function toPlanRecord(row: Record<string, unknown>): PlanRecord {
+  const opt = (v: unknown) => (v === null || v === undefined ? null : String(v));
+  return { runId: String(row.run_id), revision: Number(row.revision), kind: row.kind as PlanRecord['kind'], digest: String(row.digest),
+    previous: opt(row.previous), plan: String(row.plan_id), ruleLock: opt(row.rule_lock_id), policy: opt(row.policy_id),
+    profile: String(row.profile_id), snapshotId: opt(row.snapshot_id), sequence: Number(row.sequence), admittedAt: String(row.admitted_at) };
+}

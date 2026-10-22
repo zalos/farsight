@@ -3,17 +3,29 @@
 // SHA-256 of its canonical definition (for a built-in worker, including its module bytes), so a worker that
 // announces another identity, or a definition changed after registration, is refused.
 //
-// Two kinds exist and they are not interchangeable:
+// Three kinds exist and they are not interchangeable:
 // - external: a third-party tool. Container isolation only, an image pinned by digest, a fixed argument list.
 // - built-in: a worker shipped in Sentinel's own package (parsers and similar). A local child process with no
 //   inherited environment; its module is hashed at registration and again before every start.
+// - operation: one of Sentinel's own bootstrap operations (capture, parse, inventory), run by the coordinator in its
+//   own process over the store it owns, never as a worker. Its digest covers the bytes of the Sentinel module that
+//   implements it, so a plan bound to it is bound to that implementation.
+//
+// A check adapter also states the finest coverage granularity its engine can establish (`coverage`, default
+// `aggregate`). The coordinator never records coverage finer than this, whatever a result claims.
 // No production external adapter is registered yet; PR 10 onwards adds them with their measured pins.
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Digest, Id } from '../contracts/common.js';
+import type { CoverageGranularity } from '../contracts/coverage.js';
+import type { ResourcePolicy } from '../contracts/work.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { ExecutionError } from './errors.js';
+import { CAPTURE_IMPLEMENTATION_URL } from '../snapshot/capture.js';
+import { PARSE_IMPLEMENTATION_URL } from '../snapshot/parser.js';
+import { INVENTORY_IMPLEMENTATION_URL } from './bootstrap.js';
 
 /**
  * Limits for one attempt. The ceilings are PR 01's accepted resource defaults (feasibility-decisions.json
@@ -67,6 +79,8 @@ export interface ExternalAdapterDefinition {
   /** The executable and its fixed arguments inside the image. Nothing from a repository is added. */
   command: readonly string[];
   limits?: Partial<AdapterLimits>;
+  /** The finest coverage the engine establishes; `aggregate` when absent. */
+  coverage?: CoverageGranularity;
 }
 
 export interface BuiltInAdapterDefinition {
@@ -77,13 +91,39 @@ export interface BuiltInAdapterDefinition {
   /** Absolute path of the worker module, run with this process's Node and no inherited environment. */
   module: string;
   limits?: Partial<AdapterLimits>;
+  /** The finest coverage the worker establishes; `aggregate` when absent. */
+  coverage?: CoverageGranularity;
 }
 
-export type AdapterDefinition = ExternalAdapterDefinition | BuiltInAdapterDefinition;
+export type BootstrapOperation = 'capture' | 'parse' | 'inventory';
+
+export interface OperationAdapterDefinition {
+  id: Id;
+  version: string;
+  kind: 'operation';
+  operation: BootstrapOperation;
+}
+
+export type AdapterDefinition = ExternalAdapterDefinition | BuiltInAdapterDefinition | OperationAdapterDefinition;
 
 export type TrustedAdapter =
-  | (Readonly<Omit<ExternalAdapterDefinition, 'limits'>> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits> })
-  | (Readonly<Omit<BuiltInAdapterDefinition, 'limits'>> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits>; readonly moduleDigest: Digest });
+  | (Readonly<Omit<ExternalAdapterDefinition, 'limits' | 'coverage'>> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits>; readonly coverage: CoverageGranularity })
+  | (Readonly<Omit<BuiltInAdapterDefinition, 'limits' | 'coverage'>> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits>; readonly moduleDigest: Digest; readonly coverage: CoverageGranularity })
+  | (Readonly<OperationAdapterDefinition> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits>; readonly moduleDigest: Digest; readonly coverage: 'aggregate' });
+
+/**
+ * The file each bootstrap operation's implementation runs from, as that module itself reports it (import.meta.url),
+ * so the digest stays the implementation's bytes whether the code is in the workspace dist or a packed bundle chunk.
+ */
+const OPERATION_MODULES: Readonly<Record<BootstrapOperation, string>> = Object.freeze({
+  capture: CAPTURE_IMPLEMENTATION_URL, parse: PARSE_IMPLEMENTATION_URL, inventory: INVENTORY_IMPLEMENTATION_URL,
+});
+const GRANULARITIES: readonly CoverageGranularity[] = ['per-file-per-rule', 'per-file', 'aggregate'];
+const coverageOf = (v: unknown): CoverageGranularity => {
+  if (v === undefined) return 'aggregate';
+  if (!GRANULARITIES.includes(v as CoverageGranularity)) invalid('coverage granularity');
+  return v as CoverageGranularity;
+};
 
 export interface AdapterRegistry {
   get(id: Id): TrustedAdapter;
@@ -113,6 +153,29 @@ function limitsOf(partial: Partial<AdapterLimits> | undefined): Readonly<Adapter
   return Object.freeze(limits);
 }
 
+/**
+ * The limits one attempt runs under: the adapter's, lowered by the work's own resource policy where that is
+ * stricter (deadline, memory, CPU, processes, process output). A policy never raises a limit. The CPU quota may be
+ * fractional (0.1–2); output is split so stdout and stderr together stay within the policy's output bound.
+ */
+export function effectiveLimits(adapter: Readonly<AdapterLimits>, policy?: ResourcePolicy): Readonly<AdapterLimits> {
+  if (!policy) return adapter;
+  const l = { ...adapter };
+  l.timeoutMs = Math.min(l.timeoutMs, policy.deadlineMs);
+  l.memoryBytes = Math.min(l.memoryBytes, policy.memoryBytes);
+  l.cpus = Math.min(l.cpus, Math.max(0.1, Math.round(policy.cpuQuota * 100) / 100));
+  l.pids = Math.min(l.pids, policy.maxPids);
+  const combined = Math.min(l.stdoutBytes + l.stderrBytes, policy.maxOutputBytes);
+  if (combined < l.stdoutBytes + l.stderrBytes) {
+    l.stderrBytes = Math.min(l.stderrBytes, Math.floor(combined / 4));
+    l.stdoutBytes = combined - l.stderrBytes;
+  }
+  l.maxFrameBytes = Math.min(l.maxFrameBytes, l.stdoutBytes);
+  l.helloTimeoutMs = Math.min(l.helloTimeoutMs, l.timeoutMs);
+  l.cancelGraceMs = Math.min(l.cancelGraceMs, l.timeoutMs);
+  return Object.freeze(l);
+}
+
 /** Hash a built-in module's bytes; refuses links and non-files. */
 export function moduleDigestOf(path: string): Digest {
   let s;
@@ -125,21 +188,28 @@ function trusted(def: AdapterDefinition): TrustedAdapter {
   if (!def || typeof def !== 'object') invalid('definition');
   if (!ID.test(def.id ?? '')) invalid('id');
   if (typeof def.version !== 'string' || !def.version || def.version.length > 64) invalid('version');
+  if (def.kind === 'operation') {
+    if (!Object.hasOwn(OPERATION_MODULES, def.operation ?? '')) invalid('operation');
+    const moduleDigest = moduleDigestOf(fileURLToPath(OPERATION_MODULES[def.operation]));
+    const body = { id: def.id, version: def.version, kind: def.kind, operation: def.operation, moduleDigest };
+    return Object.freeze({ ...body, limits: ACCEPTED_CEILINGS, coverage: 'aggregate' as const, digest: sha256(canonicalJsonBytes(body)) });
+  }
   const limits = limitsOf(def.limits);
+  const coverage = coverageOf(def.coverage);
   if (def.kind === 'external') {
     if (def.isolation !== 'container') throw new ExecutionError('sentinel.execution.adapterIsolationRefused', { adapter: (def as AdapterDefinition).id });
     if (!IMAGE_REFERENCE.test(def.image ?? '')) invalid('image must be pinned as repository@sha256:<digest>');
     if (!Array.isArray(def.command) || !def.command.length || def.command.length > 64
       || def.command.some(a => typeof a !== 'string' || a.length > 65_536 || a.includes('\0'))
       || def.command.reduce((n, a) => n + a.length, 0) > 262_144) invalid('command');
-    const body = { id: def.id, version: def.version, kind: def.kind, isolation: def.isolation, image: def.image, command: [...def.command], limits };
+    const body = { id: def.id, version: def.version, kind: def.kind, isolation: def.isolation, image: def.image, command: [...def.command], limits, coverage };
     return Object.freeze({ ...body, command: Object.freeze([...def.command]), digest: sha256(canonicalJsonBytes(body)) });
   }
   if (def.kind === 'built-in') {
     if (def.isolation !== 'child') invalid('built-in workers run as a child process');
     if (typeof def.module !== 'string' || !isAbsolute(def.module)) invalid('module must be an absolute path');
     const moduleDigest = moduleDigestOf(def.module);
-    const body = { id: def.id, version: def.version, kind: def.kind, isolation: def.isolation, module: def.module, moduleDigest, limits };
+    const body = { id: def.id, version: def.version, kind: def.kind, isolation: def.isolation, module: def.module, moduleDigest, limits, coverage };
     return Object.freeze({ ...body, digest: sha256(canonicalJsonBytes(body)) });
   }
   return invalid('kind');

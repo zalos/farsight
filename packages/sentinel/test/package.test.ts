@@ -53,10 +53,21 @@ test('no Farsight package depends on or imports Sentinel', () => {
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', 'node:fs'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
+  'execution/assets.js': ['node:fs', 'node:path', 'node:url'],
+  'execution/bootstrap.js': ['node:fs', 'node:path'],
+  'execution/coordinator.js': ['node:crypto', 'node:fs'],
+  'execution/coverage.js': ['node:crypto'],
+  'execution/durability.js': ['node:fs'],
+  'execution/plan.js': ['node:crypto', 'node:path'],
+  'execution/plans.js': ['node:crypto'],
   'execution/errors.js': ['@farsight/core/dist/strings-sentinel-execution.js'],
   'execution/isolation.js': ['node:crypto', 'node:fs', 'node:os', 'node:path'],
+  'execution/launch-gate.js': ['node:fs'],
   'execution/processes.js': ['node:child_process'],
-  'execution/registry.js': ['node:crypto', 'node:fs', 'node:path'],
+  'execution/publication.js': ['node:fs'],
+  'execution/recovery.js': ['node:fs', 'node:path'],
+  'execution/scratch.js': ['node:fs', 'node:path'],
+  'execution/registry.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
   'policy/admission.js': ['@farsight/core/dist/grants.js'],

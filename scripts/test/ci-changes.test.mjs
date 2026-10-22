@@ -7,8 +7,8 @@ import { join, dirname } from 'node:path';
 import { changedPaths, detectChecks, selectChecks, sentinelIsolationInputs, sentinelPackageInputs } from '../ci-changes.mjs';
 import { buildClosure } from '../pack-preflight.mjs';
 
-const none = { validate: false, e2e: false, echo: false, sentinel: false, isolation: false };
-const full = { validate: true, e2e: true, echo: true, sentinel: true, isolation: true };
+const none = { validate: false, e2e: false, echo: false, sentinel: false, isolation: false, recovery: false };
+const full = { validate: true, e2e: true, echo: true, sentinel: true, isolation: true, recovery: true };
 
 test('ordinary docs skip runtime checks; packaged docs still check their tarball', () => {
   assert.deepEqual(selectChecks(['README.md', 'docs/research/analysis-core-options-2026-10-17.md',
@@ -37,7 +37,7 @@ test('runtime, fixtures and shared build inputs retain their affected checks', (
     'scripts/ci-changes.mjs', 'new-build-input.json', 'docs/fixture.json']) {
     assert.deepEqual(selectChecks([path]), full, path);
   }
-  assert.deepEqual(selectChecks(['packages/code-parser/src/tsjs.ts']), { ...none, validate: true, e2e: true, sentinel: true, isolation: true }, 'the public parser now belongs to Sentinel’s own build closure');
+  assert.deepEqual(selectChecks(['packages/code-parser/src/tsjs.ts']), { ...none, validate: true, e2e: true, sentinel: true, isolation: true, recovery: true }, 'the public parser now belongs to Sentinel’s own build closure');
   assert.deepEqual(selectChecks(['scripts/pack-echo.mjs']), { ...none, echo: true });
   for (const path of ['scripts/pack.mjs', 'scripts/pack-preflight.mjs', 'scripts/npm-consumer.mjs', 'scripts/test-farsight-package.mjs', 'scripts/test-farsight-package-absent.mjs']) {
     assert.deepEqual(selectChecks([path]), full, `${path} is shared packaging`);
@@ -71,6 +71,8 @@ test('sentinel-isolation runs for Sentinel and its own build closure only', () =
   }
   assert.equal(selectChecks(['packages/new-dep/src/x.ts'], { isolationInputs: new Set(['new-dep']) }).isolation, true);
   assert.equal(selectChecks(['.github/workflows/ci.yml']).isolation, true, 'workflow edits run everything');
+  assert.equal(selectChecks(['packages/sentinel/src/execution/coordinator.ts']).recovery, true, 'the recovery smoke follows the same inputs');
+  assert.equal(selectChecks(['packages/parsers/src/tsjs.ts']).recovery, false);
 });
 
 test('unreadable workspace manifests select every check', () => {
@@ -86,9 +88,9 @@ test('unreadable workspace manifests select every check', () => {
 test('Sentinel selects its package check without e2e; its build closure and the CLI layers select it too', () => {
   for (const path of ['packages/sentinel/src/index.ts', 'packages/sentinel/schemas/report.schema.json',
     'packages/sentinel/package.json', 'packages/sentinel/tsconfig.json']) {
-    assert.deepEqual(selectChecks([path]), { ...none, validate: true, sentinel: true, isolation: true }, path);
+    assert.deepEqual(selectChecks([path]), { ...none, validate: true, sentinel: true, isolation: true, recovery: true }, path);
   }
-  assert.deepEqual(selectChecks(['packages/sentinel/test/contracts.test.ts', 'packages/sentinel/test/fixtures/feasibility/a.ts']), { ...none, validate: true, isolation: true });
+  assert.deepEqual(selectChecks(['packages/sentinel/test/contracts.test.ts', 'packages/sentinel/test/fixtures/feasibility/a.ts']), { ...none, validate: true, isolation: true, recovery: true });
   assert.deepEqual(selectChecks(['packages/sentinel/README.md', 'scripts/pack-sentinel.mjs', 'scripts/test-sentinel-package.mjs']), { ...none, sentinel: true });
   assert.deepEqual(selectChecks(['packages/core/src/counts.ts']), full, 'core feeds Echo and Sentinel');
   assert.deepEqual(selectChecks(['packages/graph/src/graph.ts']), full);
@@ -140,9 +142,10 @@ test('real git ranges handle PR branch points, multiple push commits, deletion a
     execFileSync(process.execPath, [new URL('../ci-changes.mjs', import.meta.url).pathname], {
       cwd: dir, env: { ...process.env, BASE_SHA: base, HEAD_SHA: docs, GITHUB_EVENT_NAME: 'push', GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary },
     });
-    assert.equal(readFileSync(output, 'utf8'), 'validate=false\ne2e=false\necho=false\nsentinel=false\nisolation=false\n');
+    assert.equal(readFileSync(output, 'utf8'), 'validate=false\ne2e=false\necho=false\nsentinel=false\nisolation=false\nrecovery=false\n');
     assert.match(readFileSync(summary, 'utf8'), /e2e: skip/);
     assert.match(readFileSync(summary, 'utf8'), /sentinel-package: skip/);
     assert.match(readFileSync(summary, 'utf8'), /sentinel-isolation: skip/);
+    assert.match(readFileSync(summary, 'utf8'), /sentinel-recovery: skip/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
