@@ -392,7 +392,102 @@ try {
     }
   }
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}${osvDemo}npm consumer`);
+  // Trivy assets: the in-container worker ships with its exact digest and rights; no checks bundle or fixture ships.
+  let trivyDemo = '';
+  if (existsSync(join(sourceDir, 'scripts', 'package-assets-trivy.mjs'))) {
+    const manifestPath = join(installed, 'assets', 'trivy', 'manifest.json');
+    assert.ok(existsSync(manifestPath), 'the Trivy asset manifest is packaged');
+    const resolved = await evalModule(`import { createRequire } from 'node:module'; const r = createRequire(process.cwd() + '/'); console.log(r.resolve('farsight-sentinel/assets/trivy/manifest.json'));`);
+    assert.ok(resolved.trim().endsWith('assets/trivy/manifest.json'), 'Trivy assets resolve through the exports map');
+    const trivy = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    const worker = readFileSync(join(installed, trivy.worker.path));
+    assert.equal(`sha256:${createHash('sha256').update(worker).digest('hex')}`, trivy.worker.digest, 'the Trivy worker matches its digest');
+    assert.equal(trivy.adapter.command.at(-1), `/input/${trivy.worker.digest.slice(7)}`, 'the fixed command names the shipped worker');
+    assert.match(trivy.adapter.image, /^ghcr\.io\/aquasecurity\/trivy@sha256:[0-9a-f]{64}$/);
+    assert.equal(trivy.checks.shipped, false);
+    assert.equal(trivy.registered, false);
+    assert.ok(!readdirSync(installed, { recursive: true }).map(String).some((f) => /\.tar\.gz$|fixtures\/iac/.test(f)), 'no checks bundle or fixture ships');
+    trivyDemo = `trivy assets (worker ${trivy.worker.digest.slice(7, 19)}, no bundle), `;
+    // With SENTINEL_ISOLATION=1, the pinned image installed and SENTINEL_TRIVY_CHECKS_DIR naming the owner-acquired
+    // bundle, the shipped worker bytes run in the real engine through the WORKSPACE's isolated execution service. This
+    // checks the installed asset, not an installed runtime: nothing exported invokes the adapter until the PR 09 command.
+    if (process.env.SENTINEL_ISOLATION === '1') {
+      const imp = (p) => import(new URL(`file://${join(sourceDir, 'dist', p)}`).href);
+      const { TRIVY_ADAPTER, TRIVY_WORKER_DIGEST, loadChecksBundle, runTrivyAttempt } = await imp('adapters/trivy/index.js');
+      assert.deepEqual(trivy.adapter.command, [...TRIVY_ADAPTER.command], 'the shipped adapter is the workspace adapter');
+      assert.equal(trivy.worker.digest, TRIVY_WORKER_DIGEST);
+      assert.ok(process.env.SENTINEL_TRIVY_CHECKS_DIR, 'SENTINEL_TRIVY_CHECKS_DIR names the owner-acquired bundle');
+      const bundle = loadChecksBundle(join(process.env.SENTINEL_TRIVY_CHECKS_DIR, 'checks'));
+      assert.ok(bundle, 'the pinned checks bundle has been acquired');
+      const { createAdapterRegistry } = await imp('execution/registry.js');
+      const { createExecutionService } = await imp('execution/service.js');
+      const { openStore } = await imp('store/index.js');
+      const helpers = await import(new URL(`file://${join(sourceDir, 'test', 'iac-helpers.ts')}`).href);
+      const scratch = realpathSync(consumer.dir);
+      const work = join(scratch, 'trivy-work');
+      mkdirSync(work, { mode: 0o700 });
+      const store = await openStore(join(scratch, 'trivy-store'));
+      try {
+        const service = await createExecutionService(store, { scratchRoot: work, registry: createAdapterRegistry([TRIVY_ADAPTER]), containers: true });
+        const qualify = process.env.SENTINEL_IAC_QUALIFY?.replace(/^linux\//, '');
+        const r = await runTrivyAttempt(service, {
+          attemptId: 'att-package-trivy', work: { id: 'work-package', revision: 1 }, scratch, bundle,
+          targets: helpers.capturedTree(join(scratch, 'trivy-tree'), { 'services/api/Dockerfile': 'trivy/dockerfile-root.fixture' }),
+          ...(qualify ? { qualifyingArchitecture: qualify } : {}),
+        });
+        assert.equal(r.attempt, 'succeeded');
+        assert.ok(r.findings.some((f) => f.checkId === 'DS-0002'));
+        trivyDemo += `installed trivy worker run by the workspace service: ${r.findings.length} findings (${r.platform.architecture} ${r.platform.state}; installed-runtime acceptance open), `;
+      } finally {
+        await store.close();
+      }
+    }
+  }
+
+  // zizmor assets: the in-container worker ships with its exact digest and rights; no fixture ships.
+  let zizmorDemo = '';
+  if (existsSync(join(sourceDir, 'scripts', 'package-assets-zizmor.mjs'))) {
+    const manifestPath = join(installed, 'assets', 'zizmor', 'manifest.json');
+    assert.ok(existsSync(manifestPath), 'the zizmor asset manifest is packaged');
+    const zizmor = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    const worker = readFileSync(join(installed, zizmor.worker.path));
+    assert.equal(`sha256:${createHash('sha256').update(worker).digest('hex')}`, zizmor.worker.digest, 'the zizmor worker matches its digest');
+    assert.equal(zizmor.adapter.command.at(-1), `/input/${zizmor.worker.digest.slice(7)}`, 'the fixed command names the shipped worker');
+    assert.match(zizmor.adapter.image, /^ghcr\.io\/zizmorcore\/zizmor@sha256:[0-9a-f]{64}$/);
+    assert.ok(zizmor.adapter.engineArgs.includes('--offline') && zizmor.adapter.engineArgs.includes('--no-ignores'));
+    assert.equal(zizmor.registered, false);
+    zizmorDemo = `zizmor assets (worker ${zizmor.worker.digest.slice(7, 19)}), `;
+    if (process.env.SENTINEL_ISOLATION === '1') {
+      const imp = (p) => import(new URL(`file://${join(sourceDir, 'dist', p)}`).href);
+      const { ZIZMOR_ADAPTER, ZIZMOR_WORKER_DIGEST, runZizmorAttempt } = await imp('adapters/zizmor/index.js');
+      assert.deepEqual(zizmor.adapter.command, [...ZIZMOR_ADAPTER.command], 'the shipped adapter is the workspace adapter');
+      assert.equal(zizmor.worker.digest, ZIZMOR_WORKER_DIGEST);
+      const { createAdapterRegistry } = await imp('execution/registry.js');
+      const { createExecutionService } = await imp('execution/service.js');
+      const { openStore } = await imp('store/index.js');
+      const helpers = await import(new URL(`file://${join(sourceDir, 'test', 'iac-helpers.ts')}`).href);
+      const scratch = realpathSync(consumer.dir);
+      const work = join(scratch, 'zizmor-work');
+      mkdirSync(work, { mode: 0o700 });
+      const store = await openStore(join(scratch, 'zizmor-store'));
+      try {
+        const service = await createExecutionService(store, { scratchRoot: work, registry: createAdapterRegistry([ZIZMOR_ADAPTER]), containers: true });
+        const qualify = process.env.SENTINEL_IAC_QUALIFY?.replace(/^linux\//, '');
+        const r = await runZizmorAttempt(service, {
+          attemptId: 'att-package-zizmor', work: { id: 'work-package', revision: 1 }, scratch,
+          targets: helpers.capturedTree(join(scratch, 'zizmor-tree'), { '.github/workflows/triage.yml': 'zizmor/workflow-injection.fixture' }),
+          ...(qualify ? { qualifyingArchitecture: qualify } : {}),
+        });
+        assert.equal(r.attempt, 'succeeded');
+        assert.ok(r.findings.some((f) => f.audit === 'template-injection'));
+        zizmorDemo += `installed zizmor worker run by the workspace service: ${r.findings.length} findings (${r.platform.architecture} ${r.platform.state}; installed-runtime acceptance open), `;
+      } finally {
+        await store.close();
+      }
+    }
+  }
+
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}${osvDemo}${trivyDemo}${zizmorDemo}npm consumer`);
 } finally {
   consumer.cleanup();
 }

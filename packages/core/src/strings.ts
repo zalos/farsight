@@ -59,6 +59,8 @@ import { SENTINEL_PATTERN_STRINGS } from './strings-sentinel-pattern.js';
 import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
 import { SENTINEL_OSV_STRINGS } from './strings-sentinel-osv.js';
+import { SENTINEL_TRIVY_STRINGS } from './strings-sentinel-trivy.js';
+import { SENTINEL_ZIZMOR_STRINGS } from './strings-sentinel-zizmor.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
 import { TOUR_STRINGS } from './strings-tour.js';
@@ -194,6 +196,10 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_POLICY_STRINGS,
   // Sentinel's OSV advisory adapter: coverage, refusals, engine failures and acquisition (strings-sentinel-osv.ts)
   ...SENTINEL_OSV_STRINGS,
+  // Sentinel's Trivy misconfiguration adapter: coverage, refused results, failures and acquisition (strings-sentinel-trivy.ts)
+  ...SENTINEL_TRIVY_STRINGS,
+  // Sentinel's zizmor CI-configuration adapter: coverage, refused findings, failures and job refusals (strings-sentinel-zizmor.ts)
+  ...SENTINEL_ZIZMOR_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
   // who may do what — the role × action table's words live in strings-roles.ts (roles.*, gate.roles.*, its counts)

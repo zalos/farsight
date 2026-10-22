@@ -1,0 +1,5 @@
+# Application settings, not a Kubernetes manifest.
+name: sentinel-fixture
+features:
+  - reports
+  - exports

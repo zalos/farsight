@@ -1,0 +1,4 @@
+FROM alpine:3.20
+# trivy:ignore:DS-0002
+USER root
+CMD ["sh"]
