@@ -106,3 +106,74 @@ export function classesOf(file: ParsedFile): AstNode[] {
   }
   return out;
 }
+
+const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
+const SCOPE_TYPES = new Set([...FUNCTION_TYPES, 'BlockStatement', 'StaticBlock', 'CatchClause', 'ForStatement', 'ForInStatement', 'ForOfStatement', 'ClassDeclaration', 'ClassExpression', 'SwitchStatement']);
+export const isFunction = (n: AstNode | undefined) => !!n && FUNCTION_TYPES.has(n.type);
+
+/** Like `walk`, with the chain of ancestors (outermost first) of each node. */
+export function walkWithAncestors(node: unknown, visit: (n: AstNode, ancestors: readonly AstNode[]) => boolean | void, ancestors: AstNode[] = []): void {
+  if (Array.isArray(node)) { for (const c of node) walkWithAncestors(c, visit, ancestors); return; }
+  if (!isNode(node)) return;
+  if (visit(node, ancestors) === false) return;
+  ancestors.push(node);
+  for (const [k, v] of Object.entries(node)) if (k !== 'start' && k !== 'end' && k !== 'type' && typeof v === 'object' && v !== null) walkWithAncestors(v, visit, ancestors);
+  ancestors.pop();
+}
+
+/** Names a binding pattern introduces (identifiers, destructuring, defaults, rest, TS parameter properties). */
+export function patternNames(p: AstNode | undefined, out: string[] = []): string[] {
+  if (!p) return out;
+  switch (p.type) {
+    case 'Identifier': out.push(String(p.name)); break;
+    case 'AssignmentPattern': patternNames(p.left, out); break;
+    case 'RestElement': patternNames(p.argument, out); break;
+    case 'ArrayPattern': for (const e of p.elements ?? []) patternNames(e, out); break;
+    case 'ObjectPattern': for (const q of p.properties ?? []) patternNames(q.type === 'RestElement' ? q : q.value, out); break;
+    case 'TSParameterProperty': patternNames(p.parameter, out); break;
+    default: break;
+  }
+  return out;
+}
+
+/** Every name a scope node binds, over-approximated: declarations anywhere inside it except in nested functions. */
+function scopeBindings(scope: AstNode): Set<string> {
+  const names = new Set<string>();
+  if (isFunction(scope)) {
+    for (const p of scope.params ?? []) patternNames(p, [] as string[]).forEach(n => names.add(n));
+    if (scope.type === 'FunctionExpression' && scope.id) names.add(String(scope.id.name));
+  }
+  if (scope.type === 'CatchClause') patternNames(scope.param).forEach(n => names.add(n));
+  if (scope.type === 'ClassExpression' && scope.id) names.add(String(scope.id.name));
+  const body = isFunction(scope) ? scope.body : scope.type === 'CatchClause' ? scope.body : scope;
+  walk(body, n => {
+    if (n !== body && isFunction(n)) { if (n.type === 'FunctionDeclaration' && n.id) names.add(String(n.id.name)); return false; }
+    if (n.type === 'VariableDeclarator') patternNames(n.id).forEach(x => names.add(x));
+    if ((n.type === 'ClassDeclaration' || n.type === 'TSEnumDeclaration' || n.type === 'TSModuleDeclaration') && n.id && n !== scope) names.add(String(n.id.name));
+    if (n.type === 'ImportDeclaration') return false;
+    return undefined;
+  });
+  return names;
+}
+
+/** True when a scope node binds `name` (over-approximated as in `scopeBindings`); false for a node that is not a scope. */
+export function bindsName(scope: AstNode, name: string): boolean {
+  return SCOPE_TYPES.has(scope.type) && scopeBindings(scope).has(name);
+}
+
+/** True when `name`, referenced at `offset`, is bound by a scope nested inside the module: not the module's import. */
+export function shadowedAt(file: ParsedFile, name: string, offset: number): boolean {
+  let hit = false;
+  walk(file.program, n => {
+    if (hit || offset < n.start || offset >= n.end) return false;
+    if (n !== file.program && SCOPE_TYPES.has(n.type) && scopeBindings(n).has(name)) hit = true;
+    return undefined;
+  });
+  return hit;
+}
+
+/** `resolveRef` with lexical scope: a name a nested scope rebinds at `at` is local, whatever the module imports. */
+export function resolveAt(file: ParsedFile, ref: { local: string; member?: string }, at: number): { module: string | null; name: string; shadowed: boolean } {
+  if (shadowedAt(file, ref.local, at)) return { module: null, name: ref.member ? `${ref.local}.${ref.member}` : ref.local, shadowed: true };
+  return { ...resolveRef(file, ref), shadowed: false };
+}

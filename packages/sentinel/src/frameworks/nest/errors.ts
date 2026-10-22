@@ -9,9 +9,11 @@ export const NEST_REASON_CODES = Object.freeze([
   'sentinel.nest.moduleUnresolved', 'sentinel.nest.dynamicModule', 'sentinel.nest.externalModule', 'sentinel.nest.unknownFactory',
   'sentinel.nest.nonLiteralRegistration', 'sentinel.nest.controllerUnresolved', 'sentinel.nest.controllerWithoutRoutes',
   'sentinel.nest.middlewareNotModeled', 'sentinel.nest.adapterRouteNotModeled',
+  'sentinel.nest.bootstrapNotInvoked', 'sentinel.nest.applicationEscapes', 'sentinel.nest.registrationNotFollowed',
   'sentinel.nest.surfaceUnresolved', 'sentinel.nest.controllerNotRegistered', 'sentinel.nest.inheritedController', 'sentinel.nest.customDecorator',
   'sentinel.nest.guardEffectUnresolved', 'sentinel.nest.pipeEffectUnresolved', 'sentinel.nest.interceptorEffectUnresolved',
   'sentinel.nest.validationOptionsUnknown', 'sentinel.nest.dtoUnresolved', 'sentinel.nest.dtoWithoutRules',
+  'sentinel.nest.dtoConditional', 'sentinel.nest.dtoInherited', 'sentinel.nest.decoratorMetadataOff', 'sentinel.nest.decoratorMetadataUnknown',
   'sentinel.nest.parseFailed', 'sentinel.nest.invalidUtf8', 'sentinel.nest.fileNotRead', 'sentinel.nest.fileNotCaptured', 'sentinel.nest.spanUnavailable',
 ] as const);
 export type NestReasonCode = typeof NEST_REASON_CODES[number];

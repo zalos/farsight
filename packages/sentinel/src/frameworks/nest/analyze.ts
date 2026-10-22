@@ -18,7 +18,7 @@ import { validateEnvelope } from '../../validate.js';
 import { NEST_PACK } from './support.js';
 import { NestPackError, type NestReason, type NestReasonCode } from './errors.js';
 import {
-  classesOf, decoratorCall, loadParser, parseFile, refName, resolveRef, SyntaxFailure, walk,
+  bindsName, classesOf, decoratorCall, isFunction, loadParser, parseFile, refName, resolveAt, resolveRef, SyntaxFailure, walk, walkWithAncestors,
   type AstNode, type ParsedFile, type Span,
 } from './syntax.js';
 
@@ -45,7 +45,7 @@ export interface NestInput {
   readonly index: number;
   readonly decorator: string;
   /** The parameter's annotated class, when it is one this pack resolved. */
-  readonly dto: { readonly name: string; readonly relativePath: string; readonly rules: number } | null;
+  readonly dto: { readonly name: string; readonly relativePath: string; readonly rules: number; readonly conditional: boolean; readonly inherited: boolean } | null;
   readonly typeName: string | null;
   readonly evidence: SourceEvidence;
 }
@@ -167,11 +167,12 @@ function classify(ctx: Ctx, file: ParsedFile, arg: AstNode, stage: NestStage, sc
   if (!ref || (arg.type !== 'Identifier' && arg.type !== 'NewExpression' && arg.type !== 'CallExpression' && arg.type !== 'MemberExpression' && arg.type !== 'StaticMemberExpression')) {
     return { ...base, name: '(expression)', origin: 'unresolved', effect: 'unknown', optionsKnown: false };
   }
-  const r = resolveRef(file, ref);
+  // The name as the scope at the argument sees it: a parameter or local declaration named like an import is not it.
+  const r = resolveAt(file, ref, target!.start);
   const name = r.name;
   if (r.module === '@nestjs/common') {
     const literalOptions = (arg.arguments ?? []).every((a: AstNode) => a.type === 'ObjectExpression' && (a.properties ?? []).every((p: AstNode) => p.type === 'Property' && !p.computed && !p.method && ['Literal', 'BooleanLiteral', 'NumericLiteral', 'StringLiteral'].includes(p.value?.type)));
-    if (name === 'ValidationPipe' && stage === 'pipe' && !call) return { ...base, name, origin: '@nestjs/common', effect: 'validation', optionsKnown: literalOptions };
+    if (name === 'ValidationPipe' && stage === 'pipe' && !call) return { ...base, name, origin: '@nestjs/common', effect: 'validation', optionsKnown: validationOptionsKnown(arg) };
     if (PARSE_PIPES.has(name) && stage === 'pipe' && !call) return { ...base, name, origin: '@nestjs/common', effect: 'parsing', optionsKnown: literalOptions };
     if ((name === 'DefaultValuePipe' && stage === 'pipe') || (name === 'ClassSerializerInterceptor' && stage === 'interceptor')) return { ...base, name, origin: '@nestjs/common', effect: 'transformation', optionsKnown: literalOptions };
     return { ...base, name, origin: '@nestjs/common', effect: stage === 'guard' ? 'access-control-unresolved' : 'unknown', optionsKnown: false };
@@ -180,11 +181,67 @@ function classify(ctx: Ctx, file: ParsedFile, arg: AstNode, stage: NestStage, sc
     return { ...base, name, origin: '@nestjs/platform-express', effect: 'parsing', optionsKnown: true };
   }
   if (r.module === null || r.module.startsWith('.')) {
-    const local = call ? null : findClass(ctx, file, ref.local);
+    const local = call || r.shadowed ? null : findClass(ctx, file, ref.local);
     if (local) return { ...base, name, origin: 'local', effect: stage === 'guard' ? 'access-control-unresolved' : 'unknown', optionsKnown: false };
     return { ...base, name, origin: 'unresolved', effect: stage === 'guard' ? 'access-control-unresolved' : 'unknown', optionsKnown: false };
   }
   return { ...base, name, origin: 'external', effect: stage === 'guard' ? 'access-control-unresolved' : 'unknown', optionsKnown: false };
+}
+
+/**
+ * ValidationPipe options known not to weaken validation. Any other option (skipping missing, undefined or null
+ * properties, groups, always, custom-decorator validation, transform options, an exception factory, ...) or a value that
+ * is not a literal leaves whether the schema is enforced unknown.
+ */
+const SAFE_VALIDATION_OPTIONS: Record<string, (v: unknown) => boolean> = {
+  whitelist: v => typeof v === 'boolean', forbidNonWhitelisted: v => typeof v === 'boolean', transform: v => typeof v === 'boolean',
+  disableErrorMessages: v => typeof v === 'boolean', enableDebugMessages: v => typeof v === 'boolean', stopAtFirstError: v => typeof v === 'boolean',
+  errorHttpStatusCode: v => typeof v === 'number', forbidUnknownValues: v => v === true,
+};
+function validationOptionsKnown(arg: AstNode): boolean {
+  if (arg.type === 'Identifier' || arg.type === 'MemberExpression' || arg.type === 'StaticMemberExpression') return true; // the class itself: default options
+  const args = arg.arguments ?? [];
+  if (args.length === 0) return true;
+  if (args.length !== 1 || args[0].type !== 'ObjectExpression') return false;
+  return (args[0].properties ?? []).every((p: AstNode) => {
+    if (p.type !== 'Property' || p.computed || p.method || p.kind !== 'init') return false;
+    const key = String(p.key?.name ?? p.key?.value);
+    const ok = Object.hasOwn(SAFE_VALIDATION_OPTIONS, key) ? SAFE_VALIDATION_OPTIONS[key]! : null;
+    return ok !== null && ['Literal', 'BooleanLiteral', 'NumericLiteral'].includes(p.value?.type) && ok(p.value.value);
+  });
+}
+
+/** True when a top-level statement of the module calls this function unconditionally (`f()`, `await f()`, `void f()`, `f().catch(...)`). */
+function invokedAtTopLevel(file: ParsedFile, fn: AstNode): boolean {
+  let name: string | null = null;
+  for (const st of file.program.body ?? []) {
+    const d = st.type === 'ExportNamedDeclaration' || st.type === 'ExportDefaultDeclaration' ? st.declaration : st;
+    if (d === fn && fn.id) name = String(fn.id.name);
+    if (d?.type === 'VariableDeclaration' && d.kind === 'const') for (const v of d.declarations ?? []) if (v.init === fn && v.id?.type === 'Identifier') name = String(v.id.name);
+  }
+  if (!name) return false;
+  return (file.program.body ?? []).some((st: AstNode) => {
+    if (st.type !== 'ExpressionStatement') return false;
+    let e = st.expression;
+    for (;;) {
+      if (e?.type === 'AwaitExpression') e = e.argument;
+      else if (e?.type === 'UnaryExpression' && e.operator === 'void') e = e.argument;
+      else if (e?.type === 'CallExpression' && (e.callee?.type === 'MemberExpression' || e.callee?.type === 'StaticMemberExpression') && ['then', 'catch', 'finally'].includes(e.callee.property?.name)) e = e.callee.object;
+      else break;
+    }
+    return e?.type === 'CallExpression' && e.callee?.type === 'Identifier' && e.callee.name === name;
+  });
+}
+
+/** True when a statement can leave its function: a return or throw outside any nested function. */
+function mayLeave(st: AstNode): boolean {
+  let leaves = false;
+  walk(st, n => {
+    if (leaves || (n !== st && isFunction(n))) return false;
+    if (n.type === 'ReturnStatement' || n.type === 'ThrowStatement') leaves = true;
+    return undefined;
+  });
+  return leaves;
 }
 
 function decoratorsNamed(file: ParsedFile, node: AstNode): { name: string | null; module: string | null; d: AstNode; args: AstNode[] }[] {
@@ -192,21 +249,41 @@ function decoratorsNamed(file: ParsedFile, node: AstNode): { name: string | null
     const { callee, args } = decoratorCall(d);
     const ref = refName(callee);
     if (!ref) return { name: null, module: null, d, args };
-    const r = resolveRef(file, ref);
+    const r = resolveAt(file, ref, d.start);
     return { name: r.module === '@nestjs/common' ? r.name : null, module: r.module, d, args };
   });
 }
 
-/** The class-validator rules a DTO class declares on its properties. */
-function dtoRules(file: ParsedFile, cls: AstNode): number {
+/** class-validator decorators that make a property's other rules conditional. */
+const CONDITIONAL_RULES = new Set(['ValidateIf', 'IsOptional']);
+
+/**
+ * The class-validator rules a DTO class declares on its properties, and whether any of them is conditional: a
+ * ValidateIf or IsOptional, a rule restricted to groups or marked always, or options the pack cannot read. A class
+ * that extends another inherits rules the pack does not follow.
+ */
+function dtoRules(file: ParsedFile, cls: AstNode): { rules: number; conditional: boolean; inherited: boolean } {
   let rules = 0;
+  let conditional = false;
   for (const m of cls.body?.body ?? []) {
     for (const d of m.decorators ?? []) {
-      const ref = refName(decoratorCall(d).callee);
-      if (ref && resolveRef(file, ref).module === 'class-validator') rules++;
+      const { callee, args } = decoratorCall(d);
+      const ref = refName(callee);
+      if (!ref) continue;
+      const r = resolveAt(file, ref, d.start);
+      if (r.module !== 'class-validator') continue;
+      rules++;
+      if (CONDITIONAL_RULES.has(r.name)) conditional = true;
+      for (const a of args) {
+        if (a.type !== 'ObjectExpression') continue;
+        for (const p of a.properties ?? []) {
+          const key = p.type === 'Property' && !p.computed ? String(p.key?.name ?? p.key?.value) : null;
+          if (key === null || key === 'groups' || key === 'always') conditional = true;
+        }
+      }
     }
   }
-  return rules;
+  return { rules, conditional, inherited: !!cls.superClass };
 }
 
 function typeNameOf(param: AstNode): string | null {
@@ -214,6 +291,82 @@ function typeNameOf(param: AstNode): string | null {
   const ann = id?.typeAnnotation?.typeAnnotation;
   if (ann?.type === 'TSTypeReference' && ann.typeName?.type === 'Identifier') return String(ann.typeName.name);
   return null;
+}
+
+/** JSON with comments and trailing commas, with comment and comma bytes blanked so offsets still match the text. */
+function blankJsonc(text: string): string {
+  const out = text.split('');
+  let i = 0;
+  const blank = (a: number, b: number) => { for (let k = a; k < b; k++) if (out[k] !== '\n') out[k] = ' '; };
+  while (i < text.length) {
+    const c = text[i]!;
+    if (c === '"') { i++; while (i < text.length && text[i] !== '"') i += text[i] === '\\' ? 2 : 1; i++; continue; }
+    if (c === '/' && text[i + 1] === '/') { const e = text.indexOf('\n', i); const end = e < 0 ? text.length : e; blank(i, end); i = end; continue; }
+    if (c === '/' && text[i + 1] === '*') { const e = text.indexOf('*/', i + 2); const end = e < 0 ? text.length : e + 2; blank(i, end); i = end; continue; }
+    if (c === ',') { let j = i + 1; while (j < text.length && /\s/.test(out[j]!)) j++; if (text[j] === '}' || text[j] === ']') out[i] = ' '; }
+    i++;
+  }
+  return out.join('');
+}
+
+type Metadata = { state: 'on' | 'off' | 'unknown'; evidence: SourceEvidence | null };
+
+/**
+ * Whether the compiler emits the parameter-type metadata ValidationPipe reads to find a DTO's class. Without it the
+ * pipe sees no class and validates nothing. Read from the captured tsconfig.json nearest the controller: on only when
+ * it sets both experimentalDecorators and emitDecoratorMetadata to true itself; off when it sets either to false, or
+ * leaves metadata unset and extends nothing; unknown when it inherits them, cannot be read, or another compiler (SWC)
+ * builds the project.
+ */
+async function decoratorMetadata(ctx: Ctx, controllerPath: string, cache: Map<string, Metadata>): Promise<Metadata> {
+  const dirs = controllerPath.split('/').slice(0, -1);
+  for (let n = dirs.length; n >= 0; n--) {
+    const dir = dirs.slice(0, n).join('/');
+    const path = dir ? `${dir}/tsconfig.json` : 'tsconfig.json';
+    if (!ctx.content.has(path)) continue;
+    if (cache.has(path)) return cache.get(path)!;
+    const result = await (async (): Promise<Metadata> => {
+      for (const other of ['.swcrc', dir ? `${dir}/.swcrc` : '.swcrc']) if (ctx.content.has(other)) return { state: 'unknown', evidence: null };
+      for (const cli of ['nest-cli.json', dir ? `${dir}/nest-cli.json` : 'nest-cli.json']) {
+        const id = ctx.content.get(cli);
+        if (!id) continue;
+        try {
+          const conf = JSON.parse(blankJsonc(new TextDecoder('utf-8', { fatal: true }).decode(await ctx.input.readArtifact(id))));
+          const builder = conf?.compilerOptions?.builder;
+          if (builder !== undefined && builder !== 'tsc' && builder?.type !== 'tsc') return { state: 'unknown', evidence: null };
+        } catch { return { state: 'unknown', evidence: null }; }
+      }
+      let text: string;
+      let conf: any;
+      try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(await ctx.input.readArtifact(ctx.content.get(path)!));
+        conf = JSON.parse(blankJsonc(text));
+      } catch { return { state: 'unknown', evidence: null }; }
+      const opts = conf?.compilerOptions ?? {};
+      const at = (key: string) => {
+        const matches = [...blankJsonc(text).matchAll(new RegExp(`"${key}"\\s*:\\s*(true|false)`, 'g'))];
+        return matches.length === 1 ? evidenceForText(ctx, path, text, matches[0]!.index!, matches[0]!.index! + matches[0]![0].length) : null;
+      };
+      if (opts.emitDecoratorMetadata === false || opts.experimentalDecorators === false) return { state: 'off', evidence: at(opts.emitDecoratorMetadata === false ? 'emitDecoratorMetadata' : 'experimentalDecorators') };
+      if (opts.emitDecoratorMetadata === true && opts.experimentalDecorators === true) {
+        const ev = at('emitDecoratorMetadata');
+        return ev ? { state: 'on', evidence: ev } : { state: 'unknown', evidence: null };
+      }
+      return conf?.extends !== undefined ? { state: 'unknown', evidence: null } : { state: 'off', evidence: null };
+    })();
+    cache.set(path, result);
+    return result;
+  }
+  return { state: 'unknown', evidence: null };
+}
+
+function evidenceForText(ctx: Ctx, path: string, text: string, start: number, end: number): SourceEvidence {
+  const startByte = Buffer.byteLength(text.slice(0, start), 'utf8');
+  const endByte = startByte + Buffer.byteLength(text.slice(start, end), 'utf8');
+  return {
+    snapshotId: ctx.input.snapshot.id, sourceId: ctx.input.sourceId, relativePath: path, content: ctx.content.get(path)!,
+    span: { startByte, endByte }, quoteDigest: sha256(Buffer.from(text.slice(start, end), 'utf8')),
+  };
 }
 
 /** Versions of the Nest packages and class-validator, from the captured lockfile first, else exact manifest pins. */
@@ -266,43 +419,92 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
   const globals: NestBinding[] = [];
   let rootModule: { file: ParsedFile; node: AstNode } | null = null;
   let bootstrapEvidence: SourceEvidence | null = null;
-  const creates: { file: ParsedFile; call: AstNode; app: string | null }[] = [];
+  // The application object, as the bootstrap declares it: `const app = [await] NestFactory.create(Module)` as a
+  // statement of the bootstrap's own body (or the module's). Any other shape is not followed.
+  interface Create { file: ParsedFile; call: AstNode; app: string | null; body: AstNode[] | null; statement: AstNode | null; fn: AstNode | null }
+  const creates: Create[] = [];
   for (const file of ctx.files.values()) {
-    walk(file.program, n => {
-      if (n.type !== 'VariableDeclarator' && n.type !== 'ExpressionStatement' && n.type !== 'AssignmentExpression') return;
-      const init = n.type === 'VariableDeclarator' ? n.init : n.type === 'AssignmentExpression' ? n.right : n.expression;
-      const call = init?.type === 'AwaitExpression' ? init.argument : init;
-      if (call?.type !== 'CallExpression') return;
-      const ref = refName(call.callee);
-      if (!ref || ref.member !== 'create' || resolveRef(file, { local: ref.local }).module !== '@nestjs/core' || resolveRef(file, { local: ref.local }).name !== 'NestFactory') return;
-      const app = n.type === 'VariableDeclarator' && n.id?.type === 'Identifier' ? String(n.id.name) : n.type === 'AssignmentExpression' && n.left?.type === 'Identifier' ? String(n.left.name) : null;
-      creates.push({ file, call, app });
+    walkWithAncestors(file.program, (n, anc) => {
+      if (n.type !== 'CallExpression') return;
+      const ref = refName(n.callee);
+      if (!ref || ref.member !== 'create') return;
+      const r = resolveAt(file, { local: ref.local }, n.start);
+      if (r.module !== '@nestjs/core' || r.name !== 'NestFactory') return;
+      const up = [...anc].reverse();
+      let k = 0;
+      if (up[k]?.type === 'AwaitExpression') k++;
+      const decl = up[k], declaration = up[k + 1], container = up[k + 2], owner = up[k + 3];
+      const shaped = decl?.type === 'VariableDeclarator' && decl.id?.type === 'Identifier' && declaration?.type === 'VariableDeclaration' && declaration.kind === 'const'
+        && (container?.type === 'Program' || (container?.type === 'BlockStatement' && isFunction(owner)));
+      creates.push({
+        file, call: n, app: shaped ? String(decl.id.name) : null,
+        body: shaped ? container.body : null, statement: shaped ? declaration : null, fn: shaped && container.type !== 'Program' ? owner ?? null : null,
+      });
       return false;
     });
   }
   if (creates.length !== 1) frontier(ctx, creates[1]?.file.path ?? 'main.ts', creates.length ? 'bootstrapAmbiguous' : 'bootstrapNotFound');
   const boot = creates.length === 1 ? creates[0]! : null;
+  const followed = new Set<AstNode>();
   if (boot) {
     bootstrapEvidence = evidenceOf(ctx, boot.file, boot.call);
     const arg = boot.call.arguments?.[0];
-    const ref = arg?.type === 'Identifier' ? refName(arg) : null;
+    const ref = arg?.type === 'Identifier' && !resolveAt(boot.file, { local: String(arg.name) }, arg.start).shadowed ? refName(arg) : null;
     rootModule = ref ? findClass(ctx, boot.file, ref.local) : null;
     if (!rootModule) frontier(ctx, boot.file.path, 'rootModuleUnresolved');
-    if (!boot.app) frontier(ctx, boot.file.path, 'applicationUnresolved');
-    walk(boot.file.program, n => {
-      if (n.type !== 'CallExpression') return;
-      const ref = refName(n.callee);
-      if (!ref || !boot.app || ref.local !== boot.app || !ref.member) return;
-      if (ref.member === 'use') { frontier(ctx, boot.file.path, 'middlewareNotModeled'); return; }
-      // A handler mounted on the HTTP adapter runs outside Nest's chain; it is not one of the controller surfaces.
-      if (ref.member === 'getHttpAdapter') { frontier(ctx, boot.file.path, 'adapterRouteNotModeled'); return; }
-      const stage = STAGE_OF[ref.member];
-      if (!stage) return;
-      for (const a of n.arguments ?? []) {
-        if (a.type === 'SpreadElement') { frontier(ctx, boot.file.path, 'nonLiteralRegistration'); continue; }
-        const b = classify(ctx, boot.file, a, stage, 'global', 'use-global');
-        if (b) globals.push(b); else frontier(ctx, boot.file.path, 'spanUnavailable');
+    if (!boot.app || !boot.body || !boot.statement) frontier(ctx, boot.file.path, 'applicationUnresolved');
+    else {
+      // The bootstrap must run: a function the module calls unconditionally at its top level (or the module itself).
+      if (boot.fn && !invokedAtTopLevel(boot.file, boot.fn)) frontier(ctx, boot.file.path, 'bootstrapNotInvoked');
+      const app = boot.app;
+      const fnBody = boot.fn ?? boot.file.program;
+      const bodyBlock = boot.fn ? boot.fn.body : boot.file.program;
+      // Every use of the application other than a method call on it passes it where its registrations cannot be seen.
+      walkWithAncestors(fnBody, (n, anc) => {
+        if (n.type !== 'Identifier' || n.name !== app) return;
+        const parent = anc[anc.length - 1];
+        if (parent === undefined || (parent.type === 'VariableDeclarator' && parent.id === n)) return;
+        if ((parent.type === 'MemberExpression' || parent.type === 'StaticMemberExpression') && parent.object === n && !parent.computed) return;
+        // A nested scope that declares its own `app` is a different binding.
+        if (anc.slice(anc.indexOf(fnBody) + 1).some(a => a !== bodyBlock && bindsName(a, app))) return;
+        frontier(ctx, boot.file.path, 'applicationEscapes');
+      });
+      walk(fnBody, n => {
+        if (n.type !== 'CallExpression') return;
+        const r = refName(n.callee);
+        if (r?.member === 'getHttpAdapter') frontier(ctx, boot.file.path, 'adapterRouteNotModeled');
+        if (r?.local === app && r.member === 'use') frontier(ctx, boot.file.path, 'middlewareNotModeled');
+      });
+      // Straight-line statements after the create, until the application initializes: only those certainly run, in
+      // this order, before routes are built. A statement that can leave the function ends certainty for the rest.
+      let definite = true;
+      let initialized = false;
+      for (const st of boot.body.slice(boot.body.indexOf(boot.statement) + 1)) {
+        const expr = st.type === 'ExpressionStatement' ? (st.expression?.type === 'AwaitExpression' ? st.expression.argument : st.expression) : null;
+        const r = expr?.type === 'CallExpression' ? refName(expr.callee) : null;
+        if (r && r.local === app && r.member && definite && !initialized) {
+          if (r.member === 'init' || r.member === 'listen') initialized = true;
+          const stage = STAGE_OF[r.member];
+          if (stage) {
+            followed.add(expr);
+            for (const a of expr.arguments ?? []) {
+              if (a.type === 'SpreadElement') { frontier(ctx, boot.file.path, 'nonLiteralRegistration'); continue; }
+              const b = classify(ctx, boot.file, a, stage, 'global', 'use-global');
+              if (b) globals.push(b); else frontier(ctx, boot.file.path, 'spanUnavailable');
+            }
+          }
+        }
+        if (mayLeave(st)) definite = false;
       }
+    }
+  }
+  // A global registration anywhere else (conditional, after initialization, in another function, on another binding)
+  // is not followed, and it could change any chain.
+  for (const file of ctx.files.values()) {
+    walk(file.program, n => {
+      if (n.type !== 'CallExpression' || followed.has(n)) return;
+      const r = refName(n.callee);
+      if (r?.member && STAGE_OF[r.member] && r.member.startsWith('useGlobal')) frontier(ctx, file.path, 'registrationNotFollowed');
     });
   }
 
@@ -378,8 +580,11 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
     if (!controllers.has(`${path}::${className}`)) local.push(R('controllerNotRegistered'));
     if (cls.superClass) local.push(R('inheritedController'));
     const chain: NestBinding[] = [...globals];
+    // Decorators apply bottom to top, and each UseGuards / UseInterceptors / UsePipes appends to what the ones below it
+    // registered (extendArrayMetadata), so a scope's stacked decorators register in reverse source order; the
+    // arguments of one decorator keep their order.
     const take = (decs: ReturnType<typeof decoratorsNamed>, scope: NestScope) => {
-      for (const d of decs) {
+      for (const d of [...decs].reverse()) {
         if (d.name && STAGE_OF[d.name]) {
           for (const a of d.args) {
             if (a.type === 'SpreadElement') { local.push(R('nonLiteralRegistration')); continue; }
@@ -407,7 +612,7 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
         // The parameter with its decorators: what the handler declares it receives.
         const ev = evidenceOf(ctx, file, { type: 'Span', start: Math.min(param.start, ...(param.decorators ?? []).map((x: AstNode) => x.start)), end: param.end });
         if (!ev) { local.push(R('spanUnavailable')); continue; }
-        inputs.push({ index, decorator: d.name, typeName, evidence: ev, dto: dtoClass ? { name: typeName!, relativePath: dtoClass.file.path, rules: dtoRules(dtoClass.file, dtoClass.node) } : null });
+        inputs.push({ index, decorator: d.name, typeName, evidence: ev, dto: dtoClass ? { name: typeName!, relativePath: dtoClass.file.path, ...dtoRules(dtoClass.file, dtoClass.node) } : null });
       }
     });
     chain.sort((a, b) => STAGE_RANK[a.stage] - STAGE_RANK[b.stage] || SCOPE_RANK[a.scope] - SCOPE_RANK[b.scope]);
@@ -420,6 +625,7 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
   const globalFrontiers = ctx.frontiers.filter(f => ([
     'versionUnresolved', 'versionUnsupported', 'bootstrapNotFound', 'bootstrapAmbiguous', 'rootModuleUnresolved', 'applicationUnresolved',
     'middlewareNotModeled', 'nonLiteralRegistration', 'dynamicModule', 'externalModule', 'unknownFactory', 'moduleUnresolved',
+    'bootstrapNotInvoked', 'applicationEscapes', 'registrationNotFollowed',
     'controllerUnresolved', 'parseFailed', 'invalidUtf8', 'fileNotRead', 'fileNotCaptured', 'spanUnavailable',
   ] as NestReason[]).map(R).includes(f.reasonCode as NestReasonCode)).map(f => f.reasonCode);
   const facts: ControlFact[] = [];
@@ -431,6 +637,7 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
       ...(verdict === 'unknown' ? { reasonCode: reasonCode! } : {}),
     });
   };
+  const metadataCache = new Map<string, Metadata>();
   for (const s of surfaces) {
     const blockers = [...globalFrontiers, ...s.frontiers];
     const guards = s.chain.filter(b => b.stage === 'guard');
@@ -457,10 +664,15 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
       if (validated.some(i => validators(i).some(v => !v.optionsKnown))) reasons.push(R('validationOptionsUnknown'));
       if (validated.some(i => !i.dto)) reasons.push(R('dtoUnresolved'));
       if (validated.some(i => i.dto && i.dto.rules === 0)) reasons.push(R('dtoWithoutRules'));
+      if (validated.some(i => i.dto?.conditional)) reasons.push(R('dtoConditional'));
+      if (validated.some(i => i.dto?.inherited)) reasons.push(R('dtoInherited'));
       if (framework.classValidator !== NEST_PACK.versions['class-validator']) reasons.push(R('classValidatorUnsupported'));
+      const metadata = await decoratorMetadata(ctx, s.relativePath, metadataCache);
+      if (metadata.state === 'off') reasons.push(R('decoratorMetadataOff'));
+      if (metadata.state === 'unknown') reasons.push(R('decoratorMetadataUnknown'));
       const first = validators(validated[0]!)[0]!;
       if (reasons.length) add(s, 'input-validation', s.chain.indexOf(first), 'unknown', [], reasons[0]);
-      else add(s, 'input-validation', s.chain.indexOf(first), 'applies', [...new Set(validated.flatMap(i => [validators(i)[0]!.evidence, i.evidence]))]);
+      else add(s, 'input-validation', s.chain.indexOf(first), 'applies', [...new Set(validated.flatMap(i => [validators(i)[0]!.evidence, i.evidence])), metadata.evidence!]);
     } else if (validated.some(i => validators(i).length === 0 && unknownPipes(i).length)) {
       add(s, 'input-validation', s.chain.indexOf(unknownPipes(validated.find(i => unknownPipes(i).length)!)[0]!), 'unknown', [], R('pipeEffectUnresolved'));
     } else if (blockers.length) {

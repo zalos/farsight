@@ -330,3 +330,103 @@ export class AppModule {}
   });
   assert.equal(fact(mixed.analysis, 'POST /orders', 'input-validation')!.reasonCode, 'sentinel.nest.pipeEffectUnresolved');
 });
+
+// ---- review regressions: a registration counts only where it certainly runs, on the application, under its own name
+
+const ctlText = () => readFileSync(join(APP, 'orders.controller.ts.fixture'), 'utf8');
+/** A bootstrap with `body` after the create; `head` goes above the function, `call` invokes it. */
+function mainWith(body: string, head = '', call = 'bootstrap();', params = '') {
+  return `import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { AppModule } from './app.module';
+${head}
+async function bootstrap(${params}) {
+  const app = await NestFactory.create(AppModule);
+${body}
+  await app.listen(3000);
+}
+${call}
+`;
+}
+const validation = (a: NestAnalysis) => fact(a, 'POST /orders', 'input-validation')!;
+
+test('SOL: a registration that cannot run, or runs on another binding, is never protection', needsStore, async t => {
+  const reachable = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());') });
+  assert.equal(validation(reachable.analysis).verdict, 'applies', 'the near neighbour: unconditional, before listen');
+  const dead = await run(t, { 'main.ts': mainWith('  if (false) app.useGlobalPipes(new ValidationPipe());') });
+  assert.deepEqual(dead.analysis.scope.globals, []);
+  assert.equal(validation(dead.analysis).verdict, 'unknown');
+  assert.equal(validation(dead.analysis).reasonCode, 'sentinel.nest.registrationNotFollowed');
+  const tried = await run(t, { 'main.ts': mainWith('  try {\n    app.useGlobalPipes(new ValidationPipe());\n  } catch {}') });
+  assert.equal(validation(tried.analysis).reasonCode, 'sentinel.nest.registrationNotFollowed');
+  const late = await run(t, { 'main.ts': mainWith('  await app.init();\n  app.useGlobalPipes(new ValidationPipe());') });
+  assert.equal(validation(late.analysis).reasonCode, 'sentinel.nest.registrationNotFollowed', 'after initialization');
+  const afterExit = await run(t, { 'main.ts': mainWith('  if (process.env.SKIP) return;\n  app.useGlobalPipes(new ValidationPipe());') });
+  assert.equal(validation(afterExit.analysis).reasonCode, 'sentinel.nest.registrationNotFollowed', 'after a possible return');
+  const unrelated = await run(t, { 'main.ts': mainWith('', 'function configure(app: { useGlobalPipes(p: unknown): void }) {\n  app.useGlobalPipes(new ValidationPipe());\n}') });
+  assert.deepEqual(unrelated.analysis.scope.globals, [], 'a parameter named app is another binding');
+  assert.equal(validation(unrelated.analysis).reasonCode, 'sentinel.nest.registrationNotFollowed');
+  const escapes = await run(t, { 'main.ts': mainWith('  configure(app);', 'function configure(target: { useGlobalPipes(p: unknown): void }) {\n  target.useGlobalPipes(new ValidationPipe());\n}') });
+  assert.ok(reasons(escapes.analysis).includes('sentinel.nest.applicationEscapes'));
+  assert.equal(validation(escapes.analysis).verdict, 'unknown');
+  const notRun = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());', '', 'export { bootstrap };') });
+  assert.ok(reasons(notRun.analysis).includes('sentinel.nest.bootstrapNotInvoked'));
+  assert.equal(validation(notRun.analysis).verdict, 'unknown');
+  const chained = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());', '', 'bootstrap().catch(() => process.exit(1));') });
+  assert.equal(validation(chained.analysis).verdict, 'applies', 'invoked through a promise chain');
+});
+
+test('SOL: a name rebound in a nested scope is not the import, while an aliased import is', needsStore, async t => {
+  const param = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());', '', 'bootstrap(class {\n  transform(value: unknown) {\n    return value;\n  }\n});', 'ValidationPipe: new () => unknown') });
+  const b = param.analysis.scope.globals[0]!;
+  assert.deepEqual([b.name, b.origin, b.effect], ['ValidationPipe', 'unresolved', 'unknown']);
+  assert.equal(validation(param.analysis).reasonCode, 'sentinel.nest.pipeEffectUnresolved');
+  const local = await run(t, { 'main.ts': mainWith('  const ValidationPipe = class {\n    transform(value: unknown) {\n      return value;\n    }\n  };\n  app.useGlobalPipes(new ValidationPipe());') });
+  assert.equal(validation(local.analysis).reasonCode, 'sentinel.nest.pipeEffectUnresolved');
+  const aliased = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new Check());').replace("import { ValidationPipe } from '@nestjs/common';", "import { ValidationPipe as Check } from '@nestjs/common';") });
+  assert.equal(validation(aliased.analysis).verdict, 'applies');
+  const ns = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new common.ValidationPipe());').replace("import { ValidationPipe } from '@nestjs/common';", "import * as common from '@nestjs/common';") });
+  assert.equal(validation(ns.analysis).verdict, 'applies', 'a namespace import');
+});
+
+test('SOL: conditional validation, weakening options and missing decorator metadata are never applies', needsStore, async t => {
+  const dto = readFileSync(join(APP, 'create-order.dto.ts.fixture'), 'utf8');
+  const global = { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());') };
+  const conditional = await run(t, { ...global, 'create-order.dto.ts': dto.replace("import { IsInt, IsString, Min } from 'class-validator';", "import { IsInt, IsString, Min, ValidateIf } from 'class-validator';").replace('  @IsString()\n', '  @ValidateIf(() => false)\n  @IsString()\n') });
+  assert.equal(validation(conditional.analysis).reasonCode, 'sentinel.nest.dtoConditional');
+  const optional = await run(t, { ...global, 'create-order.dto.ts': dto.replace("import { IsInt, IsString, Min } from 'class-validator';", "import { IsInt, IsOptional, IsString, Min } from 'class-validator';").replace('  @IsString()\n', '  @IsOptional()\n  @IsString()\n') });
+  assert.equal(validation(optional.analysis).reasonCode, 'sentinel.nest.dtoConditional');
+  const grouped = await run(t, { ...global, 'create-order.dto.ts': dto.replace('  @IsString()\n', "  @IsString({ groups: ['create'] })\n") });
+  assert.equal(validation(grouped.analysis).reasonCode, 'sentinel.nest.dtoConditional');
+  const skipping = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe({ skipMissingProperties: true }));') });
+  assert.equal(validation(skipping.analysis).reasonCode, 'sentinel.nest.validationOptionsUnknown');
+  const safe = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));') });
+  assert.equal(validation(safe.analysis).verdict, 'applies');
+  assert.ok(validation(safe.analysis).evidence.some(e => quote(safe, e) === '"emitDecoratorMetadata": true'), 'the metadata setting is cited');
+  const off = await run(t, { ...global, 'tsconfig.json': '{ "compilerOptions": { "experimentalDecorators": true, "emitDecoratorMetadata": false } }\n' });
+  assert.equal(validation(off.analysis).reasonCode, 'sentinel.nest.decoratorMetadataOff');
+  const unset = await run(t, { ...global, 'tsconfig.json': '{ "compilerOptions": { "experimentalDecorators": true } }\n' });
+  assert.equal(validation(unset.analysis).reasonCode, 'sentinel.nest.decoratorMetadataOff');
+  const inherited = await run(t, { ...global, 'tsconfig.json': '{ "extends": "./tsconfig.base.json" }\n' });
+  assert.equal(validation(inherited.analysis).reasonCode, 'sentinel.nest.decoratorMetadataUnknown');
+  const none = await run(t, { ...global, 'tsconfig.json': null });
+  assert.equal(validation(none.analysis).reasonCode, 'sentinel.nest.decoratorMetadataUnknown');
+  const swc = await run(t, { ...global, 'nest-cli.json': '{ "compilerOptions": { "builder": "swc" } }\n' });
+  assert.equal(validation(swc.analysis).reasonCode, 'sentinel.nest.decoratorMetadataUnknown');
+  // Without metadata nothing validates either way: a surface with no pipe is still does-not-apply.
+  assert.equal(fact(off.analysis, 'POST /orders/import', 'input-validation')!.verdict, 'unknown', 'a global validator over an upload has no DTO');
+});
+
+test('SOL: stacked decorators register bottom to top, each decorator’s arguments in order', needsStore, async t => {
+  const r = await run(t, {
+    'trim.pipe.ts': 'export class TrimPipe {\n  transform(value: unknown) {\n    return value;\n  }\n}\n',
+    'audit.guard.ts': 'export class AuditGuard {\n  canActivate(): boolean {\n    return true;\n  }\n}\n',
+    'orders.controller.ts': ctlText().replace('ParseIntPipe, Post,', 'ParseIntPipe, Post, UseGuards, UsePipes, ValidationPipe,')
+      .replace("import { CreateOrderDto } from './create-order.dto';", "import { CreateOrderDto } from './create-order.dto';\nimport { TrimPipe } from './trim.pipe';\nimport { AuditGuard } from './audit.guard';\nimport { ThrottleGuard } from 'external-throttle';")
+      .replace('  @Post()\n', '  @Post()\n  @UsePipes(new ValidationPipe(), DefaultValuePipe)\n  @UsePipes(TrimPipe)\n  @UseGuards(AuditGuard)\n  @UseGuards(ThrottleGuard)\n')
+      .replace('ParseIntPipe, Post,', 'ParseIntPipe, DefaultValuePipe, Post,'),
+  });
+  const chain = surface(r.analysis, 'POST /orders').chain.map(b => `${b.stage}:${b.name}`);
+  assert.deepEqual(chain, ['guard:ThrottleGuard', 'guard:AuditGuard', 'pipe:TrimPipe', 'pipe:ValidationPipe', 'pipe:DefaultValuePipe']);
+  assert.equal(validation(r.analysis).reasonCode, 'sentinel.nest.pipeEffectUnresolved', 'the unmodeled pipe runs first');
+});

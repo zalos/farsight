@@ -722,6 +722,21 @@ in the production registry, the planner's batching, the scan command (PR 09), an
     - **E2.** The accepted framework corpus's route-scoped ValidationPipe gives `input-validation: applies`; the same
       DTO with no pipe registered gives `does-not-apply`, citing the parameter and the bootstrap. A multipart
       interceptor only parses: the upload stays `does-not-apply` with the interceptor cited.
+    - **Only what certainly runs counts (review, 2026-10-22).** The application is the `const` the bootstrap declares from
+      `NestFactory.create`; a global registration counts only as a straight-line statement on it, after the create and
+      before `init`/`listen`, before any statement that can return or throw, in a bootstrap the module calls
+      unconditionally. Every other `useGlobal*` call (conditional, in a `try`, after initialization, in another
+      function, on another binding) is `registrationNotFollowed`, and handing the application to other code is
+      `applicationEscapes`; both leave the facts they could change unknown. Names resolve lexically: a parameter or
+      local declaration that rebinds an imported name (a bootstrap parameter called `ValidationPipe`) is not the
+      import, while aliased and namespace imports are. Stacked `UseGuards`/`UseInterceptors`/`UsePipes` register bottom
+      to top (each appends to the metadata the decorators below it wrote).
+    - **Validation needs its preconditions.** `applies` also needs ValidationPipe options known not to weaken it
+      (whitelist, forbidNonWhitelisted, transform, error and debug settings, `forbidUnknownValues: true`), no conditional
+      rule on the DTO (`ValidateIf`, `IsOptional`, `groups`, `always`), no inherited rules, and decorator metadata: the
+      captured tsconfig nearest the controller must set `experimentalDecorators` and `emitDecoratorMetadata` to true
+      itself (cited as evidence); off is `decoratorMetadataOff`, inherited, missing or SWC-built is
+      `decoratorMetadataUnknown`.
     - **Digests.** `packDigest` covers the support manifest, `environmentDigest` the resolved versions and
       `registrationDigest` every cited registration span; a change to any invalidates the facts.
 

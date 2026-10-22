@@ -95,6 +95,7 @@ try {
       const { analyzeNest, NEST_PACK } = await import('farsight-sentinel/frameworks/nest');
       const files = {
         'package.json': JSON.stringify({ dependencies: { '@nestjs/common': '10.4.15', '@nestjs/core': '10.4.15', 'class-validator': '0.14.1' } }),
+        'tsconfig.json': JSON.stringify({ compilerOptions: { experimentalDecorators: true, emitDecoratorMetadata: true } }),
         'main.ts': "import { NestFactory } from '@nestjs/core';\\nimport { AppModule } from './app.module';\\nasync function boot() {\\n  const app = await NestFactory.create(AppModule);\\n  await app.listen(3000);\\n}\\nboot();\\n",
         'app.module.ts': "import { Module } from '@nestjs/common';\\nimport { NotesController } from './notes.controller';\\n@Module({ controllers: [NotesController] })\\nexport class AppModule {}\\n",
         'notes.controller.ts': "import { Body, Controller, Post, UsePipes, ValidationPipe } from '@nestjs/common';\\nimport { IsString } from 'class-validator';\\nexport class NoteDto {\\n  @IsString()\\n  text!: string;\\n}\\n@Controller('notes')\\nexport class NotesController {\\n  @Post()\\n  @UsePipes(new ValidationPipe())\\n  create(@Body() dto: NoteDto) {\\n    return dto;\\n  }\\n}\\n",
