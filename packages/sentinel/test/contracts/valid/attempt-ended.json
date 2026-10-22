@@ -1,0 +1,34 @@
+{
+  "schema": "sentinel-attempt/draft-1",
+  "id": "att-2",
+  "work": {
+    "id": "work-pattern-api",
+    "revision": 1
+  },
+  "ordinal": 2,
+  "coordinatorEpoch": "epoch-7",
+  "operationId": "op-1",
+  "worker": {
+    "kind": "owned-container",
+    "containerId": "abababababababababababababababababababababababababababababababab",
+    "ownershipLabels": {
+      "store": "store-1",
+      "attempt": "att-1",
+      "epoch": "epoch-7"
+    }
+  },
+  "startedAt": "2026-10-21T12:00:00Z",
+  "usage": {
+    "certainty": "not-applicable"
+  },
+  "invocation": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+  "state": "failed",
+  "endedAt": "2026-10-21T12:05:00.250Z",
+  "outputs": [
+    "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+  ],
+  "error": {
+    "code": "sentinel.error.timeout",
+    "retryable": true
+  }
+}

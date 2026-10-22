@@ -26,6 +26,7 @@ jobs:
       validate: ${{ steps.select.outputs.validate }}
       e2e: ${{ steps.select.outputs.e2e }}
       echo: ${{ steps.select.outputs.echo }}
+      sentinel: ${{ steps.select.outputs.sentinel }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -109,6 +110,37 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install and verify the separate Echo package with synthetic memory
         run: pnpm test:echo:package
+
+  # Sentinel is a separate optional package (ADR 18). Farsight's tarball is packed with only the
+  # CLI's build closure, so Sentinel is unbuilt, and must install and start from a clean npm
+  # consumer; the same again in a temporary copy of the workspace with packages/sentinel removed;
+  # then Sentinel's own tarball installs, type-checks and validates on its own.
+  # Each packer stages its build and replaces only its own outputs in build/.
+  sentinel-package:
+    name: sentinel-package
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.sentinel != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Pack, install and start farsight-cli with Sentinel unbuilt
+        run: |
+          pnpm pack:cli
+          test ! -e packages/sentinel/dist || { echo "::error::Sentinel was built by the CLI's closure build"; exit 1; }
+          node scripts/test-farsight-package.mjs
+      - name: Pack, install and start farsight-cli with no Sentinel package in the workspace
+        run: pnpm test:cli:package:absent
+      - name: Pack Sentinel and verify it in a clean npm consumer
+        run: |
+          test -f packages/sentinel/package.json || { echo "::error::packages/sentinel/package.json is missing"; exit 1; }
+          pnpm test:sentinel:package
 
   e2e:
     name: e2e

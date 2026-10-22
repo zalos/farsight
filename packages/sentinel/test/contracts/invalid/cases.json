@@ -1,0 +1,1627 @@
+[
+  {
+    "name": "a future draft of a known envelope is refused with the supported list",
+    "base": "run-active",
+    "ops": [
+      {
+        "set": "/schema",
+        "value": "sentinel-run/draft-2"
+      }
+    ],
+    "expect": "sentinel.contract.unsupportedVersion",
+    "path": "/schema"
+  },
+  {
+    "name": "a frozen v1 name is not accepted by a draft build",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/schema",
+        "value": "sentinel-report/v1"
+      }
+    ],
+    "expect": "sentinel.contract.unsupportedVersion",
+    "path": "/schema"
+  },
+  {
+    "name": "another envelope's version is the wrong kind",
+    "base": "run-active",
+    "ops": [
+      {
+        "set": "/schema",
+        "value": "sentinel-work/draft-1"
+      }
+    ],
+    "expect": "sentinel.contract.wrongKind",
+    "path": "/schema"
+  },
+  {
+    "name": "a missing version is never assumed",
+    "base": "snapshot",
+    "ops": [
+      {
+        "delete": "/schema"
+      }
+    ],
+    "expect": "sentinel.contract.missingVersion",
+    "path": "/schema"
+  },
+  {
+    "name": "a numeric version is not a version string",
+    "base": "coverage-partial",
+    "ops": [
+      {
+        "set": "/schema",
+        "value": 1
+      }
+    ],
+    "expect": "sentinel.contract.missingVersion",
+    "path": "/schema"
+  },
+  {
+    "name": "a worker speaking a future protocol is refused",
+    "base": "protocol-start",
+    "ops": [
+      {
+        "set": "/protocol",
+        "value": "sentinel-worker/draft-2"
+      }
+    ],
+    "expect": "sentinel.contract.unsupportedVersion",
+    "path": "/protocol"
+  },
+  {
+    "name": "an unknown field is refused, not dropped",
+    "base": "run-active",
+    "ops": [
+      {
+        "set": "/secure",
+        "value": true
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "an unknown run state",
+    "base": "run-active",
+    "ops": [
+      {
+        "set": "/state",
+        "value": "done"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a completed run needs its outcome",
+    "base": "run-completed",
+    "ops": [
+      {
+        "delete": "/outcome"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "an active run cannot carry an outcome",
+    "base": "run-active",
+    "ops": [
+      {
+        "set": "/outcome",
+        "value": "complete-coverage"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a digest must be lower-case sha256",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/inventoryDigest",
+        "value": "sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/inventoryDigest"
+  },
+  {
+    "name": "a short digest",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/inventoryDigest",
+        "value": "sha256:abc"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/inventoryDigest"
+  },
+  {
+    "name": "a timestamp needs a Z offset",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/createdAt",
+        "value": "2026-10-21T12:00:00+02:00"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/createdAt"
+  },
+  {
+    "name": "an id with a path separator",
+    "base": "run-active",
+    "ops": [
+      {
+        "set": "/id",
+        "value": "runs/1"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/id"
+  },
+  {
+    "name": "an id longer than 128",
+    "base": "run-active",
+    "ops": [
+      {
+        "set": "/id",
+        "value": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/id"
+  },
+  {
+    "name": "a catalog key must be a sentinel key, not free text",
+    "base": "work-blocked",
+    "ops": [
+      {
+        "set": "/reasonCode",
+        "value": "dependency failed"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/reasonCode"
+  },
+  {
+    "name": "an absolute path",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "/etc/passwd"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a parent traversal path",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "src/../../secret"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a dot segment path",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "./src/a.ts"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "an empty segment path",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "src//a.ts"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a backslash path",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "src\\a.ts"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a path over 4096 bytes",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/b"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "an included file needs its content",
+    "base": "snapshot",
+    "ops": [
+      {
+        "delete": "/entries/0/content"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a refused symlink has no captured referent",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/3/content",
+        "value": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a directory boundary cannot claim zero-by-default; it needs knownDescendants",
+    "base": "snapshot",
+    "ops": [
+      {
+        "delete": "/entries/4/knownDescendants"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "negative bytes",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/bytes",
+        "value": -1
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "fractional bytes",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/bytes",
+        "value": 1.5
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a snapshot captures at least one source",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/sources",
+        "value": []
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/sources"
+  },
+  {
+    "name": "a short commit is not a pinned revision",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/sources/0/commit",
+        "value": "0123abc"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a duplicate entry for one source path",
+    "base": "snapshot",
+    "ops": [
+      {
+        "append": "/entries",
+        "from": "/entries/0"
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "an entry from an uncaptured source",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/1/sourceId",
+        "value": "web"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/entries/1/sourceId"
+  },
+  {
+    "name": "framework provenance from an uncaptured source",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/frameworkVersions/0/provenance/sourceId",
+        "value": "web"
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "a resolved framework version needs provenance",
+    "base": "snapshot",
+    "ops": [
+      {
+        "delete": "/frameworkVersions/0/provenance"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a trailing slash is an empty segment",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "src/"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "an impossible clock time",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/createdAt",
+        "value": "2026-99-99T99:99:99Z"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/createdAt"
+  },
+  {
+    "name": "a day the month does not have",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/createdAt",
+        "value": "2026-02-30T12:00:00Z"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/createdAt"
+  },
+  {
+    "name": "a leap second is not accepted",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/createdAt",
+        "value": "2026-12-31T23:59:60Z"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/createdAt"
+  },
+  {
+    "name": "a newline cannot hide a parent segment",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "a\n/../../outside"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a carriage return cannot hide a parent segment",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "a\r/../outside"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a line separator cannot hide a parent segment",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "a\u2028/../outside"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a paragraph separator cannot hide a parent segment",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "a\u2029/../outside"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a newline cannot hide a trailing slash",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "src\n/"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a newline cannot hide an empty segment",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "a\n//b"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a newline cannot hide a dot segment",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "x\n/./y"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a policy exit code that disagrees with its result",
+    "base": "run-completed",
+    "ops": [
+      {
+        "set": "/policy/exitCode",
+        "value": 0
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/exitCode"
+  },
+  {
+    "name": "a policy exit code outside 0..4",
+    "base": "run-completed",
+    "ops": [
+      {
+        "set": "/policy/exitCode",
+        "value": 5
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a run cannot be its own parent",
+    "base": "run-completed",
+    "ops": [
+      {
+        "set": "/parentId",
+        "value": "run-2"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/parentId"
+  },
+  {
+    "name": "completed before created",
+    "base": "run-completed",
+    "ops": [
+      {
+        "set": "/completedAt",
+        "value": "2026-10-20T00:00:00Z"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/completedAt"
+  },
+  {
+    "name": "a monetary budget needs a currency",
+    "base": "run-completed",
+    "ops": [
+      {
+        "delete": "/budgets/currency"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/budgets/currency"
+  },
+  {
+    "name": "money is a decimal string, never a float",
+    "base": "run-completed",
+    "ops": [
+      {
+        "set": "/budgets/maxCost",
+        "value": 12.5
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a negative amount",
+    "base": "run-completed",
+    "ops": [
+      {
+        "set": "/budgets/maxCost",
+        "value": "-1"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "plan revision starts at 1",
+    "base": "run-active",
+    "ops": [
+      {
+        "set": "/planRevision",
+        "value": 0
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a completed run cannot be awaiting confirmation",
+    "base": "run-completed",
+    "ops": [
+      {
+        "set": "/policy",
+        "value": {
+          "result": "awaiting-confirmation",
+          "exitCode": 4,
+          "reasonCodes": []
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/result"
+  },
+  {
+    "name": "a running run cannot be awaiting confirmation",
+    "base": "run-active",
+    "ops": [
+      {
+        "set": "/policy",
+        "value": {
+          "result": "awaiting-confirmation",
+          "exitCode": 4,
+          "reasonCodes": []
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/result"
+  },
+  {
+    "name": "complete coverage contradicts required coverage incomplete",
+    "base": "run-completed",
+    "ops": [
+      {
+        "set": "/outcome",
+        "value": "complete-coverage"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/result"
+  },
+  {
+    "name": "an execution failure cannot satisfy the policy",
+    "base": "run-completed",
+    "ops": [
+      {
+        "set": "/outcome",
+        "value": "execution-failure"
+      },
+      {
+        "set": "/policy",
+        "value": {
+          "result": "satisfied",
+          "exitCode": 0,
+          "reasonCodes": []
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/result"
+  },
+  {
+    "name": "an execution failure is not merely a finding failure",
+    "base": "run-completed",
+    "ops": [
+      {
+        "set": "/outcome",
+        "value": "execution-failure"
+      },
+      {
+        "set": "/policy",
+        "value": {
+          "result": "finding-policy-failed",
+          "exitCode": 1,
+          "reasonCodes": []
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/result"
+  },
+  {
+    "name": "a running run has no final policy result",
+    "base": "run-active",
+    "ops": [
+      {
+        "set": "/policy",
+        "value": {
+          "result": "satisfied",
+          "exitCode": 0,
+          "reasonCodes": []
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy"
+  },
+  {
+    "name": "a planned run has run no check",
+    "base": "run-planned-awaiting",
+    "ops": [
+      {
+        "set": "/policy",
+        "value": {
+          "result": "satisfied",
+          "exitCode": 0,
+          "reasonCodes": []
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/result"
+  },
+  {
+    "name": "a canceled run cannot satisfy the policy",
+    "base": "run-canceled",
+    "ops": [
+      {
+        "set": "/policy",
+        "value": {
+          "result": "satisfied",
+          "exitCode": 0,
+          "reasonCodes": []
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/result"
+  },
+  {
+    "name": "running work names its active attempt",
+    "base": "work-running",
+    "ops": [
+      {
+        "set": "/activeAttemptId",
+        "value": null
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "idle work has no active attempt",
+    "base": "work-blocked",
+    "ops": [
+      {
+        "set": "/state",
+        "value": "pending"
+      },
+      {
+        "set": "/activeAttemptId",
+        "value": "att-1"
+      },
+      {
+        "delete": "/reasonCode"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "leased work needs its fenced claim",
+    "base": "work-leased",
+    "ops": [
+      {
+        "delete": "/claim"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "held work says why",
+    "base": "work-blocked",
+    "ops": [
+      {
+        "delete": "/reasonCode"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a resource ceiling above PR 01's proposed 2 GiB",
+    "base": "work-running",
+    "ops": [
+      {
+        "set": "/resources/memoryBytes",
+        "value": 2147483649
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "more than 128 PIDs",
+    "base": "work-running",
+    "ops": [
+      {
+        "set": "/resources/maxPids",
+        "value": 129
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a deadline above 120 s",
+    "base": "work-running",
+    "ops": [
+      {
+        "set": "/resources/deadlineMs",
+        "value": 120001
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "output above 4 MiB",
+    "base": "work-running",
+    "ops": [
+      {
+        "set": "/resources/maxOutputBytes",
+        "value": 4194305
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "work depending on its own lineage",
+    "base": "work-running",
+    "ops": [
+      {
+        "set": "/dependencies/0",
+        "value": {
+          "id": "work-pattern-api",
+          "revision": 1
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "a duplicate dependency",
+    "base": "work-running",
+    "ops": [
+      {
+        "append": "/dependencies",
+        "from": "/dependencies/0"
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "reuse pointing at itself",
+    "base": "work-reused",
+    "ops": [
+      {
+        "set": "/reuse/publication/revision",
+        "value": 2
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "an unknown stage kind",
+    "base": "work-running",
+    "ops": [
+      {
+        "set": "/stage/kind",
+        "value": "plugin"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "an ended attempt needs its end time",
+    "base": "attempt-ended",
+    "ops": [
+      {
+        "delete": "/endedAt"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a running attempt has no end time",
+    "base": "attempt-running",
+    "ops": [
+      {
+        "set": "/endedAt",
+        "value": "2026-10-21T12:05:00Z"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "ended before started",
+    "base": "attempt-ended",
+    "ops": [
+      {
+        "set": "/endedAt",
+        "value": "2026-10-21T11:00:00Z"
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "canceled-after-spend requires confirmed usage",
+    "base": "attempt-canceled-after-spend",
+    "ops": [
+      {
+        "set": "/usage/certainty",
+        "value": "unknown"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/usage/certainty"
+  },
+  {
+    "name": "not-applicable usage carries no amounts",
+    "base": "attempt-running",
+    "ops": [
+      {
+        "set": "/usage/inputTokens",
+        "value": 10
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/usage"
+  },
+  {
+    "name": "a cost needs its currency",
+    "base": "attempt-canceled-after-spend",
+    "ops": [
+      {
+        "delete": "/usage/currency"
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "a container id must be a full 64-hex id",
+    "base": "attempt-running",
+    "ops": [
+      {
+        "set": "/worker/containerId",
+        "value": "abc"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "an unknown worker kind",
+    "base": "attempt-running",
+    "ops": [
+      {
+        "set": "/worker/kind",
+        "value": "shell"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a span that ends before it starts",
+    "base": "observation-scanner",
+    "ops": [
+      {
+        "set": "/evidence/0/span",
+        "value": {
+          "startByte": 10,
+          "endByte": 3
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "evidence from another snapshot",
+    "base": "observation-scanner",
+    "ops": [
+      {
+        "set": "/evidence/0/snapshotId",
+        "value": "snap-2"
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "a model observation records its identity strength",
+    "base": "observation-model",
+    "ops": [
+      {
+        "delete": "/producer/model/source"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "an unrecognised identity strength",
+    "base": "observation-model",
+    "ops": [
+      {
+        "set": "/producer/model/source",
+        "value": "trust-me"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a malformed CWE",
+    "base": "observation-scanner",
+    "ops": [
+      {
+        "set": "/mappings/cwe/0",
+        "value": "89"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a message above 4000 characters",
+    "base": "observation-scanner",
+    "ops": [
+      {
+        "set": "/message",
+        "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/message"
+  },
+  {
+    "name": "a scanner observation names its attempt",
+    "base": "observation-scanner",
+    "ops": [
+      {
+        "delete": "/producer/attemptId"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "evidence paths get the same check",
+    "base": "observation-scanner",
+    "ops": [
+      {
+        "set": "/evidence/0/relativePath",
+        "value": "src\n/../../etc/passwd"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "complete coverage with skipped scope is partial",
+    "base": "coverage-partial",
+    "ops": [
+      {
+        "set": "/status",
+        "value": "complete"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/skipped"
+  },
+  {
+    "name": "unavailable work cannot be complete",
+    "base": "coverage-unavailable",
+    "ops": [
+      {
+        "set": "/status",
+        "value": "complete"
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "unavailable work cannot be partial",
+    "base": "coverage-unavailable",
+    "ops": [
+      {
+        "set": "/status",
+        "value": "partial"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/status"
+  },
+  {
+    "name": "an unknown granularity",
+    "base": "coverage-partial",
+    "ops": [
+      {
+        "set": "/granularity",
+        "value": "per-line"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "an unknown coverage status",
+    "base": "coverage-partial",
+    "ops": [
+      {
+        "set": "/status",
+        "value": "green"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a skipped scope with a control character",
+    "base": "coverage-partial",
+    "ops": [
+      {
+        "set": "/skipped/0/scopeId",
+        "value": "api:src/a\u0001.ts"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "reused coverage cannot cite its own work revision",
+    "base": "coverage-complete-reused",
+    "ops": [
+      {
+        "set": "/basis/publication/revision",
+        "value": 2
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/basis/publication"
+  },
+  {
+    "name": "a reused publication names its work revision",
+    "base": "coverage-complete-reused",
+    "ops": [
+      {
+        "delete": "/basis/publication/revision"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a scope id with a next-line control",
+    "base": "coverage-partial",
+    "ops": [
+      {
+        "set": "/skipped/0/scopeId",
+        "value": "api:src/a\u0085.ts"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "an MCP channel cannot approve",
+    "base": "disposition-approved",
+    "ops": [
+      {
+        "set": "/actor/channel",
+        "value": "mcp"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "an approval needs its confirmation receipt",
+    "base": "disposition-approved",
+    "ops": [
+      {
+        "delete": "/actor/confirmationReceipt"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a proposal cannot carry a receipt",
+    "base": "disposition-proposed",
+    "ops": [
+      {
+        "set": "/actor/confirmationReceipt",
+        "value": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "an approved mitigation names its evidence",
+    "base": "disposition-approved",
+    "ops": [
+      {
+        "set": "/evidence",
+        "value": []
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/evidence"
+  },
+  {
+    "name": "expires at creation",
+    "base": "disposition-proposed",
+    "ops": [
+      {
+        "set": "/expiresAt",
+        "value": "2026-10-21T12:00:00Z"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/expiresAt"
+  },
+  {
+    "name": "supersedes itself",
+    "base": "disposition-approved",
+    "ops": [
+      {
+        "set": "/supersedes",
+        "value": "disp-2"
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "an unknown assertion trust",
+    "base": "disposition-approved",
+    "ops": [
+      {
+        "set": "/assertions/0/trust",
+        "value": "verified"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a findings count that disagrees with its rows",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/counts/findings/n",
+        "value": 2
+      },
+      {
+        "set": "/counts/findings/breakdown/0/n",
+        "value": 2
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/counts/findings/n"
+  },
+  {
+    "name": "a breakdown that does not sum",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/counts/findings/breakdown/0/n",
+        "value": 0
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/counts/findings/breakdown"
+  },
+  {
+    "name": "a count above its denominator",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/counts/seenByNoStage/of",
+        "value": 0
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/counts/seenByNoStage/of"
+  },
+  {
+    "name": "a report with gaps cannot be complete",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/completeness",
+        "value": "complete"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/completeness"
+  },
+  {
+    "name": "a gap cannot be complete coverage",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/gaps/0/status",
+        "value": "complete"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "an unbound place cannot name screens",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/findings/0/place/binding",
+        "value": "mismatched"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/findings/0/place/binding"
+  },
+  {
+    "name": "an empty place says why",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/gaps/0/place/limitationKeys",
+        "value": []
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "a place count disagrees with its screens",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/findings/0/place/counts/screens/n",
+        "value": 2
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "a decision about a missing finding",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/decisions/0/findingId",
+        "value": "f-404"
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "comparison labels need a baseline",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/baseline",
+        "value": null
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/findings"
+  },
+  {
+    "name": "an unknown comparison label",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/findings/0/comparison",
+        "value": "fixed"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "withheld evidence says why",
+    "base": "report",
+    "ops": [
+      {
+        "delete": "/findings/0/evidence/1/reasonCode"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "withheld evidence cannot carry an excerpt",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/findings/0/evidence/1/excerpt",
+        "value": "leak"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a finding with no observation",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/findings/0/observationIds",
+        "value": []
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a duplicate artifact in the closure",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/artifactClosure/1",
+        "value": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "a report cannot be its own baseline",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/baseline/reportId",
+        "value": "rep-1"
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "seen by no stage is an exact count, never null",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/counts/seenByNoStage/n",
+        "value": null
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "unknown scope is counted apart and is required",
+    "base": "report",
+    "ops": [
+      {
+        "delete": "/counts/unknownScopeBoundaries"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a count key must be a catalog key, not words",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/counts/findings/unit",
+        "value": "findings"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a node id carries no control character",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/findings/0/place/nodeIds/0",
+        "value": "api::a\u0007b"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a node id longer than 1024",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/findings/0/place/nodeIds/0",
+        "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a node id with a line separator",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/findings/0/place/nodeIds/0",
+        "value": "api::a\u2028b"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a decision valid after it expired at the report time",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/decisions/0/expiresAt",
+        "value": "2020-01-01T00:00:00Z"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/decisions/0/validity"
+  },
+  {
+    "name": "a decision expiring exactly at the report time is expired",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/decisions/0/expiresAt",
+        "value": "2026-10-21T12:05:00.250Z"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/decisions/0/validity"
+  },
+  {
+    "name": "a decision marked expired that never expires",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/decisions/0/validity",
+        "value": "expired"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/decisions/0/validity"
+  },
+  {
+    "name": "a decision marked expired before its expiry",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/decisions/0/validity",
+        "value": "expired"
+      },
+      {
+        "set": "/decisions/0/expiresAt",
+        "value": "2030-01-01T00:00:00Z"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/decisions/0/validity"
+  },
+  {
+    "name": "an unknown message type",
+    "base": "protocol-start",
+    "ops": [
+      {
+        "set": "/type",
+        "value": "exec"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a hello with no version",
+    "base": "protocol-hello",
+    "ops": [
+      {
+        "set": "/supported",
+        "value": []
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a hello repeating a version",
+    "base": "protocol-hello",
+    "ops": [
+      {
+        "set": "/supported",
+        "value": [
+          "sentinel-worker/draft-1",
+          "sentinel-worker/draft-1"
+        ]
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "a malformed protocol version",
+    "base": "protocol-hello",
+    "ops": [
+      {
+        "set": "/supported/1",
+        "value": "worker-2"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a heartbeat needs its fencing generation",
+    "base": "protocol-heartbeat",
+    "ops": [
+      {
+        "delete": "/fencingGeneration"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "progress beyond its plan",
+    "base": "protocol-start",
+    "ops": [
+      {
+        "set": "/type",
+        "value": "progress"
+      },
+      {
+        "delete": "/inputFingerprint"
+      },
+      {
+        "delete": "/inputs"
+      },
+      {
+        "delete": "/deadlineAt"
+      },
+      {
+        "set": "/completed",
+        "value": 5
+      },
+      {
+        "set": "/planned",
+        "value": 4
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/completed"
+  },
+  {
+    "name": "a result needs its granularity",
+    "base": "protocol-result",
+    "ops": [
+      {
+        "delete": "/granularity"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a result with a shell string where a scope belongs",
+    "base": "protocol-result",
+    "ops": [
+      {
+        "set": "/scannedSet/0",
+        "value": "\u0000rm"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "schema": "sentinel-disposition/draft-1",
+  "id": "disp-1",
+  "findingGroupId": "fg-1",
+  "scope": {
+    "surfaceIds": [
+      "route-submit"
+    ],
+    "environmentDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+  },
+  "decision": "accepted-risk",
+  "rationale": "Internal only until the gateway rule lands.",
+  "evidence": [],
+  "assertions": [],
+  "createdAt": "2026-10-21T12:00:00Z",
+  "expiresAt": "2026-11-21T12:00:00Z",
+  "supersedes": null,
+  "state": "proposed",
+  "actor": {
+    "channel": "mcp",
+    "principal": "Human Owner (claimed)"
+  }
+}

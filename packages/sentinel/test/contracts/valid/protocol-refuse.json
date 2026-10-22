@@ -1,0 +1,8 @@
+{
+  "protocol": "sentinel-worker/draft-1",
+  "type": "refuse",
+  "reasonCode": "sentinel.protocol.noSharedVersion",
+  "supported": [
+    "sentinel-worker/draft-1"
+  ]
+}

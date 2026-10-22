@@ -1,0 +1,468 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/SnapshotEnvelope",
+  "definitions": {
+    "SnapshotEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-snapshot/draft-1"
+        },
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "inventoryDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "createdAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "capture": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "$ref": "#/definitions/CaptureMode"
+            },
+            "policyDigest": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "mode",
+            "policyDigest"
+          ],
+          "additionalProperties": false
+        },
+        "environmentProfileDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SnapshotSource"
+          },
+          "minItems": 1,
+          "maxItems": 64
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CaptureEntry"
+          },
+          "maxItems": 200000
+        },
+        "frameworkVersions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FrameworkVersion"
+          },
+          "maxItems": 256
+        },
+        "artifacts": {
+          "type": "object",
+          "properties": {
+            "parser": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ArtifactId"
+              },
+              "maxItems": 64
+            },
+            "diagnostics": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ArtifactId"
+              },
+              "maxItems": 1024
+            }
+          },
+          "required": [
+            "parser",
+            "diagnostics"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema",
+        "id",
+        "inventoryDigest",
+        "createdAt",
+        "capture",
+        "environmentProfileDigest",
+        "sources",
+        "entries",
+        "frameworkVersions",
+        "artifacts"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-snapshot/draft-1 — immutable capture facts. Analysis outcomes are appended elsewhere, never here."
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "A UTC RFC 3339 timestamp with an explicit Z offset and a real calendar date (no leap second), years 0000–9999 proleptic Gregorian, up to nine fractional digits. The pattern bounds each field; the `date-time` format check refuses a day the month does not have. Comparisons keep all nine digits.",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$",
+      "format": "date-time"
+    },
+    "CaptureMode": {
+      "type": "string",
+      "enum": [
+        "committed-tree",
+        "working-copy-stability-checked"
+      ],
+      "description": "How the bytes were captured. A working copy is stability-checked, never an atomic Git revision."
+    },
+    "SnapshotSource": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "repositoryId": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The pinned commit, or null for a source with no Git revision.",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "capturedAt": {
+          "$ref": "#/definitions/Timestamp"
+        }
+      },
+      "required": [
+        "sourceId",
+        "repositoryId",
+        "commit",
+        "dirty",
+        "capturedAt"
+      ],
+      "additionalProperties": false
+    },
+    "CaptureEntry": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/IncludedFileEntry"
+        },
+        {
+          "$ref": "#/definitions/RecordedFileEntry"
+        },
+        {
+          "$ref": "#/definitions/SymlinkEntry"
+        },
+        {
+          "$ref": "#/definitions/DirectoryBoundaryEntry"
+        }
+      ]
+    },
+    "IncludedFileEntry": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "relativePath": {
+          "$ref": "#/definitions/RelativePath"
+        },
+        "kind": {
+          "type": "string",
+          "const": "file"
+        },
+        "disposition": {
+          "type": "string",
+          "const": "included"
+        },
+        "content": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "bytes": {
+          "$ref": "#/definitions/Count"
+        },
+        "generated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sourceId",
+        "relativePath",
+        "kind",
+        "disposition",
+        "content",
+        "bytes",
+        "generated"
+      ],
+      "additionalProperties": false,
+      "description": "An included file: its captured bytes are retained."
+    },
+    "RelativePath": {
+      "type": "string",
+      "description": "A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL. A newline or other line break inside a name is a legal POSIX name and is kept as captured; the checks use `[\\s\\S]`, never `.`, so a line break cannot hide a `..` segment from them.",
+      "pattern": "^(?![/])(?![\\s\\S]*[/]$)(?!([\\s\\S]*[/])?\\.{1,2}([/]|$))(?![\\s\\S]*[/][/])[^\\\\\\u0000]+$",
+      "maxLength": 4096
+    },
+    "ArtifactId": {
+      "$ref": "#/definitions/Digest",
+      "description": "An immutable object-store identity: the digest of canonical uncompressed bytes."
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "RecordedFileEntry": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "relativePath": {
+          "$ref": "#/definitions/RelativePath"
+        },
+        "kind": {
+          "type": "string",
+          "const": "file"
+        },
+        "disposition": {
+          "type": "string",
+          "enum": [
+            "excluded",
+            "refused",
+            "unreadable",
+            "too-large"
+          ]
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        },
+        "bytes": {
+          "$ref": "#/definitions/Count",
+          "description": "Size when it could be read from metadata (a too-large file), else absent."
+        },
+        "generated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sourceId",
+        "relativePath",
+        "kind",
+        "disposition",
+        "reasonCode",
+        "generated"
+      ],
+      "additionalProperties": false,
+      "description": "A file that was enumerated but not captured. It is recorded, never silently dropped."
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "SymlinkEntry": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "relativePath": {
+          "$ref": "#/definitions/RelativePath"
+        },
+        "kind": {
+          "type": "string",
+          "const": "symlink"
+        },
+        "disposition": {
+          "type": "string",
+          "enum": [
+            "excluded",
+            "refused"
+          ]
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        }
+      },
+      "required": [
+        "sourceId",
+        "relativePath",
+        "kind",
+        "disposition",
+        "reasonCode"
+      ],
+      "additionalProperties": false,
+      "description": "A symlink is never followed out of an authorized root, so it has no captured referent."
+    },
+    "DirectoryBoundaryEntry": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "relativePath": {
+          "$ref": "#/definitions/RelativePath"
+        },
+        "kind": {
+          "type": "string",
+          "const": "directory-boundary"
+        },
+        "disposition": {
+          "type": "string",
+          "enum": [
+            "excluded",
+            "refused",
+            "unreadable"
+          ]
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        },
+        "knownDescendants": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null: the descendants are unknown scope, never zero files."
+        }
+      },
+      "required": [
+        "sourceId",
+        "relativePath",
+        "kind",
+        "disposition",
+        "reasonCode",
+        "knownDescendants"
+      ],
+      "additionalProperties": false,
+      "description": "A directory whose descendants were not individually enumerated (an exclusion, a refusal, unreadable)."
+    },
+    "FrameworkVersion": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "enum": [
+            "resolved",
+            "unknown"
+          ]
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "resolved"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "framework": {
+                "$ref": "#/definitions/ShortText"
+              },
+              "state": {
+                "type": "string",
+                "const": "resolved"
+              },
+              "version": {
+                "$ref": "#/definitions/ShortText"
+              },
+              "provenance": {
+                "type": "object",
+                "properties": {
+                  "sourceId": {
+                    "$ref": "#/definitions/Id"
+                  },
+                  "relativePath": {
+                    "$ref": "#/definitions/RelativePath"
+                  }
+                },
+                "required": [
+                  "sourceId",
+                  "relativePath"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "framework",
+              "state",
+              "version",
+              "provenance"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "unknown"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "framework": {
+                "$ref": "#/definitions/ShortText"
+              },
+              "state": {
+                "type": "string",
+                "const": "unknown"
+              },
+              "reasonCode": {
+                "$ref": "#/definitions/CatalogKey"
+              }
+            },
+            "required": [
+              "framework",
+              "state",
+              "reasonCode"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ],
+      "description": "A framework version resolved from a lockfile, or explicitly unknown with its reason."
+    },
+    "ShortText": {
+      "type": "string",
+      "description": "A short label (a severity as supplied, a framework name).",
+      "minLength": 1,
+      "maxLength": 200
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-snapshot.draft-1.schema.json",
+  "title": "sentinel-snapshot/draft-1"
+}

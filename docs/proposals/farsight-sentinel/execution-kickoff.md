@@ -1,8 +1,8 @@
 # Farsight Sentinel implementation kickoff
 
-Prepared 2026-10-19 and refreshed 2026-10-21 for the agent that will execute the plan. Review agents have
-checked readiness. The first PR 01 slice subsequently merged as #132; see the current
-[acceptance record](feasibility-acceptance.md) before dispatching remaining work. Preparing this prompt does not approve unmeasured support
+Prepared 2026-10-19 and refreshed 2026-10-21 for the agent that will execute the plan. PR 01 merged in two
+slices (#132, #133 at `ef5c525`) and the owner accepted its bounded matrix for implementation; the current
+package status is in the [execution progress ledger](execution-progress.md). Preparing this prompt does not approve unmeasured support
 choices or authorize a merge. Give the prompt below to the implementation agent
 when ready; it begins by checking the actual review and dependency state.
 
@@ -21,8 +21,8 @@ the branch, working tree, active worktrees and live PR state; preserve other peo
 
 Proposal [PR #117](https://github.com/zalos/farsight/pull/117) merged at `04c3c63`. Planning PR 00,
 [PR #118](https://github.com/zalos/farsight/pull/118), merged on 2026-10-19 at `0c8c747`.
-The execution-preparation baseline is main `46018cb`, verified on 2026-10-21, with no Sentinel implementation
-started. Recheck the current main and owner instructions; these are historical checkpoints, not pins to ignore
+The execution-preparation baseline was main `46018cb`; PR 01 completed at `ef5c525` on 2026-10-21 with no
+production Sentinel runtime yet. Recheck the current main and owner instructions; these are historical checkpoints, not pins to ignore
 later updates. Read the [execution readiness packet](execution-readiness.md) for the prepared lanes and gates.
 
 Read these documents in order:
@@ -65,8 +65,9 @@ from the confirmed choices.
 
 ### First bounded deliverable
 
-After the PR 00 gate clears, start with **PR 01: feasibility harness and capability decisions**. If it is already
-complete, inspect its evidence and select the next eligible unfinished package instead of repeating it.
+PR 01 is complete within its accepted bounds; do not repeat it. Continue with the next eligible package in the
+[progress ledger](execution-progress.md) (PR 02 at this refresh). The PR 01 steps below are kept as the record of
+what that package had to deliver.
 
 Own `scripts/sentinel-feasibility.mjs`, the relevant `scripts/test/` tests, synthetic assets under
 `packages/sentinel/test/fixtures/`, the capability/corpus decision manifest and its results record. There is

@@ -1,0 +1,35 @@
+{
+  "schema": "sentinel-run/draft-1",
+  "id": "run-2",
+  "parentId": "run-1",
+  "baselineId": null,
+  "snapshotId": "snap-1",
+  "planRevision": 2,
+  "coordinatorEpoch": "epoch-7",
+  "ruleLockDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "toolLockDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "policyRevisionDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "requestedScope": {
+    "sourceIds": [
+      "api"
+    ],
+    "profile": "static"
+  },
+  "budgets": {
+    "maxTokens": 200000,
+    "maxCost": "12.50",
+    "currency": "USD",
+    "deadlineMs": 600000
+  },
+  "createdAt": "2026-10-21T12:00:00Z",
+  "state": "completed",
+  "outcome": "partial-coverage",
+  "completedAt": "2026-10-21T12:05:00.250Z",
+  "policy": {
+    "result": "required-coverage-incomplete",
+    "exitCode": 2,
+    "reasonCodes": [
+      "sentinel.policy.requiredCoverageIncomplete"
+    ]
+  }
+}

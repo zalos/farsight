@@ -1,0 +1,33 @@
+{
+  "schema": "sentinel-work/draft-1",
+  "id": "work-pattern-api",
+  "revision": 1,
+  "runId": "run-1",
+  "planRevision": 2,
+  "stage": {
+    "contract": "sentinel.stage.patternScan",
+    "contractVersion": "draft-1",
+    "kind": "external-tool",
+    "implementationDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+  },
+  "inputFingerprint": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+  "influenceManifest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+  "dependencies": [
+    {
+      "id": "work-capture",
+      "revision": 1
+    }
+  ],
+  "resources": {
+    "deadlineMs": 120000,
+    "memoryBytes": 2147483648,
+    "cpuQuota": 2,
+    "maxPids": 128,
+    "maxOutputBytes": 4194304
+  },
+  "coordinatorEpoch": "epoch-7",
+  "createdAt": "2026-10-21T12:00:00Z",
+  "state": "blocked",
+  "activeAttemptId": null,
+  "reasonCode": "sentinel.reason.dependencyFailed"
+}

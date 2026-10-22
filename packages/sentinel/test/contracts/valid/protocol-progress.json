@@ -1,0 +1,13 @@
+{
+  "protocol": "sentinel-worker/draft-1",
+  "attemptId": "att-1",
+  "work": {
+    "id": "work-pattern-api",
+    "revision": 1
+  },
+  "coordinatorEpoch": "epoch-7",
+  "type": "progress",
+  "seq": 2,
+  "completed": 3,
+  "planned": 9
+}

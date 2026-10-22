@@ -1,0 +1,12 @@
+{
+  "protocol": "sentinel-worker/draft-1",
+  "attemptId": "att-1",
+  "work": {
+    "id": "work-pattern-api",
+    "revision": 1
+  },
+  "coordinatorEpoch": "epoch-7",
+  "type": "checkpoint",
+  "seq": 3,
+  "checkpoint": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+}

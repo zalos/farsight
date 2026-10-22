@@ -1,0 +1,41 @@
+{
+  "schema": "sentinel-observation/draft-1",
+  "id": "obs-1",
+  "snapshotId": "snap-1",
+  "producer": {
+    "kind": "scanner",
+    "adapterId": "pattern-engine",
+    "adapterDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "attemptId": "att-1"
+  },
+  "producerRuleId": "sentinel-fixture-sql-concat-tsjs",
+  "rule": {
+    "familyId": "sentinel.sql.dynamic-query",
+    "revisionDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "originalSeverity": "ERROR",
+  "message": "Query text built by concatenation.",
+  "evidence": [
+    {
+      "snapshotId": "snap-1",
+      "sourceId": "api",
+      "relativePath": "src/routes/invoice.ts",
+      "content": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "span": {
+        "startByte": 120,
+        "endByte": 188
+      },
+      "quoteDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "nodeId": "api::src/routes/invoice.ts::submit"
+    }
+  ],
+  "limitationKeys": [
+    "sentinel.limitation.noAttackerControl"
+  ],
+  "mappings": {
+    "cwe": [
+      "CWE-89"
+    ]
+  },
+  "observedAt": "2026-10-21T12:05:00.250Z"
+}

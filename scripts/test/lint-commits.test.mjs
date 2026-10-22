@@ -17,6 +17,7 @@ test('conforming subjects pass', () => {
     'feat(core)!: drop the v0 shape',
     'test(e2e): the project picker',
     'ci: lint PR titles',
+    'feat(sentinel): add the optional contract boundary',
     'revert: feat(cli): a thing',
     `feat(parsers): ${'x'.repeat(80)} (#12)`,
   ]) assert.deepEqual(lintSubject(s), [], s);

@@ -1,0 +1,36 @@
+{
+  "schema": "sentinel-work/draft-1",
+  "id": "work-review",
+  "revision": 1,
+  "runId": "run-1",
+  "planRevision": 2,
+  "stage": {
+    "contract": "sentinel.stage.guidedReview",
+    "contractVersion": "draft-1",
+    "kind": "agentic",
+    "implementationDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+  },
+  "inputFingerprint": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+  "influenceManifest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+  "dependencies": [
+    {
+      "id": "work-capture",
+      "revision": 1
+    }
+  ],
+  "resources": {
+    "deadlineMs": 120000,
+    "memoryBytes": 2147483648,
+    "cpuQuota": 2,
+    "maxPids": 128,
+    "maxOutputBytes": 4194304
+  },
+  "coordinatorEpoch": "epoch-7",
+  "createdAt": "2026-10-21T12:00:00Z",
+  "state": "leased",
+  "activeAttemptId": "att-9",
+  "claim": {
+    "leaseExpiresAt": "2026-10-21T12:05:00.250Z",
+    "fencingGeneration": 3
+  }
+}

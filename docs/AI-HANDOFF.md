@@ -41,13 +41,58 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel PR 02 foundation validated — 2026-10-22
+
+Branch `codex/sentinel-foundation` adds the optional Sentinel package with nine draft contract envelopes,
+generated schemas, bounded validation, catalog-backed help and explicit unavailable analysis capabilities.
+Sentinel remains a separate tarball; Farsight imports no Sentinel code. Packaging now follows actual workspace
+dependency closures and stages artifacts before replacement, including refusal when npm exits successfully
+without writing a tarball. The new `sentinel-package` CI job checks clean npm consumers with Sentinel absent,
+present but unbuilt, and independently installed with its public types and schemas. ADR 18 records the boundary.
+
+Opus implemented the package, packaging and execution ledger; two SOL review lanes independently verified the
+fixes. Their final reviews cleared all reported blockers, including newline path traversal, bounded validation
+errors, core Counted compatibility, canonical graph IDs, calendar/nanosecond timestamps, policy consistency,
+decision expiry, dependency selection and prior-artifact preservation. Contracts remain `draft-1`; scanner,
+ledger, model and UI support are not claimed by this foundation.
+
+Integrated validation: Node 24 build and type checks; 1,643 package tests passed with two opt-in skips before
+the final Sentinel-only timestamp fix, then all 30 final Sentinel tests passed; 178 script tests; generated
+schemas and catalog lint (3,547 entries); actual clean npm package checks (nine contract types, nine schemas,
+36 fixtures), both Farsight isolation cases, and Echo's installed-package smoke. All 345 browser/MCP tests
+and 11 small performance checks passed. Main/feature real-ingest comparison and viewer checks are recorded in
+the PR description. The primary checkout, dogfood graph and global installation were not changed. The original
+Claude reviews remain byte-identical. PR 03 storage is next; the complete remaining plan and end gates stay in
+the execution progress ledger.
+
+## Sentinel execution continues — 2026-10-21
+
+PR #133 merged at `ef5c525`. The owner continued execution and accepted PR 01's bounded matrix and resource
+defaults **for implementation** only; nothing measured as a prototype becomes general engine, framework,
+platform or deep-analysis support. PR 00/01 are done, PR 02 is in progress, PRs 03–30 (with 23a/23b/25b) are
+pending. Remaining deferred items are implementation/release acceptance gates, not new permission gates for
+authorized reversible work. The durable status table, owner-directed roles (Opus implements, SOL reviews,
+a final Claude Fable 5.1 touch-up review fixed by Opus and verified by SOL), the captured stage
+configuration/I-O/rerun/model-choice/visual requirements and the end gates (Java + Spring sample app,
+npm-only consumer install → help → init → scan → report, release) are in the
+[execution progress ledger](proposals/farsight-sentinel/execution-progress.md). Settled by the lead: npm-only
+installs use the GitHub Release tarball URL (registry only if configured at release); initialization means
+instructions over Farsight's existing install/config/ingest/serve path plus a Sentinel flow designed in PR 09;
+the Java + Spring sample is original. Resolved since: retention
+windows are explicit-prune eligibility, never automatic deletion in v1; the final reviewer is the installed
+`fable` alias. Pending live-evaluation configuration (not an implementation or deterministic-release blocker):
+a second model — only `qwen3:4b` is local — or a hosted endpoint with a spend cap for PR 22's evaluation
+(two models × 30 cases × 5 trials × 2 variants: 300 clean plus 300 paired canary evaluations, 600 total). PR 29/30 runtime testing stays on the synthetic/sample local app only. This change is
+Markdown/JSON documentation only; no builds or tests ran locally for it, and CI selection is unchanged
+(`feasibility-decisions.json` is an unknown path, so CI selects every check); the two original Claude reviews are unchanged.
+
 ## Sentinel PR01 measured decisions — 2026-10-22
 
 [PR #133](https://github.com/zalos/farsight/pull/133), branch `codex/sentinel-decisions`, continues merged #132 (`2bd38f6`) with original engine, framework and
 runtime/resource experiments. Claude CLI implemented framework apps/drivers; SOL lanes implemented and
 cross-reviewed engine/runtime/acquisition/lifecycle controls; the lead integrated, reviewed and ran final
 measurements. [The acceptance record](proposals/farsight-sentinel/feasibility-acceptance.md) links the proposed
-matrix/resource defaults, immutable evidence and remaining gates. Owner acceptance is pending before PR02.
+matrix/resource defaults, immutable evidence and remaining gates. Owner acceptance followed on 2026-10-21 (above).
 
 Both evaluated engine profiles pass the bounded direct/local criteria but fail cross-file qualification.
 Semgrep is the proposed scoped pattern default. Four original framework apps pass 11 scenarios/14 expected

@@ -4,10 +4,11 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, renameSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { changedPaths, detectChecks, selectChecks } from '../ci-changes.mjs';
+import { changedPaths, detectChecks, selectChecks, sentinelPackageInputs } from '../ci-changes.mjs';
+import { buildClosure } from '../pack-preflight.mjs';
 
-const none = { validate: false, e2e: false, echo: false };
-const full = { validate: true, e2e: true, echo: true };
+const none = { validate: false, e2e: false, echo: false, sentinel: false };
+const full = { validate: true, e2e: true, echo: true, sentinel: true };
 
 test('ordinary docs skip runtime checks; packaged docs still check their tarball', () => {
   assert.deepEqual(selectChecks(['README.md', 'docs/research/analysis-core-options-2026-10-17.md',
@@ -22,16 +23,61 @@ test('e2e and unit test changes select their own check; mixed edits take the uni
 });
 
 test('runtime, fixtures and shared build inputs retain their affected checks', () => {
-  for (const path of ['packages/server/public/app/main.js', 'packages/parsers/src/tsjs.ts',
-    'examples/invoice-app/docs/flow.md', 'schemas/farsight-affected-v1.schema.json']) {
-    assert.deepEqual(selectChecks([path]), { validate: true, e2e: true, echo: false }, path);
+  for (const path of ['packages/app/src/index.ts', 'examples/nx-workspace/package.json', 'schemas/farsight-affected-v1.schema.json']) {
+    assert.deepEqual(selectChecks([path]), { ...none, validate: true, e2e: true }, path);
   }
-  for (const path of ['packages/graph/src/graph.ts', 'packages/core/src/graph.ts', 'packages/core/package.json', 'packages/echo/src/cli.ts',
+  for (const path of ['packages/server/public/app/main.js', 'packages/cli/src/cli.ts', 'packages/mcp/src/run.ts',
+    'packages/code-parser/src/tsjs.ts', 'packages/parsers/src/tsjs.ts', 'packages/parsers/package.json',
+    'packages/work/src/gate.ts', 'packages/work-fixture/src/index.ts', 'packages/work-jira/package.json',
+    'packages/work-azdo/src/index.ts', 'examples/invoice-app/docs/flow.md']) {
+    assert.deepEqual(selectChecks([path]), { ...none, validate: true, e2e: true, sentinel: true }, path);
+  }
+  for (const path of ['packages/graph/src/graph.ts', 'packages/core/src/graph.ts', 'packages/core/package.json',
     'pnpm-lock.yaml', 'package.json', 'pnpm-workspace.yaml', '.nvmrc', '.github/workflows/ci.yml',
     'scripts/ci-changes.mjs', 'new-build-input.json', 'docs/fixture.json']) {
     assert.deepEqual(selectChecks([path]), full, path);
   }
   assert.deepEqual(selectChecks(['scripts/pack-echo.mjs']), { ...none, echo: true });
+  for (const path of ['scripts/pack.mjs', 'scripts/pack-preflight.mjs', 'scripts/npm-consumer.mjs', 'scripts/test-farsight-package.mjs', 'scripts/test-farsight-package-absent.mjs']) {
+    assert.deepEqual(selectChecks([path]), full, `${path} is shared packaging`);
+  }
+});
+
+test("every package in farsight-cli's real build closure selects sentinel-package", () => {
+  const closure = buildClosure(process.cwd(), '@farsight/cli').closure.map((p) => p.dir.split('/').pop());
+  assert.ok(closure.length >= 10 && closure.includes('parsers') && closure.includes('work-azdo'), closure.join(', '));
+  const inputs = sentinelPackageInputs();
+  for (const dir of closure) {
+    assert.ok(inputs.has(dir), dir);
+    assert.equal(selectChecks([`packages/${dir}/src/x.ts`]).sentinel, true, dir);
+    assert.equal(selectChecks([`packages/${dir}/package.json`]).sentinel, true, dir);
+  }
+  assert.ok(!inputs.has('echo') && !inputs.has('app'), 'packages outside both closures do not select it');
+  // a CLI dependency added later joins the set from the manifests alone
+  assert.equal(selectChecks(['packages/new-dep/src/x.ts'], { packageInputs: new Set(['new-dep']) }).sentinel, true);
+  assert.deepEqual(selectChecks(['docs/x.md'], { packageInputs: undefined }), none);
+});
+
+test('unreadable workspace manifests select every check', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'farsight-ci-manifests-'));
+  try {
+    assert.throws(() => sentinelPackageInputs(dir), /CLI closure unreadable/);
+    mkdirSync(join(dir, 'packages/cli'), { recursive: true });
+    writeFileSync(join(dir, 'packages/cli/package.json'), '{ not json');
+    assert.throws(() => sentinelPackageInputs(dir));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Sentinel selects its package check without e2e; its build closure and the CLI layers select it too', () => {
+  for (const path of ['packages/sentinel/src/index.ts', 'packages/sentinel/schemas/report.schema.json',
+    'packages/sentinel/package.json', 'packages/sentinel/tsconfig.json']) {
+    assert.deepEqual(selectChecks([path]), { ...none, validate: true, sentinel: true }, path);
+  }
+  assert.deepEqual(selectChecks(['packages/sentinel/test/contracts.test.ts', 'packages/sentinel/test/fixtures/feasibility/a.ts']), { ...none, validate: true });
+  assert.deepEqual(selectChecks(['packages/sentinel/README.md', 'scripts/pack-sentinel.mjs', 'scripts/test-sentinel-package.mjs']), { ...none, sentinel: true });
+  assert.deepEqual(selectChecks(['packages/core/src/counts.ts']), full, 'core feeds Echo and Sentinel');
+  assert.deepEqual(selectChecks(['packages/graph/src/graph.ts']), full);
+  assert.deepEqual(selectChecks(['packages/echo/src/cli.ts']), { ...none, validate: true, e2e: true, echo: true });
 });
 
 test('unavailable ranges run everything, including missing/zero SHAs and unknown events', () => {
@@ -72,14 +118,15 @@ test('real git ranges handle PR branch points, multiple push commits, deletion a
     rmSync(join(dir, 'docs/old-code.md')); write('e2e/tests/new.pw.spec.ts');
     const head = commit('test(e2e): new check');
     assert.deepEqual(detectChecks({ base, head, event: 'push', cwd: dir }).checks,
-      { validate: true, e2e: true, echo: false }, 'push range includes earlier commits and deleted code');
+      { ...none, validate: true, e2e: true, sentinel: true }, 'push range includes earlier commits and deleted code');
     assert.deepEqual(detectChecks({ base: head, head, event: 'push', cwd: dir }).checks, none);
 
     const output = join(dir, 'output'), summary = join(dir, 'summary');
     execFileSync(process.execPath, [new URL('../ci-changes.mjs', import.meta.url).pathname], {
       cwd: dir, env: { ...process.env, BASE_SHA: base, HEAD_SHA: docs, GITHUB_EVENT_NAME: 'push', GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary },
     });
-    assert.equal(readFileSync(output, 'utf8'), 'validate=false\ne2e=false\necho=false\n');
+    assert.equal(readFileSync(output, 'utf8'), 'validate=false\ne2e=false\necho=false\nsentinel=false\n');
     assert.match(readFileSync(summary, 'utf8'), /e2e: skip/);
+    assert.match(readFileSync(summary, 'utf8'), /sentinel-package: skip/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

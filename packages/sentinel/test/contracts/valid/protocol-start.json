@@ -1,0 +1,16 @@
+{
+  "protocol": "sentinel-worker/draft-1",
+  "attemptId": "att-1",
+  "work": {
+    "id": "work-pattern-api",
+    "revision": 1
+  },
+  "coordinatorEpoch": "epoch-7",
+  "type": "start",
+  "seq": 0,
+  "inputFingerprint": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+  "inputs": [
+    "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  ],
+  "deadlineAt": "2026-10-21T12:05:00.250Z"
+}

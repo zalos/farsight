@@ -10,6 +10,11 @@
   "scripts": {
     "pack:echo": "pnpm --filter @farsight/echo... build && node scripts/pack-echo.mjs",
     "test:echo:package": "pnpm pack:echo && node scripts/test-echo-package.mjs",
+    "pack:cli": "pnpm --filter @farsight/cli... build && node scripts/pack.mjs",
+    "test:cli:package": "pnpm pack:cli && node scripts/test-farsight-package.mjs",
+    "test:cli:package:absent": "node scripts/test-farsight-package-absent.mjs",
+    "pack:sentinel": "pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs",
+    "test:sentinel:package": "pnpm pack:sentinel && node scripts/test-sentinel-package.mjs",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck && pnpm e2e:typecheck",
     "test": "pnpm -r test && pnpm test:scripts",

@@ -1,0 +1,298 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/CoverageEnvelope",
+  "definitions": {
+    "CoverageEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-coverage/draft-1"
+        },
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "runId": {
+          "$ref": "#/definitions/Id"
+        },
+        "checkId": {
+          "$ref": "#/definitions/Id"
+        },
+        "workId": {
+          "$ref": "#/definitions/Id"
+        },
+        "workRevision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "status": {
+          "$ref": "#/definitions/CoverageStatus"
+        },
+        "granularity": {
+          "$ref": "#/definitions/CoverageGranularity"
+        },
+        "assessedScopeArtifact": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "limitationsArtifact": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "basis": {
+          "$ref": "#/definitions/CoverageBasis"
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScopedReason"
+          },
+          "description": "Scopes the producer reported skipping (a timeout, a size limit): these stay gaps even on exit zero.",
+          "maxItems": 10000
+        },
+        "recordedAt": {
+          "$ref": "#/definitions/Timestamp"
+        }
+      },
+      "required": [
+        "schema",
+        "id",
+        "runId",
+        "checkId",
+        "workId",
+        "workRevision",
+        "status",
+        "granularity",
+        "assessedScopeArtifact",
+        "limitationsArtifact",
+        "basis",
+        "skipped",
+        "recordedAt"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-coverage/draft-1 — what one check actually covered, with its scope and limitations."
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "Ordinal": {
+      "type": "integer",
+      "description": "A positive integer ordinal or revision.",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "CoverageStatus": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "partial",
+        "unsupported",
+        "not-run",
+        "error"
+      ],
+      "description": "Coverage is separate from findings: \"complete\" says the check ran over its scope, not that nothing was found."
+    },
+    "CoverageGranularity": {
+      "type": "string",
+      "enum": [
+        "per-file-per-rule",
+        "per-file",
+        "aggregate"
+      ],
+      "description": "The finest scope an engine can establish. An aggregate scan cannot populate per-file/per-rule cells."
+    },
+    "ArtifactId": {
+      "$ref": "#/definitions/Digest",
+      "description": "An immutable object-store identity: the digest of canonical uncompressed bytes."
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "CoverageBasis": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "executed",
+            "reused",
+            "imported",
+            "unavailable"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "executed"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "executed"
+              },
+              "attemptId": {
+                "$ref": "#/definitions/Id"
+              }
+            },
+            "required": [
+              "kind",
+              "attemptId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "reused"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "reused"
+              },
+              "publication": {
+                "$ref": "#/definitions/WorkRef"
+              },
+              "derivationArtifact": {
+                "$ref": "#/definitions/ArtifactId"
+              }
+            },
+            "required": [
+              "kind",
+              "publication",
+              "derivationArtifact"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "imported"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "imported"
+              },
+              "provenanceArtifact": {
+                "$ref": "#/definitions/ArtifactId"
+              }
+            },
+            "required": [
+              "kind",
+              "provenanceArtifact"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "unavailable"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "unavailable"
+              },
+              "reasonCode": {
+                "$ref": "#/definitions/CatalogKey"
+              }
+            },
+            "required": [
+              "kind",
+              "reasonCode"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ]
+    },
+    "WorkRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false,
+      "description": "A logical work unit at one immutable revision; every reference to work names both."
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "ScopedReason": {
+      "type": "object",
+      "properties": {
+        "scopeId": {
+          "$ref": "#/definitions/ScopeId"
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        }
+      },
+      "required": [
+        "scopeId",
+        "reasonCode"
+      ],
+      "additionalProperties": false,
+      "description": "A coded reason attached to a scope (a skipped file, an unresolved frontier)."
+    },
+    "ScopeId": {
+      "type": "string",
+      "description": "A scope reference such as `<sourceId>:<relativePath>` or a surface ID. Untrusted protocol data: bounded, free of control characters, never resolved as a filesystem path.",
+      "pattern": "^[A-Za-z0-9][^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]*$",
+      "maxLength": 4300
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "A UTC RFC 3339 timestamp with an explicit Z offset and a real calendar date (no leap second), years 0000–9999 proleptic Gregorian, up to nine fractional digits. The pattern bounds each field; the `date-time` format check refuses a day the month does not have. Comparisons keep all nine digits.",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$",
+      "format": "date-time"
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-coverage.draft-1.schema.json",
+  "title": "sentinel-coverage/draft-1"
+}

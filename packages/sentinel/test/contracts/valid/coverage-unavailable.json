@@ -1,0 +1,18 @@
+{
+  "schema": "sentinel-coverage/draft-1",
+  "id": "cov-3",
+  "runId": "run-1",
+  "checkId": "chk-1",
+  "workId": "work-pattern-api",
+  "workRevision": 1,
+  "granularity": "aggregate",
+  "assessedScopeArtifact": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "limitationsArtifact": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "recordedAt": "2026-10-21T12:05:00.250Z",
+  "status": "unsupported",
+  "basis": {
+    "kind": "unavailable",
+    "reasonCode": "sentinel.capability.noQualifiedEngine"
+  },
+  "skipped": []
+}
