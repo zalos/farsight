@@ -848,3 +848,60 @@ position only when every earlier layer was read and none can refuse. Node's `req
 not bind its own, and only Node's `http`/`https` `createServer` may receive an application without opening it. Proving
 a principal or permission would need the provenance of the value a refusal reads, which this pack does not model; it is a draft, source-only capability until PR 09 wires it into a
 scan. Reason words are `strings-sentinel-express.ts`.
+
+30. **Sentinel's Next pack decides middleware applicability statically and never claims an effect (2026-10-22).**
+
+`@farsight/sentinel/frameworks/next` (`analyzeNext`) is the first framework pack behind the shared control-fact
+contract (`contracts/controls.ts`). Its inputs are the snapshot envelope, the parser evidence for one of its sources
+(PR 05, checked through the planner's `plannerAnalysisFrom`) and the captured bytes by content id, each read
+hash-checked. It never runs application code, never runs a package manager and never reads the parser's broad
+`guard::middleware:` heuristic, whose edges cover every entry under the file's folder without reading its matcher.
+
+Support is one manifest (`support.ts`), and its canonical digest is the pack digest every envelope pins: Next
+14.2.25 with React and React DOM 18.3.1, the combination PR 01 measured, and nothing else. Support is the exact
+packages, not their version strings: the manifest pins each one's registry tarball integrity, read from the resolved
+lockfile PR 01's acquisition captured (the retained archive's SHA-256 is in the manifest). Versions come only from a
+lockfile that records what was installed with its content identity (an npm 2/3 entry with the public registry
+tarball URL for that version and a sha512 integrity; a pnpm 6.0/9.0 importer version and its package's
+`resolution.integrity`), resolved from the project folder upwards. The lockfile and the package manifest are
+untrusted input: every value is shape- and size-checked, and a shape the readers do not expect is invalid, never a
+crash. These are unknown: a version written only in the package manifest; a manifest specifier that is not a
+registry version or range (`file:`, `link:`, Git, a URL, `npm:` aliases, `workspace:`); a local, linked, Git or
+mirrored package; an entry without an integrity; the pinned version with another integrity (a repacked or
+substituted package); two candidate lockfiles; an unread lockfile kind; and an exact manifest pin that disagrees
+with the lockfile. Another registry version is recorded as resolved and analyzed as nothing: every fact is
+unknown.
+
+The middleware handler and `config` export, and next.config, are read with Oxc (loaded on first read) as literal
+syntax only, with exact UTF-8 spans and a quote digest for every cited span. Anything Next would have to compute,
+or syntax not verified to be extracted the same way (`as const`, `satisfies`, identifiers, spreads, re-exports), is
+dynamic. Only an absent or statically empty next.config is supported: base paths, locales, rewrites and page
+extensions all change which request reaches which file. The middleware must sit beside the router folder (the
+project, or `src/` when the router lives there); a file elsewhere is a frontier, never the project's middleware.
+
+The matcher subset is whole path segments: literals of unreserved URL characters and `:name`, `:name?`, `:name*`,
+`:name+`, including Next's root form (which also matches `/index`). App Router surfaces are the parser's `route` and
+`page` nodes under the router's `app/` folder. Their request paths come from the captured folder segments, never
+from the graph's display name, which folds every dynamic form to `:param`. Groups and slots vanish, `[x]` is one
+segment, `[...x]` one or more, `[[...x]]` zero or more, and `_private` folders are not routable. A segment automaton
+product over the literals of both sides, plus one symbol for every other value, answers whether the matcher reaches
+all, none or only some request paths. Unconditional entries prove `all`; every entry, conditional ones included, has
+to miss for `none`. An entry outside the subset (custom regular-expression groups, brace groups, escapes, parameters
+inside a segment) blocks `none` without blocking another entry's `all`. A decision that changes under case folding
+is unknown. Dynamic segments are taken to serve every value, including ones a static sibling would win, which only
+turns `all` or `none` into `some`.
+
+Applicability is kept apart from effect. A matched surface's facts stay `unknown`
+(`sentinel.next.reason.effectNotEstablished`) for every property: running middleware, and its name, are not
+authentication or authorization evidence, and its body is not read. Only provable exclusion resolves, as
+`does-not-apply` citing the matcher bytes: the matcher reaches none of the surface's own request paths, so the
+middleware is no control on them (a middleware rewrite from a matched path can still arrive there, which only adds
+an unprotected route in). No excluded surface can be marked protected and the pack emits no `applies`. One envelope per Next project carries the facts at order 0 and the frontiers. These include the pages
+router (the graph has no surfaces for it), router files the graph has no surface for (`route.tsx`, folders that
+name one path) and unlisted router folders. Its `registrationDigest` covers the manifest, lockfile, middleware,
+next.config and the router's file inventory. Each surface's own `influenceDigest` names what decided it.
+
+Generic parser corrections the pack exposes (Pages Router surfaces, `route.tsx`, lossless dynamic segment names,
+`app/` folders outside a Next project) are separate measured parser changes, not reinterpretations here. Not decided:
+the coordinator stage and capability-table entry that run the pack (PR 09 integration), populating the snapshot's
+`frameworkVersions` from its resolution, effect analysis of middleware bodies, and other Next versions.

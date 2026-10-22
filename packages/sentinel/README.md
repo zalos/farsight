@@ -82,6 +82,20 @@ exactly one work unit or kept with its reason (unsupported, applicability unknow
 `workEnvelopesFor` gives the coordinator canonical work envelopes for a plan. A new rule plans a new revision over
 the already published capture and parse; earlier revisions never change (ADR 24).
 
+## Next middleware applicability (draft)
+
+`farsight-sentinel/frameworks/next` reads a captured Next 14.2.25 / React 18.3.1 project (versions from its lockfile
+only) and says, for each App Router route and page the parser placed, whether the middleware matcher reaches all,
+none or only some of its requests. `analyzeNext({ snapshot, analysis, read })` returns one
+`sentinel-controls/draft-1` envelope per project. A surface the matcher never reaches gets `does-not-apply`, citing
+the matcher bytes. A matched surface stays `unknown`: running middleware is not protection. Dynamic or unsupported
+matchers, another version, a non-empty next.config and the pages router are unknowns or frontiers (ADR 30). No
+application code runs. Qualification requires the pinned public registry tarball integrity as well as its version.
+Recorded pnpm patches for Next, React or React DOM (patch maps, importer hashes, package modification metadata,
+or project/workspace-root package declarations) leave applicability unknown: the original tarball integrity does
+not identify patched installed bytes. Ordinary peer dependency suffixes and unrelated package patches remain
+supported. This source-only check reads captured installation evidence; it does not attest a running installation.
+
 ## The local store (draft)
 
 ```ts

@@ -6,6 +6,19 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Next patch identity correction — 2026-10-22
+
+Branch `codex/sentinel-next-patched-identity` refuses recorded pnpm patches for Next, React and React DOM,
+including lock patch maps, importer/package patch hashes and project/workspace-root package declarations.
+Nested projects read only captured root declaration bytes; absent recorded bytes or malformed declarations leave
+versions unknown. Ancestor declaration identities contribute to registration and surface influence digests. Pack
+revision 3 invalidates facts produced with the earlier package identity semantics. Ordinary peer suffixes and
+unrelated patches still qualify. This is source-only installation evidence, not a runtime package attestation.
+
+Validation: Sentinel dependency-closure build; Next matcher/pack suites (23 tests, no skips), including actual
+capture → delete checkout → parse → analyze patched fixtures and a nested workspace control. The original
+independent patched-package probe was replayed unchanged. Public CLI integration remains separately pending.
+
 ## Delayed OOM canary correction — 2026-10-22
 
 Branch `codex/sentinel-oom-settling-investigation` corrects the test-only Docker visibility adapter: it hides the
@@ -55,6 +68,73 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 - Preserve the multi-source dogfood graph: use the workspace server's `POST /api/sync` after restart. Bare CLI ingest replaces it and ignores workspace source excludes. Smoke-test ingest from a temporary cwd with an explicit output path instead; SQLite history is cwd-relative too.
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
+
+## Next fix-stack integration with merged foundations — 2026-10-22
+
+Branch `codex/sentinel-next-integration` incorporates the reviewed patch-identity correction and follow-ups through
+`89323726`, then merges main `95387a4e`. The merge preserves the complete Pattern and Express implementations,
+reserved ADRs, catalogs, package exports, audit entries and installed-consumer hooks alongside Next. The Next runtime
+is unchanged from the frozen root-shape correction; other framework/scanner/runtime implementations come unchanged
+from merged main. The root-shape slice passed 46 focused Next/package tests with zero skips before integration.
+
+Production coordinator and CLI dispatch for framework packs remain open. The merge is a library foundation and
+makes no framework effect or full-plan acceptance claim. Integration build, focused checks and fresh installed npm
+consumer evidence are verified separately before handoff; no target application code is executed or installed.
+No primary build, dogfood replacement, server restart or push is part of this integration.
+
+## Next pnpm root-shape preflight — 2026-10-22
+
+The follow-up on `codex/sentinel-next-patch-indent` preserves `c8c3f160` and validates every meaningful lockfile root
+key before reading individual sections. Supported keys are plain, single-quoted or double-quoted simple identifiers;
+unknown ordinary identifiers may remain inert configuration. Tagged, anchored, complex, escaped or duplicate root
+keys and document directives are refused conservatively. Patch-head detection consumes those normalized roots,
+rather than a separate spelling-specific search. No YAML dependency is added; the pack revision advances to 7.
+
+A captured tagged `patchedDependencies` key reproduced the identity bypass on frozen `c8c3f160`; the existing YAML
+parser confirms it names the same map as an ordinary key. An original ordinary-config/unrelated-patch fixture keeps
+its measured peer identity. Focused checks also cover quoted known sections and unsupported root/document forms.
+No target code is executed. Independent review remains required before integration or publication.
+
+## Next pnpm modification-metadata key follow-up — 2026-10-22
+
+The follow-up on `codex/sentinel-next-patch-indent` preserves `464c6734` and reads package metadata field names as
+plain or quoted identifiers. A `patched` field in either form refuses the measured registry identity; escaped or
+unsupported key forms are unknown instead of silently ignored. Ordinary quoted `engines` and `hasBin` metadata
+still qualify. No YAML dependency is added. The pack revision advances to 6 to invalidate the earlier decision.
+
+Actual capture/parse probes reproduced all three quoted/escaped modification-key failures on frozen `464c6734`;
+the existing YAML parser confirms each spelling means the same `patched: true` field. The ordinary metadata positive
+passed that baseline. Final validation passed all 43 focused Next/package tests with zero skips, Sentinel build and
+typecheck, catalog lint and diff checks. Target code was never installed, compiled or executed. Independent review
+and integration remain with the coordinating owner; author, primary and integrating-owner trees are untouched.
+
+## Next pnpm comment-boundary follow-up — 2026-10-22
+
+The follow-up on `codex/sentinel-next-patch-indent` preserves `696d96fb` and makes the shared YAML block reader
+ignore comment-only lines at every indentation. Two actual capture/parse probes reproduced the remaining defect on
+that frozen head: a column-zero comment before the first patch entry, or between an unrelated entry and Next's entry,
+truncated the map and incorrectly retained the registry identity. The existing YAML parser confirms both placements
+preserve the same patch-map meaning. The pack revision advances to 5 so the old identity answer cannot be reused.
+
+Comment-only declarations parse as YAML null and are conservatively unknown, while explicit empty maps remain
+supported. New retained-source regressions cover both hidden-entry cases and that null-versus-empty distinction;
+ordinary peer suffixes and unrelated patch positives remain in the focused suite. No target code is executed and
+no author, primary or integrating-owner tree is changed. Independent review remains required before integration.
+
+## Next pnpm patch-map indentation correction — 2026-10-22
+
+Branch `codex/sentinel-next-patch-indent` follows reviewed patch-identity correction `c9972d84`. The lockfile reader
+infers the direct-entry indentation of `patchedDependencies` instead of assuming two spaces, and skips each entry's
+complete metadata block before reading its sibling. Relevant patches remain unknown; unsupported selector/map shapes
+are refused rather than ignored. Ordinary peer suffixes and patches for unrelated packages still qualify. The pack
+revision advances to 4 so prior analysis cannot reuse this changed identity decision.
+
+Three original capture/parse regressions (one-, four- and eight-space patch maps) fail on frozen `c9972d84`.
+Each corrected case checks both relevant-patch refusal and an unrelated-patch positive through retained bytes after
+source removal. The original four-space probe is valid YAML: the existing YAML parser produces the same object as
+for the ordinary two-space form. Target code is never installed, compiled or executed. Build, typecheck and catalog
+checks passed; all 36 focused Next/package tests and both exact review probes passed with zero skips. Independent review and integration
+remain with the coordinating owner; no primary build, graph replacement or push occurred.
 
 ## Sentinel offline advisory foundation rebased — 2026-10-22
 

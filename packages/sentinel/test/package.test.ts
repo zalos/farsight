@@ -83,6 +83,10 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/scratch.js': ['node:fs', 'node:path'],
   'execution/registry.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
+  // The Next pack (PR 14) reads literal syntax with Oxc, loaded on first read only; it never runs application code.
+  'frameworks/next/analyze.js': ['node:crypto'],
+  'frameworks/next/config.js': ['dynamic:oxc-parser'],
+  'frameworks/next/errors.js': ['@farsight/core/dist/strings-sentinel-next.js'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
   // The Spring pack: tree-sitter's Java grammar, loaded on first analysis only; graph is pure JSON helpers.
   'frameworks/spring/pack.js': ['@farsight/graph', 'node:crypto'],
