@@ -23,6 +23,9 @@ import type { CoverageGranularity } from '../contracts/coverage.js';
 import type { ResourcePolicy } from '../contracts/work.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { ExecutionError } from './errors.js';
+import { CAPTURE_IMPLEMENTATION_URL } from '../snapshot/capture.js';
+import { PARSE_IMPLEMENTATION_URL } from '../snapshot/parser.js';
+import { INVENTORY_IMPLEMENTATION_URL } from './bootstrap.js';
 
 /**
  * Limits for one attempt. The ceilings are PR 01's accepted resource defaults (feasibility-decisions.json
@@ -108,11 +111,12 @@ export type TrustedAdapter =
   | (Readonly<Omit<BuiltInAdapterDefinition, 'limits' | 'coverage'>> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits>; readonly moduleDigest: Digest; readonly coverage: CoverageGranularity })
   | (Readonly<OperationAdapterDefinition> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits>; readonly moduleDigest: Digest; readonly coverage: 'aggregate' });
 
-/** The Sentinel module that implements each bootstrap operation, relative to this file in the built package. */
-const OPERATION_MODULES: Readonly<Record<BootstrapOperation, URL>> = Object.freeze({
-  capture: new URL('../snapshot/capture.js', import.meta.url),
-  parse: new URL('../snapshot/parser.js', import.meta.url),
-  inventory: new URL('./bootstrap.js', import.meta.url),
+/**
+ * The file each bootstrap operation's implementation runs from, as that module itself reports it (import.meta.url),
+ * so the digest stays the implementation's bytes whether the code is in the workspace dist or a packed bundle chunk.
+ */
+const OPERATION_MODULES: Readonly<Record<BootstrapOperation, string>> = Object.freeze({
+  capture: CAPTURE_IMPLEMENTATION_URL, parse: PARSE_IMPLEMENTATION_URL, inventory: INVENTORY_IMPLEMENTATION_URL,
 });
 const GRANULARITIES: readonly CoverageGranularity[] = ['per-file-per-rule', 'per-file', 'aggregate'];
 const coverageOf = (v: unknown): CoverageGranularity => {

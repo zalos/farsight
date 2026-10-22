@@ -72,6 +72,15 @@ const bins = Object.fromEntries(Object.entries(typeof sentinel.bin === 'string' 
 if (!Object.keys(bins).length || !jsExports.some(([subpath]) => subpath === '.')) {
   fail('the Sentinel manifest needs a `bin` and a root export (`exports["."]` or `main`).');
 }
+// Files started or hashed by path rather than imported ship as their own entries (not exports): the launch gate
+// a built-in worker process runs first (src/execution/assets.ts finds it from the package root).
+// It is required whenever the package can start a built-in worker (it has the supervisor).
+for (const [asset, needs] of [['execution/launch-gate', 'execution/supervisor']]) {
+  const source = join(dir, 'src', `${asset}.ts`);
+  if (!existsSync(join(dir, 'src', `${needs}.ts`))) continue;
+  if (!existsSync(source)) fail(`packages/sentinel/src/${asset}.ts is missing; the launch gate must ship with the package.`);
+  entries.set(asset, source);
+}
 // `types` first: TypeScript takes the first condition that matches.
 const exportsMap = Object.fromEntries(jsExports.map(([subpath, file, types]) => [subpath, { types: `./${rel(types)}`, import: `./${entryFor(file)}` }]));
 exportsMap['./package.json'] = './package.json';

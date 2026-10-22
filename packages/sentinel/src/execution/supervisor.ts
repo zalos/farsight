@@ -29,6 +29,7 @@ import type { ProtocolMessage, ResultMessage } from '../contracts/protocol.js';
 import type { ResourcePolicy } from '../contracts/work.js';
 import type { WorkerJournal, WorkerIdentity } from './recovery.js';
 import { kernelStartOf, launchAuthorization, tokenArgument } from './recovery.js';
+import { launchGateUrl } from './assets.js';
 import { syncDirectory } from './durability.js';
 import type { OwnedResource } from '../store/owner.js';
 import { canonicalJsonBytes } from '../store/objects.js';
@@ -186,7 +187,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   if (adapter.kind === 'built-in' && moduleDigestOf(adapter.module) !== adapter.moduleDigest) {
     throw new ExecutionError('sentinel.execution.adapterIdentityMismatch', { adapter: adapter.id });
   }
-  const builtInArgs = adapter.kind === 'built-in' ? [process.execPath, '--import', LAUNCH_GATE, adapter.module, inputDir, outputDir, tokenArgument(token)] : [];
+  const builtInArgs = adapter.kind === 'built-in' ? [process.execPath, '--import', launchGateUrl(), adapter.module, inputDir, outputDir, tokenArgument(token)] : [];
   const argv = adapter.kind === 'external' ? [...adapter.command] : builtInArgs;
   const environmentNames = adapter.kind === 'external'
     ? ['HOME', 'SENTINEL_INPUT', 'SENTINEL_OUTPUT', 'SENTINEL_ADAPTER_ID', 'SENTINEL_ADAPTER_DIGEST']
@@ -359,7 +360,6 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   return outcome;
 }
 
-const LAUNCH_GATE = new URL('./launch-gate.js', import.meta.url).href;
 
 function setFailure(outcome: WorkerOutcome, code: ExecutionErrorCode, detail: Record<string, unknown>, override = false): void {
   if (outcome.code && !override) return;
