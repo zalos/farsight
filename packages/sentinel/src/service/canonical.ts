@@ -24,10 +24,10 @@ import { captureSnapshot } from '../snapshot/capture.js';
 import { openSnapshot } from '../snapshot/materialize.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import type { SentinelStore } from '../store/index.js';
-import { PREVIEW_FINDINGS_SCHEMA, PREVIEW_RULE } from '../adapters/preview-detector.js';
+import { PREVIEW_DETECTOR_ID, PREVIEW_FINDINGS_SCHEMA, PREVIEW_RULE } from '../adapters/preview-detector.js';
 import { result, type CommandResult, type PrintedVerdicts } from '../cli/outcome.js';
 import { RuleLockBook } from './rule-locks.js';
-import { foundationProfile, foundationRegistry, type TrustedProfile } from './trusted-profile.js';
+import { foundationProfile, foundationRegistry, unsupportedRules, type TrustedProfile } from './trusted-profile.js';
 import { ServiceError } from './owner-service.js';
 
 const digest = (v: unknown) => `sha256:${createHash('sha256').update(canonicalJsonBytes(v)).digest('hex')}`;
@@ -61,7 +61,14 @@ export interface CurrentPlan {
   readonly kind: 'bootstrap' | 'analysis';
 }
 
-const isPreview = (plan: PlanRevision) => plan.pins.rules.some(r => r.familyId === PREVIEW_RULE);
+/** A plan resting on the foundation-preview detector, whatever its rules are called. */
+const isPreview = (plan: PlanRevision) => plan.pins.rules.some(r => r.adapterId === PREVIEW_DETECTOR_ID || r.familyId === PREVIEW_RULE);
+
+/** Refuses a plan that would ask a shipped check adapter to run a rule it does not implement exactly. */
+export function assertSupportedRules(plan: Pick<PlanRevision, 'pins'>): void {
+  const unsupported = unsupportedRules(plan);
+  if (unsupported.length) throw new ServiceError('sentinel.service.ruleUnsupported', { unsupported });
+}
 
 function disclose(plan: PlanRevision): CanonicalDisclosure {
   return Object.freeze({
@@ -133,6 +140,8 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
     snapshot: plannerSnapshotFrom(evidence.snapshot), analyses: evidence.analyses.map(a => plannerAnalysisFrom(a as never)),
     lock: plannerLockFrom(current.lock, packs, current.digest), policy: plannerPolicyFrom(options.policy), limits: ANALYSIS_LIMITS,
   });
+  // Before admission: a shipped check adapter runs only the exact rules it implements.
+  assertSupportedRules(analysis);
   await admitPlan(store, { plan: analysis, ruleLock: current.lock, policy: options.policy, profile: profile.record });
   store.ledger.advanceRunPlan(runId, analysis.revision);
   return { outcome: 'prepared', disclosure: disclose(analysis) };
@@ -140,6 +149,9 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
 
 /** Executes the run's current admitted revision. The coordinator records coverage and the outcome. */
 export async function executeRun(store: SentinelStore, runId: string, options: { scratchRoot: string; registry?: AdapterRegistry; run?: RunEnvelope }): Promise<RunSummary> {
+  // Again before anything runs: an admitted plan from elsewhere is held to the same exact rules.
+  const plan = await currentPlan(store, runId);
+  if (plan) assertSupportedRules((await loadPlan(store, runId, plan.revision)).plan);
   const coordinator = await Coordinator.open({ store, runId, registry: options.registry ?? foundationRegistry(), scratchRoot: options.scratchRoot, ...(options.run ? { run: options.run } : {}) });
   return coordinator.run();
 }

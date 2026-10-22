@@ -32,14 +32,15 @@ import {
   adoptedPolicy, isFinalRunState, runWriteBinding, printed, receiptBook, removeScratch, reportIn,
   runStateIn, scratchUnder, statusIn, type Workspace,
 } from './local.js';
-import { canonicalResult, currentPlan } from './canonical.js';
+import { assertSupportedRules, canonicalResult, currentPlan } from './canonical.js';
+import { loadPlan } from '../execution/plans.js';
 import { foundationRegistry } from './trusted-profile.js';
 
 export type ServiceErrorCode =
   | 'sentinel.service.unknownOperation' | 'sentinel.service.requestInvalid' | 'sentinel.service.planUnknown'
   | 'sentinel.service.planChanged' | 'sentinel.service.alreadyServing' | 'sentinel.service.startFailed'
   | 'sentinel.service.recordUnsafe' | 'sentinel.service.lockChanged' | 'sentinel.service.packUnavailable'
-  | 'sentinel.service.noRuleLock' | 'sentinel.service.bootstrapFailed';
+  | 'sentinel.service.noRuleLock' | 'sentinel.service.bootstrapFailed' | 'sentinel.service.ruleUnsupported';
 
 export class ServiceError extends Error {
   constructor(readonly code: ServiceErrorCode, readonly facts: Readonly<Record<string, unknown>> = {}) { super(code); this.name = 'ServiceError'; }
@@ -219,6 +220,8 @@ export class OwnerService {
         mkdirSync(scratch, { mode: 0o700 });
         // The coordinator executes the run's current admitted revision, under this service's trusted registry.
         const first = this.#store.ledger.getRun(planId) ? undefined : this.#runEnvelope(planId);
+        const admitted = await currentPlan(this.#store, planId);
+        if (admitted) assertSupportedRules((await loadPlan(this.#store, planId, admitted.revision)).plan);
         const coordinator = await Coordinator.open({ store: this.#store, runId: planId, scratchRoot: scratch, registry: this.#registry, ...(first ? { run: first } : {}) });
         run.coordinator = coordinator;
         if (run.cancel) coordinator.cancel();

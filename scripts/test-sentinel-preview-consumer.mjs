@@ -10,7 +10,7 @@
 //   pnpm pack:sentinel && node scripts/test-sentinel-preview-consumer.mjs [build/sentinel/farsight-sentinel-<v>.tgz]
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { npmConsumer } from './npm-consumer.mjs';
@@ -90,7 +90,22 @@ try {
     process.kill(pid, 'SIGTERM');
     for (let i = 0; i < 200; i++) { try { process.kill(pid, 0); } catch { break; } await new Promise(r => setTimeout(r, 50)); }
   }
-  console.log(`sentinel preview consumer ok: npm-only install, init twice, adopt, promote the built-in pack, plan ${planId}, run (exit 2, preview), report; background run ${second} (detach, join, wait, report)`);
+  // A pack the owner promotes that names the preview detector for another rule is refused before anything runs: the
+  // detector implements exactly its own shipped rule, so a plan for anything else is never reported as covered.
+  const custom = join(scratch, 'custom-pack');
+  cpSync(join(installed, 'rules', 'foundation-preview'), custom, { recursive: true });
+  const manifestPath = join(custom, 'sentinel-pack.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.packId = 'custom-pack';
+  manifest.rules[0].familyId = 'sentinel.custom.other-rule';
+  writeFileSync(manifestPath, JSON.stringify(manifest));
+  const settingsPath = join(ws, '.farsight', 'sentinel', 'settings.json');
+  writeFileSync(settingsPath, JSON.stringify({ ...JSON.parse(readFileSync(settingsPath, 'utf8')), mandatoryRules: ['sentinel.custom.other-rule'] }));
+  assert.equal((await sentinel('settings', 'adopt', '--confirm')).status, 0);
+  assert.equal((await sentinel('rules', 'promote', custom, '--confirm')).status, 0);
+  const refused = await sentinel('plan');
+  assert.deepEqual([refused.status, refused.body.reasonCode], [3, 'sentinel.service.ruleUnsupported'], JSON.stringify(refused.body));
+  console.log(`sentinel preview consumer ok: npm-only install, init twice, adopt, promote the built-in pack, plan ${planId}, run (exit 2, preview), report; background run ${second} (detach, join, wait, report); a custom pack for the preview detector refused`);
 } finally {
   consumer.cleanup();
 }

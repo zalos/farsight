@@ -9,7 +9,7 @@ import {
   adoptWorkspaceSettings, confirmForService, currentRules, followWorkspaceRun, promoteRulePack, planWorkspace, previewReport, runPlan, describeRun, runStatus, workspaceOf, PolicyError,
   type Workspace,
 } from './service/local.js';
-import { connectService, serveWorkspace } from './service/owner-service.js';
+import { connectService, readServiceDescriptor, serveWorkspace } from './service/owner-service.js';
 import { canonicalResult, type CurrentPlan } from './service/canonical.js';
 import { launchService } from './service/launch.js';
 import { builtinPackDir } from './service/package-paths.js';
@@ -176,7 +176,12 @@ async function ensureService(ws: Workspace): Promise<ServiceClient | undefined> 
     for (const end = Date.now() + SERVICE_START_MS; Date.now() < end;) {
       await new Promise(r => setTimeout(r, 100));
       const c = await connectService(ws);
-      if (c) return c;
+      if (c) {
+        // Another command's service won the race: this command's own launch is redundant and is stopped by its own
+        // handle, so it cannot take the store later, after the winner stops.
+        if (readServiceDescriptor(ws)?.pid !== launched.pid) launched.stop();
+        return c;
+      }
     }
   } catch (e) {
     launched.stop();
@@ -214,9 +219,19 @@ async function owner(p: ParsedCommand): Promise<number> {
       const describe = async (client?: ServiceClient) => (client
         ? (await client.request('run.describe', { runId }) as CurrentPlan | null) ?? undefined
         : describeRun(ws, runId));
-      const before = await connectService(ws);
-      let planNow: CurrentPlan | undefined;
-      try { planNow = await describe(before); } finally { before?.close(); }
+      // From the service when one holds the store; else from the store. A service that another command has just
+      // started holds the store before it answers: then this command waits for it and asks it, rather than failing.
+      const describeNow = async (): Promise<CurrentPlan | undefined> => {
+        for (const end = Date.now() + SERVICE_START_MS; ;) {
+          const live = await connectService(ws);
+          if (live) { try { return await describe(live); } finally { live.close(); } }
+          try { return await describe(); } catch (e) {
+            if ((e as { code?: string }).code !== 'sentinel.store.ownedElsewhere' || Date.now() >= end) throw e;
+          }
+          await new Promise(r => setTimeout(r, 100));
+        }
+      };
+      const planNow = await describeNow();
       const shown = confirmForService(ws, { command: p.command, action, plan: planNow, planId: runId, confirm: false, now });
       if (!confirm || ('result' in shown && shown.result.outcome !== 'awaiting-confirmation')) return serviceOut('result' in shown ? shown.result : result(p.command, 'refused'));
       const client = p.command === 'pause' ? await connectService(ws) : await ensureService(ws);

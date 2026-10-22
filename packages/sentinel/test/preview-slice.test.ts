@@ -130,3 +130,50 @@ test('a selected rerun previews its consequences from the parent plan: downstrea
   assert.deepEqual([fromA.downstream, fromA.prerequisites, fromA.all], [[id.B, id.C, id.D].sort(), [], true], 'selecting the root reruns everything');
   assert.equal(((await previewRerun(store, 'run-diamond', ['work-missing'])) as any).reasonCode, 'sentinel.service.stageUnknown');
 });
+
+test('a promoted pack that names the preview detector for any other rule, or for its rule with other bytes, is refused before anything runs', needsStore, async t => {
+  const { cpSync, readFileSync: read } = await import('node:fs');
+  const { unsupportedRules } = await import('../dist/service/trusted-profile.js');
+  for (const variant of ['another-family', 'same-family-other-bytes'] as const) {
+    const dir = realpathSync.native(mkdtempSync(join(tmpdir(), `sentinel-unsupported-${variant}-`)));
+    t.after(() => { unlock(dir); rmSync(dir, { recursive: true, force: true }); });
+    // A copy of the shipped pack, changed the way an owner could change it.
+    const pack = join(dir, 'pack');
+    cpSync(realpathSync.native(builtinPackDir('foundation-preview')!), pack, { recursive: true });
+    const manifestPath = join(pack, 'sentinel-pack.json');
+    const manifest = JSON.parse(read(manifestPath, 'utf8'));
+    const family = variant === 'another-family' ? 'sentinel.sol.required-rule' : PREVIEW_RULE;
+    manifest.packId = `custom-${variant}`;
+    manifest.rules[0].familyId = family;
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    const detector = join(pack, manifest.rules[0].implementation.rulePath);
+    writeFileSync(detector, JSON.stringify({ ...JSON.parse(read(detector, 'utf8')), familyId: family, marker: 'SOL_ONLY_MARKER_NOT_IN_INPUT' }));
+
+    const path = join(dir, 'ws');
+    mkdirSync(join(path, 'src'), { recursive: true });
+    writeFileSync(join(path, 'src/query.ts'), 'export const lookup = (id: string) => db.query("SELECT * FROM invoice WHERE id = " + id);\n');
+    const ws = workspaceOf(path, { ...process.env, XDG_STATE_HOME: join(dir, 'state') });
+    initWorkspace({ workspace: path });
+    // The owner asks for the custom family and adopts it.
+    const settingsPath = join(path, '.farsight/sentinel/settings.json');
+    writeFileSync(settingsPath, JSON.stringify({ ...JSON.parse(read(settingsPath, 'utf8')), mandatoryRules: [family] }));
+    adoptWorkspaceSettings(ws, { confirm: true, now: new Date() });
+    assert.equal(promoteRulePack(ws, { packDir: pack, confirm: true, now: new Date() }).outcome, 'prepared', 'promotion itself is the owner\'s to make');
+    const adopted = adoptedPolicy(ws);
+    assert.ok('policy' in adopted);
+    const store = await openStore(ws.storePath);
+    const work = scratchUnder(ws);
+    try {
+      await assert.rejects(planWorkspaceCanonical(store, { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() }),
+        (e: any) => e.code === 'sentinel.service.ruleUnsupported' && e.facts.unsupported[0].familyId === family, variant);
+      // Nothing analysis-related was admitted: no plan revision 2 exists for any run.
+      const runs = new Set(store.ledger.readEvents({ after: 0, limit: 500 }).events.filter((e: any) => e.runId).map((e: any) => e.runId));
+      for (const id of runs) assert.equal(store.ledger.getPlan(id as string, 2), undefined, `${variant}: no analysis admitted`);
+    } finally { removeScratch(work); store.close(); }
+  }
+  // The shipped rule itself is supported; the same pins with other definition bytes are not.
+  const { supportedRules } = await import('../dist/service/trusted-profile.js');
+  const [shipped] = supportedRules();
+  assert.deepEqual(unsupportedRules({ pins: { rules: [{ ...shipped, packDigest: 'x' }] } } as any), []);
+  assert.equal(unsupportedRules({ pins: { rules: [{ ...shipped, packDigest: 'x', definitionDigest: `sha256:${'0'.repeat(64)}` }] } } as any).length, 1);
+});

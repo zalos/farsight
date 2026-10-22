@@ -185,7 +185,7 @@ export async function planWorkspace(ws: Workspace, options: { confirm: boolean; 
         planned = await planWorkspaceCanonical(store, { workspace: ws.path, trustDir: trustFolder(ws), policy, scratchRoot: work, now: options.now,
           ...(options.parentId ? { parentId: options.parentId } : {}) });
       } catch (e) {
-        if (e instanceof ServiceError && e.code === 'sentinel.service.bootstrapFailed') {
+        if (e instanceof ServiceError && (e.code === 'sentinel.service.bootstrapFailed' || e.code === 'sentinel.service.ruleUnsupported')) {
           return result('plan', 'configuration-failure', { verdicts: printed(decided.record), reasonCode: e.code, facts: { ...e.facts } });
         }
         throw e;

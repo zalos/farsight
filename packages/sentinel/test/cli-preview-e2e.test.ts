@@ -3,7 +3,7 @@
 // result is required coverage incomplete (exit 2), never satisfied. No network, scanner, container or model.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -135,7 +135,7 @@ test('init → adopt → plan → run → status → report, twice where it matt
   assert.equal(run('run', planId).body.reasonCode, 'sentinel.service.settingsNotAdopted');
 });
 
-test('run --detach: the service starts on demand, a duplicate joins, callers leave, wait and report read the result', needsStore, t => {
+test('run --detach: the service starts on demand, a duplicate joins, callers leave, wait and report read the result', needsStore, async t => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-detach-')));
   const env = { PATH: process.env.PATH ?? '', HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
   t.after(() => { stopService(env); unlock(dir); rmSync(dir, { recursive: true, force: true }); });
@@ -156,11 +156,20 @@ test('run --detach: the service starts on demand, a duplicate joins, callers lea
   assert.deepEqual([run('pause', planId).status, run('pause', planId).body.reasonCode], [4, 'sentinel.service.needsOwnerConfirm'], 'pausing is a write: it waits for the owner');
   assert.equal(run('pause', planId, '--confirm').body.reasonCode, 'sentinel.service.notRunning', 'no service, nothing to pause');
 
-  const first = run('run', planId, '--detach', '--confirm');
-  assert.deepEqual([first.status, first.body.outcome, first.body.facts.runId], [0, 'submitted', planId], first.stderr);
-  const second = run('run', planId, '--detach', '--confirm');
-  assert.equal(second.body.facts.runId, planId, 'one run for one plan');
-  assert.ok(second.body.outcome === 'submitted' ? second.body.facts.joined === true : second.body.facts.state === 'completed');
+  // Two owners' commands start the same run at the same moment, with no service yet: one service, one run.
+  const both = await Promise.all([0, 1].map(() => new Promise<{ status: number | null; body: any }>(resolve => {
+    const c = spawn(process.execPath, [CLI, 'run', planId, '--detach', '--confirm', '--json'], { cwd: ws, env });
+    let out = '';
+    c.stdout.on('data', d => { out += d; });
+    c.on('close', status => resolve({ status, body: JSON.parse(out) }));
+  })));
+  for (const r of both) {
+    assert.equal(r.body.facts.runId, planId, JSON.stringify(r.body));
+    // Submitted (exit 0), or, when the run already finished by the time this start arrived, its result (exit 2).
+    assert.ok((r.status === 0 && r.body.outcome === 'submitted') || (r.status === 2 && r.body.facts.state === 'completed'), JSON.stringify(r.body));
+  }
+  assert.ok(both.every(r => r.body.outcome === 'submitted' || r.body.facts.state === 'completed'), JSON.stringify(both.map(r => r.body)));
+  assert.ok(both.filter(r => r.body.facts.joined === false).length <= 1, 'at most one start began the run; the other joined it or found it done');
   const waited = run('wait', planId);
   assert.deepEqual([waited.status, waited.body.outcome, waited.body.facts.previewFindings], [2, 'required-coverage-incomplete', 1]);
   const report = spawnSync(process.execPath, [CLI, 'report', planId], { cwd: ws, env, encoding: 'utf8' });

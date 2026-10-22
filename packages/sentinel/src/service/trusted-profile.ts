@@ -15,7 +15,10 @@ import { createAdapterRegistry, type AdapterRegistry } from '../execution/regist
 import { executionProfileRecord, EXECUTION_PROFILE_SCHEMA, type ExecutionProfileRecord } from '../execution/profile.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { PREVIEW_DETECTOR_ID } from '../adapters/preview-detector.js';
-import { ownExecutable } from './package-paths.js';
+import { builtinPackDir, ownExecutable } from './package-paths.js';
+import { readPackDirectory, validatePack } from '../rules/index.js';
+import { realpathSync } from 'node:fs';
+import type { PlanEnvelope } from '../contracts/plan.js';
 
 export { EXECUTION_PROFILE_SCHEMA };
 export const FOUNDATION_PROFILE_ID = 'foundation-preview';
@@ -69,4 +72,38 @@ export function foundationProfile(registry: AdapterRegistry = foundationRegistry
   });
   const record = executionProfileRecord(planner, structuredClone(RESOURCES) as Record<PlanStage, ResourcePolicy>, structuredClone(PARSE));
   return Object.freeze({ planner, registry, record, digest: profileDigest(record) });
+}
+
+/**
+ * Exactly which rules each check adapter this build ships implements, read from the shipped pack's own bytes: the
+ * family, its revision and its definition digest, which covers the definition and every file it names (the detector
+ * description and the fixtures). A check adapter executes only these; being assigned a check of any other rule, or of
+ * this family with other bytes, is not evidence that the adapter ran it, so such a plan is refused, never covered.
+ */
+export interface SupportedRule { readonly adapterId: string; readonly familyId: string; readonly revision: number; readonly definitionDigest: string }
+
+let supportedCache: readonly SupportedRule[] | undefined;
+export function supportedRules(): readonly SupportedRule[] {
+  if (supportedCache) return supportedCache;
+  const pack = validatePack(readPackDirectory(realpathSync.native(builtinPackDir('foundation-preview')!)));
+  supportedCache = Object.freeze(pack.manifest.rules.map(definition => {
+    const locked = pack.rules.find(r => r.familyId === definition.familyId && r.revision === definition.revision)!;
+    return Object.freeze({ adapterId: definition.implementation.adapterId, familyId: locked.familyId, revision: locked.revision, definitionDigest: locked.definitionDigest });
+  }));
+  return supportedCache;
+}
+
+/** The check adapters this build ships (whose rules are bound by supportedRules). */
+export const SHIPPED_CHECK_ADAPTERS: ReadonlySet<string> = new Set([PREVIEW_DETECTOR_ID]);
+
+/**
+ * The plan's rules that a shipped check adapter would be asked to run but does not implement, exactly: any other
+ * family, revision or definition bytes. Empty when every such rule is supported.
+ */
+export function unsupportedRules(plan: Pick<PlanEnvelope, 'pins'>): Array<{ familyId: string; revision: number; adapterId: string }> {
+  const supported = supportedRules();
+  return plan.pins.rules
+    .filter(r => SHIPPED_CHECK_ADAPTERS.has(r.adapterId))
+    .filter(r => !supported.some(s => s.adapterId === r.adapterId && s.familyId === r.familyId && s.revision === r.revision && s.definitionDigest === r.definitionDigest))
+    .map(r => ({ familyId: r.familyId, revision: r.revision, adapterId: r.adapterId }));
 }

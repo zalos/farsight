@@ -129,6 +129,8 @@ export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
   'sentinel.service.selectionUnsupported': same('rerunning only some units is not available yet; the preview shows what it would run and reuse', 'A selected rerun runs the chosen units and everything downstream of them, and reuses the parent\'s published prerequisites. Planning just those units and reusing another run\'s published work are not built yet, so only the whole analysis can be rerun. Nothing was planned.'),
   'sentinel.service.nothingToRetry': same('every unit of the run published: nothing to retry', 'A retry runs again the units that did not publish. A run whose every unit published has none; rerun it to run everything again.'),
 
+  'sentinel.service.ruleUnsupported': same('a promoted rule names an adapter that does not implement it; nothing was planned', 'A check adapter shipped with this build runs only the exact rules it implements: the same family, revision and definition bytes, detector description and fixtures included. A pack that names it for another rule, or for this rule with other bytes, is refused before anything runs, rather than reported as covered.'),
+
   // ---- the preview report ----
   'sentinel.report.previewTitle': same('Sentinel scan — foundation preview', 'The heading of a preview report: a run\'s counts with their scopes and re-check commands, before full reports exist.'),
   'sentinel.report.previewOnly': same('Foundation preview: these counts show the pipeline works end to end. They are not scanner or framework coverage.', 'A preview report demonstrates planning, running and reporting with one original fixture detector. It makes no claim about what real scanners would find.'),

@@ -93,7 +93,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // Owner-private records published whole: a synced temporary name linked to its final one, never replaced.
   'service/publish-once.js': ['node:crypto', 'node:fs', 'node:path'],
   // The CLI's trusted profile: its canonical document's digest.
-  'service/trusted-profile.js': ['node:crypto'],
+  'service/trusted-profile.js': ['node:crypto', 'node:fs'],
   // The owner's background service is the one process the command line starts itself (asserted below).
   'service/launch.js': ['node:child_process'],
   // The local service socket: an owner-only Unix socket, used only when a service runs; nothing at import.
