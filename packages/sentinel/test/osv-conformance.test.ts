@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { rmSync, writeFileSync } from 'node:fs';
 import { createAdapterRegistry } from '../dist/execution/registry.js';
 import { createExecutionService } from '../dist/execution/service.js';
-import { OSV_ADAPTER, OSV_MEASURED_ARCHITECTURES, runOsvAttempt, explainAdvisoryChanges } from '../dist/adapters/osv/index.js';
+import { OSV_ADAPTER, OSV_MEASURED_ARCHITECTURES, buildOsvAdapter, runOsvAttempt, explainAdvisoryChanges } from '../dist/adapters/osv/index.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
 import { capturedTree, syntheticSnapshot, storedZip, sha } from './osv-helpers.ts';
 
@@ -17,6 +17,10 @@ const QUALIFY = process.env.SENTINEL_OSV_QUALIFY?.replace(/^linux\//, '');
 const NOW = new Date('2026-10-22T12:00:00.000Z');
 const DAY = 86_400_000;
 
+// A variant whose engine refuses its arguments (OSV-Scanner exits 127): the worker sends a diagnostic and then its
+// result, and the failure must arrive as the engine's own (not a protocol violation) and count nothing.
+const BAD_ARGS = buildOsvAdapter({ id: 'advisories-osv-badargs', engineArgs: ['scan', 'source', '--offline', '--no-such-sentinel-flag'] });
+
 let root: { root: string; work: string };
 let store: any;
 let service: any;
@@ -25,7 +29,7 @@ before(async () => {
   if (!enabled) return;
   root = scratch('osv');
   store = await storeIn(root.root);
-  service = await createExecutionService(store, { scratchRoot: root.work, registry: createAdapterRegistry([OSV_ADAPTER]), containers: true });
+  service = await createExecutionService(store, { scratchRoot: root.work, registry: createAdapterRegistry([OSV_ADAPTER, BAD_ARGS.definition]), containers: true });
 });
 after(async () => { if (enabled) { await store.close(); removeScratch(root.root); } });
 
@@ -134,4 +138,18 @@ test('a file the engine does not treat as a dependency input is not sent; a zip 
   const r = await run(tree, snapshots([1]));
   assert.equal(row(r, 'web/README.md'), 'not-applicable:notDependencyFile');
   assert.equal(row(r, 'web/vendor.zip'), 'not-applicable:notDependencyFile');
+});
+
+test('an engine that fails reports a diagnostic and a result in order, with its cause, and counts nothing', { skip }, async () => {
+  const r = await runOsvAttempt(service, {
+    attemptId: `att-osv-${n++}`, work: { id: 'work-osv', revision: 1 }, targets: capturedTree(join(root.root, `tree-${n++}`), { 'web/package-lock.json': 'package-lock-json.fixture' }),
+    snapshots: snapshots([1]), scratch: root.root, policy: { now: NOW, maxDatabaseAgeMs: 7 * DAY }, adapter: BAD_ARGS,
+    ...(QUALIFY ? { qualifyingArchitecture: QUALIFY } : {}),
+  });
+  assert.equal(r.attempt, 'succeeded', 'no protocol violation: the frames carry distinct sequence numbers');
+  assert.equal(r.engineExit, 127);
+  assert.equal(r.engineFailure, 'sentinel.osv.engine.engineError', 'the cause is kept');
+  assert.equal(r.platform.state, QUALIFY && !OSV_MEASURED_ARCHITECTURES.has(QUALIFY) ? 'candidate' : 'measured');
+  assert.deepEqual(r.findings, []);
+  assert.equal(row(r, 'web/package-lock.json'), 'error:engineFailed');
 });
