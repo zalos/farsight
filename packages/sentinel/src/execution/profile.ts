@@ -10,6 +10,7 @@ import type { PlanAdapterPin, PlanEnvelope, PlanStage } from '../contracts/plan.
 import type { ResourcePolicy } from '../contracts/work.js';
 import type { PlannerProfile } from '../planner/types.js';
 import type { ParserLimits, ParserSelection } from '../snapshot/parser.js';
+import { canonicalJsonBytes } from '../store/objects.js';
 import { ExecutionError } from './errors.js';
 import type { AdapterRegistry } from './registry.js';
 
@@ -28,7 +29,8 @@ export interface ExecutionProfileRecord {
 }
 
 const refuse = (reason: string): never => { throw new ExecutionError('sentinel.execution.planInvalid', { reason }); };
-const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+// Canonical comparison: a record read back from the store has its keys in canonical order.
+const sameJson = (a: unknown, b: unknown) => Buffer.from(canonicalJsonBytes(a)).equals(canonicalJsonBytes(b));
 
 /** The record for a planner profile, the resources each stage is granted, and the parse operation's settings. */
 export function executionProfileRecord(profile: PlannerProfile, resources: Record<PlanStage, ResourcePolicy>,
