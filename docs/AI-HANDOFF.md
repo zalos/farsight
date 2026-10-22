@@ -6,6 +6,34 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Selected-rerun final review corrections — 2026-10-22
+
+Runtime checkpoint `a9469623` follows independently reviewed `35302206` and the final source-only Opus approval
+of `62de9d6c`. The CI correction `28477db0` requires retained bootstrap proof only for a strict transitive subset:
+selecting a root whose downstream closure includes every unit keeps the fresh-bootstrap path. The synthetic diamond
+has no real coordinator bootstrap and now correctly refuses subset reuse without writing events; a genuinely
+captured, parsed and inventoried parent still previews its exact retained subset. `1d89496b` rejoins an active
+whole-analysis rerun admitted with the legacy identity algorithm across upgrade, then chooses a fresh generation
+once the old request is completed or canceled. It also removes the unused selection lookup and fixes its doc comment.
+
+A recovered child's full report now uses the same pinned-ancestor privacy collector as its minimal report.
+Cancellation of a parent does not erase a secret unit that genuinely succeeded and published. The reader verifies
+its exact plan revision/digest and capture, canonical work envelope, assigned captured inputs and checks, owned
+container attempt and accepted invocation, then the redacted findings and exact summary count. Secret matches keep
+both profiles coarsely withheld; a clean canceled-parent scan preserves useful excerpts and ordinary names. Missing
+or malformed accepted artifacts or invocation refuse both surfaces. Parent findings and coverage are never copied.
+
+On this final runtime the dependency-closure build and typecheck pass, the complete named CI service suite passes
+64 checks, and 21 selected authority/privacy/upgrade controls pass, all with zero skips. Both new availability cases
+and the legacy-identity case failed their preceding baseline. A fresh packed npm-only consumer runs all five existing
+pinned engines on two captures, removes the source, stops its service, regenerates full reports and comparison,
+validates official SARIF and exercises selected-child joins, terminal generations and parent immutability. The
+additional import-audit entry in test-only `631f0fa1` records the shared reader's existing graph dependency; all ten
+package controls pass, including import-time no-work checks. No new dependency, package export, asset acquisition,
+parser, core or store implementation changed. The earlier `35302206` graph/browser numbers below remain scoped to
+that runtime, rather than presented as a fresh measurement of these canonical/report-only corrections. Independent
+SOL review of this delta, final candidate CI and merge remain pending; no whole PR 09/19/27 or release gate is closed.
+
 ## Selected reruns with retained reports — 2026-10-22
 
 Branch `codex/sentinel-rerun-integration` normally merges reviewed selected reruns `45d0aed1` with report integration
@@ -21,8 +49,9 @@ A Pattern-only selected child also retains proven same-capture privacy knowledge
 matches. Full reports use the existing coarse projection even without an explicit comparison baseline; a selected
 baseline carries the same restriction into comparison. Minimal JSON reports inherit matched-name withholding through
 the existing secret-record validator. Clean accepted ancestry preserves excerpts, context labels and ordinary file
-names. Missing or corrupt accepted privacy evidence refuses. A canceled ancestor with an accepted secret publication
-conservatively refuses full reporting rather than widening completed-run eligibility.
+names. Missing or corrupt accepted privacy evidence refuses. At this historical checkpoint a canceled ancestor with an
+accepted secret publication conservatively refused full reporting; the authenticated-reader correction above supersedes
+that availability limitation without widening which runs can themselves be reported.
 
 On `35302206`, Sentinel build and typecheck, schemas, catalog (4,405 entries), thirteen workflow controls and
 workflow lint pass. Eighteen selected execution/report/privacy controls pass with zero skips, including genuine
