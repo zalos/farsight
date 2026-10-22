@@ -1,6 +1,7 @@
-# Opt-in qualification of the pattern adapter on a native Linux/amd64 runner (PR 10). Run it by hand on a branch:
-#   gh workflow run sentinel-pattern-qualification.yml --ref <branch>
-# It never runs on its own. Provisioning (the only network step) installs the pinned Semgrep index and checks that its
+# Qualification of the pattern adapter on a native Linux/amd64 runner (PR 10). It runs on a pull request only when
+# the pattern adapter, its rules, the execution service it uses or this workflow changes, and by hand on any branch:
+#   gh workflow run sentinel-pattern-qualification.yml --ref <branch>   (once the workflow is on the default branch)
+# It is not a required check. Provisioning (the only network step, an explicit CI setup step) installs the pinned Semgrep index and checks that its
 # linux/amd64 manifest is the one the adapter lists; the scans themselves never pull (`--pull never` in PR 07) and run
 # with no network. Every test must run: a skipped, failed or cancelled test fails the job. A green run is evidence for
 # moving linux/amd64 from unmeasured to measured in src/adapters/pattern/adapter.ts; it does not change it.
@@ -8,6 +9,16 @@ name: sentinel-pattern-qualification
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/sentinel-pattern-qualification.yml
+      - packages/sentinel/src/adapters/pattern/**
+      - packages/sentinel/src/execution/**
+      - packages/sentinel/rules/pattern/**
+      - packages/sentinel/test/pattern-*.test.ts
+      - packages/sentinel/scripts/package-assets.mjs
+      - scripts/pack-sentinel.mjs
+      - scripts/test-sentinel-package.mjs
 
 permissions:
   contents: read
@@ -74,4 +85,8 @@ jobs:
           grep -q 'installed assets run by the workspace service: 6 findings (amd64 candidate' package.log
       - name: No container left behind
         if: always()
-        run: test "$(docker ps -aq --filter label=org.farsight.sentinel.store | wc -l)" -eq 0
+        run: |
+          set -euo pipefail
+          # A failing daemon query must fail this step: the listing is its own command, then tested.
+          containers=$(docker ps -aq --filter label=org.farsight.sentinel.store)
+          if [ -n "$containers" ]; then echo "::error::Sentinel containers left behind: $containers"; exit 1; fi

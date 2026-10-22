@@ -197,11 +197,13 @@ the workspace source excludes. If yours differs, the report reads as not matchin
 
 ## Opt-in: pattern adapter qualification on Linux/amd64
 
-`.github/workflows/sentinel-pattern-qualification.yml` runs only by hand (`gh workflow run
-sentinel-pattern-qualification.yml --ref <branch>`), on a native `ubuntu-24.04` amd64 runner. Its one network step
+`.github/workflows/sentinel-pattern-qualification.yml` runs on a pull request that changes the pattern adapter, its
+rules, the execution service or the workflow itself, and by hand (`gh workflow run sentinel-pattern-qualification.yml
+--ref <branch>`, once it is on the default branch), on a native `ubuntu-24.04` amd64 runner. It is not a required check. Its one network step
 provisions the pinned Semgrep index and checks that the index lists the linux/amd64 manifest the adapter records; the
 scans then run through PR 07's isolation with `--pull never` and no network. It runs the pattern unit tests, the
 real-engine conformance suite (original corpus, timeouts, output bounds, omissions, scrubbed diagnostics) with
 `SENTINEL_PATTERN_QUALIFY=linux/amd64`, so results are accepted as candidate rather than refused, and the packed
-tarball's shipped pattern assets; any skipped, failed or cancelled test fails it. A green run is the evidence for marking
+tarball's shipped pattern assets; any skipped, failed or cancelled test fails it, and so does a container left behind or a
+daemon that cannot be asked. A green run is the evidence for marking
 linux/amd64 measured in `src/adapters/pattern/adapter.ts`; the workflow changes nothing itself.
