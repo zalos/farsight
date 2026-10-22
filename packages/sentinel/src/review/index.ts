@@ -21,3 +21,8 @@ export { GUIDED_PROMPT, GENERAL_PROMPT, promptDigest } from './prompts.js';
 export type { PromptArtifact } from './prompts.js';
 export { ReviewError, TOOL_REFUSAL_CODES, REPLY_REJECTION_CODES, REVIEW_FRONTIER_CODES, REVIEW_LIMITATION_CODES, REVIEW_ERROR_CODES, EVALUATION_CODES } from './errors.js';
 export type { ToolRefusalCode, ReplyRejectionCode, ReviewFrontierCode, ReviewErrorCode, EvaluationCode } from './errors.js';
+export { LedgerCheckpointStore } from './checkpoints.js';
+export { planReviewWork, isReviewWork, assertAgenticOnly, REVIEW_STAGE_CONTRACTS } from './stage.js';
+export type { ReviewWorkRequest, ReviewWorkUnit } from './stage.js';
+export { createModelReviewOperation, usageOf, recoverModelWork } from './operation.js';
+export type { ModelOperationContext, ModelOperationOutcome, ModelOperationDeps } from './operation.js';

@@ -156,7 +156,7 @@ export class ModelBroker {
     const receiptDigest = spent?.digest ?? null;
     const admissionDigest = canonicalDigest(result.record);
     const id = `menv-${admissionDigest.slice(7, 39)}`;
-    this.#deps.ledger.createEnvelope({ id, runId: req.runId, bindingDigest: binding.digest, admissionDigest, receiptDigest,
+    this.#deps.ledger.createEnvelope({ id, runId: req.runId, providerId: binding.providerId, bindingDigest: binding.digest, admissionDigest, receiptDigest,
       maxTokens: b.maxTokens!, maxCostNanos: toNanos(b.maxCost)!, currency: b.currency!, createdAt: stamp(this.#now()) });
     const env: ModelEnvelope = Object.freeze({ id, runId: req.runId, bindingDigest: binding.digest, admission: result.record, receiptDigest });
     envelopes.set(env, { binding, credential, budget: { ...b } });

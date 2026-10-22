@@ -275,7 +275,7 @@ test('the ledger: recovery keeps uncertain spend reserved and releases only what
   const ledger = await BudgetLedger.open(join(dir, 'b.db'));
   t.after(() => ledger.close());
   const at = '2026-10-22T12:00:00.000000000Z';
-  ledger.createEnvelope({ id: 'env-1', runId: 'run-1', bindingDigest: D('b'), admissionDigest: D('a'), receiptDigest: null, maxTokens: 1000, maxCostNanos: 0n, currency: 'USD', createdAt: at });
+  ledger.createEnvelope({ id: 'env-1', runId: 'run-1', providerId: 'local-review', bindingDigest: D('b'), admissionDigest: D('a'), receiptDigest: null, maxTokens: 1000, maxCostNanos: 0n, currency: 'USD', createdAt: at });
   const held = ledger.reserve({ envelopeId: 'env-1', operationId: 'op-held', tokens: 100, costNanos: 0n, epoch: 'epoch-dead', at });
   const sent = ledger.dispatch(ledger.reserve({ envelopeId: 'env-1', operationId: 'op-sent', tokens: 200, costNanos: 0n, epoch: 'epoch-dead', at }).id, at);
   const live = ledger.dispatch(ledger.reserve({ envelopeId: 'env-1', operationId: 'op-live', tokens: 300, costNanos: 0n, epoch: 'epoch-live', at }).id, at);
@@ -302,7 +302,7 @@ test('concurrent reservations from separate processes never exceed the shared bu
   const path = join(dir, 'shared.db');
   const at = '2026-10-22T12:00:00.000000000Z';
   const ledger = await BudgetLedger.open(path);
-  ledger.createEnvelope({ id: 'env-1', runId: 'run-1', bindingDigest: D('b'), admissionDigest: D('a'), receiptDigest: null, maxTokens: 1000, maxCostNanos: 5_000_000_000n, currency: 'USD', createdAt: at });
+  ledger.createEnvelope({ id: 'env-1', runId: 'run-1', providerId: 'local-review', bindingDigest: D('b'), admissionDigest: D('a'), receiptDigest: null, maxTokens: 1000, maxCostNanos: 5_000_000_000n, currency: 'USD', createdAt: at });
   ledger.close();
   const { spawn } = await import('node:child_process');
   const lib = new URL('../dist/review/providers/index.js', import.meta.url).href;
@@ -460,7 +460,7 @@ test('long operation ids never collide: each distinct id has its own reservation
   const ledger = await BudgetLedger.open(join(scratchDir(t), 'b.db'));
   t.after(() => ledger.close());
   const at = '2026-10-22T12:00:00.000000000Z';
-  ledger.createEnvelope({ id: 'env', runId: 'run', bindingDigest: D('b'), admissionDigest: D('a'), receiptDigest: null, maxTokens: 1000, maxCostNanos: 0n, currency: 'USD', createdAt: at });
+  ledger.createEnvelope({ id: 'env', runId: 'run', providerId: 'local-review', bindingDigest: D('b'), admissionDigest: D('a'), receiptDigest: null, maxTokens: 1000, maxCostNanos: 0n, currency: 'USD', createdAt: at });
   const long = 'o'.repeat(127);
   const ids = ['o'.repeat(60) + 'a', 'o'.repeat(60) + 'b', long.slice(0, 126) + 'a', long.slice(0, 126) + 'b'].map(op =>
     ledger.reserve({ envelopeId: 'env', operationId: op, tokens: 1, costNanos: 0n, epoch: 'epoch-a', at }).id);
@@ -477,4 +477,16 @@ test('the owner probe reads the origin and model from the adopted settings, neve
   await assert.rejects(probeConfigured(policy, 'local-review', 'nope', { timeoutMs: 1000, maxResponseBytes: 4096, now: NOW }), code('sentinel.provider.notTrusted'));
   await assert.rejects(probeConfigured({ settings: policy.settings } as any, 'local-review', 'review', { timeoutMs: 1000, maxResponseBytes: 4096, now: NOW }), code('sentinel.provider.notTrusted'));
   assert.equal(ep.seen.length, 1);
+});
+
+test('an operation is sent at most once in a ledger, whichever envelope asks again', needsStore, async t => {
+  const ledger = await BudgetLedger.open(join(scratchDir(t), 'b.db'));
+  t.after(() => ledger.close());
+  const at = '2026-10-22T12:00:00.000000000Z';
+  for (const id of ['env-a', 'env-b']) ledger.createEnvelope({ id, runId: 'run', providerId: 'local-review', bindingDigest: D('b'), admissionDigest: D(id), receiptDigest: null, maxTokens: 1000, maxCostNanos: 0n, currency: 'USD', createdAt: at });
+  const r = ledger.dispatch(ledger.reserve({ envelopeId: 'env-a', operationId: 'rv-x.op2', tokens: 10, costNanos: 0n, epoch: 'epoch-a', at }).id, at);
+  ledger.recover(['epoch-a'], at);
+  assert.equal(ledger.reservation(r.id).state, 'uncertain');
+  assert.throws(() => ledger.reserve({ envelopeId: 'env-b', operationId: 'rv-x.op2', tokens: 10, costNanos: 0n, epoch: 'epoch-b', at }), code('sentinel.provider.reservationState'));
+  assert.equal(ledger.totals('env-b').byState.held, 0);
 });

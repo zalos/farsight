@@ -34,6 +34,7 @@ export const SENTINEL_REVIEW_STRINGS: Record<string, StringEntry> = {
   'sentinel.review.frontier.unknownScope': same('a folder whose contents were not listed', 'Capture did not list this folder, so what it holds was not reviewed and is unknown, not clean.'),
   'sentinel.review.frontier.notInspected': same('in scope, but never read', 'The review was given this file and did not read it. It is not counted as reviewed, whatever the model concluded.'),
   'sentinel.review.frontier.canceled': same('the review was canceled', 'The review was stopped on request. Its scope is unfinished.'),
+  'sentinel.review.frontier.fenced': same('handed to a newer coordinator', 'Recovery fenced the coordinator that was running this review. It stops without writing; the newer coordinator resumes from the last checkpoint.'),
   // ---- limitations ----
   'sentinel.review.limitation.modelClaim': same('a model\'s claim, not a checked result', 'A model read the cited code and made this claim. The citations are real bytes of the snapshot, but whether the claim is right is for a person to decide. It is never coverage of a check.'),
   // ---- errors ----

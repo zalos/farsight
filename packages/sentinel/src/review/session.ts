@@ -213,9 +213,13 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
       reply = await opts.caller.call({ operationId, messages: cp.messages, maxOutputTokens: spec.budget.maxOutputTokens, ...(opts.signal ? { signal: opts.signal } : {}) });
     } catch (error) {
       const e = (error ?? {}) as CallerFailure;
+      // An operation the ledger already holds (a crash between its call and its checkpoint) is never re-sent: its
+      // spend is uncertain until the owner reconciles it. A fenced epoch hands the session to the next coordinator.
       const code: ReviewFrontierCode = e.code === 'sentinel.provider.budgetExhausted' || e.code === 'sentinel.provider.envelopeOverdrawn' ? 'sentinel.review.frontier.budget'
         : e.code === 'sentinel.provider.canceled' ? 'sentinel.review.frontier.canceled'
-          : e.spend === 'possible' ? 'sentinel.review.frontier.uncertainUsage' : 'sentinel.review.frontier.modelError';
+          : e.code === 'sentinel.provider.epochFenced' ? 'sentinel.review.frontier.fenced'
+            : e.code === 'sentinel.provider.reservationState' || e.spend === 'possible' ? 'sentinel.review.frontier.uncertainUsage' : 'sentinel.review.frontier.modelError';
+      if (code === 'sentinel.review.frontier.fenced') throw error;
       await save({ ...cp, inputBytes: cp.inputBytes + (e.spend === 'possible' ? bytes : 0),
         operations: [...cp.operations, { operationId, state: 'unsettled', inputBytes: bytes, outcome: 'failed' }], stopped: code });
       break;

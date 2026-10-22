@@ -26,7 +26,7 @@ export function generalSpec(req: GeneralRequest): SessionSpec {
   const part: Partition | undefined = req.plan.partitions.find(p => p.id === req.partitionId);
   if (!part) return reviewFail('sentinel.review.invalidInput', 'the partition is not in the plan');
   return {
-    sessionId: `rv-p-${canonicalDigest({ run: req.runId, plan: req.plan.digest, partition: part.id, attempt: req.attemptId }).slice(7, 31)}`,
+    sessionId: `rv-p-${canonicalDigest({ run: req.runId, plan: req.plan.digest, partition: part.id }).slice(7, 31)}`,
     kind: 'general', runId: req.runId, attemptId: req.attemptId, adapterId: GENERAL_ADAPTER_ID, adapterDigest: GENERAL_ADAPTER_DIGEST,
     prompt: GENERAL_PROMPT,
     scope: { snapshotId: req.plan.snapshotId, sourceId: req.plan.sourceId, files: part.members, rules: [], paths: req.paths ?? [] },

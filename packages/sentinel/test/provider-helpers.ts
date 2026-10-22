@@ -91,6 +91,7 @@ export function trustedPolicy(o: TrustedOptions = {}) {
     grants: o.grants ?? [
       { actions: ['paid.admit'], principals: ['human', 'agent'], confirm: 'never', scope: { providers: ['local-review', 'local-openai'] } },
       { actions: ['paid.admit'], principals: ['human', 'agent'], confirm: 'always', scope: { providers: ['hosted-review'] } },
+      { actions: ['tool.acquire'], principals: ['human'] },
     ],
     providers: [
       { id: 'local-review', kind: 'ollama', endpoint: ollama, credential: null, disclosure: 'local-only',

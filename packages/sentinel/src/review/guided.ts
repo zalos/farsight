@@ -39,7 +39,8 @@ export function guidedSpec(req: GuidedRequest): SessionSpec {
   if (!c.files.length) reviewFail('sentinel.review.invalidInput', 'a guided check names its scope files');
   if (typeof c.ruleText !== 'string' || !c.ruleText || c.ruleText.length > 64 * 1024) reviewFail('sentinel.review.invalidInput', 'a guided check carries its pinned rule text');
   return {
-    sessionId: `rv-g-${canonicalDigest({ run: req.runId, check: c.checkId, attempt: req.attemptId }).slice(7, 31)}`,
+    // One session per run and check, whatever the attempt: a later attempt after a crash resumes its checkpoint.
+    sessionId: `rv-g-${canonicalDigest({ run: req.runId, check: c.checkId }).slice(7, 31)}`,
     kind: 'guided', runId: req.runId, attemptId: req.attemptId, adapterId: GUIDED_ADAPTER_ID, adapterDigest: GUIDED_ADAPTER_DIGEST,
     prompt: GUIDED_PROMPT,
     scope: { snapshotId: req.snapshotId, sourceId: req.sourceId, files: c.files,

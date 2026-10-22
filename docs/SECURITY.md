@@ -50,8 +50,30 @@ are data: a script-shaped rule implementation, a link or an escaping path is ref
 and recording a tool digest in the lock authorizes no download or execution. As with the store, code running as the
 owner's own account is outside this boundary. The local runtime folder
 (`.farsight/sentinel/*`) is ignored by git. Later scanner, container and model work arrives with its
-own trust-boundary section here: external scanners run only in containers, with no host fallback, and model
-providers are opt-in per run.
+own trust-boundary section here: external scanners run only in containers, with no host fallback; model providers
+are described below.
+
+Model providers and review (ADRs 35, 39) are opt-in and run in process; no scanner, worker or repository code calls
+a model.
+- **Who may be called.** Only a provider and model in the adopted settings can be called. A local-only provider must
+  be a literal loopback address; a hosted one must use https and have recorded retention and training terms.
+- **The owner's confirmation.** The owner's receipt confirms the exact origin, credential reference, disclosure,
+  model, limits, price, terms and probed capability, and the run's budget. Any change, including any policy change,
+  stops further calls.
+- **Credentials.** A credential is read from the OS keychain (`keychain:farsight/<name>`, through core's reader) in
+  the broker's own process, only after the policy has allowed the call. It is held in a value that prints and
+  serializes as redacted and sent only as the `Authorization` header to that one origin; no error, record or log
+  carries it.
+- **Transport.** Redirects are never followed, certificates are always verified, and requests, responses, time and
+  context are bounded. No provider-returned text (model names, error bodies) reaches a public error.
+- **Disclosure.** It is bounded by the review's scope: a model sees only bounded line slices of the files its session
+  was given, as data marked untrusted, through a fixed reply grammar with no tool, target, disclosure or approval
+  power. Files a withheld secret-location citation names are removed from review whole, path included.
+- **Spend.** The worst case is reserved in a durable ledger before a request leaves. A call that may have been
+  charged stays charged until the owner reconciles it with a receipt, and recovery fences a crashed coordinator's
+  epoch so it can neither spend nor write again.
+- **Tests.** Ordinary tests use local mock endpoints and in-memory credentials. The one live test is opt-in and only
+  lists the models of a local Ollama.
 
 The secret scan (ADR 28) runs the pinned official Gitleaks image only inside its container, behind an original shell
 shim, over a rebuilt copy of the captured files, with a pinned configuration and no repository ignore list, baseline

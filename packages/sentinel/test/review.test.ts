@@ -394,7 +394,7 @@ test('demo: review reruns from the saved snapshot after the original checkout is
   const bytes = await read(e.content);
   assert.equal(sha(bytes.subarray(e.span.startByte, e.span.endByte)), e.quoteDigest, 'the citation resolves against the stored snapshot bytes');
   // The rerun (a new attempt) reads the same saved bytes and cites the same span.
-  const again = await guidedReview({ runId: 'run-1', attemptId: 'att-2', snapshotId: snapshot.id, sourceId: 'web', limits: LIMITS, budget: BUDGET,
+  const again = await guidedReview({ runId: 'run-2', attemptId: 'att-2', snapshotId: snapshot.id, sourceId: 'web', limits: LIMITS, budget: BUDGET,
     check: { checkId: 'chk-1', familyId: 'sentinel.sql.dynamic-query', revisionDigest: sha('rule'), ruleText: 'Untrusted text concatenated into SQL.', files: [query] } },
     { caller: caller('finding'), checkpoints: new FileCheckpointStore(join(dir, 'cp-g2')), read });
   assert.deepEqual(again.observations[0]!.evidence, g.observations[0]!.evidence);
@@ -420,7 +420,7 @@ test('checkpoints are validated envelopes: malformed, oversized, replayed and fo
   await refusedWith(JSON.stringify({ ...JSON.parse(good), approve: true }));
   await refusedWith(' '.repeat(5 * 1024 * 1024));
   // Another session's checkpoint copied under this id.
-  const other = spec(f, { attemptId: 'att-9' });
+  const other = spec(f, { runId: 'run-9' });
   await runSession(other, { caller: scripted(replies).caller, checkpoints: store, read: f.read });
   await refusedWith(readFileSync(join(dir, `${other.sessionId}.json`), 'utf8'));
   // A forged citation: the checkpoint says a slice was served whose bytes the snapshot does not hold.

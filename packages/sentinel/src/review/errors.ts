@@ -20,7 +20,7 @@ export const REVIEW_FRONTIER_CODES = Object.freeze([
   'sentinel.review.frontier.invalidReplies', 'sentinel.review.frontier.modelError', 'sentinel.review.frontier.uncertainUsage',
   'sentinel.review.frontier.notCaptured', 'sentinel.review.frontier.tooLarge', 'sentinel.review.frontier.withheld',
   'sentinel.review.frontier.unsupportedLanguage', 'sentinel.review.frontier.unknownScope', 'sentinel.review.frontier.notInspected',
-  'sentinel.review.frontier.canceled',
+  'sentinel.review.frontier.canceled', 'sentinel.review.frontier.fenced',
 ] as const);
 
 export const REVIEW_LIMITATION_CODES = Object.freeze(['sentinel.review.limitation.modelClaim'] as const);
