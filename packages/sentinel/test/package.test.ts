@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CAPABILITIES, POLICY_ERROR_CODES, POLICY_REASON_CODES } from '../dist/index.js';
+import { NEST_REASON_CODES } from '../dist/frameworks/nest/index.js';
 
 const pkgDir = fileURLToPath(new URL('../', import.meta.url));
 const packagesDir = fileURLToPath(new URL('../../', import.meta.url));
@@ -22,7 +23,7 @@ test('the package is optional, private and exports only files that exist', () =>
   assert.match(manifest.version, /-draft\./);
   // core supplies the shared catalog (and later counts/placement/grants); @types/node because the public store
   // declarations name Node built-ins. No scanner, container client or model SDK dependency.
-  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', 'ajv']);
+  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', 'ajv', 'oxc-parser']);
   assert.equal(manifest.bin['farsight-sentinel'], './dist/cli.js');
   for (const [key, target] of Object.entries(manifest.exports as Record<string, any>)) {
     if (key.includes('*')) continue;
@@ -74,6 +75,10 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/scratch.js': ['node:fs', 'node:path'],
   'execution/registry.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
+  // The Nest pack (PR 16) reads captured bytes with the parser's own pinned oxc-parser, loaded on first analysis only.
+  'frameworks/nest/analyze.js': ['node:crypto'],
+  'frameworks/nest/errors.js': ['@farsight/core/dist/strings-sentinel-nest.js'],
+  'frameworks/nest/syntax.js': ['dynamic:oxc-parser'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
   'policy/admission.js': ['@farsight/core/dist/grants.js'],
   'policy/adoption.js': ['node:fs', 'node:os', 'node:path'],
@@ -289,7 +294,8 @@ test('every printed word is a registered catalog entry with a definition', async
   for (const c of CAPABILITIES) used.add(c.reasonCode);
   for (const code of ['unknownKind', 'tooLarge', 'malformedJson', 'missingVersion', 'wrongKind', 'unsupportedVersion', 'invalid', 'invariant', 'errorLimit']) used.add(`sentinel.contract.${code}`);
   used.add('sentinel.protocol.noSharedVersion');
-  for (const code of [...POLICY_ERROR_CODES, ...POLICY_REASON_CODES]) used.add(code);
+  for (const code of [...POLICY_ERROR_CODES, ...POLICY_REASON_CODES, ...NEST_REASON_CODES]) used.add(code);
+  assert.deepEqual(Object.keys(STRINGS).filter(k => k.startsWith('sentinel.nest.')).sort(), [...NEST_REASON_CODES].sort(), 'the Nest catalog and the pack\'s codes are one list');
   assert.ok(used.size > 30);
   for (const key of used) {
     const entry = STRINGS[key];

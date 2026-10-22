@@ -198,6 +198,25 @@ client of the service gets what the adopted grants give agents, which by default
 say *unavailable* (exit 3) until plan revisions exist. With `--json`, every result carries its `outcome`, `exitCode`, the three
 admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR 37 in `docs/ARCHITECTURE.md`.
 
+### Nest request controls (draft)
+
+```ts
+import { analyzeNest } from 'farsight-sentinel/frameworks/nest';
+
+const { controls, scope } = await analyzeNest({
+  snapshot, sourceId: 'app', graph: analysis.sources[0].artifact.graph,
+  readArtifact: id => store.readArtifact(id),
+});
+controls.facts;          // sentinel-controls/draft-1: authentication, authorization, input-validation per route
+scope.surfaces[0].chain; // guards → interceptors → pipes, each global → controller → method (→ parameter)
+```
+
+The pack (ADR 32) supports Nest 10.4.15 exactly, resolved from the captured lockfile or an exact pin. Only the
+framework's own `ValidationPipe` over a class with class-validator rules is validation; parse pipes and multipart
+interceptors parse, and a guard's effect is never inferred. Dynamic modules, factories, middleware, custom decorators
+and inherited controllers are `sentinel.nest.*` frontiers that leave the facts they could change `unknown`. The pack
+is not yet called by the planner or the CLI.
+
 ## Versions and evolution
 
 - **Draft until review.** Every name ends in `/draft-1`. A name moves to `/v1` only after an independent

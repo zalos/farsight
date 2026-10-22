@@ -97,7 +97,13 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `scripts/package-assets.mjs`, which `scripts/pack-sentinel.mjs` calls), its words
   `strings-sentinel-pattern.ts`, its tests `test/pattern-adapter.test.ts` and, with `SENTINEL_ISOLATION=1`,
   `test/pattern-conformance.test.ts` against the real image (ADR 26; linux/amd64 through the scoped PR/manual
-  `sentinel-pattern-qualification` workflow). Depends only on graph, code-parser and core; nothing in the
+  `sentinel-pattern-qualification` workflow). 
+  `src/frameworks/nest/` is the Nest framework pack (PR 16, ADR 32), exported as `./frameworks/nest`: `syntax.ts`
+  (captured bytes through the pinned `oxc-parser`, loaded on first use, with UTF-8 byte spans), `analyze.ts`
+  (`analyzeNest`: version, bootstrap, module graph, ordered chains, control facts and the scope report),
+  `support.ts` (`NEST_PACK`, the support manifest) and `errors.ts` (reason codes, `strings-sentinel-nest.ts`);
+  `test/frameworks-nest.test.ts` runs capture → parse → analyze over `test/fixtures/nest/` and the E2 corpus.
+  Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the
   manifest's `bin` and root export; `scripts/test-sentinel-package.mjs` installs it into a clean npm consumer and

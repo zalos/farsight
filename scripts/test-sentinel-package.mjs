@@ -85,6 +85,34 @@ try {
   const parserExported = Object.hasOwn(sourceExports, './parser');
   assert.equal(subpaths.includes('./parser'), parserExported, 'the installed ./parser export matches the source package');
 
+  // The Nest pack (ADR 32), when the source package exports it: the installed API analyses a tiny synthetic tree from
+  // memory, loading the pinned oxc-parser from the consumer's own install. No store and no target code are involved.
+  const nestExported = Object.hasOwn(sourceExports, './frameworks/nest');
+  assert.equal(subpaths.includes('./frameworks/nest'), nestExported, 'the installed ./frameworks/nest export matches the source package');
+  if (nestExported) {
+    const nest = JSON.parse(await evalModule(`
+      import { createHash } from 'node:crypto';
+      const { analyzeNest, NEST_PACK } = await import('farsight-sentinel/frameworks/nest');
+      const files = {
+        'package.json': JSON.stringify({ dependencies: { '@nestjs/common': '10.4.15', '@nestjs/core': '10.4.15', 'class-validator': '0.14.1' } }),
+        'main.ts': "import { NestFactory } from '@nestjs/core';\\nimport { AppModule } from './app.module';\\nasync function boot() {\\n  const app = await NestFactory.create(AppModule);\\n  await app.listen(3000);\\n}\\nboot();\\n",
+        'app.module.ts': "import { Module } from '@nestjs/common';\\nimport { NotesController } from './notes.controller';\\n@Module({ controllers: [NotesController] })\\nexport class AppModule {}\\n",
+        'notes.controller.ts': "import { Body, Controller, Post, UsePipes, ValidationPipe } from '@nestjs/common';\\nimport { IsString } from 'class-validator';\\nexport class NoteDto {\\n  @IsString()\\n  text!: string;\\n}\\n@Controller('notes')\\nexport class NotesController {\\n  @Post()\\n  @UsePipes(new ValidationPipe())\\n  create(@Body() dto: NoteDto) {\\n    return dto;\\n  }\\n}\\n",
+      };
+      const bytes = new Map(), entries = [];
+      for (const [relativePath, text] of Object.entries(files)) {
+        const b = Buffer.from(text, 'utf8'), content = 'sha256:' + createHash('sha256').update(b).digest('hex');
+        bytes.set(content, b);
+        entries.push({ sourceId: 'app', relativePath, kind: 'file', disposition: 'included', content, bytes: b.length });
+      }
+      const graph = { repo: 'app', nodes: [{ id: 'app::route::POST /notes', kind: 'route' }], edges: [{ kind: 'calls', from: 'app::route::POST /notes', to: 'app::notes.controller.ts::NotesController.create' }] };
+      const a = await analyzeNest({ snapshot: { id: 'snap-smoke', entries }, sourceId: 'app', graph, readArtifact: async id => bytes.get(id) });
+      console.log(JSON.stringify({ version: a.controls.framework.version, pack: NEST_PACK.versions['@nestjs/common'], facts: a.controls.facts.map(f => f.property + ':' + f.verdict) }));
+    `));
+    assert.equal(nest.version, nest.pack, 'the installed pack resolves the exact pinned Nest version');
+    assert.deepEqual(nest.facts.sort(), ['authentication:does-not-apply', 'authorization:does-not-apply', 'input-validation:applies'], 'the installed pack analyses through its own oxc-parser');
+  }
+
   // The envelope registry, as the installed package reports it.
   const registry = JSON.parse(await evalModule("const { ENVELOPES } = await import('farsight-sentinel'); console.log(JSON.stringify(ENVELOPES));"));
   const kinds = Object.keys(registry);
@@ -343,7 +371,7 @@ try {
     }
   }
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}npm consumer`);
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}${nestExported ? ', Nest pack analysed' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}npm consumer`);
 } finally {
   consumer.cleanup();
 }

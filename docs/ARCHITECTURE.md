@@ -689,3 +689,41 @@ checks detector bytes against the pinned pack digest, and returns every other ru
 **Cost:** a Python file inside a string in the package, a tie to the image's `/usr/bin/python3`, and one attempt per job
 batch of at most 2,000 targets to keep timed output under its 3 MiB bound. **Not decided here:** registering the adapter
 in the production registry, the planner's batching, the scan command (PR 09), and amd64 qualification.
+
+32. **Sentinel's Nest pack resolves request controls from registrations, and never from names (2026-10-22).**
+    `packages/sentinel/src/frameworks/nest/` (PR 16, exported as `./frameworks/nest`) emits `sentinel-controls/draft-1`
+    facts for one captured source, with a `sentinel-nest-scope/draft-1` scope report of each surface's ordered chain.
+    Its inputs are the snapshot, the bytes the store captured and the public parser's artifact for the same snapshot.
+    The parser graph names the surfaces (a route node and the controller method it calls) and nothing more: an
+    annotation match, a guard node, a declared `validates` edge or a reachable reader is never protection evidence.
+    The pack reads the captured TypeScript itself with the parser's pinned `oxc-parser` (loaded on first analysis),
+    converts its UTF-16 offsets to UTF-8 byte spans (refusing one inside a surrogate pair) and cites every resolved fact
+    by content id, span and quote digest. Nothing is executed, installed or imported from the target.
+
+    - **One exact version.** `@nestjs/common` and `@nestjs/core` 10.4.15, from the captured `package-lock.json` or an
+      exact `package.json` pin, and class-validator 0.14.1 for validation. A range, a missing entry or another release
+      leaves `framework.version` null and every fact unknown.
+    - **What is followed.** One `NestFactory.create(RootModule)` kept in a named variable and its literal
+      `useGlobalGuards`/`useGlobalInterceptors`/`useGlobalPipes`; `@Module` metadata from the root module through local
+      imports; `{ provide: APP_GUARD | APP_INTERCEPTOR | APP_PIPE, useClass }`; `@UseGuards`/`@UseInterceptors`/
+      `@UsePipes` on a controller or handler and pipes passed to a parameter decorator. The chain is ordered as Nest
+      10.4.15 evaluates it: guards, interceptors, pipes, each global → controller → method (pipes also per parameter).
+    - **Distinct effects.** Only `ValidationPipe` imported from `@nestjs/common`, with literal options, over a
+      parameter whose type is a local class with class-validator rules, is validation. `Parse*Pipe` and the
+      `@nestjs/platform-express` file interceptors are parsing; `DefaultValuePipe` and `ClassSerializerInterceptor` are
+      transformation. A guard's effect is never inferred, so authentication and authorization are `unknown`
+      (`guardEffectUnresolved`) whenever a guard is in the chain, and `does-not-apply` only when the chain has no
+      guard, no unmodeled interceptor and no frontier. A local class named `ValidationPipe` is a local pipe.
+    - **Frontiers stay explicit.** Dynamic and external modules, provider factories/values/aliases, middleware,
+      non-literal registrations, custom decorators, inherited controllers, unregistered controllers, unresolved
+      providers and unreadable files are `sentinel.nest.*` frontiers. A frontier that could change a verdict leaves
+      it unknown: global frontiers apply to every surface, surface frontiers to that surface only. A handler on the
+      HTTP adapter is a frontier outside the controller surfaces.
+    - **E2.** The accepted framework corpus's route-scoped ValidationPipe gives `input-validation: applies`; the same
+      DTO with no pipe registered gives `does-not-apply`, citing the parameter and the bootstrap. A multipart
+      interceptor only parses: the upload stays `does-not-apply` with the interceptor cited.
+    - **Digests.** `packDigest` covers the support manifest, `environmentDigest` the resolved versions and
+      `registrationDigest` every cited registration span; a change to any invalidates the facts.
+
+    Not decided here: CLI and planner integration (PR 09 still pending), CSRF/CORS/rate-limit/header properties,
+    guard bodies, Fastify, and versions other than 10.4.15.
