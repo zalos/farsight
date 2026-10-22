@@ -20,39 +20,47 @@
   "counts": {
     "findings": {
       "n": 1,
-      "unit": "sentinel.unit.findings",
+      "unit": "sentinel.count.findings",
       "scope": "sentinel.scope.report",
       "source": "sentinel report fold draft-1",
+      "bizUnit": "sentinel.count.issues",
       "breakdown": [
         {
-          "key": "sentinel.part.high",
+          "key": "sentinel.count.part.high",
           "n": 1
         }
       ]
     },
     "observations": {
       "n": 2,
-      "unit": "sentinel.unit.observations",
+      "unit": "sentinel.count.observations",
       "scope": "sentinel.scope.report",
       "source": "sentinel report fold draft-1"
     },
     "coverageGaps": {
       "n": 1,
-      "unit": "sentinel.unit.gaps",
+      "unit": "sentinel.count.gaps",
       "scope": "sentinel.scope.report",
       "source": "sentinel report fold draft-1"
     },
     "plannedChecks": {
       "n": 3,
-      "unit": "sentinel.unit.checks",
+      "unit": "sentinel.count.plannedChecks",
       "scope": "sentinel.scope.report",
-      "source": "sentinel report fold draft-1",
-      "of": 3
+      "source": "sentinel report fold draft-1"
     },
     "seenByNoStage": {
-      "n": null,
-      "unknownScope": true,
-      "scope": "sentinel.scope.inventory"
+      "n": 1,
+      "unit": "sentinel.count.seenByNoStage",
+      "scope": "sentinel.scope.inventory",
+      "source": "sentinel report fold draft-1",
+      "of": 2
+    },
+    "unknownScopeBoundaries": {
+      "n": 1,
+      "unit": "sentinel.count.unknownBoundaries",
+      "scope": "sentinel.scope.inventory",
+      "source": "sentinel report fold draft-1"
     }
   },
   "findings": [
@@ -84,7 +92,7 @@
         ],
         "screens": [
           {
-            "id": "submit-invoice",
+            "id": "web::src/app/invoices/new/page.tsx::NewInvoicePage",
             "label": {
               "business": "Submit invoice",
               "code": "INV-03 /invoices/new"
@@ -95,13 +103,13 @@
         ],
         "journeys": [
           {
-            "id": "new-invoice",
+            "id": "web::design/screens.json::new-invoice",
             "label": {
               "business": "New invoice",
               "code": "new-invoice"
             },
             "screenIds": [
-              "submit-invoice"
+              "web::src/app/invoices/new/page.tsx::NewInvoicePage"
             ]
           }
         ],
@@ -113,7 +121,7 @@
               "code": "contractor"
             },
             "screenIds": [
-              "submit-invoice"
+              "web::src/app/invoices/new/page.tsx::NewInvoicePage"
             ],
             "declared": true,
             "evidenceArtifact": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
@@ -122,19 +130,26 @@
         "counts": {
           "screens": {
             "n": 1,
-            "unit": "sentinel.unit.screens",
+            "unit": "sentinel.count.screens",
             "scope": "sentinel.scope.finding",
             "source": "sentinel report fold draft-1"
           },
           "journeys": {
             "n": 1,
-            "unit": "sentinel.unit.journeys",
+            "unit": "count.unit.journeys",
             "scope": "sentinel.scope.finding",
-            "source": "sentinel report fold draft-1"
+            "source": "sentinel report fold draft-1",
+            "breakdown": [
+              {
+                "key": "count.unit.journeys",
+                "n": 1,
+                "label": "New invoice"
+              }
+            ]
           },
           "personas": {
             "n": 1,
-            "unit": "sentinel.unit.personas",
+            "unit": "count.unit.personas",
             "scope": "sentinel.scope.finding",
             "source": "sentinel report fold draft-1"
           }
@@ -176,19 +191,19 @@
         "counts": {
           "screens": {
             "n": 0,
-            "unit": "sentinel.unit.screens",
+            "unit": "sentinel.count.screens",
             "scope": "sentinel.scope.finding",
             "source": "sentinel report fold draft-1"
           },
           "journeys": {
             "n": 0,
-            "unit": "sentinel.unit.journeys",
+            "unit": "count.unit.journeys",
             "scope": "sentinel.scope.finding",
             "source": "sentinel report fold draft-1"
           },
           "personas": {
             "n": 0,
-            "unit": "sentinel.unit.personas",
+            "unit": "count.unit.personas",
             "scope": "sentinel.scope.finding",
             "source": "sentinel report fold draft-1"
           }

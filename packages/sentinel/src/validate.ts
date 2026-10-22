@@ -30,7 +30,8 @@ export type ContractErrorCode =
   | 'sentinel.contract.wrongKind'
   | 'sentinel.contract.unsupportedVersion'
   | 'sentinel.contract.invalid'
-  | 'sentinel.contract.invariant';
+  | 'sentinel.contract.invariant'
+  | 'sentinel.contract.errorLimit';
 
 export interface ContractError {
   code: ContractErrorCode;
@@ -51,7 +52,10 @@ const compiled = new Map<EnvelopeKind, ValidateFunction>();
 function validatorFor(kind: EnvelopeKind): ValidateFunction {
   let fn = compiled.get(kind);
   if (!fn) {
-    ajv ??= new Ajv({ allErrors: true, strict: true, allowUnionTypes: true });
+    // allErrors: false bounds the work and the error list at the source: Ajv stops at the first failure
+    // instead of materialising one error per bad element of a large array.
+    ajv ??= new Ajv({ allErrors: false, strict: true, allowUnionTypes: true })
+      .addFormat('date-time', { type: 'string', validate: isCalendarTimestamp });
     fn = ajv.compile((schemas as Record<EnvelopeKind, object>)[kind]);
     compiled.set(kind, fn);
   }
@@ -61,6 +65,29 @@ function validatorFor(kind: EnvelopeKind): ValidateFunction {
 /** The published JSON schema for one envelope kind. */
 export function schemaOf(kind: EnvelopeKind): object {
   return (schemas as Record<EnvelopeKind, object>)[kind];
+}
+
+/** A real UTC calendar instant: the schema pattern bounds each field, this refuses 2026-02-30 and friends. */
+export function isCalendarTimestamp(value: string): boolean {
+  const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]{1,9})?Z$/.exec(value);
+  if (!m) return false;
+  const [y, mo, d, h, mi, se] = m.slice(1).map(Number) as [number, number, number, number, number, number];
+  const t = new Date(Date.UTC(y, mo - 1, d, h, mi, se));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d
+    && t.getUTCHours() === h && t.getUTCMinutes() === mi && t.getUTCSeconds() === se;
+}
+
+/** At most this many errors are reported; collection stops there rather than truncating afterwards. */
+export const MAX_REPORTED_ERRORS = 100;
+
+const LIMIT = Symbol('sentinel.contract.errorLimit');
+class Bounded {
+  readonly list: ContractError[] = [];
+  full = false;
+  add(e: ContractError): void {
+    if (this.list.length >= MAX_REPORTED_ERRORS) { this.full = true; throw LIMIT; }
+    this.list.push(e);
+  }
 }
 
 function fail<T>(errors: ContractError[]): ValidationResult<T> {
@@ -101,8 +128,14 @@ export function validateEnvelope<K extends EnvelopeKind>(kind: K, value: unknown
       message: `${e.keyword}: ${e.message ?? 'invalid'}`,
     })));
   }
-  const invariants = INVARIANTS[kind](value as never);
-  if (invariants.length) return fail(invariants);
+  const out = new Bounded();
+  try {
+    INVARIANTS[kind](value as never, out);
+  } catch (e) {
+    if (e !== LIMIT) throw e;
+  }
+  if (out.full) out.list.push({ code: 'sentinel.contract.errorLimit', path: '', message: `stopped after ${MAX_REPORTED_ERRORS} errors` });
+  if (out.list.length) return fail(out.list);
   return { ok: true, value: value as EnvelopeTypes[K] };
 }
 
@@ -123,7 +156,7 @@ export function parseEnvelope<K extends EnvelopeKind>(kind: K, text: string): Va
 // ---------------------------------------------------------------------------------------------------------------
 // Invariants
 
-type Check<T> = (value: T) => ContractError[];
+type Check<T> = (value: T, out: Bounded) => void;
 const err = (path: string, message: string): ContractError => ({ code: 'sentinel.contract.invariant', path, message });
 const after = (a: string, b: string) => Date.parse(a) >= Date.parse(b);
 
@@ -134,16 +167,14 @@ function duplicates<T>(items: readonly T[], key: (item: T) => string): number[] 
   return out;
 }
 
-const snapshot: Check<SnapshotEnvelope> = v => {
-  const out: ContractError[] = [];
+const snapshot: Check<SnapshotEnvelope> = (v, out) => {
   const sources = new Set(v.sources.map(s => s.sourceId));
-  for (const i of duplicates(v.sources, s => s.sourceId)) out.push(err(`/sources/${i}/sourceId`, 'duplicate source'));
-  for (const i of duplicates(v.entries, e => `${e.sourceId}\u0000${e.relativePath}`)) out.push(err(`/entries/${i}`, 'duplicate entry for one source path'));
-  v.entries.forEach((e, i) => { if (!sources.has(e.sourceId)) out.push(err(`/entries/${i}/sourceId`, 'entry names a source the snapshot does not capture')); });
+  for (const i of duplicates(v.sources, s => s.sourceId)) out.add(err(`/sources/${i}/sourceId`, 'duplicate source'));
+  for (const i of duplicates(v.entries, e => `${e.sourceId}\u0000${e.relativePath}`)) out.add(err(`/entries/${i}`, 'duplicate entry for one source path'));
+  v.entries.forEach((e, i) => { if (!sources.has(e.sourceId)) out.add(err(`/entries/${i}/sourceId`, 'entry names a source the snapshot does not capture')); });
   v.frameworkVersions.forEach((f, i) => {
-    if (f.state === 'resolved' && !sources.has(f.provenance.sourceId)) out.push(err(`/frameworkVersions/${i}/provenance/sourceId`, 'provenance names an uncaptured source'));
+    if (f.state === 'resolved' && !sources.has(f.provenance.sourceId)) out.add(err(`/frameworkVersions/${i}/provenance/sourceId`, 'provenance names an uncaptured source'));
   });
-  return out;
 };
 
 /** The exit code each policy result prints. 4 is reserved for awaiting confirmation before admission. */
@@ -180,119 +211,102 @@ export function policyResultOf(facts: PolicyFacts): PolicyResult {
   return 'satisfied';
 }
 
-const run: Check<RunEnvelope> = v => {
-  const out: ContractError[] = [];
-  if (v.parentId === v.id) out.push(err('/parentId', 'a run cannot be its own parent'));
-  if (v.baselineId === v.id) out.push(err('/baselineId', 'a run cannot be its own baseline'));
-  if (v.state === 'completed' && !after(v.completedAt, v.createdAt)) out.push(err('/completedAt', 'completed before it was created'));
-  if (v.policy && POLICY_EXIT_CODES[v.policy.result] !== v.policy.exitCode) out.push(err('/policy/exitCode', 'exit code does not match the policy result'));
-  if (v.budgets.maxCost !== null && !v.budgets.currency) out.push(err('/budgets/currency', 'a monetary budget needs its currency'));
-  if (v.budgets.maxCost === null && v.budgets.currency) out.push(err('/budgets/currency', 'a currency without a monetary budget'));
-  return out;
+const run: Check<RunEnvelope> = (v, out) => {
+  if (v.parentId === v.id) out.add(err('/parentId', 'a run cannot be its own parent'));
+  if (v.baselineId === v.id) out.add(err('/baselineId', 'a run cannot be its own baseline'));
+  if (v.state === 'completed' && !after(v.completedAt, v.createdAt)) out.add(err('/completedAt', 'completed before it was created'));
+  if (v.policy && POLICY_EXIT_CODES[v.policy.result] !== v.policy.exitCode) out.add(err('/policy/exitCode', 'exit code does not match the policy result'));
+  // Awaiting confirmation happens before admission: only a run that has not started can be waiting.
+  if (v.policy?.result === 'awaiting-confirmation' && v.state !== 'planned') out.add(err('/policy/result', 'only a planned, unadmitted run can await confirmation'));
+  if (v.budgets.maxCost !== null && !v.budgets.currency) out.add(err('/budgets/currency', 'a monetary budget needs its currency'));
+  if (v.budgets.maxCost === null && v.budgets.currency) out.add(err('/budgets/currency', 'a currency without a monetary budget'));
 };
 
-const work: Check<WorkEnvelope> = v => {
-  const out: ContractError[] = [];
-  v.dependencies.forEach((d, i) => { if (d.id === v.id) out.push(err(`/dependencies/${i}`, 'work cannot depend on its own lineage')); });
-  for (const i of duplicates(v.dependencies, d => `${d.id}#${d.revision}`)) out.push(err(`/dependencies/${i}`, 'duplicate dependency'));
+const work: Check<WorkEnvelope> = (v, out) => {
+  v.dependencies.forEach((d, i) => { if (d.id === v.id) out.add(err(`/dependencies/${i}`, 'work cannot depend on its own lineage')); });
+  for (const i of duplicates(v.dependencies, d => `${d.id}#${d.revision}`)) out.add(err(`/dependencies/${i}`, 'duplicate dependency'));
   if (v.state === 'satisfied-by-reuse' && v.reuse.publication.id === v.id && v.reuse.publication.revision === v.revision) {
-    out.push(err('/reuse/publication', 'reuse must point at an earlier publication, not itself'));
+    out.add(err('/reuse/publication', 'reuse must point at an earlier publication, not itself'));
   }
-  return out;
 };
 
-const attempt: Check<AttemptEnvelope> = v => {
-  const out: ContractError[] = [];
-  if (v.state !== 'running' && !after(v.endedAt, v.startedAt)) out.push(err('/endedAt', 'ended before it started'));
-  if (v.state === 'canceled-after-spend' && v.usage.certainty !== 'confirmed') out.push(err('/usage/certainty', 'canceled-after-spend requires confirmed usage; unknown usage is a separate fact'));
+const attempt: Check<AttemptEnvelope> = (v, out) => {
+  if (v.state !== 'running' && !after(v.endedAt, v.startedAt)) out.add(err('/endedAt', 'ended before it started'));
+  if (v.state === 'canceled-after-spend' && v.usage.certainty !== 'confirmed') out.add(err('/usage/certainty', 'canceled-after-spend requires confirmed usage; unknown usage is a separate fact'));
   const u = v.usage;
   if (u.certainty === 'not-applicable' && (u.inputTokens !== undefined || u.outputTokens !== undefined || u.monetaryCost !== undefined)) {
-    out.push(err('/usage', 'not-applicable usage carries no amounts'));
+    out.add(err('/usage', 'not-applicable usage carries no amounts'));
   }
-  if (u.monetaryCost !== undefined && !u.currency) out.push(err('/usage/currency', 'a cost needs its currency'));
-  return out;
+  if (u.monetaryCost !== undefined && !u.currency) out.add(err('/usage/currency', 'a cost needs its currency'));
 };
 
-const observation: Check<ObservationEnvelope> = v => {
-  const out: ContractError[] = [];
+const observation: Check<ObservationEnvelope> = (v, out) => {
   v.evidence.forEach((e, i) => {
-    if (e.span.endByte < e.span.startByte) out.push(err(`/evidence/${i}/span`, 'span ends before it starts'));
-    if (e.snapshotId !== v.snapshotId) out.push(err(`/evidence/${i}/snapshotId`, 'evidence cites another snapshot'));
+    if (e.span.endByte < e.span.startByte) out.add(err(`/evidence/${i}/span`, 'span ends before it starts'));
+    if (e.snapshotId !== v.snapshotId) out.add(err(`/evidence/${i}/snapshotId`, 'evidence cites another snapshot'));
   });
-  return out;
 };
 
-const coverage: Check<CoverageEnvelope> = v => {
-  const out: ContractError[] = [];
-  if (v.status === 'complete' && v.skipped.length) out.push(err('/skipped', 'complete coverage cannot have skipped scope; it is partial'));
-  if (v.status === 'complete' && v.basis.kind === 'unavailable') out.push(err('/basis', 'unavailable work cannot be complete coverage'));
+const coverage: Check<CoverageEnvelope> = (v, out) => {
+  if (v.status === 'complete' && v.skipped.length) out.add(err('/skipped', 'complete coverage cannot have skipped scope; it is partial'));
+  if (v.status === 'complete' && v.basis.kind === 'unavailable') out.add(err('/basis', 'unavailable work cannot be complete coverage'));
   if (v.basis.kind === 'unavailable' && !['unsupported', 'not-run', 'error'].includes(v.status)) {
-    out.push(err('/status', 'unavailable work is unsupported, not-run or error'));
+    out.add(err('/status', 'unavailable work is unsupported, not-run or error'));
   }
   if (v.basis.kind === 'reused' && v.basis.publication.id === v.workId && v.basis.publication.revision === v.workRevision) {
-    out.push(err('/basis/publication', 'reuse points at an earlier publication, not this work revision'));
+    out.add(err('/basis/publication', 'reuse points at an earlier publication, not this work revision'));
   }
-  return out;
 };
 
-const disposition: Check<DispositionEnvelope> = v => {
-  const out: ContractError[] = [];
-  if (v.supersedes === v.id) out.push(err('/supersedes', 'a decision cannot supersede itself'));
-  if (v.expiresAt !== null && !(Date.parse(v.expiresAt) > Date.parse(v.createdAt))) out.push(err('/expiresAt', 'expires at or before creation'));
+const disposition: Check<DispositionEnvelope> = (v, out) => {
+  if (v.supersedes === v.id) out.add(err('/supersedes', 'a decision cannot supersede itself'));
+  if (v.expiresAt !== null && !(Date.parse(v.expiresAt) > Date.parse(v.createdAt))) out.add(err('/expiresAt', 'expires at or before creation'));
   if (v.decision === 'mitigated' && v.state === 'approved' && v.evidence.length === 0) {
-    out.push(err('/evidence', 'an approved mitigation names the evidence it rests on; an assertion alone is not verification'));
+    out.add(err('/evidence', 'an approved mitigation names the evidence it rests on; an assertion alone is not verification'));
   }
-  return out;
 };
 
-function countErrors(path: string, c: ReportCount, expected?: number): ContractError[] {
-  const out: ContractError[] = [];
-  if (c.of !== undefined && c.of < c.n) out.push(err(`${path}/of`, 'count exceeds its denominator'));
-  if (c.breakdown && c.breakdown.reduce((s, p) => s + p.n, 0) !== c.n) out.push(err(`${path}/breakdown`, 'breakdown does not sum to the count'));
-  if (expected !== undefined && c.n !== expected) out.push(err(`${path}/n`, 'count does not match the listed rows'));
-  return out;
+function countErrors(out: Bounded, path: string, c: ReportCount, expected?: number): void {
+  if (c.of !== undefined && c.of < c.n) out.add(err(`${path}/of`, 'count exceeds its denominator'));
+  if (c.breakdown && c.breakdown.reduce((s, p) => s + p.n, 0) !== c.n) out.add(err(`${path}/breakdown`, 'breakdown does not sum to the count'));
+  if (expected !== undefined && c.n !== expected) out.add(err(`${path}/n`, 'count does not match the listed rows'));
 }
 
-function placeErrors(path: string, p: FindingPlace): ContractError[] {
-  const out: ContractError[] = [];
-  out.push(...countErrors(`${path}/counts/screens`, p.counts.screens, new Set(p.screens.map(s => s.id)).size));
-  out.push(...countErrors(`${path}/counts/journeys`, p.counts.journeys, new Set(p.journeys.map(j => j.id)).size));
-  out.push(...countErrors(`${path}/counts/personas`, p.counts.personas, new Set(p.personas.map(s => s.id)).size));
+function placeErrors(out: Bounded, path: string, p: FindingPlace): void {
+  countErrors(out, `${path}/counts/screens`, p.counts.screens, new Set(p.screens.map(s => s.id)).size);
+  countErrors(out, `${path}/counts/journeys`, p.counts.journeys, new Set(p.journeys.map(j => j.id)).size);
+  countErrors(out, `${path}/counts/personas`, p.counts.personas, new Set(p.personas.map(s => s.id)).size);
   if (p.binding !== 'matched' && (p.screens.length || p.journeys.length || p.personas.length)) {
-    out.push(err(`${path}/binding`, 'an unbound context cannot place on screens, journeys or personas'));
+    out.add(err(`${path}/binding`, 'an unbound context cannot place on screens, journeys or personas'));
   }
-  if (p.binding !== 'matched' && p.limitationKeys.length === 0) out.push(err(`${path}/limitationKeys`, 'an empty place says why'));
-  if (p.binding === 'matched' && !p.context) out.push(err(`${path}/context`, 'a matched place names its pinned context'));
-  return out;
+  if (p.binding !== 'matched' && p.limitationKeys.length === 0) out.add(err(`${path}/limitationKeys`, 'an empty place says why'));
+  if (p.binding === 'matched' && !p.context) out.add(err(`${path}/context`, 'a matched place names its pinned context'));
 }
 
-const report: Check<ReportEnvelope> = v => {
-  const out: ContractError[] = [];
-  out.push(...countErrors('/counts/findings', v.counts.findings, v.findings.length));
-  out.push(...countErrors('/counts/coverageGaps', v.counts.coverageGaps, v.gaps.length));
-  out.push(...countErrors('/counts/observations', v.counts.observations, new Set(v.findings.flatMap(f => f.observationIds)).size));
-  out.push(...countErrors('/counts/plannedChecks', v.counts.plannedChecks));
-  if (v.counts.seenByNoStage.n === null && !v.counts.seenByNoStage.unknownScope) out.push(err('/counts/seenByNoStage', 'an unknown count is unknown scope'));
-  if (v.completeness === 'complete' && v.gaps.length) out.push(err('/completeness', 'a report with coverage gaps is partial'));
-  for (const i of duplicates(v.findings, f => f.id)) out.push(err(`/findings/${i}/id`, 'duplicate finding'));
+const report: Check<ReportEnvelope> = (v, out) => {
+  countErrors(out, '/counts/findings', v.counts.findings, v.findings.length);
+  countErrors(out, '/counts/coverageGaps', v.counts.coverageGaps, v.gaps.length);
+  countErrors(out, '/counts/observations', v.counts.observations, new Set(v.findings.flatMap(f => f.observationIds)).size);
+  countErrors(out, '/counts/plannedChecks', v.counts.plannedChecks);
+  countErrors(out, '/counts/seenByNoStage', v.counts.seenByNoStage);
+  countErrors(out, '/counts/unknownScopeBoundaries', v.counts.unknownScopeBoundaries);
+  if (v.completeness === 'complete' && v.gaps.length) out.add(err('/completeness', 'a report with coverage gaps is partial'));
+  for (const i of duplicates(v.findings, f => f.id)) out.add(err(`/findings/${i}/id`, 'duplicate finding'));
   const findings = new Set(v.findings.map(f => f.id));
   v.findings.forEach((f, i) => {
-    out.push(...placeErrors(`/findings/${i}/place`, f.place));
-    for (const j of duplicates(f.evidence, e => e.id)) out.push(err(`/findings/${i}/evidence/${j}`, 'duplicate evidence'));
+    placeErrors(out, `/findings/${i}/place`, f.place);
+    for (const j of duplicates(f.evidence, e => e.id)) out.add(err(`/findings/${i}/evidence/${j}`, 'duplicate evidence'));
   });
-  v.gaps.forEach((g, i) => out.push(...placeErrors(`/gaps/${i}/place`, g.place)));
-  v.decisions.forEach((d, i) => { if (!findings.has(d.findingId)) out.push(err(`/decisions/${i}/findingId`, 'decision about a finding the report does not contain')); });
-  for (const i of duplicates(v.artifactClosure, a => a)) out.push(err(`/artifactClosure/${i}`, 'duplicate artifact'));
-  if (v.baseline?.reportId === v.id) out.push(err('/baseline', 'a report cannot be its own baseline'));
-  if (v.baseline === null && v.findings.some(f => f.comparison !== undefined)) out.push(err('/findings', 'comparison labels need a baseline'));
-  return out;
+  v.gaps.forEach((g, i) => placeErrors(out, `/gaps/${i}/place`, g.place));
+  v.decisions.forEach((d, i) => { if (!findings.has(d.findingId)) out.add(err(`/decisions/${i}/findingId`, 'decision about a finding the report does not contain')); });
+  for (const i of duplicates(v.artifactClosure, a => a)) out.add(err(`/artifactClosure/${i}`, 'duplicate artifact'));
+  if (v.baseline?.reportId === v.id) out.add(err('/baseline', 'a report cannot be its own baseline'));
+  if (v.baseline === null && v.findings.some(f => f.comparison !== undefined)) out.add(err('/findings', 'comparison labels need a baseline'));
 };
 
-const protocol: Check<ProtocolMessage> = v => {
-  const out: ContractError[] = [];
-  if (v.type === 'progress' && v.completed > v.planned) out.push(err('/completed', 'more completed than planned'));
-  if (v.type === 'hello' && new Set(v.supported).size !== v.supported.length) out.push(err('/supported', 'duplicate version'));
-  return out;
+const protocol: Check<ProtocolMessage> = (v, out) => {
+  if (v.type === 'progress' && v.completed > v.planned) out.add(err('/completed', 'more completed than planned'));
+  if (v.type === 'hello' && new Set(v.supported).size !== v.supported.length) out.add(err('/supported', 'duplicate version'));
 };
 
 const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {

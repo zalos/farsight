@@ -104,32 +104,12 @@
               "$ref": "#/definitions/ReportCount"
             },
             "seenByNoStage": {
-              "type": "object",
-              "properties": {
-                "n": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/definitions/Count"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "unknownScope": {
-                  "type": "boolean"
-                },
-                "scope": {
-                  "$ref": "#/definitions/CatalogKey"
-                }
-              },
-              "required": [
-                "n",
-                "unknownScope",
-                "scope"
-              ],
-              "additionalProperties": false,
-              "description": "Always printed, including zero; null when unknown directory scope makes the count unknowable."
+              "$ref": "#/definitions/ReportCount",
+              "description": "The exact number of included inventory entries no completed stage covered. Always printed, including zero."
+            },
+            "unknownScopeBoundaries": {
+              "$ref": "#/definitions/ReportCount",
+              "description": "Inventory boundaries whose descendants were never enumerated: unknown scope, counted apart, never folded into the exact number above and never read as zero files."
             }
           },
           "required": [
@@ -137,7 +117,8 @@
             "observations",
             "coverageGaps",
             "plannedChecks",
-            "seenByNoStage"
+            "seenByNoStage",
+            "unknownScopeBoundaries"
           ],
           "additionalProperties": false
         },
@@ -209,8 +190,9 @@
     },
     "Timestamp": {
       "type": "string",
-      "description": "A UTC RFC 3339 timestamp with an explicit Z offset.",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+      "description": "A UTC RFC 3339 timestamp with an explicit Z offset and a real calendar date (no leap second). The pattern bounds each field; the `date-time` format check refuses a day the month does not have.",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$",
+      "format": "date-time"
     },
     "Digest": {
       "type": "string",
@@ -227,13 +209,17 @@
           "$ref": "#/definitions/Count"
         },
         "unit": {
-          "$ref": "#/definitions/CatalogKey"
+          "$ref": "#/definitions/SharedCatalogKey"
+        },
+        "bizUnit": {
+          "$ref": "#/definitions/SharedCatalogKey"
         },
         "scope": {
-          "$ref": "#/definitions/CatalogKey"
+          "$ref": "#/definitions/SharedCatalogKey"
         },
         "source": {
           "type": "string",
+          "minLength": 1,
           "maxLength": 256
         },
         "breakdown": {
@@ -241,7 +227,24 @@
           "items": {
             "$ref": "#/definitions/ReportCountPart"
           },
-          "maxItems": 32
+          "maxItems": 64
+        },
+        "recheck": {
+          "type": "object",
+          "properties": {
+            "cli": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "mcp": {
+              "type": "string",
+              "maxLength": 1024
+            }
+          },
+          "required": [
+            "cli"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -251,22 +254,27 @@
         "source"
       ],
       "additionalProperties": false,
-      "description": "A scoped number, structurally compatible with core's `Counted`: what it counts, over which scope, from where. Unit and scope keys are catalog keys; the report never prints a bare number."
+      "description": "A scoped number with exactly core's `Counted` shape: what it counts (`unit`, and `bizUnit` when the business register prints it), over which scope, from which fold, its partition and the command that re-checks it. Unit, scope and part keys are shared-catalog keys; the tests run core's own `countedProblems` over them."
     },
-    "CatalogKey": {
+    "SharedCatalogKey": {
       "type": "string",
-      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
-      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "description": "A key in the shared two-register catalog (`count.unit.journeys`, `sentinel.count.findings`).",
+      "pattern": "^[a-z][A-Za-z0-9]*(\\.[A-Za-z0-9]+)+$",
       "maxLength": 128
     },
     "ReportCountPart": {
       "type": "object",
       "properties": {
         "key": {
-          "$ref": "#/definitions/CatalogKey"
+          "$ref": "#/definitions/SharedCatalogKey",
+          "description": "A catalog key printed with `{n}`."
         },
         "n": {
           "$ref": "#/definitions/Count"
+        },
+        "label": {
+          "$ref": "#/definitions/BoundedText",
+          "description": "A name out of the pinned context, when the part is one thing rather than a kind."
         }
       },
       "required": [
@@ -274,7 +282,12 @@
         "n"
       ],
       "additionalProperties": false,
-      "description": "A part of a count's breakdown. Parts sum to the count they explain."
+      "description": "One part of a count's partition: core's `CountPart`. Parts sum to the count they explain."
+    },
+    "BoundedText": {
+      "type": "string",
+      "description": "Untrusted text supplied by a producer (a scanner message, a rationale). Always escaped when rendered.",
+      "maxLength": 4000
     },
     "ReportFinding": {
       "type": "object",
@@ -353,11 +366,6 @@
       "additionalProperties": false,
       "description": "The same thing said in both registers; the report carries both so it never looks a label up later."
     },
-    "BoundedText": {
-      "type": "string",
-      "description": "Untrusted text supplied by a producer (a scanner message, a rationale). Always escaped when rendered.",
-      "maxLength": 4000
-    },
     "FindingPlace": {
       "type": "object",
       "properties": {
@@ -392,8 +400,9 @@
         "nodeIds": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/ShortText"
+            "$ref": "#/definitions/NodeId"
           },
+          "description": "Canonical graph node IDs, the same identities `SourceEvidence.nodeId` carries.",
           "maxItems": 256
         },
         "screens": {
@@ -402,7 +411,7 @@
             "type": "object",
             "properties": {
               "id": {
-                "$ref": "#/definitions/Id"
+                "$ref": "#/definitions/NodeId"
               },
               "label": {
                 "$ref": "#/definitions/PlaceLabel"
@@ -434,7 +443,7 @@
             "type": "object",
             "properties": {
               "id": {
-                "$ref": "#/definitions/Id"
+                "$ref": "#/definitions/NodeId"
               },
               "label": {
                 "$ref": "#/definitions/PlaceLabel"
@@ -458,7 +467,7 @@
             "type": "object",
             "properties": {
               "id": {
-                "$ref": "#/definitions/Id"
+                "$ref": "#/definitions/NodeId"
               },
               "label": {
                 "$ref": "#/definitions/PlaceLabel"
@@ -534,6 +543,13 @@
       "minLength": 1,
       "maxLength": 200
     },
+    "NodeId": {
+      "type": "string",
+      "description": "A canonical application-graph identity (`repo::path/to/File.tsx::Component`), a screen or a journey ID from pinned context. Unlike a ledger `Id` it may contain `/` and `::`; it is bounded and free of control characters.",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    },
     "PlaceLabel": {
       "type": "object",
       "additionalProperties": false,
@@ -554,9 +570,15 @@
     "ScreenIds": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/Id"
+        "$ref": "#/definitions/NodeId"
       },
       "maxItems": 512
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
     },
     "ComparisonLabel": {
       "type": "string",

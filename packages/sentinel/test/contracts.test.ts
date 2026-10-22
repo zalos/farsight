@@ -11,6 +11,8 @@ import {
   DISPOSITION_DECISIONS, DECISION_CHANNELS, ASSERTION_TRUSTS, COMPARISON_LABELS, PROTOCOL_MESSAGE_TYPES,
 } from '../dist/index.js';
 import type { EnvelopeKind, HelloMessage } from '../dist/index.js';
+import { MAX_REPORTED_ERRORS } from '../dist/index.js';
+import { counted, countedProblems } from '@farsight/core/dist/counts.js';
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const VALID = here('./contracts/valid/');
@@ -235,6 +237,79 @@ test('a snapshot holds capture facts only; analysis outcomes live in their own e
   const snapshot = load('snapshot');
   snapshot.entries[0].coverage = 'complete';
   assert.equal(validateEnvelope('snapshot', snapshot).ok, false, 'stage coverage cannot be written into a capture entry');
+});
+
+test('a large broken record produces a bounded error list, not one error per element', () => {
+  // 10,000 empty entries: Ajv stops at the first failure instead of building 250,000 errors.
+  const snap = load('snapshot');
+  snap.entries = Array.from({ length: 10_000 }, () => ({}));
+  const before = process.memoryUsage().heapUsed;
+  const r = validateEnvelope('snapshot', snap);
+  assert.equal(r.ok, false);
+  if (!r.ok) {
+    assert.ok(r.errors.length <= 8, `${r.errors.length} errors`);
+    assert.ok(JSON.stringify(r.errors).length < 8_192, `${JSON.stringify(r.errors).length} bytes`);
+  }
+  assert.ok(process.memoryUsage().heapUsed - before < 64 * 1024 * 1024, 'validation allocates far less than the reported regression');
+  // Schema-valid input that breaks an invariant everywhere: collection stops at the limit and says so.
+  const dup = load('snapshot');
+  dup.entries = Array.from({ length: 20_000 }, () => structuredClone(dup.entries[0]));
+  const d = validateEnvelope('snapshot', dup);
+  assert.equal(d.ok, false);
+  if (!d.ok) {
+    assert.equal(d.errors.length, MAX_REPORTED_ERRORS + 1);
+    assert.equal(d.errors.at(-1)!.code, 'sentinel.contract.errorLimit');
+  }
+});
+
+test('timestamps are real calendar instants', () => {
+  const ok = (t: string) => { const v = load('snapshot'); v.createdAt = t; return validateEnvelope('snapshot', v).ok; };
+  assert.equal(ok('2028-02-29T00:00:00Z'), true, 'a leap day');
+  assert.equal(ok('2026-02-29T00:00:00Z'), false, 'not a leap year');
+  assert.equal(ok('2026-04-31T00:00:00Z'), false);
+  assert.equal(ok('2026-12-31T23:59:59.123456789Z'), true);
+  assert.equal(ok('2026-99-99T99:99:99Z'), false);
+});
+
+test('report counts are core Counted values with registered catalog words', () => {
+  const report = load('report');
+  const counts = [
+    ...Object.entries(report.counts).map(([k, c]) => [`counts.${k}`, c] as const),
+    ...[...report.findings, ...report.gaps].flatMap((row: any, i: number) => Object.entries(row.place.counts).map(([k, c]) => [`place ${i} ${k}`, c] as const)),
+  ];
+  assert.ok(counts.length >= 12);
+  for (const [where, c] of counts) assert.deepEqual(countedProblems(c as any, where), [], where);
+  // Everything core's own constructor can produce — bizUnit, recheck, labelled parts — is accepted unchanged.
+  const full = counted(1, 'sentinel.count.findings', 'sentinel.scope.report', 'sentinel report fold draft-1', {
+    bizUnit: 'sentinel.count.issues',
+    breakdown: [{ key: 'sentinel.count.part.high', n: 1, label: 'Invoice submission' }],
+    recheck: { cli: 'farsight-sentinel report --run run-2 --json', mcp: 'sentinel_report' },
+  });
+  assert.deepEqual(countedProblems(full), []);
+  report.counts.findings = full;
+  const r = validateEnvelope('report', report);
+  assert.ok(r.ok, JSON.stringify(!r.ok && r.errors));
+  if (r.ok) assert.deepEqual(r.value.counts.findings, full);
+});
+
+test('placement uses canonical graph identities, not ledger ids', () => {
+  const report = load('report');
+  const long = `web::${'src/components/'.repeat(60)}Invoice.tsx::InvoiceForm`;
+  assert.ok(long.length > 200 && long.length <= 1024);
+  report.findings[0].place.nodeIds = [long, 'api::src/routes/invoice.ts::submit'];
+  report.findings[0].place.screens[0].id = long;
+  report.findings[0].place.journeys[0].screenIds = [long];
+  report.findings[0].place.personas[0].screenIds = [long];
+  const r = validateEnvelope('report', report);
+  assert.ok(r.ok, JSON.stringify(!r.ok && r.errors));
+  // The same identity is valid as SourceEvidence.nodeId, so a finding can cite what it is placed on.
+  const obs = load('observation-scanner');
+  obs.evidence[0].nodeId = long;
+  assert.ok(validateEnvelope('observation', obs).ok);
+  // Ledger ids stay opaque: a graph-shaped id is not a run id.
+  const run = load('run-active');
+  run.id = 'api::src/run';
+  assert.equal(validateEnvelope('run', run).ok, false);
 });
 
 test('policy results fold with fixed precedence and exit codes', () => {

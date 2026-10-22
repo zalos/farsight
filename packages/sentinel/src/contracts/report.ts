@@ -1,47 +1,65 @@
 import type {
-  ArtifactId, BoundedText, CatalogKey, Count, Digest, Id, Ordinal, RegisterText, ShortText, Timestamp,
+  ArtifactId, BoundedText, CatalogKey, Count, Digest, Id, NodeId, Ordinal, RegisterText, SharedCatalogKey, ShortText,
+  Timestamp,
 } from './common.js';
 import type { CoverageStatus } from './coverage.js';
 
-/** A part of a count's breakdown. Parts sum to the count they explain. */
+/** One part of a count's partition: core's `CountPart`. Parts sum to the count they explain. */
 export interface ReportCountPart {
-  key: CatalogKey;
+  /** A catalog key printed with `{n}`. */
+  key: SharedCatalogKey;
   n: Count;
+  /** A name out of the pinned context, when the part is one thing rather than a kind. */
+  label?: BoundedText;
 }
 
 /**
- * A scoped number, structurally compatible with core's `Counted`: what it counts, over which scope, from where.
- * Unit and scope keys are catalog keys; the report never prints a bare number.
+ * A scoped number with exactly core's `Counted` shape: what it counts (`unit`, and `bizUnit` when the business
+ * register prints it), over which scope, from which fold, its partition and the command that re-checks it.
+ * Unit, scope and part keys are shared-catalog keys; the tests run core's own `countedProblems` over them.
  */
 export interface ReportCount {
   n: Count;
   of?: Count;
-  unit: CatalogKey;
-  scope: CatalogKey;
-  /** @maxLength 256 */
+  unit: SharedCatalogKey;
+  bizUnit?: SharedCatalogKey;
+  scope: SharedCatalogKey;
+  /**
+   * @minLength 1
+   * @maxLength 256
+   */
   source: string;
-  /** @maxItems 32 */
+  /** @maxItems 64 */
   breakdown?: ReportCountPart[];
+  recheck?: {
+    /** @maxLength 1024 */
+    cli: string;
+    /** @maxLength 1024 */
+    mcp?: string;
+  };
 }
 
 /** A readable label captured from pinned context, so a recipient never looks one up in today's graph. */
 export interface PlaceLabel extends RegisterText {}
 
 /** @maxItems 512 */
-export type ScreenIds = Id[];
+export type ScreenIds = NodeId[];
 
 /** Report-side application placement. Reachability is navigation evidence, never proof of exploitation. */
 export interface FindingPlace {
   binding: 'matched' | 'mismatched' | 'unavailable';
   context?: { artifact: ArtifactId; sourceBindingReceipt: ArtifactId; projectionVersion: ShortText };
-  /** @maxItems 256 */
-  nodeIds: ShortText[];
+  /**
+   * Canonical graph node IDs, the same identities `SourceEvidence.nodeId` carries.
+   * @maxItems 256
+   */
+  nodeIds: NodeId[];
   /** @maxItems 512 */
-  screens: Array<{ id: Id; label: PlaceLabel; via: 'direct-use' | 'potential-impact'; evidenceArtifact: ArtifactId }>;
+  screens: Array<{ id: NodeId; label: PlaceLabel; via: 'direct-use' | 'potential-impact'; evidenceArtifact: ArtifactId }>;
   /** @maxItems 512 */
-  journeys: Array<{ id: Id; label: PlaceLabel; screenIds: ScreenIds }>;
+  journeys: Array<{ id: NodeId; label: PlaceLabel; screenIds: ScreenIds }>;
   /** @maxItems 64 */
-  personas: Array<{ id: Id; label: PlaceLabel; screenIds: ScreenIds; declared: boolean; evidenceArtifact: ArtifactId }>;
+  personas: Array<{ id: NodeId; label: PlaceLabel; screenIds: ScreenIds; declared: boolean; evidenceArtifact: ArtifactId }>;
   counts: { screens: ReportCount; journeys: ReportCount; personas: ReportCount };
   /** @maxItems 32 */
   limitationKeys: CatalogKey[];
@@ -119,8 +137,15 @@ export interface ReportEnvelope {
     observations: ReportCount;
     coverageGaps: ReportCount;
     plannedChecks: ReportCount;
-    /** Always printed, including zero; null when unknown directory scope makes the count unknowable. */
-    seenByNoStage: { n: Count | null; unknownScope: boolean; scope: CatalogKey };
+    /**
+     * The exact number of included inventory entries no completed stage covered. Always printed, including zero.
+     */
+    seenByNoStage: ReportCount;
+    /**
+     * Inventory boundaries whose descendants were never enumerated: unknown scope, counted apart, never folded
+     * into the exact number above and never read as zero files.
+     */
+    unknownScopeBoundaries: ReportCount;
   };
   /** @maxItems 25000 */
   findings: ReportFinding[];

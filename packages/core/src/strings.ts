@@ -49,6 +49,7 @@ import { ECHO_SUBMIND_STRINGS } from './strings-echo-submind.js';
 import { ECHO_MEMORY_STRINGS } from './strings-echo-memory.js';
 import { ECHO_INSTALLATION_STRINGS } from './strings-echo-installation.js';
 import { SENTINEL_CLI_STRINGS } from './strings-sentinel-cli.js';
+import { SENTINEL_REPORT_STRINGS } from './strings-sentinel-report.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
 import { TOUR_STRINGS } from './strings-tour.js';
@@ -164,6 +165,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...ECHO_INSTALLATION_STRINGS,
   // Sentinel's placeholder executable, capability reasons and contract error codes (strings-sentinel-cli.ts).
   ...SENTINEL_CLI_STRINGS,
+  // the words for a Sentinel report's counts and their sentinel.scope.* scopes (strings-sentinel-report.ts)
+  ...SENTINEL_REPORT_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
   // who may do what — the role × action table's words live in strings-roles.ts (roles.*, gate.roles.*, its counts)

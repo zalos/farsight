@@ -126,7 +126,7 @@ test('every printed word is a registered catalog entry with a definition', async
   const cliText = readFileSync(`${pkgDir}src/cli.ts`, 'utf8');
   const used = new Set([...cliText.matchAll(/word\('(sentinel\.[^']+)'/g)].map(m => m[1]!));
   for (const c of CAPABILITIES) used.add(c.reasonCode);
-  for (const code of ['unknownKind', 'tooLarge', 'malformedJson', 'missingVersion', 'wrongKind', 'unsupportedVersion', 'invalid', 'invariant']) used.add(`sentinel.contract.${code}`);
+  for (const code of ['unknownKind', 'tooLarge', 'malformedJson', 'missingVersion', 'wrongKind', 'unsupportedVersion', 'invalid', 'invariant', 'errorLimit']) used.add(`sentinel.contract.${code}`);
   used.add('sentinel.protocol.noSharedVersion');
   assert.ok(used.size > 30);
   for (const key of used) {

@@ -39,6 +39,7 @@ export const SENTINEL_CLI_STRINGS: Record<string, StringEntry> = {
   'sentinel.contract.unsupportedVersion': same('version not supported', 'The record is of a known kind at a version this build does not read. It is refused rather than converted.'),
   'sentinel.contract.invalid': same('does not match its schema', 'A field is missing, unknown, of the wrong type or outside its bounds.'),
   'sentinel.contract.invariant': same('breaks a record rule', 'The fields are well formed, but together they contradict a rule, such as complete coverage that skipped part of its scope.'),
+  'sentinel.contract.errorLimit': same('too many errors to list', 'Validation stopped collecting errors at its limit, so a very broken record cannot use unbounded memory. Fix the listed errors and validate again.'),
   'sentinel.protocol.noSharedVersion': same('no shared protocol version', 'The worker and the coordinator speak no common protocol version, so the coordinator refuses rather than guessing.'),
 };
 

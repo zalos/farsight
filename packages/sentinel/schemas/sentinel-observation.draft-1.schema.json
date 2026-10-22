@@ -317,8 +317,7 @@
           "$ref": "#/definitions/Digest"
         },
         "nodeId": {
-          "type": "string",
-          "maxLength": 1024
+          "$ref": "#/definitions/NodeId"
         },
         "occurrenceId": {
           "type": "string",
@@ -337,8 +336,8 @@
     },
     "RelativePath": {
       "type": "string",
-      "description": "A source-relative POSIX path: no leading slash, no `.`/`..` segment, no empty segment, no backslash or NUL.",
-      "pattern": "^(?![/])(?!(.*[/])?\\.{1,2}([/]|$))(?!.*[/][/])[^\\\\\\u0000]+$",
+      "description": "A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL.",
+      "pattern": "^(?![/])(?!.*[/]$)(?!(.*[/])?\\.{1,2}([/]|$))(?!.*[/][/])[^\\\\\\u0000]+$",
       "maxLength": 4096
     },
     "ArtifactId": {
@@ -368,6 +367,13 @@
       "minimum": 0,
       "maximum": 9007199254740991
     },
+    "NodeId": {
+      "type": "string",
+      "description": "A canonical application-graph identity (`repo::path/to/File.tsx::Component`), a screen or a journey ID from pinned context. Unlike a ledger `Id` it may contain `/` and `::`; it is bounded and free of control characters.",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    },
     "CatalogKey": {
       "type": "string",
       "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
@@ -380,8 +386,9 @@
     },
     "Timestamp": {
       "type": "string",
-      "description": "A UTC RFC 3339 timestamp with an explicit Z offset.",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+      "description": "A UTC RFC 3339 timestamp with an explicit Z offset and a real calendar date (no leap second). The pattern bounds each field; the `date-time` format check refuses a day the month does not have.",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$",
+      "format": "date-time"
     }
   },
   "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-observation.draft-1.schema.json",

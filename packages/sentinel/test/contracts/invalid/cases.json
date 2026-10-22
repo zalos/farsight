@@ -372,6 +372,53 @@
     "expect": "sentinel.contract.invalid"
   },
   {
+    "name": "a trailing slash is an empty segment",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "src/"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "an impossible clock time",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/createdAt",
+        "value": "2026-99-99T99:99:99Z"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/createdAt"
+  },
+  {
+    "name": "a day the month does not have",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/createdAt",
+        "value": "2026-02-30T12:00:00Z"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/createdAt"
+  },
+  {
+    "name": "a leap second is not accepted",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/createdAt",
+        "value": "2026-12-31T23:59:60Z"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/createdAt"
+  },
+  {
     "name": "a policy exit code that disagrees with its result",
     "base": "run-completed",
     "ops": [
@@ -461,6 +508,38 @@
       }
     ],
     "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a completed run cannot be awaiting confirmation",
+    "base": "run-completed",
+    "ops": [
+      {
+        "set": "/policy",
+        "value": {
+          "result": "awaiting-confirmation",
+          "exitCode": 4,
+          "reasonCodes": []
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/result"
+  },
+  {
+    "name": "a running run cannot be awaiting confirmation",
+    "base": "run-active",
+    "ops": [
+      {
+        "set": "/policy",
+        "value": {
+          "result": "awaiting-confirmation",
+          "exitCode": 4,
+          "reasonCodes": []
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/result"
   },
   {
     "name": "running work names its active attempt",
@@ -970,12 +1049,12 @@
     "base": "report",
     "ops": [
       {
-        "set": "/counts/plannedChecks/of",
-        "value": 2
+        "set": "/counts/seenByNoStage/of",
+        "value": 0
       }
     ],
     "expect": "sentinel.contract.invariant",
-    "path": "/counts/plannedChecks/of"
+    "path": "/counts/seenByNoStage/of"
   },
   {
     "name": "a report with gaps cannot be complete",
@@ -988,17 +1067,6 @@
     ],
     "expect": "sentinel.contract.invariant",
     "path": "/completeness"
-  },
-  {
-    "name": "an unknown seen-by-no-stage count is unknown scope",
-    "base": "report",
-    "ops": [
-      {
-        "set": "/counts/seenByNoStage/unknownScope",
-        "value": false
-      }
-    ],
-    "expect": "sentinel.contract.invariant"
   },
   {
     "name": "a gap cannot be complete coverage",
@@ -1132,6 +1200,60 @@
       }
     ],
     "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "seen by no stage is an exact count, never null",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/counts/seenByNoStage/n",
+        "value": null
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "unknown scope is counted apart and is required",
+    "base": "report",
+    "ops": [
+      {
+        "delete": "/counts/unknownScopeBoundaries"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a count key must be a catalog key, not words",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/counts/findings/unit",
+        "value": "findings"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a node id carries no control character",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/findings/0/place/nodeIds/0",
+        "value": "api::a\u0007b"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a node id longer than 1024",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/findings/0/place/nodeIds/0",
+        "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
   },
   {
     "name": "an unknown message type",

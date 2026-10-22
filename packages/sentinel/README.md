@@ -37,6 +37,14 @@ the worker protocol's binding. A test walks the generated schemas to enforce bot
 There are no retention fields here. v1 never deletes anything automatically. The age and count values PR 01
 proposed are only thresholds that make a record eligible for an explicit prune (PR 03/26).
 
+Every report number is a core `Counted` (unit, optional business unit, scope, source, breakdown with labels,
+recheck) whose words are in the shared catalog (`strings-sentinel-report.ts`, scopes `sentinel.scope.*` in
+`COUNT_SCOPES`). *Seen by no stage* is always an exact count of included entries, zero included. Folders whose
+contents were never listed are counted apart as unknown scope and never read as zero files. Placement uses
+canonical graph identities (`repo::path/to/File.tsx::Component`), not ledger IDs. Timestamps are real UTC
+calendar instants. Validation stops at the first schema failure and caps invariant errors at 100, so a large
+broken record cannot multiply into a large error list.
+
 Spans are zero-based, half-open UTF-8 byte offsets. Paths are source-relative POSIX paths with no `.`/`..`
 segment. Money is a decimal string. Resource ceilings are the PR 01 proposed defaults (2 GiB, 2 CPUs,
 128 PIDs, 120 s, 4 MiB output); a profile can only lower them.

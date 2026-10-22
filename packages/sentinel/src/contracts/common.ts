@@ -25,14 +25,16 @@ export type Id = string;
 export type CatalogKey = string;
 
 /**
- * A UTC RFC 3339 timestamp with an explicit Z offset.
- * @pattern ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$
+ * A UTC RFC 3339 timestamp with an explicit Z offset and a real calendar date (no leap second).
+ * The pattern bounds each field; the `date-time` format check refuses a day the month does not have.
+ * @pattern ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]{1,9})?Z$
+ * @format date-time
  */
 export type Timestamp = string;
 
 /**
- * A source-relative POSIX path: no leading slash, no `.`/`..` segment, no empty segment, no backslash or NUL.
- * @pattern ^(?![/])(?!(.*[/])?\.{1,2}([/]|$))(?!.*[/][/])[^\\\u0000]+$
+ * A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL.
+ * @pattern ^(?![/])(?!.*[/]$)(?!(.*[/])?\.{1,2}([/]|$))(?!.*[/][/])[^\\\u0000]+$
  * @maxLength 4096
  */
 export type RelativePath = string;
@@ -78,6 +80,22 @@ export interface RegisterText {
   code: BoundedText;
 }
 
+/**
+ * A canonical application-graph identity (`repo::path/to/File.tsx::Component`), a screen or a journey ID from
+ * pinned context. Unlike a ledger `Id` it may contain `/` and `::`; it is bounded and free of control characters.
+ * @minLength 1
+ * @maxLength 1024
+ * @pattern ^[^\u0000-\u001f\u007f]+$
+ */
+export type NodeId = string;
+
+/**
+ * A key in the shared two-register catalog (`count.unit.journeys`, `sentinel.count.findings`).
+ * @pattern ^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9]+)+$
+ * @maxLength 128
+ */
+export type SharedCatalogKey = string;
+
 /** A logical work unit at one immutable revision; every reference to work names both. */
 export interface WorkRef {
   id: Id;
@@ -100,8 +118,7 @@ export interface SourceEvidence {
   content: ArtifactId;
   span: ByteSpan;
   quoteDigest?: Digest;
-  /** @maxLength 1024 */
-  nodeId?: string;
+  nodeId?: NodeId;
   /** @maxLength 256 */
   occurrenceId?: string;
 }
