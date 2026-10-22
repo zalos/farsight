@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import type { Id, WorkRef } from '../../contracts/common.js';
 import type { ExecutionService } from '../../execution/service.js';
 import { releaseWorkDir } from '../../execution/supervisor.js';
-import { PATTERN_ADAPTER } from './adapter.js';
+import { PATTERN_ADAPTER, type PatternAdapterBuild } from './adapter.js';
 import { buildPatternJob, type PatternRule, type PatternTarget } from './job.js';
 import { normalizePatternRun, type PatternRunResult } from './normalize.js';
 
@@ -18,16 +18,17 @@ export interface PatternAttempt {
   /** A private (0700) folder for the job's own input files. */
   scratch: string;
   signal?: AbortSignal;
-  /** Test seam: another registered adapter id with the same worker (a lowered deadline, for instance). */
+  /** Test seam: another registered adapter (a lowered deadline or a variant built by buildPatternAdapter). */
   adapterId?: Id;
+  adapter?: PatternAdapterBuild;
 }
 
 export async function runPatternAttempt(service: ExecutionService, attempt: PatternAttempt): Promise<PatternRunResult> {
   const jobDir = mkdtempSync(join(attempt.scratch, 'pattern-job-'));
   try {
-    const built = buildPatternJob(attempt.rules, attempt.targets, jobDir);
+    const built = buildPatternJob(attempt.rules, attempt.targets, jobDir, attempt.adapter);
     const outcome = await service.run({
-      adapterId: attempt.adapterId ?? PATTERN_ADAPTER.id, attemptId: attempt.attemptId, work: attempt.work, inputs: built.inputs,
+      adapterId: attempt.adapterId ?? attempt.adapter?.definition.id ?? PATTERN_ADAPTER.id, attemptId: attempt.attemptId, work: attempt.work, inputs: built.inputs,
       ...(attempt.signal ? { signal: attempt.signal } : {}),
     });
     try {

@@ -8,12 +8,14 @@
 //   anything that would claim a cross-file flow is refused, never credited;
 // - finding identity is Sentinel's own digest of rule, revision, target and span; engine fingerprints are ignored;
 // - no source text is kept: a finding carries its span and a digest of the quoted bytes;
-// - coverage is per file: every applicable target is complete, partial, skipped, omitted (requested but neither
-//   scanned nor skipped, even on exit zero) or in error; a file no rule language applies to is not applicable.
+// - coverage is per file per rule, and conservative: a rule counts as run on a file only when the engine reports a
+//   non-zero match time for that rule on that file; a zero (the rule's file prefilter skipped it) is `not-run`, a
+//   reported timeout for that rule is `partial`, a missing timing block leaves every rule `not-established`; files
+//   requested but neither scanned nor skipped are `omitted`, even on exit zero.
 import { createHash } from 'node:crypto';
 import type { ArtifactId } from '../../contracts/common.js';
 import type { WorkerOutcome } from '../../execution/supervisor.js';
-import { PATTERN_ENGINE } from './adapter.js';
+import { MEASURED_ARCHITECTURES, PATTERN_ENGINE } from './adapter.js';
 import { patternFail } from './errors.js';
 import { languageOf, type PatternEvidenceKind, type PatternJob, type PatternLanguage, type PatternRule } from './job.js';
 
@@ -23,6 +25,7 @@ export const PATTERN_COVERAGE_REASONS = [
   'sentinel.pattern.coverage.noRuleLanguage', 'sentinel.pattern.coverage.ignoreFileExcluded',
   'sentinel.pattern.coverage.attemptFailed', 'sentinel.pattern.coverage.attemptTimedOut', 'sentinel.pattern.coverage.attemptCanceled',
   'sentinel.pattern.coverage.engineTimedOut', 'sentinel.pattern.coverage.outputTruncated', 'sentinel.pattern.coverage.engineFailed',
+  'sentinel.pattern.coverage.ruleNotRun', 'sentinel.pattern.coverage.ruleRunUnreported', 'sentinel.pattern.coverage.platformUnmeasured',
 ] as const;
 export type PatternCoverageReason = typeof PATTERN_COVERAGE_REASONS[number];
 
@@ -32,16 +35,16 @@ export const PATTERN_REFUSAL_REASONS = [
 ] as const;
 export type PatternRefusalReason = typeof PATTERN_REFUSAL_REASONS[number];
 
-export type CoverageStatus = 'complete' | 'partial' | 'skipped' | 'omitted' | 'error' | 'not-applicable' | 'excluded';
+export type CoverageStatus = 'complete' | 'partial' | 'not-run' | 'not-established' | 'skipped' | 'omitted' | 'error' | 'not-applicable' | 'excluded';
 
+/** One target and one rule; `familyId` is null for a file no rule applies to, or one that was excluded. */
 export interface PatternCoverage {
   readonly relativePath: string;
   readonly artifact: ArtifactId;
   readonly language: PatternLanguage | null;
+  readonly familyId: string | null;
   readonly status: CoverageStatus;
   readonly reasonCode: PatternCoverageReason;
-  /** The rules this per-file status stands for (every rule whose language applies). */
-  readonly rules: readonly string[];
 }
 
 export interface ByteSpanRef { readonly startByte: number; readonly endByte: number; readonly quoteDigest: string }
@@ -66,7 +69,7 @@ export interface PatternRefusal { readonly reasonCode: PatternRefusalReason; rea
 export interface PatternRunResult {
   readonly adapter: string;
   readonly engine: string;
-  readonly granularity: 'per-file';
+  readonly granularity: 'per-file-per-rule';
   readonly attempt: WorkerOutcome['state'];
   readonly engineExit: number | null;
   readonly findings: readonly PatternFinding[];
@@ -132,13 +135,15 @@ export function normalizePatternRun(input: NormalizeInput): PatternRunResult {
     const language = languageOf(path) ?? null;
     return { language, rules: language ? job.ruleIds.filter(id => rules.get(id)!.languages.includes(language)) : [] };
   };
-  const everyTarget = (status: CoverageStatus, reasonCode: PatternCoverageReason): PatternCoverage[] => job.targets.map(t => {
+  /** One row per applicable rule, or one row with no rule for a file no rule applies to. */
+  const rowsFor = (t: { path: string; artifact: ArtifactId }, statusOf: (familyId: string) => [CoverageStatus, PatternCoverageReason]): PatternCoverage[] => {
     const a = applicable(t.path);
-    return a.rules.length
-      ? { relativePath: t.path, artifact: t.artifact, language: a.language, status, reasonCode, rules: a.rules }
-      : { relativePath: t.path, artifact: t.artifact, language: a.language, status: 'not-applicable', reasonCode: 'sentinel.pattern.coverage.noRuleLanguage', rules: [] };
-  });
-  const base = { adapter: outcome.adapter.id, engine: `${PATTERN_ENGINE.name} ${PATTERN_ENGINE.version}`, granularity: 'per-file' as const, attempt: outcome.state };
+    if (!a.rules.length) return [{ relativePath: t.path, artifact: t.artifact, language: a.language, familyId: null, status: 'not-applicable', reasonCode: 'sentinel.pattern.coverage.noRuleLanguage' }];
+    return a.rules.map(familyId => { const [status, reasonCode] = statusOf(familyId); return { relativePath: t.path, artifact: t.artifact, language: a.language, familyId, status, reasonCode }; });
+  };
+  const everyTarget = (status: CoverageStatus, reasonCode: PatternCoverageReason): PatternCoverage[] =>
+    job.targets.flatMap(t => rowsFor(t, () => [status, reasonCode]));
+  const base = { adapter: outcome.adapter.id, engine: `${PATTERN_ENGINE.name} ${PATTERN_ENGINE.version}`, granularity: 'per-file-per-rule' as const, attempt: outcome.state };
 
   if (outcome.state !== 'succeeded') {
     const reason: PatternCoverageReason = outcome.state === 'timed-out' ? 'sentinel.pattern.coverage.attemptTimedOut'
@@ -146,6 +151,11 @@ export function normalizePatternRun(input: NormalizeInput): PatternRunResult {
     return deepFreeze({ ...base, engineExit: null, findings: [], coverage: everyTarget('error', reason), refused: [] });
   }
 
+  // Results from an image platform no conformance run has measured are not trusted, whatever they say.
+  const architecture = outcome.container?.image?.architecture;
+  if (!architecture || !MEASURED_ARCHITECTURES.has(architecture)) {
+    return deepFreeze({ ...base, engineExit: null, findings: [], coverage: everyTarget('error', 'sentinel.pattern.coverage.platformUnmeasured'), refused: [] });
+  }
   const recordOut = outcome.outputs.find(o => o.mediaType === 'application/vnd.sentinel.pattern-run+json');
   if (!recordOut) return patternFail('sentinel.pattern.outputInvalid', 'no run record');
   const record = parseJson(input.outputBytes(recordOut.id), MAX_RUN_RECORD, 'the run record');
@@ -165,35 +175,51 @@ export function normalizePatternRun(input: NormalizeInput): PatternRunResult {
   }
   const rel = (p: unknown): string | null => (typeof p === 'string' && p.startsWith(TREE) && targets.has(p.slice(TREE.length)) ? p.slice(TREE.length) : null);
 
-  // Coverage, per file.
+  // Coverage, per file per rule.
   const scanned = new Set<string>(engine.paths.scanned.map(rel).filter(Boolean));
   const skipped = new Map<string, string>();
   for (const s of Array.isArray(engine.paths.skipped) ? engine.paths.skipped : []) { const r = rel(s?.path); if (r && typeof s.reason === 'string') skipped.set(r, s.reason); }
-  const partial = new Map<string, PatternCoverageReason>();
+  const parseErrors = new Set<string>();
+  const timeouts = new Set<string>();
   for (const e of engine.errors) {
     const kind = Array.isArray(e?.type) ? e.type[0] : e?.type;
     const r = rel(e?.path);
     if (!r) continue;
-    if (kind === 'Timeout') partial.set(r, 'sentinel.pattern.coverage.ruleTimeout');
-    else if (!partial.has(r)) partial.set(r, 'sentinel.pattern.coverage.partialParse');
+    if (kind === 'Timeout') {
+      // A timeout names its rule; one without a known rule leaves every rule of the file short of complete.
+      if (typeof e.rule_id === 'string' && rules.has(e.rule_id)) timeouts.add(`${r}\u0000${e.rule_id}`);
+      else parseErrors.add(r);
+    } else parseErrors.add(r);
+  }
+  // Which rule ran on which file: the engine's per-target match times, indexed by its rule list.
+  const timing = engine.time && Array.isArray(engine.time.rules) && Array.isArray(engine.time.targets) ? engine.time : null;
+  const ran = new Map<string, Set<string>>();
+  let timingUsable = false;
+  if (timing && timing.rules.every((id: unknown) => typeof id === 'string') && [...timing.rules].sort().join('\u0000') === [...job.ruleIds].join('\u0000')) {
+    timingUsable = true;
+    for (const t of timing.targets) {
+      const r = rel(t?.path);
+      if (!r || !Array.isArray(t.match_times) || t.match_times.length !== timing.rules.length) continue; // that target stays unreported
+      const set = new Set<string>();
+      t.match_times.forEach((v: unknown, i: number) => { if (typeof v === 'number' && Number.isFinite(v) && v > 0) set.add(timing.rules[i]); });
+      ran.set(r, set);
+    }
   }
   const failed = exit !== 0;
-  const coverage: PatternCoverage[] = job.targets.map(t => {
-    const a = applicable(t.path);
-    const row = (status: CoverageStatus, reasonCode: PatternCoverageReason): PatternCoverage =>
-      ({ relativePath: t.path, artifact: t.artifact, language: a.language, status, reasonCode, rules: a.rules });
-    if (excluded.has(t.path)) return row('excluded', 'sentinel.pattern.coverage.ignoreFileExcluded');
-    if (!a.rules.length) return { ...row('not-applicable', 'sentinel.pattern.coverage.noRuleLanguage'), rules: [] };
-    if (failed) return row('error', 'sentinel.pattern.coverage.engineFailed');
-    const skip = skipped.get(t.path);
-    if (skip === 'exceeded_size_limit') return row('skipped', 'sentinel.pattern.coverage.tooLarge');
-    if (scanned.has(t.path)) {
-      if (partial.has(t.path)) return row('partial', partial.get(t.path)!);
-      if (skip) return row('partial', 'sentinel.pattern.coverage.partialParse');
-      return row('complete', 'sentinel.pattern.coverage.complete');
+  const coverage: PatternCoverage[] = job.targets.flatMap(t => {
+    if (excluded.has(t.path)) {
+      return [{ relativePath: t.path, artifact: t.artifact, language: applicable(t.path).language, familyId: null, status: 'excluded' as const, reasonCode: 'sentinel.pattern.coverage.ignoreFileExcluded' as const }];
     }
-    if (skip) return row('skipped', 'sentinel.pattern.coverage.engineSkipped');
-    return row('omitted', 'sentinel.pattern.coverage.omitted');
+    return rowsFor(t, familyId => {
+      if (failed) return ['error', 'sentinel.pattern.coverage.engineFailed'];
+      const skip = skipped.get(t.path);
+      if (skip === 'exceeded_size_limit') return ['skipped', 'sentinel.pattern.coverage.tooLarge'];
+      if (timeouts.has(`${t.path}\u0000${familyId}`)) return ['partial', 'sentinel.pattern.coverage.ruleTimeout'];
+      if (!scanned.has(t.path)) return skip ? ['skipped', 'sentinel.pattern.coverage.engineSkipped'] : ['omitted', 'sentinel.pattern.coverage.omitted'];
+      if (parseErrors.has(t.path) || skip) return ['partial', 'sentinel.pattern.coverage.partialParse'];
+      if (!timingUsable || !ran.has(t.path)) return ['not-established', 'sentinel.pattern.coverage.ruleRunUnreported'];
+      return ran.get(t.path)!.has(familyId) ? ['complete', 'sentinel.pattern.coverage.complete'] : ['not-run', 'sentinel.pattern.coverage.ruleNotRun'];
+    });
   });
 
   // Findings.
