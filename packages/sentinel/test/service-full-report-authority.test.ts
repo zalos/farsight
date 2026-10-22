@@ -25,12 +25,12 @@ import { unlock } from './snapshot-helpers.ts';
 // Every report assertion starts with a real owner-held store, admitted canonical plan, worker and publication.
 // Faults are injected only into this test's trusted producer or its own accepted CAS files, never by fabricating
 // a publication, store capability or receipt. The malformed worker is Sentinel's inert protocol fixture.
-async function published(t: any, forged: boolean | 'json' | 'utf8' | 'line' = false) {
+async function published(t: any, forged: boolean | 'json' | 'utf8' | 'line' | 'object' | 'shape' | 'auxiliary' | 'duplicate' = false, safe = false) {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-full-report-')));
   const path = join(dir, 'workspace');
   mkdirSync(join(path, 'src'), { recursive: true });
   const file = join(path, 'src', 'lookup.ts');
-  writeFileSync(file, 'export const lookup = (id: string) => db.query("SELECT * FROM invoice WHERE id = " + id);\n');
+  writeFileSync(file, safe ? 'export const lookup = (id: string) => db.query("SELECT * FROM invoice WHERE id = ?", [id]);\n' : 'export const lookup = (id: string) => db.query("SELECT * FROM invoice WHERE id = " + id);\n');
   const ws = workspaceOf(path, { ...process.env, XDG_STATE_HOME: join(dir, 'state') });
   initWorkspace({ workspace: path });
   assert.equal(adoptWorkspaceSettings(ws, { confirm: true, now: new Date() }).outcome, 'prepared');
@@ -39,7 +39,7 @@ async function published(t: any, forged: boolean | 'json' | 'utf8' | 'line' = fa
   const store = await openStore(ws.storePath);
   t.after(() => { store.close(); unlock(dir); rmSync(dir, { recursive: true, force: true }); });
   const work = scratchUnder(ws);
-  const malformed = forged === 'json' || forged === 'utf8';
+  const malformed = forged === 'json' || forged === 'utf8' || forged === 'object' || forged === 'shape';
   const worker = join(dir, 'malformed-worker.mjs');
   if (malformed) writeFileSync(worker, 'globalThis.PAYLOAD = ' + JSON.stringify(forged) + '; await import(' + JSON.stringify(new URL('./fixtures/workers/report-malformed-worker.mjs', import.meta.url).href) + ');');
   const registry = malformed ? createAdapterRegistry([
@@ -55,6 +55,12 @@ async function published(t: any, forged: boolean | 'json' | 'utf8' | 'line' = fa
   const drivers = forged ? createCheckDriverRegistry([{ ...base, async normalize(ctx: any, v: any) {
     if (malformed) return { coverage: { ...v.result }, records: [] };
     const accepted = await base.normalize(ctx, v);
+    if (forged === 'auxiliary') return { ...accepted, records: [{ schema: 'application/json', privacy: 'metadata' as const,
+      value: { schema: 'sentinel-preview-auxiliary/draft-1', note: 'not a finding document' } }] };
+    if (forged === 'duplicate') {
+      const doc = JSON.parse(Buffer.from(v.output(v.outputs[0].id)).toString('utf8'));
+      return { ...accepted, records: [{ schema: 'application/json', privacy: 'source-derived' as const, value: { ...doc, duplicate: true } }] };
+    }
     if (forged === 'line') {
       const doc = JSON.parse(Buffer.from(v.output(v.outputs[0].id)).toString('utf8'));
       doc.findings[0].line = 999999;
@@ -260,4 +266,25 @@ test('current workspace inputs stay bounded to genuine captured regular files wi
 test('accepted preview finding cannot cite a line beyond its captured source', async t => {
   const f = await published(t, 'line');
   await assert.rejects(assessRun(f.store, f.runId), (e: any) => e.code === 'sentinel.report.evidenceUnbound');
+});
+
+for (const mode of ['object', 'shape', 'duplicate'] as const) test('accepted preview requires one exact findings document: ' + mode, async t => {
+  const f = await published(t, mode);
+  await assert.rejects(fullReport({ ...f.request, disclosure: 'shareable' }), (e: any) => e.code === 'sentinel.report.evidenceUnbound');
+});
+
+test('accepted preview retains genuine findings beside unrelated auxiliary JSON', async t => {
+  const f = await published(t, 'auxiliary');
+  const report = await fullReport({ ...f.request, disclosure: 'shareable' });
+  assert.equal(report.document.completeness, 'complete');
+  assert.equal(report.document.findings.length, 1);
+  assert.equal(report.document.gaps.length, 0);
+});
+
+test('accepted preview retains an honest empty findings document', async t => {
+  const f = await published(t, false, true);
+  const report = await fullReport({ ...f.request, disclosure: 'shareable' });
+  assert.equal(report.document.completeness, 'complete');
+  assert.equal(report.document.findings.length, 0);
+  assert.equal(report.document.gaps.length, 0);
 });

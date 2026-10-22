@@ -1,4 +1,4 @@
-// Original inert protocol fixture: a genuine accepted worker output with invalid JSON or UTF-8. This tests the
+// Original inert protocol fixture: a genuine accepted worker output with invalid JSON, UTF-8 or findings shape. This tests the
 // report consuming boundary, not the worker's ability to attest semantics; no application code is executed.
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
@@ -10,7 +10,9 @@ send({ protocol, type: 'hello', supported: [protocol], adapterId: process.env.SE
 for await (const text of input) {
   const start = JSON.parse(text);
   if (start.type !== 'start') continue;
-  const bytes = globalThis.PAYLOAD === 'json' ? Buffer.from('{broken') : Buffer.from([0x7b, 0xff, 0x7d]);
+  const bytes = globalThis.PAYLOAD === 'object' ? Buffer.from(JSON.stringify({ schema: 'not-the-preview-schema', findings: [] }))
+    : globalThis.PAYLOAD === 'shape' ? Buffer.from(JSON.stringify({ schema: 'sentinel-preview-findings/draft-1', checks: start.checks, findings: [] }))
+      : globalThis.PAYLOAD === 'json' ? Buffer.from('{broken') : Buffer.from([0x7b, 0xff, 0x7d]);
   const hex = createHash('sha256').update(bytes).digest('hex');
   const id = `sha256:${hex}`;
   writeFileSync(`${process.env.SENTINEL_OUTPUT}/${hex}`, bytes);

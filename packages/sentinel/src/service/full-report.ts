@@ -18,7 +18,7 @@ import type { SentinelStore } from '../store/index.js';
 import { loadPlan } from '../execution/plans.js';
 import { loadBootstrap } from '../execution/bootstrap.js';
 import type { ParserIndex, ParserResult } from '../snapshot/parser.js';
-import { PREVIEW_DETECTOR_ID, PREVIEW_FINDINGS_SCHEMA } from '../adapters/preview-detector.js';
+import { PREVIEW_DETECTOR_ID, PREVIEW_FINDINGS_SCHEMA, PREVIEW_RULE } from '../adapters/preview-detector.js';
 import { NAME_LIMITATIONS, NAME_MESSAGE, OBSERVATION_LIMITATIONS, OBSERVATION_MESSAGE } from '../adapters/gitleaks/normalize.js';
 import { GITLEAKS_RULE_IDS } from '../adapters/gitleaks/rules.js';
 import { resolveWithheldLocation } from '../snapshot/locations.js';
@@ -184,6 +184,7 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
     // a dropped or added finding record refuses the report rather than reading as fewer (or more) findings.
     let findingRecords = 0;
     const driverReports: number[] = [];
+    let previewDocuments = 0;
     for (const output of pub.outputs) {
       if (output.schema !== COVERAGE_SCHEMA && output.schema !== FINDING_SCHEMA && output.schema !== PREVIEW_FINDINGS_SCHEMA && output.schema !== DRIVER_REPORT_SCHEMA && output.schema !== 'application/json') continue;
       let value: any;
@@ -226,11 +227,14 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
         continue;
       }
       if (unit.adapterId !== PREVIEW_DETECTOR_ID) unbound('preview findings from a unit the preview detector did not run');
-      if (canonicalJson([...(value.checks ?? [])].sort()) !== canonicalJson([...unit.checks].sort())) unbound('preview findings for other checks');
+      if (++previewDocuments !== 1) unbound('an accepted preview unit has multiple findings documents');
+      if (value.detector !== PREVIEW_DETECTOR_ID || value.rule !== PREVIEW_RULE || !Array.isArray(value.checks)
+        || !Array.isArray(value.scopes) || canonicalJson([...value.scopes].sort()) !== canonicalJson([...unit.scopes].sort())) unbound('accepted preview findings do not identify their detector and scopes');
+      if (canonicalJson([...value.checks].sort()) !== canonicalJson([...unit.checks].sort())) unbound('preview findings for other checks');
       if (!Array.isArray(value.findings) || unit.checks.length !== 1) unbound('preview findings without their exact check');
       for (const f of value.findings) {
         const { check, pin } = assignedCheck(unit.checks[0]!);
-        if (!isRecord(f) || typeof f.path !== 'string' || !Number.isSafeInteger(f.line)) unbound('a preview finding without its check');
+        if (!isRecord(f) || f.rule !== PREVIEW_RULE || typeof f.path !== 'string' || !Number.isSafeInteger(f.line)) unbound('a preview finding without its check');
         const ev = await cite(unit.sourceId!, f.path, f.input, { lines: [f.line, f.line] });
         if (check.scopeId !== fileScope(ev.sourceId, ev.relativePath)) unbound('a preview finding is outside its admitted check scope');
         observations.push(observation({
@@ -244,6 +248,9 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
     if (unit.adapterId && SCANNER_ADAPTERS.has(unit.adapterId) && (driverReports.length !== 1 || driverReports[0] !== findingRecords)) {
       unbound('a scanner unit\'s accepted findings do not match its own report');
     }
+    // Raw scanner JSON and other auxiliary documents are not findings. The preview producer, however, always
+    // publishes its one findings document, even when its genuine result is empty or skipped.
+    if (unit.adapterId === PREVIEW_DETECTOR_ID && previewDocuments !== 1) unbound('an accepted preview unit has no findings document');
   }
 
   // A citation by another scanner of a file whose name the secret scan matched is withheld the same way: by its capture

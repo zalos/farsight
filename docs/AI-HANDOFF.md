@@ -41,6 +41,22 @@ its report survived service restart and source removal, and incomplete required 
 code or host scanner ran; no scanner assets were downloaded and no hosted model was called. This is local arm64 evidence; combined native CI remains an
 integration gate. The earlier 576-test broad suite belongs to `44ff7fae` and was not repeated for this source-preserving merge.
 
+## Full reports require the accepted preview findings document — 2026-10-22
+
+Branch `codex/sentinel-report-preview-shape`, based on `a9cea6fa`, closes a remaining report-consumer gap:
+a genuine accepted preview unit whose raw output is valid JSON with an unrecognized schema cannot become a
+complete zero-finding report. The consumer requires exactly one preview findings document, bound to the detector,
+rule, assigned checks and scopes. Malformed or duplicate documents refuse. Other auxiliary JSON stays allowed,
+and a genuine empty findings document remains complete. Scanner record handling is unchanged.
+
+Three new genuine-publication negatives (wrong schema, incomplete identity and duplicate document) fail on the
+base while the positive report and auxiliary-JSON controls pass. With the fix, the full authority suite plus the
+real four-engine public full-report/context/compare lifecycle pass 26 tests with no skips on Node 24.19.0 using
+existing pinned Linux containers and offline synthetic data. Dependency build, typecheck and catalog lint pass.
+The independent review also exercised duplicated vulnerable dependency locks and Dockerfiles, retaining both
+identical-byte paths distinctly. No target code, hosted model or real credential was used. Gitleaks full-report
+support and combined integration/native CI remain separately owned gates; no push or main merge occurred.
+
 ## Start here
 
 Read `AGENTS.md` for project rules and architecture. Codex loads it as project instructions; `CLAUDE.md` imports it and this handoff. Keep durable facts in those repository files so both providers receive updates. This is project memory, not ChatGPT account memory or a synchronization of private conversation histories.
