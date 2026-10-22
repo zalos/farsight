@@ -52,23 +52,26 @@ reviewed separately against the native CI evidence.
 
 ## Provider PR156 integration rebase — 2026-10-22
 
-Branch `codex/sentinel-providers-integration` is rebased onto fetched main `5196dc70`. All reviewed provider
-implementation, test/helper and provider catalog bytes remain identical to `979d7146`; the policy-revision,
-per-call and budget-fence corrections are unchanged. Documentation conflicts retain both the merged Pattern
-foundation and provider ADR/package map. Main's Pattern adapter, rules, packaging hook, packer and consumer checks
-were verified byte-identical.
+Branch `codex/sentinel-providers-integration` was rebased onto fetched main `5196dc70`, then includes the newer
+merged Express foundation `95387a4e` through feature-branch merge `5dad0a61`. All reviewed provider implementation,
+test/helper and provider catalog bytes remain identical to `979d7146`; policy-revision, per-call and budget-fence
+corrections are unchanged. Conflict resolutions retain Pattern, Express and provider ADR/package map, catalogs
+and exports. Incoming Express/Pattern implementations, rules, asset hook, packer and consumer are byte-identical
+to main `95387a4e`.
 
-Affected dependency build and typecheck, catalog lint and the exact existing PR title lint passed. The focused
-provider and package-boundary suites passed 35 tests with no skips, using only original local mock endpoints.
-A fresh npm-only consumer verified nine exports, 19 contract types and schemas, 53 fixtures, cross-process store
-reopen and 17 Pattern pack files. An additional installed-only consumer compiled all 27 named provider types and
-verified durable uncertain-budget accounting and excess-reservation refusal without invoking an endpoint.
-No hosted/model request, download, real keychain read, primary build, graph refresh, push or merge occurred.
+The provider/package suites passed 35 tests with no skips on the byte-identical provider foundation before the
+Express merge, using only original local mock endpoints. After the merge, affected dependency build/typecheck,
+catalog lint and ten affected package checks passed, with no broad suite repeat. A fresh npm-only consumer
+verified ten exports, 19 contract types and schemas, 53 fixtures, cross-process store reopen, 17 Pattern pack files
+and actual installed Express capture/parse/analysis. Another installed-only consumer compiled all 27 named
+provider types and verified durable uncertain-budget accounting and excess-reservation refusal without invoking
+an endpoint. Exact existing PR and authored commit subjects passed lint.
 
-This is the reviewed provider foundation. Trusted capability production, provider settings/selection and public
-owner-CLI dispatch remain open. Ledger reconciliation is a host primitive; the owner command, spent-receipt
-validation and coordinator fencing path that authorize it are not supplied by this integration. Live model/E5
-qualification and model-review orchestration remain separate gates. The integrating lead owns review and push.
+No hosted/model request, model download, real keychain read, primary build, graph refresh, push or merge to main
+occurred. This is the reviewed provider foundation. Trusted capability production, provider settings/selection
+and public owner-CLI dispatch remain open. Ledger reconciliation is a host primitive; its owner command,
+spent-receipt validation and coordinator fencing path are not supplied here. Live model/E5 qualification and
+model-review orchestration remain separate gates. The integrating lead owns review and push.
 
 ## Sentinel provider transport integration — 2026-10-22
 
