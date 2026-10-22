@@ -248,3 +248,108 @@ test('importing the facade opens nothing', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---- schema upgrades under the real owner ----
+// The upgrade is driven through the ledger's internal test seams (an extra migration and a failpoint), but with the
+// real owner lock, the real object verifier and a real second process: a crash or failure at each point leaves the
+// earlier schema, and the next owner takes over and reads what was accepted before.
+const STORE_DIST = fileURLToPath(new URL('../dist/store/', import.meta.url));
+const PROBE_MIGRATION = { version: 2, name: 'upgrade-probe', sql: 'CREATE TABLE upgrade_probe (x INTEGER NOT NULL) STRICT;' };
+
+/** Opens the ledger with the shipped migrations plus the probe step, under a real owner, failing at `point`. */
+function upgradeScript(storePath: string, point: string, how: 'kill' | 'throw'): string {
+  return `
+    const { acquireStoreOwner } = await import(${JSON.stringify(`${STORE_DIST}owner.js`)});
+    const { openLedger } = await import(${JSON.stringify(`${STORE_DIST}ledger.js`)});
+    const { LEDGER_MIGRATIONS } = await import(${JSON.stringify(`${STORE_DIST}migrations.js`)});
+    const { ObjectStore } = await import(${JSON.stringify(`${STORE_DIST}objects.js`)});
+    const { ledgerObjectVerifier } = await import(${JSON.stringify(`${STORE_DIST}objects-ledger.js`)});
+    const owner = await acquireStoreOwner(${JSON.stringify(storePath)});
+    let code = null, report = null;
+    try {
+      const ledger = await openLedger(owner, {
+        objects: ledgerObjectVerifier(new ObjectStore(owner)),
+        migrations: [...LEDGER_MIGRATIONS, ${JSON.stringify(PROBE_MIGRATION)}],
+        failpoint: p => {
+          if (p !== ${JSON.stringify(point)}) return;
+          ${how === 'kill' ? "process.kill(process.pid, 'SIGKILL');" : "throw new Error('injected failure at ' + p);"}
+        },
+      });
+      report = ledger.migration;
+    } catch (e) { code = e.code; }
+    owner.close();
+    console.log(JSON.stringify({ code, report }));
+  `;
+}
+
+/** A store at the shipped schema with one accepted artifact; returns the artifact id and its text. */
+async function storeWithArtifact(storePath: string): Promise<{ id: string; text: string }> {
+  const store = await openStore(storePath);
+  try {
+    begin(store);
+    const text = 'accepted before the upgrade';
+    const bytes = Buffer.from(text);
+    const id = store.objects.identify(bytes);
+    store.ledger.registerStaging('stage-up', [{ id: id.id, schema: 'text/plain', privacy: 'metadata' }], { work: W1, attemptId: 'att-1' });
+    const receipt = await store.objects.put(bytes, { expect: id });
+    store.ledger.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-up', receipts: [receipt], outputs: [id.id], endedAt: ENDED });
+    assert.equal(store.migration.to, 1);
+    return { id: id.id, text };
+  } finally {
+    store.close();
+  }
+}
+
+/** The next owner, in this process, through the facade: the shipped schema, the artifact and integrity intact. */
+async function assertTakeover(storePath: string, artifact: { id: string; text: string }) {
+  const store = await openStore(storePath);
+  try {
+    assert.deepEqual({ from: store.migration.from, to: store.migration.to }, { from: 1, to: 1 }, 'the upgrade left nothing applied');
+    assert.equal((await store.readArtifact(artifact.id)).toString('utf8'), artifact.text);
+    assert.deepEqual(store.checkIntegrity(), { integrity: 'ok', foreignKeyViolations: 0 });
+    assert.equal((await store.inspect()).ok, true);
+  } finally {
+    store.close();
+  }
+  const backups = join(storePath, 'backups');
+  return existsSync(backups) ? readdirSync(backups) : [];
+}
+
+function runUpgrade(storePath: string, point: string, how: 'kill' | 'throw') {
+  return spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', '--input-type=module', '-e', upgradeScript(storePath, point, how)],
+    { encoding: 'utf8', timeout: 30_000 });
+}
+
+for (const point of ['backup:after-copy', 'migrate:after-sql'] as const) {
+  test(`an owner killed at ${point} leaves the old schema, and the next owner takes over`, needsStore, async t => {
+    const storePath = scratch(t);
+    const artifact = await storeWithArtifact(storePath);
+    const killed = runUpgrade(storePath, point, 'kill');
+    assert.equal(killed.signal, 'SIGKILL', `the upgrader died at ${point}: ${killed.stderr}`);
+    const backups = await assertTakeover(storePath, artifact);
+    if (point === 'backup:after-copy') {
+      assert.deepEqual(backups.filter(f => f.endsWith('.bak')), [], 'the dead upgrader published no unverified backup');
+    } else {
+      // The backup was verified and made durable before the schema change began, and survives the crash.
+      assert.equal(backups.filter(f => f.endsWith('.bak')).length, 1, 'the pre-upgrade backup survives');
+      assert.deepEqual(backups.filter(f => f.endsWith('.partial')), []);
+    }
+    // With nothing injected, a later owner completes the same upgrade, with a verified backup first.
+    const done = JSON.parse(runUpgrade(storePath, 'none', 'throw').stdout.trim());
+    assert.equal(done.code, null);
+    assert.deepEqual({ from: done.report.from, to: done.report.to }, { from: 1, to: 2 });
+    assert.ok(existsSync(done.report.backupPath), 'the upgrade kept its verified backup');
+  });
+
+  test(`a failure at ${point} rolls the upgrade back and releases the owner`, needsStore, async t => {
+    const storePath = scratch(t);
+    const artifact = await storeWithArtifact(storePath);
+    const failed = runUpgrade(storePath, point, 'throw');
+    assert.equal(failed.status, 0, failed.stderr);
+    const outcome = JSON.parse(failed.stdout.trim());
+    assert.equal(outcome.code, point === 'backup:after-copy' ? 'sentinel.store.backupFailed' : 'sentinel.store.migrationFailed');
+    const backups = await assertTakeover(storePath, artifact);
+    assert.deepEqual(backups.filter(f => f.endsWith('.partial')), [], 'a failed backup removes its partial copy');
+    if (point === 'backup:after-copy') assert.deepEqual(backups.filter(f => f.endsWith('.bak')), [], 'a failed backup publishes nothing');
+  });
+}
