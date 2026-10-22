@@ -56,19 +56,43 @@ test('pack with only core built refuses a missing entry in the CLI closure befor
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('an optional package outside the CLI closure, unbuilt or absent, does not block the pack preflight', () => {
-  const root = workspace('farsight-pack-optional-');
+test('Farsight packs with Sentinel present but unbuilt (and Echo unbuilt) beside the CLI closure', () => {
+  const root = workspace('farsight-pack-unbuilt-');
   try {
     builtCli(root);
-    // Sentinel and Echo depend on core; nothing in the CLI closure depends on them.
-    manifest(root, 'sentinel', { name: '@farsight/sentinel', main: 'dist/index.js', bin: { 'farsight-sentinel': 'dist/cli.js' }, dependencies: { '@farsight/core': 'workspace:*' } });
+    // Sentinel and Echo depend on core; nothing in the CLI closure depends on them, and neither has a dist/.
+    manifest(root, 'sentinel', { name: '@farsight/sentinel', main: './dist/index.js', types: './dist/index.d.ts', bin: { 'farsight-sentinel': './dist/cli.js' }, dependencies: { '@farsight/core': 'workspace:*', ajv: '8.20.0' } });
+    write(root, 'packages/sentinel/src/index.ts', 'export {};');
     manifest(root, 'echo', { name: '@farsight/echo', main: 'dist/index.js', dependencies: { '@farsight/core': 'workspace:*' } });
-    const unbuilt = pack(root, '--check');
-    assert.equal(unbuilt.status, 0, unbuilt.stderr);
+    const run = pack(root, '--check');
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /build prerequisites present/);
+    assert.equal(existsSync(join(root, 'packages/sentinel/dist')), false);
     assert.equal(existsSync(join(root, 'build/keep.txt')), true, '--check changes no artifact');
-    rmSync(join(root, 'packages/sentinel'), { recursive: true });
-    const absent = pack(root, '--check');
-    assert.equal(absent.status, 0, absent.stderr);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('Farsight packs with no Sentinel package in the workspace at all', () => {
+  const root = workspace('farsight-pack-absent-');
+  try {
+    builtCli(root);
+    assert.equal(existsSync(join(root, 'packages/sentinel')), false);
+    const run = pack(root, '--check');
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(existsSync(join(root, 'build/keep.txt')), true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a CLI closure that did depend on an unbuilt Sentinel would be refused, not skipped', () => {
+  const root = workspace('farsight-pack-dependent-');
+  try {
+    builtCli(root);
+    manifest(root, 'sentinel', { name: '@farsight/sentinel', main: './dist/index.js' });
+    manifest(root, 'cli', { name: '@farsight/cli', dependencies: { '@farsight/core': 'workspace:*', '@farsight/sentinel': 'workspace:*' } });
+    const run = pack(root, '--check');
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /missing: packages\/sentinel\/dist\/index\.js/);
+    assert.equal(existsSync(join(root, 'build/keep.txt')), true);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

@@ -4,11 +4,15 @@
 // bundled from `src/<x>.ts` with Sentinel's workspace dependencies inlined. Third-party
 // dependencies of that closure stay external and become the tarball's dependencies. The
 // tarball carries Sentinel's own version, runtime floor and `private` flag, not the app's.
+// Public types are required: every JavaScript export needs a `types` condition, and tsc's
+// declarations ship beside the bundles. A declaration that imports a workspace package, or
+// a module the tarball does not declare, is refused — it would not resolve for a consumer.
 //
 //   pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs
 //   → build/sentinel/farsight-sentinel-<sentinel version>.tgz
 import { build } from 'esbuild';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { builtinModules } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,18 +38,28 @@ if (missing.length) {
 }
 
 const target = (entry) => (typeof entry === 'string' ? entry : entry?.import ?? entry?.default);
-// subpath → its JavaScript target; non-JavaScript subpaths (schemas, package.json) are handled below
-const jsExports = Object.entries(typeof sentinel.exports === 'string' || !sentinel.exports ? { '.': sentinel.exports ?? sentinel.main } : sentinel.exports)
-  .map(([subpath, entry]) => [subpath, target(entry)])
+const rel = (file) => String(file).replace(/^\.\//, '');
+// subpath → its JavaScript target and declaration; non-JavaScript subpaths (schemas, package.json) are handled below
+const declared = typeof sentinel.exports === 'string' || !sentinel.exports
+  ? { '.': { types: sentinel.types, import: sentinel.exports ?? sentinel.main } } : sentinel.exports;
+const jsExports = Object.entries(declared)
+  .map(([subpath, entry]) => [subpath, target(entry), typeof entry === 'object' ? entry?.types : undefined])
   .filter(([, file]) => typeof file === 'string' && /\.js$/.test(file));
+const untyped = jsExports.filter(([, , types]) => typeof types !== 'string' || !/^dist\/.+\.d\.ts$/.test(rel(types)));
+if (untyped.length) fail('every JavaScript export needs a `types` condition under dist/ (public types are part of the package).', untyped.map(([subpath]) => `untyped: ${subpath}`));
+const missingTypes = jsExports.map(([, , types]) => rel(types)).filter((types) => !existsSync(join(dir, types)));
+if (missingTypes.length) fail('declarations are missing. Run `pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs`.', missingTypes.map((types) => `missing: packages/sentinel/${types}`));
+const schemaDir = join(dir, 'schemas');
+const schemaFiles = existsSync(schemaDir) ? readdirSync(schemaDir, { recursive: true }).map(String).filter((f) => f.endsWith('.json')) : [];
+if (declared['./schemas/*'] && !schemaFiles.length) fail('the manifest exports ./schemas/* but packages/sentinel/schemas has no JSON schema.');
 // `dist/<x>.js` → `src/<x>.ts`; the published file is `dist/<x>.mjs`.
 const entries = new Map();
 const entryFor = (target) => {
-  const rel = String(target).replace(/^\.\//, '');
-  const m = /^dist\/(.+)\.js$/.exec(rel);
-  if (!m) fail(`cannot map ${rel} to a source entry; expected dist/<name>.js.`);
+  const file = rel(target);
+  const m = /^dist\/(.+)\.js$/.exec(file);
+  if (!m) fail(`cannot map ${file} to a source entry; expected dist/<name>.js.`);
   const source = join(dir, 'src', `${m[1]}.ts`);
-  if (!existsSync(source)) fail(`packages/sentinel/src/${m[1]}.ts is missing for ${rel}.`);
+  if (!existsSync(source)) fail(`packages/sentinel/src/${m[1]}.ts is missing for ${file}.`);
   entries.set(m[1], source); // dist/contracts/index.js → dist/contracts/index.mjs
   return `dist/${m[1]}.mjs`;
 };
@@ -54,7 +68,8 @@ const bins = Object.fromEntries(Object.entries(typeof sentinel.bin === 'string' 
 if (!Object.keys(bins).length || !jsExports.some(([subpath]) => subpath === '.')) {
   fail('the Sentinel manifest needs a `bin` and a root export (`exports["."]` or `main`).');
 }
-const exportsMap = Object.fromEntries(jsExports.map(([subpath, file]) => [subpath, `./${entryFor(file)}`]));
+// `types` first: TypeScript takes the first condition that matches.
+const exportsMap = Object.fromEntries(jsExports.map(([subpath, file, types]) => [subpath, { types: `./${rel(types)}`, import: `./${entryFor(file)}` }]));
 exportsMap['./package.json'] = './package.json';
 
 // Third-party dependencies of the closure: kept external, declared once with one range.
@@ -88,9 +103,29 @@ for (const target of new Set(Object.values(bins))) {
   if (!text.startsWith('#!')) writeFileSync(path, '#!/usr/bin/env node\n' + text);
 }
 
+// tsc's declarations, in their own layout: `./x.js` specifiers inside them resolve to `./x.d.ts`.
+const specifiers = new Set();
+const dist = join(dir, 'dist');
+for (const file of readdirSync(dist, { recursive: true }).map(String).filter((f) => f.endsWith('.d.ts'))) {
+  const text = readFileSync(join(dist, file), 'utf8').replace(/^\/\/# sourceMappingURL=\S+$/m, '').trimEnd() + '\n';
+  for (const m of text.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+|\/\/\/\s*<reference\s+types=)["']([^"']+)["']/gm)) specifiers.add(m[1]);
+  mkdirSync(dirname(join(out, 'dist', file)), { recursive: true });
+  writeFileSync(join(out, 'dist', file), text);
+}
+const bare = [...specifiers].filter((s) => !s.startsWith('.'));
+const packageOf = (s) => (s.startsWith('@') ? s.split('/').slice(0, 2).join('/') : s.split('/')[0]);
+const unresolvable = bare.filter((s) => {
+  const name = packageOf(s);
+  if (s.startsWith('node:') || builtinModules.includes(name)) return !dependencies['@types/node'];
+  return name.startsWith('@farsight/') || !dependencies[name];
+});
+if (unresolvable.length) {
+  fail('a declaration imports a module a consumer could not resolve (a workspace package, or one the tarball does not declare; node: builtins need @types/node).', unresolvable.map((s) => `import: ${s}`));
+}
+
 const files = ['dist'];
-if (existsSync(join(dir, 'schemas'))) {
-  cpSync(join(dir, 'schemas'), join(out, 'schemas'), { recursive: true });
+if (schemaFiles.length) {
+  cpSync(schemaDir, join(out, 'schemas'), { recursive: true });
   files.push('schemas');
   exportsMap['./schemas/*'] = './schemas/*';
 }
@@ -100,7 +135,7 @@ writeFileSync(join(out, 'package.json'), JSON.stringify({
   ...(sentinel.private ? { private: true } : {}),
   description: sentinel.description ?? 'Optional Sentinel package for Farsight, installed and run separately from farsight-cli.',
   license: 'MIT', ...(pkg.repository ? { repository: pkg.repository } : {}), type: 'module',
-  bin: bins, exports: exportsMap, files,
+  bin: bins, types: exportsMap['.'].types, exports: exportsMap, files,
   ...(Object.keys(dependencies).length ? { dependencies } : {}),
   engines: { node: sentinel.engines?.node ?? pkg.engines?.node ?? '>=24' },
 }, null, 2) + '\n');
