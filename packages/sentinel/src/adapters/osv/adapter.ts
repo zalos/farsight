@@ -21,9 +21,9 @@ export const OSV_IMAGE_PLATFORMS = Object.freeze([
   Object.freeze({ platform: 'linux/arm64', architecture: 'arm64', state: 'measured' as const,
     manifest: 'sha256:de2dcd79d417411e488fc6f2b37060685f33f1fcadf1a9282fae7322ec4c3a49',
     evidence: 'darwin-arm64 host, Docker Desktop 4.65.0 with Engine 29.2.1; OSV conformance 2026-10-22' }),
-  Object.freeze({ platform: 'linux/amd64', architecture: 'amd64', state: 'unmeasured' as const,
+  Object.freeze({ platform: 'linux/amd64', architecture: 'amd64', state: 'measured' as const,
     manifest: 'sha256:d2c46aa2483c4e02759bc25f2224d28a5ceeb3dca5a1ecd1f569fbed83a626f0',
-    evidence: 'listed in the pinned index; not installed here and no native amd64 host measured' }),
+    evidence: 'native Ubuntu 24.04.5 x64, Docker 28.0.4, Node 24.22.0; 21 conformance tests, zero skips and installed worker one finding; https://github.com/zalos/farsight/actions/runs/39788785215' }),
 ]);
 export const OSV_MEASURED_ARCHITECTURES: ReadonlySet<string> = new Set(OSV_IMAGE_PLATFORMS.filter(p => p.state === 'measured').map(p => p.architecture));
 

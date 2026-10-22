@@ -39,7 +39,7 @@ test('the adapter is pinned to the official release and image, offline, with the
   assert.equal(createAdapterRegistry([OSV_ADAPTER]).get('advisories-osv').kind, 'external');
   assert.equal(OSV_SUPPORT.mode, 'full-offline');
   assert.equal(OSV_SUPPORT.reachability, 'not-assessed');
-  assert.deepEqual(OSV_SUPPORT.platforms.map((p: any) => `${p.platform}:${p.state}`), ['linux/arm64:measured', 'linux/amd64:unmeasured']);
+  assert.deepEqual(OSV_SUPPORT.platforms.map((p: any) => `${p.platform}:${p.state}`), ['linux/arm64:measured', 'linux/amd64:measured']);
 });
 
 test('fixtures are original, synthetic and stored under non-manifest names', () => {
@@ -143,8 +143,11 @@ test('a failed engine, an unloaded database, a stale snapshot, a changed copy an
   assert.equal(row(skipped, 'web/package-lock.json'), 'partial:componentsSkipped');
   assert.equal(skipped.components.find((c: any) => c.name === 'sentinel-fixture-beta')!.assessed, false, 'a component the engine would not match is not assessed');
   const amd = run(t, ENGINE, {}, { arch: 'amd64' });
-  assert.equal(amd.platform.state, 'refused');
-  assert.equal(amd.findings.length, 0);
+  assert.equal(amd.platform.state, 'measured');
+  assert.ok(amd.findings.length > 0);
+  const unlisted = run(t, ENGINE, {}, { arch: 'riscv64' });
+  assert.equal(unlisted.platform.state, 'refused');
+  assert.equal(unlisted.findings.length, 0);
   return code(() => run(t, ENGINE, { job: sha('another job') })).then(c => assert.equal(c, 'sentinel.osv.outputInvalid'));
 });
 

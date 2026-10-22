@@ -224,3 +224,5 @@ synthetic fixtures and runtime-only positive controls). Measured on 2026-10-22 (
 no finding, `lodash@4.17.11` (lockfile) 7 advisory groups and `jackson-databind@2.9.8` (POM, exact) 60; a scan with the
 npm archive took about 7–10 s. The adapter is not registered and nothing exported runs it: the package gate is partial
 until the planner and command integrate it.
+
+The offline advisory adapter is measured on Linux arm64 and native Linux amd64. The [amd64 qualification](https://github.com/zalos/farsight/actions/runs/39788785215) passed 21 tests with zero skips and ran the installed worker against its original fixtures. Full installed CLI registration remains a separate integration gate.

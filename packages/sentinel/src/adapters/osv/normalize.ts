@@ -188,7 +188,7 @@ export function normalizeOsvRun(input: OsvNormalizeInput): OsvRunResult {
     return deepFreeze({ ...base, ...empty, platform: { architecture: outcome.container?.image?.architecture ?? null, state: 'refused' as const }, engineExit: null, engineFailure: null, coverage: allError(reason) });
   }
   const architecture = outcome.container?.image?.architecture ?? null;
-  const candidate = architecture !== null && architecture === input.qualifyingArchitecture && OSV_IMAGE_PLATFORMS.some(p => p.architecture === architecture && p.state === 'unmeasured');
+  const candidate = architecture !== null && architecture === input.qualifyingArchitecture && OSV_IMAGE_PLATFORMS.some(p => p.architecture === architecture && !OSV_MEASURED_ARCHITECTURES.has(p.architecture));
   if (!architecture || (!OSV_MEASURED_ARCHITECTURES.has(architecture) && !candidate)) {
     return deepFreeze({ ...base, ...empty, platform: { architecture, state: 'refused' as const }, engineExit: null, engineFailure: null, coverage: allError('sentinel.osv.coverage.platformUnmeasured') });
   }

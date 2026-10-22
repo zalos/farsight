@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { rmSync, writeFileSync } from 'node:fs';
 import { createAdapterRegistry } from '../dist/execution/registry.js';
 import { createExecutionService } from '../dist/execution/service.js';
-import { OSV_ADAPTER, runOsvAttempt, explainAdvisoryChanges } from '../dist/adapters/osv/index.js';
+import { OSV_ADAPTER, OSV_MEASURED_ARCHITECTURES, runOsvAttempt, explainAdvisoryChanges } from '../dist/adapters/osv/index.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
 import { capturedTree, syntheticSnapshot, storedZip, sha } from './osv-helpers.ts';
 
@@ -45,7 +45,7 @@ test('lockfiles match completely, a Maven manifest says what it cannot know, an 
   assert.equal(r.attempt, 'succeeded');
   assert.equal(r.engineExit, 1, 'advisories found');
   assert.equal(r.engineFailure, null);
-  assert.equal(r.platform.state, QUALIFY ? 'candidate' : 'measured');
+  assert.equal(r.platform.state, QUALIFY && !OSV_MEASURED_ARCHITECTURES.has(QUALIFY) ? 'candidate' : 'measured');
   assert.equal(row(r, 'web/package-lock.json'), 'complete:');
   assert.equal(row(r, 'web/pnpm-lock.yaml'), 'complete:');
   assert.equal(row(r, 'api/pom.xml'), 'partial:versionsUnknown,transitivesNotResolved');
