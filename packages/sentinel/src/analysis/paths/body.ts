@@ -92,14 +92,15 @@ export function localNames(text: string, ownName: string | undefined): Set<strin
   for (const m of text.matchAll(/\b(?:const|let|var|class|function\s*\*?)\s+([\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*)/gu)) out.add(m[1]!);
   for (const m of text.matchAll(/\b(?:const|let|var)\s*([{[][^=;]*?[}\]])\s*=/gu)) addAll(m[1]!);
   for (const m of text.matchAll(/\bcatch\s*\(([^)]*)\)/gu)) addAll(m[1]!);
-  // Parameter lists: every balanced parenthesised group followed (after an optional type) by `=>` or a body. Nested
-  // parentheses (`(sink: () => void)`) are included whole.
+  // Parameter lists: every name inside any parenthesised group. Telling a parameter list from a call's arguments needs
+  // a parser (a type or a comment can sit between `)` and the body), so every group counts: a name collected too many
+  // only stops the search following one edge, which it reports; a name missed would let it follow a shadowed call.
+  for (const m of text.matchAll(/\(([^()]*)\)/gu)) addAll(m[1]!);
   for (let i = 0; i < text.length; i++) {
     if (text[i] !== '(') continue;
     let depth = 0, j = i;
     for (; j < text.length; j++) { if (text[j] === '(') depth++; else if (text[j] === ')' && --depth === 0) break; }
-    if (j >= text.length) break;
-    if (/^\s*(?::[^;{}]*?)?(=>|\{)/u.test(text.slice(j + 1, j + 400))) addAll(text.slice(i + 1, j));
+    addAll(text.slice(i + 1, j));
   }
   for (const m of text.matchAll(/([\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*)\s*=>/gu)) out.add(m[1]!);
   if (ownName) {

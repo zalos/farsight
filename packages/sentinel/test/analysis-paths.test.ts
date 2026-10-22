@@ -350,3 +350,61 @@ export function pickUnicode() {
   const env = await paths([{ from: id('src/value.ts', 'pickUnicode'), to: id('src/db.ts', 'query') }]);
   assert.deepEqual(outcome(env), ['not-reached-bounded', 'functionAsValue']);
 });
+
+// ---- review round 3 (SOL, 5047b42): escaped identifiers, distant parameter lists, mutated inputs, unverified bytes ----
+
+test('round 3: an escaped identifier makes a function opaque, a distant parameter list still shadows, and a mutated input is rebuilt', needsStore, async t => {
+  const { paths } = await setup(t, { ...PATHS_APP, 'src/escape.ts': `import { query } from './db.js';
+
+export function sink() {
+  return query('drop');
+}
+
+export function pickEscaped() {
+  return \\u0073ink;
+}
+
+export function callEscaped() {
+  return \\u{73}ink();
+}
+
+export function dispatch(sink: () => void): void /* ${'x'.repeat(600)} */ {
+  sink();
+}
+` });
+  const env = await paths([
+    { from: id('src/escape.ts', 'pickEscaped'), to: id('src/db.ts', 'query') },
+    { from: id('src/escape.ts', 'callEscaped'), to: id('src/escape.ts', 'sink') },
+    { from: id('src/escape.ts', 'dispatch'), to: id('src/escape.ts', 'sink') },
+  ]);
+  assert.deepEqual(outcome(env, 0), ['not-reached-bounded', 'escapedIdentifier']);
+  assert.notEqual(env.results[1].outcome, 'reached');
+  assert.notEqual(env.results[2].outcome, 'reached');
+  assert.ok(env.results[2].frontierReasons.includes('sentinel.paths.shadowedCall'));
+});
+
+test('round 3: parser evidence changed after it was cached is never served from the cache', needsStore, async t => {
+  const start = (body: string) => ({ ...PATHS_APP, 'src/start.ts': `import { query } from './db.js';\n\nexport function start() {\n  ${body}\n}\n` });
+  const a = await setup(t, start('return query(\'select 1\');'));
+  const b = await setup(t, start('return 0;'));
+  const q = [{ from: id('src/start.ts', 'start'), to: id('src/db.ts', 'query') }];
+  // Mutable copies that a caller could change after caching.
+  const analysis: any = { sourceId: 'app', artifact: structuredClone(a.analysis.artifact), index: structuredClone(a.analysis.index) };
+  assert.deepEqual(outcome(await boundedCallPaths({ snapshot: a.snapshot, analysis, queries: q, readContent: a.readContent })), ['reached']);
+  Object.assign(analysis.artifact, structuredClone(b.analysis.artifact));
+  Object.assign(analysis.index, structuredClone(b.analysis.index));
+  const env = await boundedCallPaths({ snapshot: b.snapshot, analysis, queries: q, readContent: b.readContent });
+  assert.notEqual(env.results[0].outcome, 'reached');
+  assert.equal(env.analysisFingerprint, b.analysis.artifact.analysis.fingerprint);
+});
+
+test('round 3: imported locations are checked against verified captured bytes, never a reader\'s length', needsStore, async t => {
+  const { doc, run, entry, snapshot, text } = await importFixture(t);
+  const routes = entry('src/routes.ts');
+  const wide = { ...doc, flows: [{ ...doc.flows[0], source: { ...doc.flows[0]!.source, span: { startByte: 0, endByte: routes.bytes + 100 } } }] };
+  const authorization = ownerConfirms(t, deepImportIntent(text(wide), snapshot.id));
+  // A reader returning more, unrelated bytes cannot widen what a span may cover.
+  const r: any = await importDeepAnalysis({ document: text(wide), snapshot, authorization, importedAt: '2026-10-22T10:00:00Z', readContent: async () => Buffer.alloc(100_000, 0) });
+  assert.equal(r.observations.length, 0);
+  assert.deepEqual(r.unknown.map((u: any) => u.reasonCode), ['sentinel.deep.contentUnverified']);
+});

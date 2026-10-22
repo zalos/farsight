@@ -24,6 +24,7 @@ export const PATH_REASON_CODES = Object.freeze([
   'sentinel.paths.analysisIncomplete', 'sentinel.paths.unknownNode', 'sentinel.paths.inactiveEdge',
   'sentinel.paths.notDataFlow', 'sentinel.paths.graphOnly', 'sentinel.paths.deferredStep', 'sentinel.paths.siteUnplaced',
   'sentinel.paths.unrecordedCall', 'sentinel.paths.functionAsValue', 'sentinel.paths.bodyUnread', 'sentinel.paths.shadowedCall',
+  'sentinel.paths.escapedIdentifier',
 ] as const);
 export type PathReason = typeof PATH_REASON_CODES[number];
 
@@ -68,10 +69,12 @@ interface GraphIndex {
   /** Distinct recorded call sites (byte starts of call-edge occurrences) per file. */
   readonly callSites: ReadonlyMap<string, readonly number[]>;
   readonly functionNames: ReadonlySet<string>;
+  /** What the entry was built from, checked on every cache hit. */
+  readonly stamp: string;
 }
 
 /** Per request: whether a node's text is accounted for by recorded calls, and the names it binds locally. */
-type Accounted = Map<string, { reason: PathReason | null; locals: ReadonlySet<string> }>;
+type Accounted = Map<string, { reason: PathReason | null; locals: ReadonlySet<string>; opaque?: boolean }>;
 
 const indexes = new WeakMap<object, WeakMap<object, Map<string, GraphIndex>>>();
 
@@ -85,8 +88,10 @@ function indexOf(analysis: PathAnalysis, kinds: readonly PathEdgeKind[]): GraphI
   let perArtifact = perIndex.get(analysis.index);
   if (!perArtifact) perIndex.set(analysis.index, perArtifact = new Map());
   const key = [...kinds].sort().join(',');
+  // The cached entry is checked against what it was built from, so an object changed after it was cached is rebuilt.
+  const stamp = `${analysis.artifact.analysis.fingerprint}\u0000${analysis.index.analysisFingerprint}\u0000${analysis.index.snapshotId}\u0000${analysis.artifact.graph.nodes.length}\u0000${analysis.artifact.graph.edges.length}\u0000${analysis.index.occurrences.length}\u0000${analysis.index.nodes.length}`;
   const hit = perArtifact.get(key);
-  if (hit) return hit;
+  if (hit && hit.stamp === stamp) return hit;
   const graph = analysis.artifact.graph;
   const nodes = new Map(graph.nodes.map(n => [n.id, n]));
   const out = new Map<string, GraphEdge[]>();
@@ -121,7 +126,7 @@ function indexOf(analysis: PathAnalysis, kinds: readonly PathEdgeKind[]): GraphI
   }
   const functionNames = new Set(graph.nodes.filter(n => n.kind === 'function' || n.kind === 'component')
     .map(n => n.id.split('::').pop()!.split('.').pop()!).filter(Boolean));
-  const index = { nodes, out, sites, graphDigest, cycleOf, cycles, bodies, callSites, functionNames };
+  const index = { nodes, out, sites, graphDigest, cycleOf, cycles, bodies, callSites, functionNames, stamp };
   perArtifact.set(key, index);
   return index;
 }
@@ -186,7 +191,7 @@ const CODE_KINDS = new Set(['function', 'component', 'page', 'route', 'class']);
  * frontier. Exactly placed whole-line text is read lexically (body.ts) and compared with the recorded call sites in
  * the same bytes.
  */
-async function accountedFor(ix: GraphIndex, accounted: Accounted, id: string, read: (content: string) => Promise<Uint8Array>): Promise<{ reason: PathReason | null; locals: ReadonlySet<string> }> {
+async function accountedFor(ix: GraphIndex, accounted: Accounted, id: string, read: (content: string) => Promise<Uint8Array>): Promise<{ reason: PathReason | null; locals: ReadonlySet<string>; opaque?: boolean }> {
   const known = accounted.get(id);
   if (known !== undefined) return known;
   const node = ix.nodes.get(id)!;
@@ -201,6 +206,13 @@ async function accountedFor(ix: GraphIndex, accounted: Accounted, id: string, re
       else {
         const text = bytes.subarray(body.startByte, body.endByte).toString('utf8');
         const own = id.split('::').pop()!.split('.').pop();
+        // A Unicode escape can spell any identifier (`\u0073ink` is `sink`): a lexical reading cannot tell which
+        // names such a function calls, binds or hands on, so none of its edges is followed and absence is not claimed.
+        if (/\\u(?:[0-9a-fA-F]{4}|\{[0-9a-fA-F]+\})/.test(text)) {
+          const result = { reason: 'sentinel.paths.escapedIdentifier' as PathReason, locals: new Set<string>(), opaque: true };
+          accounted.set(id, result);
+          return result;
+        }
         const scan = scanBody(text, ix.functionNames, own);
         locals = localNames(text, own);
         const recorded = (ix.callSites.get(body.path) ?? []).filter(b => b >= body.startByte && b < body.endByte).length;
@@ -234,6 +246,7 @@ async function search(ix: GraphIndex, accounted: Accounted, q: PathQuery, bounds
     for (const v of frontier) {
       const body = await accountedFor(ix, accounted, v, read);
       if (body.reason) reasons.add(body.reason);
+      if (body.opaque) continue;
       const edges = ix.out.get(v) ?? [];
       if (edges.length > bounds.maxFanout) reasons.add('sentinel.paths.fanoutLimit');
       for (const e of edges.slice(0, bounds.maxFanout)) {

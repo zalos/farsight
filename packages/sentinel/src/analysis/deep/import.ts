@@ -20,7 +20,7 @@ import type { ActionIntent } from '../../contracts/index.js';
 
 export const DEEP_REASON_CODES = Object.freeze([
   'sentinel.deep.malformed', 'sentinel.deep.notOwnerConfirmed', 'sentinel.deep.unbound',
-  'sentinel.deep.fileNotCaptured', 'sentinel.deep.contentMismatch', 'sentinel.deep.locationOutOfRange', 'sentinel.deep.locationNotRead',
+  'sentinel.deep.fileNotCaptured', 'sentinel.deep.contentMismatch', 'sentinel.deep.contentUnverified', 'sentinel.deep.locationOutOfRange', 'sentinel.deep.locationNotRead',
   'sentinel.deep.importedNotExecuted', 'sentinel.deep.toolScopeOnly', 'sentinel.deep.buildStated',
 ] as const);
 export type DeepReason = typeof DEEP_REASON_CODES[number];
@@ -120,16 +120,24 @@ export async function importDeepAnalysis(request: DeepImportRequest): Promise<De
   // The analyzer read something other than this capture: none of its results are about this source.
   if (fileProblems.length) return { status: 'unbound', reasonCode: 'sentinel.deep.unbound', documentDigest, files: fileProblems.slice(0, 1000) };
 
-  const lengths = new Map<string, number>();
-  const lengthOf = async (content: ArtifactId) => {
-    if (!lengths.has(content)) lengths.set(content, (await request.readContent(content)).length);
-    return lengths.get(content)!;
+  // A location is checked against the captured bytes themselves: the reader's bytes must hash to the content id and
+  // have the captured length, so a reader returning other or longer bytes cannot widen what a span may cover.
+  const capturedBytes = new Map([...captured.values()].map(c => [c.content, c.bytes]));
+  const lengths = new Map<string, Promise<number | undefined>>();
+  const lengthOf = (content: ArtifactId) => {
+    let p = lengths.get(content);
+    if (!p) lengths.set(content, p = request.readContent(content).then(bytes => {
+      const ok = sha(bytes) === content && bytes.length === capturedBytes.get(content);
+      return ok ? bytes.length : undefined;
+    }, () => undefined));
+    return p;
   };
   const locate = async (l: DeepImportLocation): Promise<DeepReason | SourceEvidence> => {
     const content = read.get(l.relativePath);
     if (!content) return 'sentinel.deep.locationNotRead';
     if (content !== l.content) return 'sentinel.deep.contentMismatch';
     const length = await lengthOf(content);
+    if (length === undefined) return 'sentinel.deep.contentUnverified';
     if (!(l.span.startByte < l.span.endByte && l.span.endByte <= length)) return 'sentinel.deep.locationOutOfRange';
     return { snapshotId: request.snapshot.id, sourceId: doc.binding.sourceId, relativePath: l.relativePath, content, span: { startByte: l.span.startByte, endByte: l.span.endByte } };
   };
