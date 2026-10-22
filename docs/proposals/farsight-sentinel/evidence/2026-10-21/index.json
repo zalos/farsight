@@ -1,0 +1,32 @@
+{
+  "format": "sentinel-feasibility-evidence/draft-1",
+  "date": "2026-10-21",
+  "scope": "Original synthetic evidence only; scanner streams are UTF-8 scrubbed by the harness. No tool binaries, source worktrees or provider content.",
+  "files": [
+    {
+      "path": "compiled-parser-files.json",
+      "sha256": "b9ce6006319be7e2abe00d33724ede19b631e6b7065d5ab1723745c64208cd3e",
+      "bytes": 17035
+    },
+    {
+      "path": "local-artifacts.tgz",
+      "sha256": "e29ac945633c357eb8d6ba6901ce0e8dd999b2dc9c7bce8e42630f98ada66f9b",
+      "bytes": 237686
+    },
+    {
+      "path": "local-results.json",
+      "sha256": "415278f3da440a718bcffd0b76419bfdb42bc3c4c277d09d0899bcd7f8aa2e52",
+      "bytes": 58865
+    },
+    {
+      "path": "scanner-results.json",
+      "sha256": "f82df484b01c9cd34c63e1cca53a5668d302ff2e810517f63df19ae9c38922ff",
+      "bytes": 303506
+    },
+    {
+      "path": "scanners-initial-failed.json",
+      "sha256": "1ea79adc62eefc3a80fcdf51feb77b71ac99907f203dfe42f440d63a51adc07a",
+      "bytes": 184514
+    }
+  ]
+}
