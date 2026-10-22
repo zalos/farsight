@@ -112,12 +112,13 @@ export async function acquireStoreOwner(storePath: string, options: AcquireOptio
     if (!hasIdentity(layout.owner, lockFile.identity) || !hasIdentity(layout.root, root.identity)) {
       throw new StoreError('sentinel.store.identityChanged', { path: layout.root });
     }
-    const owner = new Owner(db, runtime, layout, root.filesystem, root.identity, lockFile.identity, storeId, epoch);
+    // Everything that can fail happens before the Owner exists: its constructor is the only place that records
+    // the store as held in this process, so a failed acquisition leaves no registration behind to clean up.
     writeDescriptor(layout, {
       format: 'sentinel-owner-descriptor/draft-1', storeId, epoch, pid: process.pid,
       acquiredAt: new Date().toISOString(), node: runtime.node, sqlite: runtime.sqliteVersion, platform: `${runtime.platform}-${runtime.arch}`,
     });
-    return owner;
+    return new Owner(db, runtime, layout, root.filesystem, root.identity, lockFile.identity, storeId, epoch);
   } catch (error) {
     release(db);
     throw error;

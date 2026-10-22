@@ -2,7 +2,7 @@
 // takeover, cooperative release, closed and stale capabilities, resource ordering and identity binding.
 import { test as nodeTest, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { acquireStoreOwner } from '../dist/store/owner.js';
@@ -179,4 +179,21 @@ test('the epoch and store id are the coordinatorEpoch and store label of the sha
     const checked = validateEnvelope('attempt', fixture);
     assert.equal(checked.ok, true, JSON.stringify(checked));
   } finally { owner.close(); }
+});
+
+test('a failed descriptor publication rolls the whole acquisition back: same-process retry and other processes succeed', async () => {
+  const store = freshStore();
+  (await acquireStoreOwner(store)).close();
+  mkdirSync(join(store, 'owner.json'), { mode: 0o700 }); // renaming the descriptor over a folder fails
+  await assert.rejects(acquireStoreOwner(store), (e: unknown) => isStoreError(e, 'sentinel.store.ioFailure')
+    && (e as any).detail.operation === 'write-descriptor');
+  assert.deepEqual(readdirSync(store).filter(f => f.endsWith('.tmp')), [], 'no descriptor temp file is left');
+  // Another process gets past the lock (so it was released) and then meets the same folder-shaped descriptor.
+  assert.deepEqual(probeOwnership(store), { outcome: 'refused', code: 'sentinel.store.ioFailure' }, 'the OS lock was released');
+  rmSync(join(store, 'owner.json'), { recursive: true });
+  const retry = await acquireStoreOwner(store);
+  retry.assertHeld();
+  assert.deepEqual(probeOwnership(store), { outcome: 'refused', code: 'sentinel.store.ownedElsewhere' });
+  retry.close();
+  assert.equal(probeOwnership(store).outcome, 'acquired');
 });
