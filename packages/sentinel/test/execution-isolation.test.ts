@@ -1,0 +1,208 @@
+// Real-container isolation canaries. They run only with SENTINEL_ISOLATION=1 (the dedicated CI job sets it);
+// there, a missing or unqualified container runtime or a missing pinned image is a failure, never a skip.
+// Without it, only these real-container cases skip, with the reason below; the pure argument and validation
+// checks at the top always run.
+import { test, after, before } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { ContainerBackend, createArgs, validateContainer, LABELS, ISOLATION_POLICY, isolationQualification } from '../dist/execution/isolation.js';
+import { createAdapterRegistry, DEFAULT_ADAPTER_LIMITS } from '../dist/execution/registry.js';
+import { superviseAttempt } from '../dist/execution/supervisor.js';
+import { isExecutionError } from '../dist/execution/errors.js';
+import { inputs, ownerIn, removeScratch, scratch, work, WORKER } from './execution-helpers.ts';
+
+/** node:22-alpine as an OCI index pinned by digest (linux/arm64 and linux/amd64). Installed ahead; never pulled here. */
+export const CANARY_IMAGE = 'node@sha256:ebc216c22db53dbde85719a874978d5aec04e6e405ad26a3804c6f9abc4ca1a9';
+const enabled = process.env.SENTINEL_ISOLATION === '1';
+const skip = !enabled && 'real-container canary: set SENTINEL_ISOLATION=1 with a qualified local Docker and the pinned canary image installed';
+const is = (code: string) => (e: unknown) => isExecutionError(e) && e.code === code;
+
+const spec = {
+  image: { reference: CANARY_IMAGE, id: 'sha256:x', os: 'linux', architecture: 'arm64' },
+  command: ['node', '-e', '0'], limits: { ...DEFAULT_ADAPTER_LIMITS }, inputDir: '/private/in', outputDir: '/private/out',
+  labels: { owner: 'nonce', store: 'store-1', attempt: 'att-1', epoch: 'epoch-1', invocation: `sha256:${'a'.repeat(64)}` },
+  adapter: { id: 'tool', digest: `sha256:${'b'.repeat(64)}` }, user: '501:20',
+};
+
+test('the create arguments pin every isolation control and never pull', () => {
+  const args = createArgs(spec, 'arm64');
+  const flag = (name: string) => args.flatMap((a, i) => (a === name ? [args[i + 1]] : []));
+  assert.deepEqual(flag('--pull'), ['never']);
+  assert.deepEqual(flag('--network'), ['none']);
+  assert.deepEqual(flag('--user'), ['501:20']);
+  assert.deepEqual(flag('--cap-drop'), ['ALL']);
+  assert.deepEqual(flag('--security-opt'), ['no-new-privileges:true']);
+  assert.deepEqual(flag('--memory'), flag('--memory-swap'));
+  assert.deepEqual(flag('--log-driver'), ['none']);
+  assert.ok(args.includes('--read-only') && args.includes('--init'));
+  assert.deepEqual(flag('--mount'), ['type=bind,source=/private/in,target=/input,readonly', 'type=bind,source=/private/out,target=/output']);
+  assert.ok(!args.some(a => /docker\.sock|privileged|host/.test(a)), 'no socket, privilege or host namespace');
+  assert.equal(args.at(-3), CANARY_IMAGE);
+});
+
+test('a container whose settings differ from the spec is refused, naming the setting', () => {
+  const good = {
+    Id: 'c'.repeat(64),
+    Config: { Image: CANARY_IMAGE, User: '501:20', OpenStdin: true, Tty: false, Env: ['PATH=/usr/bin', 'HOME=/tmp', 'SENTINEL_INPUT=/input', 'SENTINEL_OUTPUT=/output', 'SENTINEL_ADAPTER_ID=tool', `SENTINEL_ADAPTER_DIGEST=sha256:${'b'.repeat(64)}`],
+      Labels: { [LABELS.owner]: 'nonce', [LABELS.store]: 'store-1', [LABELS.attempt]: 'att-1', [LABELS.epoch]: 'epoch-1', [LABELS.invocation]: `sha256:${'a'.repeat(64)}` } },
+    HostConfig: { NetworkMode: 'none', ReadonlyRootfs: true, CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], IpcMode: 'none',
+      Memory: spec.limits.memoryBytes, MemorySwap: spec.limits.memoryBytes, NanoCpus: spec.limits.cpus * 1e9, PidsLimit: spec.limits.pids,
+      LogConfig: { Type: 'none' }, Init: true, Tmpfs: { '/tmp': `rw,noexec,nosuid,nodev,size=${spec.limits.tmpfsBytes},mode=1777` } },
+    Mounts: [{ Type: 'bind', Destination: '/input', RW: false }, { Type: 'bind', Destination: '/output', RW: true }],
+  };
+  validateContainer(good, spec, ['PATH=/usr/bin']);
+  const variants: Array<[string, (c: any) => void]> = [
+    ['network', c => { c.HostConfig.NetworkMode = 'bridge'; }],
+    ['read-only root', c => { c.HostConfig.ReadonlyRootfs = false; }],
+    ['mounts', c => { c.Mounts.push({ Type: 'bind', Destination: '/var/run/docker.sock', RW: true }); }],
+    ['mounts', c => { c.Mounts[0].RW = true; }],
+    ['environment', c => { c.Config.Env.push('SSH_AUTH_SOCK=/tmp/agent'); }],
+    ['label epoch', c => { c.Config.Labels[LABELS.epoch] = 'epoch-other'; }],
+    ['privileged', c => { c.HostConfig.Privileged = true; }],
+    ['capabilities', c => { c.HostConfig.CapAdd = ['NET_ADMIN']; }],
+    ['memory', c => { c.HostConfig.MemorySwap = -1; }],
+    ['user', c => { c.Config.User = '0:0'; }],
+  ];
+  for (const [setting, change] of variants) {
+    const c = structuredClone(good); change(c);
+    assert.throws(() => validateContainer(c, spec, ['PATH=/usr/bin']), (e: unknown) => is('sentinel.execution.isolationMismatch')(e) && (e as any).detail.setting === setting, setting);
+  }
+});
+
+test('isolation qualification is exact host, runtime and server triples', () => {
+  assert.equal(isolationQualification(ISOLATION_POLICY, 'darwin-arm64', 'docker-desktop', 'linux-arm64')?.status, 'measured');
+  assert.equal(isolationQualification(ISOLATION_POLICY, 'linux-x64', 'docker-engine', 'linux-amd64')?.status, 'candidate');
+  assert.equal(isolationQualification(ISOLATION_POLICY, 'darwin-arm64', 'docker-engine', 'linux-arm64'), undefined);
+  assert.equal(isolationQualification(ISOLATION_POLICY, 'darwin-arm64', 'docker-desktop', 'linux-amd64'), undefined, 'no emulation');
+  assert.equal(isolationQualification(ISOLATION_POLICY, 'linux-arm64', 'docker-engine', 'linux-arm64'), undefined);
+});
+
+// Real containers from here on.
+const s = scratch('isolation');
+let owner: Awaited<ReturnType<typeof ownerIn>>;
+let backend: ContainerBackend;
+const source = readFileSync(WORKER, 'utf8');
+const captured = inputs(s.root);
+const secret = join(s.work, 'secret-canary.txt');
+writeFileSync(secret, 'synthetic canary that no worker may read\n');
+before(async () => {
+  if (!enabled) return;
+  owner = await ownerIn(s.root);
+  backend = await ContainerBackend.connect({ privateDir: s.root });
+});
+after(() => { owner?.close(); removeScratch(s.root); });
+
+let n = 0;
+function registryFor(behaviour: string, limits: Record<string, number> = {}, argument?: string) {
+  return createAdapterRegistry([{
+    id: `canary-${behaviour}`, version: '0.0.0-test', kind: 'external', isolation: 'container', image: CANARY_IMAGE,
+    command: ['node', '--input-type=module', '-e', source, behaviour, ...(argument ? [argument] : [])],
+    limits: { timeoutMs: 30_000, cancelGraceMs: 2_000, helloTimeoutMs: 15_000, memoryBytes: 256 * 1024 * 1024, pids: 64, tmpfsBytes: 16 * 1024 * 1024, ...limits },
+  }]);
+}
+const run = (behaviour: string, limits: Record<string, number> = {}, argument?: string, signal?: AbortSignal) =>
+  superviseAttempt({ owner, registry: registryFor(behaviour, limits, argument), adapterId: `canary-${behaviour}`, attemptId: `attempt-c${++n}`,
+    work, inputs: captured, scratchRoot: s.work, backend, signal });
+const docker = (...args: string[]) => spawnSync(backendDocker(), args, { encoding: 'utf8', env: { ...process.env } });
+const backendDocker = () => ['/usr/bin/docker', '/usr/local/bin/docker', '/opt/homebrew/bin/docker'].find(p => spawnSync(p, ['--version']).status === 0)!;
+const absent = (id: string) => /no such (container|object)/i.test(docker('inspect', '--type', 'container', id).stderr);
+const canary = (text: string) => JSON.parse(/canary (\{.*\})/.exec(text)?.[1] ?? '{}');
+
+test('the backend is a qualified local runtime; its facts are printed for the run log', { skip }, t => {
+  const f = backend.facts;
+  t.diagnostic(`sentinel-isolation-qualification host=${f.host} backend=${f.backend} server=${f.server} engine=${f.serverVersion} os=${JSON.stringify(f.operatingSystem)} cgroup=${f.cgroupVersion} status=${f.qualification.status}`);
+  assert.ok(isolationQualification(ISOLATION_POLICY, f.host, f.backend, f.server));
+});
+
+test('an honest worker in a container succeeds and its container is removed by exact identity', { skip }, async () => {
+  const o = await run('ok');
+  assert.equal(o.state, 'succeeded', JSON.stringify({ code: o.code, detail: o.detail, stderr: o.diagnostics.text.slice(0, 400) }));
+  assert.equal(o.worker?.kind, 'owned-container');
+  assert.deepEqual((o.worker as any).ownershipLabels, { store: owner.storeId, attempt: o.attemptId, epoch: owner.epoch });
+  assert.equal(o.cleanup, 'removed-owned-container');
+  assert.ok(absent(o.container!.id));
+  assert.equal(o.outputs.length, 1);
+});
+
+test('network canary: egress and name lookup fail, and the attempt is a recorded failure', { skip }, async t => {
+  const o = await run('network');
+  const report = canary(o.diagnostics.text);
+  t.diagnostic(`network canary ${JSON.stringify(report)}`);
+  assert.equal(o.code, 'sentinel.execution.workerExited', JSON.stringify(report));
+  assert.ok(report.tcp && report.tcp !== 'ESCAPED' && report.dns && report.dns !== 'ESCAPED', JSON.stringify(report));
+  assert.equal(o.cleanup, 'removed-owned-container');
+});
+
+test('host-file canary: no host path, sibling file, daemon socket or writable input/root is reachable', { skip }, async t => {
+  const o = await run('hostfile', {}, secret);
+  const report = canary(o.diagnostics.text);
+  t.diagnostic(`host-file canary ${JSON.stringify({ ...report, environment: (report.environment ?? []).join(' ') })}`);
+  assert.equal(o.code, 'sentinel.execution.workerExited', JSON.stringify(report));
+  for (const k of ['hostPath', 'besideAttempt', 'dockerSocket', 'writeInput', 'writeRoot']) assert.ok(report[k] && report[k] !== 'ESCAPED', `${k}: ${report[k]}`);
+  const leaked = (report.environment as string[]).filter(name => /^(USER|LOGNAME|SSH_|DOCKER_|GIT_|AWS_|GITHUB_|NPM_|PNPM_|CI$)/.test(name));
+  assert.deepEqual(leaked, []);
+});
+
+test('resource canaries: memory, processes and temporary storage are bounded', { skip }, async t => {
+  const memory = await run('memory', { memoryBytes: 64 * 1024 * 1024 });
+  assert.equal(memory.code, 'sentinel.execution.resourceExceeded', JSON.stringify({ code: memory.code, c: memory.container?.state }));
+  assert.equal(memory.container?.state?.oomKilled, true);
+  const pids = await run('pids', { pids: 16 });
+  const forked = canary(pids.diagnostics.text);
+  assert.notEqual(pids.state, 'succeeded');
+  assert.ok(typeof forked.started === 'number' && forked.started < 16, JSON.stringify(forked));
+  const tmp = await run('tmpfs', { tmpfsBytes: 1024 * 1024 });
+  assert.equal(canary(tmp.diagnostics.text).fillTmp, 'ENOSPC');
+  t.diagnostic(`resource canaries oom=${memory.container?.state?.oomKilled} forked=${forked.started}/16 tmpfs=${canary(tmp.diagnostics.text).fillTmp}`);
+  for (const o of [memory, pids, tmp]) assert.equal(o.cleanup, 'removed-owned-container');
+});
+
+test('malformed-output canary and deadline: the container itself is stopped and removed', { skip }, async () => {
+  const frame = await run('huge-frame');
+  assert.equal(frame.code, 'sentinel.execution.frameTooLarge');
+  const late = await run('hang', { timeoutMs: 3_000 });
+  assert.equal(late.state, 'timed-out');
+  const ac = new AbortController();
+  setTimeout(() => ac.abort(), 2_500);
+  const stubborn = await run('ignore-cancel', { cancelGraceMs: 500 }, undefined, ac.signal);
+  assert.equal(stubborn.state, 'canceled');
+  for (const o of [frame, late, stubborn]) { assert.equal(o.cleanup, 'removed-owned-container'); assert.ok(absent(o.container!.id)); }
+});
+
+test('a missing pinned image is refused and never pulled', { skip }, async () => {
+  const ref = `farsight-sentinel-intentionally-absent@sha256:${'0'.repeat(64)}`;
+  await assert.rejects(backend.inspectImage(ref), is('sentinel.execution.imageMissing'));
+  assert.notEqual(docker('image', 'inspect', ref).status, 0);
+});
+
+test('cleanup cannot target a container it does not own', { skip }, async () => {
+  const created = docker('create', '--pull', 'never', '--label', `${LABELS.owner}=someone-else`, CANARY_IMAGE, 'true');
+  assert.equal(created.status, 0, created.stderr);
+  const id = created.stdout.trim();
+  try {
+    assert.equal(await backend.remove(id, 'not-the-owner'), 'cleanup-failed');
+    await assert.rejects(backend.kill(id, 'not-the-owner'), is('sentinel.execution.cleanupFailed'));
+    assert.equal(backend.removeSync(id, 'not-the-owner'), 'cleanup-failed');
+    assert.equal(absent(id), false, 'the unrelated container is untouched');
+  } finally { docker('rm', '--force', id); }
+});
+
+test('closing the store owner removes a running worker container before the lock is released', { skip }, async () => {
+  const other = scratch('owner-close');
+  const o2 = await ownerIn(other.root);
+  const pending = superviseAttempt({ owner: o2, registry: registryFor('hang'), adapterId: 'canary-hang', attemptId: 'attempt-close', work,
+    inputs: inputs(other.root), scratchRoot: other.work, backend });
+  let id: string | undefined;
+  for (let i = 0; i < 100 && !id; i++) {
+    await new Promise(r => setTimeout(r, 100));
+    id = docker('ps', '-q', '--no-trunc', '--filter', `label=${LABELS.attempt}=attempt-close`).stdout.trim().split('\n')[0] || undefined;
+  }
+  assert.ok(id, 'the worker container started');
+  o2.close();
+  assert.ok(absent(id!), 'removed during owner close');
+  const outcome = await pending;
+  assert.notEqual(outcome.state, 'succeeded');
+  removeScratch(other.root);
+});
