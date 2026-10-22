@@ -33,10 +33,10 @@ identifiers, not GitHub PR numbers.
   Independent review and selected/native CI passed on their final source-equivalent candidates. Installed npm
   consumers exercise the library APIs, retained Next inputs after source removal, offline provider budgets,
   four-engine owner adoption/detach/join/wait/replay, and secret omission/privacy. These are scoped foundations:
-  canonical framework/path/provider dispatch, model evaluation, selected-stage integration and the GUI remain open.
-  The full owner report candidate is separate: its accepted evidence binding and conservative projection are reviewed,
-  and its installed five-engine two-capture comparison, official SARIF and offline-browser acceptance passed on the
-  qualified local macOS arm64 / Docker Desktop Linux arm64 host. Selected CI and merge are still pending. If either run has an accepted secret match, both report disclosure profiles
+  canonical framework/path/provider dispatch, model evaluation, selected-stage integration and the GUI remain open. The selected-rerun candidate retains exact admitted selections and parent evidence, but its integration review and merge are still pending; analysis-prerequisite reuse remains PR 27's separate gate.
+  The full owner report slice merged as [#155](https://github.com/zalos/farsight/pull/155), `63ecf4f0`, after independent
+  review and all required and selected CI checks. Its installed five-engine two-capture comparison, official SARIF
+  and offline-browser acceptance passed locally; the native scanner CLI job also passed on Linux amd64. If either run has an accepted secret match, both report disclosure profiles
   withhold every source excerpt, location and context-controlled name; a run without matches retains useful placement.
   A Git header capture correction merged as [#143](https://github.com/zalos/farsight/pull/143), `9a0fd21`.
 - PR 02 merged as [#134](https://github.com/zalos/farsight/pull/134), `269c3bc`, after contract/packaging
@@ -54,15 +54,15 @@ identifiers, not GitHub PR numbers.
   gates**. They are not new permission gates for implementation work the owner has already authorized.
 - Container-only external scanning with no host fallback (confirmed 2026-10-21) stays binding.
 
-## How execution runs (owner direction, 2026-10-21)
+## How execution runs (owner direction updated 2026-10-22)
 
 | Role | Who | Responsibility |
 |---|---|---|
 | Integration lead | Root (Codex lead session) | Owns shared contracts and dependencies, reviews integration, enforces each gate's definition of done, merges and runs the release |
-| Implementation | Claude Opus | Each package in its own worktree and PR, through validation and an open PR |
-| Review | SOL reviewers | Review each PR against its backlog gate; findings in Conventional Comments |
-| Final cleanup review | Claude Fable (CLI alias `fable`, confirmed installed; the reviewer of the existing [implementation review](claude-review-implementation.md)) | One touch-up review across the delivered product before release |
-| Final fixes / verification | Claude Opus fixes Fable's findings; SOL verifies them | No release row moves until verification is recorded |
+| Implementation | SOL implementers | Each package in its own worktree, with its affected validation and immutable review checkpoint |
+| Review | Independent SOL reviewers | Review each checkpoint against its backlog gate; findings in Conventional Comments; the implementer does not approve its own work |
+| Final PR review | Claude Opus | One final review of the completed PR before merge, after implementation and independent SOL verification |
+| Final fixes / verification | SOL implements corrections; an independent SOL reviewer verifies them | No merge or release row moves until its verification is recorded |
 
 All planned packages progress to the end of the backlog, then the end gates below, then release.
 

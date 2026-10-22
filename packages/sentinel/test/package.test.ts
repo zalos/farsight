@@ -55,6 +55,7 @@ test('no Farsight package depends on or imports Sentinel', () => {
 // added; nothing networked, no worker or cluster, and no static node:sqlite import anywhere.
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'service/scanner-assets.js': ['node:crypto', 'node:fs', 'node:path'],
+  'reports/accepted-secrets.js': ['@farsight/graph', 'node:crypto'],
   'reports/scanner.js': ['@farsight/core/dist/counts.js', '@farsight/core/dist/strings.js'],
   // The pattern adapter (PR 10): hashing and its own job files only; the engine runs through execution/ in a container.
   'adapters/drivers/canonical.js': ['node:fs'],

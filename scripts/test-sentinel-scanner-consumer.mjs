@@ -50,13 +50,25 @@ try{
  assert.equal((await cli('run',nextId,'--detach','--confirm')).status,0);assert.equal((await cli('wait',nextId)).status,2);
  for(const path of [...Object.keys(f.files),...Object.keys(secretFiles)])rmSync(join(f.ws,path),{force:true});await stopOwnService();
  const regenerated=(await cli('report',id)).body.facts.report;assert.deepEqual(regenerated.observations,report.observations);assert.deepEqual(regenerated.coverage,report.coverage);assert.equal(regenerated.ledgerSequence,report.ledgerSequence);
+ // Retain the full parent document before child activity; regenerating after it must preserve every accepted fact.
+ const parentFullPath=join(realpathSync.native(consumer.scratch),'parent-before.json');
+ assert.equal((await cli('report',id,'--full','--format','json','--out',parentFullPath)).status,0);
+ const parentFullBefore=JSON.parse(readFileSync(parentFullPath,'utf8'));
  // A selected rerun with the source gone: one unit, run through its own pinned container over the retained snapshot.
  const units=planned.body.facts.unitIds;assert.ok(units.length>1);const parentBefore=(await cli('report',id)).body.facts.report;
  const rerun=await cli('rerun',id,'--stage',units[0]);assert.deepEqual([rerun.status,rerun.body.outcome,rerun.body.facts.parentId],[0,'prepared',id],JSON.stringify(rerun.body));
  const rp=rerun.body.facts.preview;assert.deepEqual([rp.selected,rp.all,rp.units.length,rp.held.length],[[units[0]],false,1,units.length-1]);
- const child=rerun.body.facts.runId;const reran=await cli('run',child);assert.deepEqual([reran.status,reran.body.facts.state],[2,'completed'],JSON.stringify(reran.body));
+ const child=rerun.body.facts.runId;
+ assert.equal((await cli('rerun',id,'--stage',units[0])).body.facts.runId,child,'same pending selection joins the admitted child');
+ assert.equal((await cli('run',child,'--detach','--confirm')).status,0);
+ assert.equal((await cli('run',child,'--detach','--confirm')).body.facts.runId,child,'same running child joins across CLI connections');
+ const reran=await cli('wait',child);assert.deepEqual([reran.status,reran.body.facts.state],[2,'completed'],JSON.stringify(reran.body));
  const childReport=(await cli('report',child)).body.facts.report;const childAdapters=new Set(childReport.observations.map(o=>o.value.adapter));
  assert.ok(childAdapters.size<=1,'only the selected worker ran: '+[...childAdapters]);for(const a of childAdapters)assert.ok(adapters.has(a));
+ await stopOwnService();
+ const childFull=await cli('report',child,'--full');assert.equal(childFull.status,0,JSON.stringify(childFull.body));assert.equal(childFull.body.facts.completeness,'partial','held required units remain gaps in a full child report');
+ const fresh=await cli('rerun',id,'--stage',units[0]);assert.equal(fresh.status,0);assert.notEqual(fresh.body.facts.runId,child,'a terminal request creates a fresh child');
+ assert.equal((await cli('rerun',id,'--stage',units[0])).body.facts.runId,fresh.body.facts.runId,'the fresh pending generation is joined');
  const parentAfter=(await cli('report',id)).body.facts.report;assert.deepEqual(parentAfter.observations,parentBefore.observations);assert.deepEqual(parentAfter.coverage,parentBefore.coverage);
  // The full report from the installed command alone, with the source deleted and the service stopped: shareable and
  // private offline HTML and the JSON document, each written once to a new file; a second write to a path is refused.
@@ -66,7 +78,10 @@ try{
   const args=['report',id,'--full',...(name.endsWith('.html')?['--format','html']:[]),...extra,'--out',join(delivered,name)];
   assert.equal((await cli(...args)).status,0,name);assert.equal((await cli(...args)).body.reasonCode,'sentinel.report.outExists',name);
  }
- const doc=JSON.parse(readFileSync(join(delivered,'report.json'),'utf8'));assert.equal(doc.schema,'sentinel-report/draft-1');assert.equal(doc.disclosure.profile,'shareable');
+ const doc=JSON.parse(readFileSync(join(delivered,'report.json'),'utf8'));
+ // Evaluation time is the only new fact from rendering later; run ledger, observations, coverage and report IDs stay.
+ const withoutEvaluation=d=>{const {evaluatedAt,...rest}=d;return rest;};
+ assert.deepEqual(withoutEvaluation(doc),withoutEvaluation(parentFullBefore),'selected child activity cannot mutate the parent full report');assert.equal(doc.schema,'sentinel-report/draft-1');assert.equal(doc.disclosure.profile,'shareable');
  const shareable=readFileSync(join(delivered,'shareable.html'),'utf8');const priv=readFileSync(join(delivered,'private.html'),'utf8');
  for(const name of ['shareable.html','private.html','report.json','report.sarif'])clean(readFileSync(join(delivered,name),'utf8'),name);
  const secretFindings=doc.findings.filter(x=>x.ruleFamilyId.startsWith('sentinel.secrets.'));
@@ -89,5 +104,5 @@ try{
   await consumer.exec(process.execPath,['validate-sarif.mjs']);
  }
  if(process.env.SENTINEL_REPORT_DELIVERY)cpSync(delivered,process.env.SENTINEL_REPORT_DELIVERY,{recursive:true});
- console.log('sentinel scanner consumer ok: npm-only init twice, adoption, exact original packs, missing-asset refusal, owner-receipted tool/database adoption, plan, detach/join/wait through five real pinned containers, retained report after service restart and source removal; full report (five engines, secret values and secret-shaped names absent from every output) written once as shareable and private offline HTML and JSON, plus comparison of two genuine retained captures after source removal, from the installed command alone; incomplete required coverage stays exit 2');
+ console.log('sentinel scanner consumer ok: npm-only init twice, adoption, exact original packs, missing-asset refusal, owner-receipted tool/database adoption, plan, detach/join/wait through five real pinned containers, retained report after service restart and source removal; full report (five engines, secret values and secret-shaped names absent from every output) written once as shareable and private offline HTML and JSON, plus comparison of two genuine retained captures after source removal and a selected one-unit child with retained full reporting, pending/running joins, fresh terminal generation and immutable parent report, from the installed command alone; incomplete required coverage stays exit 2');
 }finally{await stopOwnService();consumer.cleanup();}

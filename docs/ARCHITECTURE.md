@@ -704,6 +704,25 @@ whole-analysis rerun follows the same rule; a plain `plan` of the same content s
 selected rerun whose held units carry required checks ends incomplete, and the preview counts them (`requiredHeld`).
 The parent's runs, results and report are unchanged.
 
+**A retained full report proves the bootstrap lineage again.** A selected child's completed analysis has no new
+inventory stage. The report reader resolves exactly the inventory its admitted plan reuses, following at most 64
+runs and refusing cycles. Every selected edge must match the durable parent id and that parent's exact admitted
+revision, digest, snapshot and reused inventory. The producer's own admitted bootstrap must name that inventory
+work revision; its accepted attempt must be the pinned coordinator inventory operation, with a retained invocation
+bound to that plan, snapshot and work. The existing bootstrap reader then verifies the retained inventory and parser
+artifacts. A genuine accepted publication from a sibling over the same snapshot is still refused, as is a parse/check
+publication or a missing invocation. No live registry, current scanner image or source checkout is needed for this
+read. Held units remain gaps; no parent observation or coverage record becomes the child's.
+
+Privacy knowledge also survives a selection. An ancestor proven by those same selection bindings may have an accepted
+Gitleaks match while the child holds Gitleaks and reruns Pattern. The minimal scanner report inherits matched-name withholding through the same verified lineage and shared accepted-secret validator, without importing any parent records into its observations or counts. The reader assesses that ancestor's accepted secret
+publication through the existing record-binding checks and applies the conservative projection to the child (and to a
+comparison whose selected baseline inherits that knowledge). It contributes only a withholding flag; no ancestor
+finding, coverage or comparison result becomes the child's. A clean accepted ancestor scan preserves ordinary excerpts
+and confirmed context labels. Missing/corrupt evidence refuses; a canceled ancestor with an accepted secret-scan
+publication conservatively refuses because the completed-run assessment cannot authenticate it. This does not widen
+completed-run eligibility or reuse analysis results as prerequisites.
+
 **Open gate: dependency-bearing selections are refused.** A selection where something that runs needs an analysis
 unit that does not run is refused (`prerequisiteNotReusable`), even when the parent published that unit under exactly
 the same terms; only the bootstrap is reused. The shipped planner's check units depend only on the bootstrap, so no
