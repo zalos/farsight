@@ -41,9 +41,8 @@ push, tags that commit and creates the Release; `gh run watch` follows it too.
 | `bump` | `patch` (default) · `minor` · `major`, applied to the root `package.json` version; ignored when `version` is set. A bump from a prerelease finishes it (`1.0.0-beta.1` + patch → `1.0.0`). |
 | `version` | an explicit `X.Y.Z`; must be after the current version |
 | `sentinel_version` | farsight-sentinel's own release version `A.B.C`; **required** while the checkout has `packages/sentinel`, must be after Sentinel's current version, and is never taken from farsight-cli's. It is written to `packages/sentinel/package.json` and the release manifest. |
-| `allow_pending_gates` | open the PR although acceptance gates are pending (a Sentinel feature the release needs is not built yet); a failed gate still stops it. Off by default: a real release needs every gate passed. |
 | `prerelease` | a tag such as `beta.1`, appended as `X.Y.Z-beta.1`; the GitHub Release is marked pre-release and an npm publish goes to the `next` dist-tag |
-| `dry_run` | run the gates, make the version commit on the runner, pack and smoke-test, print the version and the notes (job summary), and stop: no branch pushed, no PR. Can be dispatched from any branch; a real release refuses any branch but `main`. |
+| `dry_run` | run the gates, make the version commit on the runner, pack and smoke-test, run the acceptance (pending gates reported, not blocking — the only place they may be), print the version and the notes (job summary), and stop: no branch pushed, no PR, no tag. Can be dispatched from any branch; a real release refuses any branch but `main`. |
 
 ## What the release workflow does
 
@@ -153,14 +152,20 @@ npm configuration or `NODE_PATH`, its own `HOME`, and no way to resolve a worksp
 
 A pending gate is never reported as passed. Each names the capability the installed Sentinel reports for it; when
 the package reports that capability available, the gate **fails** until its check is written in the runner, so a
-release cannot claim a feature nothing verified. Exit 0 when nothing failed, 1 when a gate failed, 2 under
-`--require-complete` when a gate is pending.
+release cannot claim a feature nothing verified. Exit 0 only when every gate passed, 1 when a gate failed, 2 when a
+gate is pending.
+
+**Publication cannot skip a gate.** A real release-workflow run, publish.yml (whatever commit triggers it) and
+verify-release all require every gate passed; there is no input, variable or flag that waives one, and publish runs
+the acceptance before it tags, creates the Release, uploads or publishes to npm. `--allow-pending` exists only for
+checks that publish nothing: CI's `sentinel-package` job and a release **dry run** (no branch, no PR, no tag). A
+static test (`scripts/test/release-workflows.test.mjs`) holds the workflows to this.
 
 ```sh
 pnpm pack:cli && pnpm pack:sentinel
 node scripts/npm-acceptance.mjs --farsight build/farsight-cli-X.Y.Z.tgz --sentinel build/sentinel/farsight-sentinel-A.B.C.tgz \
   --expect-farsight X.Y.Z --expect-sentinel A.B.C [--expect-commit <sha>] [--only farsight|sentinel|both] [--modes global,local] \
-  [--require-complete] [--report acceptance.json]
+  [--allow-pending] [--report acceptance.json]     # --allow-pending: a development check only
 ```
 
 ## Verify a published release
@@ -171,8 +176,9 @@ node scripts/verify-release.mjs --tag vX.Y.Z         # locally; any machine with
 ```
 
 It reads `https://github.com/zalos/farsight/releases/download/vX.Y.Z/release-manifest.json`, downloads each tarball
-from the URL the manifest names for it and checks its size and SHA-256, then runs the acceptance on those URLs. It
-changes nothing and can be re-run at any time; it does not depend on publish.yml running again (a re-run of publish
+from the URL the manifest names for it and checks its size and SHA-256, then runs the acceptance on those URLs; a
+pending gate fails it like a failed one (`--diagnostic` reports pending gates locally and says it is not a
+verification; no workflow passes it). It changes nothing and can be re-run at any time; it does not depend on publish.yml running again (a re-run of publish
 skips a tag that exists).
 
 If publish fails after the merge (say, a flaky smoke test), fix the cause and re-run the failed run

@@ -29,10 +29,6 @@ on:
         description: farsight-sentinel's own release version A.B.C (required; never taken from farsight-cli's)
         type: string
         required: false
-      allow_pending_gates:
-        description: Open the PR even though acceptance gates are pending (features not built yet); failures still stop it
-        type: boolean
-        default: false
       prerelease:
         description: Prerelease tag such as beta.1 (optional; makes X.Y.Z-beta.1)
         type: string
@@ -62,7 +58,6 @@ jobs:
       BUMP: ${{ inputs.bump }}
       VERSION: ${{ inputs.version }}
       SENTINEL_VERSION: ${{ inputs.sentinel_version }}
-      ALLOW_PENDING: ${{ inputs.allow_pending_gates }}
       PRERELEASE: ${{ inputs.prerelease }}
       DRY_RUN: ${{ inputs.dry_run }}
       # a PR opened with GITHUB_TOKEN does not start pull_request workflows (GitHub's
@@ -166,7 +161,8 @@ jobs:
           test -s "$RUNNER_TEMP/smoke/g.json"
 
       # Six clean npm-only consumers (each package alone and both, global and project-local), installing from
-      # URLs. A real release needs every gate passed; a dry run, or allow_pending_gates, reports pending gates.
+      # URLs. A real release needs every gate passed: a pending gate stops it before any branch or PR exists. Only a
+      # dry run, which pushes nothing and opens no PR, may report pending gates (--allow-pending).
       - name: Accept both tarballs in clean npm-only consumers
         env:
           TAG: ${{ steps.release.outputs.tag }}
@@ -179,7 +175,7 @@ jobs:
             esac
           done < <(node scripts/release-manifest.mjs validate --tag "$TAG")
           commit="$(node -e "import('./packages/core/dist/version.js').then((m) => console.log(m.gitIdentity('.').commit))")"
-          if [ "$DRY_RUN" != "true" ] && [ "$ALLOW_PENDING" != "true" ]; then args+=(--require-complete); fi
+          if [ "$DRY_RUN" = "true" ]; then args+=(--allow-pending); fi
           node scripts/npm-acceptance.mjs "${args[@]}" --expect-commit "$commit" --report "$RUNNER_TEMP/acceptance.json"
 
       - name: Write the PR body

@@ -82,20 +82,24 @@ test('wrong versions and provenance fail: Sentinel printing Farsight\'s version,
   } finally { s.done(); }
 });
 
-test('exit codes: 0 with pending gates, 2 under --require-complete, 1 when a capability is claimed without a check', () => {
+test('exit codes: pending gates block by default (2); --allow-pending reports them (0); a claimed capability without a check fails (1)', () => {
   const s = standIns();
   const claimed = standIns({ sentinelCaps: CAPABILITIES({ reports: 'available' }) });
   try {
     const cli = (...args) => spawnSync(process.execPath, [RUNNER, '--expect-farsight', '0.4.0', '--expect-sentinel', '0.1.0', '--modes', 'global', ...args], { encoding: 'utf8', timeout: 300_000 });
-    const pending = cli('--sentinel', s.sentinel);
-    assert.equal(pending.status, 0, pending.stderr + pending.stdout);
-    assert.match(pending.stdout, /0 failed, 7 pending \(blocked by PR 09, PR 19, PR 23a, PR 26\)/);
-    assert.equal(cli('--sentinel', s.sentinel, '--require-complete').status, 2);
-    const fails = cli('--sentinel', claimed.sentinel);
-    assert.equal(fails.status, 1);
+    const blocked = cli('--sentinel', s.sentinel);
+    assert.equal(blocked.status, 2, 'without a flag, a pending gate blocks');
+    assert.match(blocked.stdout, /0 failed, 7 pending \(blocked by PR 09, PR 19, PR 23a, PR 26\)/);
+    assert.match(blocked.stdout, /pending gates block: a release needs every gate passed/);
+    const dev = cli('--sentinel', s.sentinel, '--allow-pending');
+    assert.equal(dev.status, 0, dev.stderr + dev.stdout);
+    assert.match(dev.stdout, /--allow-pending: a development check, not a release gate/);
+    assert.equal(cli('--sentinel', s.sentinel, '--require-complete').status, 1, 'the old flag is unknown, not a silent no-op');
+    const fails = cli('--sentinel', claimed.sentinel, '--allow-pending');
+    assert.equal(fails.status, 1, '--allow-pending never excuses a failure');
     assert.match(fails.stdout, /failed\s+sentinel\/global sentinel\.report-offline — the installed Sentinel reports reports as available/);
     const report = join(s.dir, 'report.json');
-    assert.equal(cli('--farsight', s.farsight, '--only', 'farsight', '--report', report).status, 0);
+    assert.equal(cli('--farsight', s.farsight, '--only', 'farsight', '--report', report).status, 0, 'Farsight alone has no pending gate');
     assert.ok(existsSync(report));
   } finally { s.done(); claimed.done(); }
 });

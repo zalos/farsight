@@ -149,8 +149,8 @@ jobs:
           "$prefix/bin/farsight" ingest "$GITHUB_WORKSPACE/examples/invoice-app" --repo invoice-app --out "$RUNNER_TEMP/smoke/g.json"
           test -s "$RUNNER_TEMP/smoke/g.json"
 
-      # The same acceptance the release PR passed, on the merged commit's own tarballs. Pending gates are listed;
-      # failures stop the publish. (The release workflow decides whether pending gates may ship.)
+      # Mandatory, before any tag, Release, upload or npm publish: the merged commit's own tarballs must pass every
+      # acceptance gate. A pending gate fails it like a failed one; nothing here can waive that.
       - name: Accept both tarballs in clean npm-only consumers
         run: |
           args=()

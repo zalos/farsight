@@ -14,12 +14,13 @@
 //            unavailable (with the PR it is planned in), or this host cannot open the store. A pending gate is never
 //            reported as passed; when the installed package says a pending capability is now available, the gate
 //            fails until its verifier is written here, so nothing is claimed without being checked.
-// Exit code 0 when nothing failed; 1 when a gate failed; 2 when `--require-complete` is set and a gate is pending
-// (the release workflows set it for the final release).
+// Exit code 0 only when every gate passed; 1 when a gate failed; 2 when a gate is pending. Pending gates block by
+// default: only a development check that publishes nothing may pass `--allow-pending` to report them and exit 0
+// (CI's sentinel-package job and a release dry run). Publication never passes it.
 //
 //   node scripts/npm-acceptance.mjs --farsight build/farsight-cli-<v>.tgz --sentinel build/sentinel/farsight-sentinel-<v>.tgz \
 //     [--expect-farsight <v>] [--expect-sentinel <v>] [--expect-commit <sha>] [--only farsight|sentinel|both] \
-//     [--modes global,local] [--require-complete] [--report <file.json>]
+//     [--modes global,local] [--allow-pending] [--report <file.json>]
 //   (a URL in place of a file installs that URL directly)
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -453,7 +454,7 @@ export async function runAcceptance({ farsight, sentinel, expect = {}, only, mod
 async function main(argv) {
   const { values } = parseArgs({ args: argv, options: {
     farsight: { type: 'string' }, sentinel: { type: 'string' }, 'expect-farsight': { type: 'string' }, 'expect-sentinel': { type: 'string' },
-    'expect-commit': { type: 'string' }, only: { type: 'string' }, modes: { type: 'string' }, 'require-complete': { type: 'boolean', default: false },
+    'expect-commit': { type: 'string' }, only: { type: 'string' }, modes: { type: 'string' }, 'allow-pending': { type: 'boolean', default: false },
     report: { type: 'string' }, keep: { type: 'boolean', default: false },
   } });
   if (values.only && !['farsight', 'sentinel', 'both'].includes(values.only)) throw new Error('--only is farsight, sentinel or both');
@@ -467,7 +468,8 @@ async function main(argv) {
   const s = report.summary;
   console.log(`\nnpm acceptance: ${s.passed} passed, ${s.failed} failed, ${s.pending} pending${s.pending ? ` (blocked by ${s.blockedBy.join(', ')})` : ''}`);
   if (s.failed) return 1;
-  if (s.pending && values['require-complete']) { console.log('--require-complete: a release needs every gate passed'); return 2; }
+  if (s.pending && !values['allow-pending']) { console.log('pending gates block: a release needs every gate passed (--allow-pending is for development checks that publish nothing)'); return 2; }
+  if (s.pending) console.log('--allow-pending: a development check, not a release gate');
   return 0;
 }
 

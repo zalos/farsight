@@ -5,7 +5,10 @@
 // farsight-sentinel alone and both, each globally and into a project. It changes nothing on GitHub and does not
 // depend on publish.yml running again (a re-run of publish skips a tag that exists).
 //
-//   node scripts/verify-release.mjs --tag vX.Y.Z [--repo-url https://github.com/zalos/farsight] [--require-complete] [--report <file>]
+//   node scripts/verify-release.mjs --tag vX.Y.Z [--repo-url https://github.com/zalos/farsight] [--report <file>]
+//
+// A release verification needs every gate passed: a pending gate fails it (exit 2). `--diagnostic` reports pending
+// gates and exits 0, labelled as not a verification; no workflow passes it.
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -56,7 +59,7 @@ export async function verifyRelease({ tag, repoUrl = defaultRepoUrl(), fetchImpl
 
 async function main(argv) {
   const { values } = parseArgs({ args: argv, options: {
-    tag: { type: 'string' }, 'repo-url': { type: 'string' }, 'require-complete': { type: 'boolean', default: false }, report: { type: 'string' },
+    tag: { type: 'string' }, 'repo-url': { type: 'string' }, diagnostic: { type: 'boolean', default: false }, report: { type: 'string' },
   } });
   if (!values.tag) throw new Error('--tag is required');
   const result = await verifyRelease({ tag: values.tag, repoUrl: values['repo-url'] ?? defaultRepoUrl() });
@@ -64,7 +67,8 @@ async function main(argv) {
   const s = result.summary;
   console.log(`\nverify-release ${values.tag}: ${s.passed} passed, ${s.failed} failed, ${s.pending} pending${s.pending ? ` (blocked by ${s.blockedBy.join(', ')})` : ''}`);
   if (s.failed) return 1;
-  if (s.pending && values['require-complete']) return 2;
+  if (s.pending && !values.diagnostic) { console.log('pending gates: this release does not pass verification'); return 2; }
+  if (s.pending) console.log('--diagnostic: pending gates reported; this is not a release verification');
   return 0;
 }
 
