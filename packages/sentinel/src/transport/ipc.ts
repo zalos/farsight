@@ -300,52 +300,76 @@ export interface ServiceClient {
 
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
+export interface ConnectOptions {
+  /** Rejects with `sentinel.ipc.timeout` unless the connection is established and welcomed in time (default 5 s). */
+  readonly timeoutMs?: number;
+  /** Rejects with `sentinel.ipc.canceled` when aborted before the welcome. */
+  readonly signal?: AbortSignal;
+}
+
+export const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
+
 /**
  * Connects to a recorded address as `client`, after checking the folder and the socket are ours and private, and
- * proceeds only when the service's welcome names the store and owner nonce the caller expects.
+ * proceeds only when the service's welcome names the store and owner nonce the caller expects. One deadline (and the
+ * optional signal) covers both the connection and the welcome: a peer that accepts and never answers cannot hold the
+ * caller. Whatever ends the handshake, its timer and listeners are removed and, unless it succeeded, only this
+ * connection is destroyed; the listening endpoint and its other clients are untouched.
  */
-export async function connectOwnerSocket(address: RuntimeAddress, expect: ServiceIdentity, client: ClientKind): Promise<ServiceClient> {
+export async function connectOwnerSocket(address: RuntimeAddress, expect: ServiceIdentity, client: ClientKind, options: ConnectOptions = {}): Promise<ServiceClient> {
   checkAddress(address);
   const st = socketStat(address.socket);
   if (!st) throw new IpcError('sentinel.ipc.notListening');
   assertOwnSocket(st);
+  if (options.signal?.aborted) throw new IpcError('sentinel.ipc.canceled');
+  const timeoutMs = options.timeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
   const socket = connect(address.socket);
-  await new Promise<void>((resolve, reject) => {
-    socket.once('connect', resolve);
-    socket.once('error', e => reject(new IpcError('sentinel.ipc.notListening', (e as NodeJS.ErrnoException).code ?? '')));
-  });
   const decoder = new FrameDecoder();
   const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: unknown) => void }>();
-  let welcomed: ((ok: boolean) => void) | undefined;
-  const welcome = new Promise<boolean>(r => { welcomed = r; });
+  // The handshake settles exactly once: welcomed, refused, closed, failed, timed out or canceled.
+  let settle: ((outcome: true | IpcError) => void) | undefined;
+  const handshake = new Promise<true | IpcError>(resolve => { settle = resolve; });
+  const finish = (outcome: true | IpcError) => { const s = settle; settle = undefined; s?.(outcome); };
+  const timer = setTimeout(() => finish(new IpcError('sentinel.ipc.timeout', 'no welcome in time')), timeoutMs);
+  const onAbort = () => finish(new IpcError('sentinel.ipc.canceled'));
+  options.signal?.addEventListener('abort', onAbort, { once: true });
+  socket.once('connect', () => {
+    try { socket.write(encodeFrame({ protocol: SERVICE_PROTOCOL, type: 'hello', client })); } catch { finish(new IpcError('sentinel.ipc.frameMalformed')); }
+  });
   socket.on('data', chunk => {
     let frames: unknown[];
     try { frames = decoder.push(chunk); } catch { socket.destroy(); return; }
     for (const f of frames) {
       if (!isRecord(f)) continue;
       if (f.type === 'welcome') {
-        welcomed?.(f.protocol === SERVICE_PROTOCOL && f.storeId === expect.storeId && f.ownerNonce === expect.ownerNonce);
-        welcomed = undefined;
+        finish(f.protocol === SERVICE_PROTOCOL && f.storeId === expect.storeId && f.ownerNonce === expect.ownerNonce
+          ? true : new IpcError('sentinel.ipc.handshakeMismatch'));
       } else if (f.type === 'response' && typeof f.id === 'number' && pending.has(f.id)) {
         const p = pending.get(f.id)!;
         pending.delete(f.id);
         if (f.ok === true) p.resolve(f.value); else p.reject(new IpcError(String(f.code ?? 'sentinel.ipc.requestFailed') as IpcErrorCode));
       } else if (f.type === 'error') {
-        welcomed?.(false);
-        welcomed = undefined;
+        finish(new IpcError('sentinel.ipc.handshakeMismatch'));
       }
     }
   });
   let closed = false;
+  let connected = false;
+  socket.once('connect', () => { connected = true; });
   socket.on('close', () => {
     closed = true;
-    welcomed?.(false);
+    finish(new IpcError(connected ? 'sentinel.ipc.handshakeMismatch' : 'sentinel.ipc.notListening', 'connection closed'));
     for (const p of pending.values()) p.reject(new IpcError('sentinel.ipc.notListening', 'connection closed'));
     pending.clear();
   });
-  socket.on('error', () => socket.destroy());
-  socket.write(encodeFrame({ protocol: SERVICE_PROTOCOL, type: 'hello', client }));
-  if (!(await welcome)) { socket.destroy(); throw new IpcError('sentinel.ipc.handshakeMismatch'); }
+  socket.on('error', e => {
+    if (!connected) finish(new IpcError('sentinel.ipc.notListening', (e as NodeJS.ErrnoException).code ?? ''));
+    socket.destroy();
+  });
+  const outcome = await handshake;
+  clearTimeout(timer);
+  options.signal?.removeEventListener('abort', onAbort);
+  if (outcome !== true) { socket.destroy(); throw outcome; }
   let next = 1;
   return Object.freeze({
     request(op: string, body: unknown, options: RequestOptions = {}): Promise<unknown> {

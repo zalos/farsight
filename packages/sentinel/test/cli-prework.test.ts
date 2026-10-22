@@ -458,3 +458,55 @@ test('only a refused connection proves a socket stale: any other error leaves a 
     (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.socketIndeterminate');
   assert.equal(lstatSync(address.socket).ino, inode);
 });
+
+test('connecting has its own deadline and cancel: a peer that accepts and never welcomes cannot hold the caller', async t => {
+  const { createServer } = await import('node:net');
+  const base = scratch(t, 'snw-');
+  const identity = { storeId: 'store-1', ownerNonce: newOwnerNonce() };
+  const address = runtimeAddress({ storePath: '/w', ownerNonce: identity.ownerNonce, env: { TMPDIR: base } });
+  // A private socket of ours that accepts every connection and never sends a welcome.
+  const peers: NetSocket[] = [];
+  const closedPeers: NetSocket[] = [];
+  const silent = createServer(s => { peers.push(s); s.resume(); s.on('close', () => closedPeers.push(s)); s.on('error', () => {}); });
+  await new Promise<void>(r => silent.listen(address.socket, () => r()));
+  chmodSync(address.socket, 0o600);
+  t.after(() => new Promise<void>(r => { for (const p of peers) p.destroy(); silent.close(() => r()); }));
+  // Another client already connected to the same endpoint.
+  const other = connect(address.socket);
+  await new Promise(r => other.once('connect', r));
+
+  let started = Date.now();
+  await assert.rejects(connectOwnerSocket(address, identity, 'cli', { timeoutMs: 200 }), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.timeout');
+  assert.ok(Date.now() - started < 2000, 'the deadline covers the welcome, not only the connection');
+  const ctl = new AbortController();
+  started = Date.now();
+  const canceled = assert.rejects(connectOwnerSocket(address, identity, 'cli', { signal: ctl.signal, timeoutMs: 60_000 }), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.canceled');
+  setTimeout(() => ctl.abort(), 50);
+  await canceled;
+  assert.ok(Date.now() - started < 2000);
+  await assert.rejects(connectOwnerSocket(address, identity, 'cli', { signal: AbortSignal.abort() }), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.canceled');
+
+  // Each abandoned handshake closed only its own connection; the endpoint and the other client are untouched.
+  for (let i = 0; i < 100 && closedPeers.length < 2; i++) await new Promise(r => setTimeout(r, 10));
+  assert.equal(closedPeers.length, 2, 'the timed-out and the canceled connections were closed by the caller');
+  assert.ok(lstatSync(address.socket).isSocket(), 'the endpoint is still there');
+  assert.equal(other.destroyed, false, 'another client keeps its connection');
+  const again = connect(address.socket);
+  await new Promise(r => again.once('connect', r));
+  again.destroy();
+  other.destroy();
+
+  // A live owner: a canceled connection attempt leaves it serving its existing client.
+  const liveBase = scratch(t, 'snl-');
+  const liveId = { storeId: 'store-2', ownerNonce: newOwnerNonce() };
+  const liveAddress = runtimeAddress({ storePath: '/l', ownerNonce: liveId.ownerNonce, env: { TMPDIR: liveBase } });
+  const owner = await listenOwnerSocket(liveAddress, liveId, async () => 'ok');
+  t.after(() => owner.close());
+  const existing = await connectOwnerSocket(liveAddress, liveId, 'mcp', { timeoutMs: 2000 });
+  await assert.rejects(connectOwnerSocket(liveAddress, liveId, 'cli', { signal: AbortSignal.abort() }), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.canceled');
+  assert.equal(await existing.request('ping', {}), 'ok');
+  const fresh = await connectOwnerSocket(liveAddress, liveId, 'cli');
+  assert.equal(await fresh.request('ping', {}), 'ok');
+  fresh.close();
+  existing.close();
+});
