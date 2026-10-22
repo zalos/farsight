@@ -514,7 +514,25 @@ try {
     }
   }
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}${osvDemo}${trivyDemo}${zizmorDemo}npm consumer`);
+  // Gitleaks assets: the in-container worker ships with its exact digest and rights; no image, binary or report ships.
+  let gitleaksDemo = '';
+  if (existsSync(join(sourceDir, 'scripts', 'package-assets-gitleaks.mjs'))) {
+    const manifestPath = join(installed, 'assets', 'gitleaks', 'manifest.json');
+    assert.ok(existsSync(manifestPath), 'the Gitleaks asset manifest is packaged');
+    const resolved = await evalModule(`import { createRequire } from 'node:module'; const r = createRequire(process.cwd() + '/'); console.log(r.resolve('farsight-sentinel/assets/gitleaks/manifest.json'));`);
+    assert.ok(resolved.trim().endsWith('assets/gitleaks/manifest.json'), 'Gitleaks assets resolve through the exports map');
+    const gitleaks = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    const worker = readFileSync(join(installed, gitleaks.worker.path));
+    assert.equal(`sha256:${createHash('sha256').update(worker).digest('hex')}`, gitleaks.worker.digest, 'the Gitleaks worker matches its digest');
+    assert.equal(gitleaks.adapter.command.at(-1), `/input/${gitleaks.worker.digest.slice(7)}`, 'the fixed command names the shipped worker');
+    assert.match(gitleaks.adapter.image, /^ghcr\.io\/gitleaks\/gitleaks@sha256:[0-9a-f]{64}$/);
+    assert.equal(gitleaks.registered, false);
+    assert.deepEqual(readdirSync(join(installed, 'assets', 'gitleaks')).sort(), ['manifest.json', 'worker.sh'], 'only the worker and its manifest ship');
+    assert.ok(!readdirSync(installed, { recursive: true }).map(String).some((f) => /\.tar$|secrets-helpers|secrets-conformance|report\.txt$/.test(f)), 'no image, report or test helper ships');
+    gitleaksDemo = `gitleaks assets (worker ${gitleaks.worker.digest.slice(7, 19)}, no image), `;
+  }
+
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}${osvDemo}${trivyDemo}${zizmorDemo}${gitleaksDemo}npm consumer`);
 } finally {
   consumer.cleanup();
 }

@@ -90,11 +90,14 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   the unexported `owner-receipts.ts` (issue one; owner CLI only), `admission.ts` (the three verdicts over core
   `decideGrants`) and `user-state.ts` (owner-only files); `src/contracts/controls.ts` is the framework control-fact
   contract PRs 14–17 emit; the reason codes are `strings-sentinel-policy.ts`; `test/rules-policy.test.ts` covers them.
-  Current-tree secret scanning (ADR 25): `src/adapters/gitleaks.ts` (the trusted registration for a measured pin, the
-  scan manifest, and the reader that re-checks every observation's redaction shape and the coverage) and
-  `gitleaks-worker.ts` (the program the container runs: protocol shim, tree rebuild, Gitleaks with fixed arguments,
-  the closed-field normaliser); its words are `strings-sentinel-secrets.ts`; `test/secrets-gitleaks.test.ts` runs it
-  over a stand-in tool (`test/fixtures/secrets/fake-gitleaks.mjs`) and, with `SENTINEL_GITLEAKS_IMAGE`, the real one.
+  Current-tree secret scanning (ADR 28), `src/adapters/gitleaks/`: `adapter.ts` (the Gitleaks 8.30.1 pins, the
+  configuration and report template, the shim build and support statement), `worker-source.ts` (the original POSIX
+  shell shim the official image runs), `rules.ts` (rule IDs and global allowlist paths generated from the release's
+  default configuration by `scripts/generate-gitleaks-rules.mjs`), `job.ts` (what is sent, what is a skipped scope),
+  `normalize.ts` (the run record and report read into redacted observations and coverage) and `run.ts` (one attempt
+  through the execution service); `scripts/package-assets-gitleaks.mjs` ships the shim; its words are
+  `strings-sentinel-secrets.ts`; `test/secrets-gitleaks.test.ts` always runs, `test/secrets-conformance.test.ts` runs
+  the pinned engine with `SENTINEL_ISOLATION=1`.
   Depends only on graph, code-parser and core; nothing in the
   `src/adapters/sealed-input.ts` reads an attempt's sealed input copies by artifact id for every external adapter.
   `src/adapters/trivy/` is the Trivy misconfiguration adapter (PR 13, ADR 33), internal until integration:

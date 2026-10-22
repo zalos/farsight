@@ -9,6 +9,10 @@ export const SENTINEL_SECRETS_STRINGS: Record<string, StringEntry> = {
   'sentinel.secrets.valueWithheld': same('the matched value is withheld', 'A secret scan keeps which detector matched and where, never the value it matched. The value stays only in the captured source, where a person with access can open it.'),
   'sentinel.secrets.lineLocation': same('located to whole lines', 'The location covers the whole lines the detector matched, not the exact characters, so the citation itself cannot reveal any part of the value.'),
   'sentinel.secrets.fileTooLarge': same('a file was too large for the secret scan', 'Files above the scan size limit are not given to the scanner. Each one is listed as a skipped part of the scope, so the scan is partial, never clean.'),
+  'sentinel.secrets.pathUnsupported': same('a file name the secret scan cannot carry', 'A file whose name holds a line break or another control character cannot be handed to the scanner. It is listed as a skipped part of the scope, so the scan is partial, never clean.'),
+  'sentinel.secrets.toolAllowlisted': same('a file the scanner always skips', 'The scanner\u2019s own default rules skip some paths, such as images, lockfiles and vendored folders. Each such file is listed as a skipped part of the scope rather than counted as scanned.'),
+  'sentinel.secrets.toolTimedOut': same('the secret scanner ran out of time', 'The scanner was stopped at its time limit before it finished. The scan counts as not done.'),
+  'sentinel.secrets.platformUnmeasured': same('the secret scanner ran on a platform that has not been measured', 'Results are trusted only from the image platform the scanner was qualified on. A run on any other platform is recorded as failed.'),
   'sentinel.secrets.inputInvalid': same('the secret scan input was not acceptable', 'The list of captured files handed to the scanner did not match the files supplied with it. The scan did not run and nothing was reported as clean.'),
   'sentinel.secrets.protocolInvalid': same('the secret scanner worker received an unexpected message', 'The scanner worker expects one greeting and one start message. Anything else stops it before it scans.'),
   'sentinel.secrets.toolFailed': same('the secret scanner failed', 'The scanner ended with an error, was stopped, or wrote more output than allowed. Its own messages are discarded because they can quote what it read. The scan counts as not done.'),
@@ -20,8 +24,7 @@ export const SENTINEL_SECRETS_STRINGS: Record<string, StringEntry> = {
   'sentinel.secrets.unknownFile': same('the secret scanner reported a file that was not captured', 'Each reported file must be one of the captured files. A report naming anything else is refused.'),
   'sentinel.secrets.locationOutOfRange': same('the secret scanner reported lines a file does not have', 'A location outside the captured file cannot be cited, so the report is refused.'),
   'sentinel.secrets.workerError': same('the secret scanner worker stopped unexpectedly', 'The worker hit an error it does not name. Only this code is kept, because an error message can quote what it read. The scan counts as not done.'),
-  'sentinel.secrets.outputRefused': same('a secret scan observation was refused', 'Every observation is checked again outside the container: it may name the detector and cite whole lines of a captured file, and nothing else. One that carries anything more is refused and the scan is recorded as failed.'),
-  'sentinel.secrets.coverageMismatch': same('the secret scan did not account for every captured file', 'Each captured file must be either scanned or listed as skipped with a reason. A file the result does not mention would be a silent gap, so the scan is recorded as failed.'),
+  'sentinel.secrets.outputRefused': same('the secret scanner output was refused', 'The run record and the report must have exactly the expected shape and name the job they were made for. Anything else is refused and the scan is recorded as failed.'),
 };
 
 export function sentinelSecretsWord(key: string, values: Record<string, string | number> = {}): string {
