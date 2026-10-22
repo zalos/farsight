@@ -44,7 +44,7 @@ measured windows; these small in-memory codec trials cannot establish disk throu
 
 ## Runtime scope and installation
 
-Measured identities/results will be recorded after committed-code trials. Until then no runtime is accepted.
+The run below measures one host/backend combination. Runtime acceptance remains the owner/integration decision.
 The executable gate is limited to native ARM64 macOS or Linux with a Linux ARM64 Docker server and ARM64
 image; only the actual observed host/backend combination may be proposed for initial support. Independent
 Linux hosts, Docker Engine installations without Desktop, Colima, Windows, AMD64 and emulation are unmeasured
@@ -61,6 +61,81 @@ separately limit VM CPU, memory and disk; per-container ceilings do not reserve 
 client for its Docker runtime. Colima has not been installed, started or tested by this lane. Current
 installation documentation may describe later releases than the actual pinned backend; measured identities
 and control evidence are the authority for this experiment's bounded capability claims.
+
+## Measured run: 2026-10-21 local / 2026-10-22 UTC
+
+Committed harness revision `df8bc9993b20a7514fc4fb9678b764abd7c1e6d0` ran with clean experiment files
+from `01:35:19.895Z` to `01:35:27.695Z`. The result was `measured-with-explicit-gaps`: all 14 controls
+passed, seven real container trials completed their expected outcomes and verified exact owned-container
+removal, and 54 codec trials roundtripped retained bytes. Nine focused regression tests passed before the
+run. No primary build/test, image/tool acquisition, fixture dependency installation or application execution
+occurred in this lane. Raw original/synthetic artifacts remain outside the repository for integration
+retention: `result.json` SHA-256
+`c7bc1c07fe0f5beb1172aa08cf90e4f814dc814930129cd813eecb7bab214821`.
+Its artifact inventory names 61 files totaling 99,118,381 bytes, including six exact JSON inputs,
+54 encoded outputs and the incremental progress record. Each artifact has its own full SHA-256.
+
+The host was macOS 27.0 (Darwin 27.0.0), native ARM64 Apple M4, 10 logical CPUs, 17,179,869,184 bytes RAM,
+Node 24.19.0. Docker client and Engine were 29.2.1. A separate read-only installation identity supplement
+verified Docker Desktop 4.65.0 build 221669 from its installed app metadata; the `docker desktop version`
+output in the original result identifies the CLI plugin v0.3.0, not the Desktop application. Supplement
+SHA-256: `791c66884082265fdc596d44aabdd4a604281ea8485ca236b64e01ce44169c68`.
+The Docker VM was Linux ARM64 (`aarch64`), kernel `6.12.76-linuxkit`, cgroup v2/cgroupfs, 10 CPUs and
+8,217,059,328 bytes RAM; memory, swap, CPU quota and PID controllers were reported available. Its inspected
+security options named built-in seccomp and cgroup namespaces. This establishes neither an independent
+Linux host nor a broad Docker/backend version range.
+
+| Control | Actual retained observation | Boundary |
+|---|---|---|
+| Missing host executable | `ENOENT` from the fresh output's deliberately absent executable | Preflight failure, no fallback |
+| Missing image | Docker inspection exited 1 with the exact absent image diagnostic | Inspection only; no pull/create |
+| Missing container executable | Nonzero completed client failure named the exact absent entrypoint; inspected container stayed `created`, exit 127 | Tool absence is visible, then exact cleanup |
+| Actual quota admission | 256 MiB / 1 CPU admitted; 8,217,059,329-byte request rejected against the measured 8,217,059,328-byte VM quota | Quota comparison, not a reservation or observed free-memory guarantee |
+| Network | Inspected `none`, Python `OSError`, errno 101 | Passed shared `networkDenied`; no timeout/refusal substitution |
+| Limits | `memory.max=268435456`, `cpu.max=100000 100000`, `pids.max=32` inside the container | Bounded harmless allocation, not scanner sizing |
+| Memory observation | Python process lifetime maxRSS 42,000 KiB; sampled cgroup `memory.peak=39448576` bytes during a 32 MiB allocation | Different accounting domains/times; neither is a codec or production scanner peak |
+| Timeout and cancellation | Trusted READY marker appeared; client stopped near its 1.5-second boundary; both containers were still `running` before explicit cleanup | Killing the client does not stop its container; exact owned removal and absent verification passed |
+| Output budget | 16,384 retained stdout bytes, `outputExceeded=true` | Truncation remains budget exhaustion even though the short bounded writer could exit 0 |
+| Temporary storage | Bounded 2 MiB write in inspected 1 MiB noexec tmpfs returned `OSError`, errno 28 | Real isolated storage exhaustion, not host disk exhaustion |
+| Synthetic controls | Missing database prerequisite, unavailable controller/measurement, and input/total/trial admission exhaustion rejected | They remain named synthetic; no candidate DB or disabled-host-controller claim |
+
+The lead sequenced engine/framework measurement jobs around this 7.8-second run. Framework dependency
+preparation and ordinary desktop activity were not suspended; global host idleness, CPU load and disk
+contention were not sampled. Trials used fixed codec order and three repetitions. The table is descriptive
+of these exact original payloads and this Node build; no cross-codec or cross-host performance ranking is
+accepted from it. Compression/decompression timers exclude I/O/hashing; parent wall includes them.
+Memory ranges are the fresh child process-lifetime maxRSS over three repetitions, in KiB.
+
+| JSON | Minimum size | Codec | Exact input bytes | Encoded bytes | Encode median ms | Decode median ms | Parent wall median ms | Child lifetime maxRSS KiB range |
+|---|---:|---|---:|---:|---:|---:|---:|---:|
+| parser | 64 KiB | raw | 65,693 | 65,693 | 0.010 | 0.007 | 25.962 | 50,224–50,288 |
+| parser | 64 KiB | gzip | 65,693 | 18,095 | 0.861 | 0.142 | 25.985 | 50,592–50,720 |
+| parser | 64 KiB | zstd | 65,693 | 16,492 | 0.487 | 0.085 | 26.175 | 51,120–51,136 |
+| parser | 1 MiB | raw | 1,048,641 | 1,048,641 | 0.062 | 0.075 | 26.509 | 53,104–53,120 |
+| parser | 1 MiB | gzip | 1,048,641 | 279,516 | 8.366 | 1.488 | 36.831 | 54,016–54,016 |
+| parser | 1 MiB | zstd | 1,048,641 | 269,511 | 2.105 | 0.676 | 29.692 | 56,320–56,384 |
+| parser | 8 MiB | raw | 8,388,927 | 8,388,927 | 1.061 | 1.027 | 40.445 | 74,720–74,880 |
+| parser | 8 MiB | gzip | 8,388,927 | 2,220,355 | 67.032 | 11.883 | 113.134 | 80,000–80,160 |
+| parser | 8 MiB | zstd | 8,388,927 | 2,162,352 | 17.233 | 6.085 | 60.450 | 83,568–83,680 |
+| scan | 64 KiB | raw | 65,782 | 65,782 | 0.012 | 0.007 | 29.572 | 50,240–50,288 |
+| scan | 64 KiB | gzip | 65,782 | 9,899 | 0.708 | 0.121 | 30.661 | 50,624–50,736 |
+| scan | 64 KiB | zstd | 65,782 | 8,840 | 0.501 | 0.086 | 29.993 | 50,976–51,152 |
+| scan | 1 MiB | raw | 1,048,702 | 1,048,702 | 0.086 | 0.074 | 32.989 | 53,136–53,264 |
+| scan | 1 MiB | gzip | 1,048,702 | 150,672 | 4.836 | 0.955 | 33.562 | 53,744–53,856 |
+| scan | 1 MiB | zstd | 1,048,702 | 144,553 | 1.670 | 0.624 | 35.805 | 56,032–56,144 |
+| scan | 8 MiB | raw | 8,388,720 | 8,388,720 | 0.848 | 1.075 | 37.927 | 74,752–74,848 |
+| scan | 8 MiB | gzip | 8,388,720 | 1,197,040 | 34.909 | 7.180 | 77.273 | 77,904–77,952 |
+| scan | 8 MiB | zstd | 8,388,720 | 1,174,504 | 10.872 | 4.371 | 48.344 | 81,296–81,376 |
+
+For the largest payloads gzip retained 2,220,355 parser bytes and 1,197,040 scan bytes; zstd retained
+2,162,352 and 1,174,504 bytes respectively. That small additional byte reduction on these payloads does not
+by itself justify an extra restore/runtime compatibility requirement. Raw copy remains necessary for
+already-compressed data; these JSON trials do not measure that workload. The proposal below keeps gzip
+as the initial codec while preserving original-byte hashes and a separate zstd decision.
+
+Required online/advisory work and candidate database semantics remain gaps even though offline failure
+controls passed. Full scanner RSS/CPU/corpus budgets, production admission/retention implementation,
+crash/orphan recovery, graph payload effects and other host/backend combinations remain unmeasured.
 
 ## Proposed starting policy for owner review
 
