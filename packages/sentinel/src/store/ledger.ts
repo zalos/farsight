@@ -720,6 +720,39 @@ export class Ledger {
       if (!staged.has(input.manifest) || !staged.has(input.materialization)) {
         throw new LedgerError('sentinel.store.stagingMismatch', 'the manifest and the materialization must be staged');
       }
+      // Every admitted artifact must stay reachable from the two roots, or a prune plan would list it the moment its
+      // stage is released. Walk the selected stages' links, plus links already recorded for artifacts this admission
+      // re-stages; only staged nodes are expanded, so the walk visits at most the staged set and its direct targets.
+      const children = new Map<string, Set<string>>();
+      const addLink = (parent: string, child: string) => {
+        let set = children.get(parent);
+        if (!set) children.set(parent, set = new Set());
+        set.add(child);
+      };
+      for (const stageId of stageIds) {
+        for (const l of this.#all('SELECT parent_id, child_id FROM staging_links WHERE stage_id = ?', stageId)) addLink(String(l.parent_id), String(l.child_id));
+      }
+      for (const id of staged.keys()) {
+        for (const l of this.#all('SELECT child_id FROM artifact_links WHERE parent_id = ?', id)) addLink(id, String(l.child_id));
+      }
+      const reached = new Set<string>([input.manifest, input.materialization]);
+      const queue = [input.manifest, input.materialization];
+      while (queue.length) {
+        const next = queue.pop()!;
+        if (!staged.has(next)) continue;
+        for (const child of children.get(next) ?? []) {
+          if (reached.has(child)) continue;
+          // A link out of the selected stages may name only an artifact the ledger already accepted.
+          if (!staged.has(child) && !this.#get('SELECT 1 AS x FROM artifacts WHERE id = ?', child)) {
+            throw new LedgerError('sentinel.store.stagingMismatch', 'a snapshot link names an artifact that is neither selected nor accepted');
+          }
+          reached.add(child);
+          queue.push(child);
+        }
+      }
+      if ([...staged.keys()].some(id => !reached.has(id))) {
+        throw new LedgerError('sentinel.store.stagingMismatch', 'an admitted artifact is not reachable from the snapshot\'s manifest or materialization');
+      }
       const sequence = this.#event('snapshot-admitted', null, null, { snapshotId: input.snapshotId, artifacts: staged.size });
       this.#acceptArtifacts(receipts, staged, sequence);
       for (const stageId of stageIds) {

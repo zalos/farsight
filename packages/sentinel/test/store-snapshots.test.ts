@@ -146,3 +146,50 @@ test('a foundation-schema ledger upgrades in place: every event and its referenc
   db.exec('PRAGMA foreign_keys = ON');
   assert.throws(() => db.exec(`INSERT INTO reports (id, run_id, sequence, created_at) VALUES ('r', 'run-1', 999999, 'x')`), /FOREIGN KEY/);
 });
+
+test('every admitted artifact must be reachable from the manifest or the materialization', async t => {
+  const { ledger } = await ledgerAt(t);
+  // An extra artifact in a selected stage that no root links to is refused, atomically.
+  const { input } = stageCapture(ledger, 'reach');
+  ledger.registerStaging('reach.extra', [{ id: sha('orphan bytes'), schema: 'text/plain', privacy: 'source' }]);
+  const withOrphan = { ...input, stageIds: [...input.stageIds, 'reach.extra'], receipts: [...input.receipts, identityReceipt('orphan bytes')] };
+  const before = ledger.currentSequence();
+  assert.throws(() => ledger.admitSnapshot(withOrphan), code('sentinel.store.stagingMismatch'));
+  assert.equal(ledger.currentSequence(), before, 'nothing committed');
+  assert.equal(ledger.getSnapshot('snap-reach'), undefined);
+  assert.ok(ledger.gcSnapshot().staged.includes(sha('orphan bytes')), 'the stages stay pinned');
+  // Without the orphan stage the same capture is admitted, and nothing it admitted is a prune candidate.
+  ledger.admitSnapshot(input);
+  const gc = ledger.gcSnapshot();
+  const reachable = new Set([input.manifest, input.materialization]);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [p, c] of gc.links) if (reachable.has(p) && !reachable.has(c)) { reachable.add(c); grew = true; }
+  }
+  for (const r of input.receipts) assert.ok(reachable.has(r.id), r.id);
+
+  // A cycle among staged artifacts terminates; a link to an artifact staged in a stage not selected is refused.
+  const a = 'cycle a', b = 'cycle b', m = 'cycle manifest', z = 'cycle sidecar';
+  ledger.registerStaging('cycle.held', [{ id: sha('held elsewhere'), schema: 'text/plain', privacy: 'source' }]);
+  ledger.registerStaging('cycle.0', [
+    { id: sha(a), schema: 'text/plain', privacy: 'source', links: [sha(b)] },
+    { id: sha(b), schema: 'text/plain', privacy: 'source', links: [sha(a)] },
+    { id: sha(m), schema: 'sentinel-snapshot/draft-1', privacy: 'source-derived', links: [sha(a), sha('held elsewhere')] },
+    { id: sha(z), schema: 'sentinel-capture-materialization/draft-1', privacy: 'source', links: [sha(m)] },
+  ]);
+  const cycle = { snapshotId: 'snap-cycle', stageIds: ['cycle.0'], manifest: sha(m), materialization: sha(z), inventoryDigest: DIGEST,
+    receipts: [a, b, m, z].map(identityReceipt) };
+  assert.throws(() => ledger.admitSnapshot(cycle), code('sentinel.store.stagingMismatch'), 'a link into an unselected stage dangles');
+  identityReceipt('held elsewhere');
+  const record = ledger.admitSnapshot({ ...cycle, stageIds: ['cycle.0', 'cycle.held'], receipts: [...cycle.receipts, identityReceipt('held elsewhere')] });
+  assert.equal(record.snapshotId, 'snap-cycle');
+
+  // A link to content an earlier snapshot already accepted is allowed without staging it again.
+  ledger.registerStaging('reuse.0', [
+    { id: sha('reuse manifest'), schema: 'sentinel-snapshot/draft-1', privacy: 'source-derived', links: [sha('reach a')] },
+    { id: sha('reuse sidecar'), schema: 'sentinel-capture-materialization/draft-1', privacy: 'source', links: [sha('reuse manifest')] },
+  ]);
+  ledger.admitSnapshot({ snapshotId: 'snap-reuse', stageIds: ['reuse.0'], manifest: sha('reuse manifest'), materialization: sha('reuse sidecar'),
+    inventoryDigest: DIGEST, receipts: ['reuse manifest', 'reuse sidecar'].map(identityReceipt) });
+  assert.deepEqual(ledger.checkIntegrity(), { integrity: 'ok', foreignKeyViolations: 0 });
+});
