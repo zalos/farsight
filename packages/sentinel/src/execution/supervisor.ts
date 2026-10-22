@@ -19,7 +19,7 @@ import type { AttemptWorker } from '../contracts/attempt.js';
 import type { ProtocolMessage, ResultMessage } from '../contracts/protocol.js';
 import type { OwnedResource } from '../store/owner.js';
 import { canonicalJsonBytes } from '../store/objects.js';
-import { ExecutionError, type ExecutionErrorCode } from './errors.js';
+import { ExecutionError, isExecutionError, type ExecutionErrorCode } from './errors.js';
 import { ContainerBackend, containerUser, intentDetail, ownerNonce, type BackendFacts, type CleanupState, type ImagePin } from './isolation.js';
 import { BoundedCapture, spawnWorker, type WorkerProcess } from './processes.js';
 import { encodeFrame, FrameDecoder, WorkerSession } from './protocol.js';
@@ -51,6 +51,14 @@ export interface AttemptRequest {
   /** Required for external adapters; built-in workers run without one. */
   backend?: ContainerBackend;
   signal?: AbortSignal;
+  /**
+   * Called once the worker exists (container created and verified, or child spawned) and before it may do any work.
+   * The coordinator records the attempt in the ledger here, so the ledger's fence exists before the worker acts.
+   * Throwing stops and removes the worker; the error is rethrown.
+   */
+  onWorker?: (worker: AttemptWorker) => void;
+  /** A durable journal of container intents (recovery, PR 08): recorded before a create, settled once removed. */
+  intents?: IntentJournal;
 }
 
 export type OutcomeState = 'succeeded' | 'failed' | 'canceled' | 'timed-out';
@@ -86,6 +94,16 @@ export interface WorkerOutcome {
   stopConfirmed?: boolean;
   backend?: Readonly<BackendFacts>;
   workDir: string;
+}
+
+/** A container create's whole intent: name, owner nonce and the ownership labels (see isolation.intentDetail). */
+export type ContainerIntent = ReturnType<typeof intentDetail>;
+
+export interface IntentJournal {
+  /** Durable before it returns: the create may happen right after. */
+  record(intent: ContainerIntent): void;
+  /** The container is confirmed removed or was never made; the intent may be forgotten. */
+  settle(intent: ContainerIntent): void;
 }
 
 /** Everything that decided this invocation. Hashed; its digest labels the container. No credential, ever. */
@@ -195,7 +213,9 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   });
   if (adapter.kind === 'external') {
     const b = backend!;
+    const intent = intentDetail({ labels });
     try {
+      request.intents?.record(intent);
       guard.createPending = true;
       containerId = await b.create({
         image: image!, command: adapter.command, limits, inputDir, outputDir, adapter: { id: adapter.id, digest: adapter.digest }, user: containerUser(), labels,
@@ -213,13 +233,22 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
         throw new ExecutionError(gone === 'cleanup-failed' ? 'sentinel.execution.cleanupFailed' : 'sentinel.execution.isolationMismatch',
           gone === 'cleanup-failed' ? { container: containerId, owner: nonce } : { setting: 'mount identity' });
       }
+      outcome.container = { id: containerId, image: image! };
+      outcome.worker = { kind: 'owned-container', containerId, ownershipLabels: { store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch } };
+      request.onWorker?.(outcome.worker);
     } catch (error) {
+      // A container that exists is removed before the error leaves; its intent is settled only when that is confirmed.
+      if (containerId) {
+        const gone = await b.remove(containerId, labels).catch(() => 'cleanup-failed' as const);
+        if (gone !== 'cleanup-failed') request.intents?.settle(intent);
+      } else if (!isExecutionError(error, 'sentinel.execution.reconciliationPending') && !isExecutionError(error, 'sentinel.execution.cleanupFailed')) {
+        // The create was refused or reconciled (found and removed); nothing remains under this intent.
+        if (isExecutionError(error, 'sentinel.execution.commandFailed') || isExecutionError(error, 'sentinel.execution.canceled')) request.intents?.settle(intent);
+      }
       unregister();
       throw error;
     }
     const id = containerId;
-    outcome.container = { id, image: image! };
-    outcome.worker = { kind: 'owned-container', containerId: id, ownershipLabels: { store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch } };
     proc = b.startAttached(id);
   } else {
     // A built-in worker inherits nothing: its environment is exactly these four names.
@@ -228,6 +257,15 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     } });
     const pid = proc.child.pid;
     if (pid) outcome.worker = { kind: 'owned-child', pid, processStartedAt: proc.startedAt.toISOString() };
+    try {
+      if (!outcome.worker) throw new ExecutionError('sentinel.execution.workerExited', { reason: 'no process id' });
+      request.onWorker?.(outcome.worker);
+    } catch (error) {
+      proc.kill();
+      await proc.exited;
+      unregister();
+      throw error;
+    }
   }
   guard.proc = proc;
 
@@ -246,6 +284,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       if (state) outcome.container!.state = { exitCode: state.exitCode, oomKilled: state.oomKilled };
       if (state?.oomKilled && outcome.state === 'failed') setFailure(outcome, 'sentinel.execution.resourceExceeded', {}, true);
       outcome.cleanup = await backend.remove(containerId, labels).catch(() => 'cleanup-failed' as const);
+      if (outcome.cleanup !== 'cleanup-failed') request.intents?.settle(intentDetail({ labels }));
     }
     unregister();
   }

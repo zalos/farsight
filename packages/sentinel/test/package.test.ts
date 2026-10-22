@@ -53,9 +53,12 @@ test('no Farsight package depends on or imports Sentinel', () => {
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', 'node:fs'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
+  'execution/coordinator.js': ['node:crypto'],
   'execution/errors.js': ['@farsight/core/dist/strings-sentinel-execution.js'],
   'execution/isolation.js': ['node:crypto', 'node:fs', 'node:os', 'node:path'],
   'execution/processes.js': ['node:child_process'],
+  'execution/publication.js': ['node:fs'],
+  'execution/recovery.js': ['node:fs', 'node:path'],
   'execution/registry.js': ['node:crypto', 'node:fs', 'node:path'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
