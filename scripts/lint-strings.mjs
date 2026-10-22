@@ -194,7 +194,7 @@ for (const id of spriteIds) {
 
 // ── RULE 5: no developer's unit in the business register ────────────────────
 const BIZ_BANNED = /\b(steps?|cuts?|seams?|beats?|moments?|truncated|helpers?|hops?)\b/i;
-const BIZ_PREFIXES = ['journey.biz.', 'impact.biz.', 'count.', 'map.biz.', 'tour.biz.', 'ask.biz.'];
+const BIZ_PREFIXES = ['journey.biz.', 'impact.biz.', 'count.', 'map.biz.', 'tour.biz.', 'ask.biz.', 'sentinel.term.biz.'];
 for (const [key, entry] of Object.entries(STRINGS)) {
   if (!BIZ_PREFIXES.some((p) => key.startsWith(p))) continue;
   for (const register of ['hud', 'professional']) {

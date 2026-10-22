@@ -656,7 +656,7 @@ test('a receipt is one-use, short-lived and bound to the exact intent, state and
 test('only the owner CLI channel issues a receipt, and a receipt not issued here is unknown', t => {
   const book = owner(t);
   const bind = { intent: baseIntent, stateDigest: D('1'), policyRevision: D('2') };
-  for (const channel of ['mcp', 'http-bridge', 'model']) {
+  for (const channel of ['mcp', 'http-bridge', 'model', 'local-service']) {
     assert.equal(code(() => issueReceipt(book, { channel, principal: 'owner' }, bind, { now: NOW, ttlMs: 1000 })), 'sentinel.receipt.ownerOnly', channel);
   }
   assert.equal(code(() => issueReceipt(book, { channel: 'owner-cli', principal: 'owner' }, bind, { now: NOW, ttlMs: MAX_RECEIPT_TTL_MS + 1 })), 'sentinel.receipt.ttlInvalid');

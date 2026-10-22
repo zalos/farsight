@@ -119,9 +119,10 @@
         "owner-cli",
         "mcp",
         "http-bridge",
-        "model"
+        "model",
+        "local-service"
       ],
-      "description": "Where a decision came from. Only a trusted local owner action approves; MCP, HTTP and model output propose."
+      "description": "Where a decision came from. Only a trusted local owner action approves; MCP, HTTP, model output and any client of the owner's local service (`local-service`, the owner's own CLI included when it talks to the service) propose."
     },
     "AdmissionVerdict": {
       "type": "object",

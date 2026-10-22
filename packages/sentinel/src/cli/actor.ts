@@ -9,15 +9,12 @@ import type { DecisionChannel, Principal } from '../contracts/index.js';
 
 export type { Principal };
 
-/**
- * The channel a local service connection is recorded under. PR 02's `DecisionChannel` has no value for "a local
- * client of the service"; `local-service` is proposed for it (until then it is mapped by the admission wiring).
- */
-export type ServiceChannel = Exclude<DecisionChannel, 'owner-cli'> | 'local-service';
+/** The channel a local service connection is recorded under: any channel but the owner's own. */
+export type ServiceChannel = Exclude<DecisionChannel, 'owner-cli'>;
 
 export interface RequestedBy {
   readonly principal: Principal;
-  readonly channel: DecisionChannel | 'local-service';
+  readonly channel: DecisionChannel;
 }
 
 /** What a service connection is granted: never the owner, never human authority. */
