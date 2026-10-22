@@ -75,7 +75,7 @@ try{
   writeFileSync(join(consumer.dir,'official-sarif.json'),readFileSync(process.env.SENTINEL_SARIF_SCHEMA));
   writeFileSync(join(consumer.dir,'validate-sarif.mjs'),`import assert from 'node:assert/strict'; import {readFileSync} from 'node:fs'; import {Ajv} from 'ajv';
    const check=new Ajv({strict:false,validateFormats:false,unicodeRegExp:false}).compile(JSON.parse(readFileSync('official-sarif.json','utf8')));
-   assert.equal(check(JSON.parse(readFileSync(\${JSON.stringify(join(delivered,'report.sarif'))},'utf8'))),true,'actual installed five-engine SARIF fits the official schema');`);
+   assert.equal(check(JSON.parse(readFileSync(${JSON.stringify(join(delivered,'report.sarif'))},'utf8'))),true,'actual installed five-engine SARIF fits the official schema');`);
   await consumer.exec(process.execPath,['validate-sarif.mjs']);
  }
  if(process.env.SENTINEL_REPORT_DELIVERY)cpSync(delivered,process.env.SENTINEL_REPORT_DELIVERY,{recursive:true});
