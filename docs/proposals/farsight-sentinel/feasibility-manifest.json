@@ -73,7 +73,7 @@
       "id": "E2",
       "probe": null,
       "decision": "deferred",
-      "reason": "Review synthetic framework labels and controls now; execution-order and protection semantics are not implemented until PR 14-17.",
+      "reason": "Original source-label probe remains separate. The framework-feasibility harness measures bounded original application ordering and matching; production framework analysis remains PR 14-17.",
       "prerequisites": []
     },
     {

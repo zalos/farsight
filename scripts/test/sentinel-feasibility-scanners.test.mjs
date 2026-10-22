@@ -38,7 +38,7 @@ test('fixed Docker arguments forbid acquisition and bind only explicit synthetic
     assert.equal(value('--user'), '65534:65534');
     assert.equal(value('--cap-drop'), 'ALL');
     assert.equal(value('--security-opt'), 'no-new-privileges:true');
-    assert.equal(value('--memory'), '2g'); assert.equal(value('--cpus'), '2'); assert.equal(value('--pids-limit'), '128');
+    assert.equal(value('--memory'), '2g'); assert.equal(value('--memory-swap'), '2g'); assert.equal(value('--cpus'), '2'); assert.equal(value('--pids-limit'), '128');
     assert.ok(args.includes('--read-only'));
     assert.equal(value('--tmpfs'), candidate.id === 'semgrep' ? '/tmp:rw,noexec,nosuid,size=256m,mode=1777' : '/tmp:rw,exec,nosuid,size=256m,mode=1777');
     assert.equal(value('--entrypoint'), candidate.entrypoint);
@@ -82,7 +82,7 @@ function fakeDocker({ mismatch = false, timeout = false, corruptInspect = false,
     if (args[0] === 'inspect' && removed) return { ...ok(''), exitCode: 1, stderr: 'Error: No such object: ' + id };
     if (args[0] === 'inspect') return ok(corruptInspect ? '{}' : JSON.stringify([{ Id: id, Image: 'sha256:pinned-image',
       Config: { Image: CANDIDATES[0].image, Labels: { 'org.farsight.sentinel-feasibility.owner': mismatch ? 'someone-else' : owner }, User: '65534:65534' },
-      HostConfig: { NetworkMode: 'none', ReadonlyRootfs: true, Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=256m,mode=1777' } }, State: { ExitCode: containerExit, Running: running, Status: running ? 'running' : 'exited', Dead: false, OOMKilled: false }, Mounts: [] }]));
+      HostConfig: { NetworkMode: 'none', ReadonlyRootfs: true, MemorySwap: 2147483648, Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=256m,mode=1777' } }, State: { ExitCode: containerExit, Running: running, Status: running ? 'running' : 'exited', Dead: false, OOMKilled: false }, Mounts: [] }]));
     if (args[0] === 'start') return timeout ? { ...ok(''), exitCode: null, timedOut: true } : { ...ok('{"results":[],"paths":{"scanned":[]}}'), exitCode: clientExit };
     if (args[0] === 'rm') { removed = true; return ok(id); }
     throw new Error('unexpected Docker command');
@@ -99,6 +99,7 @@ test('timeout cleans only the exact container with the matching owner label', as
   assert.deepEqual(fake.calls.find(c => c.args[0] === 'rm').args, ['rm', '--force', fake.id]);
   assert.equal(fake.calls.filter(c => c.args[0] === 'inspect').length, 4);
   assert.equal(result.isolation.networkMode, 'none');
+  assert.equal(result.isolation.memorySwap, 2147483648);
   assert.deepEqual(result.isolation.tmpfs, { '/tmp': 'rw,noexec,nosuid,size=256m,mode=1777' });
 });
 

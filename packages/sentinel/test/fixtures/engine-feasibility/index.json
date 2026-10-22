@@ -1,0 +1,352 @@
+{
+  "schemaVersion": "sentinel-engine-corpus-v1",
+  "authorship": "Original inert source; initial semantic labels and inclusive spans manually authored before engine runs. Three safe caller spans corrected by independent source review afterward; no parser/engine oracle.",
+  "labelReview": {
+    "state": "needs-independent-review",
+    "reviewer": null
+  },
+  "denominator": {
+    "validFiles": 9,
+    "positiveSymbols": 9,
+    "safeSymbols": 9,
+    "perCapability": {
+      "direct": {
+        "positive": 3,
+        "safe": 3
+      },
+      "local": {
+        "positive": 3,
+        "safe": 3
+      },
+      "cross-file": {
+        "positive": 3,
+        "safe": 3
+      }
+    },
+    "controlsOutsideCapability": 3
+  },
+  "thresholdProposals": {
+    "pattern": {
+      "directPositiveHits": 3,
+      "safeHitsMaximum": 0,
+      "unattributedMaximum": 0,
+      "engineErrorsMaximum": 0
+    },
+    "localTaint": {
+      "directAndLocalPositiveHits": 6,
+      "safeHitsMaximum": 0
+    },
+    "crossFile": {
+      "positiveHits": 3,
+      "safeHitsMaximum": 0,
+      "sourceSinkPathEvidenceRequired": true
+    },
+    "common": [
+      "Every requested file reconciled against engine-reported scanned paths; omissions are gaps even on exit zero.",
+      "Pinned versions, unchanged inputs, owned-container cleanup and bounded completed commands required.",
+      "Pattern hits outside direct capability do not earn flow credit.",
+      "No scoped default recommendation unless independent labels and thresholds reviewed."
+    ]
+  },
+  "files": [
+    {
+      "path": "typescript/Main.ts",
+      "source": "sources/typescript/Main.ts.fixture",
+      "sha256": "44ff24a24e7ca9b37eee2dda2f3079c66aa463e46cf13ec524c0561ee362e95d",
+      "bytes": 684,
+      "stage": "valid"
+    },
+    {
+      "path": "typescript/CrossEntry.ts",
+      "source": "sources/typescript/CrossEntry.ts.fixture",
+      "sha256": "8e19301fe58a8cecd33d8c830dd38189a5c6c032992bd9e8544c906e497931f8",
+      "bytes": 354,
+      "stage": "valid"
+    },
+    {
+      "path": "typescript/CrossSink.ts",
+      "source": "sources/typescript/CrossSink.ts.fixture",
+      "sha256": "214409cb533ace7e8c2018950897961749fd7d67aa2e967772c14936015e43c3",
+      "bytes": 188,
+      "stage": "valid"
+    },
+    {
+      "path": "javascript/Main.js",
+      "source": "sources/javascript/Main.js.fixture",
+      "sha256": "460b181e5379d0ddc9df2e6167deff31f61502e6e9d507f6bccad6015bee2032",
+      "bytes": 608,
+      "stage": "valid"
+    },
+    {
+      "path": "javascript/CrossEntry.js",
+      "source": "sources/javascript/CrossEntry.js.fixture",
+      "sha256": "1f4f54ef0dc7d62ef7e3f4f55c43b470e7b8f9e45fa5dbe979d7ed88b517f8c6",
+      "bytes": 316,
+      "stage": "valid"
+    },
+    {
+      "path": "javascript/CrossSink.js",
+      "source": "sources/javascript/CrossSink.js.fixture",
+      "sha256": "d5318666d05e0477a8933bfaae1de0ecf3f4f18a9075a6246896f5ecb14173d0",
+      "bytes": 144,
+      "stage": "valid"
+    },
+    {
+      "path": "java/Main.java",
+      "source": "sources/java/Main.java.fixture",
+      "sha256": "fc7732f4df8a2c1d6a125f0dbfe2d9b18665879370e560ffd7f7122ccedf013b",
+      "bytes": 683,
+      "stage": "valid"
+    },
+    {
+      "path": "java/CrossEntry.java",
+      "source": "sources/java/CrossEntry.java.fixture",
+      "sha256": "81164aafa03650875a699cd94bbf885944a311c66f1cec0b0fb0cf1ab95934d1",
+      "bytes": 322,
+      "stage": "valid"
+    },
+    {
+      "path": "java/CrossSink.java",
+      "source": "sources/java/CrossSink.java.fixture",
+      "sha256": "74a1cd1b0cb8337fcf784775882cd94604a878c8a76d0d6ac6c106205f4aa320",
+      "bytes": 207,
+      "stage": "valid"
+    },
+    {
+      "path": "controls/partial.ts",
+      "source": "sources/controls/partial.ts.fixture",
+      "sha256": "5ea64460d0ed75471c0db80cbb31972cb8ad355c30a7bbae858e97acd814c652",
+      "bytes": 161,
+      "stage": "partial"
+    },
+    {
+      "path": "controls/unsupported.rs",
+      "source": "sources/controls/unsupported.rs.fixture",
+      "sha256": "341a86a29a1ee73f1d0d20de6d603e9834711a6243be75eb03921dfc9cd83cf9",
+      "bytes": 136,
+      "stage": "out-of-rule-language",
+      "reason": "Rust is outside the selected JS/TS/Java rule languages; this does not claim Rust is unsupported by either engine."
+    },
+    {
+      "path": "controls/oversized.ts",
+      "source": "sources/controls/oversized.ts.fixture",
+      "sha256": "a57e72f8c55adb81e8c60c3870868aec14ec9942977af0880fcbb10216b9454b",
+      "bytes": 8845,
+      "stage": "oversize"
+    }
+  ],
+  "labels": [
+    {
+      "id": "typescript-direct-positive",
+      "language": "typescript",
+      "capability": "direct",
+      "label": "positive",
+      "path": "typescript/Main.ts",
+      "startLine": 1,
+      "endLine": 3,
+      "reason": "Request value changes SQL structure."
+    },
+    {
+      "id": "typescript-direct-safe",
+      "language": "typescript",
+      "capability": "direct",
+      "label": "safe",
+      "path": "typescript/Main.ts",
+      "startLine": 4,
+      "endLine": 6,
+      "reason": "SQL structure is constant; request value is a separate bound argument. Assumes query binding semantics."
+    },
+    {
+      "id": "typescript-local-positive",
+      "language": "typescript",
+      "capability": "local",
+      "label": "positive",
+      "path": "typescript/Main.ts",
+      "startLine": 7,
+      "endLine": 11,
+      "reason": "Request value changes SQL structure."
+    },
+    {
+      "id": "typescript-local-safe",
+      "language": "typescript",
+      "capability": "local",
+      "label": "safe",
+      "path": "typescript/Main.ts",
+      "startLine": 12,
+      "endLine": 16,
+      "reason": "SQL structure is constant; request value is a separate bound argument. Assumes query binding semantics."
+    },
+    {
+      "id": "typescript-cross-file-positive",
+      "language": "typescript",
+      "capability": "cross-file",
+      "label": "positive",
+      "path": "typescript/CrossSink.ts",
+      "startLine": 1,
+      "endLine": 3,
+      "reason": "Caller concatenates request text into SQL before passing it across this file boundary.",
+      "sourcePath": "typescript/CrossEntry.ts",
+      "sourceStartLine": 3,
+      "sourceEndLine": 3
+    },
+    {
+      "id": "typescript-cross-file-safe",
+      "language": "typescript",
+      "capability": "cross-file",
+      "label": "safe",
+      "path": "typescript/CrossSink.ts",
+      "startLine": 4,
+      "endLine": 6,
+      "reason": "Caller passes constant SQL and a separate value across the file boundary; assumes query binding semantics.",
+      "sourcePath": "typescript/CrossEntry.ts",
+      "sourceStartLine": 6,
+      "sourceEndLine": 6
+    },
+    {
+      "id": "javascript-direct-positive",
+      "language": "javascript",
+      "capability": "direct",
+      "label": "positive",
+      "path": "javascript/Main.js",
+      "startLine": 1,
+      "endLine": 3,
+      "reason": "Request value changes SQL structure."
+    },
+    {
+      "id": "javascript-direct-safe",
+      "language": "javascript",
+      "capability": "direct",
+      "label": "safe",
+      "path": "javascript/Main.js",
+      "startLine": 4,
+      "endLine": 6,
+      "reason": "SQL structure is constant; request value is a separate bound argument. Assumes query binding semantics."
+    },
+    {
+      "id": "javascript-local-positive",
+      "language": "javascript",
+      "capability": "local",
+      "label": "positive",
+      "path": "javascript/Main.js",
+      "startLine": 7,
+      "endLine": 11,
+      "reason": "Request value changes SQL structure."
+    },
+    {
+      "id": "javascript-local-safe",
+      "language": "javascript",
+      "capability": "local",
+      "label": "safe",
+      "path": "javascript/Main.js",
+      "startLine": 12,
+      "endLine": 16,
+      "reason": "SQL structure is constant; request value is a separate bound argument. Assumes query binding semantics."
+    },
+    {
+      "id": "javascript-cross-file-positive",
+      "language": "javascript",
+      "capability": "cross-file",
+      "label": "positive",
+      "path": "javascript/CrossSink.js",
+      "startLine": 1,
+      "endLine": 3,
+      "reason": "Caller concatenates request text into SQL before passing it across this file boundary.",
+      "sourcePath": "javascript/CrossEntry.js",
+      "sourceStartLine": 3,
+      "sourceEndLine": 3
+    },
+    {
+      "id": "javascript-cross-file-safe",
+      "language": "javascript",
+      "capability": "cross-file",
+      "label": "safe",
+      "path": "javascript/CrossSink.js",
+      "startLine": 4,
+      "endLine": 6,
+      "reason": "Caller passes constant SQL and a separate value across the file boundary; assumes query binding semantics.",
+      "sourcePath": "javascript/CrossEntry.js",
+      "sourceStartLine": 6,
+      "sourceEndLine": 6
+    },
+    {
+      "id": "java-direct-positive",
+      "language": "java",
+      "capability": "direct",
+      "label": "positive",
+      "path": "java/Main.java",
+      "startLine": 2,
+      "endLine": 4,
+      "reason": "Request value changes SQL structure."
+    },
+    {
+      "id": "java-direct-safe",
+      "language": "java",
+      "capability": "direct",
+      "label": "safe",
+      "path": "java/Main.java",
+      "startLine": 5,
+      "endLine": 7,
+      "reason": "SQL structure is constant; request value is a separate bound argument. Assumes query binding semantics."
+    },
+    {
+      "id": "java-local-positive",
+      "language": "java",
+      "capability": "local",
+      "label": "positive",
+      "path": "java/Main.java",
+      "startLine": 8,
+      "endLine": 12,
+      "reason": "Request value changes SQL structure."
+    },
+    {
+      "id": "java-local-safe",
+      "language": "java",
+      "capability": "local",
+      "label": "safe",
+      "path": "java/Main.java",
+      "startLine": 13,
+      "endLine": 17,
+      "reason": "SQL structure is constant; request value is a separate bound argument. Assumes query binding semantics."
+    },
+    {
+      "id": "java-cross-file-positive",
+      "language": "java",
+      "capability": "cross-file",
+      "label": "positive",
+      "path": "java/CrossSink.java",
+      "startLine": 2,
+      "endLine": 4,
+      "reason": "Caller concatenates request text into SQL before passing it across this file boundary.",
+      "sourcePath": "java/CrossEntry.java",
+      "sourceStartLine": 3,
+      "sourceEndLine": 3
+    },
+    {
+      "id": "java-cross-file-safe",
+      "language": "java",
+      "capability": "cross-file",
+      "label": "safe",
+      "path": "java/CrossSink.java",
+      "startLine": 5,
+      "endLine": 7,
+      "reason": "Caller passes constant SQL and a separate value across the file boundary; assumes query binding semantics.",
+      "sourcePath": "java/CrossEntry.java",
+      "sourceStartLine": 6,
+      "sourceEndLine": 6
+    }
+  ],
+  "rules": [
+    {
+      "mode": "pattern",
+      "source": "rules/pattern.yaml.fixture",
+      "sha256": "d9e42afe21d70ef92573816941f446e3e4e4c37d95a77a5d9a1e54bc60e9cac7",
+      "bytes": 437
+    },
+    {
+      "mode": "taint",
+      "source": "rules/taint.yaml.fixture",
+      "sha256": "7b8121e3407e42721798b405312448c61b0fd1df6df2aba5601f10535dfff940",
+      "bytes": 725
+    }
+  ]
+}

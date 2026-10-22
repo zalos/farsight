@@ -1,0 +1,8 @@
+class CrossSink {
+  static void positive(Database database, String sql) {
+    database.query(sql);
+  }
+  static void safe(Database database, String sql, String value) {
+    database.query(sql, value);
+  }
+}

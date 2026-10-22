@@ -1,0 +1,6 @@
+export function positive(database, sql) {
+  database.query(sql);
+}
+export function safe(database, sql, value) {
+  database.query(sql, value);
+}

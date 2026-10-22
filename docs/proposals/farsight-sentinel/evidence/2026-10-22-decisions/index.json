@@ -1,0 +1,120 @@
+{
+  "format": "sentinel-feasibility-evidence-index/draft-1",
+  "scope": "Original synthetic experiment evidence. Historical records remain unchanged and do not replace the final measurements. Owner acceptance remains pending.",
+  "records": [
+    {
+      "path": "engine-initial.json",
+      "bytes": 550255,
+      "sha256": "898b121c5aa97de388f1a2bb6957752bf8058c0c78f09f8e03ad30834a51603e",
+      "note": "Historical initial run: missing-rule denominator was recorded as zero. Not final acceptance evidence."
+    },
+    {
+      "path": "engine-denominator-corrected.json",
+      "bytes": 551588,
+      "sha256": "4374398798f306fabe03d4478bcffac6424c5867eafa498a1d74c8f3360061e6",
+      "note": "Corrected denominator; before final input-control hardening and safe cross-file caller-span correction."
+    },
+    {
+      "path": "engine-controls-corrected.json",
+      "bytes": 553550,
+      "sha256": "6e9b9308c5460cbf1c5ddd2b4511a5f913fc209fdba5b30d0f9764a9038e7a3e",
+      "note": "Stricter process/isolation/input controls; safe cross-file caller source spans were still wrong."
+    },
+    {
+      "path": "engine-final.json",
+      "bytes": 554871,
+      "sha256": "5d4744aa479edf1d206ae9fa47a0c1e2138708ce9fab273dd2ed527bd5bdbe50",
+      "note": "Final reviewed-label run at 210e47a; both candidates reconcile all valid inputs and expected omission/failure controls."
+    },
+    {
+      "path": "runtime-initial.json",
+      "bytes": 220609,
+      "sha256": "c7bc1c07fe0f5beb1172aa08cf90e4f814dc814930129cd813eecb7bab214821",
+      "note": "Historical resource/runtime run before complete artifact/input identity checks."
+    },
+    {
+      "path": "runtime-environment.json",
+      "bytes": 2871,
+      "sha256": "791c66884082265fdc596d44aabdd4a604281ea8485ca236b64e01ce44169c68",
+      "note": "Environment supplement for the initial run; no replacement of its original output."
+    },
+    {
+      "path": "runtime-identity-corrected.json",
+      "bytes": 241013,
+      "sha256": "720b60632ba0f1326640b4e3e28ecfe1cf144984cedfa20c43a8cfadd11e5f22",
+      "note": "Identity hardening rerun at b8becd2, before explicit optional-zstd-unavailable handling."
+    },
+    {
+      "path": "runtime-final.json",
+      "bytes": 242841,
+      "sha256": "dcc954e40a13367b6c5d343f071f8cf30c606c2a5798bb8012a28959f3e950b7",
+      "note": "Final resource/runtime run at 4353d4f; 54 measured codec trials, all 14 controls passed."
+    },
+    {
+      "path": "runtime-artifacts.tgz",
+      "bytes": 11640818,
+      "sha256": "22f48801d02be27ea3c448bebb1b1d7ccfef731b8160a413504e700261b8aa3a",
+      "note": "Exact original input/output/progress bytes for all three runtime runs, content-addressed; manifest maps original run-relative paths to objects."
+    },
+    {
+      "path": "framework-owner-failure.json",
+      "bytes": 48984,
+      "sha256": "5be33e6f5fee190eb02671beeddfa4b58a7262e1a7c25ada5644a9ebe50a31b1",
+      "note": "Historical failure: owner-label mismatch; cleanup refused. Retained original output is not final acceptance evidence."
+    },
+    {
+      "path": "framework-vacuous-pass.json",
+      "bytes": 81620,
+      "sha256": "51df480bed6d98b58578cc441d128a0ff41d3223157565ea5ca0e5c133c71e82",
+      "note": "Historical defect: state says measured despite null observations. Explicitly invalid, retained to document the found-and-fixed false pass."
+    },
+    {
+      "path": "framework-initial.json",
+      "bytes": 195494,
+      "sha256": "646f4be0674facbf367ba094ddffd58271fb7c35f7bbabced4143f62f6f54854",
+      "note": "Historical dirty-tree combined run before acquisition/run separation and strict lifecycle fixes."
+    },
+    {
+      "path": "framework-acquisition-intermediate.json",
+      "bytes": 231353,
+      "sha256": "1e22742370dd9a1ffd3fd030856f436cc7ccd39e330f5135483e4041bc365c8d",
+      "note": "Historical acquisition at 536e6b1, before corpus and final SOL hardening."
+    },
+    {
+      "path": "framework-run-intermediate.json",
+      "bytes": 106435,
+      "sha256": "3988498a08fb7c25ba2542a459bb8e864ef562c439a90c42d1e75f3bd0269efe",
+      "note": "Historical runtime at 536e6b1; not acceptance evidence for corrected corpus or final controls."
+    },
+    {
+      "path": "framework-acquisition-corpus-corrected.json",
+      "bytes": 231440,
+      "sha256": "ebc637bf2cd7c43b2514b7dd582214294b041f0893cbfede2f6df100686a12c5",
+      "note": "Corpus corrected at 0cb1a3c; dependencies acquired but no run was executed. Predates final SOL acquisition/lifecycle hardening."
+    },
+    {
+      "path": "framework-acquisition-final.json",
+      "bytes": 345715,
+      "sha256": "9966a8c62af6ee8399e78adcdd8191702cbc4c7cedcfdb885cf01150f9797f2a",
+      "note": "Final explicit acquisition at 74eec663d4e32311dd919deb7d78e95504e81ab9; all four acquired, five dependency readers removed, exact resolved bytes retained."
+    },
+    {
+      "path": "framework-run-final.json",
+      "bytes": 469343,
+      "sha256": "e57bfd5a49c4feaae3f044a40da39c4c2c04a00709759e3ae15075a031d1d1ac",
+      "note": "Final offline run at 74eec663d4e32311dd919deb7d78e95504e81ab9; all four measured, eleven scenarios/fourteen expected statuses agree, nine runtime dependency/app containers removed."
+    },
+    {
+      "path": "framework-acquisition-files.tgz",
+      "bytes": 37070,
+      "sha256": "2ec8042f42e24be4f810a5da70f1f207fdfe27190aacc02da2c9007aac0086af",
+      "note": "Exact 32 retained acquisition files: 19 original sources, eight generated Dockerfiles/drivers, and five resolved lock/tree/POM evidence files. No installed dependencies or binaries."
+    },
+    {
+      "path": "framework-disposal-final.json",
+      "bytes": 25044,
+      "sha256": "4b157e6f9955b897735ff63c14e7cdd1a826eb35deae063f718d687e46cbd99c",
+      "note": "Exact final acquisition tags removed without force; independent image-ID verification records each resulting image state. Unrelated image tags preserved."
+    }
+  ]
+}

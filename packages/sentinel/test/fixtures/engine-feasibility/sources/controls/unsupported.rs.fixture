@@ -1,0 +1,3 @@
+fn unsupported(request: Request, database: Database) {
+    database.query("SELECT id FROM customer WHERE name = " + request.value());
+}

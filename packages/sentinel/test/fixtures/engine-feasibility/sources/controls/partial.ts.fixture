@@ -1,0 +1,4 @@
+export function validPrefix(request, database) {
+  database.query("SELECT id FROM customer WHERE name = '" + request.value() + "'");
+}
+export function broken( {

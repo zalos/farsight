@@ -41,6 +41,33 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel PR01 measured decisions — 2026-10-22
+
+[PR #133](https://github.com/zalos/farsight/pull/133), branch `codex/sentinel-decisions`, continues merged #132 (`2bd38f6`) with original engine, framework and
+runtime/resource experiments. Claude CLI implemented framework apps/drivers; SOL lanes implemented and
+cross-reviewed engine/runtime/acquisition/lifecycle controls; the lead integrated, reviewed and ran final
+measurements. [The acceptance record](proposals/farsight-sentinel/feasibility-acceptance.md) links the proposed
+matrix/resource defaults, immutable evidence and remaining gates. Owner acceptance is pending before PR02.
+
+Both evaluated engine profiles pass the bounded direct/local criteria but fail cross-file qualification.
+Semgrep is the proposed scoped pattern default. Four original framework apps pass 11 scenarios/14 expected
+responses at `74eec66`; all 14 owned dependency/app containers were removed. The final four acquisition tags
+were removed non-forcibly and their image IDs confirmed absent; earlier Claude acquisition images remain
+separate historical resources. Runtime evidence passes 14 controls, seven container cleanup checks and 54
+codec trials; only the actual Mac ARM64/Docker Desktop combination is proposed. Advisory database semantics,
+full crash recovery, general engine accuracy, production framework packs and other platforms remain open.
+Scan/stage configuration, inspectable I/O, linked reruns and visuals remain PR25; model selection is PR25b.
+
+Validation: 154 integrated script tests pass. Product build/type/schema, 1,615 package tests with two live
+skips, catalog lint, Echo smoke, 345 browser/MCP tests and 11 small perf checks passed before the final
+experiment-only changes; required PR CI checks validate the final submitted revision. Claude's independent
+source review and cleanup re-review report no remaining actionable findings. Original reviews/history are
+unchanged; retained failures include a rejected false-success result. All builds/tests used isolated worktrees.
+The first CI run passed product/browser/package checks but exposed seven Linux AMD64 script-test failures
+from mixed real/simulated host metadata; the follow-up corrects only synthetic fixture identity and keeps the
+measured harness unchanged. No primary build/test, dogfood refresh, global install, model/provider trial or
+production Sentinel package. The primary checkout's existing editor-settings edit is preserved.
+
 ## Sentinel PR 01 first implementation slice — 2026-10-21
 
 PR #132 review follow-up on `codex/sentinel-feasibility` tightens platform refusal, network-denial evidence

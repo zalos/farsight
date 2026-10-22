@@ -1,0 +1,178 @@
+{
+  "schemaVersion": "sentinel-framework-feasibility-corpus-v1",
+  "purpose": "PR 01 E2 framework evidence: original synthetic apps for Express, Nest, Next and Spring Boot/Security, probed for real in bounded no-network containers, with each runtime observation kept distinct from the source-grounded static label it is paired with. No production Sentinel adapter or public contract is defined here.",
+  "review": {
+    "status": "needs-independent-review",
+    "reviewer": null,
+    "note": "Source, expected labels and expected runtime outcomes below are authored by the implementing lane and are not yet independently reviewed. Passing a probe does not fill this field."
+  },
+  "candidates": [
+    { "id": "express", "version": "4.21.2", "registry": "npm", "case": "express-order" },
+    { "id": "@nestjs/core", "version": "10.4.15", "registry": "npm", "case": "nest-validation" },
+    { "id": "@nestjs/common", "version": "10.4.15", "registry": "npm", "case": "nest-validation" },
+    { "id": "@nestjs/platform-express", "version": "10.4.15", "registry": "npm", "case": "nest-validation" },
+    { "id": "class-validator", "version": "0.14.1", "registry": "npm", "case": "nest-validation" },
+    { "id": "class-transformer", "version": "0.5.1", "registry": "npm", "case": "nest-validation" },
+    { "id": "next", "version": "14.2.25", "registry": "npm", "case": "next-matcher" },
+    { "id": "react", "version": "18.3.1", "registry": "npm", "case": "next-matcher" },
+    { "id": "react-dom", "version": "18.3.1", "registry": "npm", "case": "next-matcher" },
+    { "id": "org.springframework.boot:spring-boot-starter-parent", "version": "3.4.3", "registry": "maven", "case": "spring-chains" },
+    { "id": "org.springframework.security:spring-security-core", "version": "6.4.3", "registry": "maven", "case": "spring-chains", "resolutionPolicy": "transitive-managed-by-spring-boot-starter-parent", "note": "Pinned here as the exact version this candidate's acquisition must resolve to. Not an independent coordinate in pom.xml.fixture: Spring Boot 3.4.3's dependency management resolves spring-boot-starter-security to this spring-security-core version by itself. Acquisition parses the real mvn dependency:tree and fails the case outright if the actually resolved version does not equal this exact pin." }
+  ],
+  "cases": [
+    {
+      "id": "express-order",
+      "framework": "express",
+      "purpose": "Early vs. late auth middleware registration order, and a gate whose body is chosen outside the source text (unknown custom middleware).",
+      "files": [
+        { "path": "package.json", "source": "sources/express-order/package.json.fixture", "sha256": "e043eee40241a8afcec1fd1866db58db7a3b2dd4b74fbaf8767c2ffef4c5a945" },
+        { "path": "server.js", "source": "sources/express-order/server.fixture.js", "sha256": "d6b08ea46da75de3ce84dd7e4bffb407ea928a857f8f471a87c4fe239b3c094b" }
+      ],
+      "healthRoute": { "method": "GET", "path": "/healthz" },
+      "scenarios": [
+        {
+          "id": "auth-before-route",
+          "method": "GET",
+          "path": "/admin/early",
+          "staticLabel": "bounded-safe-pattern",
+          "staticNote": "requireAuth is registered with app.use on this path before the route handler; source order alone supports a gate here.",
+          "expectedRuntime": { "withoutToken": 401, "withToken": 200 }
+        },
+        {
+          "id": "auth-after-route",
+          "method": "GET",
+          "path": "/admin/late",
+          "staticLabel": "unknown-enforcement",
+          "staticNote": "requireAuth is registered with app.use on this path, but only after the route handler that already answers the request; registration order, not presence of the call, decides reach.",
+          "expectedRuntime": { "withoutToken": 200, "withToken": 200 }
+        },
+        {
+          "id": "unknown-custom-middleware",
+          "method": "GET",
+          "path": "/admin/opaque",
+          "staticLabel": "unknown-enforcement",
+          "staticNote": "The middleware function is produced by resolveOpaqueMiddleware(), chosen once at startup (route-registration time) from an environment switch; static source review cannot see which function fills this slot without knowing that switch as the process starts.",
+          "env": { "SENTINEL_FIXTURE_OPAQUE_MODE": "deny" },
+          "expectedRuntime": { "anyRequest": 403 },
+          "runtimeNote": "This run pins the switch to its denying branch to show the gate can be real; the static label stays unknown-enforcement regardless, because source text alone never reveals which branch runs."
+        }
+      ]
+    },
+    {
+      "id": "nest-validation",
+      "framework": "nest",
+      "purpose": "A DTO decorated with class-validator rules is enforced only on the route that registers an actual ValidationPipe; the same DTO type on a route with no pipe is a declaration, not a check.",
+      "files": [
+        { "path": "package.json", "source": "sources/nest-validation/package.json.fixture", "sha256": "dacc3a0dd81702c3fe8fa873910e3a83a109e794086d083601670751a3f03e61" },
+        { "path": "tsconfig.json", "source": "sources/nest-validation/tsconfig.json.fixture", "sha256": "1d6e56de462328364613cd23f2f32dfb8be511e1df37081933b0587769714926" },
+        { "path": "create-user.dto.ts", "source": "sources/nest-validation/create-user.dto.fixture.ts", "sha256": "b56a7143b0488ef8d11cf834556b19b0eaa2856bd15c7877e72840071fa64a00" },
+        { "path": "app.controller.ts", "source": "sources/nest-validation/app.controller.fixture.ts", "sha256": "5017ac949a525c7bdee504d2d99a9ea26d676fda86d5bd5298c3e59fef2d7872" },
+        { "path": "app.module.ts", "source": "sources/nest-validation/app.module.fixture.ts", "sha256": "4e02f25b7c6d0f0adaa3a516805b5a12c18bfe24e61028b06cbf8c194ff8310c" },
+        { "path": "main.ts", "source": "sources/nest-validation/main.fixture.ts", "sha256": "a1f85c5e6e3adb5d0accc9fa8f3ec2008b58c29788228a5d8f1673523f338796" }
+      ],
+      "healthRoute": { "method": "GET", "path": "/healthz" },
+      "scenarios": [
+        {
+          "id": "validator-with-pipe",
+          "method": "POST",
+          "path": "/users/validated",
+          "staticLabel": "bounded-safe-pattern",
+          "staticNote": "The route carries an explicit @UsePipes(new ValidationPipe()) beside the CreateUserDto parameter.",
+          "requestBody": {},
+          "expectedRuntime": { "invalidBody": 400 }
+        },
+        {
+          "id": "validator-without-pipe",
+          "method": "POST",
+          "path": "/users/unvalidated",
+          "staticLabel": "unknown-enforcement",
+          "staticNote": "The same CreateUserDto type is declared as the parameter, but no pipe is registered for this route and none is registered globally in main.ts; the decorators alone do not establish enforcement.",
+          "requestBody": {},
+          "expectedRuntime": { "invalidBody": 201 },
+          "runtimeNote": "201, not 200: Nest's default success status for a @Post() handler with no @HttpCode() override is 201 Created. The lesson is unchanged either way (no validation runs), but this value was corrected after the first real probe run rather than left as an unverified assumption."
+        }
+      ]
+    },
+    {
+      "id": "next-matcher",
+      "framework": "next",
+      "purpose": "Inclusion in config.matcher is necessary but not sufficient for a request to be blocked; the middleware body can still exempt a matched path, and a path outside the matcher is never seen by the middleware at all.",
+      "files": [
+        { "path": "package.json", "source": "sources/next-matcher/package.json.fixture", "sha256": "80e802393dd7443bdb0247b72bde4eb8f84c571adee3b95ac814731ff8f24c7d" },
+        { "path": "next.config.js", "source": "sources/next-matcher/next.config.fixture.js", "sha256": "1973b1aef8b86625906503dc48f20cb092588328c83656651c9dbef142321270" },
+        { "path": "middleware.js", "source": "sources/next-matcher/middleware.fixture.js", "sha256": "818367ec2d6e9b203988893efd8bf1a7364f10e293b99d22c5200b640526e7b4" },
+        { "path": "pages/api/healthz.js", "source": "sources/next-matcher/healthz.fixture.js", "sha256": "4136664f9bf45da229d1c42a15ca4877965ddcc06a2604b3cbc25d4564637510" },
+        { "path": "pages/api/dashboard/secret.js", "source": "sources/next-matcher/secret.fixture.js", "sha256": "18981f86a6ebe657ea5c9f8f405be85a076143a60078579908a68549e218fac2" },
+        { "path": "pages/api/dashboard/open.js", "source": "sources/next-matcher/open.fixture.js", "sha256": "e141022b66db80d2bf01606706fe428ef6555cae4988559fbeb39c1878327e56" },
+        { "path": "pages/api/public/info.js", "source": "sources/next-matcher/info.fixture.js", "sha256": "8c29fb1a508e1fa174a6cfd8eb4245efa96287d20cc96f01e11954bc94586d3d" }
+      ],
+      "healthRoute": { "method": "GET", "path": "/api/healthz" },
+      "scenarios": [
+        {
+          "id": "matched-and-blocked",
+          "method": "GET",
+          "path": "/api/dashboard/secret",
+          "staticLabel": "bounded-safe-pattern",
+          "staticNote": "Matched by config.matcher; the middleware body's default branch blocks every path except the one literal exemption.",
+          "expectedRuntime": { "status": 403 }
+        },
+        {
+          "id": "matched-but-exempted",
+          "method": "GET",
+          "path": "/api/dashboard/open",
+          "staticLabel": "unknown-enforcement",
+          "staticNote": "Matched by config.matcher, but the middleware body explicitly lets this exact path through; matcher inclusion alone would have mislabelled this as protected.",
+          "expectedRuntime": { "status": 200 }
+        },
+        {
+          "id": "excluded-by-matcher",
+          "method": "GET",
+          "path": "/api/public/info",
+          "staticLabel": "unknown-enforcement",
+          "staticNote": "Outside config.matcher entirely; the middleware function never runs for this path, so no source-declared check applies to it either way.",
+          "expectedRuntime": { "status": 200 }
+        }
+      ]
+    },
+    {
+      "id": "spring-chains",
+      "framework": "spring",
+      "purpose": "Two ordered, overlapping SecurityFilterChain beans, plus a path that matches neither chain's securityMatcher. No bean here declares a catch-all, and the fixture does not invent a fallback.",
+      "files": [
+        { "path": "pom.xml", "source": "sources/spring-chains/pom.xml.fixture", "sha256": "d9bac9bf1043d5eb9da8beaa3e46040417767d6182dfdf541dc50e2c904ce95d" },
+        { "path": "src/main/java/org/farsight/sentinel/fixture/SentinelFeasibilityApplication.java", "source": "sources/spring-chains/SentinelFeasibilityApplication.fixture.java", "sha256": "f1fb25831a2aec620544f53b843ad7198311b01d0068e9a0d6a4d25eb66ce131" },
+        { "path": "src/main/java/org/farsight/sentinel/fixture/HelloController.java", "source": "sources/spring-chains/HelloController.fixture.java", "sha256": "d82d42452516e96f5dc8d06ae933859aa36b6db98b87ff68feded92a9e8080f0" },
+        { "path": "src/main/java/org/farsight/sentinel/fixture/SecurityConfig.java", "source": "sources/spring-chains/SecurityConfig.fixture.java", "sha256": "8cd6d47f2f3fe542c52fd932442f235141ea37a11c3a761c295bd7d18cde8be3" }
+      ],
+      "healthRoute": { "method": "GET", "path": "/healthz" },
+      "credentials": { "username": "fixture-user", "password": "NOT_A_SECRET_DO_NOT_USE", "note": "Inert fixture credential, matching this repository's existing inert-marker convention; used only inside a no-network container against the fixture's own in-memory user store." },
+      "scenarios": [
+        {
+          "id": "overlapping-open-chain",
+          "method": "GET",
+          "path": "/api/secure/public/info",
+          "staticLabel": "unknown-enforcement",
+          "staticNote": "Caught by the earlier, narrower, declared-open chain (Order 1) before the broader authenticated chain (Order 2) is ever reached for this path; a reviewer who only reads the broader chain's matcher could misclassify this path as authenticated.",
+          "expectedRuntime": { "withoutCredentials": 200 }
+        },
+        {
+          "id": "later-authenticated-chain",
+          "method": "GET",
+          "path": "/api/secure/data",
+          "staticLabel": "bounded-safe-pattern",
+          "staticNote": "Not matched by the open chain's narrower securityMatcher; the broader authenticated chain (Order 2) applies.",
+          "expectedRuntime": { "withoutCredentials": 401, "withCredentials": 200 }
+        },
+        {
+          "id": "unmatched-no-chain-applies",
+          "method": "GET",
+          "path": "/api/other/thing",
+          "staticLabel": "unknown-enforcement",
+          "staticNote": "No SecurityFilterChain's securityMatcher reaches this path. The static label stays unknown-enforcement: neither chain's declared policy says anything about this path, so source review alone cannot certify it protected or unprotected either way.",
+          "expectedRuntime": { "withoutCredentials": 200 },
+          "runtimeNote": "Frozen before the confirming measurement, from Spring Security's own documented FilterChainProxy contract, not from having already run this fixture: when no configured SecurityFilterChain's securityMatcher matches a request, Spring Security applies none of that chain's filters to it at all (no authentication, no CSRF) rather than falling back to any other chain's policy, so the request reaches the controller as if no security configuration existed for this path. 200 without credentials is that documented behaviour's predicted outcome, checked here like any other scenario's expectedRuntime — not an exploratory probe outside the pass/fail denominator. A different outcome would mean this fixture's understanding of that contract, or the pinned Spring Security version's actual behaviour, is wrong, and must be investigated rather than silently re-labelled."
+        }
+      ]
+    }
+  ]
+}

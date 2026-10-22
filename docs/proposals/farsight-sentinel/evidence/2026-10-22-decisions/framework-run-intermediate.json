@@ -1,0 +1,1239 @@
+{
+  "format": "sentinel-feasibility-frameworks-results/draft-1",
+  "startedAt": "2026-10-22T02:01:19.480Z",
+  "provenance": {
+    "revision": "536e6b1062681dc4af79367e3389391504a4616c",
+    "dirty": false
+  },
+  "runtime": {
+    "node": "24.21.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "harness": [
+    {
+      "path": "scripts/sentinel-feasibility-frameworks.mjs",
+      "sha256": "cd42fb8f844ae1bad535c3c9c16d4835258fa16ced63658e837b28e26e85db2c",
+      "bytes": 18252
+    },
+    {
+      "path": "scripts/sentinel-feasibility/frameworks/runtime.mjs",
+      "sha256": "a8d98ec9793d61eede0cd135272d73eb8aa24d018ec30b32767820e72d3abede",
+      "bytes": 16917
+    },
+    {
+      "path": "scripts/sentinel-feasibility/frameworks/express.mjs",
+      "sha256": "d81cc3ff78a806407c8f16accd38a1e7825a87e2243bf2d02e71bb4f28ba14ba",
+      "bytes": 2619
+    },
+    {
+      "path": "scripts/sentinel-feasibility/frameworks/nest.mjs",
+      "sha256": "8898526d0ac22b55177c4246357a0edaa56bef32891715c83419f7ef7ed880a4",
+      "bytes": 1901
+    },
+    {
+      "path": "scripts/sentinel-feasibility/frameworks/next.mjs",
+      "sha256": "f56d7dba34ca4dd478a2327be0a02ce1dcab02bdc7c4cf7a32c86e489dd60dab",
+      "bytes": 1877
+    },
+    {
+      "path": "scripts/sentinel-feasibility/frameworks/spring.mjs",
+      "sha256": "b82d35b0873547e50a11adda2f2569b0e8f2a9ac377a283013f0a4498698bd21",
+      "bytes": 2677
+    }
+  ],
+  "acquisition": {
+    "path": "/tmp/sentinel-fw-acq-final",
+    "startedAt": "2026-10-22T02:01:01.297Z",
+    "provenance": {
+      "revision": "536e6b1062681dc4af79367e3389391504a4616c",
+      "dirty": false
+    }
+  },
+  "cases": [
+    {
+      "caseId": "express-order",
+      "tag": "sentinel-feasibility-frameworks-express-order-d86d4e14-2437-44b1-850b-1e06926a9674",
+      "imageId": "sha256:7f673bd773f52fc4c5c8560c0e36cd0f74d5e5dc173bcc0ebfc1b8b2cca813ba",
+      "probe": {
+        "image": "sha256:7f673bd773f52fc4c5c8560c0e36cd0f74d5e5dc173bcc0ebfc1b8b2cca813ba",
+        "expectedImageId": "sha256:7f673bd773f52fc4c5c8560c0e36cd0f74d5e5dc173bcc0ebfc1b8b2cca813ba",
+        "caseId": "express-order",
+        "owner": "fb92fc0a-dd22-46fa-8fcb-eaaa78c4d8d1",
+        "name": "sentinel-feasibility-frameworks-3c161a3f-6509-4374-aa3c-50b9eb48b976",
+        "command": [
+          "docker",
+          "create",
+          "--pull",
+          "never",
+          "--name",
+          "sentinel-feasibility-frameworks-3c161a3f-6509-4374-aa3c-50b9eb48b976",
+          "--label",
+          "org.farsight.sentinel-feasibility-frameworks.owner=fb92fc0a-dd22-46fa-8fcb-eaaa78c4d8d1",
+          "--label",
+          "org.farsight.sentinel-feasibility-frameworks.case=express-order",
+          "--platform",
+          "linux/arm64",
+          "--network",
+          "none",
+          "--user",
+          "65534:65534",
+          "--read-only",
+          "--cap-drop",
+          "ALL",
+          "--security-opt",
+          "no-new-privileges:true",
+          "--memory",
+          "1g",
+          "--memory-swap",
+          "1g",
+          "--cpus",
+          "1",
+          "--pids-limit",
+          "256",
+          "--tmpfs",
+          "/tmp:rw,noexec,nosuid,size=128m,mode=1777",
+          "--env",
+          "HOME=/tmp",
+          "sha256:7f673bd773f52fc4c5c8560c0e36cd0f74d5e5dc173bcc0ebfc1b8b2cca813ba"
+        ],
+        "state": "measured",
+        "create": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 40.792708000000005,
+          "stdout": "92857f2972f8199425c4f27a7d95e3e2a7056d4ebc84639f92d445d39c6b8d8e\n",
+          "stderr": "",
+          "stdoutSha256": "635ecf7399a3d854c16ab17da82ef7b4244025470009e63e90a08b179e10cc73",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "preStartInspect": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 30.562749999999994,
+          "stdout": "[\n    {\n        \"Id\": \"92857f2972f8199425c4f27a7d95e3e2a7056d4ebc84639f92d445d39c6b8d8e\",\n        \"Created\": \"2026-10-22T02:01:19.5588513Z\",\n        \"Path\": \"/app/probe.sh\",\n        \"Args\": [],\n        \"State\": {\n            \"Status\": \"created\",\n            \"Running\": false,\n            \"Paused\": false,\n            \"Restarting\": false,\n            \"OOMKilled\": false,\n            \"Dead\": false,\n            \"Pid\": 0,\n            \"ExitCode\": 0,\n            \"Error\": \"\",\n            \"StartedAt\": \"0001-01-01T00:00:00Z\",\n            \"FinishedAt\": \"0001-01-01T00:00:00Z\"\n        },\n        \"Image\": \"sha256:7f673bd773f52fc4c5c8560c0e36cd0f74d5e5dc173bcc0ebfc1b8b2cca813ba\",\n        \"ResolvConfPath\": \"\",\n        \"HostnamePath\": \"\",\n        \"HostsPath\": \"\",\n        \"LogPath\": \"\",\n        \"Name\": \"/sentinel-feasibility-frameworks-3c161a3f-6509-4374-aa3c-50b9eb48b976\",\n        \"RestartCount\": 0,\n        \"Driver\": \"overlayfs\",\n        \"Platform\": \"linux\",\n        \"MountLabel\": \"\",\n        \"ProcessLabel\": \"\",\n        \"AppArmorProfile\": \"\",\n        \"ExecIDs\": null,\n        \"HostConfig\": {\n            \"Binds\": null,\n            \"ContainerIDFile\": \"\",\n            \"LogConfig\": {\n                \"Type\": \"json-file\",\n                \"Config\": {}\n            },\n            \"NetworkMode\": \"none\",\n            \"PortBindings\": {},\n            \"RestartPolicy\": {\n                \"Name\": \"no\",\n                \"MaximumRetryCount\": 0\n            },\n            \"AutoRemove\": false,\n            \"VolumeDriver\": \"\",\n            \"VolumesFrom\": null,\n            \"ConsoleSize\": [\n                0,\n                0\n            ],\n            \"CapAdd\": null,\n            \"CapDrop\": [\n                \"ALL\"\n            ],\n            \"CgroupnsMode\": \"private\",\n            \"Dns\": null,\n            \"DnsOptions\": [],\n            \"DnsSearch\": [],\n            \"ExtraHosts\": null,\n            \"GroupAdd\": null,\n            \"IpcMode\": \"private\",\n            \"Cgroup\": \"\",\n            \"Links\": null,\n            \"OomScoreAdj\": 0,\n            \"PidMode\": \"\",\n            \"Privileged\": false,\n            \"PublishAllPorts\": false,\n            \"ReadonlyRootfs\": true,\n            \"SecurityOpt\": [\n                \"no-new-privileges:true\"\n            ],\n            \"Tmpfs\": {\n                \"/tmp\": \"rw,noexec,nosuid,size=128m,mode=1777\"\n            },\n            \"UTSMode\": \"\",\n            \"UsernsMode\": \"\",\n            \"ShmSize\": 67108864,\n            \"Runtime\": \"runc\",\n            \"Isolation\": \"\",\n            \"CpuShares\": 0,\n            \"Memory\": 1073741824,\n            \"NanoCpus\": 1000000000,\n            \"CgroupParent\": \"\",\n            \"BlkioWeight\": 0,\n            \"BlkioWeightDevice\": [],\n            \"BlkioDeviceReadBps\": [],\n            \"BlkioDeviceWriteBps\": [],\n            \"BlkioDeviceReadIOps\": [],\n            \"BlkioDeviceWriteIOps\": [],\n            \"CpuPeriod\": 0,\n            \"CpuQuota\": 0,\n            \"CpuRealtimePeriod\": 0,\n            \"CpuRealtimeRuntime\": 0,\n            \"CpusetCpus\": \"\",\n            \"CpusetMems\": \"\",\n            \"Devices\": [],\n            \"DeviceCgroupRules\": null,\n            \"DeviceRequests\": null,\n            \"MemoryReservation\": 0,\n            \"MemorySwap\": 1073741824,\n            \"MemorySwappiness\": null,\n            \"OomKillDisable\": false,\n            \"PidsLimit\": 256,\n            \"Ulimits\": [],\n            \"CpuCount\": 0,\n            \"CpuPercent\": 0,\n            \"IOMaximumIOps\": 0,\n            \"IOMaximumBandwidth\": 0,\n            \"MaskedPaths\": [\n                \"/proc/acpi\",\n                \"/proc/asound\",\n                \"/proc/interrupts\",\n                \"/proc/kcore\",\n                \"/proc/keys\",\n                \"/proc/latency_stats\",\n                \"/proc/sched_debug\",\n                \"/proc/scsi\",\n                \"/proc/timer_list\",\n                \"/proc/timer_stats\",\n                \"/sys/devices/virtual/powercap\",\n                \"/sys/firmware\"\n            ],\n            \"ReadonlyPaths\": [\n                \"/proc/bus\",\n                \"/proc/fs\",\n                \"/proc/irq\",\n                \"/proc/sys\",\n                \"/proc/sysrq-trigger\"\n            ]\n        },\n        \"Storage\": {\n            \"RootFS\": {\n                \"Snapshot\": {\n                    \"Name\": \"overlayfs\"\n                }\n            }\n        },\n        \"Mounts\": [],\n        \"Config\": {\n            \"Hostname\": \"92857f2972f8\",\n            \"Domainname\": \"\",\n            \"User\": \"65534:65534\",\n            \"AttachStdin\": false,\n            \"AttachStdout\": true,\n            \"AttachStderr\": true,\n            \"Tty\": false,\n            \"OpenStdin\": false,\n            \"StdinOnce\": false,\n            \"Env\": [\n                \"HOME=/tmp\",\n                \"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\",\n                \"NODE_VERSION=22.23.4\",\n                \"YARN_VERSION=1.22.22\",\n                \"SENTINEL_FIXTURE_OPAQUE_MODE=deny\"\n            ],\n            \"Cmd\": null,\n            \"Image\": \"sha256:7f673bd773f52fc4c5c8560c0e36cd0f74d5e5dc173bcc0ebfc1b8b2cca813ba\",\n            \"Volumes\": null,\n            \"WorkingDir\": \"/app\",\n            \"Entrypoint\": [\n                \"/app/probe.sh\"\n            ],\n            \"Labels\": {\n                \"org.farsight.sentinel-feasibility-frameworks.case\": \"express-order\",\n                \"org.farsight.sentinel-feasibility-frameworks.owner\": \"fb92fc0a-dd22-46fa-8fcb-eaaa78c4d8d1\"\n            },\n            \"StopTimeout\": 1\n        },\n        \"NetworkSettings\": {\n            \"SandboxID\": \"\",\n            \"SandboxKey\": \"\",\n            \"Ports\": {},\n            \"Networks\": {\n                \"none\": {\n                    \"IPAMConfig\": null,\n                    \"Links\": null,\n                    \"Aliases\": null,\n                    \"DriverOpts\": null,\n                    \"GwPriority\": 0,\n                    \"NetworkID\": \"\",\n                    \"EndpointID\": \"\",\n                    \"Gateway\": \"\",\n                    \"IPAddress\": \"\",\n                    \"MacAddress\": \"\",\n                    \"IPPrefixLen\": 0,\n                    \"IPv6Gateway\": \"\",\n                    \"GlobalIPv6Address\": \"\",\n                    \"GlobalIPv6PrefixLen\": 0,\n                    \"DNSNames\": null\n                }\n            }\n        },\n        \"ImageManifestDescriptor\": {\n            \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\",\n            \"digest\": \"sha256:284ef5f4559e9d7e86fa7d4aff111c857ddf632825eab2855023bd0d68cfe379\",\n            \"size\": 2568,\n            \"platform\": {\n                \"architecture\": \"arm64\",\n                \"os\": \"linux\"\n            }\n        }\n    }\n]\n",
+          "stderr": "",
+          "stdoutSha256": "07d0005711b0ce15e42438f822249a8c2441e002a136f8d717813c7b2f30cb99",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "preStartIsolation": {
+          "id": "92857f2972f8199425c4f27a7d95e3e2a7056d4ebc84639f92d445d39c6b8d8e",
+          "imageId": "sha256:7f673bd773f52fc4c5c8560c0e36cd0f74d5e5dc173bcc0ebfc1b8b2cca813ba",
+          "image": "sha256:7f673bd773f52fc4c5c8560c0e36cd0f74d5e5dc173bcc0ebfc1b8b2cca813ba",
+          "user": "65534:65534",
+          "networkMode": "none",
+          "readOnlyRootfs": true,
+          "capDrop": [
+            "ALL"
+          ],
+          "securityOpt": [
+            "no-new-privileges:true"
+          ],
+          "tmpfs": {
+            "/tmp": "rw,noexec,nosuid,size=128m,mode=1777"
+          },
+          "memory": 1073741824,
+          "memorySwap": 1073741824,
+          "nanoCpus": 1000000000,
+          "pidsLimit": 256,
+          "mounts": []
+        },
+        "preStartCheck": {
+          "passed": true,
+          "checks": [
+            {
+              "name": "image-id-matches-acquired",
+              "passed": true
+            },
+            {
+              "name": "network-none",
+              "passed": true
+            },
+            {
+              "name": "user-is-run-uid",
+              "passed": true
+            },
+            {
+              "name": "read-only-rootfs",
+              "passed": true
+            },
+            {
+              "name": "cap-drop-all",
+              "passed": true
+            },
+            {
+              "name": "no-new-privileges",
+              "passed": true
+            },
+            {
+              "name": "memory-limit-matches",
+              "passed": true
+            },
+            {
+              "name": "memory-swap-not-unbounded",
+              "passed": true
+            },
+            {
+              "name": "cpus-limit-matches",
+              "passed": true
+            },
+            {
+              "name": "pids-limit-matches",
+              "passed": true
+            },
+            {
+              "name": "no-host-bind-mounts",
+              "passed": true
+            }
+          ]
+        },
+        "execution": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 1183.487625,
+          "stdout": "fixture-express-order listening on 3000\nSENTINEL_FIXTURE_PROBE_RESULT={\"status\":\"ok\",\"observations\":{\"auth-before-route\":{\"withoutToken\":401,\"withToken\":200},\"auth-after-route\":{\"withoutToken\":200,\"withToken\":200},\"unknown-custom-middleware\":{\"anyRequest\":403}}}\n",
+          "stderr": "",
+          "stdoutSha256": "3be7be3caaa79eacaa5a0095deb8c7e45adba1b011e9d899ad633637a258f849",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "postStartInspect": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 24.244625000000042,
+          "stdout": "[\n    {\n        \"Id\": \"92857f2972f8199425c4f27a7d95e3e2a7056d4ebc84639f92d445d39c6b8d8e\",\n        \"Created\": \"2026-10-22T02:01:19.5588513Z\",\n        \"Path\": \"/app/probe.sh\",\n        \"Args\": [],\n        \"State\": {\n            \"Status\": \"exited\",\n            \"Running\": false,\n            \"Paused\": false,\n            \"Restarting\": false,\n            \"OOMKilled\": false,\n            \"Dead\": false,\n            \"Pid\": 0,\n            \"ExitCode\": 0,\n            \"Error\": \"\",\n            \"StartedAt\": \"2026-10-22T02:01:19.652377842Z\",\n            \"FinishedAt\": \"2026-10-22T02:01:20.7674013Z\"\n        },\n        \"Image\": \"sha256:7f673bd773f52fc4c5c8560c0e36cd0f74d5e5dc173bcc0ebfc1b8b2cca813ba\",\n        \"ResolvConfPath\": \"/var/lib/docker/containers/92857f2972f8199425c4f27a7d95e3e2a7056d4ebc84639f92d445d39c6b8d8e/resolv.conf\",\n        \"HostnamePath\": \"/var/lib/docker/containers/92857f2972f8199425c4f27a7d95e3e2a7056d4ebc84639f92d445d39c6b8d8e/hostname\",\n        \"HostsPath\": \"/var/lib/docker/containers/92857f2972f8199425c4f27a7d95e3e2a7056d4ebc84639f92d445d39c6b8d8e/hosts\",\n        \"LogPath\": \"/var/lib/docker/containers/92857f2972f8199425c4f27a7d95e3e2a7056d4ebc84639f92d445d39c6b8d8e/92857f2972f8199425c4f27a7d95e3e2a7056d4ebc84639f92d445d39c6b8d8e-json.log\",\n        \"Name\": \"/sentinel-feasibility-frameworks-3c161a3f-6509-4374-aa3c-50b9eb48b976\",\n        \"RestartCount\": 0,\n        \"Driver\": \"overlayfs\",\n        \"Platform\": \"linux\",\n        \"MountLabel\": \"\",\n        \"ProcessLabel\": \"\",\n        \"AppArmorProfile\": \"\",\n        \"ExecIDs\": null,\n        \"HostConfig\": {\n            \"Binds\": null,\n            \"ContainerIDFile\": \"\",\n            \"LogConfig\": {\n                \"Type\": \"json-file\",\n                \"Config\": {}\n            },\n            \"NetworkMode\": \"none\",\n            \"PortBindings\": {},\n            \"RestartPolicy\": {\n                \"Name\": \"no\",\n                \"MaximumRetryCount\": 0\n            },\n            \"AutoRemove\": false,\n            \"VolumeDriver\": \"\",\n            \"VolumesFrom\": null,\n            \"ConsoleSize\": [\n                0,\n                0\n            ],\n            \"CapAdd\": null,\n            \"CapDrop\": [\n                \"ALL\"\n            ],\n            \"CgroupnsMode\": \"private\",\n            \"Dns\": null,\n            \"DnsOptions\": [],\n            \"DnsSearch\": [],\n            \"ExtraHosts\": null,\n            \"GroupAdd\": null,\n            \"IpcMode\": \"private\",\n            \"Cgroup\": \"\",\n            \"Links\": null,\n            \"OomScoreAdj\": 0,\n            \"PidMode\": \"\",\n            \"Privileged\": false,\n            \"PublishAllPorts\": false,\n            \"ReadonlyRootfs\": true,\n            \"SecurityOpt\": [\n                \"no-new-privileges:true\"\n            ],\n            \"Tmpfs\": {\n                \"/tmp\": \"rw,noexec,nosuid,size=128m,mode=1777\"\n            },\n            \"UTSMode\": \"\",\n            \"UsernsMode\": \"\",\n            \"ShmSize\": 67108864,\n            \"Runtime\": \"runc\",\n            \"Isolation\": \"\",\n            \"CpuShares\": 0,\n            \"Memory\": 1073741824,\n            \"NanoCpus\": 1000000000,\n            \"CgroupParent\": \"\",\n            \"BlkioWeight\": 0,\n            \"BlkioWeightDevice\": [],\n            \"BlkioDeviceReadBps\": [],\n            \"BlkioDeviceWriteBps\": [],\n            \"BlkioDeviceReadIOps\": [],\n            \"BlkioDeviceWriteIOps\": [],\n            \"CpuPeriod\": 0,\n            \"CpuQuota\": 0,\n            \"CpuRealtimePeriod\": 0,\n            \"CpuRealtimeRuntime\": 0,\n            \"CpusetCpus\": \"\",\n            \"CpusetMems\": \"\",\n            \"Devices\": [],\n            \"DeviceCgroupRules\": null,\n            \"DeviceRequests\": null,\n            \"MemoryReservation\": 0,\n            \"MemorySwap\": 1073741824,\n            \"MemorySwappiness\": null,\n            \"OomKillDisable\": null,\n            \"PidsLimit\": 256,\n            \"Ulimits\": [],\n            \"CpuCount\": 0,\n            \"CpuPercent\": 0,\n            \"IOMaximumIOps\": 0,\n            \"IOMaximumBandwidth\": 0,\n            \"MaskedPaths\": [\n                \"/proc/acpi\",\n                \"/proc/asound\",\n                \"/proc/interrupts\",\n                \"/proc/kcore\",\n                \"/proc/keys\",\n                \"/proc/latency_stats\",\n                \"/proc/sched_debug\",\n                \"/proc/scsi\",\n                \"/proc/timer_list\",\n                \"/proc/timer_stats\",\n                \"/sys/devices/virtual/powercap\",\n                \"/sys/firmware\"\n            ],\n            \"ReadonlyPaths\": [\n                \"/proc/bus\",\n                \"/proc/fs\",\n                \"/proc/irq\",\n                \"/proc/sys\",\n                \"/proc/sysrq-trigger\"\n            ]\n        },\n        \"Storage\": {\n            \"RootFS\": {\n                \"Snapshot\": {\n                    \"Name\": \"overlayfs\"\n                }\n            }\n        },\n        \"Mounts\": [],\n        \"Config\": {\n            \"Hostname\": \"92857f2972f8\",\n            \"Domainname\": \"\",\n            \"User\": \"65534:65534\",\n            \"AttachStdin\": false,\n            \"AttachStdout\": true,\n            \"AttachStderr\": true,\n            \"Tty\": false,\n            \"OpenStdin\": false,\n            \"StdinOnce\": false,\n            \"Env\": [\n                \"HOME=/tmp\",\n                \"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\",\n                \"NODE_VERSION=22.23.4\",\n                \"YARN_VERSION=1.22.22\",\n                \"SENTINEL_FIXTURE_OPAQUE_MODE=deny\"\n            ],\n            \"Cmd\": null,\n            \"Image\": \"sha256:7f673bd773f52fc4c5c8560c0e36cd0f74d5e5dc173bcc0ebfc1b8b2cca813ba\",\n            \"Volumes\": null,\n            \"WorkingDir\": \"/app\",\n            \"Entrypoint\": [\n                \"/app/probe.sh\"\n            ],\n            \"Labels\": {\n                \"org.farsight.sentinel-feasibility-frameworks.case\": \"express-order\",\n                \"org.farsight.sentinel-feasibility-frameworks.owner\": \"fb92fc0a-dd22-46fa-8fcb-eaaa78c4d8d1\"\n            },\n            \"StopTimeout\": 1\n        },\n        \"NetworkSettings\": {\n            \"SandboxID\": \"\",\n            \"SandboxKey\": \"\",\n            \"Ports\": {},\n            \"Networks\": {\n                \"none\": {\n                    \"IPAMConfig\": null,\n                    \"Links\": null,\n                    \"Aliases\": null,\n                    \"DriverOpts\": null,\n                    \"GwPriority\": 0,\n                    \"NetworkID\": \"076a598f032616b47e9ed4de0dc9a78cfd5b00b147248657a5a83832b5dee40f\",\n                    \"EndpointID\": \"\",\n                    \"Gateway\": \"\",\n                    \"IPAddress\": \"\",\n                    \"MacAddress\": \"\",\n                    \"IPPrefixLen\": 0,\n                    \"IPv6Gateway\": \"\",\n                    \"GlobalIPv6Address\": \"\",\n                    \"GlobalIPv6PrefixLen\": 0,\n                    \"DNSNames\": null\n                }\n            }\n        },\n        \"ImageManifestDescriptor\": {\n            \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\",\n            \"digest\": \"sha256:284ef5f4559e9d7e86fa7d4aff111c857ddf632825eab2855023bd0d68cfe379\",\n            \"size\": 2568,\n            \"platform\": {\n                \"architecture\": \"arm64\",\n                \"os\": \"linux\"\n            }\n        }\n    }\n]\n",
+          "stderr": "",
+          "stdoutSha256": "7a5e186671b3a39f1f2d2c40f2c353b0dfe30f4148a32ed063a8697bcd7367b6",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "containerState": {
+          "Status": "exited",
+          "Running": false,
+          "Paused": false,
+          "Restarting": false,
+          "OOMKilled": false,
+          "Dead": false,
+          "Pid": 0,
+          "ExitCode": 0,
+          "Error": "",
+          "StartedAt": "2026-10-22T02:01:19.652377842Z",
+          "FinishedAt": "2026-10-22T02:01:20.7674013Z"
+        },
+        "postStartIsolation": {
+          "id": "92857f2972f8199425c4f27a7d95e3e2a7056d4ebc84639f92d445d39c6b8d8e",
+          "imageId": "sha256:7f673bd773f52fc4c5c8560c0e36cd0f74d5e5dc173bcc0ebfc1b8b2cca813ba",
+          "image": "sha256:7f673bd773f52fc4c5c8560c0e36cd0f74d5e5dc173bcc0ebfc1b8b2cca813ba",
+          "user": "65534:65534",
+          "networkMode": "none",
+          "readOnlyRootfs": true,
+          "capDrop": [
+            "ALL"
+          ],
+          "securityOpt": [
+            "no-new-privileges:true"
+          ],
+          "tmpfs": {
+            "/tmp": "rw,noexec,nosuid,size=128m,mode=1777"
+          },
+          "memory": 1073741824,
+          "memorySwap": 1073741824,
+          "nanoCpus": 1000000000,
+          "pidsLimit": 256,
+          "mounts": []
+        },
+        "completed": true,
+        "cleanup": {
+          "state": "removed-owned-container",
+          "id": "92857f2972f8199425c4f27a7d95e3e2a7056d4ebc84639f92d445d39c6b8d8e",
+          "result": {
+            "exitCode": 0,
+            "exitSignal": null,
+            "timedOut": false,
+            "outputExceeded": false,
+            "cancelled": false,
+            "spawnError": null,
+            "wallMs": 31.35279199999991,
+            "stdout": "92857f2972f8199425c4f27a7d95e3e2a7056d4ebc84639f92d445d39c6b8d8e\n",
+            "stderr": "",
+            "stdoutSha256": "635ecf7399a3d854c16ab17da82ef7b4244025470009e63e90a08b179e10cc73",
+            "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "outputEncoding": "utf8-scrubbed"
+          },
+          "verification": {
+            "exitCode": 1,
+            "exitSignal": null,
+            "timedOut": false,
+            "outputExceeded": false,
+            "cancelled": false,
+            "spawnError": null,
+            "wallMs": 18.11679099999992,
+            "stdout": "[]\n",
+            "stderr": "Error response from daemon: No such container: 92857f2972f8199425c4f27a7d95e3e2a7056d4ebc84639f92d445d39c6b8d8e\n",
+            "stdoutSha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "stderrSha256": "9140d01c28decf698f8b0dce6397db073cd4cea21208b2f2489fa74837579d3a",
+            "outputEncoding": "utf8-scrubbed"
+          }
+        }
+      },
+      "state": "measured",
+      "parsedProbeOutput": {
+        "ok": true,
+        "payload": {
+          "status": "ok",
+          "observations": {
+            "auth-before-route": {
+              "withoutToken": 401,
+              "withToken": 200
+            },
+            "auth-after-route": {
+              "withoutToken": 200,
+              "withToken": 200
+            },
+            "unknown-custom-middleware": {
+              "anyRequest": 403
+            }
+          }
+        }
+      },
+      "assessment": [
+        {
+          "scenario": "auth-before-route",
+          "staticLabel": "bounded-safe-pattern",
+          "expectedRuntime": {
+            "withoutToken": 401,
+            "withToken": 200
+          },
+          "observed": {
+            "withoutToken": 401,
+            "withToken": 200
+          },
+          "matchesExpected": true
+        },
+        {
+          "scenario": "auth-after-route",
+          "staticLabel": "unknown-enforcement",
+          "expectedRuntime": {
+            "withoutToken": 200,
+            "withToken": 200
+          },
+          "observed": {
+            "withoutToken": 200,
+            "withToken": 200
+          },
+          "matchesExpected": true
+        },
+        {
+          "scenario": "unknown-custom-middleware",
+          "staticLabel": "unknown-enforcement",
+          "expectedRuntime": {
+            "anyRequest": 403
+          },
+          "observed": {
+            "anyRequest": 403
+          },
+          "matchesExpected": true
+        }
+      ]
+    },
+    {
+      "caseId": "nest-validation",
+      "tag": "sentinel-feasibility-frameworks-nest-validation-bc8c8967-225b-46d2-8a0f-326beb7702ac",
+      "imageId": "sha256:c991ca43ba58528ba3758ebd0ef2c0a75be0c48461d95750317797466b7e3ec7",
+      "probe": {
+        "image": "sha256:c991ca43ba58528ba3758ebd0ef2c0a75be0c48461d95750317797466b7e3ec7",
+        "expectedImageId": "sha256:c991ca43ba58528ba3758ebd0ef2c0a75be0c48461d95750317797466b7e3ec7",
+        "caseId": "nest-validation",
+        "owner": "1d168efd-4dac-4ffb-a203-b2a57e5443eb",
+        "name": "sentinel-feasibility-frameworks-b7a71d4a-fa3d-48d8-a6c1-02b0ab173a02",
+        "command": [
+          "docker",
+          "create",
+          "--pull",
+          "never",
+          "--name",
+          "sentinel-feasibility-frameworks-b7a71d4a-fa3d-48d8-a6c1-02b0ab173a02",
+          "--label",
+          "org.farsight.sentinel-feasibility-frameworks.owner=1d168efd-4dac-4ffb-a203-b2a57e5443eb",
+          "--label",
+          "org.farsight.sentinel-feasibility-frameworks.case=nest-validation",
+          "--platform",
+          "linux/arm64",
+          "--network",
+          "none",
+          "--user",
+          "65534:65534",
+          "--read-only",
+          "--cap-drop",
+          "ALL",
+          "--security-opt",
+          "no-new-privileges:true",
+          "--memory",
+          "1g",
+          "--memory-swap",
+          "1g",
+          "--cpus",
+          "1",
+          "--pids-limit",
+          "256",
+          "--tmpfs",
+          "/tmp:rw,noexec,nosuid,size=128m,mode=1777",
+          "--env",
+          "HOME=/tmp",
+          "sha256:c991ca43ba58528ba3758ebd0ef2c0a75be0c48461d95750317797466b7e3ec7"
+        ],
+        "state": "measured",
+        "create": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 32.79150000000004,
+          "stdout": "e488c1b8e56972bc42b8e41374b72360b718274991bfca843f2b36d84f9aee44\n",
+          "stderr": "",
+          "stdoutSha256": "4e2b8aee52ac844340b5f5710fec08c1a544a0a0e849081297da686ab9ea88fb",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "preStartInspect": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 30.073082999999997,
+          "stdout": "[\n    {\n        \"Id\": \"e488c1b8e56972bc42b8e41374b72360b718274991bfca843f2b36d84f9aee44\",\n        \"Created\": \"2026-10-22T02:01:20.92701755Z\",\n        \"Path\": \"/app/probe.sh\",\n        \"Args\": [],\n        \"State\": {\n            \"Status\": \"created\",\n            \"Running\": false,\n            \"Paused\": false,\n            \"Restarting\": false,\n            \"OOMKilled\": false,\n            \"Dead\": false,\n            \"Pid\": 0,\n            \"ExitCode\": 0,\n            \"Error\": \"\",\n            \"StartedAt\": \"0001-01-01T00:00:00Z\",\n            \"FinishedAt\": \"0001-01-01T00:00:00Z\"\n        },\n        \"Image\": \"sha256:c991ca43ba58528ba3758ebd0ef2c0a75be0c48461d95750317797466b7e3ec7\",\n        \"ResolvConfPath\": \"\",\n        \"HostnamePath\": \"\",\n        \"HostsPath\": \"\",\n        \"LogPath\": \"\",\n        \"Name\": \"/sentinel-feasibility-frameworks-b7a71d4a-fa3d-48d8-a6c1-02b0ab173a02\",\n        \"RestartCount\": 0,\n        \"Driver\": \"overlayfs\",\n        \"Platform\": \"linux\",\n        \"MountLabel\": \"\",\n        \"ProcessLabel\": \"\",\n        \"AppArmorProfile\": \"\",\n        \"ExecIDs\": null,\n        \"HostConfig\": {\n            \"Binds\": null,\n            \"ContainerIDFile\": \"\",\n            \"LogConfig\": {\n                \"Type\": \"json-file\",\n                \"Config\": {}\n            },\n            \"NetworkMode\": \"none\",\n            \"PortBindings\": {},\n            \"RestartPolicy\": {\n                \"Name\": \"no\",\n                \"MaximumRetryCount\": 0\n            },\n            \"AutoRemove\": false,\n            \"VolumeDriver\": \"\",\n            \"VolumesFrom\": null,\n            \"ConsoleSize\": [\n                0,\n                0\n            ],\n            \"CapAdd\": null,\n            \"CapDrop\": [\n                \"ALL\"\n            ],\n            \"CgroupnsMode\": \"private\",\n            \"Dns\": null,\n            \"DnsOptions\": [],\n            \"DnsSearch\": [],\n            \"ExtraHosts\": null,\n            \"GroupAdd\": null,\n            \"IpcMode\": \"private\",\n            \"Cgroup\": \"\",\n            \"Links\": null,\n            \"OomScoreAdj\": 0,\n            \"PidMode\": \"\",\n            \"Privileged\": false,\n            \"PublishAllPorts\": false,\n            \"ReadonlyRootfs\": true,\n            \"SecurityOpt\": [\n                \"no-new-privileges:true\"\n            ],\n            \"Tmpfs\": {\n                \"/tmp\": \"rw,noexec,nosuid,size=128m,mode=1777\"\n            },\n            \"UTSMode\": \"\",\n            \"UsernsMode\": \"\",\n            \"ShmSize\": 67108864,\n            \"Runtime\": \"runc\",\n            \"Isolation\": \"\",\n            \"CpuShares\": 0,\n            \"Memory\": 1073741824,\n            \"NanoCpus\": 1000000000,\n            \"CgroupParent\": \"\",\n            \"BlkioWeight\": 0,\n            \"BlkioWeightDevice\": [],\n            \"BlkioDeviceReadBps\": [],\n            \"BlkioDeviceWriteBps\": [],\n            \"BlkioDeviceReadIOps\": [],\n            \"BlkioDeviceWriteIOps\": [],\n            \"CpuPeriod\": 0,\n            \"CpuQuota\": 0,\n            \"CpuRealtimePeriod\": 0,\n            \"CpuRealtimeRuntime\": 0,\n            \"CpusetCpus\": \"\",\n            \"CpusetMems\": \"\",\n            \"Devices\": [],\n            \"DeviceCgroupRules\": null,\n            \"DeviceRequests\": null,\n            \"MemoryReservation\": 0,\n            \"MemorySwap\": 1073741824,\n            \"MemorySwappiness\": null,\n            \"OomKillDisable\": false,\n            \"PidsLimit\": 256,\n            \"Ulimits\": [],\n            \"CpuCount\": 0,\n            \"CpuPercent\": 0,\n            \"IOMaximumIOps\": 0,\n            \"IOMaximumBandwidth\": 0,\n            \"MaskedPaths\": [\n                \"/proc/acpi\",\n                \"/proc/asound\",\n                \"/proc/interrupts\",\n                \"/proc/kcore\",\n                \"/proc/keys\",\n                \"/proc/latency_stats\",\n                \"/proc/sched_debug\",\n                \"/proc/scsi\",\n                \"/proc/timer_list\",\n                \"/proc/timer_stats\",\n                \"/sys/devices/virtual/powercap\",\n                \"/sys/firmware\"\n            ],\n            \"ReadonlyPaths\": [\n                \"/proc/bus\",\n                \"/proc/fs\",\n                \"/proc/irq\",\n                \"/proc/sys\",\n                \"/proc/sysrq-trigger\"\n            ]\n        },\n        \"Storage\": {\n            \"RootFS\": {\n                \"Snapshot\": {\n                    \"Name\": \"overlayfs\"\n                }\n            }\n        },\n        \"Mounts\": [],\n        \"Config\": {\n            \"Hostname\": \"e488c1b8e569\",\n            \"Domainname\": \"\",\n            \"User\": \"65534:65534\",\n            \"AttachStdin\": false,\n            \"AttachStdout\": true,\n            \"AttachStderr\": true,\n            \"Tty\": false,\n            \"OpenStdin\": false,\n            \"StdinOnce\": false,\n            \"Env\": [\n                \"HOME=/tmp\",\n                \"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\",\n                \"NODE_VERSION=22.23.4\",\n                \"YARN_VERSION=1.22.22\"\n            ],\n            \"Cmd\": null,\n            \"Image\": \"sha256:c991ca43ba58528ba3758ebd0ef2c0a75be0c48461d95750317797466b7e3ec7\",\n            \"Volumes\": null,\n            \"WorkingDir\": \"/app\",\n            \"Entrypoint\": [\n                \"/app/probe.sh\"\n            ],\n            \"Labels\": {\n                \"org.farsight.sentinel-feasibility-frameworks.case\": \"nest-validation\",\n                \"org.farsight.sentinel-feasibility-frameworks.owner\": \"1d168efd-4dac-4ffb-a203-b2a57e5443eb\"\n            },\n            \"StopTimeout\": 1\n        },\n        \"NetworkSettings\": {\n            \"SandboxID\": \"\",\n            \"SandboxKey\": \"\",\n            \"Ports\": {},\n            \"Networks\": {\n                \"none\": {\n                    \"IPAMConfig\": null,\n                    \"Links\": null,\n                    \"Aliases\": null,\n                    \"DriverOpts\": null,\n                    \"GwPriority\": 0,\n                    \"NetworkID\": \"\",\n                    \"EndpointID\": \"\",\n                    \"Gateway\": \"\",\n                    \"IPAddress\": \"\",\n                    \"MacAddress\": \"\",\n                    \"IPPrefixLen\": 0,\n                    \"IPv6Gateway\": \"\",\n                    \"GlobalIPv6Address\": \"\",\n                    \"GlobalIPv6PrefixLen\": 0,\n                    \"DNSNames\": null\n                }\n            }\n        },\n        \"ImageManifestDescriptor\": {\n            \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\",\n            \"digest\": \"sha256:8f3b3f51344ea5b911d32fe1f4a13da75459bef66306f33422e8eafc1a8d142d\",\n            \"size\": 2759,\n            \"platform\": {\n                \"architecture\": \"arm64\",\n                \"os\": \"linux\"\n            }\n        }\n    }\n]\n",
+          "stderr": "",
+          "stdoutSha256": "7fd066ca81ee29b65502cfb3a49a4f512959fb75362e492ece3b9c848aa1c3c9",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "preStartIsolation": {
+          "id": "e488c1b8e56972bc42b8e41374b72360b718274991bfca843f2b36d84f9aee44",
+          "imageId": "sha256:c991ca43ba58528ba3758ebd0ef2c0a75be0c48461d95750317797466b7e3ec7",
+          "image": "sha256:c991ca43ba58528ba3758ebd0ef2c0a75be0c48461d95750317797466b7e3ec7",
+          "user": "65534:65534",
+          "networkMode": "none",
+          "readOnlyRootfs": true,
+          "capDrop": [
+            "ALL"
+          ],
+          "securityOpt": [
+            "no-new-privileges:true"
+          ],
+          "tmpfs": {
+            "/tmp": "rw,noexec,nosuid,size=128m,mode=1777"
+          },
+          "memory": 1073741824,
+          "memorySwap": 1073741824,
+          "nanoCpus": 1000000000,
+          "pidsLimit": 256,
+          "mounts": []
+        },
+        "preStartCheck": {
+          "passed": true,
+          "checks": [
+            {
+              "name": "image-id-matches-acquired",
+              "passed": true
+            },
+            {
+              "name": "network-none",
+              "passed": true
+            },
+            {
+              "name": "user-is-run-uid",
+              "passed": true
+            },
+            {
+              "name": "read-only-rootfs",
+              "passed": true
+            },
+            {
+              "name": "cap-drop-all",
+              "passed": true
+            },
+            {
+              "name": "no-new-privileges",
+              "passed": true
+            },
+            {
+              "name": "memory-limit-matches",
+              "passed": true
+            },
+            {
+              "name": "memory-swap-not-unbounded",
+              "passed": true
+            },
+            {
+              "name": "cpus-limit-matches",
+              "passed": true
+            },
+            {
+              "name": "pids-limit-matches",
+              "passed": true
+            },
+            {
+              "name": "no-host-bind-mounts",
+              "passed": true
+            }
+          ]
+        },
+        "execution": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 3200.3932079999995,
+          "stdout": "fixture-nest-validation listening on 3000\nSENTINEL_FIXTURE_PROBE_RESULT={\"status\":\"ok\",\"observations\":{\"validator-with-pipe\":{\"invalidBody\":400},\"validator-without-pipe\":{\"invalidBody\":201}}}\n",
+          "stderr": "",
+          "stdoutSha256": "779938f3de5da1b912e70c25b516696361413b1a0b264aab13a797b93754ef73",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "postStartInspect": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 31.687208000000282,
+          "stdout": "[\n    {\n        \"Id\": \"e488c1b8e56972bc42b8e41374b72360b718274991bfca843f2b36d84f9aee44\",\n        \"Created\": \"2026-10-22T02:01:20.92701755Z\",\n        \"Path\": \"/app/probe.sh\",\n        \"Args\": [],\n        \"State\": {\n            \"Status\": \"exited\",\n            \"Running\": false,\n            \"Paused\": false,\n            \"Restarting\": false,\n            \"OOMKilled\": false,\n            \"Dead\": false,\n            \"Pid\": 0,\n            \"ExitCode\": 0,\n            \"Error\": \"\",\n            \"StartedAt\": \"2026-10-22T02:01:20.996679551Z\",\n            \"FinishedAt\": \"2026-10-22T02:01:24.124729302Z\"\n        },\n        \"Image\": \"sha256:c991ca43ba58528ba3758ebd0ef2c0a75be0c48461d95750317797466b7e3ec7\",\n        \"ResolvConfPath\": \"/var/lib/docker/containers/e488c1b8e56972bc42b8e41374b72360b718274991bfca843f2b36d84f9aee44/resolv.conf\",\n        \"HostnamePath\": \"/var/lib/docker/containers/e488c1b8e56972bc42b8e41374b72360b718274991bfca843f2b36d84f9aee44/hostname\",\n        \"HostsPath\": \"/var/lib/docker/containers/e488c1b8e56972bc42b8e41374b72360b718274991bfca843f2b36d84f9aee44/hosts\",\n        \"LogPath\": \"/var/lib/docker/containers/e488c1b8e56972bc42b8e41374b72360b718274991bfca843f2b36d84f9aee44/e488c1b8e56972bc42b8e41374b72360b718274991bfca843f2b36d84f9aee44-json.log\",\n        \"Name\": \"/sentinel-feasibility-frameworks-b7a71d4a-fa3d-48d8-a6c1-02b0ab173a02\",\n        \"RestartCount\": 0,\n        \"Driver\": \"overlayfs\",\n        \"Platform\": \"linux\",\n        \"MountLabel\": \"\",\n        \"ProcessLabel\": \"\",\n        \"AppArmorProfile\": \"\",\n        \"ExecIDs\": null,\n        \"HostConfig\": {\n            \"Binds\": null,\n            \"ContainerIDFile\": \"\",\n            \"LogConfig\": {\n                \"Type\": \"json-file\",\n                \"Config\": {}\n            },\n            \"NetworkMode\": \"none\",\n            \"PortBindings\": {},\n            \"RestartPolicy\": {\n                \"Name\": \"no\",\n                \"MaximumRetryCount\": 0\n            },\n            \"AutoRemove\": false,\n            \"VolumeDriver\": \"\",\n            \"VolumesFrom\": null,\n            \"ConsoleSize\": [\n                0,\n                0\n            ],\n            \"CapAdd\": null,\n            \"CapDrop\": [\n                \"ALL\"\n            ],\n            \"CgroupnsMode\": \"private\",\n            \"Dns\": null,\n            \"DnsOptions\": [],\n            \"DnsSearch\": [],\n            \"ExtraHosts\": null,\n            \"GroupAdd\": null,\n            \"IpcMode\": \"private\",\n            \"Cgroup\": \"\",\n            \"Links\": null,\n            \"OomScoreAdj\": 0,\n            \"PidMode\": \"\",\n            \"Privileged\": false,\n            \"PublishAllPorts\": false,\n            \"ReadonlyRootfs\": true,\n            \"SecurityOpt\": [\n                \"no-new-privileges:true\"\n            ],\n            \"Tmpfs\": {\n                \"/tmp\": \"rw,noexec,nosuid,size=128m,mode=1777\"\n            },\n            \"UTSMode\": \"\",\n            \"UsernsMode\": \"\",\n            \"ShmSize\": 67108864,\n            \"Runtime\": \"runc\",\n            \"Isolation\": \"\",\n            \"CpuShares\": 0,\n            \"Memory\": 1073741824,\n            \"NanoCpus\": 1000000000,\n            \"CgroupParent\": \"\",\n            \"BlkioWeight\": 0,\n            \"BlkioWeightDevice\": [],\n            \"BlkioDeviceReadBps\": [],\n            \"BlkioDeviceWriteBps\": [],\n            \"BlkioDeviceReadIOps\": [],\n            \"BlkioDeviceWriteIOps\": [],\n            \"CpuPeriod\": 0,\n            \"CpuQuota\": 0,\n            \"CpuRealtimePeriod\": 0,\n            \"CpuRealtimeRuntime\": 0,\n            \"CpusetCpus\": \"\",\n            \"CpusetMems\": \"\",\n            \"Devices\": [],\n            \"DeviceCgroupRules\": null,\n            \"DeviceRequests\": null,\n            \"MemoryReservation\": 0,\n            \"MemorySwap\": 1073741824,\n            \"MemorySwappiness\": null,\n            \"OomKillDisable\": null,\n            \"PidsLimit\": 256,\n            \"Ulimits\": [],\n            \"CpuCount\": 0,\n            \"CpuPercent\": 0,\n            \"IOMaximumIOps\": 0,\n            \"IOMaximumBandwidth\": 0,\n            \"MaskedPaths\": [\n                \"/proc/acpi\",\n                \"/proc/asound\",\n                \"/proc/interrupts\",\n                \"/proc/kcore\",\n                \"/proc/keys\",\n                \"/proc/latency_stats\",\n                \"/proc/sched_debug\",\n                \"/proc/scsi\",\n                \"/proc/timer_list\",\n                \"/proc/timer_stats\",\n                \"/sys/devices/virtual/powercap\",\n                \"/sys/firmware\"\n            ],\n            \"ReadonlyPaths\": [\n                \"/proc/bus\",\n                \"/proc/fs\",\n                \"/proc/irq\",\n                \"/proc/sys\",\n                \"/proc/sysrq-trigger\"\n            ]\n        },\n        \"Storage\": {\n            \"RootFS\": {\n                \"Snapshot\": {\n                    \"Name\": \"overlayfs\"\n                }\n            }\n        },\n        \"Mounts\": [],\n        \"Config\": {\n            \"Hostname\": \"e488c1b8e569\",\n            \"Domainname\": \"\",\n            \"User\": \"65534:65534\",\n            \"AttachStdin\": false,\n            \"AttachStdout\": true,\n            \"AttachStderr\": true,\n            \"Tty\": false,\n            \"OpenStdin\": false,\n            \"StdinOnce\": false,\n            \"Env\": [\n                \"HOME=/tmp\",\n                \"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\",\n                \"NODE_VERSION=22.23.4\",\n                \"YARN_VERSION=1.22.22\"\n            ],\n            \"Cmd\": null,\n            \"Image\": \"sha256:c991ca43ba58528ba3758ebd0ef2c0a75be0c48461d95750317797466b7e3ec7\",\n            \"Volumes\": null,\n            \"WorkingDir\": \"/app\",\n            \"Entrypoint\": [\n                \"/app/probe.sh\"\n            ],\n            \"Labels\": {\n                \"org.farsight.sentinel-feasibility-frameworks.case\": \"nest-validation\",\n                \"org.farsight.sentinel-feasibility-frameworks.owner\": \"1d168efd-4dac-4ffb-a203-b2a57e5443eb\"\n            },\n            \"StopTimeout\": 1\n        },\n        \"NetworkSettings\": {\n            \"SandboxID\": \"\",\n            \"SandboxKey\": \"\",\n            \"Ports\": {},\n            \"Networks\": {\n                \"none\": {\n                    \"IPAMConfig\": null,\n                    \"Links\": null,\n                    \"Aliases\": null,\n                    \"DriverOpts\": null,\n                    \"GwPriority\": 0,\n                    \"NetworkID\": \"076a598f032616b47e9ed4de0dc9a78cfd5b00b147248657a5a83832b5dee40f\",\n                    \"EndpointID\": \"\",\n                    \"Gateway\": \"\",\n                    \"IPAddress\": \"\",\n                    \"MacAddress\": \"\",\n                    \"IPPrefixLen\": 0,\n                    \"IPv6Gateway\": \"\",\n                    \"GlobalIPv6Address\": \"\",\n                    \"GlobalIPv6PrefixLen\": 0,\n                    \"DNSNames\": null\n                }\n            }\n        },\n        \"ImageManifestDescriptor\": {\n            \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\",\n            \"digest\": \"sha256:8f3b3f51344ea5b911d32fe1f4a13da75459bef66306f33422e8eafc1a8d142d\",\n            \"size\": 2759,\n            \"platform\": {\n                \"architecture\": \"arm64\",\n                \"os\": \"linux\"\n            }\n        }\n    }\n]\n",
+          "stderr": "",
+          "stdoutSha256": "fdf8d4ac8588a23845368ceeba3288e17bccb89eff25a7238196a207ac0fda55",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "containerState": {
+          "Status": "exited",
+          "Running": false,
+          "Paused": false,
+          "Restarting": false,
+          "OOMKilled": false,
+          "Dead": false,
+          "Pid": 0,
+          "ExitCode": 0,
+          "Error": "",
+          "StartedAt": "2026-10-22T02:01:20.996679551Z",
+          "FinishedAt": "2026-10-22T02:01:24.124729302Z"
+        },
+        "postStartIsolation": {
+          "id": "e488c1b8e56972bc42b8e41374b72360b718274991bfca843f2b36d84f9aee44",
+          "imageId": "sha256:c991ca43ba58528ba3758ebd0ef2c0a75be0c48461d95750317797466b7e3ec7",
+          "image": "sha256:c991ca43ba58528ba3758ebd0ef2c0a75be0c48461d95750317797466b7e3ec7",
+          "user": "65534:65534",
+          "networkMode": "none",
+          "readOnlyRootfs": true,
+          "capDrop": [
+            "ALL"
+          ],
+          "securityOpt": [
+            "no-new-privileges:true"
+          ],
+          "tmpfs": {
+            "/tmp": "rw,noexec,nosuid,size=128m,mode=1777"
+          },
+          "memory": 1073741824,
+          "memorySwap": 1073741824,
+          "nanoCpus": 1000000000,
+          "pidsLimit": 256,
+          "mounts": []
+        },
+        "completed": true,
+        "cleanup": {
+          "state": "removed-owned-container",
+          "id": "e488c1b8e56972bc42b8e41374b72360b718274991bfca843f2b36d84f9aee44",
+          "result": {
+            "exitCode": 0,
+            "exitSignal": null,
+            "timedOut": false,
+            "outputExceeded": false,
+            "cancelled": false,
+            "spawnError": null,
+            "wallMs": 29.186625000000276,
+            "stdout": "e488c1b8e56972bc42b8e41374b72360b718274991bfca843f2b36d84f9aee44\n",
+            "stderr": "",
+            "stdoutSha256": "4e2b8aee52ac844340b5f5710fec08c1a544a0a0e849081297da686ab9ea88fb",
+            "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "outputEncoding": "utf8-scrubbed"
+          },
+          "verification": {
+            "exitCode": 1,
+            "exitSignal": null,
+            "timedOut": false,
+            "outputExceeded": false,
+            "cancelled": false,
+            "spawnError": null,
+            "wallMs": 33.33587500000067,
+            "stdout": "[]\n",
+            "stderr": "Error response from daemon: No such container: e488c1b8e56972bc42b8e41374b72360b718274991bfca843f2b36d84f9aee44\n",
+            "stdoutSha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "stderrSha256": "1203fa3ecfb760406c6d8bb3b8d9d440261f7b5e43c2aec28928089e9340c222",
+            "outputEncoding": "utf8-scrubbed"
+          }
+        }
+      },
+      "state": "measured",
+      "parsedProbeOutput": {
+        "ok": true,
+        "payload": {
+          "status": "ok",
+          "observations": {
+            "validator-with-pipe": {
+              "invalidBody": 400
+            },
+            "validator-without-pipe": {
+              "invalidBody": 201
+            }
+          }
+        }
+      },
+      "assessment": [
+        {
+          "scenario": "validator-with-pipe",
+          "staticLabel": "bounded-safe-pattern",
+          "expectedRuntime": {
+            "invalidBody": 400
+          },
+          "observed": {
+            "invalidBody": 400
+          },
+          "matchesExpected": true
+        },
+        {
+          "scenario": "validator-without-pipe",
+          "staticLabel": "unknown-enforcement",
+          "expectedRuntime": {
+            "invalidBody": 201
+          },
+          "observed": {
+            "invalidBody": 201
+          },
+          "matchesExpected": true
+        }
+      ]
+    },
+    {
+      "caseId": "next-matcher",
+      "tag": "sentinel-feasibility-frameworks-next-matcher-920feaac-9ce6-4a56-b17d-1bd3941a7f9f",
+      "imageId": "sha256:d407204bb855cf041a4268268601a6dfaba57a0664de80fbf06cc4903555213f",
+      "probe": {
+        "image": "sha256:d407204bb855cf041a4268268601a6dfaba57a0664de80fbf06cc4903555213f",
+        "expectedImageId": "sha256:d407204bb855cf041a4268268601a6dfaba57a0664de80fbf06cc4903555213f",
+        "caseId": "next-matcher",
+        "owner": "2371993d-713e-4e49-b1c8-6c88f00754c8",
+        "name": "sentinel-feasibility-frameworks-babf6761-7957-4b96-8fec-d145d62f2e47",
+        "command": [
+          "docker",
+          "create",
+          "--pull",
+          "never",
+          "--name",
+          "sentinel-feasibility-frameworks-babf6761-7957-4b96-8fec-d145d62f2e47",
+          "--label",
+          "org.farsight.sentinel-feasibility-frameworks.owner=2371993d-713e-4e49-b1c8-6c88f00754c8",
+          "--label",
+          "org.farsight.sentinel-feasibility-frameworks.case=next-matcher",
+          "--platform",
+          "linux/arm64",
+          "--network",
+          "none",
+          "--user",
+          "65534:65534",
+          "--read-only",
+          "--cap-drop",
+          "ALL",
+          "--security-opt",
+          "no-new-privileges:true",
+          "--memory",
+          "1g",
+          "--memory-swap",
+          "1g",
+          "--cpus",
+          "1",
+          "--pids-limit",
+          "256",
+          "--tmpfs",
+          "/tmp:rw,noexec,nosuid,size=128m,mode=1777",
+          "--env",
+          "HOME=/tmp",
+          "sha256:d407204bb855cf041a4268268601a6dfaba57a0664de80fbf06cc4903555213f"
+        ],
+        "state": "measured",
+        "create": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 36.09804200000053,
+          "stdout": "680154ae5ab31233e85accd7beeab5f5513b356721ea694c6845c63bf2749a31\n",
+          "stderr": "",
+          "stdoutSha256": "9ae2a5defe46e2d10c7756dbd3757105a7267758e993adb850568ad088603b37",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "preStartInspect": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 26.54725000000053,
+          "stdout": "[\n    {\n        \"Id\": \"680154ae5ab31233e85accd7beeab5f5513b356721ea694c6845c63bf2749a31\",\n        \"Created\": \"2026-10-22T02:01:24.336213302Z\",\n        \"Path\": \"/app/probe.sh\",\n        \"Args\": [],\n        \"State\": {\n            \"Status\": \"created\",\n            \"Running\": false,\n            \"Paused\": false,\n            \"Restarting\": false,\n            \"OOMKilled\": false,\n            \"Dead\": false,\n            \"Pid\": 0,\n            \"ExitCode\": 0,\n            \"Error\": \"\",\n            \"StartedAt\": \"0001-01-01T00:00:00Z\",\n            \"FinishedAt\": \"0001-01-01T00:00:00Z\"\n        },\n        \"Image\": \"sha256:d407204bb855cf041a4268268601a6dfaba57a0664de80fbf06cc4903555213f\",\n        \"ResolvConfPath\": \"\",\n        \"HostnamePath\": \"\",\n        \"HostsPath\": \"\",\n        \"LogPath\": \"\",\n        \"Name\": \"/sentinel-feasibility-frameworks-babf6761-7957-4b96-8fec-d145d62f2e47\",\n        \"RestartCount\": 0,\n        \"Driver\": \"overlayfs\",\n        \"Platform\": \"linux\",\n        \"MountLabel\": \"\",\n        \"ProcessLabel\": \"\",\n        \"AppArmorProfile\": \"\",\n        \"ExecIDs\": null,\n        \"HostConfig\": {\n            \"Binds\": null,\n            \"ContainerIDFile\": \"\",\n            \"LogConfig\": {\n                \"Type\": \"json-file\",\n                \"Config\": {}\n            },\n            \"NetworkMode\": \"none\",\n            \"PortBindings\": {},\n            \"RestartPolicy\": {\n                \"Name\": \"no\",\n                \"MaximumRetryCount\": 0\n            },\n            \"AutoRemove\": false,\n            \"VolumeDriver\": \"\",\n            \"VolumesFrom\": null,\n            \"ConsoleSize\": [\n                0,\n                0\n            ],\n            \"CapAdd\": null,\n            \"CapDrop\": [\n                \"ALL\"\n            ],\n            \"CgroupnsMode\": \"private\",\n            \"Dns\": null,\n            \"DnsOptions\": [],\n            \"DnsSearch\": [],\n            \"ExtraHosts\": null,\n            \"GroupAdd\": null,\n            \"IpcMode\": \"private\",\n            \"Cgroup\": \"\",\n            \"Links\": null,\n            \"OomScoreAdj\": 0,\n            \"PidMode\": \"\",\n            \"Privileged\": false,\n            \"PublishAllPorts\": false,\n            \"ReadonlyRootfs\": true,\n            \"SecurityOpt\": [\n                \"no-new-privileges:true\"\n            ],\n            \"Tmpfs\": {\n                \"/tmp\": \"rw,noexec,nosuid,size=128m,mode=1777\"\n            },\n            \"UTSMode\": \"\",\n            \"UsernsMode\": \"\",\n            \"ShmSize\": 67108864,\n            \"Runtime\": \"runc\",\n            \"Isolation\": \"\",\n            \"CpuShares\": 0,\n            \"Memory\": 1073741824,\n            \"NanoCpus\": 1000000000,\n            \"CgroupParent\": \"\",\n            \"BlkioWeight\": 0,\n            \"BlkioWeightDevice\": [],\n            \"BlkioDeviceReadBps\": [],\n            \"BlkioDeviceWriteBps\": [],\n            \"BlkioDeviceReadIOps\": [],\n            \"BlkioDeviceWriteIOps\": [],\n            \"CpuPeriod\": 0,\n            \"CpuQuota\": 0,\n            \"CpuRealtimePeriod\": 0,\n            \"CpuRealtimeRuntime\": 0,\n            \"CpusetCpus\": \"\",\n            \"CpusetMems\": \"\",\n            \"Devices\": [],\n            \"DeviceCgroupRules\": null,\n            \"DeviceRequests\": null,\n            \"MemoryReservation\": 0,\n            \"MemorySwap\": 1073741824,\n            \"MemorySwappiness\": null,\n            \"OomKillDisable\": false,\n            \"PidsLimit\": 256,\n            \"Ulimits\": [],\n            \"CpuCount\": 0,\n            \"CpuPercent\": 0,\n            \"IOMaximumIOps\": 0,\n            \"IOMaximumBandwidth\": 0,\n            \"MaskedPaths\": [\n                \"/proc/acpi\",\n                \"/proc/asound\",\n                \"/proc/interrupts\",\n                \"/proc/kcore\",\n                \"/proc/keys\",\n                \"/proc/latency_stats\",\n                \"/proc/sched_debug\",\n                \"/proc/scsi\",\n                \"/proc/timer_list\",\n                \"/proc/timer_stats\",\n                \"/sys/devices/virtual/powercap\",\n                \"/sys/firmware\"\n            ],\n            \"ReadonlyPaths\": [\n                \"/proc/bus\",\n                \"/proc/fs\",\n                \"/proc/irq\",\n                \"/proc/sys\",\n                \"/proc/sysrq-trigger\"\n            ]\n        },\n        \"Storage\": {\n            \"RootFS\": {\n                \"Snapshot\": {\n                    \"Name\": \"overlayfs\"\n                }\n            }\n        },\n        \"Mounts\": [],\n        \"Config\": {\n            \"Hostname\": \"680154ae5ab3\",\n            \"Domainname\": \"\",\n            \"User\": \"65534:65534\",\n            \"AttachStdin\": false,\n            \"AttachStdout\": true,\n            \"AttachStderr\": true,\n            \"Tty\": false,\n            \"OpenStdin\": false,\n            \"StdinOnce\": false,\n            \"Env\": [\n                \"HOME=/tmp\",\n                \"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\",\n                \"NODE_VERSION=22.23.4\",\n                \"YARN_VERSION=1.22.22\"\n            ],\n            \"Cmd\": null,\n            \"Image\": \"sha256:d407204bb855cf041a4268268601a6dfaba57a0664de80fbf06cc4903555213f\",\n            \"Volumes\": null,\n            \"WorkingDir\": \"/app\",\n            \"Entrypoint\": [\n                \"/app/probe.sh\"\n            ],\n            \"Labels\": {\n                \"org.farsight.sentinel-feasibility-frameworks.case\": \"next-matcher\",\n                \"org.farsight.sentinel-feasibility-frameworks.owner\": \"2371993d-713e-4e49-b1c8-6c88f00754c8\"\n            },\n            \"StopTimeout\": 1\n        },\n        \"NetworkSettings\": {\n            \"SandboxID\": \"\",\n            \"SandboxKey\": \"\",\n            \"Ports\": {},\n            \"Networks\": {\n                \"none\": {\n                    \"IPAMConfig\": null,\n                    \"Links\": null,\n                    \"Aliases\": null,\n                    \"DriverOpts\": null,\n                    \"GwPriority\": 0,\n                    \"NetworkID\": \"\",\n                    \"EndpointID\": \"\",\n                    \"Gateway\": \"\",\n                    \"IPAddress\": \"\",\n                    \"MacAddress\": \"\",\n                    \"IPPrefixLen\": 0,\n                    \"IPv6Gateway\": \"\",\n                    \"GlobalIPv6Address\": \"\",\n                    \"GlobalIPv6PrefixLen\": 0,\n                    \"DNSNames\": null\n                }\n            }\n        },\n        \"ImageManifestDescriptor\": {\n            \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\",\n            \"digest\": \"sha256:8bfba866424d4bccc9df8be76f7694af2d65dcb5e2acb27195acd3c5280b1c40\",\n            \"size\": 2951,\n            \"platform\": {\n                \"architecture\": \"arm64\",\n                \"os\": \"linux\"\n            }\n        }\n    }\n]\n",
+          "stderr": "",
+          "stdoutSha256": "cacde43c1a406b5e09882ff6f9aa0130fd93671ab813c1df991c981a68389fef",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "preStartIsolation": {
+          "id": "680154ae5ab31233e85accd7beeab5f5513b356721ea694c6845c63bf2749a31",
+          "imageId": "sha256:d407204bb855cf041a4268268601a6dfaba57a0664de80fbf06cc4903555213f",
+          "image": "sha256:d407204bb855cf041a4268268601a6dfaba57a0664de80fbf06cc4903555213f",
+          "user": "65534:65534",
+          "networkMode": "none",
+          "readOnlyRootfs": true,
+          "capDrop": [
+            "ALL"
+          ],
+          "securityOpt": [
+            "no-new-privileges:true"
+          ],
+          "tmpfs": {
+            "/tmp": "rw,noexec,nosuid,size=128m,mode=1777"
+          },
+          "memory": 1073741824,
+          "memorySwap": 1073741824,
+          "nanoCpus": 1000000000,
+          "pidsLimit": 256,
+          "mounts": []
+        },
+        "preStartCheck": {
+          "passed": true,
+          "checks": [
+            {
+              "name": "image-id-matches-acquired",
+              "passed": true
+            },
+            {
+              "name": "network-none",
+              "passed": true
+            },
+            {
+              "name": "user-is-run-uid",
+              "passed": true
+            },
+            {
+              "name": "read-only-rootfs",
+              "passed": true
+            },
+            {
+              "name": "cap-drop-all",
+              "passed": true
+            },
+            {
+              "name": "no-new-privileges",
+              "passed": true
+            },
+            {
+              "name": "memory-limit-matches",
+              "passed": true
+            },
+            {
+              "name": "memory-swap-not-unbounded",
+              "passed": true
+            },
+            {
+              "name": "cpus-limit-matches",
+              "passed": true
+            },
+            {
+              "name": "pids-limit-matches",
+              "passed": true
+            },
+            {
+              "name": "no-host-bind-mounts",
+              "passed": true
+            }
+          ]
+        },
+        "execution": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 1197.9866249999995,
+          "stdout": "SENTINEL_FIXTURE_PROBE_RESULT={\"status\":\"ok\",\"observations\":{\"matched-and-blocked\":{\"status\":403},\"matched-but-exempted\":{\"status\":200},\"excluded-by-matcher\":{\"status\":200}}}\n",
+          "stderr": "",
+          "stdoutSha256": "f9ac18c87ab316340604cf0b4dbe46373a9c2a65824c2bd6790b0199f1b9c57e",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "postStartInspect": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 26.36541600000055,
+          "stdout": "[\n    {\n        \"Id\": \"680154ae5ab31233e85accd7beeab5f5513b356721ea694c6845c63bf2749a31\",\n        \"Created\": \"2026-10-22T02:01:24.336213302Z\",\n        \"Path\": \"/app/probe.sh\",\n        \"Args\": [],\n        \"State\": {\n            \"Status\": \"exited\",\n            \"Running\": false,\n            \"Paused\": false,\n            \"Restarting\": false,\n            \"OOMKilled\": false,\n            \"Dead\": false,\n            \"Pid\": 0,\n            \"ExitCode\": 0,\n            \"Error\": \"\",\n            \"StartedAt\": \"2026-10-22T02:01:24.423131635Z\",\n            \"FinishedAt\": \"2026-10-22T02:01:25.551159719Z\"\n        },\n        \"Image\": \"sha256:d407204bb855cf041a4268268601a6dfaba57a0664de80fbf06cc4903555213f\",\n        \"ResolvConfPath\": \"/var/lib/docker/containers/680154ae5ab31233e85accd7beeab5f5513b356721ea694c6845c63bf2749a31/resolv.conf\",\n        \"HostnamePath\": \"/var/lib/docker/containers/680154ae5ab31233e85accd7beeab5f5513b356721ea694c6845c63bf2749a31/hostname\",\n        \"HostsPath\": \"/var/lib/docker/containers/680154ae5ab31233e85accd7beeab5f5513b356721ea694c6845c63bf2749a31/hosts\",\n        \"LogPath\": \"/var/lib/docker/containers/680154ae5ab31233e85accd7beeab5f5513b356721ea694c6845c63bf2749a31/680154ae5ab31233e85accd7beeab5f5513b356721ea694c6845c63bf2749a31-json.log\",\n        \"Name\": \"/sentinel-feasibility-frameworks-babf6761-7957-4b96-8fec-d145d62f2e47\",\n        \"RestartCount\": 0,\n        \"Driver\": \"overlayfs\",\n        \"Platform\": \"linux\",\n        \"MountLabel\": \"\",\n        \"ProcessLabel\": \"\",\n        \"AppArmorProfile\": \"\",\n        \"ExecIDs\": null,\n        \"HostConfig\": {\n            \"Binds\": null,\n            \"ContainerIDFile\": \"\",\n            \"LogConfig\": {\n                \"Type\": \"json-file\",\n                \"Config\": {}\n            },\n            \"NetworkMode\": \"none\",\n            \"PortBindings\": {},\n            \"RestartPolicy\": {\n                \"Name\": \"no\",\n                \"MaximumRetryCount\": 0\n            },\n            \"AutoRemove\": false,\n            \"VolumeDriver\": \"\",\n            \"VolumesFrom\": null,\n            \"ConsoleSize\": [\n                0,\n                0\n            ],\n            \"CapAdd\": null,\n            \"CapDrop\": [\n                \"ALL\"\n            ],\n            \"CgroupnsMode\": \"private\",\n            \"Dns\": null,\n            \"DnsOptions\": [],\n            \"DnsSearch\": [],\n            \"ExtraHosts\": null,\n            \"GroupAdd\": null,\n            \"IpcMode\": \"private\",\n            \"Cgroup\": \"\",\n            \"Links\": null,\n            \"OomScoreAdj\": 0,\n            \"PidMode\": \"\",\n            \"Privileged\": false,\n            \"PublishAllPorts\": false,\n            \"ReadonlyRootfs\": true,\n            \"SecurityOpt\": [\n                \"no-new-privileges:true\"\n            ],\n            \"Tmpfs\": {\n                \"/tmp\": \"rw,noexec,nosuid,size=128m,mode=1777\"\n            },\n            \"UTSMode\": \"\",\n            \"UsernsMode\": \"\",\n            \"ShmSize\": 67108864,\n            \"Runtime\": \"runc\",\n            \"Isolation\": \"\",\n            \"CpuShares\": 0,\n            \"Memory\": 1073741824,\n            \"NanoCpus\": 1000000000,\n            \"CgroupParent\": \"\",\n            \"BlkioWeight\": 0,\n            \"BlkioWeightDevice\": [],\n            \"BlkioDeviceReadBps\": [],\n            \"BlkioDeviceWriteBps\": [],\n            \"BlkioDeviceReadIOps\": [],\n            \"BlkioDeviceWriteIOps\": [],\n            \"CpuPeriod\": 0,\n            \"CpuQuota\": 0,\n            \"CpuRealtimePeriod\": 0,\n            \"CpuRealtimeRuntime\": 0,\n            \"CpusetCpus\": \"\",\n            \"CpusetMems\": \"\",\n            \"Devices\": [],\n            \"DeviceCgroupRules\": null,\n            \"DeviceRequests\": null,\n            \"MemoryReservation\": 0,\n            \"MemorySwap\": 1073741824,\n            \"MemorySwappiness\": null,\n            \"OomKillDisable\": null,\n            \"PidsLimit\": 256,\n            \"Ulimits\": [],\n            \"CpuCount\": 0,\n            \"CpuPercent\": 0,\n            \"IOMaximumIOps\": 0,\n            \"IOMaximumBandwidth\": 0,\n            \"MaskedPaths\": [\n                \"/proc/acpi\",\n                \"/proc/asound\",\n                \"/proc/interrupts\",\n                \"/proc/kcore\",\n                \"/proc/keys\",\n                \"/proc/latency_stats\",\n                \"/proc/sched_debug\",\n                \"/proc/scsi\",\n                \"/proc/timer_list\",\n                \"/proc/timer_stats\",\n                \"/sys/devices/virtual/powercap\",\n                \"/sys/firmware\"\n            ],\n            \"ReadonlyPaths\": [\n                \"/proc/bus\",\n                \"/proc/fs\",\n                \"/proc/irq\",\n                \"/proc/sys\",\n                \"/proc/sysrq-trigger\"\n            ]\n        },\n        \"Storage\": {\n            \"RootFS\": {\n                \"Snapshot\": {\n                    \"Name\": \"overlayfs\"\n                }\n            }\n        },\n        \"Mounts\": [],\n        \"Config\": {\n            \"Hostname\": \"680154ae5ab3\",\n            \"Domainname\": \"\",\n            \"User\": \"65534:65534\",\n            \"AttachStdin\": false,\n            \"AttachStdout\": true,\n            \"AttachStderr\": true,\n            \"Tty\": false,\n            \"OpenStdin\": false,\n            \"StdinOnce\": false,\n            \"Env\": [\n                \"HOME=/tmp\",\n                \"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\",\n                \"NODE_VERSION=22.23.4\",\n                \"YARN_VERSION=1.22.22\"\n            ],\n            \"Cmd\": null,\n            \"Image\": \"sha256:d407204bb855cf041a4268268601a6dfaba57a0664de80fbf06cc4903555213f\",\n            \"Volumes\": null,\n            \"WorkingDir\": \"/app\",\n            \"Entrypoint\": [\n                \"/app/probe.sh\"\n            ],\n            \"Labels\": {\n                \"org.farsight.sentinel-feasibility-frameworks.case\": \"next-matcher\",\n                \"org.farsight.sentinel-feasibility-frameworks.owner\": \"2371993d-713e-4e49-b1c8-6c88f00754c8\"\n            },\n            \"StopTimeout\": 1\n        },\n        \"NetworkSettings\": {\n            \"SandboxID\": \"\",\n            \"SandboxKey\": \"\",\n            \"Ports\": {},\n            \"Networks\": {\n                \"none\": {\n                    \"IPAMConfig\": null,\n                    \"Links\": null,\n                    \"Aliases\": null,\n                    \"DriverOpts\": null,\n                    \"GwPriority\": 0,\n                    \"NetworkID\": \"076a598f032616b47e9ed4de0dc9a78cfd5b00b147248657a5a83832b5dee40f\",\n                    \"EndpointID\": \"\",\n                    \"Gateway\": \"\",\n                    \"IPAddress\": \"\",\n                    \"MacAddress\": \"\",\n                    \"IPPrefixLen\": 0,\n                    \"IPv6Gateway\": \"\",\n                    \"GlobalIPv6Address\": \"\",\n                    \"GlobalIPv6PrefixLen\": 0,\n                    \"DNSNames\": null\n                }\n            }\n        },\n        \"ImageManifestDescriptor\": {\n            \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\",\n            \"digest\": \"sha256:8bfba866424d4bccc9df8be76f7694af2d65dcb5e2acb27195acd3c5280b1c40\",\n            \"size\": 2951,\n            \"platform\": {\n                \"architecture\": \"arm64\",\n                \"os\": \"linux\"\n            }\n        }\n    }\n]\n",
+          "stderr": "",
+          "stdoutSha256": "11ac2686d1f1f97466caac7af4780f63d35f388e82d2d937e4e66b1cd3bc25f3",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "containerState": {
+          "Status": "exited",
+          "Running": false,
+          "Paused": false,
+          "Restarting": false,
+          "OOMKilled": false,
+          "Dead": false,
+          "Pid": 0,
+          "ExitCode": 0,
+          "Error": "",
+          "StartedAt": "2026-10-22T02:01:24.423131635Z",
+          "FinishedAt": "2026-10-22T02:01:25.551159719Z"
+        },
+        "postStartIsolation": {
+          "id": "680154ae5ab31233e85accd7beeab5f5513b356721ea694c6845c63bf2749a31",
+          "imageId": "sha256:d407204bb855cf041a4268268601a6dfaba57a0664de80fbf06cc4903555213f",
+          "image": "sha256:d407204bb855cf041a4268268601a6dfaba57a0664de80fbf06cc4903555213f",
+          "user": "65534:65534",
+          "networkMode": "none",
+          "readOnlyRootfs": true,
+          "capDrop": [
+            "ALL"
+          ],
+          "securityOpt": [
+            "no-new-privileges:true"
+          ],
+          "tmpfs": {
+            "/tmp": "rw,noexec,nosuid,size=128m,mode=1777"
+          },
+          "memory": 1073741824,
+          "memorySwap": 1073741824,
+          "nanoCpus": 1000000000,
+          "pidsLimit": 256,
+          "mounts": []
+        },
+        "completed": true,
+        "cleanup": {
+          "state": "removed-owned-container",
+          "id": "680154ae5ab31233e85accd7beeab5f5513b356721ea694c6845c63bf2749a31",
+          "result": {
+            "exitCode": 0,
+            "exitSignal": null,
+            "timedOut": false,
+            "outputExceeded": false,
+            "cancelled": false,
+            "spawnError": null,
+            "wallMs": 32.418250000000626,
+            "stdout": "680154ae5ab31233e85accd7beeab5f5513b356721ea694c6845c63bf2749a31\n",
+            "stderr": "",
+            "stdoutSha256": "9ae2a5defe46e2d10c7756dbd3757105a7267758e993adb850568ad088603b37",
+            "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "outputEncoding": "utf8-scrubbed"
+          },
+          "verification": {
+            "exitCode": 1,
+            "exitSignal": null,
+            "timedOut": false,
+            "outputExceeded": false,
+            "cancelled": false,
+            "spawnError": null,
+            "wallMs": 24.95404199999939,
+            "stdout": "[]\n",
+            "stderr": "Error response from daemon: No such container: 680154ae5ab31233e85accd7beeab5f5513b356721ea694c6845c63bf2749a31\n",
+            "stdoutSha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "stderrSha256": "d2723f5b2192594ce961d163c71076e8d0dc4360123768b69eff4f789eaa88df",
+            "outputEncoding": "utf8-scrubbed"
+          }
+        }
+      },
+      "state": "measured",
+      "parsedProbeOutput": {
+        "ok": true,
+        "payload": {
+          "status": "ok",
+          "observations": {
+            "matched-and-blocked": {
+              "status": 403
+            },
+            "matched-but-exempted": {
+              "status": 200
+            },
+            "excluded-by-matcher": {
+              "status": 200
+            }
+          }
+        }
+      },
+      "assessment": [
+        {
+          "scenario": "matched-and-blocked",
+          "staticLabel": "bounded-safe-pattern",
+          "expectedRuntime": {
+            "status": 403
+          },
+          "observed": {
+            "status": 403
+          },
+          "matchesExpected": true
+        },
+        {
+          "scenario": "matched-but-exempted",
+          "staticLabel": "unknown-enforcement",
+          "expectedRuntime": {
+            "status": 200
+          },
+          "observed": {
+            "status": 200
+          },
+          "matchesExpected": true
+        },
+        {
+          "scenario": "excluded-by-matcher",
+          "staticLabel": "unknown-enforcement",
+          "expectedRuntime": {
+            "status": 200
+          },
+          "observed": {
+            "status": 200
+          },
+          "matchesExpected": true
+        }
+      ]
+    },
+    {
+      "caseId": "spring-chains",
+      "tag": "sentinel-feasibility-frameworks-spring-chains-53482770-b464-475e-a7d2-431eb97d7756",
+      "imageId": "sha256:7e02d37fab8be71c5874dde6d62eb819ad70f546159d5a72cdd1dfb8cf4145a9",
+      "probe": {
+        "image": "sha256:7e02d37fab8be71c5874dde6d62eb819ad70f546159d5a72cdd1dfb8cf4145a9",
+        "expectedImageId": "sha256:7e02d37fab8be71c5874dde6d62eb819ad70f546159d5a72cdd1dfb8cf4145a9",
+        "caseId": "spring-chains",
+        "owner": "c7e56ca5-b833-4454-b9e5-4bd1441248c1",
+        "name": "sentinel-feasibility-frameworks-002e5d13-64a7-4bcf-a34d-a69d24bb237c",
+        "command": [
+          "docker",
+          "create",
+          "--pull",
+          "never",
+          "--name",
+          "sentinel-feasibility-frameworks-002e5d13-64a7-4bcf-a34d-a69d24bb237c",
+          "--label",
+          "org.farsight.sentinel-feasibility-frameworks.owner=c7e56ca5-b833-4454-b9e5-4bd1441248c1",
+          "--label",
+          "org.farsight.sentinel-feasibility-frameworks.case=spring-chains",
+          "--platform",
+          "linux/arm64",
+          "--network",
+          "none",
+          "--user",
+          "65534:65534",
+          "--read-only",
+          "--cap-drop",
+          "ALL",
+          "--security-opt",
+          "no-new-privileges:true",
+          "--memory",
+          "1g",
+          "--memory-swap",
+          "1g",
+          "--cpus",
+          "1",
+          "--pids-limit",
+          "256",
+          "--tmpfs",
+          "/tmp:rw,noexec,nosuid,size=128m,mode=1777",
+          "--env",
+          "HOME=/tmp",
+          "sha256:7e02d37fab8be71c5874dde6d62eb819ad70f546159d5a72cdd1dfb8cf4145a9"
+        ],
+        "state": "measured",
+        "create": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 36.40912500000013,
+          "stdout": "2b25f4cd0529ae59d42cefe0c0f9c51a071447db2d01e881931f057918acacef\n",
+          "stderr": "",
+          "stdoutSha256": "bb2b7a3e7c3f94e1aaf4530db25302f0e8eae0f31985652587202214deb664a4",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "preStartInspect": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 32.423415999999634,
+          "stdout": "[\n    {\n        \"Id\": \"2b25f4cd0529ae59d42cefe0c0f9c51a071447db2d01e881931f057918acacef\",\n        \"Created\": \"2026-10-22T02:01:25.732121178Z\",\n        \"Path\": \"/app/probe.sh\",\n        \"Args\": [],\n        \"State\": {\n            \"Status\": \"created\",\n            \"Running\": false,\n            \"Paused\": false,\n            \"Restarting\": false,\n            \"OOMKilled\": false,\n            \"Dead\": false,\n            \"Pid\": 0,\n            \"ExitCode\": 0,\n            \"Error\": \"\",\n            \"StartedAt\": \"0001-01-01T00:00:00Z\",\n            \"FinishedAt\": \"0001-01-01T00:00:00Z\"\n        },\n        \"Image\": \"sha256:7e02d37fab8be71c5874dde6d62eb819ad70f546159d5a72cdd1dfb8cf4145a9\",\n        \"ResolvConfPath\": \"\",\n        \"HostnamePath\": \"\",\n        \"HostsPath\": \"\",\n        \"LogPath\": \"\",\n        \"Name\": \"/sentinel-feasibility-frameworks-002e5d13-64a7-4bcf-a34d-a69d24bb237c\",\n        \"RestartCount\": 0,\n        \"Driver\": \"overlayfs\",\n        \"Platform\": \"linux\",\n        \"MountLabel\": \"\",\n        \"ProcessLabel\": \"\",\n        \"AppArmorProfile\": \"\",\n        \"ExecIDs\": null,\n        \"HostConfig\": {\n            \"Binds\": null,\n            \"ContainerIDFile\": \"\",\n            \"LogConfig\": {\n                \"Type\": \"json-file\",\n                \"Config\": {}\n            },\n            \"NetworkMode\": \"none\",\n            \"PortBindings\": {},\n            \"RestartPolicy\": {\n                \"Name\": \"no\",\n                \"MaximumRetryCount\": 0\n            },\n            \"AutoRemove\": false,\n            \"VolumeDriver\": \"\",\n            \"VolumesFrom\": null,\n            \"ConsoleSize\": [\n                0,\n                0\n            ],\n            \"CapAdd\": null,\n            \"CapDrop\": [\n                \"ALL\"\n            ],\n            \"CgroupnsMode\": \"private\",\n            \"Dns\": null,\n            \"DnsOptions\": [],\n            \"DnsSearch\": [],\n            \"ExtraHosts\": null,\n            \"GroupAdd\": null,\n            \"IpcMode\": \"private\",\n            \"Cgroup\": \"\",\n            \"Links\": null,\n            \"OomScoreAdj\": 0,\n            \"PidMode\": \"\",\n            \"Privileged\": false,\n            \"PublishAllPorts\": false,\n            \"ReadonlyRootfs\": true,\n            \"SecurityOpt\": [\n                \"no-new-privileges:true\"\n            ],\n            \"Tmpfs\": {\n                \"/tmp\": \"rw,noexec,nosuid,size=128m,mode=1777\"\n            },\n            \"UTSMode\": \"\",\n            \"UsernsMode\": \"\",\n            \"ShmSize\": 67108864,\n            \"Runtime\": \"runc\",\n            \"Isolation\": \"\",\n            \"CpuShares\": 0,\n            \"Memory\": 1073741824,\n            \"NanoCpus\": 1000000000,\n            \"CgroupParent\": \"\",\n            \"BlkioWeight\": 0,\n            \"BlkioWeightDevice\": [],\n            \"BlkioDeviceReadBps\": [],\n            \"BlkioDeviceWriteBps\": [],\n            \"BlkioDeviceReadIOps\": [],\n            \"BlkioDeviceWriteIOps\": [],\n            \"CpuPeriod\": 0,\n            \"CpuQuota\": 0,\n            \"CpuRealtimePeriod\": 0,\n            \"CpuRealtimeRuntime\": 0,\n            \"CpusetCpus\": \"\",\n            \"CpusetMems\": \"\",\n            \"Devices\": [],\n            \"DeviceCgroupRules\": null,\n            \"DeviceRequests\": null,\n            \"MemoryReservation\": 0,\n            \"MemorySwap\": 1073741824,\n            \"MemorySwappiness\": null,\n            \"OomKillDisable\": false,\n            \"PidsLimit\": 256,\n            \"Ulimits\": [],\n            \"CpuCount\": 0,\n            \"CpuPercent\": 0,\n            \"IOMaximumIOps\": 0,\n            \"IOMaximumBandwidth\": 0,\n            \"MaskedPaths\": [\n                \"/proc/acpi\",\n                \"/proc/asound\",\n                \"/proc/interrupts\",\n                \"/proc/kcore\",\n                \"/proc/keys\",\n                \"/proc/latency_stats\",\n                \"/proc/sched_debug\",\n                \"/proc/scsi\",\n                \"/proc/timer_list\",\n                \"/proc/timer_stats\",\n                \"/sys/devices/virtual/powercap\",\n                \"/sys/firmware\"\n            ],\n            \"ReadonlyPaths\": [\n                \"/proc/bus\",\n                \"/proc/fs\",\n                \"/proc/irq\",\n                \"/proc/sys\",\n                \"/proc/sysrq-trigger\"\n            ]\n        },\n        \"Storage\": {\n            \"RootFS\": {\n                \"Snapshot\": {\n                    \"Name\": \"overlayfs\"\n                }\n            }\n        },\n        \"Mounts\": [],\n        \"Config\": {\n            \"Hostname\": \"2b25f4cd0529\",\n            \"Domainname\": \"\",\n            \"User\": \"65534:65534\",\n            \"AttachStdin\": false,\n            \"AttachStdout\": true,\n            \"AttachStderr\": true,\n            \"Tty\": false,\n            \"OpenStdin\": false,\n            \"StdinOnce\": false,\n            \"Env\": [\n                \"HOME=/tmp\",\n                \"PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\",\n                \"JAVA_HOME=/opt/java/openjdk\",\n                \"LANG=en_US.UTF-8\",\n                \"LANGUAGE=en_US:en\",\n                \"LC_ALL=en_US.UTF-8\",\n                \"JAVA_VERSION=jdk-21.0.7+6\",\n                \"MAVEN_HOME=/usr/share/maven\",\n                \"MAVEN_CONFIG=/root/.m2\"\n            ],\n            \"Cmd\": null,\n            \"Image\": \"sha256:7e02d37fab8be71c5874dde6d62eb819ad70f546159d5a72cdd1dfb8cf4145a9\",\n            \"Volumes\": null,\n            \"WorkingDir\": \"/app\",\n            \"Entrypoint\": [\n                \"/app/probe.sh\"\n            ],\n            \"Labels\": {\n                \"org.farsight.sentinel-feasibility-frameworks.case\": \"spring-chains\",\n                \"org.farsight.sentinel-feasibility-frameworks.owner\": \"c7e56ca5-b833-4454-b9e5-4bd1441248c1\",\n                \"org.opencontainers.image.description\": \"Apache Maven is a software project management and comprehension tool. Based on the concept of a project object model (POM), Maven can manage a project's build, reporting and documentation from a central piece of information.\",\n                \"org.opencontainers.image.source\": \"https://github.com/carlossg/docker-maven\",\n                \"org.opencontainers.image.title\": \"Apache Maven\",\n                \"org.opencontainers.image.url\": \"https://github.com/carlossg/docker-maven\"\n            },\n            \"StopTimeout\": 1\n        },\n        \"NetworkSettings\": {\n            \"SandboxID\": \"\",\n            \"SandboxKey\": \"\",\n            \"Ports\": {},\n            \"Networks\": {\n                \"none\": {\n                    \"IPAMConfig\": null,\n                    \"Links\": null,\n                    \"Aliases\": null,\n                    \"DriverOpts\": null,\n                    \"GwPriority\": 0,\n                    \"NetworkID\": \"\",\n                    \"EndpointID\": \"\",\n                    \"Gateway\": \"\",\n                    \"IPAddress\": \"\",\n                    \"MacAddress\": \"\",\n                    \"IPPrefixLen\": 0,\n                    \"IPv6Gateway\": \"\",\n                    \"GlobalIPv6Address\": \"\",\n                    \"GlobalIPv6PrefixLen\": 0,\n                    \"DNSNames\": null\n                }\n            }\n        },\n        \"ImageManifestDescriptor\": {\n            \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\",\n            \"digest\": \"sha256:0611d6fe3855185c877778dbdc64ffd27e31998ad11bda00d5120cdfec3d41a3\",\n            \"size\": 3900,\n            \"platform\": {\n                \"architecture\": \"arm64\",\n                \"os\": \"linux\"\n            }\n        }\n    }\n]\n",
+          "stderr": "",
+          "stdoutSha256": "4b01cbf14aecc771843767aedf8ff8778a90dc924c39c478d323641d8d0ed09f",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "preStartIsolation": {
+          "id": "2b25f4cd0529ae59d42cefe0c0f9c51a071447db2d01e881931f057918acacef",
+          "imageId": "sha256:7e02d37fab8be71c5874dde6d62eb819ad70f546159d5a72cdd1dfb8cf4145a9",
+          "image": "sha256:7e02d37fab8be71c5874dde6d62eb819ad70f546159d5a72cdd1dfb8cf4145a9",
+          "user": "65534:65534",
+          "networkMode": "none",
+          "readOnlyRootfs": true,
+          "capDrop": [
+            "ALL"
+          ],
+          "securityOpt": [
+            "no-new-privileges:true"
+          ],
+          "tmpfs": {
+            "/tmp": "rw,noexec,nosuid,size=128m,mode=1777"
+          },
+          "memory": 1073741824,
+          "memorySwap": 1073741824,
+          "nanoCpus": 1000000000,
+          "pidsLimit": 256,
+          "mounts": []
+        },
+        "preStartCheck": {
+          "passed": true,
+          "checks": [
+            {
+              "name": "image-id-matches-acquired",
+              "passed": true
+            },
+            {
+              "name": "network-none",
+              "passed": true
+            },
+            {
+              "name": "user-is-run-uid",
+              "passed": true
+            },
+            {
+              "name": "read-only-rootfs",
+              "passed": true
+            },
+            {
+              "name": "cap-drop-all",
+              "passed": true
+            },
+            {
+              "name": "no-new-privileges",
+              "passed": true
+            },
+            {
+              "name": "memory-limit-matches",
+              "passed": true
+            },
+            {
+              "name": "memory-swap-not-unbounded",
+              "passed": true
+            },
+            {
+              "name": "cpus-limit-matches",
+              "passed": true
+            },
+            {
+              "name": "pids-limit-matches",
+              "passed": true
+            },
+            {
+              "name": "no-host-bind-mounts",
+              "passed": true
+            }
+          ]
+        },
+        "execution": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 3435.4655829999992,
+          "stdout": "\n  .   ____          _            __ _ _\n /\\\\ / ___'_ __ _ _(_)_ __  __ _ \\ \\ \\ \\\n( ( )\\___ | '_ | '_| | '_ \\/ _` | \\ \\ \\ \\\n \\\\/  ___)| |_)| | | | | || (_| |  ) ) ) )\n  '  |____| .__|_| |_|_| |_\\__, | / / / /\n =========|_|==============|___/=/_/_/_/\n\n :: Spring Boot ::                (v3.4.3)\n\n2026-10-22T02:01:26.617Z  INFO 7 --- [           main] o.f.s.f.SentinelFeasibilityApplication   : Starting SentinelFeasibilityApplication v0.0.0 using Java 21.0.7 with PID 7 (/app/target/spring-chains-fixture.jar started by nobody in /app)\n2026-10-22T02:01:26.618Z  INFO 7 --- [           main] o.f.s.f.SentinelFeasibilityApplication   : No active profile set, falling back to 1 default profile: \"default\"\n2026-10-22T02:01:27.516Z  INFO 7 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 3000 (http)\n2026-10-22T02:01:27.537Z  INFO 7 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]\n2026-10-22T02:01:27.537Z  INFO 7 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.36]\n2026-10-22T02:01:27.621Z  INFO 7 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext\n2026-10-22T02:01:27.622Z  INFO 7 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 928 ms\n2026-10-22T02:01:28.013Z  INFO 7 --- [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService\n2026-10-22T02:01:28.398Z  INFO 7 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 3000 (http) with context path '/'\n2026-10-22T02:01:28.404Z  INFO 7 --- [           main] o.f.s.f.SentinelFeasibilityApplication   : Started SentinelFeasibilityApplication in 2.177 seconds (process running for 2.543)\n2026-10-22T02:01:28.939Z  INFO 7 --- [0.1-3000-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'\n2026-10-22T02:01:28.939Z  INFO 7 --- [0.1-3000-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'\n2026-10-22T02:01:28.939Z  INFO 7 --- [0.1-3000-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 0 ms\nSENTINEL_FIXTURE_PROBE_RESULT={\"status\":\"ok\",\"observations\":{\"overlapping-open-chain\":{\"withoutCredentials\":200},\"later-authenticated-chain\":{\"withoutCredentials\":401,\"withCredentials\":200},\"unmatched-no-chain-applies\":{\"withoutCredentials\":200}}}\n",
+          "stderr": "",
+          "stdoutSha256": "b258de0c4b391cf0cce7b74fb5550bace65ed389f7bbd798bc23c3ec544b0e5a",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "postStartInspect": {
+          "exitCode": 0,
+          "exitSignal": null,
+          "timedOut": false,
+          "outputExceeded": false,
+          "cancelled": false,
+          "spawnError": null,
+          "wallMs": 22.47895900000003,
+          "stdout": "[\n    {\n        \"Id\": \"2b25f4cd0529ae59d42cefe0c0f9c51a071447db2d01e881931f057918acacef\",\n        \"Created\": \"2026-10-22T02:01:25.732121178Z\",\n        \"Path\": \"/app/probe.sh\",\n        \"Args\": [],\n        \"State\": {\n            \"Status\": \"exited\",\n            \"Running\": false,\n            \"Paused\": false,\n            \"Restarting\": false,\n            \"OOMKilled\": false,\n            \"Dead\": false,\n            \"Pid\": 0,\n            \"ExitCode\": 0,\n            \"Error\": \"\",\n            \"StartedAt\": \"2026-10-22T02:01:25.810747719Z\",\n            \"FinishedAt\": \"2026-10-22T02:01:29.196583096Z\"\n        },\n        \"Image\": \"sha256:7e02d37fab8be71c5874dde6d62eb819ad70f546159d5a72cdd1dfb8cf4145a9\",\n        \"ResolvConfPath\": \"/var/lib/docker/containers/2b25f4cd0529ae59d42cefe0c0f9c51a071447db2d01e881931f057918acacef/resolv.conf\",\n        \"HostnamePath\": \"/var/lib/docker/containers/2b25f4cd0529ae59d42cefe0c0f9c51a071447db2d01e881931f057918acacef/hostname\",\n        \"HostsPath\": \"/var/lib/docker/containers/2b25f4cd0529ae59d42cefe0c0f9c51a071447db2d01e881931f057918acacef/hosts\",\n        \"LogPath\": \"/var/lib/docker/containers/2b25f4cd0529ae59d42cefe0c0f9c51a071447db2d01e881931f057918acacef/2b25f4cd0529ae59d42cefe0c0f9c51a071447db2d01e881931f057918acacef-json.log\",\n        \"Name\": \"/sentinel-feasibility-frameworks-002e5d13-64a7-4bcf-a34d-a69d24bb237c\",\n        \"RestartCount\": 0,\n        \"Driver\": \"overlayfs\",\n        \"Platform\": \"linux\",\n        \"MountLabel\": \"\",\n        \"ProcessLabel\": \"\",\n        \"AppArmorProfile\": \"\",\n        \"ExecIDs\": null,\n        \"HostConfig\": {\n            \"Binds\": null,\n            \"ContainerIDFile\": \"\",\n            \"LogConfig\": {\n                \"Type\": \"json-file\",\n                \"Config\": {}\n            },\n            \"NetworkMode\": \"none\",\n            \"PortBindings\": {},\n            \"RestartPolicy\": {\n                \"Name\": \"no\",\n                \"MaximumRetryCount\": 0\n            },\n            \"AutoRemove\": false,\n            \"VolumeDriver\": \"\",\n            \"VolumesFrom\": null,\n            \"ConsoleSize\": [\n                0,\n                0\n            ],\n            \"CapAdd\": null,\n            \"CapDrop\": [\n                \"ALL\"\n            ],\n            \"CgroupnsMode\": \"private\",\n            \"Dns\": null,\n            \"DnsOptions\": [],\n            \"DnsSearch\": [],\n            \"ExtraHosts\": null,\n            \"GroupAdd\": null,\n            \"IpcMode\": \"private\",\n            \"Cgroup\": \"\",\n            \"Links\": null,\n            \"OomScoreAdj\": 0,\n            \"PidMode\": \"\",\n            \"Privileged\": false,\n            \"PublishAllPorts\": false,\n            \"ReadonlyRootfs\": true,\n            \"SecurityOpt\": [\n                \"no-new-privileges:true\"\n            ],\n            \"Tmpfs\": {\n                \"/tmp\": \"rw,noexec,nosuid,size=128m,mode=1777\"\n            },\n            \"UTSMode\": \"\",\n            \"UsernsMode\": \"\",\n            \"ShmSize\": 67108864,\n            \"Runtime\": \"runc\",\n            \"Isolation\": \"\",\n            \"CpuShares\": 0,\n            \"Memory\": 1073741824,\n            \"NanoCpus\": 1000000000,\n            \"CgroupParent\": \"\",\n            \"BlkioWeight\": 0,\n            \"BlkioWeightDevice\": [],\n            \"BlkioDeviceReadBps\": [],\n            \"BlkioDeviceWriteBps\": [],\n            \"BlkioDeviceReadIOps\": [],\n            \"BlkioDeviceWriteIOps\": [],\n            \"CpuPeriod\": 0,\n            \"CpuQuota\": 0,\n            \"CpuRealtimePeriod\": 0,\n            \"CpuRealtimeRuntime\": 0,\n            \"CpusetCpus\": \"\",\n            \"CpusetMems\": \"\",\n            \"Devices\": [],\n            \"DeviceCgroupRules\": null,\n            \"DeviceRequests\": null,\n            \"MemoryReservation\": 0,\n            \"MemorySwap\": 1073741824,\n            \"MemorySwappiness\": null,\n            \"OomKillDisable\": null,\n            \"PidsLimit\": 256,\n            \"Ulimits\": [],\n            \"CpuCount\": 0,\n            \"CpuPercent\": 0,\n            \"IOMaximumIOps\": 0,\n            \"IOMaximumBandwidth\": 0,\n            \"MaskedPaths\": [\n                \"/proc/acpi\",\n                \"/proc/asound\",\n                \"/proc/interrupts\",\n                \"/proc/kcore\",\n                \"/proc/keys\",\n                \"/proc/latency_stats\",\n                \"/proc/sched_debug\",\n                \"/proc/scsi\",\n                \"/proc/timer_list\",\n                \"/proc/timer_stats\",\n                \"/sys/devices/virtual/powercap\",\n                \"/sys/firmware\"\n            ],\n            \"ReadonlyPaths\": [\n                \"/proc/bus\",\n                \"/proc/fs\",\n                \"/proc/irq\",\n                \"/proc/sys\",\n                \"/proc/sysrq-trigger\"\n            ]\n        },\n        \"Storage\": {\n            \"RootFS\": {\n                \"Snapshot\": {\n                    \"Name\": \"overlayfs\"\n                }\n            }\n        },\n        \"Mounts\": [],\n        \"Config\": {\n            \"Hostname\": \"2b25f4cd0529\",\n            \"Domainname\": \"\",\n            \"User\": \"65534:65534\",\n            \"AttachStdin\": false,\n            \"AttachStdout\": true,\n            \"AttachStderr\": true,\n            \"Tty\": false,\n            \"OpenStdin\": false,\n            \"StdinOnce\": false,\n            \"Env\": [\n                \"HOME=/tmp\",\n                \"PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\",\n                \"JAVA_HOME=/opt/java/openjdk\",\n                \"LANG=en_US.UTF-8\",\n                \"LANGUAGE=en_US:en\",\n                \"LC_ALL=en_US.UTF-8\",\n                \"JAVA_VERSION=jdk-21.0.7+6\",\n                \"MAVEN_HOME=/usr/share/maven\",\n                \"MAVEN_CONFIG=/root/.m2\"\n            ],\n            \"Cmd\": null,\n            \"Image\": \"sha256:7e02d37fab8be71c5874dde6d62eb819ad70f546159d5a72cdd1dfb8cf4145a9\",\n            \"Volumes\": null,\n            \"WorkingDir\": \"/app\",\n            \"Entrypoint\": [\n                \"/app/probe.sh\"\n            ],\n            \"Labels\": {\n                \"org.farsight.sentinel-feasibility-frameworks.case\": \"spring-chains\",\n                \"org.farsight.sentinel-feasibility-frameworks.owner\": \"c7e56ca5-b833-4454-b9e5-4bd1441248c1\",\n                \"org.opencontainers.image.description\": \"Apache Maven is a software project management and comprehension tool. Based on the concept of a project object model (POM), Maven can manage a project's build, reporting and documentation from a central piece of information.\",\n                \"org.opencontainers.image.source\": \"https://github.com/carlossg/docker-maven\",\n                \"org.opencontainers.image.title\": \"Apache Maven\",\n                \"org.opencontainers.image.url\": \"https://github.com/carlossg/docker-maven\"\n            },\n            \"StopTimeout\": 1\n        },\n        \"NetworkSettings\": {\n            \"SandboxID\": \"\",\n            \"SandboxKey\": \"\",\n            \"Ports\": {},\n            \"Networks\": {\n                \"none\": {\n                    \"IPAMConfig\": null,\n                    \"Links\": null,\n                    \"Aliases\": null,\n                    \"DriverOpts\": null,\n                    \"GwPriority\": 0,\n                    \"NetworkID\": \"076a598f032616b47e9ed4de0dc9a78cfd5b00b147248657a5a83832b5dee40f\",\n                    \"EndpointID\": \"\",\n                    \"Gateway\": \"\",\n                    \"IPAddress\": \"\",\n                    \"MacAddress\": \"\",\n                    \"IPPrefixLen\": 0,\n                    \"IPv6Gateway\": \"\",\n                    \"GlobalIPv6Address\": \"\",\n                    \"GlobalIPv6PrefixLen\": 0,\n                    \"DNSNames\": null\n                }\n            }\n        },\n        \"ImageManifestDescriptor\": {\n            \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\",\n            \"digest\": \"sha256:0611d6fe3855185c877778dbdc64ffd27e31998ad11bda00d5120cdfec3d41a3\",\n            \"size\": 3900,\n            \"platform\": {\n                \"architecture\": \"arm64\",\n                \"os\": \"linux\"\n            }\n        }\n    }\n]\n",
+          "stderr": "",
+          "stdoutSha256": "d7be94d29f78095499fcb9fd2907791d2519a555b328f01348c0ce421efb8d9d",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "outputEncoding": "utf8-scrubbed"
+        },
+        "containerState": {
+          "Status": "exited",
+          "Running": false,
+          "Paused": false,
+          "Restarting": false,
+          "OOMKilled": false,
+          "Dead": false,
+          "Pid": 0,
+          "ExitCode": 0,
+          "Error": "",
+          "StartedAt": "2026-10-22T02:01:25.810747719Z",
+          "FinishedAt": "2026-10-22T02:01:29.196583096Z"
+        },
+        "postStartIsolation": {
+          "id": "2b25f4cd0529ae59d42cefe0c0f9c51a071447db2d01e881931f057918acacef",
+          "imageId": "sha256:7e02d37fab8be71c5874dde6d62eb819ad70f546159d5a72cdd1dfb8cf4145a9",
+          "image": "sha256:7e02d37fab8be71c5874dde6d62eb819ad70f546159d5a72cdd1dfb8cf4145a9",
+          "user": "65534:65534",
+          "networkMode": "none",
+          "readOnlyRootfs": true,
+          "capDrop": [
+            "ALL"
+          ],
+          "securityOpt": [
+            "no-new-privileges:true"
+          ],
+          "tmpfs": {
+            "/tmp": "rw,noexec,nosuid,size=128m,mode=1777"
+          },
+          "memory": 1073741824,
+          "memorySwap": 1073741824,
+          "nanoCpus": 1000000000,
+          "pidsLimit": 256,
+          "mounts": []
+        },
+        "completed": true,
+        "cleanup": {
+          "state": "removed-owned-container",
+          "id": "2b25f4cd0529ae59d42cefe0c0f9c51a071447db2d01e881931f057918acacef",
+          "result": {
+            "exitCode": 0,
+            "exitSignal": null,
+            "timedOut": false,
+            "outputExceeded": false,
+            "cancelled": false,
+            "spawnError": null,
+            "wallMs": 26.20166699999936,
+            "stdout": "2b25f4cd0529ae59d42cefe0c0f9c51a071447db2d01e881931f057918acacef\n",
+            "stderr": "",
+            "stdoutSha256": "bb2b7a3e7c3f94e1aaf4530db25302f0e8eae0f31985652587202214deb664a4",
+            "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "outputEncoding": "utf8-scrubbed"
+          },
+          "verification": {
+            "exitCode": 1,
+            "exitSignal": null,
+            "timedOut": false,
+            "outputExceeded": false,
+            "cancelled": false,
+            "spawnError": null,
+            "wallMs": 21.48266700000022,
+            "stdout": "[]\n",
+            "stderr": "Error response from daemon: No such container: 2b25f4cd0529ae59d42cefe0c0f9c51a071447db2d01e881931f057918acacef\n",
+            "stdoutSha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "stderrSha256": "1e849409ff89b675a6a6cc293a8895863c9c4de1c1d33b629c7809f3871e54ce",
+            "outputEncoding": "utf8-scrubbed"
+          }
+        }
+      },
+      "state": "measured",
+      "parsedProbeOutput": {
+        "ok": true,
+        "payload": {
+          "status": "ok",
+          "observations": {
+            "overlapping-open-chain": {
+              "withoutCredentials": 200
+            },
+            "later-authenticated-chain": {
+              "withoutCredentials": 401,
+              "withCredentials": 200
+            },
+            "unmatched-no-chain-applies": {
+              "withoutCredentials": 200
+            }
+          }
+        }
+      },
+      "assessment": [
+        {
+          "scenario": "overlapping-open-chain",
+          "staticLabel": "unknown-enforcement",
+          "expectedRuntime": {
+            "withoutCredentials": 200
+          },
+          "observed": {
+            "withoutCredentials": 200
+          },
+          "matchesExpected": true
+        },
+        {
+          "scenario": "later-authenticated-chain",
+          "staticLabel": "bounded-safe-pattern",
+          "expectedRuntime": {
+            "withoutCredentials": 401,
+            "withCredentials": 200
+          },
+          "observed": {
+            "withoutCredentials": 401,
+            "withCredentials": 200
+          },
+          "matchesExpected": true
+        },
+        {
+          "scenario": "unmatched-no-chain-applies",
+          "staticLabel": "unknown-enforcement",
+          "expectedRuntime": {
+            "withoutCredentials": "measured-not-assumed"
+          },
+          "observed": {
+            "withoutCredentials": 200
+          },
+          "matchesExpected": null
+        }
+      ]
+    }
+  ],
+  "endedAt": "2026-10-22T02:01:29.308Z"
+}

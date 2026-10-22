@@ -155,7 +155,7 @@ export function containerArgs({ candidate, name, owner, scenario, source, rules,
   const args = ['create', '--pull', 'never', '--name', name,
     '--label', `${OWNER_LABEL}=${owner}`, '--label', `org.farsight.sentinel-feasibility.scenario=${scenario}`,
     '--platform', 'linux/arm64', '--network', 'none', '--read-only', '--user', '65534:65534', '--cap-drop', 'ALL',
-    '--security-opt', 'no-new-privileges:true', '--memory', '2g', '--cpus', '2', '--pids-limit', '128',
+    '--security-opt', 'no-new-privileges:true', '--memory', '2g', '--memory-swap', '2g', '--cpus', '2', '--pids-limit', '128',
     '--tmpfs', CANDIDATES.find(pin => pin.id === candidate.id).tmpfs, '--workdir', '/input',
     '--env', 'HOME=/tmp', '--env', 'SEMGREP_SEND_METRICS=off', '--env', 'SEMGREP_ENABLE_VERSION_CHECK=0',
     '--env', 'OPENGREP_SEND_METRICS=off', '--env', 'OPENGREP_ENABLE_VERSION_CHECK=0',
@@ -197,7 +197,7 @@ export async function runContainer(spec, runner = execute, signal) {
   const owner = randomUUID(), name = `sentinel-feasibility-${randomUUID()}`;
   const args = containerArgs({ ...spec, name, owner });
   const record = { candidate: spec.candidate.id, scenario: spec.scenario, owner, name, command: ['docker', ...args],
-    expectedImage: spec.candidate.image, networkPolicy: 'none', limits: { timeoutMs: TIMEOUT, outputBytes: MAX_OUTPUT, memoryBytes: 2147483648, cpus: 2, pids: 128 }, state: 'failed' };
+    expectedImage: spec.candidate.image, networkPolicy: 'none', limits: { timeoutMs: TIMEOUT, outputBytes: MAX_OUTPUT, memoryBytes: 2147483648, memorySwapBytes: 2147483648, cpus: 2, pids: 128 }, state: 'failed' };
   let identity = name;
   try {
     record.create = await runner('docker', args, { signal });
@@ -214,7 +214,7 @@ export async function runContainer(spec, runner = execute, signal) {
     record.isolation = { id, imageId: container.Image, image: container.Config.Image, networkMode: container.HostConfig.NetworkMode,
       user: container.Config.User, readOnlyRootfs: container.HostConfig.ReadonlyRootfs,
       capDrop: container.HostConfig.CapDrop, securityOpt: container.HostConfig.SecurityOpt,
-      tmpfs: container.HostConfig.Tmpfs, memory: container.HostConfig.Memory, nanoCpus: container.HostConfig.NanoCpus, pidsLimit: container.HostConfig.PidsLimit,
+      tmpfs: container.HostConfig.Tmpfs, memory: container.HostConfig.Memory, memorySwap: container.HostConfig.MemorySwap, nanoCpus: container.HostConfig.NanoCpus, pidsLimit: container.HostConfig.PidsLimit,
       mounts: container.Mounts?.map(m => ({ destination: m.Destination, readWrite: m.RW, type: m.Type })) };
     record.execution = await runner('docker', ['start', '--attach', id], { signal });
     const after = await inspectOwned(runner, id, owner);
