@@ -41,6 +41,30 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel PR 02 foundation validated — 2026-10-22
+
+Branch `codex/sentinel-foundation` adds the optional Sentinel package with nine draft contract envelopes,
+generated schemas, bounded validation, catalog-backed help and explicit unavailable analysis capabilities.
+Sentinel remains a separate tarball; Farsight imports no Sentinel code. Packaging now follows actual workspace
+dependency closures and stages artifacts before replacement, including refusal when npm exits successfully
+without writing a tarball. The new `sentinel-package` CI job checks clean npm consumers with Sentinel absent,
+present but unbuilt, and independently installed with its public types and schemas. ADR 18 records the boundary.
+
+Opus implemented the package, packaging and execution ledger; two SOL review lanes independently verified the
+fixes. Their final reviews cleared all reported blockers, including newline path traversal, bounded validation
+errors, core Counted compatibility, canonical graph IDs, calendar/nanosecond timestamps, policy consistency,
+decision expiry, dependency selection and prior-artifact preservation. Contracts remain `draft-1`; scanner,
+ledger, model and UI support are not claimed by this foundation.
+
+Integrated validation: Node 24 build and type checks; 1,643 package tests passed with two opt-in skips before
+the final Sentinel-only timestamp fix, then all 30 final Sentinel tests passed; 178 script tests; generated
+schemas and catalog lint (3,547 entries); actual clean npm package checks (nine contract types, nine schemas,
+36 fixtures), both Farsight isolation cases, and Echo's installed-package smoke. All 345 browser/MCP tests
+and 11 small performance checks passed. Main/feature real-ingest comparison and viewer checks are recorded in
+the PR description. The primary checkout, dogfood graph and global installation were not changed. The original
+Claude reviews remain byte-identical. PR 03 storage is next; the complete remaining plan and end gates stay in
+the execution progress ledger.
+
 ## Sentinel execution continues — 2026-10-21
 
 PR #133 merged at `ef5c525`. The owner continued execution and accepted PR 01's bounded matrix and resource
