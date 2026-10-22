@@ -1,7 +1,8 @@
 # Farsight Sentinel implementation kickoff
 
 Prepared 2026-10-19 and refreshed 2026-10-21 for the agent that will execute the plan. Review agents have
-checked readiness; implementation has not started. Preparing this prompt does not approve unmeasured support
+checked readiness. The first PR 01 slice subsequently merged as #132; see the current
+[acceptance record](feasibility-acceptance.md) before dispatching remaining work. Preparing this prompt does not approve unmeasured support
 choices or authorize a merge. Give the prompt below to the implementation agent
 when ready; it begins by checking the actual review and dependency state.
 

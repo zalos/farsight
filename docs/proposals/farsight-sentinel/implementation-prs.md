@@ -2,8 +2,10 @@
 
 **Status:** PR 00 merged on 2026-10-19: [#118](https://github.com/zalos/farsight/pull/118), `0c8c747`.
 Execution preparation checked against main `46018cb` on 2026-10-21; container-only external scanning is confirmed.
-Outstanding measured decisions remain deferred to their named gates; this preparation does not dispatch implementation.
-All implementation rows are **planned**; no implementation PR has started.
+Execution preparation [#131](https://github.com/zalos/farsight/pull/131) and the first PR 01 feasibility slice
+[#132](https://github.com/zalos/farsight/pull/132), `2bd38f6`, are merged. PR 01's remaining measured decisions
+are in progress; its [acceptance record](feasibility-acceptance.md) separates experiment evidence from support
+acceptance. PR 02 and later implementation rows remain **planned** until their dependencies and gates clear.
 Read the [architecture](implementation-plan.md) and [code examples](implementation-examples.md) with this backlog.
 Numbers below are local planning identifiers, not existing GitHub PR numbers.
 
