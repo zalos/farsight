@@ -10,7 +10,7 @@ export const NEST_REASON_CODES = Object.freeze([
   'sentinel.nest.nonLiteralRegistration', 'sentinel.nest.controllerUnresolved', 'sentinel.nest.controllerWithoutRoutes',
   'sentinel.nest.middlewareNotModeled', 'sentinel.nest.adapterRouteNotModeled',
   'sentinel.nest.bootstrapNotInvoked', 'sentinel.nest.applicationEscapes', 'sentinel.nest.registrationNotFollowed',
-  'sentinel.nest.applicationMutated', 'sentinel.nest.frameworkMutated',
+  'sentinel.nest.applicationMutated', 'sentinel.nest.frameworkMutated', 'sentinel.nest.frameworkEscapes',
   'sentinel.nest.surfaceUnresolved', 'sentinel.nest.controllerNotRegistered', 'sentinel.nest.inheritedController', 'sentinel.nest.customDecorator',
   'sentinel.nest.guardEffectUnresolved', 'sentinel.nest.pipeEffectUnresolved', 'sentinel.nest.interceptorEffectUnresolved',
   'sentinel.nest.validationOptionsUnknown', 'sentinel.nest.dtoUnresolved', 'sentinel.nest.dtoWithoutRules',

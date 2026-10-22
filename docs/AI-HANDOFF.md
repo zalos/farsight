@@ -29,6 +29,21 @@ pnpm lint:strings
 
 Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .farsight/settings.example.json .farsight/settings.json` (or nothing — the server falls back to a one-source workspace) and an ingest or `/api/sync` before `serve`/`mcp` have a graph.
 
+## Sentinel Nest framework escapes — 2026-10-22
+
+Branch `codex/sentinel-nest-escape-fixes`, based on `910acbb6`, adds `frameworkEscapes` where a framework value
+leaves supported local aliases: sequences, aggregates, class fields, parameter/default passing, returns and
+unsupported constructor methods. These frontiers prevent validation credit and absence claims. Existing alias
+mutation checks retain lexical shadowing, and the registration-origin dependency-copy resolution is unchanged.
+Type and noncomputed property names do not count as runtime value passing. ADR 32 and the package README record
+the boundary; fixtures are captured and parsed, never executed.
+
+Validation: the graph/core/code-parser/Sentinel build and typecheck closure passed; catalog lint and exact commit
+subject lint passed. The focused owner suite (37 tests) plus the independent captured-source probes (23) passed:
+60 passed, 0 failed, 0 skipped. Running the 15 new durable cases against unchanged baseline output produced
+13 failures for the escape cases and 2 passes for the harmless-name/shadow controls. No full suite, scanner,
+network engine, target application execution or primary checkout build was needed. Independent review is pending.
+
 ## Provider access
 
 - Codex: `.codex/config.toml` configures the workspace CLI over MCP stdio.

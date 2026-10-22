@@ -217,6 +217,11 @@ interceptors parse, and a guard's effect is never inferred. Dynamic modules, fac
 and inherited controllers are `sentinel.nest.*` frontiers that leave the facts they could change `unknown`. The pack
 is not yet called by the planner or the CLI.
 
+Framework constructors passed to ordinary helpers, returned, or hidden in unsupported alias expressions,
+aggregates or class fields leave an explicit `frameworkEscapes` frontier. The pack does not execute those helpers
+or assume they preserve the constructor: validation and absence remain unknown. Supported local aliases are still
+checked for mutation, and a separate shadowed parameter does not imply a mutation of the imported framework.
+
 ## Versions and evolution
 
 - **Draft until review.** Every name ends in `/draft-1`. A name moves to `/v1` only after an independent

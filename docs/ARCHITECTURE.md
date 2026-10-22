@@ -754,6 +754,13 @@ in the production registry, the planner's batching, the scan command (PR 09), an
       application (`app.useGlobalPipes = ...`) is `applicationMutated`; writing to anything imported from Nest,
       class-validator or class-transformer, through assignment, `Object.defineProperty` and the like, or rewriting
       reflected metadata, is `frameworkMutated`; both block every fact they could change.
+    - **Framework values leaving followed bindings (fourth review, 2026-10-22).** A local framework alias is
+      followed only through supported identifier/member bindings, type wrappers and conditional/logical alternatives.
+      A constructor hidden in a sequence, aggregate or class field, supplied as a parameter/default, returned, or
+      handed to an ordinary function is `frameworkEscapes`. Constructor methods such as `bind`, `call` and `apply`
+      are also outside the modeled exports and factory call. Such code may mutate the actual framework, so every
+      control fact stays unknown. Modeled registration arguments and framework decorators remain supported; type
+      names, noncomputed property names and unused shadowed parameters do not pass the imported value anywhere.
     - **Digests.** `packDigest` covers the support manifest, `environmentDigest` the resolved versions and
       `registrationDigest` every cited registration span; a change to any invalidates the facts.
 

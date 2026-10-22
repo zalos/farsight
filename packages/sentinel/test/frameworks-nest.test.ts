@@ -604,3 +604,52 @@ test('global ValidationPipe dependencies resolve from the registration file and 
   const shared = await run(t, { ...files, 'package.json': pkg, 'package-lock.json': JSON.stringify({ lockfileVersion: 3, packages: installs }) });
   assert.equal(validation(shared.analysis).verdict, 'applies');
 });
+
+// These fixtures are captured and parsed, never executed. Constructors can reach writes through syntax this pack
+// deliberately does not interpret. A named frontier must replace both validation credit and absence claims.
+const frameworkEscapeCases = {
+  'sequence initializer': 'const Alias = (Date.now(), ValidationPipe); Alias.prototype.transform = async (v: unknown) => v;',
+  'object destructuring': 'const { Alias } = { Alias: ValidationPipe }; Alias.prototype.transform = async (v: unknown) => v;',
+  'ordinary function parameter': 'function disable(Pipe: any) { Pipe.prototype.transform = async (v: unknown) => v; } disable(ValidationPipe);',
+  'array storage': 'const aliases = [ValidationPipe]; aliases[0].prototype.transform = async (v: unknown) => v;',
+  'returned constructor': 'function getPipe() { return ValidationPipe; } const Alias = getPipe(); Alias.prototype.transform = async (v: unknown) => v;',
+  'object member assignment': 'const holder: any = {}; holder.pipe = ValidationPipe; holder.pipe.prototype.transform = async (v: unknown) => v;',
+  'typed alias parameter': 'const Alias = ValidationPipe as typeof ValidationPipe; function disable(Pipe: any) { Pipe.prototype.transform = async (v: unknown) => v; } disable(Alias);',
+  'default parameter': 'function disable(Pipe = ValidationPipe) { Pipe.prototype.transform = async (v: unknown) => v; } disable();',
+  'class field storage': 'class Holder { pipe = ValidationPipe; } new Holder().pipe.prototype.transform = async (v: unknown) => v;',
+  'for-of aggregate': 'for (const Alias of [ValidationPipe]) { Alias.prototype.transform = async (v: unknown) => v; }',
+  'direct sequence member write': '(Date.now(), ValidationPipe).prototype.transform = async (v: unknown) => v;',
+  'awaited constructor': '(await ValidationPipe).prototype.transform = async (v: unknown) => v;',
+  'bound constructor method': 'const Alias = ValidationPipe.bind(null); Alias.prototype.transform = async (v: unknown) => v;',
+};
+for (const [name, mutation] of Object.entries(frameworkEscapeCases)) {
+  test(`framework escape: ${name} leaves validation unknown`, needsStore, async t => {
+    const r = await run(t, { 'main.ts': mainWith(`  ${mutation}\n  app.useGlobalPipes(new ValidationPipe());`) });
+    assert.equal(validation(r.analysis).verdict, 'unknown');
+    assert.ok(reasons(r.analysis).includes('sentinel.nest.frameworkEscapes'));
+    assert.ok(r.analysis.controls.facts.every(f => f.verdict === 'unknown'), 'a possible framework rewrite also prevents false absence');
+  });
+}
+
+test('framework escape: type and property names do not pass a framework value', needsStore, async t => {
+  const r = await run(t, { 'main.ts': mainWith(`
+  const names = { ValidationPipe: 'label' };
+  const typed = 'label' as unknown as typeof ValidationPipe;
+  consume(names.ValidationPipe);
+  consume(typed);
+  app.useGlobalPipes(new ValidationPipe());`, 'function consume(value: unknown) { return value; }') });
+  assert.equal(validation(r.analysis).verdict, 'applies');
+  assert.ok(!reasons(r.analysis).includes('sentinel.nest.frameworkEscapes'));
+});
+
+test('framework escape: supported local alias and unrelated shadow retain validation', needsStore, async t => {
+  const r = await run(t, { 'main.ts': mainWith(`
+  const Alias = ValidationPipe;
+  function unrelated(Alias: { prototype: { transform: unknown } }) {
+    Alias.prototype.transform = (v: unknown) => v;
+  }
+  app.useGlobalPipes(new ValidationPipe());`) });
+  assert.equal(validation(r.analysis).verdict, 'applies');
+  assert.ok(!reasons(r.analysis).includes('sentinel.nest.frameworkEscapes'));
+  assert.ok(!reasons(r.analysis).includes('sentinel.nest.frameworkMutated'));
+});
