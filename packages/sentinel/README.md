@@ -72,7 +72,8 @@ and `verifyPinnedLock` refuses any other revision. `resolveLockedRules` returns 
 repository can only tighten (`effectivePolicy`, whose `view` is the only policy to serve), binds settings to a workspace
 through owner adoption in user state (`adoptionIntent`, `adoptSettings`, `loadPolicyInputs`), spends receipts once
 (`ReceiptBook.consume`) and records three-verdict admission (`admit`). Receipt issuing is internal to the owner CLI
-flow and is not exported. There is no planner yet (ADR 23).
+flow and is not exported. The canonical planner consumes the pinned lock and effective policy (ADRs 23–24);
+planning and execution remain separate admitted actions.
 
 ## Deterministic planning (draft)
 
@@ -136,8 +137,10 @@ Qualified, and refused otherwise: an exact host and SQLite pair the release poli
 canonical owner-only folder on a file system the path checks identify as local. Measured: darwin-arm64 with SQLite
 3.53.3 and 3.53.4 on APFS; linux-x64 with SQLite 3.53.4 on ext4, Node 24.21.0
 ([CI evidence](https://github.com/zalos/farsight/actions/runs/39723522049/job/119642215934)). The other allowlisted local file system types are not measured. Any other pair is refused before a file is created. Durability holds across process death, not physical power loss (see ADR 19 in
-`docs/ARCHITECTURE.md`). A store is a library facility in this draft: the `capabilities` list shows `ledger` as
-`available-draft` and every scan capability as unavailable; there is no store command until the CLI (PR 09).
+`docs/ARCHITECTURE.md`). The owner CLI uses this durable store for plans, attempts, publications and retained reports.
+The capability list distinguishes draft facilities and pinned scanner families from unavailable deep analysis,
+model commands, MCP, host bridge, GUI and replay commands. A library capability is not a claim of assessed
+protection or availability for every source, version or platform.
 
 ## Source capture (draft)
 
@@ -218,7 +221,13 @@ TypeScript, JavaScript and Java) shows the whole path working; it is not scanner
 report says so. A background run survives the command that started it: the owner's service (`serve`, started on
 demand, stopping when idle) holds the store, a duplicate start joins the same run, and a run interrupted by the
 service stopping resumes with `resume <planId> --confirm`. Only the owner's `--confirm` hands a run over; another
-client of the service gets what the adopted grants give agents, which by default is nothing. `retry` and full `rerun` prepare a child over the retained snapshot; strict stage selections remain disclosed and refused. With `--json`, every result carries its `outcome`, `exitCode`, the three
+client of the service gets what the adopted grants give agents, which by default is nothing. `retry` and
+`rerun --stage <unit,...>` prepare a linked child over the retained snapshot. The selected units and
+their downstream dependents run again; unrelated required units stay held and remain coverage gaps. A strict subset
+requires authenticated retained bootstrap lineage; a whole-analysis selection makes a fresh bootstrap. Duplicate
+active requests join the same child, while a new request after termination gets a new generation. Parent publications
+remain unchanged; this is selected execution, not general differential reuse. With `--json`, every result carries
+its `outcome`, `exitCode`, the three
 admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR 37 in `docs/ARCHITECTURE.md`.
 
 ## Explicit pinned scanner commands (draft)
@@ -330,8 +339,9 @@ scope.surfaces[0].chain; // guards → interceptors → pipes, each global → c
 The pack (ADR 32) supports Nest 10.4.15 exactly, resolved from the captured lockfile or an exact pin. Only the
 framework's own `ValidationPipe` over a class with class-validator rules is validation; parse pipes and multipart
 interceptors parse, and a guard's effect is never inferred. Dynamic modules, factories, middleware, custom decorators
-and inherited controllers are `sentinel.nest.*` frontiers that leave the facts they could change `unknown`. The pack
-is not yet called by the planner or the CLI.
+and inherited controllers are `sentinel.nest.*` frontiers that leave the facts they could change `unknown`. The
+canonical framework-inspection worker calls this pack when the owner promotes and selects the shipped
+framework controls; see the captured-source inspection section below.
 
 Framework constructors passed to ordinary helpers, returned, or hidden in unsupported alias expressions,
 aggregates, tagged-template arguments or class fields leave an explicit `frameworkEscapes` frontier. The pack does not execute those helpers
@@ -364,7 +374,9 @@ count as checks Sentinel ran. ADR 36.
 ## Spring Security servlet pack (draft, PR 17)
 
 `src/frameworks/spring/` turns one source's parser evidence into `sentinel-controls/draft-1` control facts for its
-Spring routes, for exactly **Spring Boot 3.4.3 with Spring Security 6.4.3**, servlet stack. The library export is `farsight-sentinel/frameworks/spring`; canonical scan CLI integration remains open. Inputs are the captured snapshot, the PR 05 parser evidence for the source, a reader
+Spring routes, for exactly **Spring Boot 3.4.3 with Spring Security 6.4.3**, servlet stack. The library export is
+`farsight-sentinel/frameworks/spring`; the canonical framework-inspection worker also consumes it. Inputs are the
+captured snapshot, the PR 05 parser evidence for the source, a reader
 for captured bytes and the selected environment (`activeProfiles`, or `null` when none was selected). Nothing is
 built, resolved or run. The public graph supplies route identities. The pack reads every route mapping, security
 chain, matcher, rule and method-security annotation again from the captured Java syntax (tree-sitter's Java grammar),
@@ -426,10 +438,11 @@ independently verify the supplied graph's relationships, labels or producer.
 Secret-scan findings are reported with their locations withheld in every profile and never placed; two files with the
 same bytes stay two findings. A file whose name the secret scan matched is withheld from every report, including other
 scanners' citations of it and the minimal `report <runId>` output. A missing, extra or forged accepted secret record
-refuses the report. When the secret scan matched anything in a run (or its baseline), the scanner reports whole lines, not the value, so
+refuses the report. When the secret scan matched anything in a run, its explicit baseline or a proven same-capture
+selected ancestor, the scanner reports whole lines, not the value, so
 the report cannot prove other text is free of it: it withholds every excerpt, location and context name or label in
 that report, in both profiles, keeps findings' rule words, counts and placement shape, and says so
-(`sentinel.report.withheld.secretRun`). A run with no secret match reports as before (ADR 38). In a secret-bearing
+(`sentinel.report.withheld.secretRun`). With no match in that proven scope, reports retain useful detail (ADR 38). In a secret-bearing
 full report even ordinary source and context names are opaque; the minimal report's other names remain unchanged.
 A secret finding's identity is keyed by a per-store random secret kept in the owner's
 trust folder (never the public store id, and never in the store, a bundle or a report), so the same file keeps its
@@ -492,7 +505,9 @@ line: each command accepts only its own options, and an unknown, missing or repe
 cover valid fixtures for every kind and union branch, over 100 invalid cases (each with its expected error code
 and location), exact-limit bounds, version refusal, the drift check, the enum pins, the CLI and the package
 boundary, and the store: runtime gate, owner lock across real processes, ledger, objects, reachability and the
-facade end to end (`test/store-integration.test.ts`). They need no scanner, container, network or credential. `test/fixtures/` holds PR 01's feasibility
+facade end to end (`test/store-integration.test.ts`). Pure tests need no scanner, container, network or credential;
+explicit native opt-ins exercise already provisioned pinned assets and must meet their zero-skip qualification gates.
+`test/fixtures/` holds PR 01's feasibility
 inputs, which this package leaves untouched.
 
 ## Pattern adapter (draft)
@@ -552,10 +567,15 @@ The pinned Gitleaks 8.30.1 current-tree adapter has real container conformance e
 Desktop (Engine 29.2.1) and native AMD64 on Ubuntu 24.04.5 with Node 24.22.0. The native
 [isolation run](https://github.com/zalos/farsight/actions/runs/39801723971/job/119904045294) passed all 93 cases
 without skips, including Gitleaks positive/negative, omission, malformed output and redaction cases. The same
-image index, default rules and worker bytes apply; other platforms remain refused. This qualification does not
-complete the public scan command integration or add Git-history scanning.
+image index, default rules and worker bytes apply; other platforms remain refused. Canonical secrets commands
+and full reports are merged. This engine qualification alone does not complete
+export/replay or the final combined release gate, and it adds no Git-history scanning.
 
 ### Captured-source framework inspection
+
+This bounded owner-command slice merged in PR #160. The four framework libraries and retained inspection are
+available within their supported shapes; ordinary-layout capture repairs and broader framework qualification
+remain separate gates.
 
 The owner may promote `builtin:framework-controls` and add `sentinel.controls.authentication`,
 `sentinel.controls.authorization` and `sentinel.controls.input-validation` to adopted `mandatoryRules`.
@@ -565,7 +585,8 @@ No external image is required for this inspection. External scanner adapters sti
 
 `report <run> --full --format json|md|html|sarif` includes the same control answers, modeled library versions,
 unknowns and frontiers. Applying or not applying a control is a configuration fact, never a finding or a policy
-assessment. Unsupported and unrecognized sources remain incomplete, including empty route/page extents.
+assessment (`assessment: none`). It grants no security clearance. Unsupported and unrecognized sources remain
+incomplete, including empty route/page extents.
 Selected reruns use the original retained capture and may run after source removal. Secret-run withholding applies
 before every rendering; raw source-derived artifacts remain private evidence.
 
@@ -574,8 +595,23 @@ hard memory, CPU or process limit; it runs only Sentinel's shipped code. The wor
 build and installed dependency bytes/lookups. Reinstalling, moving or changing those bytes requires a new plan.
 Public GUI configuration and policy assessment remain separate work.
 
-Canonical working-copy capture currently omits the workspace's private `.farsight` directory by owner policy.
+On merged main at PR #160, canonical working-copy capture omits the workspace's private `.farsight` directory by owner policy.
 The Express and Spring libraries conservatively retain a source-incomplete frontier for that omitted scope; they
 may leave route control answers unknown even when the visible application is simple. The report shows that boundary
 and keeps required coverage incomplete. Captures with owner state outside the source can establish the supported
 facts; this integration does not broaden the libraries' absence proofs or treat the omitted scope as empty.
+A separate, unmerged capture-boundary correction is under review. Its acceptance requires capturing source around
+the exact owned store: an indexed open Express route may establish `does-not-apply`, a guarded route retains
+`unknown/refusalUnproven`, and neither gains an artificial `sourceIncomplete` from a blanket folder exclusion.
+Captured hidden source may still have a valid `routeNotInGraph` parser frontier. None establishes protection.
+
+## Remaining product and release gates
+
+Canonical structural-path requests and durable deep imports are not owner CLI workflows yet; no qualified deep-flow
+engine ships. Decisions/import authority, provider/model command integration, deterministic MCP, the optional host
+bridge, GUI configuration and stage detail, model selection, replay/retention and later differential/build/runtime
+tracks remain open. Framework inspection and scanner observations do not clear those gates. Final acceptance still
+requires the complete installed CLI/MCP/GUI/report journey, original Java/Spring build/run/scan cases in Linux
+containers with no host fallback, product cleanup review, truthful npm-only instructions and both independently
+versioned tarballs installed separately and together from their published URLs. See the execution-progress ledger
+for each merged slice and its remaining acceptance.

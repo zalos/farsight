@@ -33,7 +33,8 @@ identifiers, not GitHub PR numbers.
   Independent review and selected/native CI passed on their final source-equivalent candidates. Installed npm
   consumers exercise the library APIs, retained Next inputs after source removal, offline provider budgets,
   four-engine owner adoption/detach/join/wait/replay, and secret omission/privacy. These are scoped foundations:
-  canonical framework/path/provider dispatch, model evaluation, selected-stage integration and the GUI remain open.
+  canonical path/provider dispatch, model evaluation and the GUI remain open. Framework inspection and selected
+  retained-input execution subsequently merged as recorded below.
   The selected-rerun candidate retained exact admitted selections and parent evidence; its historical checkpoints and
   completed merge are recorded below; analysis-prerequisite reuse remains PR 27's separate gate.
   Runtime checkpoint `35302206` integrates selected retained-input reruns with full and minimal report privacy,
@@ -63,24 +64,32 @@ identifiers, not GitHub PR numbers.
 
   The bounded framework inspection merged as [#160](https://github.com/zalos/farsight/pull/160), `0b1f74a7`, with
   its reviewed tree unchanged and all twenty final CI checks, including the twenty-repetition recovery gate and the
-  installed Linux scanner and offline report workflow. Its candidate notes follow. The capture-boundary follow-up
-  (ADR 46, not yet merged) removes the owner-policy omission of `.farsight` described there: a capture leaves out only
+  installed Linux scanner and offline report workflow. The first post-merge native run failed OOM attribution;
+  one unchanged failed-job retry passed 104 checks with zero skips. Exit 137 alone is not an OOM witness, and
+  the retry does not erase the failure or establish flake-free behavior. The scanner job passed.
+  The private capture-boundary candidate `a5f6cbcc` (ADR 46, not merged) proposes removing the owner-policy
+  omission of `.farsight` described there: a capture leaves out only
   the exact held store; run scratch is a lease inside it, released only on scoped stopped-consumer proof; trust state
   and the service runtime folder are refused inside the workspace. On the default layout the Express inspection then
   answers without a capture gap (open route established does-not-apply; guarded route a cited refusalUnproven
   unknown). Routes under hidden folders stay cited `routeNotInGraph` frontiers because Farsight's parser lists no
   hidden folder, and a minimal workspace's report counts the captured settings file as seen by no check. Independent
-  SOL verification, root real-ingest and browser measurement, selected CI and merge remain.
+  verification of the final cleanup and capture boundaries, installed consumer acceptance, root real-ingest and
+  browser measurement, selected CI and merge remain. These are candidate claims, not merged-main behavior.
 
-  The framework candidate combined the retained source seam and closure with `64d86ae9`; its
+  Historical framework candidate evidence: the candidate combined the retained source seam and closure with
+  `64d86ae9`; its
   production checkpoint is `43ec307d`. Genuine current/baseline/canceled-selected secret privacy, independent
   two-source readback after removal, installed npm-only report delivery, actual mid-inspection service SIGKILL/resume
   and once-only publication pass. Existing exports, five scanner assets and four framework library consumers remain
   present. Actual clean and secret-withheld reports render/print offline without external requests or browser errors.
-  It is not merged or a claim that PRs 14–17 are complete: the canonical owner-policy omission of `.farsight` can leave
-  Express/Spring source completeness unknown. A sound intrinsic-store classification requires separate investigation;
-  genuine source exclusions must remain unknown. Independent final delta review, one final Opus PR review and remote
-  CI/merge remain required. GUI configuration, progress/detail, visual placement and policy assessment remain open.
+  That slice is now merged in #160; it does not complete PRs 14–17. On merged main, the owner-policy omission
+  of `.farsight` can leave Express/Spring source completeness unknown. The separate capture candidate must not
+  manufacture protection: accept an indexed open route as established `does-not-apply`, a guarded route as cited
+  `unknown/refusalUnproven`, and neither with an artificial `sourceIncomplete` caused by blanket omission. Hidden
+  source can be captured while its route remains a valid `routeNotInGraph` parser frontier. Genuine exclusions
+  remain unknown. Inspection is `assessment: none`; GUI configuration, progress/detail, visual placement, broader
+  supported-shape qualification and security assessment remain open.
   The full owner report slice merged as [#155](https://github.com/zalos/farsight/pull/155), `63ecf4f0`, after independent
   review and all required and selected CI checks. Its installed five-engine two-capture comparison, official SARIF
   and offline-browser acceptance passed locally; the native scanner CLI job also passed on Linux amd64. If either run has an accepted secret match, both report disclosure profiles
@@ -98,7 +107,9 @@ identifiers, not GitHub PR numbers.
   framework packs, other framework versions, other hosts/backends/architectures, or capacity guarantees.
 - Gates still listed as pending (advisory database, crash recovery, models, incremental equivalence, framework
   packs, scan configuration and visuals, provider selection) remain **implementation and release acceptance
-  gates**. They are not new permission gates for implementation work the owner has already authorized.
+  gates** where their scoped evidence is not yet recorded. Earlier merged qualification is not reopened merely
+  because the whole-product gate remains pending. They are not new permission gates for implementation work
+  the owner has already authorized.
 - Container-only external scanning with no host fallback (confirmed 2026-10-21) stays binding.
 
 ## How execution runs (owner direction updated 2026-10-22)
@@ -106,11 +117,14 @@ identifiers, not GitHub PR numbers.
 | Role | Who | Responsibility |
 |---|---|---|
 | Integration lead | Root (Codex lead session) | Owns shared contracts and dependencies, reviews integration, enforces each gate's definition of done, merges and runs the release |
-| Implementation | SOL finishes the current framework iteration; subsequent iterations use Claude Opus implementers | Each package in its own worktree, with affected validation and an immutable checkpoint |
-| Review | Independent SOL reviewers | Review each checkpoint against its backlog gate; findings in Conventional Comments; the implementer does not approve its own work |
-| Final PR review | This SOL-authored framework iteration: one Claude Opus review. Subsequent Opus-authored iterations: independent SOL review | Root gives final acceptance; Opus does not add a review of its own implementation |
-| End-of-plan product cleanup / touch-up review | Fable, the previously requested product reviewer | A separate final release-candidate review across the delivered product; the per-PR Opus review does not replace this gate |
-| Final fixes / verification | Claude Opus implements Fable corrections; an independent SOL reviewer verifies them | No merge or release row moves until its verification is recorded |
+| Implementation | SOL implementors | Each bounded slice in its own worktree, with affected validation and an immutable checkpoint |
+| Independent review | Claude reviewer, one final PR review | Review the frozen completed candidate against its gate; the implementer does not approve its own work |
+| Independent plan audit | Astra | Audit implementation status, dependency order and retained end gates; an audit is not runtime qualification |
+| End-of-plan product cleanup / touch-up review | Fable, the previously requested product reviewer | Separate final release-candidate review across delivered CLI/MCP/GUI/reports/docs; per-PR review does not replace it |
+| Final fixes / verification | SOL fixes; independent Claude verification | Root records acceptance only after each correction is independently verified |
+
+Earlier Opus implementation and SOL review references in this ledger describe historical evidence, not current staffing.
+Keep only one Sentinel PR outstanding; root owns the merge queue and exact combined-candidate acceptance.
 
 All planned packages progress to the end of the backlog, then the end gates below, then release.
 
@@ -131,6 +145,28 @@ All planned packages progress to the end of the backlog, then the end gates belo
   [Java-build](isolated-java-build-design.md) and [runtime](managed-runtime-design.md) designs passed SOL review
   on 2026-10-22. Implementation, dependency gates and empirical qualification remain pending; design approval
   is not execution evidence or permission for a broader target.
+
+## Current integration critical path
+
+Complete bounded planner-authentication cost correction → exact capture boundary → one complete retained-source /
+fixed built-in worker proof → actual PR18 owner paths workflow → usable PR20 decisions/import authority →
+deterministic MCP (23a) and host bridge (24) → the full configure/preview/run/reconnect/stage-I/O/retry/rerun/compare
+GUI (25). These are dependency/acceptance milestones, not completed implementations. Do not merge an unused pure
+seam merely to move a row. Existing required checks stay visible when held or unavailable; structural call paths
+never become data-flow or security coverage.
+
+Before PR26, PR20 additionally needs a separately designed and independently qualified bounded cookie producer
+on an original Linux-container fixture/sample. Bind exact accepted source/control/build/configuration/target;
+observe issuance, valid/tampered/absent-cookie requests and a seeded bypass using a protected-action oracle.
+This finite qualification breaks the PR20 → PR26 → general PR29/30 dependency cycle; it does not ship general
+runtime support or prove cryptographic algorithms, key strength or confidentiality. Broader mandatory properties
+need their own qualified semantic producer. Imported labels, absent alerts and owner assertions do not replace it.
+This is a planning dependency, not authorization for new targets, acquisition, requests or spend.
+
+The configured provider/model track (21/22/23b/25b), later selection/reuse (27/28), general Java/runtime work
+(29/30), Fable, npm-only documentation and final release remain in the owner's full 01–30 scope. PR26 is an
+internal deterministic checkpoint, not permission to drop later tracks or advertise unavailable model support.
+Final parity must cover CLI, MCP, GUI and offline reports on the same pinned evidence/time/scope.
 
 ## Product requirements to carry (owner, captured 2026-10-21)
 
@@ -161,30 +197,30 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 | 06 | Rules, policy merge, deterministic planning | 05 | done | Repository config cannot weaken mandatory rules | Shared matcher [#137](https://github.com/zalos/farsight/pull/137), rules/policy [#142](https://github.com/zalos/farsight/pull/142), canonical planner [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`; independent review, 336 local tests, clean npm consumer, identical real ingests and final CI passed |
 | 07 | Worker protocol and scanner isolation | 03, 01 isolation decision, 02 | done | Network, host-file, resource and malformed-output canaries fail safely; no host fallback | [#139](https://github.com/zalos/farsight/pull/139), `625a920`; SOL approved, macOS real-container checks 92 passed, Linux qualification 82 passed/zero skipped, all eight final CI checks |
 | 08 | Scheduler, resume, pause, cancellation | 03, 06, 07 | done | E4 kills at every boundary, 20 repetitions, zero lost/duplicate outputs | [#147](https://github.com/zalos/farsight/pull/147), `2587eb16`; SOL reviewed, 421 local tests, clean npm consumer, identical real ingests, final CI and native [20-repetition recovery](https://github.com/zalos/farsight/actions/runs/39803836156) passed |
-| 09 | Standalone CLI and minimal report slice | 08 | in progress | Duplicate starts return one run; disconnect does not stop work; bounded status | Owner CLI and retained minimal-report acceptance merged in [#148](https://github.com/zalos/farsight/pull/148); selected-stage runtime `bfb60d65` merged in [#159](https://github.com/zalos/farsight/pull/159) as `64d86ae9` (exact final `147eb71c` tree), after independent SOL review, all sixteen final checks, native twenty-repetition recovery and both post-merge checks; remaining package/release acceptance stays open |
-| 10 | Pattern scanner and original rules | 09, 01 engine decision | in progress | Pinned engine matches known positives/negatives incl. exit-zero omissions | Adapter foundation merged [#145](https://github.com/zalos/farsight/pull/145); native qualification passed; canonical public command acceptance merged in #148; remaining package and release end gates stay open |
-| 11 | Current-tree secrets | 09 | in progress | Synthetic secrets never appear in output, export or logs | Reviewed current-tree adapter and canonical secrets command in [#150](https://github.com/zalos/farsight/pull/150); native qualification and installed privacy/replay acceptance passed; the foundation merged as `34ca02b5`; full-report integration merged in #155; export and remaining package gates stay open |
-| 12 | Offline dependency advisories | 09 | in progress | Lockfile/Maven complete vs partial matching distinguished; advisory DB gate measured | Adapter foundation merged [#146](https://github.com/zalos/farsight/pull/146); native ARM64/AMD64 offline qualification passed; canonical public command acceptance merged in #148; remaining package and release end gates stay open |
-| 13 | Infrastructure and CI checks | 09, 12 | in progress | Workflow/Dockerfile/IaC positives and negatives against installed tools | Reviewed adapters and four-scanner command acceptance in [#148](https://github.com/zalos/farsight/pull/148); the scoped command foundation merged as `e8a6ffa9`; remaining end gates stay open |
-| 14 | Next matcher semantics | 05, 06, 09 | in progress | Matching, excluded, dynamic and version-mismatch cases correct | Merged framework library [#151](https://github.com/zalos/farsight/pull/151); reviewed package API and installed consumer pass; command integration open |
-| 15 | Express order and mounts | 05, 06, 09 | in progress | Auth before/after route, nested mounts and bypass fixtures | Library foundation merged [#152](https://github.com/zalos/farsight/pull/152); reviewed package API and installed consumer pass; canonical framework dispatch remains open |
-| 16 | Nest guards, pipes, interceptors | 05, 06, 09 | in progress | Direct providers pass; dynamic/unresolved stay unknown | Reviewed captured-registration library merged [#157](https://github.com/zalos/farsight/pull/157), `09a4f492`; canonical command integration open |
-| 17 | Spring servlet security | 05, 06, 09 | in progress | E2 six review cases plus bypass negatives; no false protected verdict | Library foundation merged [#149](https://github.com/zalos/farsight/pull/149); reviewed package API and installed consumer pass; sample application and canonical framework dispatch remain open |
-| 18 | Bounded paths, optional deep engine | 10, 14–17, E3 | in progress | Cross-file distinguished from a call path; no invented deep backend | Merged analysis library [#153](https://github.com/zalos/farsight/pull/153); reviewed static paths and owner-approved import; command integration open |
-| 19 | Finding identity, comparison, standalone report | 10–18 | in progress | Identity stable under movement; standalone HTML/Markdown/JSON readable offline | Owner-command slice merged as [#155](https://github.com/zalos/farsight/pull/155), `63ecf4f0`, after all required/selected CI; accepted-publication and owner-context binding, conservative secret withholding, installed five-engine comparison, official SARIF and offline-browser checks passed; canonical framework/path/provider finding integration and remaining package/end gates stay open |
-| 20 | Dispositions, assertions, runtime-evidence import | 19 | pending | Decisions bound to scoped evidence and expiry | — |
-| 21 | Ollama and hosted transport | 08, 09 | in progress | Redirects, truncation, cancellation, unpriced endpoints handled | Transport and budget implementation independently reviewed; public command integration open |
-| 22 | Guided and general model review | 18–21 | in progress | E5/E8 under configured budgets and accepted thresholds; live evaluation awaits the second-model configuration | Review implementation and model settings exist; review corrections and live qualification open |
+| 09 | Standalone CLI and minimal report slice | 08 | in progress | Duplicate starts return one run; disconnect does not stop work; bounded status | Owner CLI and retained minimal-report acceptance merged in [#148](https://github.com/zalos/farsight/pull/148); selected-stage runtime `bfb60d65` merged in [#159](https://github.com/zalos/farsight/pull/159) as `64d86ae9` (exact final `147eb71c` tree), after independent SOL review, all sixteen final checks, native twenty-repetition recovery and both post-merge checks; final installed lifecycle/release-candidate acceptance and accurate help/initialization documentation remain open; future command families keep their own package gates |
+| 10 | Pattern scanner and original rules | 09, 01 engine decision | in progress | Pinned engine matches known positives/negatives incl. exit-zero omissions | Adapter foundation merged [#145](https://github.com/zalos/farsight/pull/145); native qualification passed; canonical public command acceptance merged in #148; final combined installed/export/privacy acceptance and exact supported release matrix remain open |
+| 11 | Current-tree secrets | 09 | in progress | Synthetic secrets never appear in output, export or logs | Reviewed current-tree adapter and canonical secrets command in [#150](https://github.com/zalos/farsight/pull/150); native qualification and installed privacy/replay acceptance passed; the foundation merged as `34ca02b5`; full-report integration merged in #155; redacted/private export closure and final combined installed release acceptance remain open |
+| 12 | Offline dependency advisories | 09 | in progress | Lockfile/Maven complete vs partial matching distinguished; advisory DB gate measured | Adapter foundation merged [#146](https://github.com/zalos/farsight/pull/146); native ARM64/AMD64 offline qualification passed; canonical public command acceptance merged in #148; final combined installed/export/privacy acceptance and exact supported release matrix remain open |
+| 13 | Infrastructure and CI checks | 09, 12 | in progress | Workflow/Dockerfile/IaC positives and negatives against installed tools | Reviewed adapters and four-scanner command acceptance in [#148](https://github.com/zalos/farsight/pull/148); the scoped command foundation merged as `e8a6ffa9`; final combined installed/export acceptance and exact supported release matrix remain open |
+| 14 | Next matcher semantics | 05, 06, 09 | in progress | Matching, excluded, dynamic and version-mismatch cases correct | Merged framework library [#151](https://github.com/zalos/farsight/pull/151); reviewed package API and installed consumer pass; canonical retained inspection merged #160; ordinary-layout capture correction, bounded supported-shape qualification and final product placement remain open |
+| 15 | Express order and mounts | 05, 06, 09 | in progress | Auth before/after route, nested mounts and bypass fixtures | Library foundation merged [#152](https://github.com/zalos/farsight/pull/152); reviewed package API and installed consumer pass; canonical retained inspection merged #160; ordinary-layout capture correction, conservative refusal semantics and final supported-shape/product qualification remain open |
+| 16 | Nest guards, pipes, interceptors | 05, 06, 09 | in progress | Direct providers pass; dynamic/unresolved stay unknown | Reviewed captured-registration library merged [#157](https://github.com/zalos/farsight/pull/157), `09a4f492`; canonical retained inspection merged #160; bounded supported-shape qualification, capture correction and final product placement remain open |
+| 17 | Spring servlet security | 05, 06, 09 | in progress | E2 six review cases plus bypass negatives; no false protected verdict | Library foundation merged [#149](https://github.com/zalos/farsight/pull/149); reviewed package API and installed consumer pass; canonical retained inspection merged #160; original Linux-container sample build/run/scan, capture correction and broader supported-shape qualification remain open |
+| 18 | Bounded paths, optional deep engine | 10, 14–17, E3 | in progress | Cross-file distinguished from a call path; no invented deep backend | Merged analysis library [#153](https://github.com/zalos/farsight/pull/153); reviewed private request/protocol checkpoint `fbc8be9d`; bounded readonly source/fixed-worker proof, actual owner request→run→report and durable deep-import acceptance remain open; no qualified deep engine |
+| 19 | Finding identity, comparison, standalone report | 10–18 | in progress | Identity stable under movement; standalone HTML/Markdown/JSON readable offline | Owner-command slice merged as [#155](https://github.com/zalos/farsight/pull/155), `63ecf4f0`, after all required/selected CI; accepted-publication and owner-context binding, conservative secret withholding, installed five-engine comparison, official SARIF and offline-browser checks passed; framework inspection projection merged #160 (`assessment: none`); path/decision/import projection, CLI/MCP/GUI parity and clean-recipient replay/delivery remain open |
+| 20 | Dispositions, assertions, runtime-evidence import | 19 | in progress (private only) | Decisions bound to scoped evidence and expiry | Reviewed pure kernel `b4ded90c`; private Stage-A import `e9d160e1` blocked on parser/privacy/budget corrections; genuine accepted finding basis, durable owner decision/import authority, expiry/reopening, report integration and qualified cookie story remain open |
+| 21 | Ollama and hosted transport | 08, 09 | in progress | Redirects, truncation, cancellation, unpriced endpoints handled | Provider transport/budget library merged #156; trusted owner command/service admission, configured provider selection, recovery and disclosure integration remain open |
+| 22 | Guided and general model review | 18–21 | in progress | E5/E8 under configured budgets and accepted thresholds; live evaluation awaits the second-model configuration | Private model checkpoint and settings exist; deadline/cancel/disclosure/quote/budget and authority corrections, independent verification, exact citations/adversarial controls and the two-model 600-evaluation gate remain open |
 | 23a | Deterministic MCP and placed evidence | 20, schema with 24 | pending | Read access cannot mutate or admit paid work | — |
 | 23b | Fenced external review claims | 22, 23a | pending | Cross-workspace, expired and duplicate submissions fail | — |
 | 24 | Optional Farsight host bridge | 09, 20 | pending | Origin/body/path guards, version mismatch, absent service handled | — |
 | 25 | Deterministic GUI and placement | 23a, 24 | pending | CLI/MCP/GUI agree; configure → preview → run → stage I/O → rerun → compare demonstrated | — |
 | 25b | Model review and disclosure in the GUI | 22, 25 | pending | Model picker; review never changes deterministic totals | — |
-| 26 | Replay, retention, packaging, deterministic release gate | 01–20, 23a, 24, 25 | in progress | Restored bundle works without the checkout; accepted E1–E4/E7/E8 | Packaging prework reviewed; replay and retention corrections in progress; release gates remain open |
+| 26 | Replay, retention, packaging, deterministic release gate | 01–20, 23a, 24, 25 | in progress | Restored bundle works without the checkout; accepted E1–E4/E7/E8 | Private packaging/bundle/retention prework exists; complete retained closure, safe restore, explicit pin/prune, installed CLI/MCP/bridge/GUI replay, standalone recipient report and both independent tarballs remain open |
 | 27 | Conservative differential selection | 26 | pending | Every reuse justified by explicit dependencies | — |
 | 28 | Differential/full audit and enablement | 27 | pending | Zero unexplained differences vs full scans | — |
-| 29 | Optional isolated Java builds | 26, new owner review | pending | Per backlog §PR 29 after its review; builds only synthetic/sample sources | — |
-| 30 | Managed runtime scanning | 26, approved runtime design | pending | Per backlog §PR 30 after its design approval; targets only the local synthetic/sample app | — |
+| 29 | Optional isolated Java builds | 26, new owner review | in progress (private only) | Per backlog §PR 29 after its review; builds only synthetic/sample sources | Private deadline/output/exact-container OOM observation delta has scoped review; trusted PID/storage observations, whole original sample build provenance, isolation/recovery and public workflow qualification remain open; no shipped Java support |
+| 30 | Managed runtime scanning | 26, approved runtime design | pending | Per backlog §PR 30 after its design approval; targets only the local synthetic/sample app | Bounded design approved; exact target authority, request/rate/time/reset/cancel enforcement and empirical scoped runtime findings remain open; no arbitrary target or host fallback |
 
 ## End gates before release
 
@@ -193,7 +229,7 @@ skipped with its reason, never as passed.
 
 | Gate | Status | Acceptance test |
 |---|---|---|
-| Final Fable review | pending | Claude Fable (`fable`) reviews the delivered CLI, MCP, GUI, reports and docs for cleanup/touch-up; findings fixed by SOL; an independent SOL reviewer verifies each fix |
+| Final Fable review | pending | Fable reviews delivered CLI, MCP, GUI, reports and docs for cleanup/touch-up; SOL fixes findings and independent Claude review verifies each fix |
 | Java + Spring sample application | pending | An **original** Java/Spring Boot sample written for this gate (no external benchmark acquisition) builds and runs in a Linux container (never on the host; source-only scanning does not execute its build). Sentinel scans it and the report shows: a known-vulnerable case found, its safe sibling not flagged, and an unknown/unsupported case reported as unknown, not as protected or clean |
 | npm-only consumer install | pending | On a clean machine or prefix with only Node 24 and npm (no pnpm, no checkout): `npm install -g <GitHub Release tarball URL>`, then `--help`; the existing Farsight path (install → `farsight.config.json`/settings → ingest → serve) works as [GETTING-STARTED.md](../../GETTING-STARTED.md) documents; Sentinel's initialization flow, a scan and a report succeed; the report opens offline. Written as initialization instructions for npm-only users |
 | Release | pending | The release PR flow in [RELEASING.md](../../RELEASING.md): gates, smoke both independently versioned Farsight/Sentinel tarballs, squash-merge, publish both with their exact install lines, then install each and both from the published URLs in clean Node/npm-only prefixes without pnpm or a checkout; verify the release commit |
