@@ -38,9 +38,9 @@ export const PATTERN_IMAGE_PLATFORMS = Object.freeze([
     evidence: 'darwin-arm64 host, Docker Desktop 4.65.0 with Engine 29.2.1, Linux 6.12 aarch64 server; pattern conformance 2026-10-22',
   }),
   Object.freeze({
-    platform: 'linux/amd64', architecture: 'amd64', state: 'unmeasured' as const,
+    platform: 'linux/amd64', architecture: 'amd64', state: 'measured' as const,
     manifest: 'sha256:c47e426f7f0cfa19af6d7877560d0a7135f683b8090ad0efc97c4ec7810dc435',
-    evidence: 'listed in the pinned index; its layers are not installed here and no native amd64 host has been measured',
+    evidence: 'native Ubuntu 24.04.5 x64, Docker 28.0.4, Node 24.21.0; 22 conformance tests, zero skips and installed worker six findings; https://github.com/zalos/farsight/actions/runs/39790599932',
   }),
 ]);
 export const MEASURED_ARCHITECTURES: ReadonlySet<string> = new Set(PATTERN_IMAGE_PLATFORMS.filter(p => p.state === 'measured').map(p => p.architecture));

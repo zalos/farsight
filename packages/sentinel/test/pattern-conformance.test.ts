@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAdapterRegistry } from '../dist/execution/registry.js';
 import { createExecutionService } from '../dist/execution/service.js';
-import { PATTERN_ADAPTER, ENGINE_ARGS, buildPatternAdapter, buildPatternJob, patternRuleOf, runPatternAttempt } from '../dist/adapters/pattern/index.js';
+import { PATTERN_ADAPTER, MEASURED_ARCHITECTURES, ENGINE_ARGS, buildPatternAdapter, buildPatternJob, patternRuleOf, runPatternAttempt } from '../dist/adapters/pattern/index.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
 
 const enabled = process.env.SENTINEL_ISOLATION === '1';
@@ -73,7 +73,7 @@ test('the pinned engine finds the original positives, none of the negatives, and
   const wall = Date.now() - t0;
   assert.equal(r.attempt, 'succeeded');
   assert.equal(r.engineExit, 0);
-  assert.equal(r.platform.state, QUALIFY ? 'candidate' : 'measured', `platform ${r.platform.architecture}`);
+  assert.equal(r.platform.state, QUALIFY && !MEASURED_ARCHITECTURES.has(QUALIFY) ? 'candidate' : 'measured', `platform ${r.platform.architecture}`);
   assert.deepEqual(r.findings.map(f => `${f.familyId} ${f.relativePath} ${f.evidence.kind}`).sort(), [
     'sentinel.sql.concatenated-query-java java/Direct.java structural-locator',
     'sentinel.sql.concatenated-query-tsjs controls/broken.ts structural-locator',
