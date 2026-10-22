@@ -16,12 +16,15 @@ on:
     paths:
       - .github/workflows/sentinel-iac-qualification.yml
       - packages/sentinel/src/adapters/trivy/**
+      - packages/sentinel/src/adapters/zizmor/**
       - packages/sentinel/src/adapters/sealed-input.ts
       - packages/sentinel/src/execution/**
       - packages/sentinel/test/trivy-*.ts
+      - packages/sentinel/test/zizmor-*.ts
       - packages/sentinel/test/iac-helpers.ts
       - packages/sentinel/test/fixtures/iac/**
       - packages/sentinel/scripts/package-assets-trivy.mjs
+      - packages/sentinel/scripts/package-assets-zizmor.mjs
       - packages/sentinel/scripts/acquire-trivy-checks.mjs
       - scripts/pack-sentinel.mjs
       - scripts/test-sentinel-package.mjs
@@ -41,6 +44,8 @@ jobs:
     env:
       TRIVY_INDEX: ghcr.io/aquasecurity/trivy@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
       TRIVY_AMD64: sha256:2e6c00d711ab4ae41d8a30c2c1fd3bd3b62704c177bb120f95012e939edfb3df
+      ZIZMOR_INDEX: ghcr.io/zizmorcore/zizmor@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9
+      ZIZMOR_AMD64: sha256:cfc533b8fa781c51c6fb4085057945bc3eebb6b6e8a25ab7daa85c885f071269
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -67,6 +72,7 @@ jobs:
             test "$(docker image inspect "$1" --format '{{.Architecture}}')" = amd64
           }
           check "$TRIVY_INDEX" "$TRIVY_AMD64"
+          check "$ZIZMOR_INDEX" "$ZIZMOR_AMD64"
       - run: pnpm install --frozen-lockfile
       - name: Build Sentinel and its workspace closure
         run: pnpm --filter '@farsight/sentinel...' build
@@ -85,7 +91,7 @@ jobs:
           export SENTINEL_TRIVY_CHECKS_DIR="$RUNNER_TEMP/iac-owner"
           node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=600000 \
             --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=iac.tap \
-            test/trivy-adapter.test.ts test/trivy-conformance.test.ts
+            test/trivy-adapter.test.ts test/trivy-conformance.test.ts test/zizmor-adapter.test.ts test/zizmor-conformance.test.ts
           grep -qx '# skipped 0' iac.tap || { echo "::error::an IaC adapter test was skipped"; exit 1; }
           grep -qx '# fail 0' iac.tap && grep -qx '# cancelled 0' iac.tap
       - name: Install the packed tarball and run its shipped workers
@@ -98,6 +104,7 @@ jobs:
           pnpm pack:sentinel
           node scripts/test-sentinel-package.mjs | tee package.log
           grep -q 'installed trivy worker run by the workspace service: .* (amd64 candidate' package.log
+          grep -q 'installed zizmor worker run by the workspace service: .* (amd64 candidate' package.log
       - name: No container left behind
         if: always()
         run: |

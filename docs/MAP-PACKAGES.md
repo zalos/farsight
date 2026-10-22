@@ -97,6 +97,10 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   worker), `normalize.ts` (findings and per-file coverage), `run.ts` and `errors.ts` (words: `strings-sentinel-trivy.ts`);
   `scripts/package-assets-trivy.mjs` stages its worker and manifest, `scripts/acquire-trivy-checks.mjs` is the owner's
   acquisition step; `test/trivy-adapter.test.ts` and `test/trivy-conformance.test.ts` (real engine) cover it.
+  `src/adapters/zizmor/` is the zizmor CI-configuration adapter (PR 13, ADR 34), internal until integration, with the
+  same `adapter`/`job`/`worker-source`/`normalize`/`run`/`errors` split (words: `strings-sentinel-zizmor.ts`);
+  `scripts/package-assets-zizmor.mjs` stages its worker; `test/zizmor-adapter.test.ts` and
+  `test/zizmor-conformance.test.ts` (real engine) cover it; `test/iac-helpers.ts` and `test/fixtures/iac/` serve both.
   `src/planner/` is the pure deterministic planner (PR 06, ADR 24), exported as `./planner`: `planner.ts`
   (`planBootstrap`, `planAnalysis`, `checkWorkGraph`, the surface vocabulary), `adapters.ts` (inputs from the rule
   lock and validated packs, the effective policy, the snapshot and parser evidence), `boundary.ts` (canonical work

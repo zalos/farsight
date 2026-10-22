@@ -208,6 +208,11 @@ evidence; inline ignore comments, remote modules and unread variable files leave
 id, severity and lines at a captured path; no graph node is created. Real-engine tests run with `SENTINEL_ISOLATION=1`
 and `SENTINEL_TRIVY_CHECKS_DIR` set to that folder.
 
+The zizmor adapter (internal, ADR 34) audits GitHub Actions workflows, action definitions and Dependabot configuration
+with zizmor 1.31.1, offline, with no token, repository configuration or ignore comments. The five audits that need the
+GitHub API are reported as skipped on every workflow and action, which therefore stays partial; findings are an audit,
+severity and byte spans at a captured path.
+
 ## Versions and evolution
 
 - **Draft until review.** Every name ends in `/draft-1`. A name moves to `/v1` only after an independent
