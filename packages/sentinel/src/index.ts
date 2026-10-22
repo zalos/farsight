@@ -17,3 +17,14 @@ export type {
   SentinelStore, StoreLedger, StoreObjects, StoredObject, ObjectIdentityRef, OpenStoreOptions, PutObjectOptions,
   StoreRuntimeFacts, StoreErrorCode, LedgerErrorCode, ObjectStoreErrorCode, GcErrorCode,
 } from './store/index.js';
+// Source capture (PR 04): authorised sources into one immutable, published snapshot; restore and reconcile.
+// Capturing is an explicit call through an open store, never an import effect.
+export {
+  captureSnapshot, restoreSnapshot, readSnapshot, reconcileInventory, SnapshotError, SNAPSHOT_ERROR_CODES, CAPTURE_REASON_CODES,
+  DEFAULT_CAPTURE_POLICY,
+} from './snapshot/index.js';
+export type {
+  CaptureRequest, CaptureSourceRequest, CaptureModeRequest, CaptureStageTarget, CaptureStageInfo, CaptureResult, CaptureStore,
+  SubmoduleRequest, RestoreOptions, RestoredSnapshot, RestoredSource, RestoreStore, Reconciliation, CapturePolicy,
+  SnapshotErrorCode, CaptureReasonCode,
+} from './snapshot/index.js';

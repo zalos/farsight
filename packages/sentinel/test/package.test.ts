@@ -70,6 +70,14 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'store/paths.js': ['node:child_process', 'node:fs', 'node:path'],
   // node:sqlite is imported lazily, by the first store open, never at module load.
   'store/runtime.js': ['dynamic:node:sqlite'],
+  // Source capture reads files and Git objects itself: no child process, so no git, hook, filter or fetch.
+  'snapshot/capture.js': ['node:crypto', 'node:fs', 'node:path'],
+  'snapshot/errors.js': ['@farsight/core/dist/strings-sentinel-capture.js'],
+  'snapshot/git.js': ['node:crypto', 'node:fs', 'node:path', 'node:zlib'],
+  'snapshot/inventory.js': ['node:crypto', 'node:fs'],
+  'snapshot/materialize.js': ['node:fs', 'node:path'],
+  'snapshot/policy.js': ['node:crypto', 'node:path'],
+  'snapshot/worktree.js': ['node:fs'],
 };
 
 test('the library imports only its reviewed modules, and nothing that could start work at import', () => {
@@ -130,7 +138,7 @@ function probe(code: string): { spawns: string[]; sqlite: boolean; files: string
 }
 
 test('importing the root and the store, and asking the CLI for help, start nothing', () => {
-  const lib = probe(`await import(${JSON.stringify(`${pkgDir}dist/index.js`)}); await import(${JSON.stringify(`${pkgDir}dist/store/index.js`)});`);
+  const lib = probe(`await import(${JSON.stringify(`${pkgDir}dist/index.js`)}); await import(${JSON.stringify(`${pkgDir}dist/store/index.js`)}); await import(${JSON.stringify(`${pkgDir}dist/snapshot/index.js`)});`);
   assert.deepEqual(lib.spawns, [], 'no child process at import');
   assert.equal(lib.sqlite, false, 'node:sqlite is not loaded until a store is opened');
   assert.deepEqual(lib.files, [], 'no file is created at import');
