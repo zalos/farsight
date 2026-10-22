@@ -1,0 +1,9 @@
+{
+  "engine": "zizmor",
+  "version": "1.31.1",
+  "mode": "offline",
+  "persona": "regular",
+  "configuration": "none; ignore comments off",
+  "inputs": ["GitHub Actions workflows", "action definitions", "Dependabot configuration"],
+  "onlineAuditsSkipped": ["impostor-commit", "known-vulnerable-actions", "ref-confusion", "ref-version-mismatch", "stale-action-refs"]
+}

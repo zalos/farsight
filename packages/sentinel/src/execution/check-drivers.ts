@@ -26,7 +26,7 @@ import type { ResolvedRule } from '../rules/resolve.js';
 import { ExecutionError } from './errors.js';
 import type { ExecutionProfileRecord } from './profile.js';
 import type { AdapterRegistry } from './registry.js';
-import type { CapturedInput, VerifiedOutput } from './supervisor.js';
+import type { CapturedInput, VerifiedOutput, WorkerOutcome } from './supervisor.js';
 
 export interface RuleFiles {
   readonly rule: ResolvedRule;
@@ -65,12 +65,14 @@ export interface PreparedJob {
 
 export interface NormalizedOutcome {
   /** The coverage view the coordinator turns into canonical records (bounded by the adapter's granularity). */
-  readonly coverage: Pick<ResultMessage, 'coveredChecks' | 'scannedSet' | 'skipped' | 'unresolvedFrontiers'> & { readonly granularity: CoverageGranularity };
+  readonly coverage: Pick<ResultMessage, 'coveredChecks' | 'scannedSet' | 'skipped' | 'unresolvedFrontiers'> & { readonly actualReadSet?: ResultMessage['actualReadSet'] } & { readonly granularity: CoverageGranularity };
   /** Records published with the result (observations, provenance), as canonical JSON. */
-  readonly records: readonly { readonly value: unknown; readonly schema: string }[];
+  readonly records: readonly { readonly value: unknown; readonly schema: string; readonly privacy?: 'metadata' | 'source-derived' | 'source' }[];
 }
 
 export interface VerifiedAttempt {
+  /** The exact supervisor outcome, deep-frozen by the coordinator; image facts never come from worker metadata. */
+  readonly outcome: Readonly<WorkerOutcome>;
   readonly result: ResultMessage;
   readonly outputs: readonly VerifiedOutput[];
   readonly workDir: string;

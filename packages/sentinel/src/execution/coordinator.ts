@@ -13,6 +13,7 @@
 // and inventory units run as the coordinator's own operations (bootstrap.ts); an analysis revision's check units
 // run as workers, and what each covered is recorded as canonical coverage records (coverage.ts) that PR 06's
 // evaluateRequiredCoverage alone turns into the run's outcome.
+import { deepFreeze } from '../policy/immutable.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -532,12 +533,37 @@ export class Coordinator {
           // trusted adapter establishes; published with the result.
           // A driver normalizes the verified result (before the work folder is released) into the coverage view
           // and records published with it; without one, the result's own coverage claims are read.
-          const out = outcome;
-          const normalized = driver ? await driver.normalize(prepared!.context, { result: out.result!, outputs: out.outputs, workDir: out.workDir, job: prepared!.job,
-            output: (oid: ArtifactId) => { const o = out.outputs.find(x => x.id === oid); if (!o) throw new ExecutionError('sentinel.execution.outputMismatch', { reason: 'not a verified output' }); return readFileSync(o.path); },
+          const out = deepFreeze(outcome);
+          const normalized = driver ? await driver.normalize(prepared!.context, { outcome: out, result: out.result!, outputs: out.outputs, workDir: out.workDir, job: prepared!.job,
+            output: (oid: ArtifactId) => {
+              const o = out.outputs.find(x => x.id === oid);
+              if (!o) throw new ExecutionError('sentinel.execution.outputMismatch', { reason: 'not a verified output' });
+              const bytes = readFileSync(o.path);
+              if (bytes.length !== o.bytes || `sha256:${createHash('sha256').update(bytes).digest('hex')}` !== o.id) {
+                throw new ExecutionError('sentinel.execution.outputMismatch', { reason: 'the normalized output is not its verified bytes' });
+              }
+              return bytes;
+            },
             sealed: (sid: ArtifactId) => { const m = /^sha256:([0-9a-f]{64})$/.exec(sid); if (!m) return undefined; try { return readFileSync(join(out.workDir, 'input', m[1]!)); } catch { return undefined; } } }) : null;
           stillWithin();
           const view = normalized ? { ...outcome.result!, ...normalized.coverage } : outcome.result!;
+          if (normalized?.coverage.actualReadSet !== undefined) {
+            const read = normalized.coverage.actualReadSet;
+            const allowed = new Set(executable.inputScopes.flatMap(i => {
+              const source = executable.unit.inputs.find(s => s.content === i.input);
+              if (!source || !executable.inputs.some(s => s.id === i.input)) return [];
+              const path = join(out.workDir, 'input', i.input.slice(7));
+              let bytes: Buffer;
+              try { bytes = readFileSync(path); } catch { throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'a normalized read names no sealed source input' }); }
+              if (`sha256:${createHash('sha256').update(bytes).digest('hex')}` !== i.input) throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'a normalized read does not name the sealed source bytes' });
+              return i.scopes.filter(scope => executable.unit.scopes.includes(scope));
+            }));
+            if (new Set(read).size !== read.length || read.some(scope => !allowed.has(scope))
+              || normalized.coverage.scannedSet.some(scope => !read.includes(scope))) {
+              throw new ExecutionError('sentinel.execution.resultMismatch', { reason: 'the normalized read set is outside sealed source scopes or omits a scanned scope' });
+            }
+          }
+
           const coverage = coverageRecords({ runId: this.#plan.run.id, attemptId, work: ref, checks: executable.checks, scopes: this.#scopes,
             adapterGranularity: executable.adapter!.coverage, result: view, recordedAt: now() });
           await publishOutcome({ store: this.#store, work: ref, attemptId, result: outcome.result!, outputs: outcome.outputs, endedAt: now(),

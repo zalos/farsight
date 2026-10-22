@@ -554,6 +554,18 @@ Opening the coordinator checks each selected driver's implementation digest agai
 adapter and the admitted unit, even when its driver registry was constructed against another adapter registry.
 
 
+The internal production drivers bind Pattern, OSV, Trivy and zizmor to this one seam. Each accepts only its original
+shipped rule families, revisions and definition digests, plus the exact pinned engine image and the assigned
+snapshot inputs. Required database/checks provenance is supplied explicitly from owner-held acquisition records;
+a path or adjacent file grants no trust and no driver downloads anything. Missing assets refuse preparation and
+leave the unit unpublished; public scanner capability registration and acquisition remain separate integration work.
+The bridge seals its job with the plan/unit/check binding, normalizes the exact supervisor outcome frozen in place,
+and publishes source-derived reports and findings beside per-check coverage in the same accepted attempt. A trusted
+normalizer can refine the actual read set only to sealed captured input scopes; scanned scopes must also have been
+read. Expected scopes remain the admitted plan's scopes. The verified worker result stays unchanged as audit evidence.
+Original rule packs and their digest manifest ship as data assets; they contain no engine, database or execution grant.
+
+
 **Coverage.** Each assigned check gets one `sentinel-coverage/draft-1` record per attempt that published:
 `complete`, `partial` (scope skipped, unresolved or not scanned) or `not-run`. The record is never finer than the
 trusted adapter's registered `coverage` granularity (default `aggregate`); a result cannot claim finer coverage.

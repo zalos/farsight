@@ -1,0 +1,14 @@
+{
+  "engine": "trivy",
+  "version": "0.76.1",
+  "mode": "misconfiguration-only",
+  "scanners": ["dockerfile", "kubernetes", "terraform"],
+  "checks": {
+    "name": "trivy-checks",
+    "version": "2.3.0",
+    "manifest": "sha256:3eae4436560566e77115396d0221a64e0cd86d94a3b45203f8ae3f9a85c027cd",
+    "layer": "sha256:4bf8ba41d342b378e63707561806d7784373ddd6cc04fdaf085ec7f38a19ec9d"
+  },
+  "repositoryIgnoreFiles": "disabled",
+  "inlineIgnores": "honoured by the engine and reported as a limitation"
+}

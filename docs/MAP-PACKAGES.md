@@ -102,6 +102,14 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   same `adapter`/`job`/`worker-source`/`normalize`/`run`/`errors` split (words: `strings-sentinel-zizmor.ts`);
   `scripts/package-assets-zizmor.mjs` stages its worker; `test/zizmor-adapter.test.ts` and
   `test/zizmor-conformance.test.ts` (real engine) cover it; `test/iac-helpers.ts` and `test/fixtures/iac/` serve both.
+  `src/adapters/drivers/` is the internal production bridge for Pattern, OSV, Trivy and zizmor: `canonical.ts`
+  binds the one coordinator driver contract, sealed source scopes, exact job and same-attempt findings/coverage;
+  `kernels.ts` and each scanner module compose the existing adapter normalizers without starting work. `common.ts`
+  binds supported family/revision/definition digests and constructs explicit coverage facts. Original rule packs live
+  under `rules/{pattern,advisories,infrastructure,ci}`; `scripts/package-assets-drivers.mjs` stages the three added
+  packs and their digest manifest. Tests `drivers-canonical.test.ts` exercise real planning, bootstrap and container
+  publication; `drivers-boundary.test.ts` checks outcome identity, scoped sealed reads and source-derived privacy.
+  Public CLI capability registration remains separate integration work.
   `src/planner/` is the pure deterministic planner (PR 06, ADR 24), exported as `./planner`: `planner.ts`
   (`planBootstrap`, `planAnalysis`, `checkWorkGraph`, the surface vocabulary), `adapters.ts` (inputs from the rule
   lock and validated packs, the effective policy, the snapshot and parser evidence), `boundary.ts` (canonical work

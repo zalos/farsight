@@ -1,0 +1,8 @@
+{
+  "engine": "osv-scanner",
+  "version": "2.7.0",
+  "mode": "full-offline",
+  "ecosystems": ["npm", "Maven"],
+  "inputs": ["package-lock.json", "pnpm-lock.yaml", "pom.xml", "*.cdx.json"],
+  "matches": "a component of a captured lockfile, manifest or SBOM at a version an advisory in the pinned offline snapshot names"
+}
