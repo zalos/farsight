@@ -80,6 +80,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'rules/pack.js': ['node:fs', 'node:path'],
   'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:fs'],
   'cli/init.js': ['node:crypto', 'node:fs', 'node:path'],
+  // The foundation-preview detector, a built-in worker: it reads its copied inputs and writes one artifact.
+  'adapters/preview-detector.js': ['node:crypto', 'node:fs'],
+  'service/preview-plan.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   // The local service socket: an owner-only Unix socket, used only when a service runs; nothing at import.
   'transport/ipc.js': ['node:crypto', 'node:fs', 'node:net', 'node:path'],
   'reports/preview.js': ['@farsight/core/dist/strings-sentinel-report.js', '@farsight/core/dist/strings-sentinel-service.js'],
