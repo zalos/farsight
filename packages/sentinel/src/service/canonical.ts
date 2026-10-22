@@ -35,7 +35,7 @@ import { scannerReportOf } from '../reports/scanner.js';
 import { publicRegistry, publicProfile, scannerExecution, externalDrivers } from './scanner-profile.js';
 import { heldDatabases, installedAdapters, checkPlanDatabases } from './scanner-assets.js';
 import { recordRunFailure, runFailureFacts } from './run-failure.js';
-import { SELECTION_SCHEMA, unitIdentity, unitsToRun, type RerunSelection } from '../execution/selection.js';
+import { SELECTION_SCHEMA, selectionClosure, unitIdentity, unitsToRun, type RerunSelection } from '../execution/selection.js';
 
 const digest = (v: unknown) => `sha256:${createHash('sha256').update(canonicalJsonBytes(v)).digest('hex')}`;
 export const WORKSPACE_SOURCE = 'workspace';
@@ -135,7 +135,8 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
     })).snapshot;
   // The run is what it would read and do: the captured inventory (not the capture's time), the lock, the policy and
   // the profile. The same content under the same terms plans to the same run.
-  const runId = `run-${digest({ inventory: snapshot.inventoryDigest, lock: current.digest, policy: options.policy.revision, profile: profile.digest, parent: options.parentId ?? null }).slice(7, 39)}`;
+  const key = { inventory: snapshot.inventoryDigest, lock: current.digest, policy: options.policy.revision, profile: profile.digest, parent: options.parentId ?? null };
+  const runId = options.parentId ? rerunIdOf(store, key) : `run-${digest(key).slice(7, 39)}`;
   const latest = store.ledger.latestPlan(runId);
   if (latest?.kind === 'analysis') return { outcome: 'kept', disclosure: disclose((await loadPlan(store, runId, latest.revision)).plan) };
 
@@ -352,6 +353,21 @@ export async function previewRerun(store: SentinelStore, parentId: string, selec
   return planned.preview;
 }
 
+/**
+ * A rerun's id: its request (parent, selection and terms) and a generation. The first generation not yet admitted, or
+ * admitted and not ended, is this request, so repeating it while it waits or runs joins it (`kept`) and a retry of it
+ * resumes it. Once that run has ended, an explicit rerun of the same parent and selection is a fresh run with its own
+ * id: an ended run is never handed back as a new one.
+ */
+function rerunIdOf(store: SentinelStore, request: Record<string, unknown>): string {
+  for (let generation = 0; ; generation++) {
+    const id = `run-${digest({ ...request, generation }).slice(7, 39)}`;
+    if (!store.ledger.latestPlan(id)) return id;
+    const state = store.ledger.getRun(id)?.state;
+    if (state !== 'completed' && state !== 'canceled') return id;
+  }
+}
+
 /** The terms a rerun is planned under: the owner's lock, adopted policy and this installation's profile, now. */
 export interface RerunTerms {
   trustDir: string;
@@ -399,7 +415,7 @@ export async function selectedRerun(store: SentinelStore, parentId: string, sele
   const { current, packs, profile } = await currentTerms(terms);
   const evidence = await loadBootstrap(store, inventoryRun, { id: inventory.id, revision: inventory.revision });
   const selectedIds = sortedIds(chosen);
-  const runId = `run-${digest({ rerun: parentId, parentPlan: parentPlan.digest, selected: selectedIds, lock: current.digest, policy: terms.policy.revision, profile: profile.digest }).slice(7, 39)}`;
+  const runId = rerunIdOf(store, { rerun: parentId, parentPlan: parentPlan.digest, selected: selectedIds, lock: current.digest, policy: terms.policy.revision, profile: profile.digest });
   const plan = planAnalysis({
     runId, revision: 1, previous: null, bootstrap: parentPlan.reused.map(r => ({ id: r.id, revision: r.revision })), profile: profile.planner,
     snapshot: plannerSnapshotFrom(evidence.snapshot), analyses: evidence.analyses.map(a => plannerAnalysisFrom(a as never)),
@@ -415,15 +431,12 @@ export async function selectedRerun(store: SentinelStore, parentId: string, sele
   const stale = selectedIds.filter(id => !byIdentity.has(unitIdentity(parentUnits.get(id)!)));
   if (stale.length) return { reasonCode: 'sentinel.service.selectionStale', facts: { stale } } as Refusal;
   const mapped = selectedIds.map(id => ({ parentUnit: id, unit: byIdentity.get(unitIdentity(parentUnits.get(id)!))! }));
-  // Downstream within the rerun's own revision; a prerequisite of the same revision that is not run is refused.
-  const ids = new Set(plan.units.map(u => u.id));
-  const run = new Set(mapped.map(m => m.unit));
-  for (let grew = true; grew;) {
-    grew = false;
-    for (const u of plan.units) if (!run.has(u.id) && u.dependencies.some(d => run.has(d.id))) { run.add(u.id); grew = true; }
-  }
-  const needed = plan.units.filter(u => run.has(u.id)).flatMap(u => u.dependencies.filter(d => ids.has(d.id) && !run.has(d.id)).map(d => d.id));
-  if (needed.length) return { reasonCode: 'sentinel.service.prerequisiteNotReusable', facts: { needed: sortedIds(new Set(needed)) } } as Refusal;
+  // Downstream within the rerun's own revision. OPEN GATE: a unit that runs and needs an analysis unit that does not
+  // is refused, even when the parent published that unit under exactly these terms. Consuming such genuine parent
+  // publications (and counting held results as coverage) is PR 27's; until then selections are fail-closed here. The
+  // shipped planner's check units depend only on the bootstrap, so today this refusal is reached only by such plans.
+  const { run, needed } = selectionClosure(plan.units, mapped.map(m => m.unit));
+  if (needed.length) return { reasonCode: 'sentinel.service.prerequisiteNotReusable', facts: { needed } } as Refusal;
   const downstream = sortedIds([...run].filter(id => !mapped.some(m => m.unit === id)));
   const held = plan.units.filter(u => !run.has(u.id)).map(u => ({ unit: u.id, parentUnit: parentOf.get(u.id) ?? null })).sort((a, b) => (a.unit < b.unit ? -1 : 1));
   const selection: RerunSelection = {

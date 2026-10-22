@@ -690,14 +690,27 @@ held units with their parent counterparts; and the reused bootstrap. Admission c
 every unit runs or is held exactly once, what runs is closed downstream, nothing that runs depends on a held unit,
 and the reused set is the plan's. It is stored as an immutable artifact, linked from the plan and pinned in the
 ledger's `plans.selection_id` (migration 5, `plan-selection`), so the coordinator, a resume after a crash and the
-service all hold the same units back. The preview `rerun` prints is that same admitted plan (`kept` when repeated
-under the same terms). The run is created on the first `run`, foreground or detached, from an envelope derived from
-the admitted plan and selection. `retry` of a selected run reruns only the selected units that did not publish.
+service all hold the same units back. The preview `rerun` prints is that same admitted plan. The run is created on
+the first `run`, foreground or detached, from an envelope derived from the admitted plan and selection. `retry` of a
+selected run reruns only the selected units that did not publish.
+
+**One request is one run; asking again after it ended is a new one.** A rerun's id is its request (parent, selection,
+lock, policy, profile) and a generation: the first generation not yet admitted, or admitted and not ended. Repeating
+the request while its run waits or runs joins it (`kept`), and a crash resumes it; once it has completed or been
+canceled, the same `rerun` is a fresh run with its own id, and the ended one is never handed back as new. A
+whole-analysis rerun follows the same rule; a plain `plan` of the same content stays the same run (ADR 37).
 
 **Coverage stays honest.** A held unit's results stay the parent's and are not copied as the child's coverage, so a
 selected rerun whose held units carry required checks ends incomplete, and the preview counts them (`requiredHeld`).
-The parent's runs, results and report are unchanged. **Not in this decision:** reusing a parent's published check
-results as the child's coverage (differential selection, PR 27); selecting by stage name rather than unit id.
+The parent's runs, results and report are unchanged.
+
+**Open gate: dependency-bearing selections are refused.** A selection where something that runs needs an analysis
+unit that does not run is refused (`prerequisiteNotReusable`), even when the parent published that unit under exactly
+the same terms; only the bootstrap is reused. The shipped planner's check units depend only on the bootstrap, so no
+shipped plan reaches this today. Consuming genuine, eligible parent publications as prerequisites and counting held
+results as coverage belong to differential selection (PR 27); until both exist, the selective-stage rerun completion
+gate stays open, and a selected rerun never claims complete coverage on its own. **Not in this decision:** selecting
+by stage name rather than unit id.
 
 
 26. **The pattern engine runs behind an original protocol shim inside its pinned image, and coverage is per file per

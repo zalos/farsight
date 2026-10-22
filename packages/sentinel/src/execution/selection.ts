@@ -42,6 +42,22 @@ export const unitsToRun = (s: RerunSelection): Set<Id> => new Set([...s.selected
  * prerequisite would have to be reused from the parent, which a revision cannot express yet). The revision's own
  * reused work is the selection's.
  */
+/**
+ * What a selection runs within one revision: the chosen units and everything downstream of them, and `needed`, the
+ * units of the same revision something that runs depends on but that do not run. A non-empty `needed` is refused by
+ * the caller (fail-closed): reusing another analysis unit's published result is not supported yet (PR 27).
+ */
+export function selectionClosure(units: readonly Pick<PlanWork, 'id' | 'dependencies'>[], chosen: readonly Id[]): { run: Set<Id>; needed: Id[] } {
+  const ids = new Set(units.map(u => u.id));
+  const run = new Set(chosen);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const u of units) if (!run.has(u.id) && u.dependencies.some(d => run.has(d.id))) { run.add(u.id); grew = true; }
+  }
+  const needed = new Set(units.filter(u => run.has(u.id)).flatMap(u => u.dependencies.filter(d => ids.has(d.id) && !run.has(d.id)).map(d => d.id)));
+  return { run, needed: [...needed].sort() };
+}
+
 export function checkSelection(plan: Readonly<PlanEnvelope>, s: RerunSelection): void {
   if (s?.schema !== SELECTION_SCHEMA) refuse('the selection is not a sentinel-rerun-selection/draft-1 record');
   if (plan.kind !== 'analysis') refuse('only an analysis revision is admitted with a selection');

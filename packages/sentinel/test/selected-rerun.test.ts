@@ -14,7 +14,7 @@ import { builtinPackDir } from '../dist/service/package-paths.js';
 import { initWorkspace } from '../dist/cli/init.js';
 import { loadPlan } from '../dist/execution/plans.js';
 import { Coordinator } from '../dist/execution/coordinator.js';
-import { checkSelection, NOT_SELECTED } from '../dist/execution/selection.js';
+import { checkSelection, NOT_SELECTED, selectionClosure } from '../dist/execution/selection.js';
 import { unlock } from './snapshot-helpers.ts';
 
 const QUALIFIED = qualificationFor(SQLITE_RELEASE_POLICY, `${process.platform}-${process.arch}`, process.versions.sqlite ?? '') !== undefined;
@@ -102,6 +102,18 @@ test('a strict subset reruns exactly the selected units over the parent\'s retai
   assert.deepEqual(counts(store, parentId), parentEvents, 'the parent run is untouched');
   assert.deepEqual(await previewFindingsOf(store, parentId), parentFindings, 'its results unchanged');
   assert.equal((await previewFindingsOf(store, childId))!.findings.length, 1, 'the selected unit\'s own finding');
+  // Asked again once that run has ended, the same parent and selection is a fresh run, never the ended one handed back;
+  // a repeat of the fresh request while it waits joins it.
+  const childEvents = counts(store, childId);
+  const again: any = await rerunRun(store, parentId, [chosen], terms);
+  assert.equal(again.outcome, 'prepared');
+  assert.notEqual(again.disclosure.runId, childId);
+  assert.deepEqual([again.preview.selected, again.preview.units.length, again.preview.held.length], [[chosen], 1, 2]);
+  assert.equal((await rerunRun(store, parentId, [chosen], terms) as any).disclosure.runId, again.disclosure.runId, 'the waiting request is joined');
+  assert.equal((await rerunRun(store, parentId, [chosen], terms) as any).outcome, 'kept');
+  assert.equal((await executeRun(store, again.disclosure.runId, { scratchRoot: work })).state, 'completed');
+  assert.deepEqual(counts(store, childId), childEvents, 'the earlier rerun is untouched');
+  assert.equal(snapshotsAdmitted(store), snapshots, 'still nothing captured again');
   const report = await store.inspect();
   assert.equal(report.ok, true, JSON.stringify(report.errors));
 });
@@ -198,6 +210,17 @@ test('a parent canceled before its analysis has no bootstrap to reuse: a selecte
   const refused: any = await previewRerun(store, runId, [leaf.id], { trustDir: '', policy: null as any, scratchRoot: work });
   assert.equal(refused.reasonCode, 'sentinel.service.bootstrapUnavailable');
   assert.equal(snapshotsAdmitted(store), snapshots, 'nothing was captured to make up for it');
+});
+
+test('a selection that needs an analysis unit it does not run is refused: reusing one is not supported (PR 27)', () => {
+  // The synthetic diamond A → {B, C} → D: choosing B runs B and D, and D also needs C, which does not run.
+  const u = (id: string, deps: string[] = []) => ({ id, dependencies: deps.map(d => ({ id: d, revision: 1 })) });
+  const units = [u('A'), u('B', ['A']), u('C', ['A']), u('D', ['B', 'C'])];
+  assert.deepEqual(((r) => [[...r.run].sort(), r.needed])(selectionClosure(units, ['B'])), [['B', 'D'], ['A', 'C']]);
+  assert.deepEqual(((r) => [[...r.run].sort(), r.needed])(selectionClosure(units, ['A'])), [['A', 'B', 'C', 'D'], []]);
+  assert.deepEqual(((r) => [[...r.run].sort(), r.needed])(selectionClosure(units, ['D'])), [['D'], ['B', 'C']]);
+  // Units that depend only on the reused bootstrap (outside the revision) need nothing: the shipped planner's case.
+  assert.deepEqual(selectionClosure([u('x', ['boot']), u('y', ['boot'])], ['x']).needed, []);
 });
 
 test('a selection that does not fit its revision is refused at admission', () => {

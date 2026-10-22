@@ -144,6 +144,12 @@ test('init → adopt → plan → run → status → report, twice where it matt
   assert.equal(run('rerun', rerunId).body.reasonCode, 'sentinel.service.runNotEnded', 'a run that has not ended is resumed, not rerun');
   const rerunRunResult = run('run', rerunId);
   assert.deepEqual([rerunRunResult.status, rerunRunResult.body.facts.previewFindings], [2, 1]);
+  // Once that rerun has ended, asking again is a fresh run, never the ended one handed back.
+  const fresh = run('rerun', planId);
+  assert.deepEqual([fresh.body.outcome, fresh.body.facts.preview.all], ['prepared', true]);
+  assert.notEqual(fresh.body.facts.runId, rerunId);
+  assert.equal(run('rerun', planId).body.facts.runId, fresh.body.facts.runId, 'while it waits, the same request is joined');
+  assert.equal(run('status', rerunId).body.facts.state, 'completed', 'the ended rerun is unchanged');
   // Changed source is a new snapshot and a new plan, not a rerun.
   writeFileSync(join(ws, 'src/more.ts'), 'export const del = (n: string) => db.query(`DELETE FROM t WHERE n = ${n}`);\n');
   const changed = run('plan');
