@@ -65,12 +65,12 @@ export interface GitReadLimits {
 
 export const DEFAULT_GIT_READ_LIMITS: GitReadLimits = Object.freeze({
   maxPacks: 1024,
-  maxIndexBytes: 256 * 1024 * 1024,
-  maxIndexObjects: 8_000_000,
-  maxPackObjects: 16_000_000,
-  maxIndexCacheBytes: 512 * 1024 * 1024,
+  maxIndexBytes: 64 * 1024 * 1024,
+  maxIndexObjects: 2_000_000,
+  maxPackObjects: 3_000_000,
+  maxIndexCacheBytes: 128 * 1024 * 1024,
   maxDeltaDepth: 128,
-  maxDeltaChainBytes: 256 * 1024 * 1024,
+  maxDeltaChainBytes: 64 * 1024 * 1024,
 });
 
 function resolveLimits(given: Partial<GitReadLimits> | undefined): GitReadLimits {
@@ -86,6 +86,71 @@ function resolveLimits(given: Partial<GitReadLimits> | undefined): GitReadLimits
   return Object.freeze(out) as unknown as GitReadLimits;
 }
 
+/** The shared ceilings of one GitReadBudget. A caller may lower them; none can be raised above its default. */
+export interface GitReadBudgetLimits {
+  /** Bytes every repository sharing the budget may hold at once: retained pack-index data plus an index being read. */
+  readonly maxRetainedBytes: number;
+  /** Pack objects every repository sharing the budget may index at once. */
+  readonly maxPackObjects: number;
+}
+
+export const DEFAULT_GIT_READ_BUDGET: GitReadBudgetLimits = Object.freeze({
+  maxRetainedBytes: 128 * 1024 * 1024,
+  maxPackObjects: 3_000_000,
+});
+
+/**
+ * One memory budget shared by the Git readers of one capture: every repository opened with it (primary, submodule,
+ * both working-copy enumerations) reserves against it before it allocates pack-index memory, and releases on close()
+ * or when a load fails. Exceeding it is a bounded refusal (`unsupported`), never eviction. It is a plain object the
+ * caller owns; it grants nothing and is not shared across stores or processes.
+ */
+export class GitReadBudget {
+  readonly limits: GitReadBudgetLimits;
+  #bytes = 0;
+  #objects = 0;
+
+  constructor(limits: Partial<GitReadBudgetLimits> = {}) {
+    const out: Record<string, number> = { ...DEFAULT_GIT_READ_BUDGET };
+    for (const [key, value] of Object.entries(limits)) {
+      const ceiling = (DEFAULT_GIT_READ_BUDGET as unknown as Record<string, number>)[key];
+      if (ceiling === undefined) throw new RangeError(`unknown Git read budget ${key}`);
+      if (!Number.isSafeInteger(value) || (value as number) < 1 || (value as number) > ceiling) {
+        throw new RangeError(`${key} must be an integer from 1 to ${ceiling}`);
+      }
+      out[key] = value as number;
+    }
+    this.limits = Object.freeze(out) as unknown as GitReadBudgetLimits;
+  }
+
+  /** Bytes and objects currently reserved by every repository using this budget. */
+  get usedBytes(): number { return this.#bytes; }
+  get usedObjects(): number { return this.#objects; }
+
+  /**
+   * Reserves `bytes` and `objects` before they are allocated, or throws `unsupported`. Returns an idempotent
+   * release. Used by GitRepository; exposed so a caller can see and test its accounting.
+   */
+  reserve(bytes: number, objects: number, what: string): () => void {
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || !Number.isSafeInteger(objects) || objects < 0) throw new RangeError('a reservation is a non-negative integer');
+    if (this.#bytes + bytes > this.limits.maxRetainedBytes) {
+      throw unsafe(`${what} needs ${bytes} bytes; the shared Git read budget has ${this.limits.maxRetainedBytes - this.#bytes} of ${this.limits.maxRetainedBytes} left`);
+    }
+    if (this.#objects + objects > this.limits.maxPackObjects) {
+      throw unsafe(`${what} lists ${objects} objects; the shared Git read budget has ${this.limits.maxPackObjects - this.#objects} of ${this.limits.maxPackObjects} left`);
+    }
+    this.#bytes += bytes;
+    this.#objects += objects;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.#bytes -= bytes;
+      this.#objects -= objects;
+    };
+  }
+}
+
 interface Pack {
   readonly segments: readonly string[]; // objects/pack/<name>.pack under the common directory
   readonly identity: string;            // dev:ino of the pack when its index was loaded
@@ -96,6 +161,17 @@ interface Pack {
   readonly end: number;                 // pack size minus trailer
   readonly fanout: Uint32Array;
   readonly index: number;
+}
+
+interface ParsedIndex {
+  readonly n: number;
+  /** Bytes reserved for what is kept. */
+  readonly bytes: number;
+  readonly fanout: Uint32Array;
+  readonly names: Buffer;
+  readonly offsets: Float64Array;
+  readonly sorted: Float64Array;
+  readonly packChecksum: Buffer;
 }
 
 /** One delta resolution: every step (an offset base or an object-id base) counts against one budget. */
@@ -253,6 +329,11 @@ export interface GitOpenOptions {
   readonly commonDir?: string;
   /** Lower any resource ceiling for this repository (DEFAULT_GIT_READ_LIMITS are the maxima). */
   readonly limits?: Partial<GitReadLimits>;
+  /**
+   * The memory budget to reserve pack-index memory from. Pass one budget to every repository a capture opens so
+   * their total stays within it; without one, this repository gets a private budget with the default ceilings.
+   */
+  readonly budget?: GitReadBudget;
 }
 
 export class GitRepository {
@@ -261,15 +342,19 @@ export class GitRepository {
   readonly algorithm: GitHashAlgorithm;
   readonly hexLength: number;
   readonly limits: GitReadLimits;
-  readonly #packs: Pack[] = [];
+  readonly budget: GitReadBudget;
+  #packs: Pack[] = [];
   #packsLoaded = false;
+  /** Releases for the budget this repository's loaded indexes hold. */
+  #held: Array<() => void> = [];
 
-  private constructor(gitDir: string, commonDir: string, algorithm: GitHashAlgorithm, limits: GitReadLimits) {
+  private constructor(gitDir: string, commonDir: string, algorithm: GitHashAlgorithm, limits: GitReadLimits, budget: GitReadBudget) {
     this.gitDir = gitDir;
     this.commonDir = commonDir;
     this.algorithm = algorithm;
     this.hexLength = algorithm === 'sha1' ? 40 : 64;
     this.limits = limits;
+    this.budget = budget;
   }
 
   /**
@@ -279,6 +364,7 @@ export class GitRepository {
    */
   static open(root: string, options: GitOpenOptions = {}): GitRepository {
     const limits = resolveLimits(options.limits);
+    if (options.budget !== undefined && !(options.budget instanceof GitReadBudget)) throw new TypeError('budget must be a GitReadBudget');
     const rootReal = canonicalDir(root, 'the source root');
     const dotGit = lstatBig(join(rootReal, '.git'));
     if (!dotGit) throw new GitReadError('notRepository', 'no .git at the source root');
@@ -311,7 +397,7 @@ export class GitRepository {
     if (format !== 'sha1' && format !== 'sha256') throw new GitReadError('unsupported', `object format ${format} is not supported`);
     const refStorage = configValue(config, 'extensions', 'refstorage');
     if (refStorage && refStorage.toLowerCase() !== 'files') throw new GitReadError('unsupported', `ref storage ${refStorage} is not supported`);
-    return new GitRepository(gitDir, commonDir, format, limits);
+    return new GitRepository(gitDir, commonDir, format, limits, options.budget ?? new GitReadBudget());
   }
 
   #isOid(text: string): boolean {
@@ -423,10 +509,14 @@ export class GitRepository {
   }
 
   /**
-   * Releases nothing persistent: every descriptor is opened and closed within one read, so reads after close()
-   * (a capture's later re-read) still work and still leave nothing open. Kept for callers that pair it with open().
+   * Releases the loaded pack indexes and their share of the budget. No descriptor outlives a read, so a read after
+   * close() (a capture's later re-read) still works: it reloads the indexes and reserves the budget again.
    */
-  close(): void { /* no descriptor outlives a read */ }
+  close(): void {
+    for (const release of this.#held.splice(0)) release();
+    this.#packs = [];
+    this.#packsLoaded = false;
+  }
 
   #chain(): Chain { return { steps: 0, bytes: 0, seen: new Set() }; }
 
@@ -471,51 +561,79 @@ export class GitRepository {
     return this.#packedHeader(located.pack, located.offset, chain);
   }
 
+  /**
+   * Loads every pack index, all or nothing: a failure releases what this load reserved and leaves the repository
+   * unloaded, so the next read retries from the start instead of using a partial set.
+   */
   #loadPacks(): void {
     if (this.#packsLoaded) return;
-    this.#packsLoaded = true;
     const listed = listUnder(this.commonDir, ['objects', 'pack']);
-    if (!listed) return;
+    if (!listed) { this.#packsLoaded = true; return; }
     const names = listed.filter(n => /^[A-Za-z0-9_-][A-Za-z0-9._-]*\.idx$/.test(n)).sort();
     if (names.length > this.limits.maxPacks) throw unsafe(`${names.length} pack indexes exceed the limit of ${this.limits.maxPacks}`);
+    const raw = this.hexLength / 2;
+    const loaded: Pack[] = [];
+    const holds: Array<() => void> = [];
     let objects = 0;
     let cache = 0;
-    for (const idxName of names) {
-      const packName = idxName.replace(/\.idx$/, '.pack');
-      const idx = readUnder(this.commonDir, ['objects', 'pack', idxName], this.limits.maxIndexBytes, 'unsupported');
-      if (!idx) continue;
-      const parsed = this.#parseIndex(idx, idxName);
-      objects += parsed.n;
-      if (objects > this.limits.maxPackObjects) throw unsafe(`pack indexes list more than ${this.limits.maxPackObjects} objects`);
-      cache += parsed.names.byteLength + parsed.offsets.byteLength * 2 + parsed.fanout.byteLength;
-      if (cache > this.limits.maxIndexCacheBytes) throw unsafe(`pack indexes need more than ${this.limits.maxIndexCacheBytes} bytes of memory`);
-      const raw = this.hexLength / 2;
-      // The pack must exist, start with its header naming the same object count, and end with the checksum the
-      // index records. An index without its pack holds nothing readable.
-      const pack = withFile(this.commonDir, ['objects', 'pack', packName], (fd, st) => {
-        const size = Number(st.size);
-        if (size < 12 + raw) throw new GitReadError('corrupt', `pack ${packName} is truncated`);
-        const head = readExactly(fd, 12, 0, `pack ${packName}`);
-        const version = head.readUInt32BE(4);
-        if (head.toString('latin1', 0, 4) !== 'PACK' || (version !== 2 && version !== 3)) throw new GitReadError('unsupported', `pack ${packName} is not version 2 or 3`);
-        if (head.readUInt32BE(8) !== parsed.n) throw new GitReadError('corrupt', `pack ${packName} and its index disagree on the object count`);
-        if (!readExactly(fd, raw, size - raw, `pack ${packName}`).equals(parsed.packChecksum)) {
-          throw new GitReadError('corrupt', `pack ${packName} does not match its index`);
+    try {
+      for (const idxName of names) {
+        const packName = idxName.replace(/\.idx$/, '.pack');
+        // The index file is a temporary allocation: reserved before it is read, released once it is parsed.
+        let releaseTemp: (() => void) | undefined;
+        let parsed: ParsedIndex | undefined;
+        try {
+          const idx = withFile(this.commonDir, ['objects', 'pack', idxName], (fd, st) => {
+            if (st.size > BigInt(this.limits.maxIndexBytes)) throw unsafe(`pack index ${idxName} is larger than ${this.limits.maxIndexBytes} bytes`);
+            const size = Number(st.size);
+            releaseTemp = this.budget.reserve(size, 0, `reading pack index ${idxName}`);
+            const buf = readExactly(fd, size, 0, `pack index ${idxName}`);
+            if (readSync(fd, Buffer.alloc(1), 0, 1, size) !== 0) throw unsafe(`pack index ${idxName} grew while it was read`);
+            return buf;
+          });
+          if (!idx) continue;
+          parsed = this.#parseIndex(idx, idxName, (n, bytes) => {
+            // Checked before the parsed arrays are allocated: per repository, then against the shared budget.
+            if (objects + n > this.limits.maxPackObjects) throw unsafe(`pack indexes list more than ${this.limits.maxPackObjects} objects`);
+            if (cache + bytes > this.limits.maxIndexCacheBytes) throw unsafe(`pack indexes need more than ${this.limits.maxIndexCacheBytes} bytes of memory`);
+            holds.push(this.budget.reserve(bytes, n, `pack index ${idxName}`));
+            objects += n;
+            cache += bytes;
+          });
+        } finally { releaseTemp?.(); }
+        // The pack must exist, start with its header naming the same object count, and end with the checksum the
+        // index records. An index without its pack holds nothing readable.
+        const pack = withFile(this.commonDir, ['objects', 'pack', packName], (fd, st) => {
+          const size = Number(st.size);
+          if (size < 12 + raw) throw new GitReadError('corrupt', `pack ${packName} is truncated`);
+          const head = readExactly(fd, 12, 0, `pack ${packName}`);
+          const version = head.readUInt32BE(4);
+          if (head.toString('latin1', 0, 4) !== 'PACK' || (version !== 2 && version !== 3)) throw new GitReadError('unsupported', `pack ${packName} is not version 2 or 3`);
+          if (head.readUInt32BE(8) !== parsed!.n) throw new GitReadError('corrupt', `pack ${packName} and its index disagree on the object count`);
+          if (!readExactly(fd, raw, size - raw, `pack ${packName}`).equals(parsed!.packChecksum)) {
+            throw new GitReadError('corrupt', `pack ${packName} does not match its index`);
+          }
+          return { identity: idOf(st), size };
+        });
+        if (!pack) { holds.pop()?.(); objects -= parsed.n; cache -= parsed.bytes; continue; }
+        const end = pack.size - raw;
+        if (parsed.n > 0 && (parsed.sorted[0]! < 12 || parsed.sorted[parsed.n - 1]! >= end)) {
+          throw new GitReadError('corrupt', `pack index ${idxName} has an offset outside its pack`);
         }
-        return { identity: idOf(st), size };
-      });
-      if (!pack) continue;
-      const end = pack.size - raw;
-      if (parsed.n > 0 && (parsed.sorted[0]! < 12 || parsed.sorted[parsed.n - 1]! >= end)) {
-        throw new GitReadError('corrupt', `pack index ${idxName} has an offset outside its pack`);
+        loaded.push({ segments: ['objects', 'pack', packName], identity: pack.identity, size: pack.size, names: parsed.names,
+          offsets: parsed.offsets, sorted: parsed.sorted, end, fanout: parsed.fanout, index: loaded.length });
       }
-      this.#packs.push({ segments: ['objects', 'pack', packName], identity: pack.identity, size: pack.size, names: parsed.names,
-        offsets: parsed.offsets, sorted: parsed.sorted, end, fanout: parsed.fanout, index: this.#packs.length });
+    } catch (error) {
+      for (const release of holds) release();
+      throw error;
     }
+    this.#packs = loaded;
+    this.#held.push(...holds);
+    this.#packsLoaded = true;
   }
 
   /** Validates a version-2 pack index completely before anything from it is used. */
-  #parseIndex(idx: Buffer, idxName: string) {
+  #parseIndex(idx: Buffer, idxName: string, admit: (objects: number, bytes: number) => void): ParsedIndex {
     const raw = this.hexLength / 2;
     const bad = (why: string) => new GitReadError('corrupt', `pack index ${idxName} ${why}`);
     if (idx.length < 8 + 1024 + 2 * raw || idx.readUInt32BE(0) !== 0xff744f63 || idx.readUInt32BE(4) !== 2) {
@@ -538,6 +656,9 @@ export class GitRepository {
     let large = 0;
     for (let i = 0; i < n; i++) if (idx.readUInt32BE(offStart + i * 4) & 0x80000000) large++;
     if (idx.length !== largeStart + large * 8 + 2 * raw) throw bad('has the wrong length for its object count');
+    // Everything parsed is kept: names, two offset tables, the fan-out and the pack checksum. Admit it first.
+    const bytes = n * (raw + 16) + 1024 + raw;
+    admit(n, bytes);
     // Names strictly ascending, each inside the fan-out bucket of its first byte.
     let bucket = 0;
     for (let i = 0; i < n; i++) {
@@ -560,7 +681,7 @@ export class GitRepository {
     }
     const sorted = Float64Array.from(offsets).sort();
     for (let i = 1; i < n; i++) if (sorted[i]! <= sorted[i - 1]!) throw bad('lists one pack offset twice');
-    return { n, fanout, names: Buffer.from(idx.subarray(namesStart, crcStart)), offsets, sorted,
+    return { n, bytes, fanout, names: Buffer.from(idx.subarray(namesStart, crcStart)), offsets, sorted,
       packChecksum: Buffer.from(idx.subarray(idx.length - 2 * raw, idx.length - raw)) };
   }
 

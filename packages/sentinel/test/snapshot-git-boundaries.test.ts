@@ -10,7 +10,7 @@ import { cpSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, symli
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
-import { GitReadError, GitRepository, isSafeRefName } from '../dist/snapshot/git.js';
+import { DEFAULT_GIT_READ_BUDGET, DEFAULT_GIT_READ_LIMITS, GitReadBudget, GitReadError, GitRepository, isSafeRefName } from '../dist/snapshot/git.js';
 import { commitRepo, git, scratch, writeTree } from './snapshot-helpers.ts';
 
 const GIT_DIST = fileURLToPath(new URL('../dist/snapshot/git.js', import.meta.url));
@@ -337,4 +337,88 @@ test('a byte-wise SHA-1 history and its deltas still read as git stores them', t
     assert.equal(repo.readObject(oid, 1 << 20)!.data.toString(), git(root, ['show', `${rev}:big.ts`]));
     assert.equal(repo.objectHeader(oid)!.type, 'blob');
   }
+});
+
+// ---- the shared budget ----
+
+/** A repository with one synthetic pack of `count` blobs; returns its root, one blob id, the index size and parsed size. */
+function packedRepo(root: string, count: number, tag: string) {
+  const entries: Entry[] = Array.from({ length: count }, (_, i) => { const data = Buffer.from(`${tag}-${i}\n`); return { oid: blobOid(data), kind: 'blob' as const, data }; });
+  writePack(emptyRepo(root), entries);
+  const idxName = readdirSync(join(root, '.git/objects/pack')).find(f => f.endsWith('.idx'))!;
+  const idxBytes = readFileSync(join(root, '.git/objects/pack', idxName)).length;
+  return { root, oid: entries[0]!.oid, idxBytes, parsedBytes: count * (20 + 16) + 1024 + 20, idxName };
+}
+
+test('the defaults fit a 128 MiB coordinator share and can only be lowered', () => {
+  assert.deepEqual(DEFAULT_GIT_READ_BUDGET, { maxRetainedBytes: 128 * 1024 * 1024, maxPackObjects: 3_000_000 });
+  assert.equal(DEFAULT_GIT_READ_LIMITS.maxIndexBytes, 64 * 1024 * 1024);
+  assert.equal(DEFAULT_GIT_READ_LIMITS.maxIndexCacheBytes, 128 * 1024 * 1024);
+  assert.equal(DEFAULT_GIT_READ_LIMITS.maxDeltaChainBytes, 64 * 1024 * 1024);
+  assert.throws(() => new GitReadBudget({ maxRetainedBytes: 256 * 1024 * 1024 }), RangeError);
+  assert.throws(() => new GitReadBudget({ maxPackObjects: 0 }), RangeError);
+  assert.throws(() => GitRepository.open('/', { budget: {} as never }), TypeError);
+});
+
+test('repositories sharing one budget are refused past it, and close() gives their share back', t => {
+  const dir = scratch(t);
+  const a = packedRepo(join(dir, 'a'), 50, 'a');
+  const b = packedRepo(join(dir, 'b'), 50, 'b');
+  // Room for one repository's index while it is read and parsed, not for two parsed indexes at once.
+  const budget = new GitReadBudget({ maxRetainedBytes: a.idxBytes + a.parsedBytes + 100 });
+  const ra = GitRepository.open(a.root, { budget });
+  const rb = GitRepository.open(b.root, { budget });
+  assert.equal(ra.readObject(a.oid, 64)!.data.toString(), 'a-0\n');
+  assert.equal(budget.usedBytes, a.parsedBytes, 'the read buffer is released; the parsed index is held');
+  assert.equal(budget.usedObjects, 50);
+  assert.throws(() => rb.readObject(b.oid, 64), code('unsupported'), 'the second repository does not fit');
+  assert.equal(budget.usedBytes, a.parsedBytes, 'the refused load holds nothing');
+  ra.close();
+  assert.equal(budget.usedBytes, 0);
+  assert.equal(rb.readObject(b.oid, 64)!.data.toString(), 'b-0\n', 'after a release the other fits');
+  assert.throws(() => ra.readObject(a.oid, 64), code('unsupported'), 'a read after close() reserves again, and does not fit now');
+  rb.close();
+  assert.equal(ra.readObject(a.oid, 64)!.data.toString(), 'a-0\n', 'and reloads once there is room');
+  ra.close();
+  assert.deepEqual([budget.usedBytes, budget.usedObjects], [0, 0]);
+});
+
+test('an index is admitted before anything is allocated for it: the file, then its parsed tables', t => {
+  const dir = scratch(t);
+  const r = packedRepo(join(dir, 'r'), 40, 'r');
+  const tooSmallForFile = new GitReadBudget({ maxRetainedBytes: r.idxBytes - 1 });
+  assert.throws(() => GitRepository.open(r.root, { budget: tooSmallForFile }).readObject(r.oid, 64), code('unsupported'));
+  assert.equal(tooSmallForFile.usedBytes, 0);
+  const tooSmallForTables = new GitReadBudget({ maxRetainedBytes: r.idxBytes + r.parsedBytes - 1 });
+  assert.throws(() => GitRepository.open(r.root, { budget: tooSmallForTables }).readObject(r.oid, 64), code('unsupported'));
+  assert.equal(tooSmallForTables.usedBytes, 0);
+  const objects = new GitReadBudget({ maxPackObjects: 39 });
+  assert.throws(() => GitRepository.open(r.root, { budget: objects }).readObject(r.oid, 64), code('unsupported'));
+  assert.equal(objects.usedObjects, 0);
+  const exact = new GitReadBudget({ maxRetainedBytes: r.idxBytes + r.parsedBytes, maxPackObjects: 40 });
+  assert.equal(GitRepository.open(r.root, { budget: exact }).readObject(r.oid, 64)!.data.toString(), 'r-0\n');
+});
+
+test('a failed load is all or nothing: it releases what it reserved, and the next read retries from the start', t => {
+  const root = join(scratch(t), 'two');
+  const good = packedRepo(root, 10, 'good');
+  const gitDir = join(root, '.git');
+  const later = Buffer.from('later\n');
+  writePack(gitDir, [{ oid: blobOid(later), kind: 'blob', data: later }]);
+  const packDir = join(gitDir, 'objects', 'pack');
+  const second = readdirSync(packDir).find(f => f.endsWith('.idx') && f !== good.idxName)!;
+  const valid = readFileSync(join(packDir, second));
+  const broken = Buffer.from(valid); broken[broken.length - 1]! ^= 1;
+  writeFileSync(join(packDir, second), broken);
+  const budget = new GitReadBudget();
+  const repo = GitRepository.open(root, { budget });
+  assert.throws(() => repo.readObject(good.oid, 64), code('corrupt'), 'one bad index fails the load');
+  assert.throws(() => repo.readObject(good.oid, 64), code('corrupt'), 'and is retried, not served partially');
+  assert.deepEqual([budget.usedBytes, budget.usedObjects], [0, 0], 'nothing stays reserved');
+  writeFileSync(join(packDir, second), valid);
+  assert.equal(repo.readObject(good.oid, 64)!.data.toString(), 'good-0\n');
+  assert.equal(repo.readObject(blobOid(later), 64)!.data.toString(), 'later\n');
+  assert.equal(budget.usedObjects, 11);
+  repo.close();
+  assert.deepEqual([budget.usedBytes, budget.usedObjects], [0, 0]);
 });
