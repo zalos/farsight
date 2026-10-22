@@ -29,6 +29,7 @@ export const SENTINEL_CLI_STRINGS: Record<string, StringEntry> = {
 
   'sentinel.capability.draftContracts': same('draft contracts only', 'The record formats exist as drafts with schemas and validation; nothing analyses code yet.'),
   'sentinel.capability.draftStore': same('draft local store only', 'A library can open a local store, record runs and publish verified evidence objects. Nothing scans source with it yet.'),
+  'sentinel.capability.draftParser': same('draft parser reconciliation only', 'A library can parse a captured snapshot\'s TypeScript, JavaScript and Java source with the public parser, check every read it made against the captured files, and record which files it parsed. That is syntax evidence over captured source only: it scans nothing and no check relies on it.'),
   'sentinel.capability.notImplemented': same('not implemented yet', 'The capability is planned and has not been built, so no check relies on it.'),
   'sentinel.capability.noQualifiedEngine': same('no engine qualified', 'No evaluated engine followed a flow across files in the feasibility trials, so no deep analysis is promised.'),
 
