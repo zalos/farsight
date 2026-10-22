@@ -46,6 +46,12 @@ export interface ExecutionBinding {
   protocolFingerprint: Digest;
   /** The plan's own input fingerprint for the unit (wider than the inputs). */
   inputFingerprint: Digest;
+  /**
+   * With a check driver: the plan's exact source inputs (the attempt's `inputs` add the driver's job and auxiliary
+   * inputs), and the job and auxiliary inputs by digest and role.
+   */
+  sourceInputs?: ArtifactId[];
+  derived?: { job: ArtifactId; auxiliary: Array<{ id: ArtifactId; role: string }> };
 }
 
 export interface ExecutableUnit {

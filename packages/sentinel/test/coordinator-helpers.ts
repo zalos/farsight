@@ -82,7 +82,7 @@ export async function syntheticPlan(store: any, root: string, behaviours: Record
   const adapterOfUnit = (u: string) => `${prefix}-${behaviourOf(behaviours, u)}`;
   const adapterIds = [...new Set(UNITS.map(adapterOfUnit))].sort();
   const familyOf = (adapterId: string) => `sentinel.test.r${adapterIds.indexOf(adapterId)}`;
-  const { lock, pin, view } = lockedRules(adapterIds.map(a => ({ familyId: familyOf(a), adapterId: a })), []);
+  const { lock, pin, view, pack, files: packFiles } = lockedRules(adapterIds.map(a => ({ familyId: familyOf(a), adapterId: a })), []);
   const { policy } = policyView(view.rules.map((r: any) => r.familyId));
   // Each unit covers one required check over its own captured file, under the adapter of its behaviour.
   const scopeOf = (u: string) => `${SOURCE}:src/${u.toLowerCase()}.ts`;
@@ -124,7 +124,7 @@ export async function syntheticPlan(store: any, root: string, behaviours: Record
     requestedScope: { sourceIds: [SOURCE], profile: profile.id }, budgets: { maxTokens: null, maxCost: null, deadlineMs: options.deadlineMs ?? 600_000 },
     createdAt: '2026-10-22T00:00:00Z', state: 'planned',
   };
-  return { runId, run: run as any, registry, plan, units: [...UNITS], ids };
+  return { runId, run: run as any, registry, plan, units: [...UNITS], ids, pack, packFiles };
 }
 
 /** Every plan unit's publication and how many publications each work revision got, read from the ledger. */

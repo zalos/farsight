@@ -16,6 +16,8 @@ import { RESTORE_PREFIX } from './plan.js';
 import type { RecoveryReport } from './recovery.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** A check driver's prepared files for one attempt: `prep.<attempt id>.<uuid>`, kept and removed like its work folder. */
+export const PREP_PREFIX = 'prep.';
 
 /** Remove a tree this coordinator owns, reopening the read-only folders a restore or an attempt seals. */
 export function removeOwned(path: string): void {
@@ -59,7 +61,8 @@ export function reconcileScratch(scratchRoot: string, store: SentinelStore, reco
       continue;
     }
     const cut = name.length - 37;
-    const attemptId = cut > 0 && name[cut] === '-' && UUID.test(name.slice(cut + 1)) ? name.slice(0, cut) : null;
+    const prep = name.startsWith(PREP_PREFIX);
+    const attemptId = cut > 0 && name[cut] === (prep ? '.' : '-') && UUID.test(name.slice(cut + 1)) ? name.slice(prep ? PREP_PREFIX.length : 0, cut) : null;
     const attempt = attemptId ? store.ledger.getAttempt(attemptId) : null;
     // An attempt never recorded (its owner died before recording it) is ours only through its worker record, settled
     // by this recovery. A container whose removal is unconfirmed or an unreadable record could belong to any attempt.

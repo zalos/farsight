@@ -13,10 +13,14 @@
 // and inventory units run as the coordinator's own operations (bootstrap.ts); an analysis revision's check units
 // run as workers, and what each covered is recorded as canonical coverage records (coverage.ts) that PR 06's
 // evaluateRequiredCoverage alone turns into the run's outcome.
-import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileDigest, isCheckDriverRegistry, type CheckDriver, type CheckDriverRegistry, type DriverContext, type RuleFiles } from './check-drivers.js';
+import { resolveLockedRules } from '../rules/resolve.js';
+import type { ValidatedPack } from '../rules/pack.js';
 import { restoreSnapshot } from '../snapshot/materialize.js';
-import { reconcileScratch, removeOwned, type ScratchReconciliation } from './scratch.js';
+import { PREP_PREFIX, reconcileScratch, removeOwned, type ScratchReconciliation } from './scratch.js';
 import type { ArtifactId, CatalogKey, Id, WorkRef } from '../contracts/common.js';
 import type { CoverageEnvelope } from '../contracts/coverage.js';
 import type { RunEnvelope, RunOutcome, RunState } from '../contracts/run.js';
@@ -35,8 +39,8 @@ import {
   type Capacity, type CommittedUnit, type RetryPolicy, type UnitDecision,
 } from './scheduler.js';
 import { createExecutionService, type ExecutionService } from './service.js';
-import { releaseWorkDir, type InvocationRecord, type WorkerOutcome } from './supervisor.js';
-import { bindingId, bindingMismatch, checkRecordedRun, checkRecordedWork, executablePlan, EXECUTION_BINDING_SCHEMA, type ValidatedPlan } from './plan.js';
+import { inputFingerprintOf, releaseWorkDir, type InvocationRecord, type WorkerOutcome } from './supervisor.js';
+import { bindingId, bindingMismatch, checkRecordedRun, checkRecordedWork, executablePlan, EXECUTION_BINDING_SCHEMA, type ExecutionBinding, type ValidatedPlan } from './plan.js';
 import { loadPlan } from './plans.js';
 import { publishPrepared, runOperation } from './bootstrap.js';
 import { COVERAGE_SCHEMA, coverageRecords, scopeIndex, type ScopeIndex } from './coverage.js';
@@ -72,6 +76,10 @@ export interface CoordinatorOptions {
    * before it returns blocked. Nothing new is admitted meanwhile. 0–600000 ms, default 30000.
    */
   cleanupWaitMs?: number;
+  /** Trusted check drivers (createCheckDriverRegistry), bound to adapters by id and implementation digest. */
+  drivers?: CheckDriverRegistry;
+  /** The promoted packs the plan's lock pins, with their files' bytes, for drivers (each verified when used). */
+  packs?: ReadonlyArray<{ pack: ValidatedPack; files: ReadonlyMap<string, Uint8Array> }>;
   /** Package-internal test seam for the container runtime (see ContainerBackend.connect). */
   backendOptions?: { wrapRunner?: (runner: DockerRunner) => DockerRunner };
 }
@@ -148,12 +156,17 @@ export class Coordinator {
   /** Coverage records read back from publications, by work. */
   readonly #coverage = new Map<string, CoverageEnvelope[]>();
   readonly #scratchRoot: string;
+  readonly #drivers: CheckDriverRegistry | undefined;
+  readonly #packs: CoordinatorOptions['packs'];
   /** The plan's scope extents, indexed once. */
   readonly #scopes: ScopeIndex;
 
   private constructor(o: CoordinatorOptions, plan: ValidatedPlan, service: ExecutionService, intents: IntentFiles, workers: WorkerFiles, recovery: RecoveryReport) {
     this.#store = o.store; this.#plan = plan; this.#service = service; this.#intents = intents; this.#workers = workers;
     this.#scratchRoot = o.scratchRoot;
+    if (o.drivers !== undefined && !isCheckDriverRegistry(o.drivers)) throw new ExecutionError('sentinel.execution.adapterInvalid', { reason: 'drivers come only from createCheckDriverRegistry' });
+    this.#drivers = o.drivers;
+    this.#packs = o.packs ? o.packs.map(p => ({ pack: p.pack, files: new Map([...p.files].map(([k, v]) => [k, Uint8Array.from(v)])) })) : undefined;
     this.#scopes = scopeIndex(plan.admitted.plan);
     this.#unknown = new UnknownCleanup(o.store.storePath);
     const wait = o.cleanupWaitMs ?? 30_000;
@@ -412,15 +425,21 @@ export class Coordinator {
   }
 
   /** Stage canonical records unbound under this epoch and store their bytes; the first links the rest. */
-  async #stageRecords(tag: string, values: Array<{ value: unknown; schema: string }>): Promise<{ stageId: string; receipts: Awaited<ReturnType<SentinelStore['objects']['putCanonicalJson']>>[] }> {
-    const ids = values.map(v => this.#store.objects.identifyCanonicalJson(v.value));
+  async #stageRecords(tag: string, values: Array<{ value: unknown; schema: string } | { bytes: Uint8Array; schema: string }>): Promise<{ stageId: string; receipts: Awaited<ReturnType<SentinelStore['objects']['putCanonicalJson']>>[] }> {
+    const ids = values.map(v => ('bytes' in v
+      ? { id: `sha256:${createHash('sha256').update(v.bytes).digest('hex')}` as ArtifactId, rawSize: v.bytes.byteLength }
+      : this.#store.objects.identifyCanonicalJson(v.value)));
     const stageId = `${tag}.${createHash('sha256').update(`${this.#store.epoch}\u0000${tag}\u0000${Date.now()}\u0000${Math.random()}`).digest('hex').slice(0, 16)}`.slice(0, 128);
     const unique = ids.map((id, i) => ({ id, i })).filter((x, j, all) => all.findIndex(y => y.id.id === x.id.id) === j);
     this.#store.ledger.registerStaging(stageId, unique.map(({ id, i }) => ({ id: id.id, schema: values[i]!.schema.slice(0, 128), privacy: 'metadata' as const,
       ...(i === 0 ? { links: unique.filter(u => u.i !== 0).map(u => u.id.id) } : {}) })));
     try {
       const receipts = [];
-      for (const { id, i } of unique) receipts.push(await this.#store.objects.putCanonicalJson(values[i]!.value, { expect: id }));
+      for (const { id, i } of unique) {
+        const v = values[i]!;
+        receipts.push('bytes' in v ? await this.#store.objects.put(Buffer.from(v.bytes), { expect: { id: id.id as ArtifactId, rawSize: id.rawSize } })
+          : await this.#store.objects.putCanonicalJson(v.value, { expect: id as never }));
+      }
       return { stageId, receipts };
     } catch (error) { this.#abortStage(stageId); throw error; }
   }
@@ -434,6 +453,7 @@ export class Coordinator {
     const ref: WorkRef = { id: work.id, revision: work.revision };
     let attemptId: Id | null = null;
     let outcome: WorkerOutcome | undefined;
+    let prepDir: string | null = null;
     try {
       const row = this.#store.ledger.getWork(ref);
       if (!row) await this.#create(work, 'ready');
@@ -442,13 +462,18 @@ export class Coordinator {
       const id = attemptIdFor(ref, ordinal);
       const executable = this.#plan.unitOf(ref);
       if (executable.adapter!.kind === 'operation') { attemptId = await this.#operation(work, ordinal, id); return; }
-      const binding = this.#plan.bindingOf(ref);
+      // A trusted check driver prepares the exact job and auxiliary inputs; the source inputs stay the plan's own.
+      const driver = this.#drivers?.driverFor(executable.adapter!.id);
+      const prepared = driver ? await this.#prepare(driver, executable, id) : null;
+      prepDir = prepared?.dir ?? null;
+      const binding = prepared ? prepared.binding : this.#plan.bindingOf(ref);
+      const inputs = prepared ? prepared.inputs : executable.inputs;
       // The attempt's deadline is the work's, cut to what is left of the run's budget.
       const left = Math.max(1, Math.floor(this.#runDeadline - Date.now()));
       const resources = { ...structuredClone(work.resources), deadlineMs: Math.min(work.resources.deadlineMs, left) };
       let invocation: { digest: string; record: InvocationRecord } | undefined;
       outcome = await this.#service.run({
-        adapterId: executable.adapter!.id, attemptId: id, work: ref, inputs: executable.inputs,
+        adapterId: executable.adapter!.id, attemptId: id, work: ref, inputs,
         assignment: { checks: executable.checks.map(c => c.id), scopes: [...executable.unit.scopes], inputScopes: executable.inputScopes.map(x => ({ input: x.input, scopes: [...x.scopes] })) },
         signal: AbortSignal.any([this.#cancel.signal, this.#deadline.signal]), intents: this.#intents, workers: this.#workers, resources,
         ...(this.#hooks ? { hooks: { at: (b: 'before-spawn' | 'after-spawn') => this.#hooks!.at?.(b, { work: ref, attemptId: id }) } } : {}),
@@ -456,7 +481,8 @@ export class Coordinator {
           invocation = inv;
           // The attempt names its exact invocation record, accepted with its start together with the execution
           // binding it links: a failed, canceled or interrupted attempt keeps both.
-          const records = await this.#stageRecords(`invocation.${id}`, [{ value: inv.record, schema: 'sentinel-invocation/draft-1' }, { value: binding, schema: EXECUTION_BINDING_SCHEMA }]);
+          const records = await this.#stageRecords(`invocation.${id}`, [{ value: inv.record, schema: 'sentinel-invocation/draft-1' }, { value: binding, schema: EXECUTION_BINDING_SCHEMA },
+            ...(prepared?.records ?? [])]);
           if (this.#store.objects.identifyCanonicalJson(inv.record).id !== inv.digest || records.receipts.every(r => r.id !== bindingId(binding))) {
             this.#abortStage(records.stageId);
             throw new ExecutionError('sentinel.execution.resultMismatch', { reason: 'the invocation record is not the one the attempt names' });
@@ -478,10 +504,14 @@ export class Coordinator {
         try {
           // One canonical coverage record per check the plan assigned this unit, at no finer granularity than the
           // trusted adapter establishes; published with the result.
+          // A driver normalizes the verified result (before the work folder is released) into the coverage view
+          // and records published with it; without one, the result's own coverage claims are read.
+          const normalized = driver ? await driver.normalize(prepared!.context, { result: outcome.result!, outputs: outcome.outputs, workDir: outcome.workDir }) : null;
+          const view = normalized ? { ...outcome.result!, ...normalized.coverage } : outcome.result!;
           const coverage = coverageRecords({ runId: this.#plan.run.id, attemptId, work: ref, checks: executable.checks, scopes: this.#scopes,
-            adapterGranularity: executable.adapter!.coverage, result: outcome.result!, recordedAt: now() });
+            adapterGranularity: executable.adapter!.coverage, result: view, recordedAt: now() });
           await publishOutcome({ store: this.#store, work: ref, attemptId, result: outcome.result!, outputs: outcome.outputs, endedAt: now(),
-            records: coverage.records, ...(this.#hooks ? { hooks: { at: (b, c) => this.#hooks!.at?.(b, c) } } : {}),
+            records: [...coverage.records, ...(normalized?.records ?? [])], ...(this.#hooks ? { hooks: { at: (b, c) => this.#hooks!.at?.(b, c) } } : {}),
             // A run whose deadline passed while the result's objects were stored accepts nothing more.
             beforeAccept: () => {
               if (this.#deadlinePassed || Date.now() >= this.#runDeadline) throw new ExecutionError('sentinel.execution.runDeadline', { reason: 'the run deadline passed before acceptance' });
@@ -503,7 +533,68 @@ export class Coordinator {
       else this.#unstarted(ref, codeOf(error), detailOf(error));
     } finally {
       if (outcome) { try { releaseWorkDir(outcome.workDir); } catch { /* left for an explicit cleanup */ } }
+      if (prepDir) { try { removeOwned(prepDir); } catch { /* left for an explicit cleanup */ } }
     }
+  }
+
+  /**
+   * Run a driver's prepare for one attempt: the job as canonical JSON and its auxiliary files become extra inputs,
+   * each hashed here, and the execution binding records the plan's exact source inputs apart from them.
+   */
+  async #prepare(driver: CheckDriver, executable: ReturnType<ValidatedPlan['unitOf']>, attemptId: Id) {
+    const dir = join(this.#scratchRoot, `${PREP_PREFIX}${attemptId}.${randomUUID()}`);
+    mkdirSync(dir, { mode: 0o700 });
+    try { return await this.#prepareIn(dir, driver, executable); } catch (error) { removeOwned(dir); throw error; }
+  }
+
+  async #prepareIn(dir: string, driver: CheckDriver, executable: ReturnType<ValidatedPlan['unitOf']>) {
+    const context: DriverContext = {
+      plan: this.#plan.admitted.plan, unit: executable.unit, checks: executable.checks, profile: this.#plan.admitted.profile,
+      inputs: executable.inputs, inputScopes: executable.inputScopes, rules: this.#rulesOf(executable.checks),
+      restored: this.#plan.restored, workDir: dir,
+    };
+    const job = await driver.prepare(context);
+    const jobBytes = canonicalJsonBytes(job.job);
+    const jobPath = join(dir, 'sentinel-job.json');
+    writeFileSync(jobPath, jobBytes, { mode: 0o600 });
+    const jobId = this.#store.objects.identifyCanonicalJson(job.job).id as ArtifactId;
+    const auxiliary = job.auxiliary.map(a => {
+      const s = lstatSync(a.path);
+      if (!s.isFile() || s.isSymbolicLink()) throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'a prepared input is not a regular file' });
+      return { id: fileDigest(a.path) as ArtifactId, path: a.path, role: String(a.role).slice(0, 64) };
+    });
+    const base = this.#plan.bindingOf(executable.work);
+    const extra = [{ id: jobId, path: jobPath }, ...auxiliary.map(a => ({ id: a.id, path: a.path }))];
+    const inputs = [...executable.inputs, ...extra].filter((x, i, all) => all.findIndex(y => y.id === x.id) === i);
+    const ids = inputs.map(i => i.id).sort();
+    const binding: ExecutionBinding = { ...base, inputs: ids, protocolFingerprint: inputFingerprintOf(ids), sourceInputs: [...base.inputs],
+      derived: { job: jobId, auxiliary: auxiliary.map(a => ({ id: a.id, role: a.role })) } };
+    const records = [{ value: job.job, schema: 'sentinel-check-job/draft-1' },
+      ...auxiliary.map(a => ({ bytes: readFileSync(a.path), schema: `sentinel-check-input/${a.role}`.slice(0, 128) }))];
+    return { dir, context, binding, inputs, records };
+  }
+
+  /** The resolved rules (with verified pack file bytes) of exactly these checks, under the plan's pinned lock. */
+  #rulesOf(checks: readonly { familyId: string }[]): RuleFiles[] {
+    const lock = this.#plan.admitted.ruleLock;
+    const pin = this.#plan.admitted.plan.pins.ruleLockDigest;
+    if (!lock || !pin || !this.#packs?.length) return [];
+    const families = [...new Set(checks.map(c => c.familyId))];
+    const resolved = resolveLockedRules(lock, pin, this.#packs.map(p => p.pack), families);
+    return resolved.map(rule => {
+      const pack = this.#packs!.find(p => p.pack.packDigest === rule.packDigest)!;
+      const d = rule.definition;
+      const named = [d.implementation.rulePath, ...d.fixtures.positive, ...d.fixtures.negative];
+      const files = named.map(path => {
+        const listed = pack.pack.files.find(f => f.path === path);
+        const bytes = pack.files.get(path);
+        if (!listed || !bytes || `sha256:${createHash('sha256').update(bytes).digest('hex')}` !== listed.digest) {
+          throw new ExecutionError('sentinel.execution.inputMismatch', { reason: `pack file ${path} is not the bytes the lock pins` });
+        }
+        return { path, digest: listed.digest, bytes };
+      });
+      return { rule, files };
+    });
   }
 
   #end(ref: WorkRef, attemptId: Id, state: 'failed' | 'canceled', code: string, detail?: Readonly<Record<string, unknown>>): void {
