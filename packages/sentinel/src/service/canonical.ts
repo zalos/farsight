@@ -140,7 +140,41 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   const key = { inventory: snapshot.inventoryDigest, lock: current.digest, policy: options.policy.revision, profile: profile.digest, parent: options.parentId ?? null };
   const runId = options.parentId ? rerunIdOf(store, key, true) : `run-${digest(key).slice(7, 39)}`;
   const latest = store.ledger.latestPlan(runId);
-  if (latest?.kind === 'analysis') return { outcome: 'kept', disclosure: disclose((await loadPlan(store, runId, latest.revision)).plan) };
+  const analysisFor = (boot: PlanRevision, evidence: BootstrapEvidence) => {
+    const inventory = boot.units.find(u => u.stage === 'inventory')!;
+    return planAnalysis({
+      runId, revision: 2, previous: boot, bootstrap: [{ id: inventory.id, revision: inventory.revision }], profile: profile.planner,
+      snapshot: plannerSnapshotFrom(evidence.snapshot), analyses: evidence.analyses.map(a => plannerAnalysisFrom(a as never)),
+      lock: plannerLockFrom(current.lock, packs, current.digest), policy: plannerPolicyFrom(options.policy),
+      limits: options.policy.rules.includes(PREVIEW_RULE) ? ANALYSIS_LIMITS : { maxScopesPerWork: 32 },
+    });
+  };
+  if (latest?.kind === 'analysis') {
+    const active = store.ledger.getRun(runId);
+    // Only the immediate, exact bootstrap continuation can repair admit-before-advance. A later admission alone
+    // never becomes current: an already active analysis keeps its recorded revision, including an unexecuted future.
+    if (active?.planRevision === 1 && !['completed', 'canceled', 'canceling'].includes(active.state)) {
+      let expected: PlanRevision;
+      try {
+        const first = await loadPlan(store, runId, 1), next = await loadPlan(store, runId, latest.revision);
+        if (first.plan.kind !== 'bootstrap' || next.plan.revision !== 2 || next.plan.previous !== first.plan.digest || next.selection
+          || !canonicalJsonBytes(first.profile).equals(canonicalJsonBytes(profile.record))
+          || !canonicalJsonBytes(next.profile).equals(canonicalJsonBytes(profile.record))) throw new Error('not the immediate current-terms bootstrap successor');
+        const evidence = await retainedBootstrapForReport(store, runId, next);
+        expected = analysisFor(first.plan, evidence);
+        if (expected.digest !== next.plan.digest || evidence.snapshot.id !== snapshot.id) throw new Error('not the canonical successor from accepted evidence');
+        assertSupportedRules(expected);
+        if (!options.profile) checkPlanDatabases(expected, current.lock);
+      } catch {
+        throw new ServiceError('sentinel.service.planChanged', { runId });
+      }
+      store.assertHeld();
+      store.ledger.advanceRunPlan(runId, expected.revision);
+      return { outcome: 'kept', disclosure: disclose(expected) };
+    }
+    const revision = active?.planRevision ?? latest.revision;
+    return { outcome: 'kept', disclosure: disclose((await loadPlan(store, runId, revision)).plan) };
+  }
 
   const boot = latest ? (await loadPlan(store, runId, 1)).plan : planBootstrap({ runId, sourceIds: [WORKSPACE_SOURCE], profile: profile.planner });
   if (!latest) await admitPlan(store, { plan: boot, ruleLock: null, policy: null, profile: profile.record });
@@ -159,11 +193,7 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
 
   const inventory = boot.units.find(u => u.stage === 'inventory')!;
   const evidence = await loadBootstrap(store, runId, { id: inventory.id, revision: inventory.revision });
-  const analysis = planAnalysis({
-    runId, revision: 2, previous: boot, bootstrap: [{ id: inventory.id, revision: inventory.revision }], profile: profile.planner,
-    snapshot: plannerSnapshotFrom(evidence.snapshot), analyses: evidence.analyses.map(a => plannerAnalysisFrom(a as never)),
-    lock: plannerLockFrom(current.lock, packs, current.digest), policy: plannerPolicyFrom(options.policy), limits: options.policy.rules.includes(PREVIEW_RULE) ? ANALYSIS_LIMITS : { maxScopesPerWork: 32 },
-  });
+  const analysis = analysisFor(boot, evidence);
   // Before admission: a shipped check adapter runs only the exact rules it implements.
   assertSupportedRules(analysis);
   if (!options.profile) checkPlanDatabases(analysis, current.lock);
