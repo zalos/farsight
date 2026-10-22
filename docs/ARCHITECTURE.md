@@ -737,6 +737,13 @@ in the production registry, the planner's batching, the scan command (PR 09), an
       captured tsconfig nearest the controller must set `experimentalDecorators` and `emitDecoratorMetadata` to true
       itself (cited as evidence); off is `decoratorMetadataOff`, inherited, missing or SWC-built is
       `decoratorMetadataUnknown`.
+    - **Owning projects, constraints and interceptors (second review, 2026-10-22).** Versions are those of the project
+      that owns each analysed file (the nearest manifest declaring Nest; its nearest lockfile, nested installs before
+      hoisted ones; else an exact pin); the envelope's one version is set only when every owning project resolves to the
+      supported release. `Allow` is not a constraint; custom (`Validate`, `ValidateBy`, `ValidatePromise`) and nested
+      (`ValidateNested`) constraints hold logic the pack does not read, so they leave validation unknown. An interceptor
+      the pack does not model runs before the pipes and can answer without the handler, so it blocks `applies`; it, or a
+      guard, also blocks `does-not-apply`, since unmodelled code may check the input itself.
     - **Digests.** `packDigest` covers the support manifest, `environmentDigest` the resolved versions and
       `registrationDigest` every cited registration span; a change to any invalidates the facts.
 

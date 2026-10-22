@@ -430,3 +430,70 @@ test('SOL: stacked decorators register bottom to top, each decorator’s argumen
   assert.deepEqual(chain, ['guard:ThrottleGuard', 'guard:AuditGuard', 'pipe:TrimPipe', 'pipe:ValidationPipe', 'pipe:DefaultValuePipe']);
   assert.equal(validation(r.analysis).reasonCode, 'sentinel.nest.pipeEffectUnresolved', 'the unmodeled pipe runs first');
 });
+
+test('SOL: a DTO whose rules are not constraints, or live in code the pack does not read, is not validated', needsStore, async t => {
+  const global = { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());') };
+  const allowOnly = await run(t, { ...global, 'create-order.dto.ts': "import { Allow } from 'class-validator';\n\nexport class CreateOrderDto {\n  @Allow()\n  sku!: string;\n}\n" });
+  assert.equal(validation(allowOnly.analysis).reasonCode, 'sentinel.nest.dtoWithoutRules', 'Allow only exempts a property from whitelisting');
+  const allowAndRule = await run(t, { ...global, 'create-order.dto.ts': "import { Allow, IsString } from 'class-validator';\n\nexport class CreateOrderDto {\n  @Allow()\n  note!: string;\n\n  @IsString()\n  sku!: string;\n}\n" });
+  assert.equal(validation(allowAndRule.analysis).verdict, 'applies', 'the near neighbour: a real constraint beside it');
+  const custom = await run(t, { ...global, 'create-order.dto.ts': "import { Validate } from 'class-validator';\nimport { SkuRule } from './sku.rule';\n\nexport class CreateOrderDto {\n  @Validate(SkuRule)\n  sku!: string;\n}\n", 'sku.rule.ts': 'export class SkuRule {\n  validate(): boolean {\n    return true;\n  }\n}\n' });
+  assert.equal(validation(custom.analysis).verdict, 'unknown');
+  assert.equal(validation(custom.analysis).reasonCode, 'sentinel.nest.dtoConditional');
+  const nested = await run(t, { ...global, 'create-order.dto.ts': "import { IsString, ValidateNested } from 'class-validator';\n\nexport class CreateOrderDto {\n  @IsString()\n  sku!: string;\n\n  @ValidateNested()\n  address!: object;\n}\n" });
+  assert.equal(validation(nested.analysis).reasonCode, 'sentinel.nest.dtoConditional');
+});
+
+test('SOL: an interceptor the pack does not model can answer before the pipes, so validation is not established', needsStore, async t => {
+  const ctl = ctlText().replace('ParseIntPipe, Post,', 'ParseIntPipe, Post, UseInterceptors,');
+  const echo = `import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
+import { of } from 'rxjs';
+
+@Injectable()
+export class EchoInterceptor implements NestInterceptor {
+  intercept(context: ExecutionContext, _next: CallHandler) {
+    return of(context.switchToHttp().getRequest().body);
+  }
+}
+`;
+  const shortCircuit = await run(t, {
+    'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());'), 'echo.interceptor.ts': echo,
+    'orders.controller.ts': ctl.replace("import { CreateOrderDto } from './create-order.dto';", "import { CreateOrderDto } from './create-order.dto';\nimport { EchoInterceptor } from './echo.interceptor';")
+      .replace('  @Post()\n', '  @Post()\n  @UseInterceptors(EchoInterceptor)\n'),
+  });
+  assert.equal(validation(shortCircuit.analysis).verdict, 'unknown');
+  assert.equal(validation(shortCircuit.analysis).reasonCode, 'sentinel.nest.interceptorEffectUnresolved');
+  const serializer = await run(t, {
+    'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());'),
+    'orders.controller.ts': ctl.replace('ParseIntPipe, Post, UseInterceptors,', 'ClassSerializerInterceptor, ParseIntPipe, Post, UseInterceptors,')
+      .replace('  @Post()\n', '  @Post()\n  @UseInterceptors(ClassSerializerInterceptor)\n'),
+  });
+  assert.equal(validation(serializer.analysis).verdict, 'applies', 'the near neighbour: a framework interceptor that calls the handler');
+  // Without a validator, unmodeled code that may check the input leaves "no validation" unproven too.
+  const noPipe = await run(t, { 'echo.interceptor.ts': echo, 'orders.controller.ts': ctl.replace("import { CreateOrderDto } from './create-order.dto';", "import { CreateOrderDto } from './create-order.dto';\nimport { EchoInterceptor } from './echo.interceptor';").replace('  @Post()\n', '  @Post()\n  @UseInterceptors(EchoInterceptor)\n') });
+  assert.equal(validation(noPipe.analysis).reasonCode, 'sentinel.nest.interceptorEffectUnresolved');
+});
+
+test('SOL: versions are those of the project that owns the files, not the repository root', needsStore, async t => {
+  const app = tree(APP);
+  const under = (prefix: string, extra: Record<string, string> = {}) => {
+    const out: Record<string, string | null> = Object.fromEntries(Object.keys(app).map(k => [k, null]));
+    for (const [k, v] of Object.entries(app)) out[`${prefix}/${k}`] = v;
+    for (const [k, v] of Object.entries(extra)) out[k] = v;
+    return out;
+  };
+  const root = app['package.json']!;
+  const nine = root.replaceAll('"10.4.15"', '"9.4.3"');
+  const nested = await run(t, under('apps/api', { 'package.json': root, 'apps/api/package.json': nine }));
+  assert.equal(nested.analysis.controls.framework.version, null, 'the controllers belong to the Nest 9 project');
+  assert.ok(nested.analysis.controls.frontiers.some(f => f.scopeId === 'app:apps/api/package.json' && f.reasonCode === 'sentinel.nest.versionUnsupported'));
+  assert.ok(nested.analysis.controls.facts.every(f => f.verdict === 'unknown'));
+  const hoisted = await run(t, under('apps/api', { 'package.json': root, 'apps/api/package.json': '{ "name": "api", "private": true }\n' }));
+  assert.equal(hoisted.analysis.controls.framework.version, '10.4.15', 'the near neighbour: a nested manifest without Nest belongs to the root project');
+  const lockfile = JSON.stringify({ lockfileVersion: 3, packages: {
+    'node_modules/@nestjs/common': { version: '10.4.15' }, 'node_modules/@nestjs/core': { version: '10.4.15' }, 'node_modules/class-validator': { version: '0.14.1' },
+    'apps/api/node_modules/@nestjs/common': { version: '9.4.3' },
+  } });
+  const nestedInstall = await run(t, under('apps/api', { 'package.json': root, 'apps/api/package.json': root.replaceAll('"10.4.15"', '"^9.0.0"'), 'package-lock.json': lockfile }));
+  assert.equal(nestedInstall.analysis.controls.framework.version, null, 'its own install of @nestjs/common shadows the hoisted one');
+});

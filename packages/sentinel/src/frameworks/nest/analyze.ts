@@ -256,6 +256,10 @@ function decoratorsNamed(file: ParsedFile, node: AstNode): { name: string | null
 
 /** class-validator decorators that make a property's other rules conditional. */
 const CONDITIONAL_RULES = new Set(['ValidateIf', 'IsOptional']);
+/** class-validator decorators that are not constraints: Allow only exempts a property from whitelisting. */
+const NOT_RULES = new Set(['Allow']);
+/** class-validator decorators whose effect lives in code the pack does not read: custom constraints and nested classes. */
+const OPAQUE_RULES = new Set(['Validate', 'ValidateBy', 'ValidateNested', 'ValidatePromise']);
 
 /**
  * The class-validator rules a DTO class declares on its properties, and whether any of them is conditional: a
@@ -271,9 +275,9 @@ function dtoRules(file: ParsedFile, cls: AstNode): { rules: number; conditional:
       const ref = refName(callee);
       if (!ref) continue;
       const r = resolveAt(file, ref, d.start);
-      if (r.module !== 'class-validator') continue;
+      if (r.module !== 'class-validator' || NOT_RULES.has(r.name)) continue;
+      if (CONDITIONAL_RULES.has(r.name) || OPAQUE_RULES.has(r.name)) { conditional = true; continue; }
       rules++;
-      if (CONDITIONAL_RULES.has(r.name)) conditional = true;
       for (const a of args) {
         if (a.type !== 'ObjectExpression') continue;
         for (const p of a.properties ?? []) {
@@ -369,27 +373,77 @@ function evidenceForText(ctx: Ctx, path: string, text: string, start: number, en
   };
 }
 
-/** Versions of the Nest packages and class-validator, from the captured lockfile first, else exact manifest pins. */
-async function versions(ctx: Ctx): Promise<NestScopeReport['framework']> {
+type Resolved = { version: string; provenance: string } | null;
+type Versions = NestScopeReport['framework'] & { classValidatorFor(path: string): string | null };
+
+/**
+ * Versions, per owning project: a file belongs to the nearest package.json above it that declares @nestjs/common or
+ * @nestjs/core. In that project, a version comes from the nearest package-lock.json at or above it (its own nested
+ * install, then each hoisted one up to the lockfile, as Node resolves), else an exact pin in its manifest. The
+ * envelope has one framework version: only when every project the analysed files belong to resolves to the supported
+ * release; otherwise it is null and every fact is unknown, with a frontier at each project that differs.
+ */
+async function versions(ctx: Ctx, files: readonly string[]): Promise<Versions> {
+  const cache = new Map<string, any>();
   const read = async (path: string) => {
+    if (cache.has(path)) return cache.get(path);
     const id = ctx.content.get(path);
-    if (!id) return null;
-    try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await ctx.input.readArtifact(id))); } catch { return null; }
+    let v: any = null;
+    if (id) { try { v = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await ctx.input.readArtifact(id))); } catch { v = null; } }
+    cache.set(path, v);
+    return v;
   };
-  const lock = await read('package-lock.json');
-  const pkg = await read('package.json');
-  const pick = (name: string): { version: string; provenance: string } | null => {
-    const locked = lock?.packages?.[`node_modules/${name}`]?.version;
-    if (typeof locked === 'string' && EXACT.test(locked)) return { version: locked, provenance: 'package-lock.json' };
-    const declared = pkg?.dependencies?.[name];
-    if (typeof declared === 'string' && EXACT.test(declared)) return { version: declared, provenance: 'package.json (exact pin)' };
-    return null;
+  const at = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
+  const parent = (dir: string) => (dir.includes('/') ? dir.slice(0, dir.lastIndexOf('/')) : '');
+  const declares = (pkg: any) => ['dependencies', 'devDependencies'].some(f => pkg?.[f]?.['@nestjs/common'] !== undefined || pkg?.[f]?.['@nestjs/core'] !== undefined);
+  const projectOf = async (path: string): Promise<string | null> => {
+    for (let dir = parent(path); ; dir = parent(dir)) {
+      if (declares(await read(at(dir, 'package.json')))) return dir;
+      if (dir === '') return null;
+    }
   };
-  const common = pick('@nestjs/common'), core = pick('@nestjs/core'), cv = pick('class-validator');
-  const ok = common && core && common.version === NEST_PACK.versions['@nestjs/common'] && core.version === NEST_PACK.versions['@nestjs/core'];
-  if (!common || !core) frontier(ctx, 'package.json', 'versionUnresolved');
-  else if (!ok) frontier(ctx, 'package.json', 'versionUnsupported');
-  return { version: ok ? common!.version : null, provenance: ok ? common!.provenance : null, classValidator: cv?.version ?? null };
+  const resolve = async (dir: string, name: string): Promise<Resolved> => {
+    for (let lockDir = dir; ; lockDir = parent(lockDir)) {
+      const lockPath = at(lockDir, 'package-lock.json');
+      if (ctx.content.has(lockPath)) {
+        const lock = await read(lockPath);
+        const rel = lockDir === '' ? dir : dir.slice(lockDir.length + 1);
+        for (let d = rel; ; d = parent(d)) {
+          const v = lock?.packages?.[at(d, `node_modules/${name}`)]?.version;
+          if (typeof v === 'string') return EXACT.test(v) ? { version: v, provenance: lockPath } : null;
+          if (d === '') break;
+        }
+        break;
+      }
+      if (lockDir === '') break;
+    }
+    const pkg = await read(at(dir, 'package.json'));
+    const declared = pkg?.dependencies?.[name] ?? pkg?.devDependencies?.[name];
+    return typeof declared === 'string' && EXACT.test(declared) ? { version: declared, provenance: `${at(dir, 'package.json')} (exact pin)` } : null;
+  };
+  const projects = new Map<string, { common: Resolved; core: Resolved; cv: Resolved }>();
+  const projectOfFile = new Map<string, string | null>();
+  let unowned = false;
+  for (const f of new Set(files)) {
+    const dir = await projectOf(f);
+    projectOfFile.set(f, dir);
+    if (dir === null) { unowned = true; continue; }
+    if (!projects.has(dir)) projects.set(dir, { common: await resolve(dir, '@nestjs/common'), core: await resolve(dir, '@nestjs/core'), cv: await resolve(dir, 'class-validator') });
+  }
+  let ok = !unowned && projects.size > 0;
+  if (unowned || projects.size === 0) frontier(ctx, 'package.json', 'versionUnresolved');
+  for (const [dir, p] of projects) {
+    if (!p.common || !p.core) { frontier(ctx, at(dir, 'package.json'), 'versionUnresolved'); ok = false; }
+    else if (p.common.version !== NEST_PACK.versions['@nestjs/common'] || p.core.version !== NEST_PACK.versions['@nestjs/core']) { frontier(ctx, at(dir, 'package.json'), 'versionUnsupported'); ok = false; }
+  }
+  const first = [...projects.values()][0];
+  const cvs = new Set([...projects.values()].map(p => p.cv?.version ?? null));
+  return {
+    version: ok ? first!.common!.version : null,
+    provenance: ok ? [...projects.values()].map(p => p.common!.provenance).sort().join(', ') : null,
+    classValidator: cvs.size === 1 ? [...cvs][0]! : null,
+    classValidatorFor: (path: string) => { const dir = projectOfFile.get(path); return dir == null ? null : projects.get(dir)?.cv?.version ?? null; },
+  };
 }
 
 export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysis> {
@@ -413,7 +467,6 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
   for (const e of input.snapshot.entries) {
     if (e.sourceId === input.sourceId && e.kind === 'file' && e.disposition !== 'included' && /\.tsx?$/.test(e.relativePath)) frontier(ctx, e.relativePath, 'fileNotCaptured');
   }
-  const framework = await versions(ctx);
 
   // 2. The bootstrap: exactly one NestFactory.create(Module) and the application's global registrations.
   const globals: NestBinding[] = [];
@@ -620,7 +673,9 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
   }
   for (const [key, c] of controllers) if (!resolved.includes(key)) frontier(ctx, c.file.path, 'controllerWithoutRoutes');
 
-  // 5. Facts.
+  // 5. Facts, under the versions of the projects that own the bootstrap, the controllers and their inputs.
+  const owned = [...(boot ? [boot.file.path] : []), ...surfaces.map(x => x.relativePath), ...surfaces.flatMap(x => x.inputs.flatMap(i => (i.dto ? [i.dto.relativePath] : [])))];
+  const framework = await versions(ctx, owned.length ? owned : ['package.json']);
   const versionKnown = framework.version !== null;
   const globalFrontiers = ctx.frontiers.filter(f => ([
     'versionUnresolved', 'versionUnsupported', 'bootstrapNotFound', 'bootstrapAmbiguous', 'rootModuleUnresolved', 'applicationUnresolved',
@@ -661,12 +716,14 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
       // Another pipe on the same input, or a registration the pack cannot see, could replace the value it validates.
       const reasons: string[] = [...blockers];
       if (validated.some(i => unknownPipes(i).length)) reasons.push(R('pipeEffectUnresolved'));
+      // An interceptor runs before the pipes and can answer without calling the handler (and so without them).
+      if (interceptorsUnknown.length) reasons.push(R('interceptorEffectUnresolved'));
       if (validated.some(i => validators(i).some(v => !v.optionsKnown))) reasons.push(R('validationOptionsUnknown'));
       if (validated.some(i => !i.dto)) reasons.push(R('dtoUnresolved'));
-      if (validated.some(i => i.dto && i.dto.rules === 0)) reasons.push(R('dtoWithoutRules'));
       if (validated.some(i => i.dto?.conditional)) reasons.push(R('dtoConditional'));
+      if (validated.some(i => i.dto && i.dto.rules === 0)) reasons.push(R('dtoWithoutRules'));
       if (validated.some(i => i.dto?.inherited)) reasons.push(R('dtoInherited'));
-      if (framework.classValidator !== NEST_PACK.versions['class-validator']) reasons.push(R('classValidatorUnsupported'));
+      if ([s.relativePath, ...validated.flatMap(i => (i.dto ? [i.dto.relativePath] : []))].some(f => framework.classValidatorFor(f) !== NEST_PACK.versions['class-validator'])) reasons.push(R('classValidatorUnsupported'));
       const metadata = await decoratorMetadata(ctx, s.relativePath, metadataCache);
       if (metadata.state === 'off') reasons.push(R('decoratorMetadataOff'));
       if (metadata.state === 'unknown') reasons.push(R('decoratorMetadataUnknown'));
@@ -677,6 +734,10 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
       add(s, 'input-validation', s.chain.indexOf(unknownPipes(validated.find(i => unknownPipes(i).length)!)[0]!), 'unknown', [], R('pipeEffectUnresolved'));
     } else if (blockers.length) {
       add(s, 'input-validation', 0, 'unknown', [], blockers[0]);
+    } else if (interceptorsUnknown.length || guards.length) {
+      // Code the pack does not model can inspect and refuse the input itself: no is not established.
+      const b = interceptorsUnknown[0] ?? guards[0]!;
+      add(s, 'input-validation', s.chain.indexOf(b), 'unknown', [], interceptorsUnknown.length ? R('interceptorEffectUnresolved') : R('guardEffectUnresolved'));
     } else {
       // Nothing in the chain validates these inputs; a multipart interceptor only parses them.
       const parsers = s.chain.filter(b => b.effect === 'parsing').map(b => b.evidence);
@@ -689,7 +750,7 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
   const controls: ControlFactsEnvelope = {
     schema: 'sentinel-controls/draft-1', snapshotId: input.snapshot.id, framework: { id: 'nest', version: framework.version },
     packDigest: canonicalDigest({ kind: 'sentinel-framework-pack/1', pack: NEST_PACK }),
-    environmentDigest: canonicalDigest({ kind: 'sentinel-nest-environment/1', framework }),
+    environmentDigest: canonicalDigest({ kind: 'sentinel-nest-environment/2', framework: { version: framework.version, provenance: framework.provenance, classValidator: framework.classValidator } }),
     registrationDigest: canonicalDigest({ kind: 'sentinel-nest-registrations/1', registrations }),
     capability: 'framework-order',
     facts: facts.sort((a, b) => (a.surfaceId < b.surfaceId ? -1 : a.surfaceId > b.surfaceId ? 1 : a.property < b.property ? -1 : a.property > b.property ? 1 : 0)),
@@ -698,7 +759,8 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
   const checked = validateEnvelope('controls', controls);
   if (!checked.ok) throw new NestPackError(`${checked.errors[0]?.path} ${checked.errors[0]?.message}`);
   const scope: NestScopeReport = {
-    schema: 'sentinel-nest-scope/draft-1', snapshotId: input.snapshot.id, sourceId: input.sourceId, framework, globals,
+    schema: 'sentinel-nest-scope/draft-1', snapshotId: input.snapshot.id, sourceId: input.sourceId,
+    framework: { version: framework.version, provenance: framework.provenance, classValidator: framework.classValidator }, globals,
     surfaces: surfaces.sort((a, b) => (a.surfaceId < b.surfaceId ? -1 : 1)), frontiers: controls.frontiers,
   };
   return deepFreeze({ controls, scope });
