@@ -1,0 +1,8 @@
+// Original synthetic fixture: a request value flows into a query in one method.
+class Local {
+  Object search(Request req, Db db) {
+    String term = req.value();
+    String sql = "SELECT * FROM invoices WHERE note = '" + term + "'";
+    return db.query(sql);
+  }
+}

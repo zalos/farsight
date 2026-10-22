@@ -1,0 +1,4 @@
+// Original synthetic fixture: a parameterized query.
+export function findInvoice(db: { query(sql: string, args?: unknown[]): unknown }, id: string) {
+  return db.query("SELECT * FROM invoices WHERE id = $1", [id]);
+}
