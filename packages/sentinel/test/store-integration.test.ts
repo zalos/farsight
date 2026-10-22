@@ -47,11 +47,21 @@ function child(source: string, storePath: string): Record<string, unknown> {
   return JSON.parse(r.stdout.trim().split('\n').at(-1)!);
 }
 
-/** A run, one ready work revision and its running attempt under the store's current epoch. */
-function begin(store: SentinelStore, attemptId = 'att-1') {
+/**
+ * A run, one ready work revision and its running attempt under the store's current epoch. The work's influence
+ * manifest and the attempt's invocation are artifacts the ledger keeps as roots, so their bytes are staged and
+ * stored first, as a coordinator would; reachability then verifies them instead of failing closed.
+ */
+async function begin(store: SentinelStore, attemptId = 'att-1') {
+  const manifest = { kind: 'synthetic-influence-manifest', inputs: [] };
+  const invocation = { kind: 'synthetic-invocation', argv: ['scanner', '--json'] };
+  const ids = [store.objects.identifyCanonicalJson(manifest), store.objects.identifyCanonicalJson(invocation)];
+  store.ledger.registerStaging(`stage-inputs-${attemptId}`, ids.map(i => ({ id: i.id, schema: 'application/json', privacy: 'metadata' as const })));
+  await store.objects.putCanonicalJson(manifest, { expect: ids[0] });
+  await store.objects.putCanonicalJson(invocation, { expect: ids[1] });
   store.ledger.createRun(run(store.epoch) as never);
-  store.ledger.createWork(work(store.epoch) as never);
-  store.ledger.startAttempt(attempt(store.epoch, { id: attemptId, ordinal: 1 }) as never);
+  store.ledger.createWork(work(store.epoch, { influenceManifest: ids[0]!.id }) as never);
+  store.ledger.startAttempt(attempt(store.epoch, { id: attemptId, ordinal: 1, invocation: ids[1]!.id }) as never);
 }
 
 test('stage before write, durable put, transactional accept; a new process reads the artifact back', needsStore, async t => {
@@ -62,7 +72,7 @@ test('stage before write, durable put, transactional accept; a new process reads
   assert.equal(store.storePath, storePath);
   assert.match(store.epoch, /^epoch-/);
   assert.equal(store.migration.backupPath, null, 'a new ledger needs no backup');
-  begin(store);
+  await begin(store);
 
   const finding = { schema: 'sentinel-observation/draft-1', note: 'synthetic' };
   const quoted = Buffer.from('const token = read();\n');
@@ -91,7 +101,8 @@ test('stage before write, durable put, transactional accept; a new process reads
 
   const report = await store.inspect();
   assert.equal(report.ok, true, JSON.stringify(report.errors));
-  assert.deepEqual([...report.reachable].sort(), [findingId.id, quotedId.id].sort());
+  for (const id of [findingId.id, quotedId.id]) assert.ok(report.reachable.includes(id), `${id} is protected`);
+  assert.equal(report.reachable.length, 4, 'the publication, its linked bytes, the manifest and the invocation');
   const plan = await store.planPrune();
   assert.equal(plan.ok, true);
   assert.equal(plan.deleted, 0);
@@ -123,7 +134,7 @@ test('stage before write, durable put, transactional accept; a new process reads
 test('an attempt started under an earlier owner cannot publish after a takeover', needsStore, async t => {
   const storePath = scratch(t);
   const first = await openStore(storePath);
-  begin(first);
+  await begin(first);
   const bytes = Buffer.from('late result');
   const id = first.objects.identify(bytes);
   first.ledger.registerStaging('stage-late', [{ id: id.id, schema: 'text/plain', privacy: 'metadata' }], { work: W1, attemptId: 'att-1' });
@@ -144,7 +155,7 @@ test('a failed or lost write never yields an accepted reference', needsStore, as
   const storePath = scratch(t);
   const store = await openStore(storePath);
   t.after(() => store.close());
-  begin(store);
+  await begin(store);
   const bytes = Buffer.from('evidence that will not survive');
   const id = store.objects.identify(bytes);
   store.ledger.registerStaging('stage-lost', [{ id: id.id, schema: 'text/plain', privacy: 'source' }], { work: W1, attemptId: 'att-1' });
@@ -286,7 +297,7 @@ function upgradeScript(storePath: string, point: string, how: 'kill' | 'throw'):
 async function storeWithArtifact(storePath: string): Promise<{ id: string; text: string }> {
   const store = await openStore(storePath);
   try {
-    begin(store);
+    await begin(store);
     const text = 'accepted before the upgrade';
     const bytes = Buffer.from(text);
     const id = store.objects.identify(bytes);

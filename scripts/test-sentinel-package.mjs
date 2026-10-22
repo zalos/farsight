@@ -160,9 +160,15 @@ try {
     const store = await openStore(${JSON.stringify(storePath)});
     try {
       const e = store.epoch;
+      // The manifest and invocation the ledger keeps as roots are real, staged and stored bytes.
+      const inputs = [{ kind: 'synthetic-influence-manifest' }, { kind: 'synthetic-invocation' }];
+      const [manifest, invocation] = inputs.map((v) => store.objects.identifyCanonicalJson(v));
+      store.ledger.registerStaging('stage-inputs', [manifest, invocation].map((i) => ({ id: i.id, schema: 'application/json', privacy: 'metadata' })));
+      await store.objects.putCanonicalJson(inputs[0], { expect: manifest });
+      await store.objects.putCanonicalJson(inputs[1], { expect: invocation });
       store.ledger.createRun({ ...${JSON.stringify(load('run-active'))}, coordinatorEpoch: e });
-      store.ledger.createWork({ ...${JSON.stringify(load('work-idle'))}, coordinatorEpoch: e, id: ${JSON.stringify(work.id)}, state: 'ready', dependencies: [] });
-      store.ledger.startAttempt({ ...${JSON.stringify(load('attempt-running'))}, coordinatorEpoch: e, id: 'att-1', ordinal: 1, work: ${JSON.stringify(work)},
+      store.ledger.createWork({ ...${JSON.stringify(load('work-idle'))}, coordinatorEpoch: e, id: ${JSON.stringify(work.id)}, state: 'ready', dependencies: [], influenceManifest: manifest.id });
+      store.ledger.startAttempt({ ...${JSON.stringify(load('attempt-running'))}, coordinatorEpoch: e, id: 'att-1', ordinal: 1, work: ${JSON.stringify(work)}, invocation: invocation.id,
         worker: { kind: 'owned-child', pid: 4242, processStartedAt: '2026-10-21T12:00:00Z' } });
       const bytes = Buffer.from('evidence written by the first process');
       const id = store.objects.identify(bytes);
