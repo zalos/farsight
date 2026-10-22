@@ -6,7 +6,7 @@ Execution preparation [#131](https://github.com/zalos/farsight/pull/131) and PR 
 [#132](https://github.com/zalos/farsight/pull/132) `2bd38f6` and [#133](https://github.com/zalos/farsight/pull/133)
 `ef5c525`, are merged. On 2026-10-21 the owner accepted PR 01's bounded matrix and resource defaults **for
 implementation** only (see the [acceptance record](feasibility-acceptance.md)); PR 02 merged as
-[#134](https://github.com/zalos/farsight/pull/134), and PR 03 storage is in progress. Package
+[#134](https://github.com/zalos/farsight/pull/134), PR 03 storage merged as [#135](https://github.com/zalos/farsight/pull/135), and PRs 04/07 are in progress. Package
 status lives in the [execution progress ledger](execution-progress.md), not in this backlog.
 Read the [architecture](implementation-plan.md) and [code examples](implementation-examples.md) with this backlog.
 Numbers below are local planning identifiers, not existing GitHub PR numbers.
@@ -733,7 +733,8 @@ Only then enable differential selection by default for qualified profiles.
 **Suggested title:** `feat: add opt-in isolated Java build capture for Sentinel`
 
 **Files:** build-profile contracts, isolation/acquisition extensions, Java generated/bytecode adapters and fixtures.
-**Depends on:** 26; a new owner review before implementation.
+**Depends on:** 26; the [bounded Java-build design](isolated-java-build-design.md) was reviewed on 2026-10-22
+within the owner's existing original-sample authorization. Its empirical qualification gates remain pending.
 
 Execute explicitly approved Maven/Gradle profiles without host credentials; pin build toolchain, plugins and
 dependency inputs; split acquisition from offline execution; capture outputs and logs as new artifacts.
@@ -746,7 +747,9 @@ cleanup works after crash, and generated-code findings have complete provenance.
 **Suggested title:** `feat: run scoped runtime security checks in approved test environments`
 
 **Files:** target authorization, environment/assertion contracts, ZAP adapter, rate/reset/cancel controls and fixtures.
-**Depends on:** 26, separately approved runtime design; independent of 27–29 unless chosen tooling requires them.
+**Depends on:** 26 and the [bounded runtime design](managed-runtime-design.md), reviewed on 2026-10-22
+for the original local sample only; independent of 27–29 unless chosen tooling requires them. Its empirical
+qualification gates remain pending.
 
 Separate passive evidence import, crawling and active testing. Pin exact target/environment identity,
 authentication flow, allowed operations, request/rate/time budgets and state-reset strategy. No production

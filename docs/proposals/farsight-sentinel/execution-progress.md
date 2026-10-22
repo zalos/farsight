@@ -8,12 +8,12 @@ identifiers, not GitHub PR numbers.
 
 ## Checkpoint — 2026-10-22
 
-- PR 02 merged as [#134](https://github.com/zalos/farsight/pull/134), `269c3bc`, after independent SOL
-  contract/packaging review, clean npm consumer checks, browser validation and all nine CI checks. PR 03
-  storage has passed local integration and independent SOL review across four Opus lanes, including the public
-  facade and packaging. Linux runtime qualification passed in [CI](https://github.com/zalos/farsight/actions/runs/39723522049);
-  final checks remain before merge. PR 04 capture and PR 07 isolation
-  are starting in independent worktrees against the reviewed store API.
+- PR 03 merged as [#135](https://github.com/zalos/farsight/pull/135), `97ff419`, after independent SOL
+  review, clean npm consumers, measured macOS/Linux storage recovery, and all nine final CI checks.
+  PR 04 capture and PR 07 isolation are in progress in independent Opus worktrees; PR 06's pure shared-grant
+  extraction is being prepared separately. None of those implementation gates is marked complete.
+- PR 02 merged as [#134](https://github.com/zalos/farsight/pull/134), `269c3bc`, after contract/packaging
+  review and all nine CI checks.
 - PR 01's measured-decisions slice merged as [#133](https://github.com/zalos/farsight/pull/133), `ef5c525`,
   after the first slice [#132](https://github.com/zalos/farsight/pull/132), `2bd38f6`.
 - The owner continued execution and **accepted PR 01's bounded matrix and proposed resource defaults for
@@ -52,7 +52,10 @@ All planned packages progress to the end of the backlog, then the end gates belo
   or for the deterministic release.
 - **PR 29/30:** separate optional expansion designs, now in the to-the-end plan. Each still needs the design
   review its backlog row names. Real build/runtime testing stays scoped to the original synthetic fixtures and
-  the local sample application, never an arbitrary or production target.
+  the local sample application, never an arbitrary or production target. Their bounded
+  [Java-build](isolated-java-build-design.md) and [runtime](managed-runtime-design.md) designs passed SOL review
+  on 2026-10-22. Implementation, dependency gates and empirical qualification remain pending; design approval
+  is not execution evidence or permission for a broader target.
 
 ## Product requirements to carry (owner, captured 2026-10-21)
 
@@ -77,10 +80,10 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 | 00 | Agree the implementation plan | proposal #117 | done | Owner resolved/deferred choices affecting PR 01; docs valid | [#118](https://github.com/zalos/farsight/pull/118) `0c8c747` |
 | 01 | Feasibility harness and capability decisions | 00 | done (bounded) | Every support claim has a fixture/version; rejections have reasons; owner accepts the matrix | [#132](https://github.com/zalos/farsight/pull/132) `2bd38f6`, [#133](https://github.com/zalos/farsight/pull/133) `ef5c525`, [acceptance](feasibility-acceptance.md), owner acceptance 2026-10-21 |
 | 02 | Optional package, contracts, ADR | 01 | done | Schema bounds and unknown versions tested; Farsight packs/runs with Sentinel absent or unbuilt; `sentinel` scope and CI selection registered | [#134](https://github.com/zalos/farsight/pull/134) `269c3bc`; 30 contract tests, nine schemas, 36 installed fixtures; SOL review and all CI checks passed |
-| 03 | Ledger, object store, coordinator ownership | 02, 01 ownership probe | in progress | One owner on simultaneous starts; safe takeover; upgrade failure safe | — |
+| 03 | Ledger, object store, coordinator ownership | 02, 01 ownership probe | done | One owner on simultaneous starts; safe takeover; upgrade failure safe | [#135](https://github.com/zalos/farsight/pull/135) `97ff419`; macOS 135 passed/3 explicit skips, Linux 134/4; clean npm reopen; independent SOL review and all nine CI checks |
 | 04 | Immutable capture and security inventory | 03 | in progress | E1 reconciles all entries; unreadable scope stays unknown | — |
 | 05 | Parser integration and inventory reconciliation | 04 | pending | TS/Java malformed, unsupported and limit cases reconciled; real-ingest comparison vs `main` | — |
-| 06 | Rules, policy merge, deterministic planning | 05 | pending | Repository config cannot weaken mandatory rules | — |
+| 06 | Rules, policy merge, deterministic planning | 05 | in progress (shared matcher only) | Repository config cannot weaken mandatory rules | — |
 | 07 | Worker protocol and scanner isolation | 03, 01 isolation decision, 02 | in progress | Network, host-file, resource and malformed-output canaries fail safely; no host fallback | — |
 | 08 | Scheduler, resume, pause, cancellation | 03, 06, 07 | pending | E4 kills at every boundary, 20 repetitions, zero lost/duplicate outputs | — |
 | 09 | Standalone CLI and minimal report slice | 08 | pending | Duplicate starts return one run; disconnect does not stop work; bounded status | — |
