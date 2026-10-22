@@ -97,7 +97,7 @@ identifiers, not GitHub PR numbers.
 | Integration lead | Root (Codex lead session) | Owns shared contracts and dependencies, reviews integration, enforces each gate's definition of done, merges and runs the release |
 | Implementation | SOL finishes the current framework iteration; subsequent iterations use Claude Opus implementers | Each package in its own worktree, with affected validation and an immutable checkpoint |
 | Review | Independent SOL reviewers | Review each checkpoint against its backlog gate; findings in Conventional Comments; the implementer does not approve its own work |
-| Final PR review | Claude Opus | One final review of the completed PR before merge, after implementation and independent SOL verification |
+| Final PR review | This SOL-authored framework iteration: one Claude Opus review. Subsequent Opus-authored iterations: independent SOL review | Root gives final acceptance; Opus does not add a review of its own implementation |
 | End-of-plan product cleanup / touch-up review | Fable, the previously requested product reviewer | A separate final release-candidate review across the delivered product; the per-PR Opus review does not replace this gate |
 | Final fixes / verification | Claude Opus implements Fable corrections; an independent SOL reviewer verifies them | No merge or release row moves until its verification is recorded |
 
