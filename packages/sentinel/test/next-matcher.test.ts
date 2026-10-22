@@ -226,3 +226,49 @@ test('the support manifest names exactly the measured versions, and its digest i
     assert.ok(e && e.hud && e.professional && e.define, `${key} needs both registers and a define`);
   }
 });
+
+
+test('pnpm patches do not inherit the measured registry package identity', async () => {
+  const base = pnpmLock({ '.': '14.2.25' });
+  const patchMap = (pkg: string) => `patchedDependencies:\n  '${pkg}':\n    hash: synthetic-patch\n    path: patches/framework.patch\n\n`;
+  const reason = (v: any) => v.reason;
+  for (const pkg of ['next', 'react', 'react-dom'] as const) {
+    const version = OK[pkg];
+    const mapped = base.replace('importers:', patchMap(`${pkg}@${version}`) + 'importers:');
+    assert.equal(reason((await versions({ 'pnpm-lock.yaml': mapped }))[pkg]), 'identity-mismatch', `lock patch map ${pkg}`);
+    const dependency = `      ${pkg}:\n        specifier: ${version}\n        version: ${version}`;
+    const selected = base.replace(dependency, `${dependency}(patch_hash=synthetic-patch)`);
+    assert.equal(reason((await versions({ 'pnpm-lock.yaml': selected }))[pkg]), 'identity-mismatch', `importer patch hash ${pkg}`);
+    for (const key of [pkg, `${pkg}@${version}`, `${pkg}@^${version}`]) {
+      const declarations = { pnpm: { patchedDependencies: { [key]: 'patches/framework.patch' } } };
+      assert.equal(reason((await versions({ 'pnpm-lock.yaml': base }, '', declarations))[pkg]), 'identity-mismatch', `manifest patch ${key}`);
+      assert.equal(reason((await versions({ 'package-lock.json': lockfile(OK) }, '', declarations))[pkg]), 'identity-mismatch', `manifest evidence with npm lock ${key}`);
+    }
+  }
+  const v6 = base.replace("lockfileVersion: '9.0'", "lockfileVersion: '6.0'").replace(/^  (next|react|react-dom)@/gm, '  /$1@');
+  assert.equal((await versions({ 'pnpm-lock.yaml': v6 })).next.state, 'resolved', 'v6 ordinary peer suffix remains supported');
+  const patchedEntry = v6.replace('  /next@14.2.25:', '  /next@14.2.25(patch_hash=synthetic-patch):');
+  assert.equal(reason((await versions({ 'pnpm-lock.yaml': patchedEntry })).next), 'identity-mismatch', 'v6 package key patch hash alone');
+  const modifiedEntry = base.replace('  next@14.2.25:', '  next@14.2.25:\n    patched: true');
+  assert.equal(reason((await versions({ 'pnpm-lock.yaml': modifiedEntry })).next), 'identity-mismatch');
+  const unrelated = base.replace('importers:', patchMap('unrelated@1.0.0') + 'importers:');
+  const positive = await versions({ 'pnpm-lock.yaml': unrelated }, '', { pnpm: { patchedDependencies: { 'unrelated@1.0.0': 'patches/other.patch' } } });
+  assert.deepEqual(Object.values(positive).map(v => v.state), ['resolved', 'resolved', 'resolved'], 'ordinary peer suffix and unrelated patches remain supported');
+  for (const patch of ['patchedDependencies: {next@14.2.25: patches/next.patch}\n', 'patchedDependencies:\n  next@14.2.25: patches/next.patch\n']) {
+    assert.equal((await versions({ 'pnpm-lock.yaml': base.replace('importers:', patch + 'importers:') })).next.state, 'unknown', 'unsupported patch layout fails closed');
+  }
+  const escapedHead = base.replace('importers:', '\u0022patched\\u0044ependencies\u0022:\n  next@14.2.25:\n    path: patches/next.patch\nimporters:');
+  assert.equal((await versions({ 'pnpm-lock.yaml': escapedHead })).next.state, 'unknown', 'escaped patch-map keys are outside the supported YAML shape');
+  const escapedSuffix = base.replace('version: 14.2.25(', 'version: 14.2.25(\\u0070atch_hash=synthetic-patch)(');
+  assert.equal((await versions({ 'pnpm-lock.yaml': escapedSuffix })).next.state, 'unknown', 'escaped version metadata is not a peer suffix');
+  const nested = { 'pnpm-lock.yaml': pnpmLock({ 'apps/web': '14.2.25' }), 'package.json': JSON.stringify({ pnpm: { patchedDependencies: { 'next@14.2.25': 'patches/next.patch' } } }) };
+  assert.equal(reason((await versions(nested, 'apps/web', { dependencies: OK })).next), 'identity-mismatch', 'workspace root patches apply to nested apps');
+  assert.equal((await versions({ ...nested, 'package.json': '{}' }, 'apps/web', { dependencies: OK })).next.state, 'resolved');
+  for (const malformed of ['null', '{', JSON.stringify({ pnpm: { patchedDependencies: [] } }), JSON.stringify({ pnpm: null })]) {
+    assert.equal((await versions({ ...nested, 'package.json': malformed }, 'apps/web', { dependencies: OK })).next.state, 'unknown');
+  }
+  const map = new Map([['pnpm-lock.yaml', { relativePath: 'pnpm-lock.yaml', content: 'lock', bytes: Buffer.byteLength(nested['pnpm-lock.yaml']) }]]);
+  const unavailable = await resolveVersions({ projectDir: 'apps/web', files: map, recorded: new Set(['pnpm-lock.yaml', 'package.json']), packageJson: { dependencies: OK }, pins: NEXT_SUPPORT.packages,
+    read: async () => bytes(nested['pnpm-lock.yaml']) });
+  assert.equal(unavailable.next.state, 'unknown', 'recorded root declaration without bytes cannot qualify');
+});

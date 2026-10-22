@@ -282,3 +282,39 @@ test('properties narrow the facts; inconsistent inputs and altered bytes are ref
   const tampered = async (id: string) => { const b = Buffer.from(await store.readArtifact(id)); b[0] = b[0]! ^ 1; return b; };
   await assert.rejects(analyzeNext({ snapshot, analysis: source, read: tampered }), (e: any) => e.code === 'sentinel.next.integrity');
 });
+
+
+test('captured pnpm patch evidence leaves matcher exclusions unknown, while ordinary peer suffixes qualify', needsStore, async t => {
+  const files = { ...APP, 'pnpm-lock.yaml': pnpmLock({ '.': '14.2.25' }) };
+  delete (files as Record<string, string>)['package-lock.json'];
+  const plain = await analyzed(t, files);
+  assert.equal(plain.result.projects[0]!.supported, true);
+  assert.deepEqual(verdicts(plain.result, SURFACE.info), ['does-not-apply']);
+  const patch = 'diff --git a/package.json b/package.json\n--- a/package.json\n+++ b/package.json\n@@ -1 +1 @@\n-{}\n+{ "sentinelFixturePatch": true }\n';
+  const patchMap = 'patchedDependencies:\n  next@14.2.25:\n    path: patches/next.patch\n    hash: synthetic-patch\n\n';
+  for (const evidence of ['lock-map', 'importer-suffix', 'manifest', 'all'] as const) {
+    let lock = files['pnpm-lock.yaml'];
+    if (evidence === 'lock-map' || evidence === 'all') lock = lock.replace('importers:', patchMap + 'importers:');
+    if (evidence === 'importer-suffix' || evidence === 'all') lock = lock.replace('version: 14.2.25(', 'version: 14.2.25(patch_hash=synthetic-patch)(');
+    const packageJson = { name: 'next-fixture', private: true, version: '0.0.0', dependencies: VERSIONS,
+      ...(evidence === 'manifest' || evidence === 'all' ? { pnpm: { patchedDependencies: { 'next@14.2.25': 'patches/next.patch' } } } : {}) };
+    const { result } = await analyzed(t, { ...files, 'package.json': JSON.stringify(packageJson), 'pnpm-lock.yaml': lock, 'patches/next.patch': patch });
+    assert.equal(result.projects[0]!.supported, false, evidence);
+    assert.deepEqual(verdicts(result, SURFACE.info), ['unknown'], evidence);
+    assert.ok(facts(result, SURFACE.info).every((f: any) => f.reasonCode === 'sentinel.next.reason.versionUnknown'), evidence);
+  }
+});
+
+
+test('captured workspace-root patch declarations bind nested Next analysis', needsStore, async t => {
+  const nested = Object.fromEntries(Object.entries(APP).filter(([p]) => p !== 'package-lock.json').map(([p, text]) => [`apps/web/${p}`, text]));
+  const files = { ...nested, 'package.json': JSON.stringify({ name: 'workspace', private: true }), 'pnpm-lock.yaml': pnpmLock({ 'apps/web': '14.2.25' }) };
+  const before = await analyzed(t, files);
+  assert.equal(before.result.projects[0]!.supported, true);
+  assert.deepEqual(verdicts(before.result, SURFACE.info), ['does-not-apply']);
+  const root = JSON.stringify({ name: 'workspace', private: true, pnpm: { patchedDependencies: { 'next@14.2.25': 'patches/next.patch' } } });
+  const after = await analyzed(t, { ...files, 'package.json': root, 'patches/next.patch': '# Original inert fixture patch evidence\n' });
+  assert.equal(after.result.projects[0]!.supported, false);
+  assert.deepEqual(verdicts(after.result, SURFACE.info), ['unknown']);
+  assert.notEqual(before.result.envelopes[0]!.registrationDigest, after.result.envelopes[0]!.registrationDigest);
+});

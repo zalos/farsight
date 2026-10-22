@@ -6,7 +6,7 @@ import { deepFreeze } from '../../planner/identity.js';
 
 export const NEXT_PACK_ID = 'sentinel.framework.next';
 /** Bumped whenever the pack's semantics change without a manifest change. */
-export const NEXT_PACK_REVISION = 2;
+export const NEXT_PACK_REVISION = 3;
 export const NEXT_ANALYSIS_SCHEMA = 'sentinel-next-analysis/draft-1' as const;
 
 export const NEXT_SUPPORT = deepFreeze({
@@ -31,7 +31,7 @@ export const NEXT_SUPPORT = deepFreeze({
     file: 'next-matcher/package-lock.json',
   },
   versionSources: ['package-lock.json lockfileVersion 2|3 with the public registry tarball and its integrity',
-    'pnpm-lock.yaml lockfileVersion 6.0|9.0 importers with the package resolution integrity'],
+    'pnpm-lock.yaml lockfileVersion 6.0|9.0 importers with the package resolution integrity and no relevant patch evidence'],
   router: {
     modelled: 'app',
     appDirectories: ['app', 'src/app'],

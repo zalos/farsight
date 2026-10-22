@@ -179,6 +179,9 @@ export async function analyzeNext(input: NextPackInput): Promise<NextPackResult>
     const hasUnder = (dir: string) => [...recorded].some(p => p.startsWith(dir + '/')) || boundaries.some(b => b.relativePath === dir);
     const routerBase = ['app', 'pages'].some(d => hasUnder(join(projectDir, d))) ? projectDir
       : ['app', 'pages'].some(d => hasUnder(join(join(projectDir, 'src'), d))) ? join(projectDir, 'src') : null;
+    // Ancestor package declarations can modify workspace-installed packages without changing tarball integrity.
+    const versionDeclarations = [...recorded].filter(p => base(p) === 'package.json' && under(projectDir, dirOf(p)))
+      .sort().map(p => ({ relativePath: p, content: files.get(p)?.content ?? null }));
     const versions = await resolveVersions({ projectDir, files, recorded, read, packageJson: pkg, pins: NEXT_SUPPORT.packages });
     // Supported means the exact pinned packages: their versions and their registry content identity.
     const supported = PACKAGES.every(p => {
@@ -289,7 +292,7 @@ export async function analyzeNext(input: NextPackInput): Promise<NextPackResult>
       const route = routeLanguage(folders);
       const sf = surfaceFile(s.path);
       const influence = digestOf({
-        pack: NEXT_PACK_DIGEST, surface: s.nodeId, path: s.path, content: sf?.content ?? null, versions,
+        pack: NEXT_PACK_DIGEST, surface: s.nodeId, path: s.path, content: sf?.content ?? null, versions, versionDeclarations,
         middleware: middleware ? { path: middleware.relativePath, content: middleware.content } : null,
         nextConfig: nextConfig ? { path: nextConfig.relativePath, content: nextConfig.content ?? null } : null,
         matcher: typeof matcher === 'object' ? matcher.evidence.map(e => e.quoteDigest!) : matcher,
@@ -320,7 +323,7 @@ export async function analyzeNext(input: NextPackInput): Promise<NextPackResult>
     // ---- the envelope ----
     const registrationDigest = digestOf({
       pack: NEXT_PACK_DIGEST, analysis: view.analysisFingerprint, projectDir, routerBase,
-      packageJson: files.get(join(projectDir, 'package.json'))!.content,
+      packageJson: files.get(join(projectDir, 'package.json'))!.content, versionDeclarations,
       lockfiles: PACKAGES.map(p => versions[p].lockfile ?? null),
       middleware: middleware ? { path: middleware.relativePath, content: middleware.content } : null,
       nextConfig: nextConfig ? { path: nextConfig.relativePath, content: nextConfig.content ?? null } : null,

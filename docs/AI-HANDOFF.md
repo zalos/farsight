@@ -6,6 +6,19 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Next patch identity correction — 2026-10-22
+
+Branch `codex/sentinel-next-patched-identity` refuses recorded pnpm patches for Next, React and React DOM,
+including lock patch maps, importer/package patch hashes and project/workspace-root package declarations.
+Nested projects read only captured root declaration bytes; absent recorded bytes or malformed declarations leave
+versions unknown. Ancestor declaration identities contribute to registration and surface influence digests. Pack
+revision 3 invalidates facts produced with the earlier package identity semantics. Ordinary peer suffixes and
+unrelated patches still qualify. This is source-only installation evidence, not a runtime package attestation.
+
+Validation: Sentinel dependency-closure build; Next matcher/pack suites (23 tests, no skips), including actual
+capture → delete checkout → parse → analyze patched fixtures and a nested workspace control. The original
+independent patched-package probe was replayed unchanged. Public CLI integration remains separately pending.
+
 ## Start here
 
 Read `AGENTS.md` for project rules and architecture. Codex loads it as project instructions; `CLAUDE.md` imports it and this handoff. Keep durable facts in those repository files so both providers receive updates. This is project memory, not ChatGPT account memory or a synchronization of private conversation histories.

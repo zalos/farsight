@@ -3,8 +3,8 @@
 // an npm `package-lock.json` (lockfile versions 2 and 3) entry with its `integrity`, or a `pnpm-lock.yaml` (6.0/9.0)
 // importer version and its package's `resolution.integrity`. A version string alone never qualifies: a local tarball,
 // a link, a Git or URL source, an entry without an integrity, or a package whose integrity is not the pinned one for
-// its version (a repacked or substituted package) is `unknown`. So is a version written only in package.json, a
-// non-registry package.json specifier, an unread lockfile kind, two lockfiles that could both apply, a lockfile that
+// its version (a repacked or substituted package), or recorded pnpm patch evidence is `unknown`. So is a version
+// written only in package.json, a non-registry package.json specifier, an unread lockfile kind, two lockfiles that could both apply, a lockfile that
 // disagrees with an exact pin, and any lockfile whose JSON or YAML is not the expected shape. The lockfile is
 // untrusted input: every value is shape- and size-checked before it is read. Nothing runs a package manager.
 
@@ -88,6 +88,22 @@ export async function resolveVersions(inputs: VersionInputs): Promise<Readonly<R
       throw e;
     }
     const rel = dir === inputs.projectDir ? '' : inputs.projectDir.slice(dir ? dir.length + 1 : 0);
+    // pnpm applies workspace-root patches even when the analyzed app has its own package.json.
+    // Read only captured bytes; an unavailable root declaration cannot establish an unmodified package.
+    const manifests = [inputs.packageJson];
+    if (name === 'pnpm-lock.yaml' && dir !== inputs.projectDir) {
+      const rootPath = join(dir, 'package.json');
+      if (inputs.recorded.has(rootPath)) {
+        const rootFile = inputs.files.get(rootPath);
+        if (!rootFile || rootFile.bytes > MAX_LOCKFILE_BYTES) return all({ state: 'unknown', reason: 'lockfile-invalid', detail: 'the pnpm root package.json is unavailable', lockfile: ref });
+        const rootBytes = await inputs.read(rootFile);
+        try {
+          const rootJson: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(rootBytes));
+          if (!plain(rootJson)) throw new TypeError();
+          manifests.push(rootJson);
+        } catch { return all({ state: 'unknown', reason: 'lockfile-invalid', detail: 'the pnpm root package.json is invalid', lockfile: ref }); }
+      }
+    }
     const out = {} as Record<PackageName, ResolvedVersion>;
     const npm = name === 'package-lock.json' ? parsePackageLock(text) : null;
     for (const pkg of PACKAGES) {
@@ -98,7 +114,10 @@ export async function resolveVersions(inputs: VersionInputs): Promise<Readonly<R
         // Defence in depth: any shape the readers did not anticipate is invalid input, never a crash.
         found = { state: 'unknown', reason: 'lockfile-invalid', detail: `${path} is not the expected shape` };
       }
-      if (found.state === 'resolved') found = checkIdentity(found, pkg, inputs.pins[pkg]);
+      if (found.state === 'resolved') {
+        const modified = manifests.map(m => patchDeclarationProblem(m, pkg)).find(Boolean);
+        found = modified ? { state: 'unknown', reason: 'identity-mismatch', detail: modified } : checkIdentity(found, pkg, inputs.pins[pkg]);
+      }
       out[pkg] = found.state === 'resolved' ? withDeclaration({ ...found, lockfile: ref }, inputs.packageJson, pkg) : { ...found, lockfile: ref };
     }
     return Object.freeze(out);
@@ -117,6 +136,20 @@ function checkIdentity(found: Found & { state: 'resolved' }, pkg: PackageName, p
   }
   return found;
 }
+
+/** Patches change installed bytes without changing the registry tarball integrity. */
+function patchDeclarationProblem(pkgJson: Record<string, unknown>, pkg: PackageName): string | null {
+  const pnpm = pkgJson.pnpm;
+  if (pnpm === undefined) return null;
+  if (!plain(pnpm)) return 'package.json pnpm configuration is not an object';
+  const patches = pnpm.patchedDependencies;
+  if (patches === undefined) return null;
+  if (!plain(patches)) return 'package.json pnpm.patchedDependencies is not an object';
+  return Object.keys(patches).some(key => patchTargets(key, pkg)) ? `package.json records a patch for ${pkg}; the unmodified registry package was measured` : null;
+}
+
+// A patch for any version of a relevant package is conservative evidence of modification; no range evaluation.
+const patchTargets = (key: string, pkg: PackageName) => key === pkg || key.startsWith(`${pkg}@`);
 
 /** Why the package.json declaration disqualifies the lockfile's answer, or null. Untrusted input: shapes are checked. */
 function declarationProblem(pkgJson: Record<string, unknown>, pkg: PackageName, locked: string | null): [VersionReason, string] | null {
@@ -194,6 +227,7 @@ function fromPnpmLock(text: string, rel: string, pkg: PackageName): Found {
   const lv = lines.find(l => l.startsWith('lockfileVersion:'));
   const version = lv ? unq(lv.slice('lockfileVersion:'.length)) : '';
   if (version !== '6.0' && version !== '9.0') return { state: 'unknown', reason: 'lockfile-unsupported', detail: 'only pnpm lockfileVersion 6.0 or 9.0 is read' };
+  if (lines.some(l => /^"[^"]*\\/.test(l))) return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm-lock.yaml has escaped top-level keys outside the supported shape' };
   if (lines.some(l => l.includes('\t'))) return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm-lock.yaml holds tabs' };
   const indent = (l: string) => l.length - l.trimStart().length;
   const blockOf = (from: number, depth: number): [number, number] => {
@@ -212,6 +246,25 @@ function fromPnpmLock(text: string, rel: string, pkg: PackageName): Found {
   };
   const findKey = (range: [number, number], depth: number, key: string) => findKeys(range, depth, k => k === key)[0] ?? -1;
   const top: [number, number] = [0, lines.length];
+  // The supported block-style patch map may be present even when a stale importer omits its patch suffix.
+  // Refuse unfamiliar/flow patch maps rather than silently ignoring package modification evidence.
+  const patchHeads = lines.map((l, i) => ({ l, i })).filter(({ l }) => /^(?:patchedDependencies|'patchedDependencies'|"patchedDependencies")\s*:/.test(l));
+  if (patchHeads.length > 1) return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm-lock.yaml repeats patchedDependencies' };
+  if (patchHeads.length) {
+    const { l, i } = patchHeads[0]!;
+    const tail = l.slice(l.indexOf(':') + 1).trim();
+    if (tail && tail !== '{}') return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm patchedDependencies is outside the supported block shape' };
+    if (!tail) {
+      const [start, end] = blockOf(i, 0);
+      for (let n = start; n < end; n++) {
+        const line = lines[n]!;
+        if (!line.trim() || line.trimStart().startsWith('#') || indent(line) !== 2) continue;
+        const key = /^\s{2}((?:'[^']*'|"[^"]*"|[^:]+)):\s*(?:#.*)?$/.exec(line);
+        if (!key || /[\\]/.test(key[1]!)) return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm patchedDependencies has an unsupported entry' };
+        if (patchTargets(unq(key[1]!), pkg)) return { state: 'unknown', reason: 'identity-mismatch', detail: `pnpm-lock.yaml records a patch for ${pkg}; the unmodified registry package was measured` };
+      }
+    }
+  }
   const importers = findKey(top, 0, 'importers');
   if (importers < 0) return { state: 'unknown', reason: 'lockfile-unsupported', detail: 'pnpm-lock.yaml has no importers section' };
   const imp = findKey(blockOf(importers, 0), 2, rel || '.');
@@ -232,6 +285,8 @@ function fromPnpmLock(text: string, rel: string, pkg: PackageName): Found {
     if (indent(l) !== 8 || !l.trim().startsWith('version:')) continue;
     const raw = unq(l.trim().slice('version:'.length));
     if (raw.length > MAX_STRING) return { state: 'unknown', reason: 'lockfile-invalid', detail: `${pkg} has an oversized version line` };
+    if (raw.includes('\\')) return { state: 'unknown', reason: 'lockfile-invalid', detail: `${pkg} has escaped version metadata outside the supported shape` };
+    if (/\(patch_hash(?:=|\))/.test(raw)) return { state: 'unknown', reason: 'identity-mismatch', detail: `${pkg} is recorded with a pnpm patch hash` };
     const v = raw.includes('(') ? raw.slice(0, raw.indexOf('(')) : raw;
     if (!EXACT.test(v)) return { state: 'unknown', reason: raw.startsWith('file:') || raw.startsWith('link:') ? 'not-registry' : 'not-exact', detail: `${pkg} is recorded as "${raw.slice(0, 120)}"` };
     found = { v, line: i };
@@ -244,7 +299,9 @@ function fromPnpmLock(text: string, rel: string, pkg: PackageName): Found {
   const prefix = version === '9.0' ? `${pkg}@${found.v}` : `/${pkg}@${found.v}`;
   const entries = findKeys(blockOf(packages, 0), 2, k => k === prefix || (version === '6.0' && k.startsWith(`${prefix}(`)));
   if (entries.length !== 1) return { state: 'unknown', reason: entries.length ? 'lockfile-ambiguous' : 'no-integrity', detail: `${pkg}@${found.v} has ${entries.length} package entries` };
+  if (/\(patch_hash(?:=|\))/.test(lines[entries[0]!]!)) return { state: 'unknown', reason: 'identity-mismatch', detail: `${pkg} has a patched pnpm package entry` };
   const [pf, pt] = blockOf(entries[0]!, 2);
+  if (lines.slice(pf, pt).some(l => indent(l) === 4 && /^patched\s*:/.test(l.trim()))) return { state: 'unknown', reason: 'identity-mismatch', detail: `${pkg} has pnpm package modification metadata` };
   const res = lines.slice(pf, pt).filter(l => indent(l) === 4 && l.trim().startsWith('resolution:'));
   const m = res.length === 1 ? /^resolution: \{integrity: (sha512-[A-Za-z0-9+/]{86}==)\}$/.exec(res[0]!.trim()) : null;
   if (!m) return { state: 'unknown', reason: res.length === 1 && /tarball|repo|directory/.test(res[0]!) ? 'not-registry' : 'no-integrity', detail: `${pkg}@${found.v} records no registry integrity` };
