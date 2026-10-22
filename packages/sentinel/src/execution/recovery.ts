@@ -48,14 +48,25 @@ export class JournalDir<T extends Record<string, string | number>> {
   readonly dir: string;
   readonly #name: string;
   readonly #fields: Readonly<Record<string, FieldCheck>>;
+  readonly #key: string | undefined;
+  readonly #consistent: ((v: Record<string, unknown>) => boolean) | undefined;
 
-  constructor(storePath: string, name: string, fields: Readonly<Record<string, FieldCheck>>) {
+  /**
+   * `key` names the field a record's file name is made from; a listed record whose file name is not its own key is
+   * unresolved. `consistent` checks fields against each other.
+   */
+  constructor(storePath: string, name: string, fields: Readonly<Record<string, FieldCheck>>, options: { key?: string; consistent?: (v: Record<string, unknown>) => boolean } = {}) {
     this.#name = name;
     this.#fields = fields;
+    this.#key = options.key;
+    this.#consistent = options.consistent;
     const base = join(storePath, 'execution');
     this.dir = join(base, name);
-    for (const d of [base, this.dir]) {
-      try { mkdirSync(d, { mode: 0o700 }); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
+    for (const [d, parent] of [[base, storePath], [this.dir, base]] as const) {
+      let created = false;
+      try { mkdirSync(d, { mode: 0o700 }); created = true; } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
+      // A new folder exists durably only once its parent is synced; that happens before any record is acknowledged.
+      if (created) syncDirectory(parent);
       const s = lstatSync(d);
       if (!s.isDirectory() || s.isSymbolicLink() || (s.mode & 0o077) !== 0 || s.uid !== process.getuid?.()) {
         throw new ExecutionError('sentinel.execution.journalUnreadable', { reason: `${name} folder is not private` });
@@ -70,8 +81,9 @@ export class JournalDir<T extends Record<string, string | number>> {
     try { unlinkSync(tmp); } catch { /* none left from an earlier write */ }
     const bytes = Buffer.from(`${JSON.stringify(value)}\n`);
     if (bytes.byteLength > MAX_JOURNAL_RECORD_BYTES) throw new ExecutionError('sentinel.execution.journalUnreadable', { reason: 'record too large' });
-    if (Object.entries(this.#fields).some(([k, check]) => !check((value as Record<string, unknown>)[k]))) {
-      throw new ExecutionError('sentinel.execution.journalUnreadable', { reason: 'a field is missing or out of bounds' });
+    if (Object.entries(this.#fields).some(([k, check]) => !check((value as Record<string, unknown>)[k]))
+      || (this.#key && (value as Record<string, unknown>)[this.#key] !== key) || (this.#consistent && !this.#consistent(value as Record<string, unknown>))) {
+      throw new ExecutionError('sentinel.execution.journalUnreadable', { reason: 'a field is missing, out of bounds or inconsistent' });
     }
     const fd = openSync(tmp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     try {
@@ -114,6 +126,8 @@ export class JournalDir<T extends Record<string, string | number>> {
         const keys = Object.keys(this.#fields);
         if (!keys.every(k => this.#fields[k]!(v[k]))) { unresolved.push({ journal: this.#name, file: name, reason: 'missing fields' }); continue; }
         if (Object.keys(v).some(k => !keys.includes(k))) { unresolved.push({ journal: this.#name, file: name, reason: 'unexpected fields' }); continue; }
+        if (this.#key && name !== `${String(v[this.#key])}.json`) { unresolved.push({ journal: this.#name, file: name, reason: 'file name does not match its record' }); continue; }
+        if (this.#consistent && !this.#consistent(v)) { unresolved.push({ journal: this.#name, file: name, reason: 'inconsistent fields' }); continue; }
         records.push(Object.fromEntries(keys.map(k => [k, v[k]])) as T);
       }
     } finally { dir.closeSync(); }
@@ -163,7 +177,9 @@ const INTENT_FIELDS: Readonly<Record<string, FieldCheck>> = Object.freeze({
 /** Container create intents, by owner nonce. */
 export class IntentFiles implements IntentJournal {
   readonly #journal: JournalDir<ContainerIntent>;
-  constructor(storePath: string) { this.#journal = new JournalDir<ContainerIntent>(storePath, 'intents', INTENT_FIELDS); }
+  constructor(storePath: string) {
+    this.#journal = new JournalDir<ContainerIntent>(storePath, 'intents', INTENT_FIELDS, { key: 'owner', consistent: v => v.name === `sentinel-${String(v.owner)}` });
+  }
   get dir(): string { return this.#journal.dir; }
   record(intent: ContainerIntent): void { this.#journal.record(intent.owner, intent); }
   settle(intent: ContainerIntent): void { this.#journal.settle(intent.owner); }
@@ -196,7 +212,7 @@ const WORKER_FIELDS: Readonly<Record<string, FieldCheck>> = Object.freeze({
 
 export class WorkerFiles implements WorkerJournal {
   readonly #journal: JournalDir<WorkerIdentity>;
-  constructor(storePath: string) { this.#journal = new JournalDir<WorkerIdentity>(storePath, 'workers', WORKER_FIELDS); }
+  constructor(storePath: string) { this.#journal = new JournalDir<WorkerIdentity>(storePath, 'workers', WORKER_FIELDS, { key: 'attempt' }); }
   get dir(): string { return this.#journal.dir; }
   record(identity: WorkerIdentity): void { this.#journal.record(identity.attempt, identity); }
   settle(identity: WorkerIdentity): void { this.#journal.settle(identity.attempt); }
