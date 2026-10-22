@@ -240,11 +240,12 @@ separately reviewed prune. Retained provenance is protected: every artifact a re
 while its records are kept.
 
 Qualification is bounded, and anything outside it is refused rather than assumed: SQLite 3.53.3 exactly (as linked
-by Node 24.19.0), on a host the runtime's release policy lists, in a canonical owner-only folder on a measured
-local file system (a `local` apfs or hfs mount on macOS; ext4, xfs, btrfs, tmpfs, zfs or f2fs by statfs on Linux).
-darwin-arm64 is the one measured host. linux-x64 is admitted only as a candidate, so CI runs the real-owner store
-tests there and fails instead of skipping; it is not qualified until that CI evidence replaces the candidate note
-in the policy. Any other host is refused before a store file exists. Network, FUSE, overlay and unrecognised
+by Node 24.19.0), on a host the runtime's release policy lists, in a canonical owner-only folder on a file system
+the path checks identify as local. Measured so far: darwin-arm64 on APFS. linux-x64 on ext4 is admitted only as a
+candidate, so CI runs the real-owner store tests there and fails instead of skipping; it is not qualified until that
+CI evidence replaces the candidate note in the policy. The other local types the path checks accept (hfs on macOS;
+xfs, btrfs, tmpfs, zfs and f2fs by Linux statfs) are allowlisted, not measured. Any host the policy does not list
+is refused before a store file exists. Network, FUSE, overlay and unrecognised
 file systems are refused. Durability is claimed for **process death**: SQLite runs WAL with `synchronous=FULL`,
 objects are written, fsynced, verified and linked with their folders fsynced before a receipt exists, and the owner
 lock is an OS file lock the kernel releases when the holder dies. It is **not** claimed for physical power loss:

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -198,6 +198,8 @@ test('one owner at a time, and a failed open releases the lock', needsStore, asy
   const foreign = new sqlite.DatabaseSync(join(storePath, 'ledger.sqlite'));
   foreign.exec('CREATE TABLE unrelated (x INTEGER)');
   foreign.close();
+  // Private like a real ledger file, whatever the umask, so the refusal is about its contents, not its mode.
+  chmodSync(join(storePath, 'ledger.sqlite'), 0o600);
   await assert.rejects(openStore(storePath), coded('sentinel.store.notLedger'));
   const after = child(`
     try { (await openStore(storePath, { waitMs: 0 })).close(); console.log(JSON.stringify({ code: null })); }
