@@ -22,7 +22,7 @@ test('the package is optional, private and exports only files that exist', () =>
   assert.match(manifest.version, /-draft\./);
   // core supplies the shared catalog (and later counts/placement/grants); @types/node because the public store
   // declarations name Node built-ins. No scanner, container client or model SDK dependency.
-  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', 'ajv']);
+  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', 'ajv', 'oxc-parser']);
   assert.equal(manifest.bin['farsight-sentinel'], './dist/cli.js');
   for (const [key, target] of Object.entries(manifest.exports as Record<string, any>)) {
     if (key.includes('*')) continue;
@@ -68,6 +68,10 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/scratch.js': ['node:fs', 'node:path'],
   'execution/registry.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
+  // The Next pack (PR 14) reads literal syntax with Oxc, loaded on first read only; it never runs application code.
+  'frameworks/next/analyze.js': ['node:crypto'],
+  'frameworks/next/config.js': ['dynamic:oxc-parser'],
+  'frameworks/next/errors.js': ['@farsight/core/dist/strings-sentinel-next.js'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
   'policy/admission.js': ['@farsight/core/dist/grants.js'],
   'policy/adoption.js': ['node:fs', 'node:os', 'node:path'],
