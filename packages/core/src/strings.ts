@@ -79,6 +79,7 @@ import { SENTINEL_SECRETS_STRINGS } from './strings-sentinel-secrets.js';
 
 
 import { SENTINEL_EXPRESS_STRINGS } from './strings-sentinel-express.js';
+import { SENTINEL_FRAMEWORK_CONTROLS_STRINGS } from './strings-sentinel-framework-controls.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
 import { TOUR_STRINGS } from './strings-tour.js';
@@ -247,6 +248,8 @@ export const STRINGS: Record<string, StringEntry> = {
 
   // the Express framework pack: why a control fact about an Express route is unknown (strings-sentinel-express.ts)
   ...SENTINEL_EXPRESS_STRINGS,
+  // Sentinel's framework control inspection: why a check did not complete, and its rules (strings-sentinel-framework-controls.ts)
+  ...SENTINEL_FRAMEWORK_CONTROLS_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
   // who may do what — the role × action table's words live in strings-roles.ts (roles.*, gate.roles.*, its counts)

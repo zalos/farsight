@@ -187,6 +187,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'analysis/paths/paths.js': ['@farsight/graph', 'node:crypto'],
   'analysis/deep/import.js': ['@farsight/graph', 'node:crypto'],
   // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
+  // The framework inspection worker (ADR 44): sealed inputs by digest, one output file; it runs only as its own entry.
+  'frameworks/controls/worker.js': ['node:crypto', 'node:fs', 'node:url'],
   'frameworks/express/pack.js': ['@farsight/graph', 'node:crypto'],
   'frameworks/express/syntax.js': ['dynamic:oxc-parser'],
   'snapshot/worktree.js': ['node:fs'],
