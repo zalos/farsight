@@ -199,7 +199,6 @@ test('capture refuses a run whose snapshot holds other sources than the plan par
 
 for (const [label, parse, code, field] of [
   ['its deadline', { deadlineMs: 1 }, 'sentinel.execution.deadlineExceeded', 'deadlineMs'],
-  ['its output bound', { maxOutputBytes: 1 }, 'sentinel.execution.outputTooLarge', 'bytes'],
   ['its memory bound', { memoryBytes: 1 }, 'sentinel.execution.resourceExceeded', 'resource'],
 ] as const) {
   test(`a bootstrap operation is held to ${label}: the attempt fails and nothing of it is published`, needsStore, async t => {
@@ -247,4 +246,19 @@ test('a bootstrap operation canceled while it runs publishes nothing, though it 
   assert.equal(store.ledger.getPublication({ id: parseUnit.id, revision: 1 }), null);
   const [a] = store.ledger.listAttempts({ id: parseUnit.id, revision: 1 });
   assert.equal(store.ledger.getAttempt(a!.id)!.state, 'canceled');
+});
+
+test('maxOutputBytes bounds process output, which an operation does not produce: a 1-byte grant does not stop a parse', needsStore, async t => {
+  const dir = scratch(t, 'sentinel-exec-boot-output-');
+  const work = join(dir, 'work');
+  mkdirSync(work, { mode: 0o700 });
+  const { store, snapshot } = await captured(t, dir);
+  t.after(() => store.close());
+  const { registry, profile, record } = trusted(dir, true, { parse: { maxOutputBytes: 1 } });
+  const { pin } = lockedRules([{ familyId: RULE, adapterId: 'sentinel-pattern' }], []);
+  const { policy } = policyView([RULE]);
+  const boot = planBootstrap({ runId: 'run-boot', sourceIds: ['app'], profile: profile as any });
+  await admitPlan(store, { plan: boot, ruleLock: null, policy: null, profile: record });
+  const summary = await (await Coordinator.open({ store, runId: 'run-boot', run: runEnvelope(snapshot.id, pin, policy.revision, profile.id), registry, scratchRoot: work })).run();
+  assert.equal(summary.published, boot.units.length, JSON.stringify(summary.failures));
 });
