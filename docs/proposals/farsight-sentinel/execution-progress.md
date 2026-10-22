@@ -10,7 +10,9 @@ identifiers, not GitHub PR numbers.
 
 - PR 02 merged as [#134](https://github.com/zalos/farsight/pull/134), `269c3bc`, after independent SOL
   contract/packaging review, clean npm consumer checks, browser validation and all nine CI checks. PR 03
-  storage is in progress in three Opus lanes: ownership/runtime, ledger/migrations, objects/reachability.
+  storage has passed local integration and independent SOL review across four Opus lanes, including the public
+  facade and packaging. Linux qualification and CI remain before merge. PR 04 capture and PR 07 isolation
+  are starting in independent worktrees against the reviewed store API.
 - PR 01's measured-decisions slice merged as [#133](https://github.com/zalos/farsight/pull/133), `ef5c525`,
   after the first slice [#132](https://github.com/zalos/farsight/pull/132), `2bd38f6`.
 - The owner continued execution and **accepted PR 01's bounded matrix and proposed resource defaults for
@@ -75,10 +77,10 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 | 01 | Feasibility harness and capability decisions | 00 | done (bounded) | Every support claim has a fixture/version; rejections have reasons; owner accepts the matrix | [#132](https://github.com/zalos/farsight/pull/132) `2bd38f6`, [#133](https://github.com/zalos/farsight/pull/133) `ef5c525`, [acceptance](feasibility-acceptance.md), owner acceptance 2026-10-21 |
 | 02 | Optional package, contracts, ADR | 01 | done | Schema bounds and unknown versions tested; Farsight packs/runs with Sentinel absent or unbuilt; `sentinel` scope and CI selection registered | [#134](https://github.com/zalos/farsight/pull/134) `269c3bc`; 30 contract tests, nine schemas, 36 installed fixtures; SOL review and all CI checks passed |
 | 03 | Ledger, object store, coordinator ownership | 02, 01 ownership probe | in progress | One owner on simultaneous starts; safe takeover; upgrade failure safe | — |
-| 04 | Immutable capture and security inventory | 03 | pending | E1 reconciles all entries; unreadable scope stays unknown | — |
+| 04 | Immutable capture and security inventory | 03 | in progress | E1 reconciles all entries; unreadable scope stays unknown | — |
 | 05 | Parser integration and inventory reconciliation | 04 | pending | TS/Java malformed, unsupported and limit cases reconciled; real-ingest comparison vs `main` | — |
 | 06 | Rules, policy merge, deterministic planning | 05 | pending | Repository config cannot weaken mandatory rules | — |
-| 07 | Worker protocol and scanner isolation | 03, 01 isolation decision, 02 | pending | Network, host-file, resource and malformed-output canaries fail safely; no host fallback | — |
+| 07 | Worker protocol and scanner isolation | 03, 01 isolation decision, 02 | in progress | Network, host-file, resource and malformed-output canaries fail safely; no host fallback | — |
 | 08 | Scheduler, resume, pause, cancellation | 03, 06, 07 | pending | E4 kills at every boundary, 20 repetitions, zero lost/duplicate outputs | — |
 | 09 | Standalone CLI and minimal report slice | 08 | pending | Duplicate starts return one run; disconnect does not stop work; bounded status | — |
 | 10 | Pattern scanner and original rules | 09, 01 engine decision | pending | Pinned engine matches known positives/negatives incl. exit-zero omissions | — |

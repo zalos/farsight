@@ -41,14 +41,29 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
-## Sentinel PR 03 in progress — 2026-10-22
+## Sentinel PR 03 storage validation — 2026-10-22
 
 PR [#134](https://github.com/zalos/farsight/pull/134) merged at `269c3bc` with all nine CI checks passing.
-The integration branch is `codex/sentinel-store`. Three isolated Opus lanes own runtime/ownership,
-ledger/migrations and objects/reachability; SOL reviews and the lead integrates. PR 03 is not yet validated.
-Acceptance requires real simultaneous fresh-store ownership, crash takeover, epoch and active-attempt fencing,
-transactional migration/backup recovery, independently publishable work revisions and durable object publication.
-Reachability remains inspection/dry-run only; no automatic deletion. See the execution ledger for all remaining work.
+The integration branch `codex/sentinel-store` adds the optional store facade, separate lifetime owner lock,
+fenced SQLite ledger, checksummed migrations, immutable objects and conservative reachability inspection.
+Four isolated Opus lanes implemented ownership/runtime, ledger/migrations, objects/reachability and the public
+facade/packaging. SOL independently reviewed all four and verified each reproduced finding's fix.
+
+Final local validation: full build and type checks; 135 Sentinel tests passed with three explicit platform or
+permission skips; 1,615 other package tests passed with two opt-in tracker skips; 179 script tests passed after
+updating the packer's stand-in to the final API (the ten packer tests were rerun). All 345 browser/MCP tests and
+11 small performance checks passed. Catalog lint checked 3,612 entries; draft schemas stayed unchanged. Clean npm
+consumers verified all three typed exports, nine contract types/schemas, 36 fixtures, shared root/store API and
+error identities, and publication followed by reopening in another process. Farsight also installed, ingested
+and served with Sentinel entirely absent. Exact macOS ARM64/SQLite pairs 3.53.3 and 3.53.4 were measured on APFS;
+Linux x64/SQLite 3.53.4 is still a CI candidate and requires its actual run before qualification or merge.
+
+The same frozen source against main and feature builds produced identical 7,175 nodes, 15,066 edges and source
+digest, with unchanged database size; the PR body records byte counts. Fresh front-door, Map and grouped code-map
+pages had zero page errors. No primary-checkout build, graph refresh or global install was performed.
+Reachability remains inspection/dry-run only; no scanner or automatic deletion is enabled. PR 04 capture and
+PR 07 isolation are starting in independent Opus worktrees against the reviewed store API. See the execution
+ledger for remaining acceptance and release gates.
 
 ## Sentinel PR 02 foundation validated — 2026-10-22
 

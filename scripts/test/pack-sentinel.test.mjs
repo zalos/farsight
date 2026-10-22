@@ -66,6 +66,9 @@ export const SQLITE_RELEASE_POLICY = Object.freeze({
     sqlite: ${JSON.stringify(process.versions.sqlite)}, status: 'candidate' as const,
     evidence: 'synthetic packer-test fixture: admits only the host and SQLite running this test' })]),
 });
+export function qualificationFor(policy: typeof SQLITE_RELEASE_POLICY, host: string, sqlite: string) {
+  return policy.qualified.find(q => q.host === host && q.sqlite === sqlite);
+}
 export const STORAGE_ERROR_CODES = {
   ledger: ['sentinel.store.staleEpoch', 'sentinel.store.notFound', 'sentinel.store.objectMissing'],
   store: ['sentinel.store.pathNotAbsolute', 'sentinel.store.permissions', 'sentinel.store.platformUnqualified',
@@ -188,7 +191,7 @@ export async function openStore(path: string, options: { waitMs?: number } = {})
 }
 `);
   write(root, 'packages/sentinel/src/index.ts', [
-    "export { StoreError, LedgerError, ObjectStoreError, openStore } from './store/index.js';",
+    "export { StoreError, LedgerError, ObjectStoreError, openStore, SQLITE_RELEASE_POLICY, qualificationFor } from './store/index.js';",
     "import { ENVELOPES, type EnvelopeKind, type ReportEnvelope, type RunEnvelope, type WorkEnvelope, type AttemptEnvelope } from './contracts/index.js';",
     "export * from './contracts/index.js';",
     'export interface EnvelopeTypes { report: ReportEnvelope; run: RunEnvelope; work: WorkEnvelope; attempt: AttemptEnvelope }',
@@ -264,7 +267,7 @@ test('a clean npm consumer imports, type-checks and validates through the instal
     assert.equal(node(root, 'pack-sentinel.mjs').status, 0);
     const smoke = node(root, 'test-sentinel-package.mjs');
     assert.equal(smoke.status, 0, smoke.stderr + smoke.stdout);
-    assert.match(smoke.stdout, /sentinel package ok: farsight-sentinel --help, 3 typed exports \(4 contract types compiled\), 4 schemas, 4 fixtures, store reopened across processes, npm consumer/);
+    assert.match(smoke.stdout, /sentinel package ok: farsight-sentinel --help, 3 typed exports \(4 contract types compiled\), 4 schemas, 4 fixtures, store reopened across processes \([a-z0-9-]+ SQLite [0-9.]+, candidate\), npm consumer/);
     // the installed schema set must be the source set
     write(root, 'packages/sentinel/schemas/sentinel-extra.draft-1.schema.json', '{}');
     const stale = node(root, 'test-sentinel-package.mjs');
