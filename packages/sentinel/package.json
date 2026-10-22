@@ -34,6 +34,10 @@
       "types": "./dist/snapshot/parser.d.ts",
       "import": "./dist/snapshot/parser.js"
     },
+    "./frameworks/spring": {
+      "types": "./dist/frameworks/spring/index.d.ts",
+      "import": "./dist/frameworks/spring/index.js"
+    },
     "./rules": {
       "types": "./dist/rules/index.d.ts",
       "import": "./dist/rules/index.js"

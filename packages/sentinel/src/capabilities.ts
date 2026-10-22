@@ -31,7 +31,7 @@ export const CAPABILITIES: readonly Capability[] = Object.freeze([
   { id: 'framework-next', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 14' },
   { id: 'framework-express', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 15' },
   { id: 'framework-nest', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 16' },
-  { id: 'framework-spring', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 17' },
+  { id: 'framework-spring', state: 'available-draft', reasonCode: 'sentinel.capability.draftSpring', plannedIn: 'PR 17' },
   // PR 01 rejected the evaluated cross-file profiles; no deep engine is promised.
   { id: 'interprocedural-flow', state: 'unavailable', reasonCode: 'sentinel.capability.noQualifiedEngine', plannedIn: 'PR 18' },
   { id: 'reports', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 19' },

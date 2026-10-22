@@ -84,6 +84,9 @@ try {
   const sourceExports = JSON.parse(readFileSync(join(sourceDir, 'package.json'), 'utf8')).exports ?? {};
   const parserExported = Object.hasOwn(sourceExports, './parser');
   assert.equal(subpaths.includes('./parser'), parserExported, 'the installed ./parser export matches the source package');
+  // The Spring pack (ADR 24): required whenever the source package exports it.
+  const springExported = Object.hasOwn(sourceExports, './frameworks/spring');
+  assert.equal(subpaths.includes('./frameworks/spring'), springExported, 'the installed ./frameworks/spring export matches the source package');
 
   // The envelope registry, as the installed package reports it.
   const registry = JSON.parse(await evalModule("const { ENVELOPES } = await import('farsight-sentinel'); console.log(JSON.stringify(ENVELOPES));"));
@@ -154,6 +157,14 @@ try {
       '    a.analysis.complete, input?.kind, limits.maxDurationMs, r.parserComplete, r.clearsChecks, r.counts.parsed,',
       '    r.counts.unknownScopeDescendants, r.inputs[0]?.outcome, r.entries[0]?.class, r.tree.before, i.occurrences[0]?.byteSpan?.startByte,',
       '    i.spanUnavailable.invalidUtf8, i.unplaced.count, i.omitted, reason, typeof parseSnapshot, typeof retainSnapshotAnalysis];',
+      '}',
+    ] : []),
+    ...(springExported ? [
+      "import { analyzeSpring, SPRING_PACK, SPRING_ORDER, SPRING_SUPPORT, SPRING_REASON_CODES, matchTemplate, type SpringPackInput, type SpringReason } from 'farsight-sentinel/frameworks/spring';",
+      'export function springFields(input: SpringPackInput): unknown[] {',
+      '  const reason: SpringReason = SPRING_REASON_CODES[0];',
+      '  const profiles: readonly string[] | null = input.environment.activeProfiles;',
+      "  return [SPRING_PACK.version, SPRING_ORDER.chain, SPRING_SUPPORT.stack, reason, profiles, matchTemplate('/a', '/a/**'), typeof analyzeSpring];",
       '}',
     ] : []),
   ];
@@ -343,7 +354,7 @@ try {
     }
   }
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}npm consumer`);
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}${springExported ? ', Spring pack types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}npm consumer`);
 } finally {
   consumer.cleanup();
 }

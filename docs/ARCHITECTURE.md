@@ -689,3 +689,56 @@ checks detector bytes against the pinned pack digest, and returns every other ru
 **Cost:** a Python file inside a string in the package, a tie to the image's `/usr/bin/python3`, and one attempt per job
 batch of at most 2,000 targets to keep timed output under its 3 MiB bound. **Not decided here:** registering the adapter
 in the production registry, the planner's batching, the scan command (PR 09), and amd64 qualification.
+
+27. **Sentinel's first framework pack reads Spring Security servlet chains from source, for one exact version (2026-10-22).**
+
+`@farsight/sentinel` gains a public `./frameworks/spring` export: `analyzeSpring(input)`, which returns one validated
+`sentinel-controls/draft-1` envelope for one captured source's Spring routes, together with `SPRING_PACK`,
+`SPRING_ORDER`, `SPRING_SUPPORT`, `SPRING_REASON_CODES` and `matchTemplate`. It is a library: no scan runs it until the
+CLI (PR 09) integrates it, so PR 17's full acceptance depends on that work. The `framework-spring` capability is
+`available-draft` with reason `sentinel.capability.draftSpring`: source only, exactly the stated versions.
+
+**Scope.** Exactly Spring Boot 3.4.3 with the Spring Security 6.4.3 its dependency list pins, servlet stack. These are
+read from the captured `pom.xml` parent and starters, with comments masked. A security-version override, another
+security BOM, WebFlux, a Gradle build or an unreadable build leaves the envelope's version `null`, and every fact is
+`unknown`. Documentation for other versions is not evidence for these.
+
+**Inputs and evidence.** The input is the captured snapshot, the PR 05 parser evidence for the source, a reader for
+captured bytes by content id, and the selected environment (`activeProfiles`, `null` when none was selected). The
+public graph supplies route identities only. Its route names are lossy: variables rewritten, the first path kept, and
+a method-less `@RequestMapping` named GET. So each route's mapping is read again from captured syntax. So are every
+`SecurityFilterChain` bean and its `@Order`, `@Profile`, `securityMatcher`, `authorizeHttpRequests` rules and added
+filters, `@EnableMethodSecurity`, method-security annotations, filter beans, `WebSecurityCustomizer` and MVC
+interceptors. Syntax comes from tree-sitter's Java grammar (`@vscode/tree-sitter-wasm`, the version the parser pins),
+loaded on first analysis. Nothing is compiled, resolved or run. Evidence spans are exact UTF-8 bytes of captured
+files; a file that is not exact UTF-8 gives no span, and its facts are unknown. Graph tags and the parser's guard nodes
+are never proof.
+
+**Semantics.** The facts follow Spring's own order:
+- order 0: filters, unknown when any are present;
+- order 1: the first matching chain's first matching rule;
+- order 2: MVC interceptors, unknown when present;
+- order 3: method security, resolved only with an active proxy-mode enablement for that annotation kind and a
+  proxyable handler.
+
+Chains are taken in `@Order`, and a chain without a `securityMatcher` matches every request. Path patterns are compared
+as templates: a result is `match` or `no-match` only when it holds for every request the route can receive. Partial
+matches, equal orders that could both match, profiles not selected, conditional beans, non-literal matchers and
+helper-built chains are `unknown`. A route no chain matches is `unknown` (`sentinel.spring.noChainMatches`), with every
+chain matcher cited, and never protected: source alone cannot exclude a chain a dependency contributes. Missing or
+unlisted Java source, configuration that does not parse, or a configured servlet path leave chain selection unknown.
+
+**Keys.** `packDigest` covers the pack identity, its order and `SPRING_SUPPORT`. `environmentDigest` covers the
+selected profiles. `registrationDigest` covers the path and content id of every file read. A change to any of them
+changes the facts' key. Reason codes are catalog words (`strings-sentinel-spring.ts`).
+
+**Not in this decision:**
+- what Spring does when no rule in a selected chain matches;
+- Boot's default chain when no chain bean exists;
+- XML or adapter-style configuration;
+- async dispatch;
+- multi-module builds;
+- other Boot or Security versions.
+
+Each is unknown, not inferred. Later packs (PRs 14–16) follow the same envelope, positions-in-order and "unknown, never
+rounded" rules.
