@@ -18,7 +18,7 @@ from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store c
 |---|---|---|
 | **affected checks** | test `scripts/ci-changes.mjs` and select suites from the changed paths | 5 min |
 | **validate** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm -r typecheck` → `pnpm -r test` → `pnpm test:scripts` → `pnpm lint:strings`; includes Echo's unit tests | 20 min |
-| **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm e2e:typecheck` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → `pnpm e2e` → `pnpm e2e:perf` on the small preset (`FARSIGHT_PERF_PRESET=small`; the table is the `e2e-perf-results` artifact) | 30 min |
+| **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm e2e:typecheck` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → `SENTINEL_REPORT_BROWSER=1` offline report delivery and print (exactly one case, zero skips) → `pnpm e2e` → `pnpm e2e:perf` on the small preset (`FARSIGHT_PERF_PRESET=small`; the table is the `e2e-perf-results` artifact) | 30 min |
 | **secrets** | gitleaks over the pushed or PR commits (below) | 10 min |
 | **commits** | pull requests only: `scripts/lint-commits.mjs --message "$PR_TITLE"` (the title becomes the squash commit on `main` — type and scope must be on the lists) and `--range base..head --any-scope` (every branch commit has the conventional shape) | 5 min |
 | **parser-package (Linux/macOS)** (non-required) | parser package/workflow/dependency changes: actual tarballs installed outside the workspace, public types, native/WASM parsing, saved-graph query | 15 min |
@@ -42,10 +42,15 @@ checks bundle through its bounded owner setup script. OSV tests use original syn
 advisory database, project package manager or host scanner runs. Runtime execution never pulls or acquires assets.
 
 The job runs driver/binding/asset/admission tests and the real public four-engine CLI with test-file concurrency one.
+The report authority regressions use genuine accepted publications, including malformed worker output, missing
+accepted objects, exact check/source/scope bindings and bounded special-file refusals.
 An empty suite, any skip, failure or cancellation fails acceptance. It then packs the npm artifact and runs
 `test-sentinel-scanner-consumer.mjs` from a clean consumer: init, adopt settings, promote exact packs, missing-asset
 refusal, owner-receipted tools/databases, plan, detach/join/wait, and report regeneration after service restart and
-source removal. Required coverage gaps stay exit 2. Tests stop only their own supervised resources; the final step
+source removal; with the source and service gone it also writes the full report once as shareable and private HTML
+and JSON, and a browser step opens both HTML files from disk with no network and JavaScript off, failing on any
+request, page or console error, and prints them (only the shareable screenshots are retained). Required coverage
+gaps stay exit 2. Tests stop only their own supervised resources; the final step
 queries the daemon directly and fails if Sentinel containers remain. It never deletes an unowned container or hides
 a failed daemon query. The tested commit/image/worker pins, TAP result, installed-consumer success log and daemon identity are retained as CI evidence.
 
@@ -63,8 +68,8 @@ union of the matching checks. Secrets and PR commit conventions always run, incl
 | Root Markdown, Markdown under `docs/`, `.github/`, `.claude/`, `.agents/`, or `LICENSE` | none, except the packaged Echo docs below |
 | `docs/ECHO.md`, `packages/echo/README.md`, Echo packaging scripts or example connection/settings | `echo-package` |
 | `packages/sentinel/README.md`, `scripts/pack-sentinel.mjs`, `scripts/test-sentinel-package.mjs` | `sentinel-package` |
-| `packages/sentinel/` outside `test/` | `validate` + `sentinel-package` + `sentinel-isolation` + `sentinel-recovery` (no application package imports Sentinel, so no e2e) |
-| `packages/sentinel/test/` | `validate` + `sentinel-isolation` + `sentinel-recovery` |
+| `packages/sentinel/` outside `test/` | `validate` + `sentinel-package` + `sentinel-isolation` + `sentinel-recovery` + `e2e` (the e2e job also runs the offline report browser gate) |
+| `packages/sentinel/test/` | `validate` + `sentinel-isolation` + `sentinel-recovery` + `e2e` (offline report browser gate) |
 | `e2e/`, `scripts/e2e.mjs`, `scripts/e2e-perf.mjs`, `scripts/synth-graph.mjs` | `e2e` (including its typecheck and small perf suite) |
 | Package `test/` folders, `scripts/test/`, changelog/release/hook-install/commit-lint scripts | `validate` |
 | Package code/assets, `examples/`, `schemas/` | `validate` + `e2e`; graph, core and Echo changes also select `echo-package`; changes to a package in `farsight-cli`'s workspace dependency closure (cli, server, mcp, parsers, code-parser, core, graph, work and the work providers today, read from the manifests by `scripts/ci-changes.mjs`), Sentinel's own closure, or `examples/invoice-app/` also select `sentinel-package`; Sentinel's own closure (read from the manifests) also selects `sentinel-isolation` and `sentinel-recovery`; unreadable manifests select all |
@@ -153,6 +158,8 @@ how to allowlist a value you have checked: [SECURITY.md](SECURITY.md#the-scan-in
 Choose checks from the table above for local work too: ordinary Markdown edits do not need a build, unit tests or
 e2e. For changes to CI selection, run `pnpm test:scripts` and `actionlint`; the workflow change itself selects all
 checks on GitHub. Keep local validation focused on the affected behavior instead of rerunning unrelated suites.
+
+The offline report browser test is explicitly selected with `SENTINEL_REPORT_BROWSER=1`; `CI=true` alone does not require a browser in the unit-test job. The e2e job runs it after provisioning Chromium whenever application e2e or Sentinel isolation checks are selected, and fails on a missing browser, failure, or skipped case.
 
 When runtime checks are needed, build before tests. The tests import `dist/`, and e2e drives
 `packages/cli/dist/cli.js`. The full set is:

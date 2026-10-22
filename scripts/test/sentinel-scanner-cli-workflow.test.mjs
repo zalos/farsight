@@ -12,12 +12,12 @@ test('scanner CLI acceptance selects source, captured inputs, owner gates, packs
  assert.equal(selected(['docs/VISION.md','packages/sentinel/test/cli-scanners-e2e.test.ts']),true,'mixed inputs retain the gate');
  const fallback=detectChecks({base:undefined,head:undefined,event:'pull_request'}).checks;assert.equal(fallback.sentinel||fallback.isolation,true,'unavailable ranges fail closed');
 });
-test('workflow image indexes and native manifests exactly match all four adapter source pins',()=>{
- const engines=[['pattern','PATTERN'],['osv','OSV'],['trivy','TRIVY'],['zizmor','ZIZMOR']];
+test('workflow image indexes and native manifests exactly match all five adapter source pins',()=>{
+ const engines=[['pattern','PATTERN'],['osv','OSV'],['trivy','TRIVY'],['zizmor','ZIZMOR'],['gitleaks','GITLEAKS']];
  for(const[id,prefix]of engines){const source=readFileSync(new URL(`packages/sentinel/src/adapters/${id}/adapter.ts`,root),'utf8');
   const image=/\bimage: '([^']+)'/.exec(source)?.[1];const manifest=/architecture: 'amd64'[\s\S]*?manifest: '([^']+)'/.exec(source)?.[1];assert.ok(image);assert.ok(manifest);
   assert.equal(new RegExp(`^      ${prefix}_INDEX: (.+)$`,'m').exec(workflow)?.[1],image,id);assert.equal(new RegExp(`^      ${prefix}_AMD64: (.+)$`,'m').exec(workflow)?.[1],manifest,id);}
- assert.equal((workflow.match(/^          check "\$[A-Z]+_INDEX" "\$[A-Z]+_AMD64"$/gm)??[]).length,4,'each exact image is explicitly provisioned');
+ assert.equal((workflow.match(/^          check "\$[A-Z]+_INDEX" "\$[A-Z]+_AMD64"$/gm)??[]).length,5,'each exact image is explicitly provisioned');
 });
 test('selection failure cannot skip the native gate, and selected tests cannot silently skip or run empty',()=>{
  assert.match(workflow,/if: \$\{\{ !cancelled\(\) && needs\.changes\.outputs\.run != 'false' \}\}/);
@@ -26,4 +26,12 @@ test('selection failure cannot skip the native gate, and selected tests cannot s
  assert.ok(workflow.includes("grep -Eq '^# tests [1-9][0-9]*$' scanner-cli.tap"));
  assert.ok(workflow.includes('node scripts/test-sentinel-scanner-consumer.mjs | tee scanner-consumer.log'));
  assert.doesNotMatch(workflow,/continue-on-error|docker (?:system prune|rm)|pkill|killall/);
+});
+
+test('full-report native acceptance builds its context-ingestion dependency and retains every opted-in evidence suite',()=>{
+ assert.match(workflow,/pnpm --filter '@farsight\/sentinel\.\.\.' --filter '@farsight\/parsers\.\.\.' build/);
+ assert.ok(workflow.includes('test/cli-full-report-e2e.test.ts'));
+ for(const name of ['review','redaction-neighbors','short-production','exemptions'])
+  assert.ok(workflow.includes(`test/sol-report-${name}.test.ts`),name);
+ assert.ok(workflow.includes('test/report-redaction.test.ts'),'pure projection controls remain in the native union too');
 });

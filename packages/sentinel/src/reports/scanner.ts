@@ -4,6 +4,7 @@ import type {SentinelStore} from '../store/index.js';
 import type {CoverageEnvelope} from '../contracts/coverage.js';
 import type {ReportCount} from '../contracts/report.js';
 import {loadPlan} from '../execution/plans.js';
+import {openSnapshot} from '../snapshot/materialize.js';
 import {evaluateRequiredCoverage,type RequiredCoverage} from '../planner/coverage.js';
 import {countedProblems} from '@farsight/core/dist/counts.js';
 import {STRINGS} from '@farsight/core/dist/strings.js';
@@ -34,8 +35,27 @@ export async function scannerReportOf(store:SentinelStore,runId:string,now:Date)
   {n:coverage.checks.filter(c=>c.required&&!c.complete).length+coverage.ruleGaps.filter(g=>g.required).length,unit:'sentinel.count.gaps',scope:'sentinel.scope.report',source:'canonical required check coverage and required rule gaps, each once',recheck}];
  for(const c of counts)if(countedProblems(c as never,'scanner report').length)throw new Error('invalid report count');
  let sequence=0;for(let after=0;;){const page=store.ledger.readEvents({runId,after,limit:500});for(const event of page.events)sequence=event.sequence;if(!page.more)break;after=page.cursor;}
- return{schema:'sentinel-scanner-report/draft-1',label:'deterministic',runId,snapshotId:plan.pins.snapshotId!,planDigest:plan.digest,ledgerSequence:sequence,generatedAt:now.toISOString(),counts,coverage,observations,reports,
+ const doc:ScannerReport={schema:'sentinel-scanner-report/draft-1',label:'deterministic',runId,snapshotId:plan.pins.snapshotId!,planDigest:plan.digest,ledgerSequence:sequence,generatedAt:now.toISOString(),counts,coverage,observations,reports,
   pins:{rules:plan.pins.rules,tools:plan.pins.tools,databases:plan.pins.databases},limitations:['sentinel.service.policyNotEvaluated','sentinel.report.scannerSlice']};
+ return withholdMatchedNames(doc,await matchedNames(store,plan.pins.snapshotId!,observations));
+}
+/** A captured file whose name the secret scan matched: its path and name, resolved only over the private snapshot. */
+async function matchedNames(store:SentinelStore,snapshotId:string,observations:ScannerReport['observations']):Promise<string[]>{
+ const named=observations.filter(o=>(o.value as any)?.adapter==='secrets-gitleaks'&&((o.value as any).limitationKeys??[]).includes('sentinel.secrets.nameMatch'));
+ if(!named.length)return[];
+ const {snapshot}=await openSnapshot(store,snapshotId);const out=new Set<string>();
+ for(const o of named)for(const e of (o.value as any).evidence??[]){const entry=snapshot.entries[e?.entry];
+  if(!entry||entry.kind!=='file'||entry.disposition!=='included'||entry.content!==e.content)throw new Error('invalid accepted secret location');
+  out.add(entry.relativePath);const base=entry.relativePath.split('/').pop()!;if(base.length>=8)out.add(base);}
+ // Longest first, so a path is replaced whole before its own name is.
+ return [...out].sort((a,b)=>b.length-a.length);
+}
+/** Every string that names such a file (a path, a scope, a symbol) carries a fixed marker instead, in every record. */
+function withholdMatchedNames<T>(doc:T,names:readonly string[]):T{
+ if(!names.length)return doc;
+ const walk=(v:unknown):unknown=>typeof v==='string'?names.reduce((s,n)=>s.split(n).join('[a file name the secret scan matched is withheld]'),v)
+  :Array.isArray(v)?v.map(walk):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).map(([k,x])=>[k,walk(x)])):v;
+ return walk(doc) as T;
 }
 export function renderScannerMarkdown(doc:ScannerReport):string{
  const word=(key:string)=>STRINGS[key]?.professional??key;

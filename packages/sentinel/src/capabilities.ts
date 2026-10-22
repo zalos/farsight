@@ -37,7 +37,7 @@ export const CAPABILITIES: readonly Capability[] = Object.freeze([
   { id: 'deep-import', state: 'available-draft', reasonCode: 'sentinel.capability.draftDeepImport', plannedIn: 'PR 18' },
   // PR 01 rejected the evaluated cross-file profiles; no deep engine is promised.
   { id: 'interprocedural-flow', state: 'unavailable', reasonCode: 'sentinel.capability.noQualifiedEngine', plannedIn: 'PR 18' },
-  { id: 'reports', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 19' },
+  { id: 'reports', state: 'available-draft', reasonCode: 'sentinel.capability.draftReports', plannedIn: 'PR 19' },
   { id: 'dispositions', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 20' },
   { id: 'model-review', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 21–22' },
   { id: 'mcp', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 23a' },

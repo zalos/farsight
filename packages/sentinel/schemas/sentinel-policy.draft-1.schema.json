@@ -259,7 +259,8 @@
         "settings.adopt",
         "evidence.import",
         "run.pause",
-        "run.cancel"
+        "run.cancel",
+        "context.pin"
       ],
       "description": "Every action the Sentinel gate decides."
     },

@@ -1272,3 +1272,117 @@ Generic parser corrections the pack exposes (Pages Router surfaces, `route.tsx`,
 `app/` folders outside a Next project) are separate measured parser changes, not reinterpretations here. Not decided:
 the coordinator stage and capability-table entry that run the pack (PR 09 integration), populating the snapshot's
 `frameworkVersions` from its resolution, effect analysis of middleware bodies, and other Next versions.
+
+
+38. **Sentinel reports are one pinned document, rendered offline, placed only through a proven application context (2026-10-22).**
+PR 19 adds `farsight-sentinel/findings` and `farsight-sentinel/reports`. **Identity:** observations are never
+rewritten; normalizing derives a rule family, a severity on Sentinel's scale (the original kept) and one anchor per
+evidence location: the canonical symbol (`nodeId`) and a digest of the cited text with whitespace collapsed. No
+line or offset enters identity. Observations with the same rule family and anchor set, from any producer or version,
+correlate into one finding; a shared sink or symbol alone never merges two. The versioned fingerprint
+(`sentinel-issue/1`) has an exact key (rule family and anchors) and a probable key (rule family and symbols).
+**Matching** pairs one-to-one on the exact key, then on the probable key; a key shared by more than one finding on
+either side is ambiguous and nothing is chosen. **Comparison** labels every current finding (`new`, `persistent`,
+`changed-evidence`, `changed-detection`, `reopened`, `reopened-disposition-expired`) and keeps every baseline finding
+nothing continues in `historical` with a reason: it is `resolved-by-comparable-check` only when its files and
+symbols are still there, a complete current check of its rule family covered all of its files, and detection (rule
+revision, engine, capabilities, or a reviewed compatibility mapping) and conditions (environment, limits) are the
+same. Otherwise it is a removed surface (file or symbol gone; a folder that could not be listed is unknown, not
+removed), unassessed scope (no check, a failed or partial check, a narrower scope), changed detection or
+incomparable conditions; probable and ambiguous pairings stay open. Any anchor's code gone (a source removed while the
+sink remains) is a removed surface, resolution needs a current analysis showing the code still there, and a withheld
+(secret) location is never resolved. **Context:** a retained enriched graph is pinned only when every input file it
+names has the captured content id, every node it locates for the source is in a named input, every captured
+`farsight.config.json` or `screens.json` is among its inputs, and the owner confirmed exactly this context document for
+this snapshot and source (the owner-only `context.pin` action, a spent receipt): matching hashes alone do not show its
+journeys and labels are true. The verified graph is copied and frozen, so later changes to the caller's objects reach
+nothing; core's folds run on their own working copy. The receipt records what was verified. A pin is also an opaque
+runtime capability: its private provenance retains the authentic spent owner grant and exact snapshot/source.
+Copying its fields, serialized receipt, prototype or proxy conveys no authority. `placeNodes` and `placeFiles`
+require the consumer's `ContextBinding` (`snapshotId`, `sourceId`); both direct placement and report/gap consumers
+check that exact binding. Report finding placement also checks observation and citation snapshot/source identities.
+Pins for another capture/source are unplaced and excluded from the report's context artifact closure. Artifact and
+receipt byte arrays are returned as copies so caller mutation cannot change retained provenance. A mismatched context, a graph without journeys (a portable parser artifact) or no context leaves the place
+empty with its reason; no current graph is consulted and nothing enriches or fetches. **Placement** reuses core's cached
+`flowWalks`, `impactOf` + `affectedReach` and `personaOfScreen`: direct use where a screen's walk contains the symbol,
+potential impact where only dependents reach it, screens deduplicated, personas kept with their screens, bounds
+explicit (`of` carries the full count), one business sentence from the same fold. **The document**
+(`sentinel-report/draft-1`, extended additively with evidence locations, fingerprints, match strength, `historical`
+and `definitions`) carries every word it uses with its definition. A disclosure profile (`private` embeds excerpts,
+`shareable` withholds them) never changes a finding, a place or a count; secret evidence is never embedded or located
+in any profile, and disclosure covers every field: a secret finding is never placed and carries only the rule pack's
+or fixed words, a producer's message appears only in a private report of a non-secret finding, and a withheld-location
+citation (secret scan) is never read or located. Every planned check has one coverage record or is a `not-run` gap; the
+report is complete only with no gap, no file seen by no check and no unlisted folder; a gap is placed on the screens
+relying on the code the check did not cover. **Renderings** read only the document: Markdown escapes and fences source; HTML is one file with
+inline styles, no script, no external resource, a content security policy that refuses loads anyway, internal anchors
+and a print stylesheet; SARIF 2.1.0 uses the rule family as `ruleId`, Sentinel's fingerprints under their own
+`partialFingerprints` keys (never GitHub's line hash), and refuses more results than a limit rather than cutting.
+`generateReport` is the integration hook for a CLI or service; it needs no Farsight server, bridge or network, and a
+delivered report needs neither product nor the source. Not decided here: dispositions and imported evidence in the
+same document (PR 20), the CLI's report command (PR 09), the integrated view (PR 25), and building a context from
+captured configuration rather than verifying a retained one.
+
+**ADR 38 extension — the full report through the command path (2026-10-22).** `report <run> --full` and
+`compare <run> <baseline>` build the `sentinel-report/draft-1` document from a completed scanner run's accepted
+evidence only (`service/full-report.ts`), never from a report file, a structural record a caller supplies, or the
+workspace. Each work unit's accepted publication is read for its coverage records (bound to this run, unit, revision
+and publishing attempt, and to a check the unit was assigned) and its scanner findings (bound to this run, snapshot,
+source, unit, attempt and adapter). A finding becomes one observation per assigned rule family; every location it
+cites must be a captured file the unit was assigned, with exactly those bytes, and its span is checked against them
+(line ranges and whole-file citations are turned into byte spans over the captured bytes); the canonical symbol is
+the innermost bootstrap parser-index node over those bytes containing the span. Anything else refuses the whole
+report (`sentinel.report.evidenceUnbound`). Severity is the producer's, else the rule definition's from the exact
+packs the run's admitted lock names. Every plan check is a planned check (its files from its scope, symbol or unit);
+compare recomputes both sides' findings and per-family check assessments (rule revision, engine and image pins,
+trusted capabilities, environment, limits) and the current surfaces from the current run's capture and parse.
+An application graph the owner supplies (`--context`) is pinned only after the owner confirms the exact
+`context.pin` intent (exit 4 without `--confirm`; `init` grants it to the owner only), and its inputs are the
+captured files' bytes as they are on disk now, so a graph of a tree that changed after the capture is `mismatched`,
+whatever is confirmed; the spent receipt is the pin's authority and never leaves the process. Shareable is the
+default disclosure; `--out` writes one new owner-private file and never replaces one. The command is a read, never a
+policy result: its outcome is `answered` with `sentinel.service.policyNotEvaluated` among its limitations. The
+minimal `sentinel-scanner-report/draft-1` and the preview report are unchanged. While the background service holds
+the store the full report is refused (`ownerServiceRunning`). The HTML policy names only directives a `<meta>`
+policy honours, so a delivered file opens with no console error.
+**Secret-scan evidence in the full report (2026-10-22).** The report reads Gitleaks' accepted publications as exactly
+the observation that scanner may make, and nothing else as one: a `secret` record only from a `secrets-gitleaks` unit
+and no other kind from it; bound to the run, snapshot, unit, revision, attempt and adapter digest; assigned exactly the
+unit's admitted repository checks; a known pinned detector; the fixed redacted message and limitations; and only
+withheld citations, each resolving in the private snapshot (`resolveWithheldLocation`) to a captured file the unit was
+assigned, with a span inside those bytes (a name match cites none). Its rule family is the admitted check's, never the
+record's. Every scanner unit's own report states how many findings it accepted, and the publication must hold exactly
+that many finding records, so a dropped or added record refuses the report instead of reading as fewer findings. A
+withheld citation's identity is an opaque key for its file (`findings` `withheldKey`, the capture entry by default; the
+command line uses an HMAC of source and path under the store's own secret), so identical bytes in two files are two
+findings and a secret finding continues across captures of one store. The store id is public (container labels, owner
+records, a bundle's provenance, a failed run's facts) and is never the key: the secret is 32 random bytes per store id
+in the owner's private trust folder (`report-keys/`), outside the store directory so no store copy or bundle carries
+it, created once by no-overwrite publication, read only as a private single-link file of exactly 32 bytes (an existing
+unsafe key refuses rather than being replaced), and never written to a receipt, result, report, log or the service
+socket. Withheld-location identity continuity requires that same private key: if the owner loses it or opens a store
+under a different private trust folder, the next report creates a new key and its withheld-location identities change.
+Existing report files remain unchanged; a store copy or bundle cannot restore the missing key or prove continuity
+with the earlier identities. A report and a bundle together, with the store id, confirm no guessed path.
+The pinned worker reports only the rule, the lines and a file reference (template `RuleID`, `StartLine`, `EndLine`,
+`File`, with `--redact=100`), so a report sees whole matched lines, never the value's position, and cannot prove that any
+text a captured file or a confirmed graph supplied is free of a matched value. A report whose run or baseline has
+accepted secret matches therefore fails closed (`withholdSecretRun`): every finding's title and explanation are rebuilt
+from the rule pack's catalog words only; every evidence item is withheld with no excerpt and no location; every other
+source- or context-controlled string (context ids, labels and references, node ids, count part labels) becomes one
+opaque word per distinct original, so references still match and placement keeps its shape; every place records
+`sentinel.report.withheld.secretRun`, defined in the report, and the command lists it among its limitations. Trust is by
+position in the report contract, never by a key's name or a value's spelling: only positions whose value Sentinel
+generates (schema, enums, catalog keys, digests, content and artifact ids, generated run, check, finding, evidence and
+report ids, counts' words, a decision's and a definition's exact generated fields, a gap's catalog explanation) are
+kept. A run without secret matches reports as before, excerpts and labels included. The cost is availability: in a run
+with any secret match no report shows source excerpts, locations or context names. The precise replacement is an exact
+value range: the pinned template would emit, as numbers only, the match's start column and the secret's offset and
+length within it (computed inside the container from the unredacted match; Gitleaks fills its match fields with the
+redacted placeholder under `--redact`), kept privately in the publication beside the whole-line citation and read over
+the private snapshot at render time. That changes the pinned template and worker digest, needs Gitleaks
+requalification on both measured platforms and a check of the engine's column semantics for multibyte and multiline
+matches, and adds a private publication field; it is not part of this change. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
+its entry, without a symbol, never used to place a gap), and the minimal scanner report replaces such a name wherever it
+appears. Refusal reasons never name a path. The minimal scanner report's other names are unchanged; the full report
+uses the conservative projection above. The context-graph attestation limitation above is unchanged.

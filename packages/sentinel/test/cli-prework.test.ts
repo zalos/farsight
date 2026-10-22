@@ -45,7 +45,8 @@ test('arguments: each command takes only its own flags; typos and repeats are re
   no(['capabilities', '--json=yes'], 'sentinel.args.unexpectedArgument');
   no(['scan-everything'], 'sentinel.args.unknownCommand');
   // A command this build does not run is refused as unavailable, whatever its arguments.
-  assert.equal(ok(['compare']).command, 'compare');
+  assert.equal(ok(['compare', 'run-b', 'run-a']).command, 'compare');
+  assert.equal(ok(['report', 'run-a', '--full', '--disclosure', 'private', '--context', 'g.json', '--repo', 'app', '--out', 'r.html', '--confirm']).command, 'report');
   assert.equal(ok(['rerun', 'r']).command, 'rerun');
   no(['rerun'], 'sentinel.args.missingArgument');
   no(['wait'], 'sentinel.args.missingArgument');
@@ -101,7 +102,7 @@ test('init writes the private settings once and never again; it downloads and st
   assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), JSON.parse(JSON.stringify(initialSettings('static'))));
   assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')).grants, [
     { actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'], principals: ['human'], scope: { profiles: ['static'] } },
-    { actions: ['rule.promote', 'tool.acquire'], principals: ['human'] },
+    { actions: ['rule.promote', 'tool.acquire', 'context.pin'], principals: ['human'] },
   ], 'the owner only; never an agent');
   assert.equal(statSync(path).mode & 0o777, 0o600);
   assert.equal(statSync(join(ws, '.farsight/sentinel')).mode & 0o777, 0o700);
@@ -515,4 +516,23 @@ test('connecting has its own deadline and cancel: a peer that accepts and never 
   assert.equal(await fresh.request('ping', {}), 'ok');
   fresh.close();
   existing.close();
+});
+
+test('the full report refuses what it would not honour: an unknown disclosure or format, --repo without a graph, full-report flags on the minimal report', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sentinel-full-args-'));
+  try {
+    for (const [args, detail] of [
+      [['report', 'run-a', '--full', '--disclosure', 'public'], /--disclosure public/],
+      [['report', 'run-a', '--full', '--format', 'pdf'], /--format pdf/],
+      [['compare', 'run-b', 'run-a', '--repo', 'app'], /--repo \(with --context\)/],
+      [['report', 'run-a', '--out', join(dir, 'r.md')], /--out \(with --full\)/],
+      [['report', 'run-a', '--confirm'], /--confirm \(with --full\)/],
+    ] as const) {
+      const r = cli([...args, '--workspace', dir, '--json']);
+      assert.equal(r.status, 3, args.join(' '));
+      assert.equal(JSON.parse(r.stdout).reasonCode, 'sentinel.args.unexpectedArgument');
+      assert.match(r.stderr, detail);
+    }
+    assert.ok(!existsSync(join(dir, 'r.md')), 'nothing was written');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

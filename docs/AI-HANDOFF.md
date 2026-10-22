@@ -6,6 +6,54 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Full owner report integration — 2026-10-22
+
+Branch `codex/sentinel-final-report-integration` combines reviewed report projection `ce9130b0` with the merged
+scanner/library tree `34ca02b5` (exactly the reviewed `7ee256a2` tree), retaining the separately reviewed
+`7f8dd217` nonblocking owner-record read and its private-key-loss identity boundary. The report/CLI/scanner
+implementation remains the reviewed report source; incoming framework, bounded-path and provider implementations
+remain the reviewed library bytes. Catalog, contracts, owner-only actions, schemas and exports are additive unions;
+all five scanner asset sets use one packaging hook loop. The eleven recent foundation merge IDs and their scoped
+acceptance are listed in `docs/proposals/farsight-sentinel/execution-progress.md`.
+
+An accepted secret match in the run or its baseline makes every source/context-controlled detail opaque in the full
+report, including ordinary excerpts, locations and context names, in both private and shareable profiles. Trusted
+catalog words, generated identities and counts remain. This deliberately reduces report detail because the current
+worker publishes whole-line citations and cannot prove every value's exact range. No-match reports retain their
+ordinary placement and excerpts. The graph is owner-attested and bound to current captured bytes; this does not
+independently verify the graph producer or semantics. A missing private key creates new withheld-location identities;
+old delivered files remain unchanged and a store/bundle copy cannot restore that key.
+
+The source integration and independent correction reviews are complete. On source checkpoint `1a588f34`, the
+Sentinel dependency build, typecheck, schemas and catalog (4,402 entries) pass. Package/contract/policy controls
+(62), capability controls (2), workflow controls (3), publication/record controls (57, including ten actual Pattern
+opt-ins) and report-library controls (19, including official SARIF and offline printing) pass. A fresh npm-only
+consumer compiles 16 exports and 21 contract types, checks 21 schemas and 56 fixtures, runs the installed library
+hooks and verifies all five asset sets. The installed CLI runs all five existing pinned engines on two genuine
+captures, stops its own service, removes the source and reconstructs full reports and comparison from retained
+accepted evidence. Its actual SARIF validates against the official schema; private/shareable HTML open offline
+with JavaScript disabled, no external request or browser error, and print. The shareable screen was inspected.
+The initial pure pass deliberately excluded ten native controls; all ten then ran and passed separately.
+
+Selected CI, real-ingest/browser comparison against main and merge remain pending. No full-plan completion is
+claimed: canonical framework/path/provider commands, model evaluation, dispositions, selected-stage integration,
+MCP/host/GUI/bundle and release gates remain open. No source application, host scanner or hosted model is executed
+by this report integration. This is local macOS arm64 / Docker Desktop Linux arm64 acceptance, not a new host claim.
+
+## Owner-private record FIFO refusal — 2026-10-22
+
+Branch `codex/sentinel-published-record-fifo`, based on the private report-key correction, opens published records
+with `O_NONBLOCK` before inspecting their descriptor. A FIFO substituted for a report key, rule-lock record or
+adopted-asset record is refused as a nonregular file without waiting for a writer. Existing regular-file, ownership,
+mode, link-count and byte-limit checks are unchanged. Report-key continuity still depends on retaining the same
+owner-private key; a missing key starts a new identity domain, as the architecture now explicitly records.
+
+Both actual-FIFO regressions timed out on the frozen base while the regular-file positive passed. The correction
+passes all four new controls and the existing receipt/rule-lock/adopted-asset caller controls: 30 focused checks,
+zero skips. The genuine pinned local Gitleaks publication-to-full-report private-key check passes separately
+(1 check, zero skips). Sentinel dependency-closure build, typecheck and commit-title lint pass. No other report
+privacy implementation was changed; final report integration and independent review remain separately owned.
+
 ## Nest with provider and paths libraries — 2026-10-22
 
 Branch `codex/sentinel-nest-integration` merges reviewed provider/path integration `2ab52485` into Nest
@@ -158,6 +206,22 @@ its report survived service restart and source removal, and incomplete required 
 code or host scanner ran; no scanner assets were downloaded and no hosted model was called. This is local arm64 evidence; combined native CI remains an
 integration gate. The earlier 576-test broad suite belongs to `44ff7fae` and was not repeated for this source-preserving merge.
 
+## Full reports require the accepted preview findings document — 2026-10-22
+
+Branch `codex/sentinel-report-preview-shape`, based on `a9cea6fa`, closes a remaining report-consumer gap:
+a genuine accepted preview unit whose raw output is valid JSON with an unrecognized schema cannot become a
+complete zero-finding report. The consumer requires exactly one preview findings document, bound to the detector,
+rule, assigned checks and scopes. Malformed or duplicate documents refuse. Other auxiliary JSON stays allowed,
+and a genuine empty findings document remains complete. Scanner record handling is unchanged.
+
+Three new genuine-publication negatives (wrong schema, incomplete identity and duplicate document) fail on the
+base while the positive report and auxiliary-JSON controls pass. With the fix, the full authority suite plus the
+real four-engine public full-report/context/compare lifecycle pass 26 tests with no skips on Node 24.19.0 using
+existing pinned Linux containers and offline synthetic data. Dependency build, typecheck and catalog lint pass.
+The independent review also exercised duplicated vulnerable dependency locks and Dockerfiles, retaining both
+identical-byte paths distinctly. No target code, hosted model or real credential was used. Gitleaks full-report
+support and combined integration/native CI remain separately owned gates; no push or main merge occurred.
+
 ## Start here
 
 Read `AGENTS.md` for project rules and architecture. Codex loads it as project instructions; `CLAUDE.md` imports it and this handoff. Keep durable facts in those repository files so both providers receive updates. This is project memory, not ChatGPT account memory or a synchronization of private conversation histories.
@@ -272,6 +336,24 @@ four-scanner CLI consumer passes owner adoption, missing-asset refusal, plan/det
 service restart/source removal; incomplete coverage stays exit 2. Build/types/schema/catalog and focused
 package/contract/capability/workflow checks pass. Prior native CI and 20-repetition recovery results belong to exact
 `a26ca4a4`; the new integration still needs its own selected CI. No primary build, push or merge into main.
+
+## Full report accepted-evidence correction — 2026-10-22
+
+The isolated `codex/sentinel-full-report-authority-fixes` follow-on to the full-report command refuses missing,
+malformed or non-UTF-8 accepted report inputs. Scanner findings require nonempty unique assignments joined to the
+actual admitted check's family/revision, work revision, source, adapter and exact file scope. Each resulting
+observation cites only that check's captured locations. Context files use nonblocking no-follow regular descriptors,
+size ceilings and exact stable reads; current workspace inputs cannot exceed their captured size or traverse a
+replaced parent link. Matching context remains an owner attestation of a supplied graph against captured bytes,
+not independent verification of graph semantics or producer. The native scanner workflow includes these regressions.
+
+Validation: the expanded genuine-publication regressions produced ten failures and ten passing controls on the
+unchanged base; the corrected public four-engine CLI/context/compare, authority and finding-comparison checks pass
+31/31 with zero skips. Existing context, disclosure, official SARIF schema and offline browser/printing controls
+pass 19/19 with zero skips. Sentinel closure and parser builds, Sentinel types, catalog and exact commit-title lint
+pass. This local measurement used existing pinned Linux containers on the development host; native amd64 CI is a
+separate gate. No scanner acquisition, primary build, push or merge. Canonical Gitleaks full-report integration and
+retaining report/context artifacts for recipient replay remain separate follow-ons; full plan completion is not claimed.
 
 ## Sentinel Trivy/zizmor native qualification — 2026-10-22
 
@@ -448,6 +530,22 @@ annotation delimiters, and retains the harmless positive. Sentinel closure build
 package-boundary audit passed. All tests capture and parse original Java fixtures; no target code is compiled or run.
 Independent review and integration belong to the coordinating owner. No primary build or graph refresh occurred.
 
+## Sentinel reporting integration — 2026-10-22
+
+The reporting slice on `codex/sentinel-reports-integration` combines independently reviewed finding identity,
+comparison, standalone HTML/Markdown/JSON/SARIF, redaction and owner-bound context placement. The final authority
+correction passed separate SOL review: structural or copied pins, cross-capture placement and mutations of returned
+artifact bytes cannot substitute evidence. The integrated build, workspace typecheck, schema check and catalog lint
+pass; Sentinel has 449 passing tests with 33 explicit platform/opt-in skips. All 29 focused report checks pass without
+skips, including the official SARIF schema and an offline browser with JavaScript disabled. A clean npm installation
+loads 10 typed exports, 19 contracts/schemas and 54 fixtures; installed private/shareable report generation and
+SARIF validation pass. Fresh fixed-source ingests against main `2587eb16` agree on every node/edge value and digest:
+8,198 nodes, 16,956 edges, source digest `1a488ec22d7c`, 22,709,909 graph bytes and 30,998,528 database bytes.
+Three fresh browser surfaces have zero page errors; only existing missing design-image fixture requests remain.
+Private/shareable report screenshots were inspected. CLI/report dispatch, dispositions, application placement UI and
+full scanner integration remain follow-on gates; this package does not complete the entire reporting plan.
+No primary-checkout build or dogfood refresh occurred. The validation server was stopped.
+
 ## Sentinel scheduler merged; CLI integration — 2026-10-22
 
 The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`, and scheduler as
@@ -560,6 +658,20 @@ checks, 66 protocol/journal/native recovery smoke checks, and the focused pinned
 zero skips. The 15 new native behavioral cases fail nine checks on the unchanged baseline and all pass with the fix.
 The broader recovery matrix was not repeated. Independent review is still required; no selected-stage planning,
 publication, push or merge is part of this change.
+
+## Sentinel report-context authority — 2026-10-22
+
+Branch `codex/sentinel-report-context-fixes` starts from the PR 19 report fix. A genuine pin now has private runtime
+provenance anchored to its consumed owner grant. Direct placement and report/gap consumers require the exact
+snapshot and source; copied fields, serialized receipts, prototypes, proxies and pins from another capture cannot
+place findings. Report placement checks observation/citation identities too, and invalid contexts do not enter
+its artifact closure. Artifact byte access returns copies so caller mutation cannot alter retained provenance.
+
+The changed code is in `reports/context.ts`, `place.ts`, `document.ts` and the report export, with one catalog reason
+for a different capture/source. Six new actual-consumer tests accompany the existing report tests. The five-package
+build and all 40 focused report/comparison and original independent checks pass with zero skips, including official
+SARIF validation and the offline JavaScript-disabled browser/print case. Independent review is still required.
+No model, CLI, driver or application graph behavior changed.
 
 ## Sentinel parser merged; rules and policy integration — 2026-10-22
 

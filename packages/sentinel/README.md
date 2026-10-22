@@ -384,6 +384,61 @@ matchers, partial matches, equal orders, profiles not selected, conditional bean
 interceptors, servlet paths, other versions and WebFlux. `src/frameworks/spring/support.ts` states the subset and is
 part of the pack digest. The environment and the configuration bytes read key the facts.
 
+## Findings, comparisons and reports (draft)
+
+```ts
+import { compareAssessments } from 'farsight-sentinel/findings';
+import { pinApplicationContext, generateReport } from 'farsight-sentinel/reports';
+
+// The trusted owner integration confirms contextPinIntent(request) and consumes its receipt.
+const request = { snapshot, sourceId: 'app', repo: 'invoice-app', graph, inputs };
+const context = pinApplicationContext({ ...request, authorization: consumedOwnerConfirmation });
+const { document, json, markdown, html, sarif } = await generateReport({ /* run, observations, coverage, counts,
+  readContent, contexts: new Map([['app', context]]), disclosure: 'shareable', comparison? */ });
+```
+
+Observations are grouped into findings by rule family and anchors (symbol and cited text, never line numbers), and
+compared with a baseline as exact, probable or ambiguous matches; a baseline finding is resolved only by a comparable
+complete check. Findings are placed on screens, journeys and personas only through an application context whose
+inputs match the capture and whose exact document, snapshot and source the owner confirmed; otherwise they are
+reported unplaced with the reason. A returned pin is a process-local capability: copying or serializing its fields
+does not preserve authority. Direct `placeNodes` and `placeFiles` calls also require the report's exact
+`{ snapshotId, sourceId }`; report generation supplies and checks this binding for findings and gaps. The HTML file works offline with
+JavaScript disabled and loads nothing; Markdown, JSON and SARIF carry the same counts. ADR 38.
+
+From the command line, over a completed scanner run:
+
+```sh
+farsight-sentinel report <runId> --full                                  # Markdown, shareable (no source excerpts)
+farsight-sentinel report <runId> --full --format html --out report.html  # one offline file, written once
+farsight-sentinel report <runId> --full --disclosure private --format json
+farsight-sentinel report <runId> --full --context graph.json --confirm   # place findings through an application graph you confirm
+farsight-sentinel compare <runId> <baselineRunId> [--format md|json|html|sarif]
+```
+
+The report reads only the run's accepted evidence. Missing or malformed accepted report inputs refuse the report;
+findings must name nonempty exact admitted check tuples and cite their assigned captured file scopes. Current
+workspace inputs are read only for an optional context, through bounded regular-file descriptors; links, special
+files and files that exceed their captured size cannot establish a binding. The supplied graph is bounded to 64 MiB.
+A matched context records the owner's confirmation of that graph against these captured bytes. It does not
+independently verify the supplied graph's relationships, labels or producer.
+
+Secret-scan findings are reported with their locations withheld in every profile and never placed; two files with the
+same bytes stay two findings. A file whose name the secret scan matched is withheld from every report, including other
+scanners' citations of it and the minimal `report <runId>` output. A missing, extra or forged accepted secret record
+refuses the report. When the secret scan matched anything in a run (or its baseline), the scanner reports whole lines, not the value, so
+the report cannot prove other text is free of it: it withholds every excerpt, location and context name or label in
+that report, in both profiles, keeps findings' rule words, counts and placement shape, and says so
+(`sentinel.report.withheld.secretRun`). A run with no secret match reports as before (ADR 38). In a secret-bearing
+full report even ordinary source and context names are opaque; the minimal report's other names remain unchanged.
+A secret finding's identity is keyed by a per-store random secret kept in the owner's
+trust folder (never the public store id, and never in the store, a bundle or a report), so the same file keeps its
+identity across captures without anyone being able to confirm a guessed name from a report. Keep the owner's trust
+folder to keep those identities: if its `report-keys/` key is lost, a new one is created and future withheld-location
+identities change. Existing delivered reports keep their old identities; a store or bundle copy cannot restore the
+missing key or establish continuity with those earlier identities. Comparisons reconstruct both sides from retained
+runs under the current key; a delivered report file is not accepted as a baseline.
+
 ### Express control facts (draft)
 
 ```ts

@@ -74,6 +74,7 @@ import { SENTINEL_OSV_STRINGS } from './strings-sentinel-osv.js';
 import { SENTINEL_TRIVY_STRINGS } from './strings-sentinel-trivy.js';
 import { SENTINEL_ZIZMOR_STRINGS } from './strings-sentinel-zizmor.js';
 import { SENTINEL_DRIVERS_STRINGS } from './strings-sentinel-drivers.js';
+import { SENTINEL_FINDINGS_STRINGS } from './strings-sentinel-findings.js';
 import { SENTINEL_SECRETS_STRINGS } from './strings-sentinel-secrets.js';
 
 
@@ -226,6 +227,9 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_SERVICE_STRINGS,
   // Sentinel's glossary: each code-register term and its business twin, sentinel.term.biz.* (strings-sentinel-glossary.ts)
   ...SENTINEL_GLOSSARY_STRINGS,
+
+  // Sentinel findings, comparisons and report words (strings-sentinel-findings.ts)
+  ...SENTINEL_FINDINGS_STRINGS,
   // Sentinel current-tree secret scanning: limitation keys, skipped scope and coded failures (strings-sentinel-secrets.ts)
   ...SENTINEL_SECRETS_STRINGS,
 

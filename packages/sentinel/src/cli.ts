@@ -3,8 +3,10 @@
 // bounded lifecycle controls and retained reports. External scanners use the reviewed container drivers only.
 // Acquisition is a separate explicit owner action; no plan or scan downloads or uses a host scanner.
 import { readFileSync, realpathSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { REPORT_FORMATS, type ReportFormat } from './service/full-report.js';
 import {
-  adoptWorkspaceSettings, confirmForService, currentRules, followWorkspaceRun, promoteRulePack, planWorkspace, previewReport, runPlan, describeRun, runStatus, workspaceOf, PolicyError,
+  adoptWorkspaceSettings, confirmForService, currentRules, followWorkspaceRun, promoteRulePack, planWorkspace, previewReport, runPlan, describeRun, runStatus, workspaceOf, PolicyError, fullReportIn,
   type Workspace,
 } from './service/local.js';
 import { connectService, readServiceDescriptor, serveWorkspace } from './service/owner-service.js';
@@ -57,6 +59,7 @@ function help(): string {
     `  ${word('sentinel.cli.usageWait')}`,
     `  ${word('sentinel.cli.usageControls')}`,
     `  ${word('sentinel.cli.usageReport')}`,
+    `  ${word('sentinel.cli.usageFullReport')}`,
     `  ${word('sentinel.cli.usageServe')}`,
     `  ${word('sentinel.cli.usageRules')}`,
     `  ${word('sentinel.cli.usageAssets')}`,
@@ -204,6 +207,14 @@ async function owner(p: ParsedCommand): Promise<number> {
   try {
     const ws = workspaceFor(p);
     const format = typeof p.flags['--format'] === 'string' ? p.flags['--format'] : 'md';
+    if (p.command === 'compare' || (p.command === 'report' && p.flags['--full'] === true)) return await fullReportCommand(p, ws, format, confirm, now);
+    // The flags of the full report change nothing in the minimal report: refused rather than ignored.
+    for (const flag of ['--disclosure', '--context', '--repo', '--out', '--confirm']) {
+      if (p.command === 'report' && p.flags[flag] !== undefined) {
+        errOut(word('sentinel.args.unexpectedArgument', { detail: `${flag} (with --full)` }));
+        return finish(result('report', 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
+      }
+    }
     if (p.command === 'report' && format !== 'md' && format !== 'json') {
       errOut(word('sentinel.args.unexpectedArgument', { detail: format }));
       return finish(result('report', 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
@@ -341,6 +352,41 @@ async function owner(p: ParsedCommand): Promise<number> {
   }
 }
 
+/**
+ * `report <run> --full` and `compare <run> <baseline>`: the full report of a completed run from its accepted evidence,
+ * in the store this process holds. While the background service holds the store nothing is read here.
+ */
+async function fullReportCommand(p: ParsedCommand, ws: Workspace, format: string, confirm: boolean, now: Date): Promise<number> {
+  const disclosure = typeof p.flags['--disclosure'] === 'string' ? p.flags['--disclosure'] : 'shareable';
+  for (const [flag, value, allowed] of [['--format', format, REPORT_FORMATS], ['--disclosure', disclosure, ['private', 'shareable']]] as const) {
+    if (!(allowed as readonly string[]).includes(value)) {
+      errOut(word('sentinel.args.unexpectedArgument', { detail: `${flag} ${value}` }));
+      return finish(result(p.command, 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
+    }
+  }
+  if (p.flags['--repo'] !== undefined && p.flags['--context'] === undefined) {
+    errOut(word('sentinel.args.unexpectedArgument', { detail: '--repo (with --context)' }));
+    return finish(result(p.command, 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
+  }
+  const live = await connectService(ws);
+  if (live) { live.close(); return serviceOut(result(p.command, 'configuration-failure', { reasonCode: 'sentinel.service.ownerServiceRunning' })); }
+  const path = (flag: string) => (typeof p.flags[flag] === 'string' ? resolve(process.cwd(), p.flags[flag] as string) : undefined);
+  const contextFile = path('--context');
+  const outFile = path('--out');
+  const r = await fullReportIn(ws, {
+    runId: p.args.runId!, ...(p.args.baselineRunId ? { baselineRunId: p.args.baselineRunId } : {}),
+    disclosure: disclosure as 'private' | 'shareable', format: format as ReportFormat,
+    ...(contextFile ? { contextFile } : {}), ...(typeof p.flags['--repo'] === 'string' ? { repo: p.flags['--repo'] as string } : {}),
+    ...(outFile ? { out: outFile } : {}), confirm, now,
+  });
+  if (jsonOut || r.text === undefined) {
+    const f = r.result.facts as Record<string, any>;
+    return serviceOut(r.result, f.reportId ? [`report ${String(f.reportId)} · ${String(f.completeness)} · ${String(f.findings)} findings · ${String(f.gaps)} gaps${f.written ? ` · written ${String(f.written)}` : ''}`] : []);
+  }
+  out(r.text.endsWith('\n') ? r.text.slice(0, -1) : r.text);
+  return r.result.exitCode;
+}
+
 function printReport(p: ParsedCommand, doc: PreviewReport | ScannerReport | CommandResult): number {
   const format = typeof p.flags['--format'] === 'string' ? p.flags['--format'] : 'md';
   {
@@ -427,7 +473,7 @@ async function dispatch(p: ParsedCommand): Promise<number> {
     case 'capabilities': return capabilities(p);
     case 'validate': return validate(p);
     case 'init': return init(p);
-    case 'settings': case 'plan': case 'run': case 'status': case 'report':
+    case 'settings': case 'plan': case 'run': case 'status': case 'report': case 'compare':
     case 'serve': case 'wait': case 'pause': case 'resume': case 'cancel': case 'rules': case 'assets': case 'retry': case 'rerun': return owner(p);
     default: {
       const change = plannedIn(p.command)!;

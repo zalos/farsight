@@ -1,0 +1,83 @@
+import type { StringEntry } from './strings.js';
+
+// Sentinel findings, comparisons and reports (PR 19): what a report says about a finding's place, how it compares with
+// a baseline, why evidence is withheld and why a check left a gap. Both registers carry the same words until the PR 09
+// vocabulary freeze, as in strings-sentinel-capture.ts.
+const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
+const one = (text: string, pluralKey: string): StringEntry => ({ hud: text, professional: text, singularOf: pluralKey });
+
+export const SENTINEL_FINDINGS_STRINGS: Record<string, StringEntry> = {
+  // ---- counts on a finding's place and on the comparison ----
+  'sentinel.count.part.directUse': same('{n} use it directly', 'Screens whose own walk through the application reaches the code the finding is in.'),
+  'sentinel.count.part.potentialImpact': same('{n} may be affected', 'Screens that reach the finding only through code that depends on it. This is a navigation aid, not proof that the screen is affected.'),
+  'sentinel.count.historical': same('{n} earlier findings not continued', 'Findings of the earlier report that no current finding continues, each with why: fixed and rechecked, code removed, not checked this time, detection changed, or conditions that cannot be compared.'),
+  'sentinel.count.historicalOne': one('1 earlier finding not continued', 'sentinel.count.historical'),
+  'sentinel.count.part.resolvedByComparableCheck': same('{n} fixed and rechecked', 'Earlier findings a comparable complete check no longer finds.'),
+  'sentinel.count.part.removedSurface': same('{n} with the code removed', 'Earlier findings whose code is no longer there. Removing code can be a fix, but it is not a recheck.'),
+  'sentinel.count.part.unassessedInCurrentScope': same('{n} not checked this time', 'Earlier findings no complete current check covered.'),
+  'sentinel.count.part.changedDetection': same('{n} with detection changed', 'Earlier findings whose rule, engine or capabilities changed, so their absence proves nothing.'),
+  'sentinel.count.part.incomparableConditions': same('{n} under conditions that differ', 'Earlier findings checked again under a different environment or limits, so the result cannot be compared.'),
+  'sentinel.count.part.changedEvidence': same('{n} matched more than one way', 'Earlier findings that more than one current finding could continue, so none is chosen and each stays open.'),
+  // ---- comparison labels ----
+  'sentinel.compare.label.new': same('new', 'Not in the earlier report.'),
+  'sentinel.compare.label.persistent': same('still present', 'The same issue as in the earlier report, with the same evidence.'),
+  'sentinel.compare.label.changedEvidence': same('still present, evidence changed', 'An issue that continues one in the earlier report, but whose evidence moved or changed, or whose pairing needs review.'),
+  'sentinel.compare.label.changedDetection': same('detection changed', 'The rule, engine or capabilities that look for this issue changed since the earlier report, so its presence or absence cannot be compared directly.'),
+  'sentinel.compare.label.reopened': same('back again', 'An issue the earlier report listed as fixed and rechecked is found again.'),
+  'sentinel.compare.label.reopenedDispositionExpired': same('back again, decision expired', 'An issue someone had decided about, whose decision has since expired, so it is open again.'),
+  'sentinel.compare.label.resolvedByComparableCheck': same('fixed and rechecked', 'The code is still there and a complete check under the same detection and conditions no longer finds the issue.'),
+  'sentinel.compare.label.removedSurface': same('code removed', 'The code the issue was in is no longer there. That can be a fix, but nothing rechecked the code that remains.'),
+  'sentinel.compare.label.unassessedInCurrentScope': same('not checked this time', 'No complete current check covered where the issue was, so its absence says nothing.'),
+  'sentinel.compare.label.incomparableConditions': same('conditions differ', 'The issue was checked again under a different environment or limits, so the result cannot be compared.'),
+  // ---- comparison reasons ----
+  'sentinel.compare.sameEvidence': same('same issue, same evidence', 'The issue and every piece of its evidence are where they were.'),
+  'sentinel.compare.evidenceMoved': same('same issue, evidence moved', 'The same code and claim, found at a different place in the files, for example after lines were added above it.'),
+  'sentinel.compare.probableMatch': same('probably the same issue', 'The same rule in the same functions, but the cited code changed. Someone should confirm it is the same issue; it is not treated as fixed.'),
+  'sentinel.compare.ambiguousMatch': same('could be one of several issues', 'More than one finding could continue this one, for example when functions share a name or issues share a sink. None is chosen, and none is treated as fixed.'),
+  'sentinel.compare.dispositionExpired': same('a decision about it expired', 'A decision recorded for this issue has expired by the time of this report.'),
+  'sentinel.compare.reopened': same('found again after being fixed', 'The earlier report listed this issue as fixed and rechecked.'),
+  'sentinel.compare.detectionChanged': same('the rule, engine or capabilities changed', 'The check that looks for this issue now uses a different rule revision, engine or capability set, and no reviewed mapping says they detect the same things.'),
+  'sentinel.compare.newInAssessedScope': same('new where the earlier check also looked', 'The earlier report checked the same files with the same detection and did not find this.'),
+  'sentinel.compare.notPreviouslyAssessed': same('new where the earlier report did not look', 'The earlier report had no complete comparable check of these files, so this may not be new to the code.'),
+  'sentinel.compare.unknownScope': same('in a folder the capture could not list', 'The issue was in a folder whose contents were never enumerated this time, so whether its code is there is unknown.'),
+  'sentinel.compare.fileRemoved': same('its files are gone', 'None of the files the issue was in is in the current capture.'),
+  'sentinel.compare.symbolRemoved': same('its functions are gone', 'The files are still there and were fully analysed, but the functions the issue was in no longer exist.'),
+  'sentinel.compare.partRemoved': same('part of its code is gone', 'Some of the code the issue was in is no longer there while the rest remains. That is not a recheck of the issue as it was.'),
+  'sentinel.compare.surfaceUnverified': same('whether its code is still there was not checked', 'The current run has no complete analysis of the issue\'s files, so whether the functions it was in still exist is unknown.'),
+  'sentinel.compare.locationWithheld': same('its location is withheld', 'The issue concerns a secret whose location is never recorded, so whether its code is still there cannot be checked.'),
+  'sentinel.compare.noCurrentCheck': same('no current check of this rule', 'No current check of this rule ran, for example because its engine is missing.'),
+  'sentinel.compare.checksConflict': same('several current checks of this rule', 'More than one current check claims this rule, so which one decides is not clear.'),
+  'sentinel.compare.checkIncomplete': same('the current check did not finish its scope', 'The current check of this rule was partial, unsupported, not run or failed.'),
+  'sentinel.compare.scopeNarrowed': same('the current check looked at less', 'The current check of this rule did not cover every file the issue was in.'),
+  'sentinel.compare.baselineConditionsUnknown': same('the earlier check is not known', 'The earlier report does not say how this rule was checked, so a current result cannot be compared with it.'),
+  'sentinel.compare.conditionsDiffer': same('the environment or limits differ', 'The current check used a different environment or limits from the earlier one.'),
+  'sentinel.compare.comparableCheckClean': same('rechecked under the same conditions', 'A complete current check with the same rule, engine, capabilities, environment and limits covered the issue\'s files and did not find it.'),
+  // ---- placement ----
+  'sentinel.place.noContext': same('no application context', 'No saved application context was given for this source, so findings cannot be placed on screens or journeys. The report is still complete about what was checked.'),
+  'sentinel.place.noJourneys': same('the context has no journeys', 'The saved context is a code graph without journeys or screens, so nothing can be placed on them.'),
+  'sentinel.place.inputMismatch': same('the context was built from different files', 'A file the application context says it read differs from the captured file, so its screens and journeys may not describe this code.'),
+  'sentinel.place.inputNotCaptured': same('the context read a file that was not captured', 'A file the application context says it read is not in the capture.'),
+  'sentinel.place.unboundNode': same('the context names code it does not say it read', 'The application context places something in a file it does not list among its inputs, so its source cannot be confirmed.'),
+  'sentinel.place.inputOmitted': same('the context left out a configuration or design file', 'A captured configuration or design file that shapes journeys and screens is not among the context\'s inputs.'),
+  'sentinel.place.nodeNotInContext': same('some of the code is not in the context', 'Part of the code the finding is in does not appear in the application context.'),
+  'sentinel.place.truncated': same('only part of the place is listed', 'The finding reaches more screens, journeys or kinds of user than a report lists; the counts say how many there are.'),
+  'sentinel.place.contextMismatch': same('the application context belongs to another capture or source', 'A placement can use an authenticated application context only for the exact captured snapshot and source the owner confirmed. A context from another capture or source does not place these findings or gaps.'),
+  'sentinel.place.notOwnerConfirmed': same('the owner has not confirmed this application context', 'An application context is used only when the owner confirmed exactly this context for exactly this capture. Matching file hashes show which files it claims to describe, not that its journeys and screens are right.'),
+  'sentinel.place.secretWithheld': same('a secret is not placed', 'A finding about a secret is not placed on screens, because the code it is in would name its file.'),
+  'sentinel.place.gapUnplaced': same('gaps are not placed on screens', 'A gap in a check is reported against the check and its scope, not placed on screens.'),
+  'sentinel.place.noAnchorSymbol': same('the finding names no function', 'The finding\'s evidence is not inside a function the parser named, so it cannot be followed to screens.'),
+  'sentinel.place.notOnScreen': same('not on any screen', 'The code the finding is in is not reached from any screen of the application context.'),
+  // ---- disclosure and gaps ----
+  'sentinel.report.withheld.shareable': same('source text withheld in a shareable report', 'This report was made to be shared, so it does not include source text. The finding, its place and every count are unchanged.'),
+  'sentinel.report.withheld.secret': same('withheld: it concerns a secret', 'Evidence about a secret is never included in a report, nor where it is, whatever the report\'s profile.'),
+  'sentinel.report.gap.noCoverage': same('no record of what it covered', 'The check was planned, but the run recorded no coverage for it, so it is treated as not run.'),
+  'sentinel.report.gap.partial': same('covered only part of its scope', 'The check ran but did not cover everything it was planned to.'),
+  'sentinel.report.gap.unsupported': same('not supported', 'The check cannot run for this scope with what this build supports.'),
+  'sentinel.report.gap.notRun': same('did not run', 'The check was planned but did not run.'),
+  'sentinel.report.gap.error': same('failed', 'The check started and failed, so its scope is not covered.'),
+  'sentinel.report.severity.critical': same('critical', 'The most severe rating the checks give.'),
+  'sentinel.report.severity.high': same('high', 'A high severity rating.'),
+  'sentinel.report.severity.medium': same('medium', 'A medium severity rating.'),
+  'sentinel.report.severity.low': same('low', 'A low severity rating.'),
+  'sentinel.report.severity.info': same('for information', 'Recorded for information, with no severity rating, or a rating the checks gave that Sentinel does not recognise.'),
+};

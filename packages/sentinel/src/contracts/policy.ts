@@ -12,7 +12,7 @@ export type SentinelAction =
   /** Stop starting new work in a run; work in flight may finish. A write: decided like any other action. */
   | 'run.pause'
   /** Stop a run's workers; the ledger then refuses its publications. */
-  | 'run.cancel';
+  | 'run.cancel' | 'context.pin';
 
 /** What an admitted action may do beyond reading captured artifacts. */
 export type ActionEffect = 'local-artifacts' | 'source-disclosure' | 'paid-inference' | 'network' | 'tool-execution';
