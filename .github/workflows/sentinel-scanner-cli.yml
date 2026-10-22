@@ -155,7 +155,7 @@ jobs:
           grep -qx '# skipped 0' scanner-cli.tap
           grep -qx '# fail 0' scanner-cli.tap
           grep -qx '# cancelled 0' scanner-cli.tap
-      - name: Pack and run the npm-only installed public CLI through all four engines
+      - name: Pack and run the npm-only installed public CLI through all five engines
         run: |
           set -euo pipefail
           umask 022

@@ -14,6 +14,8 @@ export type * from './rules.js';
 export type * from './policy.js';
 export type * from './controls.js';
 export type * from './plan.js';
+export type * from './paths.js';
+export type * from './deepimport.js';
 
 /**
  * Every envelope: its kind, the one schema version this build reads and writes, and the generated type.
@@ -39,6 +41,8 @@ export const ENVELOPES = {
   admission: { schema: 'sentinel-admission/draft-1', type: 'AdmissionEnvelope' },
   controls: { schema: 'sentinel-controls/draft-1', type: 'ControlFactsEnvelope' },
   plan: { schema: 'sentinel-plan/draft-1', type: 'PlanEnvelope' },
+  paths: { schema: 'sentinel-paths/draft-1', type: 'PathEvidenceEnvelope' },
+  deepimport: { schema: 'sentinel-deep-import/draft-1', type: 'DeepImportEnvelope' },
 } as const;
 
 export type EnvelopeKind = keyof typeof ENVELOPES;
@@ -87,10 +91,10 @@ export const FRAMEWORK_IDS = ['next', 'express', 'nest', 'spring'] as const;
 export const RULE_ORIGINS = ['sentinel-original', 'third-party'] as const;
 export const SENTINEL_ACTIONS = [
   'run.start', 'capture.source', 'disposition.propose', 'disposition.approve', 'rule.promote',
-  'tool.acquire', 'paid.admit', 'disclosure.send', 'settings.adopt', 'run.pause', 'run.cancel', 'context.pin',
+  'tool.acquire', 'paid.admit', 'disclosure.send', 'settings.adopt', 'run.pause', 'run.cancel', 'context.pin', 'evidence.import',
 ] as const;
 /** Owner actions: an agent can never be granted them, and a person always confirms them with a receipt. */
-export const OWNER_ACTIONS = ['disposition.approve', 'rule.promote', 'tool.acquire', 'settings.adopt', 'context.pin'] as const;
+export const OWNER_ACTIONS = ['disposition.approve', 'rule.promote', 'tool.acquire', 'settings.adopt', 'context.pin', 'evidence.import'] as const;
 export const ACTION_EFFECTS = ['local-artifacts', 'source-disclosure', 'paid-inference', 'network', 'tool-execution'] as const;
 export const SETTINGS_TRUST = ['adopted', 'not-adopted', 'changed', 'missing', 'invalid'] as const;
 export const ADMISSION_OUTCOMES = ['admitted', 'denied', 'awaiting-confirmation'] as const;

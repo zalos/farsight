@@ -82,6 +82,30 @@ exactly one work unit or kept with its reason (unsupported, applicability unknow
 `workEnvelopesFor` gives the coordinator canonical work envelopes for a plan. A new rule plans a new revision over
 the already published capture and parse; earlier revisions never change (ADR 24).
 
+## Model providers (draft, opt-in)
+
+`farsight-sentinel/review/providers` is the only part of Sentinel that talks to a model: a local Ollama or an
+OpenAI-compatible endpoint. A provider is used only when it appears in the owner's adopted settings, with a model
+profile whose binding digest an owner receipt confirms whenever inference is priced or context leaves the machine.
+Every call reserves its worst case from a durable shared budget before it is sent. A call whose usage is unknown
+stays charged until the owner reconciles it. Redirects are never followed and there is no fallback to another
+provider (ADR 35). Nothing here runs unless a caller opens an envelope; the package's tests use local mock endpoints
+only.
+
+## Next middleware applicability (draft)
+
+`farsight-sentinel/frameworks/next` reads a captured Next 14.2.25 / React 18.3.1 project (versions from its lockfile
+only) and says, for each App Router route and page the parser placed, whether the middleware matcher reaches all,
+none or only some of its requests. `analyzeNext({ snapshot, analysis, read })` returns one
+`sentinel-controls/draft-1` envelope per project. A surface the matcher never reaches gets `does-not-apply`, citing
+the matcher bytes. A matched surface stays `unknown`: running middleware is not protection. Dynamic or unsupported
+matchers, another version, a non-empty next.config and the pages router are unknowns or frontiers (ADR 30). No
+application code runs. Qualification requires the pinned public registry tarball integrity as well as its version.
+Recorded pnpm patches for Next, React or React DOM (patch maps, importer hashes, package modification metadata,
+or project/workspace-root package declarations) leave applicability unknown: the original tarball integrity does
+not identify patched installed bytes. Ordinary peer dependency suffixes and unrelated package patches remain
+supported. This source-only check reads captured installation evidence; it does not attest a running installation.
+
 ## The local store (draft)
 
 ```ts
@@ -289,6 +313,76 @@ The zizmor adapter (internal, ADR 34) audits GitHub Actions workflows, action de
 with zizmor 1.31.1, offline, with no token, repository configuration or ignore comments. The five audits that need the
 GitHub API are reported as skipped on every workflow and action, which therefore stays partial; findings are an audit,
 severity and byte spans at a captured path.
+
+### Nest request controls (draft)
+
+```ts
+import { analyzeNest } from 'farsight-sentinel/frameworks/nest';
+
+const { controls, scope } = await analyzeNest({
+  snapshot, sourceId: 'app', graph: analysis.sources[0].artifact.graph,
+  readArtifact: id => store.readArtifact(id),
+});
+controls.facts;          // sentinel-controls/draft-1: authentication, authorization, input-validation per route
+scope.surfaces[0].chain; // guards → interceptors → pipes, each global → controller → method (→ parameter)
+```
+
+The pack (ADR 32) supports Nest 10.4.15 exactly, resolved from the captured lockfile or an exact pin. Only the
+framework's own `ValidationPipe` over a class with class-validator rules is validation; parse pipes and multipart
+interceptors parse, and a guard's effect is never inferred. Dynamic modules, factories, middleware, custom decorators
+and inherited controllers are `sentinel.nest.*` frontiers that leave the facts they could change `unknown`. The pack
+is not yet called by the planner or the CLI.
+
+Framework constructors passed to ordinary helpers, returned, or hidden in unsupported alias expressions,
+aggregates, tagged-template arguments or class fields leave an explicit `frameworkEscapes` frontier. The pack does not execute those helpers
+or assume they preserve the constructor: validation and absence remain unknown. Supported local aliases are still
+checked for mutation, and a separate shadowed parameter does not imply a mutation of the imported framework.
+Every other runtime use defaults to unknown until the pack explicitly models how it consumes the value.
+An alias is followed only while its declaration stays local: exports, namespace containers and unsupported
+module-loading paths remain explicit boundaries. Type-only imports and unrelated local member names are harmless.
+
+### Bounded call paths and imported deep analysis (draft)
+
+```ts
+import { boundedCallPaths, importDeepAnalysis } from 'farsight-sentinel/analysis';
+
+const paths = await boundedCallPaths({ snapshot, analysis: analysis.sources[0], readContent, queries: [{ from, to }] });
+paths.results[0].outcome;   // reached | not-reached-complete | not-reached-bounded (with its frontiers)
+paths.establishes;          // always 'call-reachability': a path is never a data flow
+
+const imported = await importDeepAnalysis({ document, snapshot, authorization: spentReceipt, readContent, importedAt });
+imported.status;            // refused | untrusted | unbound | imported (observations limited to the tool's scope)
+```
+
+Sentinel ships no deep engine: none qualified for cross-file flow (E3), so deep checks stay unsupported. A path
+search follows the parser's call edges within explicit bounds and reports cycles; it says "not reached" without a
+frontier only when every visited function's calls are accounted for by the graph. A customer's own analyzer output
+is imported only with the owner's spent receipt for exactly that document and snapshot (`deepImportIntent`; the
+document's own attestation is never trusted alone) and a binding to the exact captured bytes; imported flows never
+count as checks Sentinel ran. ADR 36.
+
+## Spring Security servlet pack (draft, PR 17)
+
+`src/frameworks/spring/` turns one source's parser evidence into `sentinel-controls/draft-1` control facts for its
+Spring routes, for exactly **Spring Boot 3.4.3 with Spring Security 6.4.3**, servlet stack. The library export is `farsight-sentinel/frameworks/spring`; canonical scan CLI integration remains open. Inputs are the captured snapshot, the PR 05 parser evidence for the source, a reader
+for captured bytes and the selected environment (`activeProfiles`, or `null` when none was selected). Nothing is
+built, resolved or run. The public graph supplies route identities. The pack reads every route mapping, security
+chain, matcher, rule and method-security annotation again from the captured Java syntax (tree-sitter's Java grammar),
+and each resolved fact cites exact byte spans of captured files.
+
+Per route, facts sit at four positions in Spring's order:
+1. servlet filters and filters a chain adds, which are unknown when present;
+2. the selected chain's authorization rule;
+3. MVC interceptors, which are unknown when present;
+4. method security.
+
+Spring runs the first chain whose `securityMatcher` matches, and the first matching rule in it decides. A route no
+chain matches is `unknown` (`sentinel.spring.noChainMatches`), with every chain matcher cited, and never protected:
+source cannot exclude a chain a dependency contributes. Anything outside the supported subset is `unknown` with a
+`sentinel.spring.*` reason and, where it applies to the whole source, a frontier: helper-built chains, non-literal
+matchers, partial matches, equal orders, profiles not selected, conditional beans, filters, customizers,
+interceptors, servlet paths, other versions and WebFlux. `src/frameworks/spring/support.ts` states the subset and is
+part of the pack digest. The environment and the configuration bytes read key the facts.
 
 ## Findings, comparisons and reports (draft)
 

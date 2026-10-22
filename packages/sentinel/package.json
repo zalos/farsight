@@ -59,7 +59,27 @@
       "import": "./dist/frameworks/express/index.js"
     },
     "./schemas/*": "./schemas/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./frameworks/spring": {
+      "types": "./dist/frameworks/spring/index.d.ts",
+      "import": "./dist/frameworks/spring/index.js"
+    },
+    "./frameworks/nest": {
+      "types": "./dist/frameworks/nest/index.d.ts",
+      "import": "./dist/frameworks/nest/index.js"
+    },
+    "./review/providers": {
+      "types": "./dist/review/providers/index.d.ts",
+      "import": "./dist/review/providers/index.js"
+    },
+    "./analysis": {
+      "types": "./dist/analysis/index.d.ts",
+      "import": "./dist/analysis/index.js"
+    },
+    "./frameworks/next": {
+      "types": "./dist/frameworks/next/index.d.ts",
+      "import": "./dist/frameworks/next/index.js"
+    }
   },
   "files": [
     "dist",
@@ -80,6 +100,7 @@
     "@farsight/graph": "workspace:*",
     "@types/node": "26.1.0",
     "ajv": "8.20.0",
-    "oxc-parser": "0.138.0"
+    "oxc-parser": "0.138.0",
+    "@vscode/tree-sitter-wasm": "0.3.1"
   }
 }
