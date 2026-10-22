@@ -964,3 +964,28 @@ Policy planned/internal metrics use the existing catalog scope `surf.scope.api` 
 one reconciled API, restricted to the sources the diff compares. Each metric carries its source fold.
 
 Design reconciliation’s `codeOnly` count and `drift` exclude unclaimed pages tagged `fallback`. Those pages are listed in `fallbacks` without introducing a new displayed count; a manifest-declared fallback participates in the ordinary built-screen and drift counts.
+
+### Sentinel report counts (draft contract `sentinel-report/draft-1`; no fold yet)
+
+These are **draft contract slots**, not printed numbers: PR 02 defines where a report carries each count, and the
+report fold that computes them arrives in PR 19. Nothing in the product prints them yet. Each slot is a
+`ReportCount` with exactly core's `Counted` shape (`n`, optional `of`, `unit`, optional `bizUnit`, `scope`, `source`,
+a `breakdown` of labelled parts that sums to `n`, optional `recheck`); every key is a shared-catalog key
+(`strings-sentinel-report.ts`, or an existing core `count.unit.*`), the three `sentinel.scope.*` scopes are in
+`COUNT_SCOPES`, and core's own `countedProblems` is run over the valid fixture's counts. The contract validator
+(`packages/sentinel/src/validate.ts`) checks that a breakdown sums, that `n` never exceeds `of`, and that each count
+tied to listed rows equals those rows.
+
+| number | unit | scope | what it counts | the validator holds it to |
+|---|---|---|---|---|
+| findings | `sentinel.count.findings` · business `sentinel.count.issues` | `sentinel.scope.report` — one saved report at its pinned ledger sequence and evaluation time | Grouped findings the report lists; several checks that saw one weakness are one finding. Breakdown by severity (`sentinel.count.part.critical` … `.info`) | `findings.length` |
+| observations | `sentinel.count.observations` | `sentinel.scope.report` | Producer claims before grouping, each once; one finding can rest on several | distinct `observationIds` across the findings |
+| gaps in the checks | `sentinel.count.gaps` | `sentinel.scope.report` | Checks that did not cover their scope: unsupported, not run, error or partial | `gaps.length` |
+| planned checks | `sentinel.count.plannedChecks` | `sentinel.scope.report` | Every planned check (one rule over one part of the code), whether it ran, was unsupported or was not needed | breakdown and `of` only (no listed rows) |
+| seen by no check | `sentinel.count.seenByNoStage`, printed *n of m captured files* | `sentinel.scope.inventory` — the snapshot's captured inventory before any check ran | The **exact** number of included inventory entries no completed stage covered, out of `of` included entries. Always printed, **including 0**, so an empty result never hides unread files | breakdown and `of` only |
+| folders never listed | `sentinel.count.unknownBoundaries` | `sentinel.scope.inventory` | Directory boundaries whose descendants were never enumerated (excluded, refused, unreadable). Unknown scope: **counted apart, never added to the exact count above and never read as zero files** | breakdown and `of` only |
+| screens · journeys · personas a finding or gap is placed on | `sentinel.count.screens` · `count.unit.journeys` · `count.unit.personas` | `sentinel.scope.finding` — one finding's (or gap's) placement | Each **unique** screen, journey and persona from the pinned application context, counted once however many paths meet it. An unbound placement (`binding` not `matched`) places nothing and says why | distinct `id`s in `place.screens` / `journeys` / `personas` |
+
+Placement IDs are canonical graph node IDs (`repo::path::name`), not ledger IDs. Placement reachability is navigation
+evidence, never proof of exploitation. The source on every draft fixture count is `sentinel report fold draft-1`; the
+production fold names itself when PR 19 lands, and a `recheck` command arrives with the Sentinel CLI.
