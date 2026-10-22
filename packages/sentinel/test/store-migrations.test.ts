@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, statSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, linkSync, statSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { openLedger } from '../dist/store/ledger.js';
@@ -154,4 +154,47 @@ test('the ledger CHECK sets equal the pinned contract and store enumerations', a
   assert.deepEqual(setIn('artifact_objects', 'codec'), [...ARTIFACT_CODECS]);
   assert.deepEqual(setIn('events', 'kind'), [...LEDGER_EVENT_KINDS]);
   db.close();
+});
+
+test('losing the owner during an upgrade commits nothing, and a successor can still upgrade', async t => {
+  for (const point of ['backup:after-copy', 'migrate:after-sql'] as const) {
+    const dir = scratch(t);
+    const path = await seeded(dir);
+    const lost = owner(dir);
+    await assert.rejects(openLedger(lost, {
+      migrations: [...LEDGER_MIGRATIONS, V2],
+      failpoint: p => { if (p === point) lost.release(); },
+    }), code('sentinel.store.ownerNotHeld'), point);
+    assert.deepEqual(peek(path), { version: 1, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 }, point);
+    const successor = await openLedger(owner(dir), { migrations: [...LEDGER_MIGRATIONS, V2] });
+    assert.equal(successor.migration.to, 2, point);
+    successor.close();
+  }
+  const fresh = scratch(t);
+  const lost = owner(fresh);
+  await assert.rejects(openLedger(lost, { failpoint: p => { if (p === 'migrate:after-sql') lost.release(); } }),
+    code('sentinel.store.ownerNotHeld'));
+  const db = new DatabaseSync(join(fresh, 'ledger.sqlite'), { readOnly: true });
+  assert.equal(Number(Object.values(db.prepare("SELECT count(*) FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").get()!)[0]), 0);
+  db.close();
+});
+
+test('no ledger path may name the owner lock file, by spelling, case or inode', async t => {
+  const dir = scratch(t);
+  const lockPath = join(dir, 'owner.sqlite');
+  writeFileSync(lockPath, '', { mode: 0o600 });
+  const before = statSync(lockPath, { bigint: true });
+  const at = (ledger: string) => {
+    const o = owner(dir) as unknown as { layout: { root: string; ledger: string; owner: string } };
+    o.layout = { root: dir, ledger, owner: lockPath };
+    return openLedger(o as never);
+  };
+  await assert.rejects(at(lockPath), code('sentinel.store.unsafePath'));
+  await assert.rejects(at(join(dir, '.', 'owner.sqlite')), code('sentinel.store.unsafePath'));
+  if (process.platform === 'darwin') await assert.rejects(at(join(dir, 'OWNER.sqlite')), code('sentinel.store.unsafePath'));
+  linkSync(lockPath, join(dir, 'alias.sqlite'));
+  await assert.rejects(at(join(dir, 'alias.sqlite')), code('sentinel.store.unsafePath'));
+  const after = statSync(lockPath, { bigint: true });
+  assert.equal(after.size, 0n);
+  assert.equal(after.mtimeNs, before.mtimeNs, 'the owner file was never written');
 });

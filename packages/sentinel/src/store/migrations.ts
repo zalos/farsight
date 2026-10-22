@@ -341,7 +341,7 @@ function fsyncPath(path: string): void {
  */
 async function takeBackup(
   sqlite: typeof import('node:sqlite'), db: DatabaseSync, path: string, from: number, tag: string,
-  failpoint: (p: LedgerFailpoint) => void,
+  failpoint: (p: LedgerFailpoint) => void, guard: LedgerGuard,
 ): Promise<string> {
   const { backup, DatabaseSync: Db } = sqlite;
   const dir = join(dirname(path), 'backups');
@@ -353,9 +353,12 @@ async function takeBackup(
     const d = lstatSync(dir);
     if (!d.isDirectory() || (d.mode & 0o077) !== 0) throw new Error('the backup directory is not private');
     rmSync(temp, { force: true });
+    guard.notOwnerFile(temp);
     await backup(db, temp);
+    guard.assertHeld();
     chmodSync(temp, 0o600);
     failpoint('backup:after-copy');
+    guard.notOwnerFile(temp);
     const copy = new Db(temp, { readOnly: true });
     try {
       const state = inspectLedgerFile(copy);
@@ -365,18 +368,33 @@ async function takeBackup(
       }
     } finally { copy.close(); }
     fsyncPath(temp);
+    guard.notOwnerFile(final);
+    guard.assertHeld();
     renameSync(temp, final);
     fsyncPath(dir);
     return final;
   } catch (error) {
-    rmSync(temp, { force: true });
+    try { guard.notOwnerFile(temp); rmSync(temp, { force: true }); } catch { /* never touch an owner alias */ }
     if (error instanceof LedgerError) throw error;
     throw new LedgerError('sentinel.store.backupFailed', 'could not take a verified backup before the upgrade',
       { cause: error });
   }
 }
 
-/** Brings the ledger to the newest known schema. The connection must not be inside a transaction. */
+/**
+ * What the migration needs from its caller to stay under the owner: a re-check that the owner is still held
+ * (throws LedgerError ownerNotHeld) and a refusal of any path that is, or aliases, the owner lock file.
+ */
+export interface LedgerGuard {
+  assertHeld(): void;
+  notOwnerFile(path: string): void;
+}
+
+/**
+ * Brings the ledger to the newest known schema. The connection must not be inside a transaction. Ownership is
+ * re-checked after every await, after BEGIN, after each step and immediately before COMMIT; a loss at any point
+ * rolls the whole upgrade back.
+ */
 export async function migrateLedger(db: DatabaseSync, path: string, options: {
   migrations: readonly Migration[];
   build: string;
@@ -384,16 +402,20 @@ export async function migrateLedger(db: DatabaseSync, path: string, options: {
   backupTag: string;
   sqlite: typeof import('node:sqlite');
   failpoint: (p: LedgerFailpoint) => void;
+  guard: LedgerGuard;
 }): Promise<MigrationReport> {
+  const { guard } = options;
+  guard.assertHeld();
   const { migrations, build, now, failpoint } = options;
   const state = checkLedgerFile(db, migrations);
   const to = migrations.length;
   if (state.version === to) return { from: state.version, to, backupPath: null };
-  const backupPath = state.version > 0 ? await takeBackup(options.sqlite, db, path, state.version, options.backupTag, failpoint) : null;
-  // Re-check after the await: nothing else holds this connection, but the check is cheap and keeps the step honest.
+  const backupPath = state.version > 0 ? await takeBackup(options.sqlite, db, path, state.version, options.backupTag, failpoint, guard) : null;
+  guard.assertHeld();
   checkLedgerFile(db, migrations);
   db.exec('BEGIN IMMEDIATE');
   try {
+    guard.assertHeld();
     if (state.version === 0) db.exec(`PRAGMA application_id = ${LEDGER_APPLICATION_ID}`);
     const record = () => db.prepare(
       'INSERT INTO schema_migrations (version, name, checksum, build, applied_at) VALUES (?, ?, ?, ?, ?)');
@@ -402,11 +424,14 @@ export async function migrateLedger(db: DatabaseSync, path: string, options: {
       failpoint('migrate:after-sql');
       record().run(m.version, m.name, migrationChecksum(m), build, now());
       db.exec(`PRAGMA user_version = ${m.version}`);
+      guard.assertHeld();
     }
     if (db.prepare('PRAGMA foreign_key_check').all().length > 0) throw new Error('foreign key check failed');
+    guard.assertHeld();
     db.exec('COMMIT');
   } catch (error) {
     if (db.isTransaction) db.exec('ROLLBACK');
+    if (error instanceof LedgerError && error.code === 'sentinel.store.ownerNotHeld') throw error;
     throw new LedgerError('sentinel.store.migrationFailed',
       `upgrade from schema ${state.version} to ${to} was rolled back`, { cause: error });
   }

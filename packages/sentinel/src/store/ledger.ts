@@ -4,13 +4,14 @@
 // Publication additionally fences the exact work revision, its active attempt and that attempt's state, so a
 // superseded attempt in the same epoch cannot win.
 import { closeSync, lstatSync, openSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { compareTimestamps, isCalendarTimestamp, validateEnvelope } from '../validate.js';
 import type {
   AttemptEnvelope, AttemptUsage, Id, RunEnvelope, RunOutcome, RunState, WorkEnvelope, WorkRef,
 } from '../contracts/index.js';
 import { digestOf } from './ledger-json.js';
-import { LEDGER_MIGRATIONS, migrateLedger } from './migrations.js';
+import { LEDGER_MIGRATIONS, migrateLedger, type LedgerGuard } from './migrations.js';
 import {
   ARTIFACT_CODECS, ARTIFACT_PRIVACY, LedgerError, MAX_ARTIFACT_BYTES, MAX_EVENT_PAGE,
   type ArtifactPrivacy, type EndAttemptInput, type EventPage, type GcSnapshot, type IdempotencyRef, type LedgerEvent,
@@ -60,7 +61,8 @@ const checkTime = (value: unknown, what: string): string => {
  * The ledger and its WAL/SHM siblings are regular files owned by this user with no group or other access; a new
  * ledger file is created 0600 before SQLite opens it (SQLite gives its siblings the main file's mode).
  */
-function preparePrivateLedgerFile(path: string): void {
+function preparePrivateLedgerFile(path: string, guard: LedgerGuard): void {
+  for (const p of [path, `${path}-wal`, `${path}-shm`, `${path}-journal`]) guard.notOwnerFile(p);
   const uid = typeof process.getuid === 'function' ? process.getuid() : undefined;
   for (const p of [path, `${path}-wal`, `${path}-shm`, `${path}-journal`]) {
     let stat;
@@ -74,6 +76,30 @@ function preparePrivateLedgerFile(path: string): void {
       throw new LedgerError('sentinel.store.unsafePath', 'could not create the ledger file', { cause: error });
     }
   }
+}
+
+/**
+ * Any descriptor this process opens on the owner lock file — and closes — drops its POSIX lock without notice, so
+ * no ledger, sibling or backup path may name it, by spelling or by inode. Only lstat is used: it opens nothing.
+ */
+function ownerGuard(owner: LedgerOwner): LedgerGuard {
+  const ownerPath = resolve(owner.layout.owner);
+  const fold = (p: string) => (process.platform === 'darwin' || process.platform === 'win32' ? p.toLowerCase() : p);
+  return {
+    assertHeld() {
+      try { owner.assertHeld(); } catch (cause) {
+        throw new LedgerError('sentinel.store.ownerNotHeld', 'the store owner is no longer held', { cause });
+      }
+    },
+    notOwnerFile(candidate: string) {
+      const refuse = () => new LedgerError('sentinel.store.unsafePath', 'a ledger path names the owner lock file');
+      if (fold(resolve(candidate)) === fold(ownerPath)) throw refuse();
+      let a; let b;
+      try { a = lstatSync(candidate, { bigint: true }); } catch { return; }
+      try { b = lstatSync(ownerPath, { bigint: true }); } catch { return; }
+      if (a.dev === b.dev && a.ino === b.ino) throw refuse();
+    },
+  };
 }
 
 const privacyRank = (p: ArtifactPrivacy) => ARTIFACT_PRIVACY.indexOf(p);
@@ -99,11 +125,13 @@ type Row = Record<string, unknown>;
  * verified before any schema change; a failed backup or migration leaves the file as it was.
  */
 export async function openLedger(owner: LedgerOwner, options: OpenLedgerOptions = {}): Promise<Ledger> {
-  owner.assertHeld();
+  const guard = ownerGuard(owner);
+  guard.assertHeld();
   // The owner has already checked the SQLite release and the store root (canonical, local, owner-only, no alias).
   const sqlite = owner.runtime.sqlite;
   const path = owner.layout.ledger;
-  preparePrivateLedgerFile(path);
+  preparePrivateLedgerFile(path, guard);
+  guard.assertHeld();
   const now = options.now ?? (() => new Date().toISOString());
   const failpoint = options.failpoint ?? (() => {});
   const db = new sqlite.DatabaseSync(path, { enableForeignKeyConstraints: true, timeout: 0, defensive: true });
@@ -117,6 +145,7 @@ export async function openLedger(owner: LedgerOwner, options: OpenLedgerOptions 
     if (mode !== 'wal' || sync !== 2 || fk !== 1) {
       throw new LedgerError('sentinel.store.sqliteUnsupported', 'WAL, synchronous=FULL and foreign keys are required');
     }
+    guard.assertHeld();
     const migration = await migrateLedger(db, path, {
       migrations: options.migrations ?? LEDGER_MIGRATIONS,
       build: options.build ?? 'unknown',
@@ -124,7 +153,9 @@ export async function openLedger(owner: LedgerOwner, options: OpenLedgerOptions 
       backupTag: checkId(owner.epoch, 'owner epoch'),
       sqlite,
       failpoint,
+      guard,
     });
+    guard.assertHeld();
     const ledger = new Ledger(db, owner, path, migration, now, failpoint, options.objects);
     owner.registerResource(ledger);
     return ledger;

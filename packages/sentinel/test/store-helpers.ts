@@ -19,10 +19,10 @@ export class FakeOwner implements LedgerOwner {
   readonly epoch: string;
   readonly storeId: string;
   readonly runtime = { sqlite };
-  readonly layout: { root: string; ledger: string };
+  readonly layout: { root: string; ledger: string; owner: string };
   constructor(storePath: string, epoch: string, storeId = 'store-1') {
     this.storePath = storePath;
-    this.layout = { root: storePath, ledger: join(storePath, 'ledger.sqlite') };
+    this.layout = { root: storePath, ledger: join(storePath, 'ledger.sqlite'), owner: join(storePath, 'owner.sqlite') };
     this.epoch = epoch;
     this.storeId = storeId;
   }

@@ -14,7 +14,7 @@ export interface LedgerOwner {
   /** The SQLite runtime the owner already checked against the release policy; the ledger opens through it only. */
   readonly runtime: { readonly sqlite: typeof import('node:sqlite') };
   /** The checked store layout; the ledger lives at `layout.ledger` and nowhere else. */
-  readonly layout: { readonly root: string; readonly ledger: string };
+  readonly layout: { readonly root: string; readonly ledger: string; readonly owner: string };
   assertHeld(): void;
   /** The ledger registers itself so releasing ownership closes it first. Required: a ledger never outlives its owner. */
   registerResource(resource: { close(): void }): unknown;
