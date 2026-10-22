@@ -358,3 +358,11 @@ no finding, `lodash@4.17.11` (lockfile) 7 advisory groups and `jackson-databind@
 npm archive took about 7–10 s. The public scanner command layer now composes this adapter through the canonical coordinator; adoption and promotion remain explicit, and no JavaScript export starts work.
 
 The offline advisory adapter is measured on Linux arm64 and native Linux amd64. The [amd64 qualification](https://github.com/zalos/farsight/actions/runs/39788785215) passed 21 tests with zero skips and ran the installed worker against its original fixtures. The public installed CLI path is qualified separately with the original synthetic corpus and held assets as described above.
+### Secrets adapter qualification
+
+The pinned Gitleaks 8.30.1 current-tree adapter has real container conformance evidence on ARM64 with Docker
+Desktop (Engine 29.2.1) and native AMD64 on Ubuntu 24.04.5 with Node 24.22.0. The native
+[isolation run](https://github.com/zalos/farsight/actions/runs/39801723971/job/119904045294) passed all 93 cases
+without skips, including Gitleaks positive/negative, omission, malformed output and redaction cases. The same
+image index, default rules and worker bytes apply; other platforms remain refused. This qualification does not
+complete the public scan command integration or add Git-history scanning.

@@ -171,8 +171,6 @@ jobs:
         working-directory: packages/sentinel
         env:
           SENTINEL_ISOLATION: '1'
-          # linux/amd64 is listed in the Gitleaks pin but not measured: its results here are candidates, never measured.
-          SENTINEL_GITLEAKS_QUALIFY: linux/amd64
         run: |
           set -o pipefail
           node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=300000 \

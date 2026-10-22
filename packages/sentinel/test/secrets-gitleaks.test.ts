@@ -155,10 +155,12 @@ test('findings become redacted observations citing whole lines; existing finding
   assert.equal(r.scanned.length, 4);
   assert.equal(r.audit.engine, 'gitleaks 8.30.1');
   assert.deepEqual(r.platform, { architecture: 'arm64', state: 'measured' });
-  // An unmeasured platform of the pinned index counts only under an explicit qualification run, and says so.
-  const candidate = synthetic({ architecture: 'amd64', qualify: 'amd64' });
-  assert.equal(candidate.status, 'complete');
-  assert.deepEqual(candidate.platform, { architecture: 'amd64', state: 'candidate' });
+  // Both pinned architectures have real engine conformance evidence. Qualification cannot demote a measured result.
+  for (const options of [{ architecture: 'amd64' }, { architecture: 'amd64', qualify: 'amd64' }]) {
+    const measured = synthetic(options);
+    assert.equal(measured.status, 'complete');
+    assert.deepEqual(measured.platform, { architecture: 'amd64', state: 'measured' });
+  }
   assert.equal(synthetic({ architecture: 's390x', qualify: 's390x' }).reasonCode, 'sentinel.secrets.platformUnmeasured', 'only a platform the index lists');
 });
 
@@ -174,7 +176,6 @@ test('every failure is an error over every target with a coded reason, never zer
     [{ report: 'U\n' }, 'sentinel.secrets.unknownFile'],
     [{ report: 'F\tgithub-pat\t2\t2\t9\n' }, 'sentinel.secrets.unknownFile'],
     [{ report: 'F\tgithub-pat\t9\t9\t1\n' }, 'sentinel.secrets.locationOutOfRange'],
-    [{ architecture: 'amd64' }, 'sentinel.secrets.platformUnmeasured'],
     [{ architecture: 's390x' }, 'sentinel.secrets.platformUnmeasured'],
     [{ extraOutput: true }, 'sentinel.secrets.outputRefused'],
     [{ state: 'failed', stderr: 'sentinel-gitleaks-worker/1 sentinel.secrets.inputInvalid\n' }, 'sentinel.secrets.inputInvalid'],

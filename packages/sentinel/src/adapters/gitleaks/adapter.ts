@@ -23,9 +23,9 @@ export const GITLEAKS_IMAGE_PLATFORMS = Object.freeze([
   Object.freeze({ platform: 'linux/arm64', architecture: 'arm64', state: 'measured' as const,
     manifest: 'sha256:6b2d52241f9d176fc59e6e3b026ea52c98f390070587d9475d6ee2bc64941815',
     evidence: 'darwin-arm64 host, Docker Desktop with Engine 29.2.1; Gitleaks conformance 2026-10-22' }),
-  Object.freeze({ platform: 'linux/amd64', architecture: 'amd64', state: 'unmeasured' as const,
+  Object.freeze({ platform: 'linux/amd64', architecture: 'amd64', state: 'measured' as const,
     manifest: 'sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb',
-    evidence: 'listed in the pinned index; not installed here and no native amd64 host measured' }),
+    evidence: 'native Ubuntu 24.04.5 x64, Node 24.22.0; CI 39801723971 isolation/conformance 93 passed, zero skipped, 2026-10-22' }),
 ]);
 export const GITLEAKS_MEASURED_ARCHITECTURES: ReadonlySet<string> = new Set(GITLEAKS_IMAGE_PLATFORMS.filter(p => p.state === 'measured').map(p => p.architecture));
 

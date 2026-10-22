@@ -17,7 +17,7 @@ import { ENTRY_SCOPE } from '../dist/adapters/gitleaks/index.js';
 
 const enabled = process.env.SENTINEL_ISOLATION === '1';
 const skip = !enabled && 'real pinned engine: set SENTINEL_ISOLATION=1 with a qualified local Docker and the pinned Gitleaks image installed';
-// On a platform of the pinned index that is not yet measured (CI's linux/amd64), results are candidates, never measured.
+// An explicit qualification option permits only a platform listed in the pin; measured results stay measured.
 const QUALIFY = process.env.SENTINEL_GITLEAKS_QUALIFY?.replace(/^linux\//, '');
 
 const VARIANTS = {
@@ -70,7 +70,7 @@ test('positive: each leaking line is one redacted observation; a root ignore lis
   const { r, ms } = await run(treeFiles());
   assert.equal(r.status, 'complete', r.reasonCode);
   assert.deepEqual(found(r), ['github-pat config/service.env:43', 'github-pat notes/allowed.md:0']);
-  assert.equal(r.platform.state, QUALIFY ? 'candidate' : 'measured');
+  assert.equal(r.platform.state, 'measured');
   assert.equal(r.audit.exitCode, 2);
   assert.equal(r.audit.image, GITLEAKS_ENGINE.image);
   assert.equal(r.scanned.length, 4);
