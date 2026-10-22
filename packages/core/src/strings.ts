@@ -62,6 +62,10 @@ import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
 import { SENTINEL_NEST_STRINGS } from './strings-sentinel-nest.js';
 
+import { SENTINEL_NEXT_STRINGS } from './strings-sentinel-next.js';
+
+import { SENTINEL_SPRING_STRINGS } from './strings-sentinel-spring.js';
+
 import { SENTINEL_OSV_STRINGS } from './strings-sentinel-osv.js';
 
 import { SENTINEL_EXPRESS_STRINGS } from './strings-sentinel-express.js';
@@ -205,6 +209,11 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_GLOSSARY_STRINGS,
   // Sentinel's Nest framework pack: why a control fact is unknown, and the registrations it could not follow (strings-sentinel-nest.ts)
   ...SENTINEL_NEST_STRINGS,
+
+  ...SENTINEL_NEXT_STRINGS,
+
+  // Sentinel's Spring Security servlet pack: why a control fact is unknown (strings-sentinel-spring.ts)
+  ...SENTINEL_SPRING_STRINGS,
 
 
   // Sentinel's OSV advisory adapter: coverage, refusals, engine failures and acquisition (strings-sentinel-osv.ts)

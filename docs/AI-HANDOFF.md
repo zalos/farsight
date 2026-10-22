@@ -6,6 +6,21 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Nest integration retains the reviewed Next and Spring aggregate — 2026-10-22
+
+Branch `codex/sentinel-nest-integration` merges reviewed aggregate `467a13b1` into `f78f3ce8`.
+Nest source, tests, fixtures and catalog remain byte-identical to `f78f3ce8`; Next, Spring and Express source,
+tests and catalogs, plus the adapter and execution runtime, remain byte-identical to `467a13b1`. All four public
+framework library exports and existing installed-package checks are retained. Next's command capability remains
+unavailable; Spring and Express keep their incoming draft library capabilities. No operation is registered here.
+
+Validation on Node 24.19.0: dependency-closure build, Sentinel typecheck, schemas and catalog passed. Ten package
+checks and two capability checks passed with zero skips. A fresh npm consumer imports twelve typed exports,
+compiles 19 contract types, validates 19 schemas and 53 fixtures, reopens storage across processes, analyses Nest,
+Spring (open/protected/unknown) and Express (before/after/conditional), and verifies Pattern/OSV assets. The
+unchanged Nest suite was not repeated after its 104-test combined framework/package run at `f78f3ce8`.
+No target code or scanner was run. Final native CI and canonical framework command integration remain open.
+
 ## Nest library merged with main foundations — 2026-10-22
 
 Branch `codex/sentinel-nest-integration` merges main `6bf00a7d` into reviewed Nest head `17ac292e`.
@@ -22,6 +37,19 @@ contract types, validated 19 schemas and 53 fixtures, and reopened storage acros
 Pattern pack files and the Pattern/OSV worker digests, with no advisory database bundled. No scanner or target
 code was executed. Broader historical suite and graph measurements remain qualified to their recorded heads;
 canonical framework command integration and new native qualification are separate gates.
+
+## Next patch identity correction — 2026-10-22
+
+Branch `codex/sentinel-next-patched-identity` refuses recorded pnpm patches for Next, React and React DOM,
+including lock patch maps, importer/package patch hashes and project/workspace-root package declarations.
+Nested projects read only captured root declaration bytes; absent recorded bytes or malformed declarations leave
+versions unknown. Ancestor declaration identities contribute to registration and surface influence digests. Pack
+revision 3 invalidates facts produced with the earlier package identity semantics. Ordinary peer suffixes and
+unrelated patches still qualify. This is source-only installation evidence, not a runtime package attestation.
+
+Validation: Sentinel dependency-closure build; Next matcher/pack suites (23 tests, no skips), including actual
+capture → delete checkout → parse → analyze patched fixtures and a nested workspace control. The original
+independent patched-package probe was replayed unchanged. Public CLI integration remains separately pending.
 
 ## Delayed OOM canary correction — 2026-10-22
 
@@ -114,6 +142,73 @@ catalog and exact subject lint passed. No target application code was executed. 
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Next fix-stack integration with merged foundations — 2026-10-22
+
+Branch `codex/sentinel-next-integration` incorporates the reviewed patch-identity correction and follow-ups through
+`89323726`, then merges main `95387a4e`. The merge preserves the complete Pattern and Express implementations,
+reserved ADRs, catalogs, package exports, audit entries and installed-consumer hooks alongside Next. The Next runtime
+is unchanged from the frozen root-shape correction; other framework/scanner/runtime implementations come unchanged
+from merged main. The root-shape slice passed 46 focused Next/package tests with zero skips before integration.
+
+Production coordinator and CLI dispatch for framework packs remain open. The merge is a library foundation and
+makes no framework effect or full-plan acceptance claim. Integration build, focused checks and fresh installed npm
+consumer evidence are verified separately before handoff; no target application code is executed or installed.
+No primary build, dogfood replacement, server restart or push is part of this integration.
+
+## Next pnpm root-shape preflight — 2026-10-22
+
+The follow-up on `codex/sentinel-next-patch-indent` preserves `c8c3f160` and validates every meaningful lockfile root
+key before reading individual sections. Supported keys are plain, single-quoted or double-quoted simple identifiers;
+unknown ordinary identifiers may remain inert configuration. Tagged, anchored, complex, escaped or duplicate root
+keys and document directives are refused conservatively. Patch-head detection consumes those normalized roots,
+rather than a separate spelling-specific search. No YAML dependency is added; the pack revision advances to 7.
+
+A captured tagged `patchedDependencies` key reproduced the identity bypass on frozen `c8c3f160`; the existing YAML
+parser confirms it names the same map as an ordinary key. An original ordinary-config/unrelated-patch fixture keeps
+its measured peer identity. Focused checks also cover quoted known sections and unsupported root/document forms.
+No target code is executed. Independent review remains required before integration or publication.
+
+## Next pnpm modification-metadata key follow-up — 2026-10-22
+
+The follow-up on `codex/sentinel-next-patch-indent` preserves `464c6734` and reads package metadata field names as
+plain or quoted identifiers. A `patched` field in either form refuses the measured registry identity; escaped or
+unsupported key forms are unknown instead of silently ignored. Ordinary quoted `engines` and `hasBin` metadata
+still qualify. No YAML dependency is added. The pack revision advances to 6 to invalidate the earlier decision.
+
+Actual capture/parse probes reproduced all three quoted/escaped modification-key failures on frozen `464c6734`;
+the existing YAML parser confirms each spelling means the same `patched: true` field. The ordinary metadata positive
+passed that baseline. Final validation passed all 43 focused Next/package tests with zero skips, Sentinel build and
+typecheck, catalog lint and diff checks. Target code was never installed, compiled or executed. Independent review
+and integration remain with the coordinating owner; author, primary and integrating-owner trees are untouched.
+
+## Next pnpm comment-boundary follow-up — 2026-10-22
+
+The follow-up on `codex/sentinel-next-patch-indent` preserves `696d96fb` and makes the shared YAML block reader
+ignore comment-only lines at every indentation. Two actual capture/parse probes reproduced the remaining defect on
+that frozen head: a column-zero comment before the first patch entry, or between an unrelated entry and Next's entry,
+truncated the map and incorrectly retained the registry identity. The existing YAML parser confirms both placements
+preserve the same patch-map meaning. The pack revision advances to 5 so the old identity answer cannot be reused.
+
+Comment-only declarations parse as YAML null and are conservatively unknown, while explicit empty maps remain
+supported. New retained-source regressions cover both hidden-entry cases and that null-versus-empty distinction;
+ordinary peer suffixes and unrelated patch positives remain in the focused suite. No target code is executed and
+no author, primary or integrating-owner tree is changed. Independent review remains required before integration.
+
+## Next pnpm patch-map indentation correction — 2026-10-22
+
+Branch `codex/sentinel-next-patch-indent` follows reviewed patch-identity correction `c9972d84`. The lockfile reader
+infers the direct-entry indentation of `patchedDependencies` instead of assuming two spaces, and skips each entry's
+complete metadata block before reading its sibling. Relevant patches remain unknown; unsupported selector/map shapes
+are refused rather than ignored. Ordinary peer suffixes and patches for unrelated packages still qualify. The pack
+revision advances to 4 so prior analysis cannot reuse this changed identity decision.
+
+Three original capture/parse regressions (one-, four- and eight-space patch maps) fail on frozen `c9972d84`.
+Each corrected case checks both relevant-patch refusal and an unrelated-patch positive through retained bytes after
+source removal. The original four-space probe is valid YAML: the existing YAML parser produces the same object as
+for the ordinary two-space form. Target code is never installed, compiled or executed. Build, typecheck and catalog
+checks passed; all 36 focused Next/package tests and both exact review probes passed with zero skips. Independent review and integration
+remain with the coordinating owner; no primary build, graph replacement or push occurred.
+
 ## Sentinel offline advisory foundation rebased — 2026-10-22
 
 Branch `codex/sentinel-osv-integration` rebases the independently reviewed advisory adapter from `30b618f1`
@@ -141,6 +236,37 @@ must grow process memory after allocation reuse or garbage collection. The refus
 error and absence of a publication; the neighbor checks successful publication. Runtime grants are unchanged.
 Validation: dependency-closure build and all 10 bootstrap tests passed with no skips. Native platform metadata is
 reviewed separately against the native CI evidence.
+
+## Spring PR149 integration rebase — 2026-10-22
+
+Branch `codex/sentinel-spring-integration` is rebased onto fetched main `5196dc70`, including the independently
+approved balanced generic correction `a951674b` (rebased runtime head `1eb1f22e`). Every Spring implementation,
+fixture and framework catalog byte is identical to that reviewed head. Conflict resolution retained main's Pattern
+ADR, adapter, rule assets, packaging hook and installed asset verification alongside the Spring export and fixture.
+Main's Pattern implementation and asset-hook bytes were checked unchanged; no OSV changes were present at this base.
+
+Affected dependency build and typecheck, catalog lint and the exact existing PR title lint passed. Nine focused
+Spring generic/inherited cases and ten package-boundary cases passed with no skips. A fresh npm-only consumer
+validated nine typed exports, 19 contract types and schemas, 53 contract fixtures, cross-process store reopen,
+17 Pattern pack files, and actual installed Spring capture/parse/analysis returning open, protected and unknown.
+The existing broad suites were not repeated for this byte-preserving rebase. No primary build, graph refresh,
+application execution, container invocation, push or merge occurred. Public Spring command integration and the
+end-of-plan Java sample runtime gates remain open. The integrating lead owns review, push and merge.
+
+## Spring generic superclass shadow correction — 2026-10-22
+
+Branch `codex/sentinel-spring-generic-fix` follows reviewed Spring head `ff13168c`. Its type index now erases each
+balanced generic argument group separately, preserving qualified member types between groups. Comments and quoted
+annotation values cannot alter bracket depth. Both direct type resolution and inherited-shadow discovery share the
+same erasure; unsupported spelling remains conservative. A captured nested helper named `AbstractHttpConfigurer`
+therefore makes the configurer method reference unknown, instead of proving authentication from a helper that could
+remove that configurer.
+
+The original capture/parse regression and three neighbors failed on the frozen baseline; its harmless generic
+inheritance neighbor passed. The corrected suite includes nested and package-qualified type paths, comment and
+annotation delimiters, and retains the harmless positive. Sentinel closure build, typecheck, catalog lint and the
+package-boundary audit passed. All tests capture and parse original Java fixtures; no target code is compiled or run.
+Independent review and integration belong to the coordinating owner. No primary build or graph refresh occurred.
 
 ## Sentinel scheduler merged; CLI integration — 2026-10-22
 

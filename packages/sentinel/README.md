@@ -82,6 +82,20 @@ exactly one work unit or kept with its reason (unsupported, applicability unknow
 `workEnvelopesFor` gives the coordinator canonical work envelopes for a plan. A new rule plans a new revision over
 the already published capture and parse; earlier revisions never change (ADR 24).
 
+## Next middleware applicability (draft)
+
+`farsight-sentinel/frameworks/next` reads a captured Next 14.2.25 / React 18.3.1 project (versions from its lockfile
+only) and says, for each App Router route and page the parser placed, whether the middleware matcher reaches all,
+none or only some of its requests. `analyzeNext({ snapshot, analysis, read })` returns one
+`sentinel-controls/draft-1` envelope per project. A surface the matcher never reaches gets `does-not-apply`, citing
+the matcher bytes. A matched surface stays `unknown`: running middleware is not protection. Dynamic or unsupported
+matchers, another version, a non-empty next.config and the pages router are unknowns or frontiers (ADR 30). No
+application code runs. Qualification requires the pinned public registry tarball integrity as well as its version.
+Recorded pnpm patches for Next, React or React DOM (patch maps, importer hashes, package modification metadata,
+or project/workspace-root package declarations) leave applicability unknown: the original tarball integrity does
+not identify patched installed bytes. Ordinary peer dependency suffixes and unrelated package patches remain
+supported. This source-only check reads captured installation evidence; it does not attest a running installation.
+
 ## The local store (draft)
 
 ```ts
@@ -224,6 +238,29 @@ checked for mutation, and a separate shadowed parameter does not imply a mutatio
 Every other runtime use defaults to unknown until the pack explicitly models how it consumes the value.
 An alias is followed only while its declaration stays local: exports, namespace containers and unsupported
 module-loading paths remain explicit boundaries. Type-only imports and unrelated local member names are harmless.
+
+## Spring Security servlet pack (draft, PR 17)
+
+`src/frameworks/spring/` turns one source's parser evidence into `sentinel-controls/draft-1` control facts for its
+Spring routes, for exactly **Spring Boot 3.4.3 with Spring Security 6.4.3**, servlet stack. The library export is `farsight-sentinel/frameworks/spring`; canonical scan CLI integration remains open. Inputs are the captured snapshot, the PR 05 parser evidence for the source, a reader
+for captured bytes and the selected environment (`activeProfiles`, or `null` when none was selected). Nothing is
+built, resolved or run. The public graph supplies route identities. The pack reads every route mapping, security
+chain, matcher, rule and method-security annotation again from the captured Java syntax (tree-sitter's Java grammar),
+and each resolved fact cites exact byte spans of captured files.
+
+Per route, facts sit at four positions in Spring's order:
+1. servlet filters and filters a chain adds, which are unknown when present;
+2. the selected chain's authorization rule;
+3. MVC interceptors, which are unknown when present;
+4. method security.
+
+Spring runs the first chain whose `securityMatcher` matches, and the first matching rule in it decides. A route no
+chain matches is `unknown` (`sentinel.spring.noChainMatches`), with every chain matcher cited, and never protected:
+source cannot exclude a chain a dependency contributes. Anything outside the supported subset is `unknown` with a
+`sentinel.spring.*` reason and, where it applies to the whole source, a frontier: helper-built chains, non-literal
+matchers, partial matches, equal orders, profiles not selected, conditional beans, filters, customizers,
+interceptors, servlet paths, other versions and WebFlux. `src/frameworks/spring/support.ts` states the subset and is
+part of the pack digest. The environment and the configuration bytes read key the facts.
 
 ### Express control facts (draft)
 

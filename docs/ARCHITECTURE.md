@@ -779,6 +779,94 @@ in the production registry, the planner's batching, the scan command (PR 09), an
     Not decided here: CLI and planner integration (PR 09 still pending), CSRF/CORS/rate-limit/header properties,
     guard bodies, Fastify, and versions other than 10.4.15.
 
+27. **Sentinel's first framework pack reads Spring Security servlet chains from source, for one exact version (2026-10-22).**
+
+`@farsight/sentinel` gains a public `./frameworks/spring` export: `analyzeSpring(input)`, which returns one validated
+`sentinel-controls/draft-1` envelope for one captured source's Spring routes, together with `SPRING_PACK`,
+`SPRING_ORDER`, `SPRING_SUPPORT`, `SPRING_REASON_CODES` and `matchTemplate`. It is a library: no scan runs it until the
+CLI (PR 09) integrates it, so PR 17's full acceptance depends on that work. The `framework-spring` capability is
+`available-draft` with reason `sentinel.capability.draftSpring`: source only, exactly the stated versions.
+
+**Scope.** Exactly Spring Boot 3.4.3 with the Spring Security 6.4.3 its dependency list pins, servlet stack. These are
+read from the captured `pom.xml` as XML structure (elements by name and nesting, never by child order).
+The envelope's version is `null`, and every fact `unknown`, for any of:
+- an explicit Spring Security version anywhere;
+- a Spring version property;
+- managed or imported dependencies;
+- profiles or modules;
+- WebFlux, a Gradle build, or a build that does not parse.
+
+Documentation for other versions is not evidence for these.
+
+**Registration.** A configuration class counts only when Spring Boot's default component scan registers it: the single
+`@SpringBootApplication`'s package and below, for a component class. Any explicit scan or import annotation, scan
+attribute or auto-configuration registration makes classes outside that scan `unknown`
+(`sentinel.spring.componentScanUnresolved`). A class Spring does not register enables nothing, so
+`@EnableMethodSecurity` must sit on a registered `@Configuration` or `@SpringBootApplication` class. Every `@Bean`
+whose type is a `SecurityFilterChain`, in any qualified spelling, is a chain. Any other `…FilterChain` bean is an
+unknown candidate, never omitted. Names resolve through imports, the package and qualified names in captured source:
+composed annotations, superclasses and interface default `@Bean` methods are followed there, and anything resolved
+outside Java's or Spring's own types is unknown. Java shadowing is honoured: a type the file declares, or a member
+type inherited from a captured supertype, shadows an import of the same name, so where it could, the name is unknown
+rather than the import. Spring merges meta-annotations, so `@Bean`, `@Order`, `@Profile` and `@Conditional` are read
+through captured composed annotations: a composed `@Bean` declares a chain, while a composed order or condition, or an
+annotation from uncaptured code that could carry one, leaves the chain's position or activity unknown
+(`sentinel.spring.chainOrderUnsupported`, `sentinel.spring.conditionComposed`, `sentinel.spring.beanDeclarationUnknown`).
+Spring registers an inherited `@Bean` but invokes the most specific method, so an inherited chain whose method name a
+subclass declares again without `@Bean` is unknown (`sentinel.spring.chainOverridden`), never read from the superclass.
+A chain the pack cannot see or place sorts ahead of every known one.
+A chain's configurer arguments must be provably inert: a lambda that only configures its own parameter and never
+continues past `disable()` (which returns the builder); Spring's own `AbstractHttpConfigurer::disable`; Spring's
+`withDefaults()`; Spring constants; or literals. An application method reference, or anything that could reach the
+`HttpSecurity` again (for example `removeConfigurer`), makes the chain unknown. The parent POM must be looked up from
+the repository (an empty `relativePath`); a relative parent could manage other versions.
+
+**Roles and the anonymous principal.** A role or authority check is always authorization. It is authentication only
+when the anonymous principal Spring gives unauthenticated requests cannot hold any authority it admits. By default that
+principal holds `ROLE_ANONYMOUS`, so `hasRole("ANONYMOUS")` does not require authentication. `anonymous(disable)`
+removes it, and a customised anonymous principal leaves authentication unknown. A `GrantedAuthorityDefaults` bean,
+which can change the `ROLE_` prefix, leaves role checks unknown.
+
+**Inputs and evidence.** The input is the captured snapshot, the PR 05 parser evidence for the source, a reader for
+captured bytes by content id, and the selected environment (`activeProfiles`, `null` when none was selected). The
+public graph supplies route identities only. Its route names are lossy: variables rewritten, the first path kept, and
+a method-less `@RequestMapping` named GET. So each route's mapping is read again from captured syntax. So are every
+`SecurityFilterChain` bean and its `@Order`, `@Profile`, `securityMatcher`, `authorizeHttpRequests` rules and added
+filters, `@EnableMethodSecurity`, method-security annotations, filter beans, `WebSecurityCustomizer` and MVC
+interceptors. Syntax comes from tree-sitter's Java grammar (`@vscode/tree-sitter-wasm`, the version the parser pins),
+loaded on first analysis. Nothing is compiled, resolved or run. Evidence spans are exact UTF-8 bytes of captured
+files; a file that is not exact UTF-8 gives no span, and its facts are unknown. Graph tags and the parser's guard nodes
+are never proof.
+
+**Semantics.** The facts follow Spring's own order:
+- order 0: filters, unknown when any are present;
+- order 1: the first matching chain's first matching rule;
+- order 2: MVC interceptors, unknown when present;
+- order 3: method security, resolved only with an active proxy-mode enablement for that annotation kind and a
+  proxyable handler.
+
+Chains are taken in `@Order`, and a chain without a `securityMatcher` matches every request. Path patterns are compared
+as templates: a result is `match` or `no-match` only when it holds for every request the route can receive. A trailing slash is never trimmed: Spring Framework 6.2's patterns do not equate `/x/` and `/x` by default, and configuration can change that, so a pattern or route ending in `/` is unknown. Partial
+matches, equal orders that could both match, profiles not selected, conditional beans, non-literal matchers and
+helper-built chains are `unknown`. A route no chain matches is `unknown` (`sentinel.spring.noChainMatches`), with every
+chain matcher cited, and never protected: source alone cannot exclude a chain a dependency contributes. Missing or
+unlisted Java source, configuration that does not parse, or a configured servlet path leave chain selection unknown.
+
+**Keys.** `packDigest` covers the pack identity, its order and `SPRING_SUPPORT`. `environmentDigest` covers the
+selected profiles. `registrationDigest` covers the path and content id of every file read. A change to any of them
+changes the facts' key. Reason codes are catalog words (`strings-sentinel-spring.ts`).
+
+**Not in this decision:**
+- what Spring does when no rule in a selected chain matches;
+- Boot's default chain when no chain bean exists;
+- XML or adapter-style configuration;
+- async dispatch;
+- multi-module builds;
+- other Boot or Security versions.
+
+Each is unknown, not inferred. Later packs (PRs 14–16) follow the same envelope, positions-in-order and "unknown, never
+rounded" rules.
+
 29. **Dependency advisories come from pinned, separately acquired OSV snapshots, matched fully offline, and counted only
 where the engine proves it matched (2026-10-22).**
 
@@ -849,3 +937,60 @@ position only when every earlier layer was read and none can refuse. Node's `req
 not bind its own, and only Node's `http`/`https` `createServer` may receive an application without opening it. Proving
 a principal or permission would need the provenance of the value a refusal reads, which this pack does not model; it is a draft, source-only capability until PR 09 wires it into a
 scan. Reason words are `strings-sentinel-express.ts`.
+
+30. **Sentinel's Next pack decides middleware applicability statically and never claims an effect (2026-10-22).**
+
+`@farsight/sentinel/frameworks/next` (`analyzeNext`) is the first framework pack behind the shared control-fact
+contract (`contracts/controls.ts`). Its inputs are the snapshot envelope, the parser evidence for one of its sources
+(PR 05, checked through the planner's `plannerAnalysisFrom`) and the captured bytes by content id, each read
+hash-checked. It never runs application code, never runs a package manager and never reads the parser's broad
+`guard::middleware:` heuristic, whose edges cover every entry under the file's folder without reading its matcher.
+
+Support is one manifest (`support.ts`), and its canonical digest is the pack digest every envelope pins: Next
+14.2.25 with React and React DOM 18.3.1, the combination PR 01 measured, and nothing else. Support is the exact
+packages, not their version strings: the manifest pins each one's registry tarball integrity, read from the resolved
+lockfile PR 01's acquisition captured (the retained archive's SHA-256 is in the manifest). Versions come only from a
+lockfile that records what was installed with its content identity (an npm 2/3 entry with the public registry
+tarball URL for that version and a sha512 integrity; a pnpm 6.0/9.0 importer version and its package's
+`resolution.integrity`), resolved from the project folder upwards. The lockfile and the package manifest are
+untrusted input: every value is shape- and size-checked, and a shape the readers do not expect is invalid, never a
+crash. These are unknown: a version written only in the package manifest; a manifest specifier that is not a
+registry version or range (`file:`, `link:`, Git, a URL, `npm:` aliases, `workspace:`); a local, linked, Git or
+mirrored package; an entry without an integrity; the pinned version with another integrity (a repacked or
+substituted package); two candidate lockfiles; an unread lockfile kind; and an exact manifest pin that disagrees
+with the lockfile. Another registry version is recorded as resolved and analyzed as nothing: every fact is
+unknown.
+
+The middleware handler and `config` export, and next.config, are read with Oxc (loaded on first read) as literal
+syntax only, with exact UTF-8 spans and a quote digest for every cited span. Anything Next would have to compute,
+or syntax not verified to be extracted the same way (`as const`, `satisfies`, identifiers, spreads, re-exports), is
+dynamic. Only an absent or statically empty next.config is supported: base paths, locales, rewrites and page
+extensions all change which request reaches which file. The middleware must sit beside the router folder (the
+project, or `src/` when the router lives there); a file elsewhere is a frontier, never the project's middleware.
+
+The matcher subset is whole path segments: literals of unreserved URL characters and `:name`, `:name?`, `:name*`,
+`:name+`, including Next's root form (which also matches `/index`). App Router surfaces are the parser's `route` and
+`page` nodes under the router's `app/` folder. Their request paths come from the captured folder segments, never
+from the graph's display name, which folds every dynamic form to `:param`. Groups and slots vanish, `[x]` is one
+segment, `[...x]` one or more, `[[...x]]` zero or more, and `_private` folders are not routable. A segment automaton
+product over the literals of both sides, plus one symbol for every other value, answers whether the matcher reaches
+all, none or only some request paths. Unconditional entries prove `all`; every entry, conditional ones included, has
+to miss for `none`. An entry outside the subset (custom regular-expression groups, brace groups, escapes, parameters
+inside a segment) blocks `none` without blocking another entry's `all`. A decision that changes under case folding
+is unknown. Dynamic segments are taken to serve every value, including ones a static sibling would win, which only
+turns `all` or `none` into `some`.
+
+Applicability is kept apart from effect. A matched surface's facts stay `unknown`
+(`sentinel.next.reason.effectNotEstablished`) for every property: running middleware, and its name, are not
+authentication or authorization evidence, and its body is not read. Only provable exclusion resolves, as
+`does-not-apply` citing the matcher bytes: the matcher reaches none of the surface's own request paths, so the
+middleware is no control on them (a middleware rewrite from a matched path can still arrive there, which only adds
+an unprotected route in). No excluded surface can be marked protected and the pack emits no `applies`. One envelope per Next project carries the facts at order 0 and the frontiers. These include the pages
+router (the graph has no surfaces for it), router files the graph has no surface for (`route.tsx`, folders that
+name one path) and unlisted router folders. Its `registrationDigest` covers the manifest, lockfile, middleware,
+next.config and the router's file inventory. Each surface's own `influenceDigest` names what decided it.
+
+Generic parser corrections the pack exposes (Pages Router surfaces, `route.tsx`, lossless dynamic segment names,
+`app/` folders outside a Next project) are separate measured parser changes, not reinterpretations here. Not decided:
+the coordinator stage and capability-table entry that run the pack (PR 09 integration), populating the snapshot's
+`frameworkVersions` from its resolution, effect analysis of middleware bodies, and other Next versions.
