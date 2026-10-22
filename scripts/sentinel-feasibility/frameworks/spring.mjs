@@ -14,6 +14,7 @@ RUN mvn -q -B -DskipTests package
 RUN mvn -q -B dependency:tree -DoutputFile=/app/dependency-tree.txt
 COPY probe.sh ./
 RUN chmod +x probe.sh
+RUN chown -R 65534:65534 /app
 ENTRYPOINT ["/app/probe.sh"]
 `;
 }

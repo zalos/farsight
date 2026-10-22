@@ -14,6 +14,7 @@ COPY tsconfig.json ./
 COPY create-user.dto.ts app.controller.ts app.module.ts main.ts ./
 COPY probe.sh ./
 RUN chmod +x probe.sh
+RUN chown -R 65534:65534 /app
 ENTRYPOINT ["/app/probe.sh"]
 `;
 }

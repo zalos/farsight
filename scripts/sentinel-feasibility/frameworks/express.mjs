@@ -13,6 +13,7 @@ RUN npm install --omit=dev --ignore-scripts --no-audit --no-fund
 COPY server.js ./
 COPY probe.sh ./
 RUN chmod +x probe.sh
+RUN chown -R 65534:65534 /app
 ENV SENTINEL_FIXTURE_OPAQUE_MODE=deny
 ENTRYPOINT ["/app/probe.sh"]
 `;

@@ -3,10 +3,6 @@
 import { BASE_IMAGES } from './runtime.mjs';
 
 export const CASE_ID = 'next-matcher';
-// `next start` has been observed writing small runtime trace files even after a prior `next build`;
-// this candidate therefore runs without --read-only, unlike the other three. Documented limitation,
-// not a silent weakening: see framework-feasibility.md.
-export const READ_ONLY = false;
 
 export function dockerfile() {
   return `FROM ${BASE_IMAGES.node}
@@ -19,6 +15,7 @@ COPY pages ./pages
 RUN npm run build
 COPY probe.sh ./
 RUN chmod +x probe.sh
+RUN chown -R 65534:65534 /app
 ENTRYPOINT ["/app/probe.sh"]
 `;
 }

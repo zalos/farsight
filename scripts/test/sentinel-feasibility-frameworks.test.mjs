@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseArgs, preview, runHasFailures } from '../sentinel-feasibility-frameworks.mjs';
-import { BASE_IMAGES, loadCorpus, materializeCase, parseProbeOutput, CORPUS } from '../sentinel-feasibility/frameworks/runtime.mjs';
+import { BASE_IMAGES, OWNER_LABEL, RUN_UID, loadCorpus, materializeCase, parseProbeOutput, evaluateCaseOutcome, CORPUS } from '../sentinel-feasibility/frameworks/runtime.mjs';
 import * as expressFramework from '../sentinel-feasibility/frameworks/express.mjs';
 import * as nestFramework from '../sentinel-feasibility/frameworks/nest.mjs';
 import * as nextFramework from '../sentinel-feasibility/frameworks/next.mjs';
@@ -19,27 +19,46 @@ test('preview launches no external program and never runs docker', () => {
   const plan = JSON.parse(output);
   assert.equal(plan.mode, 'preview');
   assert.equal(plan.effects.acquisition, false);
+  assert.equal(plan.effects.execution, false);
   assert.equal(plan.effects.providerCalls, false);
   assert.equal(plan.effects.localWrites, 'none');
   assert.deepEqual(plan.cases.sort(), Object.keys(FRAMEWORKS).sort());
 });
 
-test('parseArgs validates flags and requires a fresh --out only with --run', () => {
-  assert.equal(parseArgs([]).run, false);
-  assert.throws(() => parseArgs(['--run']), /requires a fresh --out/);
-  assert.throws(() => parseArgs(['--run', '--out']), /Missing value/);
-  assert.throws(() => parseArgs(['--out', '/tmp/x']), /requires --run/);
-  assert.throws(() => parseArgs(['--run', '--out', '/tmp/x', '--run']), /Duplicate --run/);
+test('parseArgs separates acquire from run and requires their own directories', () => {
+  assert.equal(parseArgs([]).mode, 'preview');
+  assert.throws(() => parseArgs(['--acquire']), /requires a fresh --out/);
+  assert.throws(() => parseArgs(['--run']), /requires --acquired/);
+  assert.throws(() => parseArgs(['--run', '--out', '/tmp/x']), /requires --acquired/);
+  assert.throws(() => parseArgs(['--run', '--acquired', '/tmp/a']), /requires --acquired .* and a fresh --out/);
+  assert.throws(() => parseArgs(['--acquire', '--run']), /Only one of --acquire, --run or --dispose/);
+  assert.throws(() => parseArgs(['--out', '/tmp/x']), /require --acquire, --run or --dispose/);
   assert.throws(() => parseArgs(['--case', 'not-a-real-framework']), /Unknown or duplicate/);
   assert.throws(() => parseArgs(['--case', 'express-order,express-order']), /Unknown or duplicate/);
   assert.throws(() => parseArgs(['--pull']), /Unknown option/);
-  const parsed = parseArgs(['--run', '--out', '/tmp/x', '--case', 'express-order,nest-validation']);
-  assert.equal(parsed.run, true);
-  assert.deepEqual(parsed.cases, ['express-order', 'nest-validation']);
+  const acquire = parseArgs(['--acquire', '--out', '/tmp/a', '--case', 'express-order,nest-validation']);
+  assert.equal(acquire.mode, 'acquire');
+  assert.deepEqual(acquire.cases, ['express-order', 'nest-validation']);
+  const run = parseArgs(['--run', '--acquired', '/tmp/a', '--out', '/tmp/r']);
+  assert.equal(run.mode, 'run');
+  assert.equal(run.acquired, resolve('/tmp/a'));
+});
+
+test('parseArgs requires --acquired for --dispose and refuses an --out alongside it', () => {
+  assert.throws(() => parseArgs(['--dispose']), /requires --acquired/);
+  assert.throws(() => parseArgs(['--dispose', '--acquired', '/tmp/a', '--out', '/tmp/o']), /does not take --out/);
+  const dispose = parseArgs(['--dispose', '--acquired', '/tmp/a']);
+  assert.equal(dispose.mode, 'dispose');
+  assert.equal(dispose.acquired, resolve('/tmp/a'));
 });
 
 test('base images are pinned by exact digest, not a mutable tag', () => {
   for (const ref of Object.values(BASE_IMAGES)) assert.match(ref, /^[a-z0-9.-]+@sha256:[a-f0-9]{64}$/);
+});
+
+test('every probe container runs as the unprivileged run UID, never root', () => {
+  assert.equal(RUN_UID, 65534);
+  assert.ok(OWNER_LABEL.length > 0 && !OWNER_LABEL.includes(' '));
 });
 
 test('runHasFailures is true only for a failed or mismatched case', () => {
@@ -73,10 +92,7 @@ test('materializeCase copies every declared file to its declared relative path',
   try {
     const materialized = await materializeCase(caseEntry, dir, CORPUS);
     assert.equal(materialized.length, caseEntry.files.length);
-    for (const file of caseEntry.files) {
-      const bytes = await readFile(join(dir, file.path));
-      assert.ok(bytes.length > 0);
-    }
+    for (const file of caseEntry.files) assert.ok((await readFile(join(dir, file.path))).length > 0);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
@@ -99,6 +115,42 @@ test('parseProbeOutput requires exactly one well-formed marker line with a statu
   assert.deepEqual(good.payload.observations, { a: { withoutToken: 401 } });
 });
 
+// This is the regression for the real bug a source review found: a wrapped/garbled probe payload
+// that leaves every scenario's `observed` null must never be read as a pass. An empty, all-null
+// assessment array must fail outright, not vacuously satisfy `.every(...)` on nothing.
+test('evaluateCaseOutcome fails on any missing observation, and never passes an empty/all-null assessment', () => {
+  assert.deepEqual(evaluateCaseOutcome([]), { state: 'failed', reason: 'no-scenarios-assessed' });
+  assert.deepEqual(evaluateCaseOutcome(null), { state: 'failed', reason: 'no-scenarios-assessed' });
+
+  const allNull = [
+    { scenario: 'a', observed: null, matchesExpected: null },
+    { scenario: 'b', observed: null, matchesExpected: null },
+  ];
+  const allNullOutcome = evaluateCaseOutcome(allNull);
+  assert.equal(allNullOutcome.state, 'failed');
+  assert.match(allNullOutcome.reason, /missing observation/);
+
+  const oneMissing = [
+    { scenario: 'a', observed: { x: 1 }, matchesExpected: true },
+    { scenario: 'b', observed: null, matchesExpected: null },
+  ];
+  assert.equal(evaluateCaseOutcome(oneMissing).state, 'failed');
+
+  const allPresentOneMismatch = [
+    { scenario: 'a', observed: { x: 1 }, matchesExpected: true },
+    { scenario: 'b', observed: { x: 2 }, matchesExpected: false },
+  ];
+  assert.equal(evaluateCaseOutcome(allPresentOneMismatch).state, 'measured-with-mismatch');
+
+  // A scenario with no fixed expectation (matchesExpected: null, e.g. Spring's unmatched-chain case)
+  // still requires a real, present observation to count as measured.
+  const noExpectationButObserved = [
+    { scenario: 'a', observed: { x: 1 }, matchesExpected: true },
+    { scenario: 'b', observed: { x: 200 }, matchesExpected: null },
+  ];
+  assert.equal(evaluateCaseOutcome(noExpectationButObserved).state, 'measured');
+});
+
 test('express assess agrees when runtime matches the static expectation, and flags a real mismatch', async () => {
   const { index } = await loadCorpus(CORPUS);
   const caseEntry = index.cases.find(c => c.id === 'express-order');
@@ -109,14 +161,16 @@ test('express assess agrees when runtime matches the static expectation, and fla
   };
   const agreeing = expressFramework.assess(caseEntry, matching);
   assert.ok(agreeing.every(a => a.matchesExpected === true));
+  assert.equal(evaluateCaseOutcome(agreeing).state, 'measured');
 
   const brokenLateGate = { ...matching, 'auth-after-route': { withoutToken: 401, withToken: 200 } };
   const mismatched = expressFramework.assess(caseEntry, brokenLateGate);
-  const lateScenario = mismatched.find(a => a.scenario === 'auth-after-route');
-  assert.equal(lateScenario.matchesExpected, false);
+  assert.equal(mismatched.find(a => a.scenario === 'auth-after-route').matchesExpected, false);
+  assert.equal(evaluateCaseOutcome(mismatched).state, 'measured-with-mismatch');
 
   const missing = expressFramework.assess(caseEntry, null);
   assert.ok(missing.every(a => a.observed === null && a.matchesExpected === null));
+  assert.equal(evaluateCaseOutcome(missing).state, 'failed');
 });
 
 test('nest assess distinguishes the piped route from the unpiped route', async () => {
@@ -126,6 +180,7 @@ test('nest assess distinguishes the piped route from the unpiped route', async (
   const result = nestFramework.assess(caseEntry, observed);
   assert.equal(result.find(a => a.scenario === 'validator-with-pipe').matchesExpected, true);
   assert.equal(result.find(a => a.scenario === 'validator-without-pipe').matchesExpected, true);
+  assert.equal(evaluateCaseOutcome(result).state, 'measured');
 });
 
 test('next assess treats matcher inclusion as necessary but not sufficient', async () => {
@@ -134,10 +189,10 @@ test('next assess treats matcher inclusion as necessary but not sufficient', asy
   const observed = { 'matched-and-blocked': { status: 403 }, 'matched-but-exempted': { status: 200 }, 'excluded-by-matcher': { status: 200 } };
   const result = nextFramework.assess(caseEntry, observed);
   assert.ok(result.every(a => a.matchesExpected === true));
-  assert.equal(nextFramework.READ_ONLY, false);
+  assert.equal(evaluateCaseOutcome(result).state, 'measured');
 });
 
-test('spring assess leaves the unmatched-chain scenario unlabelled as a pass/fail, by design', async () => {
+test('spring assess leaves the unmatched-chain scenario unlabelled as a pass/fail, but still requires it be observed', async () => {
   const { index } = await loadCorpus(CORPUS);
   const caseEntry = index.cases.find(c => c.id === 'spring-chains');
   const observed = {
@@ -151,14 +206,20 @@ test('spring assess leaves the unmatched-chain scenario unlabelled as a pass/fai
   const unmatched = result.find(a => a.scenario === 'unmatched-no-chain-applies');
   assert.equal(unmatched.matchesExpected, null);
   assert.equal(unmatched.observed.withoutCredentials, 200);
+  assert.equal(evaluateCaseOutcome(result).state, 'measured');
+
+  const droppedObservation = { ...observed, 'unmatched-no-chain-applies': undefined };
+  const incomplete = springFramework.assess(caseEntry, droppedObservation);
+  assert.equal(evaluateCaseOutcome(incomplete).state, 'failed');
 });
 
-test('every framework module emits a Dockerfile naming its pinned base image and a usable entrypoint', () => {
+test('every framework module emits a Dockerfile that drops to the unprivileged run UID and never pipes a remote script into a shell', () => {
   for (const [id, framework] of Object.entries(FRAMEWORKS)) {
     const text = framework.dockerfile();
     assert.match(text, /^FROM /, `${id} Dockerfile must start with FROM`);
     assert.ok(text.includes(BASE_IMAGES.node) || text.includes(BASE_IMAGES.maven), `${id} Dockerfile must use a pinned base image`);
     assert.match(text, /ENTRYPOINT \["\/app\/probe\.sh"\]/, `${id} Dockerfile must run the generated probe script`);
+    assert.match(text, /chown -R 65534:65534 \/app/, `${id} Dockerfile must hand ownership to the unprivileged run UID before it starts`);
     assert.ok(!/curl[^\n]*\|\s*sh/.test(text), `${id} Dockerfile must not pipe a remote script into a shell`);
   }
 });
