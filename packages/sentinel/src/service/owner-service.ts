@@ -35,6 +35,7 @@ import {
 import { assertSupportedRules, canonicalResult, currentPlan } from './canonical.js';
 import { loadPlan } from '../execution/plans.js';
 import { foundationRegistry } from './trusted-profile.js';
+import { recordRunFailure, runFailureCode } from './run-failure.js';
 
 export type ServiceErrorCode =
   | 'sentinel.service.unknownOperation' | 'sentinel.service.requestInvalid' | 'sentinel.service.planUnknown'
@@ -237,8 +238,9 @@ export class OwnerService {
     const run: ActiveRun = { planId, ...flags, task: Promise.resolve(), opened: new Promise(r => { settle = r; }) };
     this.#active.set(planId, run);
     run.task = (async () => {
-      const work = scratchUnder(this.#ws);
+      let work: string | undefined;
       try {
+        work = scratchUnder(this.#ws);
         const scratch = join(work, 'attempts');
         mkdirSync(scratch, { mode: 0o700 });
         // The coordinator executes the run's current admitted revision, under this service's trusted registry.
@@ -253,10 +255,16 @@ export class OwnerService {
         await coordinator.run();
       } catch (e) {
         run.error = codeOf(e);
+        if (run.coordinator) {
+          run.error = runFailureCode(e);
+          // The coordinator accepted the run. Keep its fatal runtime code after this process exits, even if the
+          // failed operation (for example finalization) could not update the ledger. Never retain raw error text.
+          try { run.error = recordRunFailure(this.#store, planId, e, this.#now()).code; } catch { /* the store itself may no longer be writable; retain the in-memory error */ }
+        }
         // Before the coordinator opened, nothing was accepted: the start (and any joiner) is refused with this.
         settle(failureOf(e));
       } finally {
-        try { removeScratch(work); } catch { /* left for an explicit cleanup */ }
+        try { if (work) removeScratch(work); } catch { /* left for an explicit cleanup */ }
         this.#active.delete(planId);
         if (run.error) this.#lastError.set(planId, run.error); else this.#lastError.delete(planId);
         if (this.#active.size === 0) this.#idleSince = Date.now();

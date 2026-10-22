@@ -41,6 +41,12 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel service reliability — 2026-10-22
+
+Branch `codex/sentinel-cli-reliability`, based on `e0e7c547`: public retry/rerun accepts an ended admitted bootstrap, prepares a fresh child over its retained snapshot and credits no parent work as completed. Fatal errors after coordinator acceptance are retained in a private durable service journal, bound to store/run/current admitted plan and containing known catalog codes only. Wait, status and unfinished report read this diagnostic after restart; raw exception text is withheld.
+
+Checks: Sentinel dependency closure build; `service-reliability.test.ts` (three regressions: partially published bootstrap through public retry/rerun after source changes; actual SQLite finalization failure across service/store restart; bounded diagnostics and copied cross-store refusal); existing `preview-slice.test.ts` (six tests), and `cli-preview-e2e.test.ts` (two actual CLI lifecycle/detached-service tests): 11 passed, zero skipped. No primary build, ingest, server or graph changes. Independent SOL review and integration remain open.
+
 ## Sentinel policy merged; planner integration verified — 2026-10-22
 
 Rules and adopted policy merged as [#142](https://github.com/zalos/farsight/pull/142), `074ee43`, after

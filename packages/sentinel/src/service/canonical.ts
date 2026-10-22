@@ -30,6 +30,7 @@ import { result, type CommandResult, type PrintedVerdicts } from '../cli/outcome
 import { RuleLockBook } from './rule-locks.js';
 import { foundationProfile, foundationRegistry, unsupportedRules, type TrustedProfile } from './trusted-profile.js';
 import { ServiceError } from './owner-service.js';
+import { recordRunFailure, runFailureFacts } from './run-failure.js';
 
 const digest = (v: unknown) => `sha256:${createHash('sha256').update(canonicalJsonBytes(v)).digest('hex')}`;
 export const WORKSPACE_SOURCE = 'workspace';
@@ -154,7 +155,10 @@ export async function executeRun(store: SentinelStore, runId: string, options: {
   const plan = await currentPlan(store, runId);
   if (plan) assertSupportedRules((await loadPlan(store, runId, plan.revision)).plan);
   const coordinator = await Coordinator.open({ store, runId, registry: options.registry ?? foundationRegistry(), scratchRoot: options.scratchRoot, ...(options.run ? { run: options.run } : {}) });
-  return coordinator.run();
+  try { return await coordinator.run(); } catch (error) {
+    try { recordRunFailure(store, runId, error); } catch { /* preserve the original error when the store cannot retain it */ }
+    throw error;
+  }
 }
 
 /** Every finding the preview detector published for the run's current revision. */
@@ -220,7 +224,8 @@ export async function canonicalResult(store: SentinelStore, command: string, run
   const admitted = await loadPlan(store, runId, plan.revision);
   const preview = isPreview(admitted.plan);
   const findings = state === 'completed' ? await previewFindingsOf(store, runId) : undefined;
-  const facts = { ...(options.facts ?? {}), runId, state, revision: plan.revision, runOutcome: recorded.outcome ?? null,
+  const diagnostic = runFailureFacts(store, runId);
+  const facts = { ...(options.facts ?? {}), ...diagnostic, runId, state, revision: plan.revision, runOutcome: recorded.outcome ?? null,
     previewFindings: findings?.findings.length ?? null, label: preview ? 'foundation-preview' : 'deterministic' };
   if (state === 'completed') {
     if (recorded.outcome === 'execution-failure') return result(command, 'configuration-failure', { ...base, facts, reasonCode: 'sentinel.service.executionFailed' });
@@ -236,7 +241,7 @@ export async function canonicalResult(store: SentinelStore, command: string, run
     if (blocked) return result(command, 'configuration-failure', { ...base, facts: { ...facts, ...blocked }, reasonCode: 'sentinel.service.runNotExecutable' });
     // Planned and admitted, with none of its analysis started yet: waiting for `run`, not interrupted.
     const untouched = admitted.plan.kind === 'analysis' && admitted.plan.units.every(u => !store.ledger.getWork({ id: u.id, revision: u.revision }));
-    return result(command, untouched ? 'prepared' : 'configuration-failure', { ...base, facts, reasonCode: untouched ? 'sentinel.service.runAwaiting' : 'sentinel.service.runInterrupted' });
+    return result(command, untouched && !diagnostic.error ? 'prepared' : 'configuration-failure', { ...base, facts, reasonCode: untouched && !diagnostic.error ? 'sentinel.service.runAwaiting' : 'sentinel.service.runInterrupted' });
   }
   return result(command, 'submitted', { ...base, facts });
 }
@@ -268,8 +273,10 @@ export async function previewRerun(store: SentinelStore, parentId: string, selec
   if (!parent) return { reasonCode: 'sentinel.service.runUnknown' };
   if (parent.state !== 'completed' && parent.state !== 'canceled') return { reasonCode: 'sentinel.service.runNotEnded' };
   const plan = await currentPlan(store, parentId);
-  if (!plan || plan.kind !== 'analysis') return { reasonCode: 'sentinel.service.planUnknown' };
+  if (!plan) return { reasonCode: 'sentinel.service.planUnknown' };
   const { plan: revision } = await loadPlan(store, parentId, plan.revision);
+  // An ended bootstrap has no analysis to reuse. Its full retry/rerun prepares a fresh child bootstrap over the
+  // retained snapshot; no earlier stage or failed attempt is represented as completed work.
   const units = new Map(revision.units.map(u => [u.id, u]));
   const unknown = selected.filter(id => !units.has(id));
   if (unknown.length) return { reasonCode: 'sentinel.service.stageUnknown', facts: { unknown } };

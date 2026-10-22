@@ -23,6 +23,7 @@ import { candidateDigest, emptyLock, lockDigest, promote, promotionIntent, readP
 import { RuleLockBook } from './rule-locks.js';
 import { loadPlan } from '../execution/plans.js';
 import { ServiceError } from './owner-service.js';
+import { runFailureFacts } from './run-failure.js';
 import type { AdapterRegistry } from '../execution/registry.js';
 import { canonicalResult, currentPlan, executeRun, notExecutableHere, rerunRun, planWorkspaceCanonical, previewFindingsOf, type CanonicalDisclosure, type CurrentPlan } from './canonical.js';
 
@@ -416,7 +417,7 @@ export async function statusIn(store: SentinelStore, options: { runId: string; a
     // Not ended and not executing: a run this installation cannot execute says so here, not only once `run` is tried.
     const blocked = !options.executing && !isFinalRunState(state) ? await notExecutableHere(store, options.runId, options.registry) : undefined;
     return result('status', 'answered', { ...(blocked ? { reasonCode: 'sentinel.service.runNotExecutable' } : {}), facts: {
-      runId: options.runId, state, cursor: page.cursor, more: page.more,
+      ...runFailureFacts(store, options.runId), runId: options.runId, state, cursor: page.cursor, more: page.more,
       events: page.events.map(e => ({ sequence: e.sequence, kind: e.kind, at: e.at })),
       ...(blocked ? { notExecutable: blocked } : {}),
     } });
@@ -447,7 +448,7 @@ export async function reportIn(store: SentinelStore, ws: Workspace, options: { r
   const recorded = store.ledger.getRun(options.runId);
   if (!recorded) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.runUnknown', facts: { runId: options.runId } });
   const findings = recorded.state === 'completed' ? await previewFindingsOf(store, options.runId) : undefined;
-  if (!findings) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.runNotCompleted', facts: { runId: options.runId } });
+  if (!findings) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.runNotCompleted', facts: { runId: options.runId, ...runFailureFacts(store, options.runId) } });
   const snapshotId = recorded.envelope.snapshotId;
   const opened = await openSnapshot(store, snapshotId);
   const unknown = opened.snapshot.entries.filter(e => e.kind === 'directory-boundary').length;
