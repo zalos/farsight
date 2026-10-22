@@ -337,7 +337,9 @@ it, and its long pieces) is replaced in every report string that source or a con
 context labels and ids and private excerpts; generated structure such as enums, catalog keys and digests is kept. Names and
 values the scan did not match are not detected or withheld. A secret finding's identity is keyed by a per-store random secret kept in the owner's
 trust folder (never the public store id, and never in the store, a bundle or a report), so the same file keeps its
-identity across captures without anyone being able to confirm a guessed name from a report.
+identity across captures without anyone being able to confirm a guessed name from a report. Keep the owner's trust
+folder to keep those identities: if its `report-keys/` key is lost, a new one is created, every secret finding gets a
+new identity, and comparisons with reports made before the loss no longer continue them.
 
 ### Express control facts (draft)
 

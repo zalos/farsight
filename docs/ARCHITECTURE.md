@@ -1023,7 +1023,10 @@ records, a bundle's provenance, a failed run's facts) and is never the key: the 
 in the owner's private trust folder (`report-keys/`), outside the store directory so no store copy or bundle carries
 it, created once by no-overwrite publication, read only as a private single-link file of exactly 32 bytes (anything
 else refuses rather than minting a new key, which would change identities), and never written to a receipt, result,
-report, log or the service socket. A report and a bundle together, with the store id, confirm no guessed path. Every candidate the secret scan's matched text yields is replaced in every source- or context-controlled string of the
+report, log or the service socket. A report and a bundle together, with the store id, confirm no guessed path. Secret
+findings keep stable identities only while the owner keeps that trust folder: if the key is lost, a new key is created
+and every withheld-location identity changes, so a comparison treats each secret finding as new and lists the earlier
+ones as no longer continued; reports generated before the loss keep the old identities and cannot be continued. Every candidate the secret scan's matched text yields is replaced in every source- or context-controlled string of the
 report document in every profile (context labels and ids, paths, symbols, titles, sentences, excerpts), one fixed word
 per candidate so references still match. The detector reports whole lines, so a matched line yields the whole trimmed
 line, each quoted string, the right-hand side of its first assignment (unquoted values with `:` or padding included),
