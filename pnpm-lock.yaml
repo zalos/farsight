@@ -150,9 +150,15 @@ importers:
 
   packages/sentinel:
     dependencies:
+      '@farsight/code-parser':
+        specifier: workspace:*
+        version: link:../code-parser
       '@farsight/core':
         specifier: workspace:*
         version: link:../core
+      '@farsight/graph':
+        specifier: workspace:*
+        version: link:../graph
       '@types/node':
         specifier: 26.1.0
         version: 26.1.0

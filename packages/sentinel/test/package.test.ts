@@ -22,7 +22,7 @@ test('the package is optional, private and exports only files that exist', () =>
   assert.match(manifest.version, /-draft\./);
   // core supplies the shared catalog (and later counts/placement/grants); @types/node because the public store
   // declarations name Node built-ins. No scanner, container client or model SDK dependency.
-  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/core', '@types/node', 'ajv']);
+  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', 'ajv']);
   assert.equal(manifest.bin['farsight-sentinel'], './dist/cli.js');
   for (const [key, target] of Object.entries(manifest.exports as Record<string, any>)) {
     if (key.includes('*')) continue;
@@ -76,6 +76,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'snapshot/git.js': ['node:crypto', 'node:fs', 'node:path', 'node:zlib'],
   'snapshot/inventory.js': ['node:crypto', 'node:fs', 'node:path'],
   'snapshot/materialize.js': ['node:fs', 'node:path'],
+  // The public parser, loaded on first parse only (its TS/JS adapter has a native binding); graph is pure JSON helpers.
+  'snapshot/parser.js': ['@farsight/graph', 'dynamic:@farsight/code-parser', 'dynamic:@farsight/code-parser/adapters/java',
+    'dynamic:@farsight/code-parser/adapters/tsjs', 'node:crypto', 'node:fs', 'node:path'],
   'snapshot/policy.js': ['node:crypto', 'node:path'],
   'snapshot/worktree.js': ['node:fs'],
 };

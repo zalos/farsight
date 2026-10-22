@@ -46,7 +46,9 @@
     "schemas:check": "node scripts/generate-schemas.mjs --check"
   },
   "dependencies": {
+    "@farsight/code-parser": "workspace:*",
     "@farsight/core": "workspace:*",
+    "@farsight/graph": "workspace:*",
     "@types/node": "26.1.0",
     "ajv": "8.20.0"
   }
