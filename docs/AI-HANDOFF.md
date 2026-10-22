@@ -6,6 +6,41 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Delayed OOM canary correction — 2026-10-22
+
+Branch `codex/sentinel-oom-settling-investigation` corrects the test-only Docker visibility adapter: it hides the
+first two terminal exit-137 observations, including naturally false flags, instead of hiding the first two true
+OOM flags. The old adapter compounds natural daemon delay and can exhaust the actual backend's four-read bound;
+a deterministic backend regression fails with the old adapter and passes with the correction. Production
+classification, the 500 ms bound, cancellation and exact ownership/cleanup are unchanged. Exit 137 with no
+affirmative OOM evidence remains `workerExited`. Required native positives still require genuine daemon evidence.
+
+Validation: Sentinel dependency-closure build; four pure state controls plus all 20 native isolation checks pass
+with zero skips on Docker Desktop Engine 29.2.1 / Linux arm64. Ten additional focused native OOM/plain-SIGKILL
+trials pass. Native inspect diagnostics retain at most 16 bounded state/timing rows, without paths or source.
+The original Linux CI failure lacked raw inspect observations, so its exact daemon sequence remains unproven;
+required native CI on the corrected head must pass before integration.
+
+## Combined scanner foundations — 2026-10-22
+
+Branch `codex/sentinel-scanner-integration` combines reviewed scanner integration `44ff7fae` with foundation
+head `7d392239` in one feature merge. Scanner, driver, scheduler, policy and report implementation bytes remain
+identical to `44ff7fae`; the incoming Express implementation and corrected bounded OOM visibility controls are
+retained. The pre-start confirmed-cleanup regression and scoped invocation inputs also remain intact. Catalogs,
+ADRs, README, import audits, exports and package consumers retain all four scanner asset sets and the source-only
+Express library. Express is available as a draft library; no framework scanner driver or public framework command
+acceptance is claimed. The IaC package selector and no-selector four-engine behavior are unchanged.
+
+Validation: Sentinel dependency-closure build, typecheck, generated schemas and catalog lint passed. Four pure
+OOM-state controls and ten package controls, plus two capability-union controls, passed with zero skips. The fresh
+npm-only package consumer compiled nine exports and 19 contract types, validated 19 schemas and 53 fixtures,
+reopened the store across processes, analyzed the installed Express before/after/conditional fixture and verified
+all four scanner asset sets. A separate installed public CLI consumer passed owner adoption, missing-asset refusal,
+exact tool/database promotion, plan and detached/joined execution through all four existing pinned containers;
+its report survived service restart and source removal, and incomplete required coverage remained exit 2. No target
+code or host scanner ran; no scanner assets were downloaded and no hosted model was called. This is local arm64 evidence; combined native CI remains an
+integration gate. The earlier 576-test broad suite belongs to `44ff7fae` and was not repeated for this source-preserving merge.
+
 ## Start here
 
 Read `AGENTS.md` for project rules and architecture. Codex loads it as project instructions; `CLAUDE.md` imports it and this handoff. Keep durable facts in those repository files so both providers receive updates. This is project memory, not ChatGPT account memory or a synchronization of private conversation histories.

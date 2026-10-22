@@ -224,8 +224,8 @@ test('the facade exposes domain operations only', needsStore, async t => {
   assert.equal(typeof store.runtime.sqlite, 'string', 'the SQLite release, not the module');
   assert.equal(root.openStore, openStore, 'the root export is the same facade');
   assert.equal(root.CAPABILITIES.find(c => c.id === 'ledger')?.state, 'available-draft');
-  assert.deepEqual(root.CAPABILITIES.filter(c => c.state === 'available-draft').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'dependency-advisories', 'infrastructure-ci-checks']);
-  assert.deepEqual(root.CAPABILITIES.filter(c => c.state === 'unavailable').map(c => c.id), ['secrets-scan', 'framework-next', 'framework-express', 'framework-nest', 'framework-spring', 'interprocedural-flow', 'reports', 'dispositions', 'model-review', 'mcp', 'farsight-host-bridge', 'gui', 'replay-bundles'],
+  assert.deepEqual(root.CAPABILITIES.filter(c => c.state === 'available-draft').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express']);
+  assert.deepEqual(root.CAPABILITIES.filter(c => c.state === 'unavailable').map(c => c.id), ['secrets-scan', 'framework-next', 'framework-nest', 'framework-spring', 'interprocedural-flow', 'reports', 'dispositions', 'model-review', 'mcp', 'farsight-host-bridge', 'gui', 'replay-bundles'],
     'unimplemented features remain explicitly unavailable');
 });
 
