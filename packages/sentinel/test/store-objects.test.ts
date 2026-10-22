@@ -382,3 +382,52 @@ test('an extra name inside objects/tmp (a writer between link and unlink) is tol
   assert.deepEqual(store.checkSync(receipt), { status: 'ok' });
   assert.equal((await store.put(SOURCE)).created, false);
 });
+
+test('a parent directory swapped before link(2) yields no receipt', async t => {
+  for (const parent of ['objects', 'objects/sha256']) {
+    const dir = scratch(t);
+    const io: ObjectStoreIo = {
+      ...NODE_OBJECT_IO,
+      link: async (a, b) => {
+        // Same contents under a new directory inode: only identity can tell.
+        const p = join(dir, parent);
+        renameSync(p, `${p}.old`);
+        mkdirSync(p, { mode: 0o700 });
+        return NODE_OBJECT_IO.link(a, b); // fails (the new parent is empty) or lands in the new tree
+      },
+    };
+    assert.equal(await code(new ObjectStore(owner(dir), { io }).put(SOURCE)), 'sentinel.object.unsafePath', parent);
+  }
+});
+
+test('a staged file or a published name replaced by another inode yields no receipt', async t => {
+  const id = identify(SOURCE);
+  const replace = (path: string) => {
+    const bytes = readFileSync(path);
+    rmSync(path);
+    writeFileSync(path, bytes, { mode: 0o600 }); // identical bytes, new inode
+  };
+  {
+    const dir = scratch(t);
+    const io: ObjectStoreIo = { ...NODE_OBJECT_IO, link: async (a, b) => { replace(a); return NODE_OBJECT_IO.link(a, b); } };
+    assert.equal(await code(new ObjectStore(owner(dir), { io }).put(SOURCE)), 'sentinel.object.unsafePath', 'staged file replaced before link');
+  }
+  {
+    const dir = scratch(t);
+    const final = join(dir, objectRelPath(id.rawDigest, 'gzip'));
+    const io: ObjectStoreIo = { ...NODE_OBJECT_IO, unlink: async p => { await NODE_OBJECT_IO.unlink(p); replace(final); } };
+    assert.equal(await code(new ObjectStore(owner(dir), { io }).put(SOURCE)), 'sentinel.object.unsafePath', 'published name replaced after link');
+  }
+  {
+    // An existing winner replaced between its verification and the receipt.
+    const dir = scratch(t);
+    await new ObjectStore(owner(dir)).put(SOURCE);
+    const final = join(dir, objectRelPath(id.rawDigest, 'gzip'));
+    let done = false;
+    const io: ObjectStoreIo = {
+      ...NODE_OBJECT_IO,
+      open: async (p, f, m) => { if (!done && p === final) { done = true; replace(final); } return NODE_OBJECT_IO.open(p, f, m); },
+    };
+    assert.equal(await code(new ObjectStore(owner(dir), { io }).put(SOURCE)), 'sentinel.object.unsafePath', 'winner replaced before its fsync');
+  }
+});

@@ -13,7 +13,10 @@
 // directory handle: these checks DETECT a swap, they cannot prevent one. Directory identities (device, inode) are
 // captured before a write and compared after the link, at each directory fsync and before the receipt; any change
 // refuses the receipt. A swap can still make link(2) create a name outside the store before it is detected; that
-// name is reported, never removed. Same-account compromise is outside the threat model.
+// name is reported, never removed. The checks are finite: a same-account process that swaps a path and restores
+// it between two observations is not seen, and no check constrains what it does outside the store. That is the
+// owner's own account and outside the threat model; within it, an observed change of any directory or object
+// identity refuses the receipt.
 import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readdirSync, readSync, realpathSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -355,7 +358,10 @@ export class ObjectStore {
           await this.#io.link(tmpPath, finalPath); // link(2) never replaces an existing name.
           created = true;
         } catch (e) {
-          if (errno(e) !== 'EEXIST') ioFail('publishing the object', e);
+          if (errno(e) !== 'EEXIST') {
+            await this.#recheck(chain); // a swapped directory is reported as such, not as a plain I/O failure
+            ioFail('publishing the object', e);
+          }
         }
         // Whatever happened, the directories must still be the ones checked, or the name may be elsewhere.
         await this.#recheck(chain);
