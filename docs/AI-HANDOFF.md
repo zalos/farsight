@@ -50,6 +50,20 @@ error and absence of a publication; the neighbor checks successful publication. 
 Validation: dependency-closure build and all 10 bootstrap tests passed with no skips. Native platform metadata is
 reviewed separately against the native CI evidence.
 
+## Sentinel provider transport integration — 2026-10-22
+
+The independently reviewed model transport on `codex/sentinel-providers-integration` adds the opt-in Ollama and
+OpenAI-compatible broker, exact provider/profile binding, bounded response parsing and a durable shared budget.
+Input mutation across an asynchronous boundary, changed policies, operation identity collisions and uncertain
+charges are covered by the final corrections. Integrated full build, workspace typecheck and catalog lint pass;
+Sentinel has 446 passing tests and 32 explicit platform/opt-in skips. A clean npm consumer loads nine typed exports,
+19 contract types/schemas and 53 fixtures and reopens the store across processes. Fresh fixed-source ingests against
+main `2587eb16` match on every node/edge value and digest: 8,196 nodes, 17,054 edges, digest `b47eaf940580`,
+22,785,052 graph bytes and 31,117,312 database bytes. Three inspected browser views have zero page errors, with only
+existing missing design-image fixture requests. Test endpoints are local mocks; no paid provider request or live
+model qualification occurred. Public model settings/dispatch and the model-review stage remain separate work.
+No primary build, dogfood refresh or global install occurred; the validation server was stopped.
+
 ## Sentinel scheduler merged; CLI integration — 2026-10-22
 
 The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`, and scheduler as
