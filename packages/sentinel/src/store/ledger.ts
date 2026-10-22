@@ -327,6 +327,8 @@ export class Ledger {
       if (run.parentId && !this.#get('SELECT 1 AS x FROM runs WHERE id = ?', run.parentId)) {
         throw new LedgerError('sentinel.store.notFound', 'the parent run is not in the ledger');
       }
+      // A run whose plans were admitted starts at one of them, and every analysis revision it has binds its snapshot.
+      if (this.migration.to >= 4) this.#checkRunPlans(run.id, run.planRevision, run.snapshotId);
       this.#run(`INSERT INTO runs (id, parent_id, snapshot_id, plan_revision, coordinator_epoch, state, envelope,
         created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, run.id, run.parentId, run.snapshotId, run.planRevision,
       run.coordinatorEpoch, run.state, JSON.stringify(run), run.createdAt);
@@ -640,6 +642,7 @@ export class Ledger {
   }
 
   #checkReceipt(r: ObjectReceipt): void {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) throw invalid('a receipt is an object');
     checkDigest(r.id, 'receipt artifact');
     checkDigest(r.storedDigest, 'receipt stored digest');
     if (!ARTIFACT_CODECS.includes(r.codec)) throw invalid('receipt codec');
@@ -922,6 +925,12 @@ export class Ledger {
       if (input.snapshotId !== null && !this.#get('SELECT 1 AS x FROM snapshots WHERE id = ?', input.snapshotId)) {
         throw new LedgerError('sentinel.store.notFound', 'the plan pins a snapshot that was not admitted');
       }
+      // A run is bound to one snapshot for good: a later analysis revision of an existing run pins that snapshot.
+      // Changed source is a new, linked run.
+      const run = this.#get('SELECT snapshot_id FROM runs WHERE id = ?', input.runId);
+      if (run && input.snapshotId !== null && input.snapshotId !== run.snapshot_id) {
+        throw new LedgerError('sentinel.store.conflict', 'an analysis revision of an existing run pins the run\'s own snapshot');
+      }
       const sequence = this.#event('plan-admitted', null, null, { runId: input.runId, revision: input.revision, digest: input.digest });
       this.#acceptUnboundStages(stage.stageIds, stage.receipts, required, sequence, input.plan);
       const admittedAt = this.#now();
@@ -962,12 +971,31 @@ export class Ledger {
       if (!run) throw new LedgerError('sentinel.store.notFound', 'no such run');
       if (run.state === 'completed' || run.state === 'canceled' || run.state === 'canceling') throw new LedgerError('sentinel.store.wrongState', 'the run has ended');
       if (revision !== Number(run.plan_revision) + 1) throw new LedgerError('sentinel.store.conflict', `the run's next plan revision is ${Number(run.plan_revision) + 1}`);
-      if (!this.#get('SELECT 1 AS x FROM plans WHERE run_id = ? AND revision = ?', runId, revision)) {
-        throw new LedgerError('sentinel.store.notFound', 'that plan revision was not admitted');
+      const plan = this.#get('SELECT snapshot_id FROM plans WHERE run_id = ? AND revision = ?', runId, revision);
+      if (!plan) throw new LedgerError('sentinel.store.notFound', 'that plan revision was not admitted');
+      const snapshot = this.#get('SELECT snapshot_id FROM runs WHERE id = ?', runId)!.snapshot_id;
+      if (plan.snapshot_id !== null && plan.snapshot_id !== snapshot) {
+        throw new LedgerError('sentinel.store.conflict', 'the revision pins another snapshot than the run');
       }
       this.#run('UPDATE runs SET plan_revision = ? WHERE id = ?', revision, runId);
       return { runId, planRevision: revision, sequence: this.#event('run-plan-advanced', runId, null, { from: Number(run.plan_revision), to: revision }) };
     });
+  }
+
+  /**
+   * Inside a transaction: when plans were admitted for this run id, the revision a run is created at must be one of
+   * them, and every admitted analysis revision must pin the run's snapshot. A run with no admitted plan is the
+   * ledger's own lower-level record and is not checked here (the coordinator executes only admitted revisions).
+   */
+  #checkRunPlans(runId: Id, revision: number, snapshotId: Id): void {
+    const plans = this.#all('SELECT revision, snapshot_id FROM plans WHERE run_id = ?', runId);
+    if (plans.length === 0) return;
+    if (!plans.some(p => Number(p.revision) === revision)) {
+      throw new LedgerError('sentinel.store.wrongState', `the run starts at plan revision ${revision}, which was not admitted`);
+    }
+    if (plans.some(p => p.snapshot_id !== null && p.snapshot_id !== snapshotId)) {
+      throw new LedgerError('sentinel.store.conflict', 'an admitted analysis revision pins another snapshot than the run');
+    }
   }
 
   /** Shape checks shared by admissions from unbound stages, before any transaction; verifies every object. */

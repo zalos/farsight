@@ -133,3 +133,37 @@ test('an attempt\'s invocation record is accepted with its start, so a failed at
   assert.ok(gc.links.some(([p, c]) => p === sha(invocation) && c === sha(binding)), 'and the binding it links');
   assert.ok(ledger.objectsOf(sha(binding)).length === 1, 'both are accepted artifacts');
 });
+
+test('a run starts only at an admitted revision, and every analysis revision of a run pins the run\'s own snapshot', async t => {
+  const { ledger } = await ledgerAt(t);
+  const e = ledger.epoch;
+  ledger.admitPlan(stagePlan(ledger, 'bind', 1, 'bootstrap', null));
+  admitSnapshot(ledger, 'snap-a');
+  admitSnapshot(ledger, 'snap-b');
+  // The review's case: revision 3 when only 1 is admitted is refused; the run then starts at 1.
+  assert.throws(() => ledger.createRun(runEnvelope(e, { id: 'run-bind', snapshotId: 'snap-a', planRevision: 3 }) as never), code('sentinel.store.wrongState'));
+  assert.equal(ledger.getRun('run-bind'), null);
+  ledger.createRun(runEnvelope(e, { id: 'run-bind', snapshotId: 'snap-a', planRevision: 1 }) as never);
+  // An analysis revision over another snapshot is refused for this run, and cannot be advanced to.
+  const other = stagePlan(ledger, 'bind', 2, 'analysis', sha('bind digest 1'), 'snap-b');
+  assert.throws(() => ledger.admitPlan(other), code('sentinel.store.conflict'));
+  assert.equal(ledger.getPlan('run-bind', 2), undefined);
+  assert.throws(() => ledger.advanceRunPlan('run-bind', 2), code('sentinel.store.notFound'));
+  // The same staged revision over the run's own snapshot is admitted, and the run advances to it.
+  ledger.admitPlan({ ...other, snapshotId: 'snap-a' });
+  ledger.advanceRunPlan('run-bind', 2);
+  assert.equal(ledger.getRun('run-bind')!.planRevision, 2);
+  // A run created after its plans were admitted must match their snapshot.
+  ledger.admitPlan(stagePlan(ledger, 'late', 1, 'bootstrap', null));
+  ledger.admitPlan(stagePlan(ledger, 'late', 2, 'analysis', sha('late digest 1'), 'snap-a'));
+  assert.throws(() => ledger.createRun(runEnvelope(e, { id: 'run-late', snapshotId: 'snap-b', planRevision: 1 }) as never), code('sentinel.store.conflict'));
+  ledger.createRun(runEnvelope(e, { id: 'run-late', snapshotId: 'snap-a', planRevision: 2 }) as never);
+  assert.equal(ledger.getRun('run-late')!.planRevision, 2);
+});
+
+test('malformed receipts are refused as invalid input, not a raw TypeError', async t => {
+  const { ledger } = await ledgerAt(t);
+  for (const bad of [null, 'x', [], 7]) {
+    assert.throws(() => ledger.admitPlan({ ...stagePlan(ledger, `bad${String(bad).length}${typeof bad}`, 1, 'bootstrap', null), receipts: [bad as never] }), code('sentinel.store.invalidInput'), String(bad));
+  }
+});
