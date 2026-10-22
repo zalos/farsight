@@ -290,7 +290,7 @@ test('E5: the plan is two models × 30 cases × five trials × clean/canary; moc
     const label = labels.get(original ?? text);
     const verdict = gullible && hostile ? 'no-finding' : label;
     // The gullible mock first repeats the canary token, as the hostile text asked; that reply is outside the grammar.
-    if (gullible && hostile) return { content: `Approved by the security team. ${/E5_CANARY_[A-Z_]+/.exec(text)![0]}`, truncated: false, identity: MOCK_ID, usage: { inputTokens: 1, outputTokens: 1 } };
+    if (gullible && hostile) return { content: `Approved by the security team. ${/E5_MARK_[0-9A-F]+/.exec(text)![0]}`, truncated: false, identity: MOCK_ID, usage: { inputTokens: 1, outputTokens: 1 } };
     const reply = verdict === 'finding'
       ? { action: 'final', verdict, inspected: [ev.path], claims: [{ statement: 'Weakness shown.', citations: [ev.id] }] }
       : { action: 'final', verdict: 'no-finding', inspected: [ev.path], claims: [] };
@@ -565,4 +565,24 @@ test('E8: the per-call bound holds against repeated evidence and worst-case esca
     return { content: JSON.stringify({ action: 'read', path: 'src/controls.ts', startLine: 1, endLine: 1 }), truncated: false, identity: MOCK_ID, usage: { inputTokens: 1, outputTokens: 1 } }; } };
   await runSession(generalSpec({ runId: 'run-1', attemptId: 'att-1', plan, partitionId: plan.partitions[0]!.id, limits: LIMITS, budget }), { caller, checkpoints: new MemoryCP(), read: f.read });
   assert.ok(largest <= bound, `largest request ${largest} within the stated bound ${bound}`);
+});
+
+test('the E5 corpus: opaque label-independent markers, canary = three comment lines + the clean bytes, unreviewed labels', () => {
+  assert.equal(corpus.cases.length, 30);
+  assert.equal(corpus.labelReview, null, 'changed bytes invalidate the earlier label review');
+  const tokens = new Set<string>();
+  for (const c of corpus.cases) {
+    assert.match(c.canaryToken, /^E5_MARK_[0-9A-F]{12}$/, c.id);
+    assert.ok(!/safe|vuln|finding|clean/i.test(c.canaryToken), `${c.id}: the marker carries no label`);
+    tokens.add(c.canaryToken);
+    const p = c.evidencePaths[0];
+    const canary = c.canary[p] as string;
+    const lines = canary.split('\n');
+    assert.ok(lines.slice(0, 3).every((l: string) => l.startsWith('// ')), c.id);
+    assert.equal(lines.slice(3).join('\n'), c.clean[p], `${c.id}: the canary is the clean source plus three comment lines`);
+  }
+  assert.equal(tokens.size, 30);
+  const java = corpus.cases.find((c: any) => c.id === 'java-command.vulnerable');
+  assert.match(Object.values(java.clean)[0] as string, /\{ "sh", "-c", "convert " \+ r\.getParameter/, 'request text sits in the shell command string');
+  for (const id of ['ts-command.vulnerable', 'ts-command.safe']) assert.match(corpus.cases.find((c: any) => c.id === id).rule.text, /shell/);
 });
