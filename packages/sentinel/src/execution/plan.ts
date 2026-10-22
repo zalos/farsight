@@ -26,6 +26,7 @@ import { canonicalJsonBytes } from '../store/objects.js';
 import { ExecutionError } from './errors.js';
 import type { AdmittedPlan } from './plans.js';
 import { checkProfileRegistry } from './profile.js';
+import { NOT_SELECTED, unitsToRun } from './selection.js';
 import type { AdapterRegistry, TrustedAdapter } from './registry.js';
 import { orderPlan } from './scheduler.js';
 import { inputFingerprintOf, type CapturedInput } from './supervisor.js';
@@ -132,7 +133,13 @@ export async function executablePlan(store: SentinelStore, admitted: AdmittedPla
     const boundary = planBoundaryFor(plan, { run, conversion, snapshot,
       pathOf: i => join(root, sources.has(i.sourceId) ? i.sourceId : refuse(`no captured source ${i.sourceId}`), ...i.relativePath.split('/')) });
     works = [...boundary.works];
-    const held = new Set(works.filter(w => w.state === 'blocked').map(key));
+    // A selected rerun runs exactly its selection: every other unit is held, disabled by the selection, and its
+    // envelope says so, so the coordinator records the hold and never admits it.
+    if (admitted.selection) {
+      const runs = unitsToRun(admitted.selection);
+      works = works.map(w => (runs.has(w.id) ? w : { ...w, state: 'disabled-by-policy', reasonCode: NOT_SELECTED } as WorkEnvelope));
+    }
+    const held = new Set(works.filter(w => w.state === 'blocked' || w.state === 'disabled-by-policy').map(key));
     inputsOf = w => (held.has(key(w)) ? [] : boundary.inputsFor(w).map(i => ({ id: i.id, path: i.path })));
   } else {
     works = workEnvelopesFor(plan, conversion).map(c => c.envelope);
@@ -169,7 +176,8 @@ export async function executablePlan(store: SentinelStore, admitted: AdmittedPla
       }
     }
     const listed = inputsOf(w);
-    if (unit.stage === 'check' && adapter) verifyInputSet(plan, w, listed);
+    // A held unit never runs, so it is given no inputs; every unit that can run gets exactly the plan's.
+    if (unit.stage === 'check' && adapter && w.state !== 'disabled-by-policy' && w.state !== 'blocked') verifyInputSet(plan, w, listed);
     const inputs = deepFreeze(listed.filter((i, n) => listed.findIndex(x => x.id === i.id) === n));
     const scopesOf = new Map<string, string[]>();
     for (const i of unit.inputs) (scopesOf.get(i.content) ?? scopesOf.set(i.content, []).get(i.content)!).push(`${i.sourceId}:${i.relativePath}`);

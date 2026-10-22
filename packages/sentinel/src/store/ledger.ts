@@ -908,12 +908,18 @@ export class Ledger {
     if (input.ruleLock !== null) checkDigest(input.ruleLock, 'rule lock artifact');
     if (input.policy !== null) checkDigest(input.policy, 'policy artifact');
     if (input.snapshotId !== null) checkId(input.snapshotId, 'snapshot id');
-    const required = [input.plan, input.profile, ...(input.ruleLock ? [input.ruleLock] : []), ...(input.policy ? [input.policy] : [])];
+    const selection = input.selection ?? null;
+    if (selection !== null) {
+      checkDigest(selection, 'selection artifact');
+      if (input.kind !== 'analysis') throw invalid('only an analysis revision is admitted with a selection');
+      if (this.migration.to < 5) throw invalid('this ledger predates selected reruns');
+    }
+    const required = [input.plan, input.profile, ...(input.ruleLock ? [input.ruleLock] : []), ...(input.policy ? [input.policy] : []), ...(selection ? [selection] : [])];
     if (new Set(required).size !== required.length) throw invalid('the plan and its pinned artifacts are distinct artifacts');
     const stage = this.#checkUnboundStages(input.stageIds, input.receipts, 'plan admission');
     const request = { runId: input.runId, revision: input.revision, kind: input.kind, digest: input.digest, previous: input.previous,
       plan: input.plan, ruleLock: input.ruleLock, policy: input.policy, profile: input.profile, snapshotId: input.snapshotId,
-      stageIds: stage.stageIds, receipts: stage.receipts.map(r => ({ ...r })) };
+      ...(selection ? { selection } : {}), stageIds: stage.stageIds, receipts: stage.receipts.map(r => ({ ...r })) };
     return this.#mutate('admitPlan', request, input.idempotency, () => {
       if (this.#get('SELECT 1 AS x FROM plans WHERE run_id = ? AND revision = ?', input.runId, input.revision)) {
         throw new LedgerError('sentinel.store.conflict', 'this plan revision was already admitted');
@@ -934,12 +940,19 @@ export class Ledger {
       const sequence = this.#event('plan-admitted', null, null, { runId: input.runId, revision: input.revision, digest: input.digest });
       this.#acceptUnboundStages(stage.stageIds, stage.receipts, required, sequence, input.plan);
       const admittedAt = this.#now();
-      this.#run(`INSERT INTO plans (run_id, revision, kind, digest, previous, plan_id, rule_lock_id, policy_id, profile_id,
-        snapshot_id, coordinator_epoch, sequence, admitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      input.runId, input.revision, input.kind, input.digest, input.previous, input.plan, input.ruleLock, input.policy,
-      input.profile, input.snapshotId, this.epoch, sequence, admittedAt);
+      if (selection) {
+        this.#run(`INSERT INTO plans (run_id, revision, kind, digest, previous, plan_id, rule_lock_id, policy_id, profile_id,
+          snapshot_id, coordinator_epoch, sequence, admitted_at, selection_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        input.runId, input.revision, input.kind, input.digest, input.previous, input.plan, input.ruleLock, input.policy,
+        input.profile, input.snapshotId, this.epoch, sequence, admittedAt, selection);
+      } else {
+        this.#run(`INSERT INTO plans (run_id, revision, kind, digest, previous, plan_id, rule_lock_id, policy_id, profile_id,
+          snapshot_id, coordinator_epoch, sequence, admitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        input.runId, input.revision, input.kind, input.digest, input.previous, input.plan, input.ruleLock, input.policy,
+        input.profile, input.snapshotId, this.epoch, sequence, admittedAt);
+      }
       return { runId: input.runId, revision: input.revision, kind: input.kind, digest: input.digest, previous: input.previous,
-        plan: input.plan, ruleLock: input.ruleLock, policy: input.policy, profile: input.profile, snapshotId: input.snapshotId, sequence, admittedAt };
+        plan: input.plan, ruleLock: input.ruleLock, policy: input.policy, profile: input.profile, selection, snapshotId: input.snapshotId, sequence, admittedAt };
     }, 'plan:before-commit');
   }
 
@@ -1323,5 +1336,5 @@ function toPlanRecord(row: Record<string, unknown>): PlanRecord {
   const opt = (v: unknown) => (v === null || v === undefined ? null : String(v));
   return { runId: String(row.run_id), revision: Number(row.revision), kind: row.kind as PlanRecord['kind'], digest: String(row.digest),
     previous: opt(row.previous), plan: String(row.plan_id), ruleLock: opt(row.rule_lock_id), policy: opt(row.policy_id),
-    profile: String(row.profile_id), snapshotId: opt(row.snapshot_id), sequence: Number(row.sequence), admittedAt: String(row.admitted_at) };
+    profile: String(row.profile_id), selection: opt(row.selection_id), snapshotId: opt(row.snapshot_id), sequence: Number(row.sequence), admittedAt: String(row.admitted_at) };
 }
