@@ -5,7 +5,8 @@
 import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { ContainerBackend, createArgs, validateContainer, LABELS, ISOLATION_POLICY, isolationQualification } from '../dist/execution/isolation.js';
 import { createAdapterRegistry, DEFAULT_ADAPTER_LIMITS } from '../dist/execution/registry.js';
@@ -87,8 +88,11 @@ const source = readFileSync(WORKER, 'utf8');
 const captured = inputs(s.root);
 const secret = join(s.work, 'secret-canary.txt');
 writeFileSync(secret, 'synthetic canary that no worker may read\n');
+// Proxy settings in Sentinel's own environment must not reach the daemon's effects or a container.
+const PROXY_ENV = { HTTP_PROXY: 'http://192.0.2.1:3128', HTTPS_PROXY: 'http://192.0.2.1:3128', NO_PROXY: '*', http_proxy: 'http://192.0.2.1:3128' };
 before(async () => {
   if (!enabled) return;
+  Object.assign(process.env, PROXY_ENV);
   owner = await ownerIn(s.root);
   backend = await ContainerBackend.connect({ privateDir: s.root });
 });
@@ -141,7 +145,7 @@ test('host-file canary: no host path, sibling file, daemon socket or writable in
   t.diagnostic(`host-file canary ${JSON.stringify({ ...report, environment: (report.environment ?? []).join(' ') })}`);
   assert.equal(o.code, 'sentinel.execution.workerExited', JSON.stringify(report));
   for (const k of ['hostPath', 'besideAttempt', 'dockerSocket', 'writeInput', 'writeRoot']) assert.ok(report[k] && report[k] !== 'ESCAPED', `${k}: ${report[k]}`);
-  const leaked = (report.environment as string[]).filter(name => /^(USER|LOGNAME|SSH_|DOCKER_|GIT_|AWS_|GITHUB_|NPM_|PNPM_|CI$)/.test(name));
+  const leaked = (report.environment as string[]).filter(name => /^(USER|LOGNAME|SSH_|DOCKER_|GIT_|AWS_|GITHUB_|NPM_|PNPM_|CI$)|PROXY/i.test(name));
   assert.deepEqual(leaked, []);
 });
 
@@ -205,4 +209,76 @@ test('closing the store owner removes a running worker container before the lock
   const outcome = await pending;
   assert.notEqual(outcome.state, 'succeeded');
   removeScratch(other.root);
+});
+
+test('effective identity inside the container: non-root, no capabilities, no new privileges, loopback only, read-only root', { skip }, async t => {
+  const o = await run('identity');
+  const r = canary(o.diagnostics.text);
+  t.diagnostic(`identity canary ${JSON.stringify(r)}`);
+  assert.notEqual(r.uid, 0);
+  assert.equal(`${r.uid}:${r.gid}`, process.getuid?.() === 0 ? '65534:65534' : `${process.getuid?.()}:${process.getgid?.()}`);
+  assert.equal(r.capEff, '0000000000000000');
+  assert.equal(r.capPrm, '0000000000000000');
+  assert.equal(r.capBnd, '0000000000000000');
+  assert.equal(r.noNewPrivs, '1');
+  assert.deepEqual(r.interfaces, ['lo']);
+  assert.equal(r.rootWritable, 'EROFS');
+  assert.equal(o.cleanup, 'removed-owned-container');
+});
+
+test('CPU and per-file size ceilings are enforced, not only configured', { skip }, async t => {
+  const cpu = await run('cpu', { cpus: 1 });
+  const ratio = canary(cpu.diagnostics.text).cpuRatio;
+  const fsize = await run('fsize', { outputBytes: 4 * 1024 * 1024 });
+  const big = join(fsize.workDir, 'output', 'big');
+  const bytes = (() => { try { return statSync(big).size; } catch { return 0; } })();
+  t.diagnostic(`enforcement cpu=${ratio} cores-used-of-1 fsize=${canary(fsize.diagnostics.text).fsize ?? `signal ${fsize.exit?.exitSignal ?? fsize.container?.state?.exitCode}`} bytes=${bytes}`);
+  assert.ok(typeof ratio === 'number' && ratio > 0.5 && ratio <= 1.25, `three busy processes used ${ratio} CPUs under a 1-CPU ceiling`);
+  assert.notEqual(fsize.state, 'succeeded');
+  assert.ok(bytes <= 4 * 1024 * 1024, `the file stopped at ${bytes} bytes`);
+  for (const o of [cpu, fsize]) assert.equal(o.cleanup, 'removed-owned-container');
+});
+
+test('output overflow, cancellation and a failed start each end with the container confirmed removed', { skip }, async () => {
+  const flood = await run('output-flood', { outputBytes: 2 * 1024 * 1024 });
+  assert.equal(flood.code, 'sentinel.execution.outputTooLarge');
+  assert.equal(flood.stopConfirmed, true, 'the daemon confirmed the stop');
+  const ac = new AbortController();
+  setTimeout(() => ac.abort(), 2_000);
+  const cancelled = await run('ack-cancel', {}, undefined, ac.signal);
+  assert.equal(cancelled.state, 'canceled');
+  const registry = createAdapterRegistry([{ id: 'canary-absent', version: '0', kind: 'external', isolation: 'container', image: CANARY_IMAGE,
+    command: ['/sentinel-executable-intentionally-absent'], limits: { timeoutMs: 20_000, helloTimeoutMs: 10_000 } }]);
+  const absentExe = await superviseAttempt({ owner, registry, adapterId: 'canary-absent', attemptId: 'attempt-absent', work, inputs: captured, scratchRoot: s.work, backend });
+  assert.equal(absentExe.code, 'sentinel.execution.workerExited');
+  for (const o of [flood, cancelled, absentExe]) { assert.equal(o.cleanup, 'removed-owned-container'); assert.ok(absent(o.container!.id)); }
+});
+
+test('an ambiguous create is reconciled by its owner nonce, and nothing else is touched', { skip }, async () => {
+  const nonce = randomUUID();
+  const mine = docker('create', '--pull', 'never', '--label', `${LABELS.owner}=${nonce}`, CANARY_IMAGE, 'true').stdout.trim();
+  const unrelated = docker('create', '--pull', 'never', '--label', `${LABELS.owner}=${randomUUID()}`, CANARY_IMAGE, 'true').stdout.trim();
+  try {
+    const result = await backend.reconcileOwned(nonce);
+    assert.deepEqual(result, { removed: [mine], uncertain: [] });
+    assert.ok(absent(mine));
+    assert.equal(absent(unrelated), false);
+  } finally { docker('rm', '--force', unrelated); docker('rm', '--force', mine); }
+  // A create cut short at any moment leaves nothing behind under its nonce.
+  const pin = await backend.inspectImage(CANARY_IMAGE);
+  const dirs = join(s.root, 'ambiguous');
+  mkdirSync(join(dirs, 'in'), { recursive: true }); mkdirSync(join(dirs, 'out'), { recursive: true });
+  for (const ms of [0, 5, 20, 60, 150]) {
+    const owner2 = randomUUID();
+    const specCut = { image: pin, command: ['node', '-e', '0'], limits: { ...DEFAULT_ADAPTER_LIMITS }, inputDir: join(dirs, 'in'), outputDir: join(dirs, 'out'),
+      labels: { owner: owner2, store: 'store-ambiguous', attempt: `attempt-cut-${ms}`, epoch: 'epoch-ambiguous', invocation: `sha256:${'c'.repeat(64)}` },
+      adapter: { id: 'cut', digest: `sha256:${'d'.repeat(64)}` }, user: process.getuid?.() === 0 ? '65534:65534' : `${process.getuid?.()}:${process.getgid?.()}` };
+    // Canceled at any moment: the create completes, the cancellation removes it, and the call says canceled.
+    // (A cancellation that comes after the create returns is the supervisor's to act on; here the id is removed.)
+    const outcome = await backend.create(specCut, AbortSignal.timeout(Math.max(ms, 1))).then(id => ({ id }), (e: unknown) => ({ e }));
+    if ('id' in outcome) assert.equal(await backend.remove(outcome.id, owner2), 'removed-owned-container');
+    else assert.ok(is('sentinel.execution.canceled')(outcome.e), String(outcome.e));
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(docker('ps', '--all', '--quiet', '--filter', `label=${LABELS.owner}=${owner2}`).stdout.trim(), '', `canceled at ${ms} ms`);
+  }
 });

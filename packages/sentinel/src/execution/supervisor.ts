@@ -82,6 +82,8 @@ export interface WorkerOutcome {
   container?: { id: string; image: ImagePin; state?: { exitCode: number | null; oomKilled: boolean } };
   exit?: { exitCode: number | null; exitSignal: NodeJS.Signals | null };
   cleanup: CleanupState | 'not-applicable';
+  /** For a container stopped early: whether the daemon confirmed it stopped (a client exit never proves it). */
+  stopConfirmed?: boolean;
   backend?: Readonly<BackendFacts>;
   workDir: string;
 }
@@ -190,7 +192,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
 
   try {
     await drive(proc, session, limits, outputDir, outcome, request.signal, async () => {
-      if (containerId) await request.backend!.kill(containerId, nonce).catch(() => undefined);
+      if (containerId) outcome.stopConfirmed = await request.backend!.kill(containerId, nonce).catch(() => false);
       proc.kill();
     });
   } finally {

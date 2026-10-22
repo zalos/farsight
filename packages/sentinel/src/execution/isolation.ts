@@ -39,7 +39,8 @@ export interface IsolationPolicy { readonly qualified: readonly QualifiedIsolati
  * darwin-arm64 with Docker Desktop (linux-arm64 VM): PR 01's runtime matrix and the PR 07 isolation canaries.
  * linux-x64 with Docker Engine (linux-amd64): a candidate, listed so GitHub's ubuntu runners run the canaries
  * before merge; its evidence is replaced with that run's facts. Nothing else is qualified (feasibility-decisions
- * defers independent Linux hosts, Colima, AMD64 Desktop, Windows and emulation).
+ * defers independent Linux hosts, Colima, AMD64 Desktop, Windows and emulation). This is separate from the store's
+ * SQLite qualification: a host qualified for the store is not thereby qualified to isolate scanners.
  */
 export const ISOLATION_POLICY: IsolationPolicy = Object.freeze({
   qualified: Object.freeze([
@@ -183,18 +184,35 @@ export class ContainerBackend {
     return { reference, id: String(v.Id), os: v.Os, architecture: v.Architecture };
   }
 
-  /** Create (not start) the container, then read it back and compare every isolation setting. */
+  /**
+   * Create (not start) the container, then read it back and compare every isolation setting.
+   *
+   * A create request is never cut short: an aborted client does not stop the daemon, which may still create the
+   * container after the client has gone. So the request runs to completion under its own bound; a cancellation
+   * that arrived meanwhile removes what it made. A failed or timed-out create is reconciled by the attempt's owner
+   * nonce over a settle window; anything whose removal cannot be confirmed makes the failure a cleanupFailed.
+   */
   async create(spec: ContainerSpec, signal?: AbortSignal): Promise<string> {
-    const r = await this.#run(createArgs(spec, this.#serverArch), signal);
+    if (signal?.aborted) throw new ExecutionError('sentinel.execution.canceled', {});
+    const r = await this.#run(createArgs(spec, this.#serverArch));
     const id = r.stdout.toString('utf8').trim();
     if (!succeeded(r) || !CONTAINER_ID.test(id)) {
-      throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'create' });
+      const uncertain = new Set<string>();
+      for (let pass = 0; pass < 3; pass++) {
+        if (pass) await new Promise(resolve => setTimeout(resolve, 500));
+        const leftover = await this.reconcileOwned(spec.labels.owner);
+        leftover.uncertain.forEach(u => uncertain.add(u));
+      }
+      if (uncertain.size) throw new ExecutionError('sentinel.execution.cleanupFailed', { container: [...uncertain].join(', ') });
+      throw new ExecutionError('sentinel.execution.commandFailed', { operation: r.timedOut ? 'create timed out' : 'create' });
     }
     try {
-      const image = await this.#inspectJson(['image', 'inspect', '--format', '{{json .Config.Env}}', spec.image.reference], signal);
-      validateContainer(await this.#container(id, signal), spec, Array.isArray(image) ? image.map(String) : []);
+      if (signal?.aborted) throw new ExecutionError('sentinel.execution.canceled', {});
+      const image = await this.#inspectJson(['image', 'inspect', '--format', '{{json .Config.Env}}', spec.image.reference]);
+      validateContainer(await this.#container(id), spec, Array.isArray(image) ? image.map(String) : []);
     } catch (error) {
-      await this.remove(id, spec.labels.owner).catch(() => undefined);
+      const removed = await this.remove(id, spec.labels.owner).catch(() => 'cleanup-failed' as const);
+      if (removed === 'cleanup-failed') throw new ExecutionError('sentinel.execution.cleanupFailed', { container: id }, { cause: error });
       throw error;
     }
     return id;
@@ -213,11 +231,35 @@ export class ContainerBackend {
     return { status: String(s.Status ?? ''), exitCode: typeof s.ExitCode === 'number' ? s.ExitCode : null, oomKilled: s.OOMKilled === true };
   }
 
-  /** Stop a running owned container. Killing the attached client alone would leave the container running. */
-  async kill(id: string, owner: string, signal?: AbortSignal): Promise<void> {
-    const c = await this.#owned(id, owner, signal);
-    if (!c || (c.State as { Running?: boolean } | undefined)?.Running !== true) return;
-    await this.#run(['kill', id], signal);
+  /**
+   * Stop a running owned container and confirm the daemon reports it stopped. Ending the attached client proves
+   * nothing about the container, so this asks the daemon. Returns false when the stop cannot be confirmed.
+   */
+  async kill(id: string, owner: string, signal?: AbortSignal): Promise<boolean> {
+    const running = (c: Record<string, unknown> | null) => (c?.State as { Running?: boolean } | undefined)?.Running === true;
+    let c = await this.#owned(id, owner, signal);
+    for (let attempt = 0; attempt < 3 && running(c); attempt++) {
+      await this.#run(['kill', id], signal);
+      c = await this.#owned(id, owner, signal);
+    }
+    return !running(c);
+  }
+
+  /**
+   * Remove every container that carries this owner nonce, each checked by exact identity and label before
+   * removal. The nonce is random per attempt, so no unrelated container can match. Containers whose removal
+   * cannot be confirmed are returned as uncertain; nothing else is touched.
+   */
+  async reconcileOwned(owner: string, signal?: AbortSignal): Promise<{ removed: string[]; uncertain: string[] }> {
+    const r = await this.#run(['ps', '--all', '--no-trunc', '--quiet', '--filter', `label=${LABELS.owner}=${owner}`], signal);
+    if (!succeeded(r)) return { removed: [], uncertain: [`label ${owner}`] };
+    const removed: string[] = [], uncertain: string[] = [];
+    for (const id of r.stdout.toString('utf8').split('\n').map(l => l.trim()).filter(Boolean)) {
+      if (!CONTAINER_ID.test(id)) { uncertain.push(id.slice(0, 64)); continue; }
+      const state = await this.remove(id, owner, signal);
+      (state === 'cleanup-failed' ? uncertain : removed).push(id);
+    }
+    return { removed, uncertain };
   }
 
   /** Remove an owned container and confirm the daemon no longer knows it. */
@@ -281,9 +323,12 @@ export class ContainerBackend {
 async function resolveEndpoint(docker: string, signal?: AbortSignal): Promise<string> {
   let endpoint = process.env.DOCKER_HOST;
   if (!endpoint) {
-    // Only this read sees the user's client configuration, to learn which local context is current.
+    // Only this read sees the user's client configuration, to learn which local context is current. Every
+    // command with an effect runs with an empty configuration and no proxy or other inherited variable.
+    const env: Record<string, string> = { PATH: SAFE_PATH, HOME: homedir() };
+    for (const name of ['DOCKER_CONFIG', 'DOCKER_CONTEXT']) if (process.env[name]) env[name] = process.env[name]!;
     const r = await runBounded(docker, ['context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}'], {
-      env: { PATH: SAFE_PATH, HOME: homedir() }, timeoutMs: 10_000, maxStdoutBytes: 16_384, maxStderrBytes: 16_384, signal,
+      env, timeoutMs: 10_000, maxStdoutBytes: 16_384, maxStderrBytes: 16_384, signal,
     });
     if (!succeeded(r)) unavailable('docker context unreadable');
     try { endpoint = JSON.parse(r.stdout.toString('utf8')) as string; } catch (e) { unavailable('docker context unreadable', e); }

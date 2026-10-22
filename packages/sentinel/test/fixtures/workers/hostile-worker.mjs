@@ -91,6 +91,15 @@ switch (behavior) {
   case 'no-hello': await sleep(60_000); break;
   case 'message-before-hello': raw('{"protocol":"sentinel-worker/draft-1","type":"progress"}\n'); await sleep(60_000); break;
   case 'old-version': send({ protocol: P, type: 'hello', supported: ['sentinel-worker/draft-9'], adapterId: process.env.SENTINEL_ADAPTER_ID, adapterDigest: process.env.SENTINEL_ADAPTER_DIGEST }); await sleep(60_000); break;
+  case 'result-before-start': {
+    // Answers before it has read its start message, so it can only guess the binding.
+    hello();
+    send({ protocol: P, type: 'result', attemptId: 'attempt-guessed', work: { id: 'work-guessed', revision: 1 }, coordinatorEpoch: 'epoch-guessed', seq: 0,
+      inputFingerprint: `sha256:${'4'.repeat(64)}`, granularity: 'per-file', artifacts: [], observations: [], coveredChecks: [], scannedSet: [],
+      skipped: [], actualReadSet: [], unresolvedFrontiers: [], diagnostics: [] });
+    await sleep(60_000); break;
+  }
+  case 'unterminated': hello(); await next(); raw('{"protocol":"sentinel-worker/draft-1"'); await sleep(50); process.exit(0);
   case 'wrong-adapter': send({ protocol: P, type: 'hello', supported: [P], adapterId: process.env.SENTINEL_ADAPTER_ID, adapterDigest: `sha256:${'0'.repeat(64)}` }); await sleep(60_000); break;
   default: {
     hello();
@@ -106,6 +115,10 @@ switch (behavior) {
       case 'forged-epoch': send({ protocol: P, type: 'progress', ...bound(start), coordinatorEpoch: 'epoch-forged', completed: 0, planned: 1 }); await sleep(60_000); break;
       case 'other-attempt': send({ protocol: P, type: 'progress', ...bound(start), attemptId: 'attempt-someone-else', completed: 0, planned: 1 }); await sleep(60_000); break;
       case 'other-revision': send({ protocol: P, type: 'progress', ...bound(start), work: { id: start.work.id, revision: start.work.revision + 1 }, completed: 0, planned: 1 }); await sleep(60_000); break;
+      case 'seq-repeat': { send({ protocol: P, type: 'progress', ...bound(start), completed: 0, planned: 1 }); seq = 0; send({ protocol: P, type: 'progress', ...bound(start), completed: 0, planned: 1 }); await sleep(60_000); break; }
+      case 'duplicate-result': { const a = honestWork(start); result(start, a); result(start, a); break; }
+      case 'result-then-malformed': { result(start, honestWork(start)); raw('{broken\n'); break; }
+      case 'late-output': { result(start, honestWork(start)); await sleep(100); writeFileSync(`${OUT}/late`, 'written after the result'); break; }
       case 'seq-gap': seq = 5; send({ protocol: P, type: 'progress', ...bound(start), completed: 0, planned: 1 }); await sleep(60_000); break;
       case 'heartbeat': send({ protocol: P, type: 'heartbeat', ...bound(start), fencingGeneration: 1 }); await sleep(60_000); break;
       case 'wrong-fingerprint': result({ ...start, inputFingerprint: `sha256:${'1'.repeat(64)}` }, honestWork(start)); await sleep(60_000); break;
@@ -121,6 +134,35 @@ switch (behavior) {
       case 'ack-cancel': { const m = await next(); if (m.type === 'cancel') send({ protocol: P, type: 'cancel-ack', ...bound(start) }); await sleep(100); break; }
       case 'ignore-cancel': await sleep(600_000); break;
       case 'memory': { const hog = []; for (let i = 0; i < 4096; i++) { const b = Buffer.alloc(16 * 1024 * 1024, i & 255); hog.push(b); } result(start, honestWork(start)); break; }
+      case 'identity': {
+        // What the kernel says this process may do, not what the container configuration claims.
+        const status = readFileSync('/proc/self/status', 'utf8');
+        const field = name => new RegExp(`^${name}:\\s*(.*)$`, 'm').exec(status)?.[1]?.trim();
+        const { networkInterfaces } = await import('node:os');
+        let rootWritable = 'refused';
+        try { writeFileSync('/identity-probe', 'x'); rootWritable = 'ESCAPED'; } catch (e) { rootWritable = e.code; }
+        process.stderr.write(`canary ${JSON.stringify({ uid: process.getuid(), gid: process.getgid(), capEff: field('CapEff'), capPrm: field('CapPrm'),
+          capBnd: field('CapBnd'), noNewPrivs: field('NoNewPrivs'), seccomp: field('Seccomp'), interfaces: Object.keys(networkInterfaces()).sort(), rootWritable })}\n`);
+        process.exit(3);
+      }
+      case 'cpu': {
+        // Three busy processes for two seconds; the cgroup's own usage counter says how much CPU they got.
+        const usage = () => Number(/usage_usec (\d+)/.exec(readFileSync('/sys/fs/cgroup/cpu.stat', 'utf8'))?.[1]);
+        const before = usage(), t0 = Date.now();
+        const busy = Array.from({ length: 3 }, () => spawn(process.execPath, ['-e', 'const e=Date.now()+2000;while(Date.now()<e){}'], { stdio: 'ignore' }));
+        await Promise.all(busy.map(c => new Promise(r => c.on('close', r))));
+        const wallUs = (Date.now() - t0) * 1000;
+        process.stderr.write(`canary ${JSON.stringify({ cpuRatio: Number(((usage() - before) / wallUs).toFixed(2)), wallMs: wallUs / 1000 })}\n`);
+        process.exit(3);
+      }
+      case 'fsize': {
+        // One file larger than the per-file ceiling (the output budget): the kernel refuses the write.
+        let outcome = 'ESCAPED';
+        try { const fd = openSync(`${OUT}/big`, 'w'); const mb = Buffer.alloc(1024 * 1024, 5); try { for (let i = 0; i < 16; i++) writeSync(fd, mb); } finally { closeSync(fd); } }
+        catch (e) { outcome = e.code; }
+        process.stderr.write(`canary ${JSON.stringify({ fsize: outcome })}\n`);
+        process.exit(3);
+      }
       case 'network': case 'hostfile': case 'tmpfs': case 'pids': {
         const report = await tryEscapes();
         process.stderr.write(`canary ${JSON.stringify(report)}\n`);

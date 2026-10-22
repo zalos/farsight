@@ -57,6 +57,18 @@ test('framing: a frame split byte by byte decodes once, and two frames in one ch
   assert.equal(new FrameDecoder().push(Buffer.concat([bytes, bytes])).length, 2);
 });
 
+test('framing: a multibyte character split across chunks decodes intact; a lone continuation byte is refused', () => {
+  const message = { protocol: 'sentinel-worker/draft-1', type: 'diagnostic', attemptId: 'att-1', work, coordinatorEpoch: 'epoch-1', seq: 0,
+    code: 'sentinel.execution.workerExited', scopeId: 'src/caf\u00e9.ts' };
+  const bytes = encodeFrame(message as any);
+  const at = bytes.indexOf(Buffer.from('\u00e9')) + 1; // between the two bytes of é
+  const d = new FrameDecoder();
+  const out = [...d.push(bytes.subarray(0, at)), ...d.push(bytes.subarray(at))];
+  assert.equal(out.length, 1);
+  assert.equal((out[0] as any).scopeId, 'src/caf\u00e9.ts');
+  assert.throws(() => new FrameDecoder().push(Buffer.from([0x22, 0x80, 0x22, 0x0a])), is('sentinel.execution.frameMalformed'));
+});
+
 test('session: the coordinator binding is the only authority', () => {
   const binding = { attemptId: 'att-1', work, coordinatorEpoch: owner.epoch, adapterId: 'a', adapterDigest: `sha256:${'a'.repeat(64)}`,
     inputFingerprint: inputFingerprintOf(captured.map(c => c.id)), inputs: captured.map(c => c.id), deadlineAt: '2099-01-01T00:00:00Z' };
@@ -133,6 +145,12 @@ const refusals: Array<[string, string, Record<string, number>?]> = [
   ['phantom-reference', 'sentinel.execution.outputMismatch'],
   ['exit-nonzero-after-result', 'sentinel.execution.workerExited'],
   ['frame-after-result', 'sentinel.execution.protocolViolation'],
+  ['seq-repeat', 'sentinel.execution.protocolViolation'],
+  ['result-before-start', 'sentinel.execution.protocolViolation'],
+  ['duplicate-result', 'sentinel.execution.protocolViolation'],
+  ['result-then-malformed', 'sentinel.execution.frameMalformed'],
+  ['late-output', 'sentinel.execution.outputMismatch'],
+  ['unterminated', 'sentinel.execution.frameMalformed'],
   ['output-flood', 'sentinel.execution.outputTooLarge', { outputBytes: 4 * 1024 * 1024 }],
   ['no-hello', 'sentinel.execution.protocolViolation', { helloTimeoutMs: 300 }],
   ['hang', 'sentinel.execution.deadlineExceeded', { timeoutMs: 800 }],
