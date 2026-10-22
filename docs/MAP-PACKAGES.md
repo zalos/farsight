@@ -97,7 +97,15 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `scripts/package-assets.mjs`, which `scripts/pack-sentinel.mjs` calls), its words
   `strings-sentinel-pattern.ts`, its tests `test/pattern-adapter.test.ts` and, with `SENTINEL_ISOLATION=1`,
   `test/pattern-conformance.test.ts` against the real image (ADR 26; linux/amd64 through the scoped PR/manual
-  `sentinel-pattern-qualification` workflow). Depends only on graph, code-parser and core; nothing in the
+  `sentinel-pattern-qualification` workflow). 
+
+  `src/review/providers/` is the opt-in model broker (PR 21, ADR 35), exported as `./review/providers`: `profile.ts`
+  (model profiles and the owner-bound provider binding), `kinds.ts` (Ollama and OpenAI-compatible wire formats and
+  `probeCapability`), `transport.ts` (one bounded node:http/https exchange, no redirects, verified TLS),
+  `credentials.ts` (keychain references read in-process into a redacted `Secret`), `budget.ts` (the durable SQLite
+  reservation ledger), `broker.ts` (`openEnvelope` through the shared admission gate, `generate`), `decimal.ts` and
+  `errors.ts`; its words are `strings-sentinel-providers.ts`. `test/providers.test.ts` drives local mock endpoints.
+  `test/store-integration.test.ts` drives the facade end to end across processes. Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the
   manifest's `bin` and root export; `scripts/test-sentinel-package.mjs` installs it into a clean npm consumer and
