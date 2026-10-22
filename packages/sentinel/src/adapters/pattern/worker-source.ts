@@ -10,7 +10,7 @@
 // Kept as a string so the package ships it inside dist with no extra build step; its SHA-256 is part of the adapter's
 // fixed command and therefore of the adapter digest. Avoid backticks and dollar-brace in the Python below.
 export const PATTERN_WORKER_SOURCE = String.raw`# Sentinel pattern worker (sentinel-pattern-worker/1). Original; standard library only.
-import hashlib, json, os, re, subprocess, sys, threading, time
+import hashlib, json, os, subprocess, sys, threading, time
 
 PROTOCOL = 'sentinel-worker/draft-1'
 JOB_SCHEMA = 'sentinel-pattern-job/draft-1'
@@ -67,26 +67,19 @@ def safe_rel(path):
         return False
     return all(seg not in ('', '.', '..') for seg in path.split('/'))
 
-SCRUB_KEEP = re.compile(r'^(Error|Usage|semgrep( scan)?:|\[ERROR\]|Fatal error|Invalid|invalid)')
-SCRUB_QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"|[\x60][^\x60]*[\x60]")
-SCRUB_PATH = re.compile(r'/tmp/sentinel-pattern/\S*')
-SCRUB_WORD = re.compile(r'^(\(?[A-Za-z][a-z]*[)\],.:;!?]*|--?[a-z][a-z-]*=?|[0-9]{1,6}[,.:;)]?|\.\.\.|<target>|[|/=\-:()\[\]]+)$')
+# A failed engine run is reported as one fixed category and its exit code. Engine messages can quote arguments, paths
+# and source text, so stderr is only matched here, never forwarded or stored; its digest stays in the run record.
+EXIT_CATEGORIES = {4: 'invalidPattern', 5: 'unparseableConfig', 7: 'missingConfig', 8: 'invalidLanguage'}
+ARGUMENT_MARKERS = (b'Invalid value for', b'invalid value', b'No such option', b'Usage:')
 
-def scrub(raw):
-    kept = []
-    for line in raw.decode('utf-8', 'replace').splitlines():
-        line = line.strip()
-        if not SCRUB_KEEP.match(line):
-            continue
-        line = SCRUB_QUOTED.sub('\u2026', line)
-        line = SCRUB_PATH.sub('<target>', line)
-        line = ' '.join(w if SCRUB_WORD.match(w) else '\u2026' for w in line.split())
-        line = ''.join(ch if (' ' <= ch <= '~') else '?' for ch in line.replace('\u2026', '...'))
-        kept.append(line[:160])
-        if len(kept) == 8:
-            break
-    text = '\n'.join(kept)
-    return (text[:512] + '\n') if text else 'the engine failed; its messages were withheld\n'
+def failure_category(code, err):
+    if code in EXIT_CATEGORIES:
+        return EXIT_CATEGORIES[code]
+    if code == 2 and any(m in err for m in ARGUMENT_MARKERS):
+        return 'invalidArgument'
+    if code in (137, -9):
+        return 'killed'
+    return 'unknown'
 
 def finish(status):
     # A daemon thread is blocked reading stdin; a normal interpreter shutdown would wait on its lock. Flush and leave.
@@ -209,17 +202,17 @@ def main():
         finish(0)
 
     engine = result['out']
+    failure = None
     if code != 0:
-        # A failed engine run explains itself through the supervisor's diagnostics channel, scrubbed first: engine
-        # messages can quote arguments, paths and source text, so only usage/error lines pass, with every quoted span,
-        # target path and token-like run replaced, as printable ASCII, at most eight lines and 512 bytes.
-        sys.stderr.write(scrub(result['err']))
+        failure = {'category': failure_category(code, result['err']), 'exitCode': code}
+        send(bound('diagnostic', code='sentinel.pattern.engine.' + failure['category']))
+        sys.stderr.write('sentinel.pattern.engine.' + failure['category'] + ' exit ' + str(code) + '\n')
         sys.stderr.flush()
     record = {
         'schema': 'sentinel-pattern-run/draft-1', 'job': job_digest, 'exitCode': code, 'timedOut': timed_out,
         'stdoutBytes': result['outBytes'], 'stdoutTruncated': result['outBytes'] > MAX_ENGINE_STDOUT,
         'stderrBytes': result['errBytes'], 'stderrDigest': sha(result['err']), 'excluded': excluded,
-        'wallMs': int((time.monotonic() - started) * 1000), 'engineOutput': sha(engine),
+        'wallMs': int((time.monotonic() - started) * 1000), 'engineOutput': sha(engine), 'failure': failure,
     }
     record_bytes = json.dumps(record, separators=(',', ':'), sort_keys=True).encode('utf-8')
     artifacts = []

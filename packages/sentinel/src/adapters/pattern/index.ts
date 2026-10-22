@@ -4,8 +4,8 @@ export { buildPatternAdapter, PATTERN_IMAGE_PLATFORMS, MEASURED_ARCHITECTURES, P
 export { buildPatternJob, patternRuleOf, languageOf, MAX_PATTERN_TARGETS } from './job.js';
 export type { PatternAdapterBuild } from './adapter.js';
 export type { PatternRule, PatternTarget, PatternJob, PatternLanguage, PatternEvidenceKind, BuiltPatternJob } from './job.js';
-export { normalizePatternRun, PATTERN_COVERAGE_REASONS, PATTERN_REFUSAL_REASONS } from './normalize.js';
-export type { PatternRunResult, PatternFinding, PatternCoverage, PatternEvidence, PatternRefusal, CoverageStatus } from './normalize.js';
+export { normalizePatternRun, PATTERN_COVERAGE_REASONS, PATTERN_REFUSAL_REASONS, PATTERN_ENGINE_FAILURES } from './normalize.js';
+export type { PatternEngineFailure, PatternRunResult, PatternFinding, PatternCoverage, PatternEvidence, PatternRefusal, CoverageStatus } from './normalize.js';
 export { runPatternAttempt } from './run.js';
 export { patternRulesFromResolved, PATTERN_UNSUPPORTED_REASONS, PATTERN_PROVIDES } from './resolved.js';
 export type { ResolvedRuleInput, PackFileInput, ResolvedPatternRules, PatternUnsupportedReason } from './resolved.js';

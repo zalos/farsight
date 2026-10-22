@@ -56,8 +56,9 @@ digest and installed ahead (never pulled), run only through the isolated executi
 read-only root, a non-root user and inputs read-only. An original shim inside the container, pinned by digest in the
 adapter's fixed command, runs the engine with telemetry and version checks off and only the open-source engine;
 repository ignore files are never materialized, in-source suppression comments are disabled, and a captured file
-shaped like a job makes the worker refuse rather than run it. Results are trusted only after the coordinator checks
-them against the job it supplied and the captured bytes; engine fingerprints and messages are not used, and findings
+shaped like a job makes the worker refuse rather than run it. A failed engine run is reported only as a fixed category and its exit code, never its messages, which
+can quote source text. Results are trusted only after the coordinator checks them against the job it supplied and the
+captured bytes; engine fingerprints and messages are not used, and findings
 keep spans and digests, not source text. The package smokes install from npm into temporary directories with their own npm
 cache and user config/state, and start nothing beyond the packaged command and a read-only Farsight server on a
 free loopback port.

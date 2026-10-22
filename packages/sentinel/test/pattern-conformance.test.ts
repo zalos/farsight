@@ -24,7 +24,9 @@ const RULES = manifest.rules.map((r: any) => patternRuleOf(r.familyId, r.revisio
 /** A test variant with a one-second per-rule engine timeout (the engine's smallest): its own shim and adapter digest. */
 /** A variant whose engine invocation fails with an adversarial value the engine echoes back in its error. */
 const SECRET = 'ghp_FAKEtoken0123456789abcdefSECRET';
-const LEAKY = buildPatternAdapter({ id: 'pattern-semgrep-leaky-error', engineArgs: ENGINE_ARGS.map((a, i) => (ENGINE_ARGS[i - 1] === '--max-target-bytes' ? `${SECRET} const password = 'Hunter2-src' \x60db.query(x)\x60` : a)) });
+/** A plain lowercase word, the shape no word filter can tell from prose: it must never survive either. */
+const LOWER = 'hunterpassword';
+const LEAKY = buildPatternAdapter({ id: 'pattern-semgrep-leaky-error', engineArgs: ENGINE_ARGS.map((a, i) => (ENGINE_ARGS[i - 1] === '--max-target-bytes' ? `${LOWER} ${SECRET} MixedCase9Token const password = 'Hunter2-src' \x60db.query(x)\x60` : a)) });
 const RULE_TIMEOUT = buildPatternAdapter({ id: 'pattern-semgrep-rule-timeout', engineArgs: ENGINE_ARGS.map((a, i) => (ENGINE_ARGS[i - 1] === '--timeout' ? '1' : a)) });
 let root: { root: string; work: string };
 let store: any;
@@ -168,18 +170,22 @@ test('changing or deleting the caller’s files after the worker copied them cha
   assert.ok(r.coverage.filter(c => c.relativePath.startsWith('live/')).every(c => c.status === 'complete' || c.status === 'not-run'));
 });
 
-test('an engine failure reaches diagnostics scrubbed: no argument value, quoted source or target path survives', { skip }, async () => {
-  const t = targets({ [`leak/${SECRET}.ts`]: `export const token = "${SECRET}";\nexport const password = 'Hunter2-src';\n${POSITIVE}` });
+test('an engine failure reaches diagnostics as a fixed category and exit code only, never engine text', { skip }, async () => {
+  // The secret sits in the file's contents and in the engine argument; target paths are the owner's names and stay.
+  const t = targets({ 'leak/values.ts': `export const token = "${SECRET}";\nexport const ${LOWER} = 'Hunter2-src';\n${POSITIVE}` });
   const dir = join(root.root, `leaky-job-${n++}`);
   mkdirSync(dir, { mode: 0o700 });
   const built = buildPatternJob(RULES, t, dir, LEAKY);
   const outcome = await service.run({ adapterId: LEAKY.definition.id, attemptId: `att-leaky-${n++}`, work: { id: 'work-pattern', revision: 1 }, inputs: built.inputs });
-  const text = outcome.diagnostics.text;
-  assert.ok(text.length > 0 && text.length <= 600, `bounded diagnostics: ${text.length}`);
-  for (const leaked of [SECRET, 'Hunter2', 'password', 'db.query', '/tmp/sentinel-pattern', 'leak/']) assert.ok(!text.includes(leaked), `diagnostics leaked ${leaked}`);
-  assert.match(text, /^(Error|Usage|semgrep|Invalid|invalid)/m, 'the engine’s own error line still explains the failure');
-  assert.match(text, /^[\x20-\x7e\n]*$/, 'printable ASCII only');
-  console.log(`# scrubbed diagnostics: ${JSON.stringify(text)}`);
+  assert.equal(outcome.diagnostics.text, 'sentinel.pattern.engine.invalidArgument exit 2\n', 'nothing but the fixed category and exit code');
+  for (const leaked of [LOWER, SECRET, 'MixedCase9Token', 'Hunter2', 'password', 'db.query', '/tmp/sentinel-pattern', 'leak/']) {
+    assert.ok(!outcome.diagnostics.text.includes(leaked), `diagnostics leaked ${leaked}`);
+  }
+  const r = await runPatternAttempt(service, { attemptId: `att-leaky-${n++}`, work: { id: 'work-pattern', revision: 1 }, rules: RULES, targets: t, scratch: root.root, adapter: LEAKY });
+  assert.equal(r.engineFailure, 'sentinel.pattern.engine.invalidArgument');
+  assert.equal(r.engineExit, 2);
+  assert.ok(r.coverage.every(c => c.status === 'error' || c.status === 'not-applicable'));
+  assert.ok(!JSON.stringify(r).includes(LOWER) && !JSON.stringify(r).includes(SECRET), 'nor in the normalized result');
 });
 
 test('the attempt deadline stops the engine and leaves every applicable file in error', { skip }, async () => {
