@@ -518,3 +518,32 @@ gate (`run.start` on the plan digest). Tool matching here establishes version an
 platform qualification remains an admission requirement and must use the full lock and qualified registry.
 Not decided here: framework control-fact work (framework-order stays unavailable until packs exist),
 and scheduling for model review.
+
+**(Number to be assigned at integration.) The pattern engine runs behind an original protocol shim inside its
+pinned image, and coverage is per file per rule only where the engine timed the rule (2026-10-22).**
+
+Semgrep 1.181.0 cannot speak the `sentinel-worker` protocol, and PR 07 hands an external worker its inputs only as
+content-addressed blobs (`/input/<digest>`, no paths) with a fixed environment. Rather than add a second execution path
+or a derived image, the adapter's fixed command runs an original, standard-library shim from its inputs inside the
+unmodified pinned image: `/usr/bin/python3 -I -S -B /input/<shim digest>`. The shim's digest sits in the command, so the
+adapter digest pins it alongside the image reference and the engine arguments; the scheduler supplies the shim, one job
+manifest, the rule config and the targets as ordinary inputs, which PR 07 copies and hashes. The shim is transport: it
+reads exactly one job (a second job-shaped input makes it refuse, so captured source cannot stand in for the job),
+materializes targets by relative path under the container's noexec `/tmp`, never materializes repository ignore files and
+writes its own empty `.semgrepignore` (the engine's built-in ignores would otherwise drop `node_modules/`, `tests/`,
+`dist/` silently), runs the fixed arguments with telemetry and version checks off, and returns the bounded raw JSON and a
+run record. Authority stays with the coordinator: the run record must name the supplied job; only job rules, job targets
+and declared languages count; spans are checked as bytes, lines and columns against the captured bytes; identity is
+Sentinel's digest, never the engine fingerprint; no source text is kept; structural locators and local taint stay
+distinct and cross-file traces are refused. **Coverage:** the engine's `paths.scanned` cannot certify that each rule ran
+on a file (its file prefilter skips rules whose required text is absent), so `--time` match times are the evidence: a
+rule is `complete` on a file only with a non-zero match time, `not-run` with zero, `partial` when an engine-reported
+timeout names that rule, and `not-established` when timing is missing; a requested file neither scanned nor skipped is
+`omitted` even on exit zero. **Platforms:** the pinned reference is a multi-platform index; only linux/arm64 is measured
+(darwin-arm64, Docker Desktop), and results from another image architecture are refused until measured natively.
+**Rules** come from PR 06's resolved, pinned rules through `patternRulesFromResolved`, which accepts only rules this
+adapter can run faithfully (source-file scope, no framework, source bytes / pattern match / source span, TS/JS/Java),
+checks detector bytes against the pinned pack digest, and returns every other rule as an explicit unsupported check.
+**Cost:** a Python file inside a string in the package, a tie to the image's `/usr/bin/python3`, and one attempt per job
+batch of at most 2,000 targets to keep timed output under its 3 MiB bound. **Not decided here:** registering the adapter
+in the production registry, the planner's batching, the scan command (PR 09), and amd64 qualification.

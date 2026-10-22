@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import type { ArtifactId } from '../../contracts/common.js';
 import type { CapturedInput } from '../../execution/supervisor.js';
 import { isSafeRelativePath } from '../../validate.js';
-import { ENGINE_TIMEOUT_SECONDS, MAX_TARGET_BYTES, PATTERN_WORKER_BYTES, PATTERN_WORKER_DIGEST } from './adapter.js';
+import { ENGINE_TIMEOUT_SECONDS, PATTERN_WORKER_BYTES, PATTERN_WORKER_DIGEST, type PatternAdapterBuild } from './adapter.js';
 import { patternFail } from './errors.js';
 
 export type PatternLanguage = 'typescript' | 'javascript' | 'java';
@@ -20,6 +20,8 @@ export interface PatternRule {
   readonly kind: PatternEvidenceKind;
   readonly languages: readonly PatternLanguage[];
   readonly engineRule: Readonly<Record<string, unknown>>;
+  /** Provenance from the pinned lock, when the rule came through patternRulesFromResolved. */
+  readonly pins?: Readonly<{ definitionDigest: string; packDigest: string; lockDigest: string; detectorDigest: string }>;
 }
 
 /** A captured target: where its bytes are now, its artifact id and its path inside the source. */
@@ -34,6 +36,8 @@ export interface PatternJob {
   readonly worker: string;
   readonly rules: ArtifactId;
   readonly ruleIds: readonly string[];
+  /** The lock pins of each rule, recorded for provenance; the worker does not read them. */
+  readonly rulePins: Readonly<Record<string, PatternRule['pins'] | null>>;
   readonly targets: readonly { readonly path: string; readonly artifact: ArtifactId }[];
   readonly maxTargetBytesRead: number;
   readonly engineTimeoutSeconds: number;
@@ -46,7 +50,8 @@ export interface BuiltPatternJob {
   readonly inputs: readonly CapturedInput[];
 }
 
-export const MAX_PATTERN_TARGETS = 10_000;
+/** Per attempt: with per-rule match times every target adds to the engine output, which is held to 3 MiB. */
+export const MAX_PATTERN_TARGETS = 2_000;
 /** The worker reads at most this much of one target: enough for the engine to see it is over MAX_TARGET_BYTES. */
 export const MAX_TARGET_READ_BYTES = 16 * 1024 * 1024;
 
@@ -107,7 +112,8 @@ function digestOfFile(path: string): ArtifactId {
  * worker, job, rules, then every target. Target artifact ids are checked against their bytes now; the execution
  * service checks them again as it copies them.
  */
-export function buildPatternJob(rules: readonly PatternRule[], targets: readonly PatternTarget[], dir: string): BuiltPatternJob {
+export function buildPatternJob(rules: readonly PatternRule[], targets: readonly PatternTarget[], dir: string, adapter?: PatternAdapterBuild): BuiltPatternJob {
+  const worker = adapter ? { bytes: adapter.workerBytes, digest: adapter.workerDigest } : { bytes: PATTERN_WORKER_BYTES, digest: PATTERN_WORKER_DIGEST };
   if (!rules.length) patternFail('sentinel.pattern.ruleInvalid', 'a job runs at least one rule');
   const ids = rules.map(r => r.familyId);
   if (new Set(ids).size !== ids.length) patternFail('sentinel.pattern.ruleInvalid', 'duplicate rule');
@@ -122,7 +128,7 @@ export function buildPatternJob(rules: readonly PatternRule[], targets: readonly
   const config = Buffer.from(JSON.stringify({ rules: rules.map(r => r.engineRule) }), 'utf8');
   const rulesDigest = sha256(config);
   const job: PatternJob = {
-    schema: 'sentinel-pattern-job/draft-1', worker: PATTERN_WORKER_DIGEST, rules: rulesDigest, ruleIds: [...ids].sort(),
+    schema: 'sentinel-pattern-job/draft-1', worker: worker.digest, rules: rulesDigest, ruleIds: [...ids].sort(), rulePins: Object.fromEntries(rules.map(r => [r.familyId, r.pins ?? null])),
     targets: targets.map(t => ({ path: t.relativePath, artifact: t.artifact })),
     maxTargetBytesRead: MAX_TARGET_READ_BYTES, engineTimeoutSeconds: ENGINE_TIMEOUT_SECONDS,
   };
@@ -131,7 +137,7 @@ export function buildPatternJob(rules: readonly PatternRule[], targets: readonly
   const jobDigest = sha256(jobBytes);
   const write = (name: string, bytes: Uint8Array) => { const p = join(dir, name); writeFileSync(p, bytes, { mode: 0o600, flag: 'wx' }); return p; };
   const inputs: CapturedInput[] = [
-    { id: PATTERN_WORKER_DIGEST, path: write('worker.py', PATTERN_WORKER_BYTES) },
+    { id: worker.digest, path: write('worker.py', worker.bytes) },
     { id: jobDigest, path: write('job.json', jobBytes) },
     { id: rulesDigest, path: write('rules.json', config) },
   ];

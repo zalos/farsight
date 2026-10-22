@@ -188,6 +188,10 @@ def main():
         finish(0)
 
     engine = result['out']
+    if code != 0:
+        # A failed engine run explains itself through the supervisor's bounded diagnostics channel, never parsed.
+        sys.stderr.buffer.write(result['err'][:4096])
+        sys.stderr.buffer.flush()
     record = {
         'schema': 'sentinel-pattern-run/draft-1', 'job': job_digest, 'exitCode': code, 'timedOut': timed_out,
         'stdoutBytes': result['outBytes'], 'stdoutTruncated': result['outBytes'] > MAX_ENGINE_STDOUT,

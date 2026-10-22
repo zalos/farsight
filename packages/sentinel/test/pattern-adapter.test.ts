@@ -11,6 +11,7 @@ import { createAdapterRegistry } from '../dist/execution/registry.js';
 import {
   PATTERN_ADAPTER, PATTERN_ENGINE, PATTERN_SUPPORT, ENGINE_ARGS, PATTERN_WORKER_DIGEST, buildPatternJob, patternRuleOf,
   normalizePatternRun, languageOf, PatternError, PATTERN_COVERAGE_REASONS, PATTERN_REFUSAL_REASONS, PATTERN_ERROR_CODES,
+  patternRulesFromResolved, PATTERN_UNSUPPORTED_REASONS, buildPatternAdapter, MAX_PATTERN_TARGETS,
 } from '../dist/adapters/pattern/index.js';
 import { PATTERN_WORKER_BYTES } from '../dist/adapters/pattern/adapter.js';
 
@@ -40,7 +41,7 @@ test('the adapter is pinned: image digest, telemetry off, suppression and ignore
   assert.equal(PATTERN_ADAPTER.image, 'semgrep/semgrep@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b');
   assert.equal(sha(PATTERN_WORKER_BYTES), PATTERN_WORKER_DIGEST);
   assert.deepEqual([...PATTERN_ADAPTER.command], ['/usr/bin/python3', '-I', '-S', '-B', `/input/${PATTERN_WORKER_DIGEST.slice(7)}`]);
-  for (const flag of ['--metrics=off', '--disable-version-check', '--disable-nosem', '--no-git-ignore', '--no-rewrite-rule-ids', '--oss-only', '--json', '--dataflow-traces']) {
+  for (const flag of ['--metrics=off', '--disable-version-check', '--disable-nosem', '--no-git-ignore', '--no-rewrite-rule-ids', '--oss-only', '--json', '--dataflow-traces', '--time']) {
     assert.ok(ENGINE_ARGS.includes(flag), flag);
   }
   const shim = PATTERN_WORKER_BYTES.toString('utf8');
@@ -52,7 +53,12 @@ test('the adapter is pinned: image digest, telemetry off, suppression and ignore
   assert.equal(adapter.kind, 'external');
   assert.equal(adapter.isolation, 'container');
   assert.equal(PATTERN_SUPPORT.capabilities['cross-file-taint'], 'unsupported');
-  assert.equal(PATTERN_SUPPORT.granularity, 'per-file');
+  assert.equal(PATTERN_SUPPORT.granularity, 'per-file-per-rule');
+  // A variant (a test's lowered timeout, say) gets its own shim digest and adapter digest: it cannot pass for this one.
+  const variant = buildPatternAdapter({ id: 'pattern-variant', engineArgs: [...ENGINE_ARGS, '--max-memory', '1'] });
+  assert.notEqual(variant.workerDigest, PATTERN_WORKER_DIGEST);
+  assert.notEqual(createAdapterRegistry([variant.definition]).get('pattern-variant').digest, adapter.digest);
+  assert.equal(MAX_PATTERN_TARGETS, 2000);
 });
 
 test('the original pack: every rule has its detector, both fixture kinds and a matching engine id', () => {
@@ -97,14 +103,21 @@ test('a job writes the worker first, then the job, rules and each target once, a
 // ---- normalization over synthetic engine output --------------------------------------------------------------------
 
 const TREE = '/tmp/sentinel-pattern/tree/';
+/** Every scanned path timed for every rule, unless the test says otherwise. */
+function timing(scanned: string[], zero: Record<string, string[]> = {}) {
+  const ids = RULES.map((r: any) => r.familyId);
+  return { rules: ids, targets: scanned.map(p => ({ path: p, match_times: ids.map((id: string) => ((zero[p] ?? []).includes(id) ? 0 : 0.001)) })) };
+}
 function run(t: { after(fn: () => void): void }, engine: Record<string, unknown>, record: Record<string, unknown> = {}, state = 'succeeded') {
   const targets = packTargets();
   const built = buildPatternJob(RULES, targets, scratch(t));
-  const engineBytes = Buffer.from(JSON.stringify({ version: '1.181.0', engine_requested: 'OSS', results: [], errors: [], paths: { scanned: [], skipped: [] }, ...engine }));
-  const recordBytes = Buffer.from(JSON.stringify({ schema: 'sentinel-pattern-run/draft-1', job: built.jobDigest, exitCode: 0, timedOut: false, stdoutTruncated: false, excluded: [], engineOutput: sha(engineBytes), ...record }));
+  const scanned = ((engine.paths as any)?.scanned ?? []) as string[];
+  const engineBytes = Buffer.from(JSON.stringify({ version: '1.181.0', engine_requested: 'OSS', results: [], errors: [], paths: { scanned: [], skipped: [] }, time: timing(scanned), ...engine }));
+  const { __arch: _arch, ...recordFields } = record as any;
+  const recordBytes = Buffer.from(JSON.stringify({ schema: 'sentinel-pattern-run/draft-1', job: built.jobDigest, exitCode: 0, timedOut: false, stdoutTruncated: false, excluded: [], engineOutput: sha(engineBytes), ...recordFields }));
   const bytes = new Map([[sha(engineBytes), engineBytes], [sha(recordBytes), recordBytes]]);
   const outcome: any = {
-    state, adapter: { id: 'pattern-semgrep', digest: sha('x') },
+    state, adapter: { id: 'pattern-semgrep', digest: sha('x') }, container: { id: 'c', image: { architecture: (record as any).__arch ?? 'arm64' } },
     outputs: [
       { id: sha(engineBytes), mediaType: 'application/vnd.semgrep.result+json', bytes: engineBytes.length, path: '' },
       { id: sha(recordBytes), mediaType: 'application/vnd.sentinel.pattern-run+json', bytes: recordBytes.length, path: '' },
@@ -123,33 +136,51 @@ const at = (bytes: Buffer, needle: string) => {
 const hit = (rule: string, path: string, needle: string, bytes: Buffer, extra: object = {}) => ({ check_id: rule, path: TREE + path, ...at(bytes, needle), extra: { fingerprint: 'requires login', lines: 'requires login', ...extra } });
 const QUERY = 'db.query("SELECT * FROM invoices WHERE id = " + id)';
 
-test('a requested file the engine neither scanned nor skipped is an omission, even on exit zero', t => {
+const cov = (r: any, path: string, rule?: string) => r.coverage.filter((c: any) => c.relativePath === path && (rule === undefined || c.familyId === rule)).map((c: any) => `${c.status}:${c.reasonCode.split('.').pop()}`);
+const CONCAT = 'sentinel.sql.concatenated-query-tsjs';
+const TAINT = 'sentinel.sql.request-to-query-tsjs';
+
+test('a requested file the engine neither scanned nor skipped is an omission for each of its rules, even on exit zero', t => {
   const r = run(t, { paths: { scanned: all.filter(p => !p.endsWith('typescript/direct.ts')), skipped: [] } });
-  const row = r.coverage.find(c => c.relativePath === 'typescript/direct.ts')!;
-  assert.equal(row.status, 'omitted');
-  assert.equal(row.reasonCode, 'sentinel.pattern.coverage.omitted');
-  assert.deepEqual(row.rules, ['sentinel.sql.concatenated-query-tsjs', 'sentinel.sql.request-to-query-tsjs'], 'per-file status stands for every applicable rule');
+  assert.deepEqual(cov(r, 'typescript/direct.ts'), ['omitted:omitted', 'omitted:omitted']);
+  assert.deepEqual(r.coverage.filter((c: any) => c.relativePath === 'typescript/direct.ts').map((c: any) => c.familyId), [CONCAT, TAINT]);
   assert.equal(r.engineExit, 0);
-  assert.ok(r.coverage.filter(c => c.relativePath !== 'typescript/direct.ts').every(c => c.status === 'complete'));
+  assert.ok(r.coverage.filter((c: any) => c.relativePath !== 'typescript/direct.ts').every((c: any) => c.status === 'complete'));
 });
 
-test('skips, parse errors and rule timeouts are gaps; engine, attempt and output failures leave nothing checked', t => {
+test('a rule counts as run on a file only with a reported match time; without timing nothing is established', t => {
+  const zero = timing(all, { [TREE + 'typescript/direct.ts']: [TAINT] });
+  const r = run(t, { paths: { scanned: all, skipped: [] }, time: zero });
+  assert.deepEqual(cov(r, 'typescript/direct.ts', CONCAT), ['complete:complete']);
+  assert.deepEqual(cov(r, 'typescript/direct.ts', TAINT), ['not-run:ruleNotRun'], 'a prefiltered rule is not counted as checked');
+  const none = run(t, { paths: { scanned: all, skipped: [] }, time: { rules: [], targets: [] } });
+  assert.ok(none.coverage.every((c: any) => c.status === 'not-established'), 'timing that does not name the job rules establishes nothing');
+  const missing = run(t, { paths: { scanned: all, skipped: [] }, time: timing(all.filter(p => !p.endsWith('java/Local.java'))) });
+  assert.deepEqual(cov(missing, 'java/Local.java'), ['not-established:ruleRunUnreported', 'not-established:ruleRunUnreported']);
+});
+
+test('skips, parse errors and per-rule timeouts are gaps; engine, attempt and output failures leave nothing checked', t => {
   const r = run(t, {
     paths: { scanned: all.filter(p => !p.endsWith('direct.js')), skipped: [{ path: TREE + 'javascript/direct.js', reason: 'exceeded_size_limit' }, { path: TREE + 'java/Local.java', reason: 'analysis_failed_parser_or_internal_error' }] },
-    errors: [{ code: 3, level: 'warn', type: ['PartialParsing', []], path: TREE + 'typescript/local.ts' }, { code: 2, level: 'warn', type: 'Timeout', path: TREE + 'java/Direct.java' }],
+    errors: [
+      { code: 3, level: 'warn', type: ['PartialParsing', []], path: TREE + 'typescript/local.ts' },
+      { code: 2, level: 'warn', type: 'Timeout', path: TREE + 'typescript/direct-safe.ts', rule_id: TAINT },
+      { code: 2, level: 'warn', type: 'Timeout', path: TREE + 'java/Direct.java' },
+    ],
   });
-  const status = (p: string) => { const c = r.coverage.find(x => x.relativePath === p)!; return `${c.status}:${c.reasonCode.split('.').pop()}`; };
-  assert.equal(status('javascript/direct.js'), 'skipped:tooLarge');
-  assert.equal(status('java/Local.java'), 'partial:partialParse');
-  assert.equal(status('typescript/local.ts'), 'partial:partialParse');
-  assert.equal(status('java/Direct.java'), 'partial:ruleTimeout');
+  assert.deepEqual(cov(r, 'javascript/direct.js'), ['skipped:tooLarge', 'skipped:tooLarge']);
+  assert.deepEqual(cov(r, 'java/Local.java'), ['partial:partialParse', 'partial:partialParse']);
+  assert.deepEqual(cov(r, 'typescript/local.ts'), ['partial:partialParse', 'partial:partialParse']);
+  assert.deepEqual(cov(r, 'typescript/direct-safe.ts', TAINT), ['partial:ruleTimeout'], 'a timeout names its rule');
+  assert.deepEqual(cov(r, 'typescript/direct-safe.ts', CONCAT), ['complete:complete'], 'the other rule on that file still ran');
+  assert.deepEqual(cov(r, 'java/Direct.java'), ['partial:partialParse', 'partial:partialParse'], 'a timeout without a rule leaves every rule short');
   for (const [record, reason] of [[{ timedOut: true }, 'engineTimedOut'], [{ stdoutTruncated: true }, 'outputTruncated'], [{ exitCode: 2 }, 'engineFailed']] as const) {
     const x = run(t, { paths: { scanned: all, skipped: [] } }, record);
-    assert.ok(x.coverage.every(c => c.status === 'error' && c.reasonCode.endsWith(reason)), reason);
+    assert.ok(x.coverage.every((c: any) => c.status === 'error' && c.reasonCode.endsWith(reason)), reason);
   }
   for (const [state, reason] of [['timed-out', 'attemptTimedOut'], ['failed', 'attemptFailed'], ['canceled', 'attemptCanceled']] as const) {
     const x = run(t, {}, {}, state);
-    assert.ok(x.coverage.every(c => c.status === 'error' && c.reasonCode.endsWith(reason)) && x.findings.length === 0, state);
+    assert.ok(x.coverage.every((c: any) => c.status === 'error' && c.reasonCode.endsWith(reason)) && x.findings.length === 0, state);
   }
 });
 
@@ -195,6 +226,14 @@ test('taint evidence stays local: a same-file trace names its source, a missing 
   assert.equal(cross.refused[0]!.reasonCode, 'sentinel.pattern.refused.crossFile');
 });
 
+test('results from an image platform conformance has not measured are not trusted', t => {
+  const good = hit('sentinel.sql.concatenated-query-tsjs', 'typescript/direct.ts', QUERY, directTs);
+  const r = run(t, { paths: { scanned: all, skipped: [] }, results: [good] }, { __arch: 'amd64' });
+  assert.equal(r.findings.length, 0);
+  assert.ok(r.coverage.every((c: any) => c.status === 'error' && c.reasonCode === 'sentinel.pattern.coverage.platformUnmeasured'));
+  assert.deepEqual(PATTERN_SUPPORT.platforms.map((p: any) => `${p.platform}:${p.state}`), ['linux/arm64:measured', 'linux/amd64:unmeasured']);
+});
+
 test('output that names another job, another engine output or another engine version is refused', t => {
   assert.equal(code(() => run(t, {}, { job: sha('another job') })), 'sentinel.pattern.outputInvalid');
   assert.equal(code(() => run(t, {}, { engineOutput: sha('other bytes') })), 'sentinel.pattern.outputInvalid');
@@ -203,10 +242,34 @@ test('output that names another job, another engine output or another engine ver
   assert.equal(code(() => run(t, { results: undefined })), 'sentinel.pattern.outputInvalid');
 });
 
+test('resolved rules become adapter rules only when this adapter can run them, with their detector bytes pinned', () => {
+  const files = manifest.rules.map((r: any) => ({ path: r.implementation.rulePath, digest: sha(readFileSync(`${PACK}${r.implementation.rulePath}`)) }));
+  const bytesOf = (digest: string) => readFileSync(`${PACK}${files.find((f: any) => f.digest === digest)!.path}`);
+  const resolved = (r: any, over: any = {}) => ({ familyId: r.familyId, revision: r.revision, definitionDigest: sha('def'), packDigest: sha('pack'), lockDigest: sha('lock'), definition: { ...r, ...over } });
+  const out = patternRulesFromResolved(manifest.rules.map((r: any) => resolved(r)), files, bytesOf);
+  assert.deepEqual(out.rules.map(r => r.familyId), manifest.rules.map((r: any) => r.familyId));
+  assert.equal(out.rules[0]!.pins!.lockDigest, sha('lock'));
+  assert.equal(out.rules[0]!.pins!.detectorDigest, files[0]!.digest);
+  assert.deepEqual(out.unsupported, []);
+  const r0 = manifest.rules[0];
+  const gaps = patternRulesFromResolved([
+    resolved(r0, { implementation: { adapterId: 'secrets-gitleaks', rulePath: r0.implementation.rulePath } }),
+    resolved(r0, { applicability: { ...r0.applicability, scopeKind: 'surface' } }),
+    resolved(r0, { applicability: { ...r0.applicability, frameworks: ['express'] } }),
+    resolved(r0, { requires: [...r0.requires, 'interprocedural-flow'] }),
+    resolved(r0, { applicability: { ...r0.applicability, languages: ['python'] } }),
+  ], files, bytesOf).unsupported.map(u => u.reasonCode.split('.').pop());
+  assert.deepEqual(gaps, ['otherAdapter', 'scope', 'framework', 'capability', 'language']);
+  // A broken pin is an error, never a quiet gap.
+  assert.equal(code(() => patternRulesFromResolved([resolved(r0)], [{ path: r0.implementation.rulePath, digest: sha('other') }], () => readFileSync(`${PACK}${r0.implementation.rulePath}`))), 'sentinel.pattern.ruleInvalid');
+  assert.equal(code(() => patternRulesFromResolved([resolved(r0)], [], bytesOf)), 'sentinel.pattern.ruleInvalid');
+  assert.equal(code(() => patternRulesFromResolved([resolved(r0, { applicability: { ...r0.applicability, languages: ['java'] } })], files, bytesOf)), 'sentinel.pattern.ruleInvalid', 'definition and engine rule languages must agree');
+});
+
 test('every pattern reason code is a catalog entry with both registers and a definition', async () => {
   const { STRINGS } = await import('@farsight/core/dist/strings.js');
   const shimCodes = [...PATTERN_WORKER_BYTES.toString('utf8').matchAll(/'(sentinel\.pattern\.[A-Za-z.]+)'/g)].map(m => m[1]!);
-  const keys = [...PATTERN_ERROR_CODES, ...PATTERN_COVERAGE_REASONS, ...PATTERN_REFUSAL_REASONS, ...PATTERN_SUPPORT.limitations,
+  const keys = [...PATTERN_ERROR_CODES, ...PATTERN_COVERAGE_REASONS, ...PATTERN_REFUSAL_REASONS, ...PATTERN_UNSUPPORTED_REASONS, ...PATTERN_SUPPORT.limitations,
     ...manifest.rules.map((r: any) => r.titleKey), ...manifest.rules.flatMap((r: any) => r.limitationKeys), ...shimCodes];
   assert.ok(shimCodes.length >= 4);
   for (const key of keys) {
