@@ -20,7 +20,7 @@ import type { ProtocolMessage, ResultMessage } from '../contracts/protocol.js';
 import type { OwnedResource } from '../store/owner.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { ExecutionError, type ExecutionErrorCode } from './errors.js';
-import { ContainerBackend, containerUser, ownerNonce, type BackendFacts, type CleanupState, type ImagePin } from './isolation.js';
+import { ContainerBackend, containerUser, intentDetail, ownerNonce, type BackendFacts, type CleanupState, type ImagePin } from './isolation.js';
 import { BoundedCapture, spawnWorker, type WorkerProcess } from './processes.js';
 import { encodeFrame, FrameDecoder, WorkerSession } from './protocol.js';
 import { moduleDigestOf, type AdapterRegistry, type TrustedAdapter } from './registry.js';
@@ -174,7 +174,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   const labels = { owner: nonce, store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch, invocation: invocationDigest };
   let containerId: string | undefined;
   let proc: WorkerProcess;
-  const guard: { ownerClosed: boolean; id?: string; proc?: WorkerProcess } = { ownerClosed: false };
+  const guard: { ownerClosed: boolean; createPending: boolean; id?: string; proc?: WorkerProcess } = { ownerClosed: false, createPending: false };
   const backend = request.backend;
   const unregister = owner.registerResource({
     name: `worker ${request.attemptId}${backend ? ` (container owner ${nonce})` : ''}`,
@@ -185,18 +185,21 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       const direct = guard.id ? backend.removeSync(guard.id, labels) : 'already-absent';
       const swept = backend.reconcileOwnedSync(labels);
       if (direct === 'cleanup-failed' || swept.uncertain.length) {
-        throw new ExecutionError('sentinel.execution.cleanupFailed', {
-          container: guard.id ?? swept.uncertain.join(', '), owner: nonce, store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch,
-        });
+        throw new ExecutionError('sentinel.execution.cleanupFailed', { ...intentDetail({ labels }), container: guard.id ?? swept.uncertain.join(', ') });
+      }
+      // A create still in flight may commit after this sweep; an empty sweep proves nothing then.
+      if (guard.createPending && !guard.id && swept.removed.length === 0) {
+        throw new ExecutionError('sentinel.execution.reconciliationPending', intentDetail({ labels }));
       }
     },
   });
   if (adapter.kind === 'external') {
     const b = backend!;
     try {
+      guard.createPending = true;
       containerId = await b.create({
         image: image!, command: adapter.command, limits, inputDir, outputDir, adapter: { id: adapter.id, digest: adapter.digest }, user: containerUser(), labels,
-      }, request.signal);
+      }, request.signal).finally(() => { guard.createPending = false; });
       guard.id = containerId;
       if (guard.ownerClosed) {
         // The owner closed while the create was in flight; the guard swept what existed then. Remove this one too.
@@ -299,9 +302,21 @@ function drive(proc: WorkerProcess, session: WorkerSession, limits: TrustedAdapt
     const send = (m: ProtocolMessage) => {
       try { proc.child.stdin.write(encodeFrame(m, limits.maxFrameBytes)); } catch { /* the worker closed stdin; exit decides */ }
     };
-    proc.child.stderr.on('data', (b: Buffer) => { stderr.push(b); outcome.diagnostics = { bytes: stderr.bytes, truncated: stderr.truncated, text: '' }; });
+    // Each stream has an emitted-byte ceiling, and the two together have the combined one: past any of them the
+    // worker is stopped. Only a bounded copy of stderr is kept for diagnostics.
+    const combinedLimit = limits.stdoutBytes + limits.stderrBytes;
+    let stdoutEmitted = 0;
+    const overCombined = () => stdoutEmitted + stderr.bytes > combinedLimit;
+    proc.child.stderr.on('data', (b: Buffer) => {
+      if (settled) return;
+      stderr.push(b);
+      outcome.diagnostics = { bytes: stderr.bytes, truncated: stderr.truncated, text: '' };
+      if (stderr.bytes > limits.stderrBytes || overCombined()) finish('sentinel.execution.stderrBudget', { bytes: limits.stderrBytes, combined: combinedLimit });
+    });
     proc.child.stdout.on('data', (b: Buffer) => {
       if (settled) return;
+      stdoutEmitted += b.byteLength;
+      if (overCombined()) return finish('sentinel.execution.stdoutBudget', { combined: combinedLimit });
       let messages: ProtocolMessage[];
       try { messages = decoder.push(b); } catch (e) { return finish((e as ExecutionError).code, (e as ExecutionError).detail); }
       for (const m of messages) {

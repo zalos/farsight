@@ -12,7 +12,8 @@ export const EXECUTION_ERROR_CODES = Object.freeze([
   'sentinel.execution.resultMismatch', 'sentinel.execution.outputMismatch', 'sentinel.execution.outputTooLarge',
   'sentinel.execution.stdoutBudget', 'sentinel.execution.deadlineExceeded', 'sentinel.execution.canceled',
   'sentinel.execution.resourceExceeded', 'sentinel.execution.workerExited', 'sentinel.execution.cleanupFailed',
-  'sentinel.execution.commandFailed', 'sentinel.execution.scratchUnsafe',
+  'sentinel.execution.commandFailed', 'sentinel.execution.scratchUnsafe', 'sentinel.execution.reconciliationPending',
+  'sentinel.execution.stderrBudget',
 ] as const);
 
 export type ExecutionErrorCode = typeof EXECUTION_ERROR_CODES[number];

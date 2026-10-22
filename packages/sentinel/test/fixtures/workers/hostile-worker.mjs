@@ -106,6 +106,7 @@ switch (behavior) {
     const start = await awaitStart();
     switch (behavior) {
       case 'ok': result(start, honestWork(start)); break;
+      case 'stderr-some': process.stderr.write('d'.repeat(2000)); result(start, honestWork(start)); break;
       case 'stderr-flood': process.stderr.write('E'.repeat(1024 * 1024)); result(start, honestWork(start)); break;
       case 'progress-then-ok': send({ protocol: P, type: 'progress', ...bound(start), completed: 1, planned: 2 }); result(start, honestWork(start)); break;
       case 'huge-frame': raw('{"x":"' + 'A'.repeat(2 * 1024 * 1024)); await sleep(60_000); break;

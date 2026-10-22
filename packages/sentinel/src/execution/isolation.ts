@@ -219,10 +219,10 @@ export class ContainerBackend {
    * Create (not start) the container, then read it back and compare every isolation setting.
    *
    * The intent is recorded before the request: the generated name (`sentinel-<owner nonce>`) and every ownership
-   * label. A create request is never cut short, since an aborted client does not stop the daemon. Whatever the
-   * request's answer (failure, timeout, lost or unreadable output, a cancellation meanwhile), what the daemon made
-   * is found again by that name and those labels and removed only by its verified exact ID. Anything whose
-   * removal cannot be confirmed is reported as cleanupFailed with its identity.
+   * label. A create request is never cut short by a cancellation, since an aborted client does not stop the daemon
+   * (the runner's own bound can still end it). Whatever the request's answer (failure, timeout, lost or unreadable
+   * output), what the daemon made is found again by that name and those labels and removed only by its verified
+   * exact ID; if nothing is found, the request may still complete, which is reconciliationPending with the intent.
    */
   async create(spec: ContainerSpec, signal?: AbortSignal): Promise<string> {
     if (signal?.aborted) throw new ExecutionError('sentinel.execution.canceled', {});
@@ -231,7 +231,8 @@ export class ContainerBackend {
     const id = succeeded(r) && CONTAINER_ID.test(answered) ? answered : undefined;
     if (!id) {
       await this.#reconcileIntent(spec);
-      throw new ExecutionError('sentinel.execution.commandFailed', { operation: r.timedOut ? 'create timed out' : 'create' });
+      // Found and removed: the request had committed, so nothing is pending.
+      throw new ExecutionError('sentinel.execution.commandFailed', { ...intentDetail(spec), operation: r.timedOut ? 'create timed out' : 'create' });
     }
     try {
       if (signal?.aborted) throw new ExecutionError('sentinel.execution.canceled', {});
@@ -244,30 +245,34 @@ export class ContainerBackend {
     return id;
   }
 
-  /** Find a create's container by its generated name and by its labels, over a settle window, and remove it. */
+  /**
+   * After a create without a confirmed answer: look for its container by the generated name and by the labels over
+   * a short window and remove what is found by verified exact ID. Finding and removing it settles the request (the
+   * daemon committed it). Finding nothing proves nothing: the request may still complete later, so that is
+   * reconciliationPending with the full intent (name and every label), for recovery to finish; there is no
+   * unbounded wait here.
+   */
   async #reconcileIntent(spec: ContainerSpec): Promise<void> {
-    const uncertain = new Set<string>();
     const name = containerName(spec.labels.owner);
-    for (let pass = 0; pass < 3; pass++) {
+    const intent = intentDetail(spec);
+    const uncertain = new Set<string>();
+    let removed = false;
+    for (let pass = 0; pass < 3 && !removed; pass++) {
       if (pass) await new Promise(resolve => setTimeout(resolve, 500));
       const byName = await this.#runner.run(['inspect', '--type', 'container', '--format', '{{json .}}', name]);
       if (succeeded(byName)) {
         let c: { Id?: string } | undefined;
         try { c = JSON.parse(byName.stdout.toString('utf8')); } catch { /* unreadable: the label pass decides */ }
         if (c && labelsMatch(c as never, null, spec.labels)) {
-          if (await this.remove(String(c.Id), spec.labels) === 'cleanup-failed') uncertain.add(String(c.Id));
+          if (await this.remove(String(c.Id), spec.labels) === 'removed-owned-container') removed = true; else uncertain.add(String(c.Id));
         } else uncertain.add(name);
       } else if (!absentContainer(byName)) uncertain.add(name);
       const leftover = await this.reconcileOwned(spec.labels);
       leftover.uncertain.forEach(u => uncertain.add(u));
-      if (uncertain.size === 0 && pass > 0 && absentContainer(byName)) break;
-      if (pass < 2) uncertain.clear();
+      if (leftover.removed.length) removed = true;
     }
-    if (uncertain.size) {
-      throw new ExecutionError('sentinel.execution.cleanupFailed', {
-        container: [...uncertain].join(', '), name, owner: spec.labels.owner, store: spec.labels.store, attempt: spec.labels.attempt, epoch: spec.labels.epoch,
-      });
-    }
+    if (uncertain.size) throw new ExecutionError('sentinel.execution.cleanupFailed', { ...intent, container: [...uncertain].join(', ') });
+    if (!removed) throw new ExecutionError('sentinel.execution.reconciliationPending', intent);
   }
 
   /** Start the created container attached: stdin carries coordinator frames, stdout worker frames, stderr diagnostics. */
@@ -401,6 +406,12 @@ function clientRunner(docker: string, env: Record<string, string>): DockerRunner
 }
 
 export const containerName = (owner: string): string => `sentinel-${owner}`;
+
+/** A create's whole intent, kept in every failure so recovery can find the container without its ID. */
+export const intentDetail = (spec: Pick<ContainerSpec, 'labels'>) => ({
+  name: containerName(spec.labels.owner), owner: spec.labels.owner, store: spec.labels.store, attempt: spec.labels.attempt,
+  epoch: spec.labels.epoch, invocation: spec.labels.invocation,
+});
 
 /** The local unix socket the client should talk to. A tcp/ssh endpoint is a remote daemon and is refused. */
 async function resolveEndpoint(docker: string, signal?: AbortSignal): Promise<string> {

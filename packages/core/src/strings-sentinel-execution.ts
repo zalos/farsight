@@ -30,6 +30,8 @@ export const SENTINEL_EXECUTION_STRINGS: Record<string, StringEntry> = {
   'sentinel.execution.resourceExceeded': same('the worker exceeded its memory limit', 'The container runtime stopped the worker because it used more memory than the attempt allows.'),
   'sentinel.execution.workerExited': same('the worker stopped without a valid result', 'The worker ended, or ended with an error, before it delivered a result that passed every check.'),
   'sentinel.execution.cleanupFailed': same('the worker container could not be confirmed removed: {container}', 'After every attempt its container is removed by its exact identity and its absence is confirmed. When that cannot be confirmed the attempt is recorded as needing cleanup.'),
+  'sentinel.execution.reconciliationPending': same('the container runtime may still create this attempt\u2019s container: {name}', 'A create request ended without a confirmed answer, so the container may appear later. Its name and ownership labels are kept so recovery can find and remove it; the attempt does not succeed and absence is never assumed.'),
+  'sentinel.execution.stderrBudget': same('the worker wrote more diagnostics than its limit', 'Diagnostics on stderr have their own byte limit, and stdout and stderr together have one too. A worker that writes past either is stopped.'),
   'sentinel.execution.commandFailed': same('a container runtime command failed ({operation})', 'A command to the container runtime returned an error, so the attempt stopped. No other container was touched.'),
   'sentinel.execution.scratchUnsafe': same('the attempt scratch folder is not a private folder', 'Attempts work in a folder only this user can open, so inputs and outputs cannot be read or swapped by others.'),
 };

@@ -128,12 +128,26 @@ test('an honest worker succeeds; outputs are re-hashed; the binding is the super
   assert.deepEqual(o.invocation.record.environmentNames, ['SENTINEL_INPUT', 'SENTINEL_OUTPUT', 'SENTINEL_ADAPTER_ID', 'SENTINEL_ADAPTER_DIGEST']);
 });
 
-test('stderr is bounded diagnostics and never protocol', async () => {
-  const o = await run('stderr-flood', { stderrBytes: 4096 });
-  assert.equal(o.state, 'succeeded');
-  assert.equal(o.diagnostics.truncated, true);
-  assert.equal(o.diagnostics.text.length, 4096);
-  assert.ok(o.diagnostics.bytes >= 1024 * 1024);
+test('stderr is diagnostics, never protocol, with its own emitted-byte ceiling', async () => {
+  const within = await run('stderr-some', { stderrBytes: 4096 });
+  assert.equal(within.state, 'succeeded');
+  assert.equal(within.diagnostics.text, 'd'.repeat(2000));
+  assert.equal(within.diagnostics.truncated, false);
+  // A worker that writes 1 MiB of stderr against a 4 KiB ceiling is stopped, keeping only a bounded copy.
+  const flood = await run('stderr-flood', { stderrBytes: 4096 });
+  assert.equal(flood.code, 'sentinel.execution.stderrBudget');
+  assert.equal(flood.result, undefined);
+  assert.ok(flood.diagnostics.text.length <= 4096);
+  assert.ok(flood.diagnostics.bytes > 4096);
+});
+
+test('stdout and stderr are capped independently, and together by their sum', async () => {
+  const stdout = await run('stdout-flood', { stdoutBytes: 65_536, stderrBytes: 262_144 });
+  assert.equal(stdout.code, 'sentinel.execution.stdoutBudget');
+  const stderr = await run('stderr-flood', { stdoutBytes: 3_932_160, stderrBytes: 8192 });
+  assert.equal(stderr.code, 'sentinel.execution.stderrBudget');
+  // The combined ceiling is the sum of the two, which the registry holds to 4 MiB of process output.
+  assert.throws(() => builtInRegistry(join(s.root, 'combined'), ['ok'], { stdoutBytes: 3_932_160, stderrBytes: 524_288 }), is('sentinel.execution.adapterInvalid'));
 });
 
 const refusals: Array<[string, string, Record<string, number>?]> = [

@@ -21,7 +21,7 @@ const result = (exitCode: number, stdout = '', stderr = '') => ({ exitCode, exit
 const is = (code: string) => (e: unknown) => isExecutionError(e) && e.code === code;
 
 /** A tiny daemon: containers by id and name, labels, and switchable faults. */
-function standIn(faults: { createOutput?: 'lost' | 'error'; rmFails?: boolean; createDelayMs?: number } = {}) {
+function standIn(faults: { createOutput?: 'lost' | 'error' | 'timeout'; rmFails?: boolean; createDelayMs?: number; visibleAfterMs?: number } = {}) {
   const containers = new Map<string, { Id: string; Name: string; Config: { Labels: Record<string, string>; Image: string }; State: { Running: boolean } }>();
   const find = (ref: string) => [...containers.values()].find(c => c.Id === ref || c.Name === ref);
   const handle = (args: readonly string[]) => {
@@ -37,7 +37,10 @@ function standIn(faults: { createOutput?: 'lost' | 'error'; rmFails?: boolean; c
         if (rest[i] === '--name') name = rest[++i]!;
       }
       const id = randomBytes(32).toString('hex');
-      containers.set(id, { Id: id, Name: name, Config: { Labels: labels, Image: PIN }, State: { Running: false } });
+      const add = () => containers.set(id, { Id: id, Name: name, Config: { Labels: labels, Image: PIN }, State: { Running: false } });
+      // A daemon that commits the create only later, after any reconciliation window has passed.
+      if (faults.visibleAfterMs) setTimeout(add, faults.visibleAfterMs); else add();
+      if (faults.createOutput === 'timeout') return { ...result(1, ''), exitCode: null, timedOut: true };
       if (faults.createOutput === 'lost') return result(0, '');
       if (faults.createOutput === 'error') return result(1, '', 'Error response from daemon: synthetic failure after creation');
       return result(0, `${id}\n`);
@@ -136,9 +139,11 @@ test('a store closed while a create is in flight leaves no container and no succ
     const pending = superviseAttempt({ owner: boundOwner(st), registry, adapterId: 'tool', attemptId: 'attempt-close', work, inputs: inputs(other.root),
       scratchRoot: other.work, backend: b }).then(o => ({ o }), (e: unknown) => ({ e }));
     await new Promise(r => setTimeout(r, 50));
-    st.close();
+    // The create has not answered yet, so the close reports it pending rather than claiming nothing exists.
+    assert.throws(() => st.close(), (e: unknown) => (e as any).cause?.code === 'sentinel.execution.reconciliationPending');
     const done = await pending;
-    assert.equal(d.containers.size, 0, JSON.stringify(faults));
+    if (!faults.createOutput) assert.equal(d.containers.size, 0, 'the late id was known, and that container was removed');
+    else assert.ok('e' in done && ['sentinel.execution.reconciliationPending', 'sentinel.execution.commandFailed', 'sentinel.store.ownerClosed'].includes((done.e as any).code), String((done as any).e));
     if ('o' in done) assert.notEqual(done.o.state, 'succeeded');
     removeScratch(other.root);
   }
@@ -154,4 +159,53 @@ test('a synchronous run holds each stream to its own limit', () => {
   const big = runBoundedSync(process.execPath, ['-e', 'process.stdout.write("o".repeat(8192))'], { env: {}, timeoutMs: 10_000, maxStdoutBytes: 4096, maxStderrBytes: 1024 });
   assert.equal(big.stdoutExceeded, true);
   assert.equal(big.stdout.byteLength, 4096);
+});
+
+test('a create that times out with the container appearing after the window is pending, with its whole intent', async () => {
+  const d = standIn({ createOutput: 'timeout', visibleAfterMs: 1_500 });
+  const b = await connect(d);
+  const sp = spec();
+  await assert.rejects(b.create(sp), (e: unknown) => is('sentinel.execution.reconciliationPending')(e)
+    && (e as any).detail.name === containerName(sp.labels.owner) && (e as any).detail.owner === sp.labels.owner
+    && (e as any).detail.store === sp.labels.store && (e as any).detail.attempt === sp.labels.attempt
+    && (e as any).detail.epoch === sp.labels.epoch && (e as any).detail.invocation === sp.labels.invocation);
+  await new Promise(r => setTimeout(r, 1_600));
+  // It did appear: absence was never claimed, and the preserved intent is what recovery (PR 08) reconciles.
+  const [late] = [...d.containers.values()];
+  assert.equal(late?.Name, containerName(sp.labels.owner));
+  assert.equal(late?.Config.Labels[LABELS.attempt], sp.labels.attempt);
+});
+
+test('closing the store before a create settles reports it pending; the late container is removed once it is known', async () => {
+  const d = standIn({ createDelayMs: 2_000, visibleAfterMs: 1_000 });
+  const b = await connect(d);
+  const other = scratch('faults-pending');
+  const st = await storeIn(other.root);
+  const registry = createAdapterRegistry([{ id: 'tool', version: '1', kind: 'external', isolation: 'container', image: PIN, command: ['tool'] }]);
+  const pending = superviseAttempt({ owner: boundOwner(st), registry, adapterId: 'tool', attemptId: 'attempt-pending', work, inputs: inputs(other.root),
+    scratchRoot: other.work, backend: b }).then(o => ({ o }), (e: unknown) => ({ e }));
+  await new Promise(r => setTimeout(r, 100));
+  assert.throws(() => st.close(), (e: unknown) => (e as any).code === 'sentinel.store.resourceCloseFailed'
+    && (e as any).cause?.code === 'sentinel.execution.reconciliationPending' && (e as any).cause.detail.attempt === 'attempt-pending'
+    && typeof (e as any).cause.detail.owner === 'string' && typeof (e as any).cause.detail.invocation === 'string');
+  const done = await pending;
+  if ('o' in done) assert.notEqual(done.o.state, 'succeeded');
+  assert.equal(d.containers.size, 0, 'the create answered with its id, and that container was removed');
+  removeScratch(other.root);
+});
+
+test('a settled create with a known id and a confirmed removal closes the store cleanly', async () => {
+  const d = standIn();
+  const b = await connect(d);
+  const other = scratch('faults-clean');
+  const st = await storeIn(other.root);
+  const registry = createAdapterRegistry([{ id: 'tool', version: '1', kind: 'external', isolation: 'container', image: PIN, command: ['tool'] }]);
+  const pending = superviseAttempt({ owner: boundOwner(st), registry, adapterId: 'tool', attemptId: 'attempt-clean', work, inputs: inputs(other.root),
+    scratchRoot: other.work, backend: b }).then(o => ({ o }), (e: unknown) => ({ e }));
+  await new Promise(r => setTimeout(r, 300));
+  st.close();
+  const done = await pending;
+  if ('o' in done) assert.notEqual(done.o.state, 'succeeded');
+  assert.equal(d.containers.size, 0);
+  removeScratch(other.root);
 });
