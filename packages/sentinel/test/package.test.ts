@@ -51,6 +51,10 @@ test('no Farsight package depends on or imports Sentinel', () => {
 // Every module import outside the package, per built file. A new import fails here until it is reviewed and
 // added; nothing networked, no worker or cluster, and no static node:sqlite import anywhere.
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
+  // The Gitleaks adapter (PR 11). The worker module is the program a container runs; it starts the pinned tool there
+  // and only when run as the worker (asserted below). Importing it, or the coordinator side, starts nothing.
+  'adapters/gitleaks-worker.js': ['node:child_process', 'node:crypto', 'node:fs', 'node:os', 'node:path'],
+  'adapters/gitleaks.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', 'node:fs'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/errors.js': ['@farsight/core/dist/strings-sentinel-execution.js'],
@@ -122,6 +126,12 @@ test('the library imports only its reviewed modules, and nothing that could star
   const processes = readFileSync(`${dist}execution/processes.js`, 'utf8');
   assert.equal([...processes.matchAll(/shell: false/g)].length, 3);
   assert.doesNotMatch(processes, /shell: true|execSync|exec\(/);
+  // The Gitleaks worker starts one process, the pinned tool, with an argument list, only from its run-guarded main.
+  const worker = readFileSync(`${dist}adapters/gitleaks-worker.js`, 'utf8');
+  const workerSpawns = [...worker.matchAll(/(?<![.\w])(spawnSync|spawn|execFileSync|execFile|execSync|exec|fork)\s*\(([^,)]*)/g)].map(m => `${m[1]}(${m[2]!.trim()}`);
+  assert.deepEqual(workerSpawns, ['spawn(GITLEAKS_BIN']);
+  assert.doesNotMatch(worker, /shell:\s*true/);
+  assert.match(worker, /if \(globalThis\.SENTINEL_GITLEAKS_RUN \|\| process\.argv\[1\] === '--sentinel-gitleaks-worker'\)/);
 });
 
 /** Runs `code` in a fresh process that records every child spawn, then reports spawns, SQLite and new files. */
