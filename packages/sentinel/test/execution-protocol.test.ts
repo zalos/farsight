@@ -151,6 +151,7 @@ const refusals: Array<[string, string, Record<string, number>?]> = [
   ['result-then-malformed', 'sentinel.execution.frameMalformed'],
   ['late-output', 'sentinel.execution.outputMismatch'],
   ['unterminated', 'sentinel.execution.frameMalformed'],
+  ['result-then-partial', 'sentinel.execution.frameMalformed'],
   ['output-flood', 'sentinel.execution.outputTooLarge', { outputBytes: 4 * 1024 * 1024 }],
   ['no-hello', 'sentinel.execution.protocolViolation', { helloTimeoutMs: 300 }],
   ['hang', 'sentinel.execution.deadlineExceeded', { timeoutMs: 800 }],

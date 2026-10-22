@@ -118,6 +118,7 @@ switch (behavior) {
       case 'seq-repeat': { send({ protocol: P, type: 'progress', ...bound(start), completed: 0, planned: 1 }); seq = 0; send({ protocol: P, type: 'progress', ...bound(start), completed: 0, planned: 1 }); await sleep(60_000); break; }
       case 'duplicate-result': { const a = honestWork(start); result(start, a); result(start, a); break; }
       case 'result-then-malformed': { result(start, honestWork(start)); raw('{broken\n'); break; }
+      case 'result-then-partial': { result(start, honestWork(start)); raw('{"protocol":"sentinel-worker/draft-1","type":'); await sleep(50); process.exit(0); }
       case 'late-output': { result(start, honestWork(start)); await sleep(100); writeFileSync(`${OUT}/late`, 'written after the result'); break; }
       case 'seq-gap': seq = 5; send({ protocol: P, type: 'progress', ...bound(start), completed: 0, planned: 1 }); await sleep(60_000); break;
       case 'heartbeat': send({ protocol: P, type: 'heartbeat', ...bound(start), fencingGeneration: 1 }); await sleep(60_000); break;

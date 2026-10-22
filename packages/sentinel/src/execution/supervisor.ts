@@ -273,6 +273,7 @@ function drive(proc: WorkerProcess, session: WorkerSession, limits: TrustedAdapt
         for (const out of step.send) send(out);
         if (step.canceled) return finish('sentinel.execution.canceled');
         if (step.result) {
+          // Provisional: confirmed only at stdout end of stream with clean framing and a clean exit.
           outcome.result = step.result;
           outcome.state = 'succeeded';
           // The worker should now exit on its own; give it the cancel grace to do so.
@@ -287,7 +288,9 @@ function drive(proc: WorkerProcess, session: WorkerSession, limits: TrustedAdapt
     void proc.exited.then(exit => {
       if (settled) return;
       if (exit.spawnError) return finish('sentinel.execution.workerExited', { reason: exit.spawnError });
-      try { decoder.end(); } catch (e) { if (outcome.state !== 'succeeded') return finish((e as ExecutionError).code, (e as ExecutionError).detail); }
+      // A result is only provisional until stdout has closed: 'close' fires after every stdout byte has been
+      // delivered, and a partial trailing frame, even after a result, voids it.
+      try { decoder.end(); } catch (e) { return finish((e as ExecutionError).code, (e as ExecutionError).detail); }
       if (outcome.state === 'succeeded') return finish();
       if (session.phase === 'canceling') return finish('sentinel.execution.canceled');
       return finish('sentinel.execution.workerExited', { exitCode: exit.exitCode ?? -1 });
