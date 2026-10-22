@@ -179,7 +179,7 @@ export function normalizePatternRun(input: NormalizeInput): PatternRunResult {
   // qualification run may name one listed, unmeasured platform, and its results are marked candidate.
   const architecture = outcome.container?.image?.architecture ?? null;
   const candidate = architecture !== null && architecture === input.qualifyingArchitecture
-    && PATTERN_IMAGE_PLATFORMS.some(p => p.architecture === architecture && p.state === 'unmeasured');
+    && PATTERN_IMAGE_PLATFORMS.some(p => p.architecture === architecture && !MEASURED_ARCHITECTURES.has(p.architecture));
   if (!architecture || (!MEASURED_ARCHITECTURES.has(architecture) && !candidate)) {
     return deepFreeze({ ...base, platform: { architecture, state: 'refused' as const }, engineExit: null, findings: [], coverage: everyTarget('error', 'sentinel.pattern.coverage.platformUnmeasured'), refused: [] });
   }

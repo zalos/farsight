@@ -258,8 +258,8 @@ finds its three direct positives (TS, JS, Java) as structural locators and its t
 none of its six negatives, and no cross-file flow; an engine-reported one-second rule timeout marks exactly the rules
 that timed out (host-dependent, so it pins the reporting path, not a threshold). Semgrep 1.181.0's open-source engine
 reported no dataflow trace for those taint results, so local-taint evidence names its sink and records the trace as not
-reported. Platforms: linux/arm64 measured; linux/amd64 is in the pinned index but unmeasured (the opt-in
-`sentinel-pattern-qualification` workflow measures it as a candidate on a native runner). A failed engine run is reported
+reported. Platforms: linux/arm64 and linux/amd64 measured. Native amd64 qualification passed all 22 tests with zero skips
+and ran the installed worker against its original fixtures ([qualification run](https://github.com/zalos/farsight/actions/runs/39790599932)). A failed engine run is reported
 only as a fixed category and its exit code; no engine text is forwarded. The tarball ships the pack under
 `rules/pattern/` and the worker with a digest/rights manifest under `assets/pattern/`; nothing exported invokes the
 adapter, so the package gate is partial until the PR 09 command (ADR 26). Integration still open:

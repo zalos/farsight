@@ -250,20 +250,20 @@ test('a scanned copy that differs from the pinned artifact, or is missing, earns
   assert.ok(missing.coverage.filter((c: any) => c.relativePath === 'typescript/local.ts').every((c: any) => c.status === 'complete'), 'other files are unaffected');
 });
 
-test('results from an image platform conformance has not measured are not trusted', t => {
+test('measured image platforms are trusted and unlisted platforms are refused even when named for qualification', t => {
   const good = hit('sentinel.sql.concatenated-query-tsjs', 'typescript/direct.ts', QUERY, directTs);
-  const r = run(t, { paths: { scanned: all, skipped: [] }, results: [good] }, { __arch: 'amd64' });
-  assert.equal(r.findings.length, 0);
-  assert.ok(r.coverage.every((c: any) => c.status === 'error' && c.reasonCode === 'sentinel.pattern.coverage.platformUnmeasured'));
-  assert.deepEqual(PATTERN_SUPPORT.platforms.map((p: any) => `${p.platform}:${p.state}`), ['linux/arm64:measured', 'linux/amd64:unmeasured']);
-  assert.deepEqual(r.platform, { architecture: 'amd64', state: 'refused' });
-  // Only a qualification run that names the listed, unmeasured platform gets results, and they are marked candidate.
-  const q = run(t, { paths: { scanned: all, skipped: [] }, results: [good] }, { __arch: 'amd64', __qualify: 'amd64' });
-  assert.deepEqual(q.platform, { architecture: 'amd64', state: 'candidate' });
-  assert.equal(q.findings.length, 1);
-  const unlisted = run(t, { paths: { scanned: all, skipped: [] }, results: [good] }, { __arch: 'riscv64', __qualify: 'riscv64' });
-  assert.equal(unlisted.platform.state, 'refused', 'a platform the pinned index does not list cannot be qualified this way');
-  assert.deepEqual(run(t, { paths: { scanned: all, skipped: [] } }).platform, { architecture: 'arm64', state: 'measured' });
+  assert.deepEqual(PATTERN_SUPPORT.platforms.map((p: any) => `${p.platform}:${p.state}`), ['linux/arm64:measured', 'linux/amd64:measured']);
+  for (const arch of ['arm64', 'amd64']) {
+    const r = run(t, { paths: { scanned: all, skipped: [] }, results: [good] }, { __arch: arch, __qualify: arch });
+    assert.deepEqual(r.platform, { architecture: arch, state: 'measured' });
+    assert.equal(r.findings.length, 1);
+  }
+  for (const qualify of [undefined, 'riscv64']) {
+    const r = run(t, { paths: { scanned: all, skipped: [] }, results: [good] }, { __arch: 'riscv64', __qualify: qualify });
+    assert.deepEqual(r.platform, { architecture: 'riscv64', state: 'refused' });
+    assert.equal(r.findings.length, 0);
+    assert.ok(r.coverage.every((c: any) => c.status === 'error' && c.reasonCode === 'sentinel.pattern.coverage.platformUnmeasured'));
+  }
 });
 
 test('output that names another job, another engine output or another engine version is refused', t => {
