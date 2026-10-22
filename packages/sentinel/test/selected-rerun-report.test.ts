@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore, qualificationFor, SQLITE_RELEASE_POLICY } from '../dist/store/index.js';
 import { adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, scratchUnder, removeScratch, workspaceOf } from '../dist/service/local.js';
-import { executeRun, planWorkspaceCanonical, rerunRun } from '../dist/service/canonical.js';
+import { executeRun, planWorkspaceCanonical, rerunRun, previewRerun } from '../dist/service/canonical.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
 import { initWorkspace } from '../dist/cli/init.js';
 import { loadPlan } from '../dist/execution/plans.js';
@@ -116,6 +116,13 @@ for (const mode of ['foreign-inventory', 'noninventory', 'wrong-revision', 'pare
     f.store.ledger.setRunState(plan.runId, 'running');
     f.store.ledger.setRunState(plan.runId, 'completed', { outcome: 'partial-coverage' });
     await assert.rejects(assessRun(f.store, plan.runId, { trustDir: f.ws.trustDir }), (e: any) => e.code === 'sentinel.report.evidenceUnbound');
+    const preview: any = await previewRerun(f.store, plan.runId, [plan.units[0]!.id], f.terms);
+    t.diagnostic(JSON.stringify({ invalidParentBinding: mode, canonicalPreviewRefused: 'reasonCode' in preview }));
+    assert.equal((await previewRerun(f.store, plan.runId, [plan.units[0]!.id]) as any).reasonCode, 'sentinel.service.bootstrapUnavailable');
+    const before = JSON.stringify(f.store.ledger.readEvents({ limit: 500 }));
+    assert.equal((await rerunRun(f.store, plan.runId, [plan.units[0]!.id], f.terms) as any).reasonCode, 'sentinel.service.bootstrapUnavailable');
+    assert.equal(JSON.stringify(f.store.ledger.readEvents({ limit: 500 })), before, 'refusal admits no run, attempt or staged records');
+    assert.equal(preview.reasonCode, 'sentinel.service.bootstrapUnavailable', 'admission must refuse the same unbound selected ancestry as reporting');
   });
 }
 

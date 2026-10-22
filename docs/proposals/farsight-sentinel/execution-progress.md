@@ -62,6 +62,7 @@ identifiers, not GitHub PR numbers.
 | Implementation | SOL implementers | Each package in its own worktree, with its affected validation and immutable review checkpoint |
 | Review | Independent SOL reviewers | Review each checkpoint against its backlog gate; findings in Conventional Comments; the implementer does not approve its own work |
 | Final PR review | Claude Opus | One final review of the completed PR before merge, after implementation and independent SOL verification |
+| End-of-plan product cleanup / touch-up review | Fable, the previously requested product reviewer | A separate final release-candidate review across the delivered product; the per-PR Opus review does not replace this gate |
 | Final fixes / verification | SOL implements corrections; an independent SOL reviewer verifies them | No merge or release row moves until its verification is recorded |
 
 All planned packages progress to the end of the backlog, then the end gates below, then release.

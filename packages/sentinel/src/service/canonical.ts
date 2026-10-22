@@ -32,6 +32,8 @@ import { RuleLockBook } from './rule-locks.js';
 import { foundationProfile, unsupportedRules, type TrustedProfile } from './trusted-profile.js';
 import { ServiceError } from './owner-service.js';
 import { scannerReportOf } from '../reports/scanner.js';
+import { retainedBootstrapForReport } from '../execution/retained-bootstrap.js';
+import type { BootstrapEvidence } from '../execution/bootstrap.js';
 import { publicRegistry, publicProfile, scannerExecution, externalDrivers } from './scanner-profile.js';
 import { heldDatabases, installedAdapters, checkPlanDatabases } from './scanner-assets.js';
 import { recordRunFailure, runFailureFacts } from './run-failure.js';
@@ -315,7 +317,8 @@ async function parentClosure(store: SentinelStore, parentId: string, selected: r
   if (parent.state !== 'completed' && parent.state !== 'canceled') return { reasonCode: 'sentinel.service.runNotEnded' } as Refusal;
   const plan = await currentPlan(store, parentId);
   if (!plan) return { reasonCode: 'sentinel.service.planUnknown' } as Refusal;
-  const { plan: revision } = await loadPlan(store, parentId, plan.revision);
+  const admitted = await loadPlan(store, parentId, plan.revision);
+  const revision = admitted.plan;
   const units = new Map(revision.units.map(u => [u.id, u]));
   const unknown = selected.filter(id => !units.has(id));
   if (unknown.length) return { reasonCode: 'sentinel.service.stageUnknown', facts: { unknown } } as Refusal;
@@ -329,7 +332,12 @@ async function parentClosure(store: SentinelStore, parentId: string, selected: r
   const prerequisites = new Set<string>(revision.reused.map(r => r.id));
   const walkUp = (id: string) => { for (const d of units.get(id)?.dependencies ?? []) if (!rerun.has(d.id) && !prerequisites.has(d.id)) { prerequisites.add(d.id); walkUp(d.id); } };
   for (const id of rerun) walkUp(id);
-  return { parent, revision, units, chosen, downstream, rerun, prerequisites };
+  let bootstrap: BootstrapEvidence | undefined;
+  if (chosen.size < units.size) {
+    try { bootstrap = await retainedBootstrapForReport(store, parentId, admitted); }
+    catch { return { reasonCode: 'sentinel.service.bootstrapUnavailable', facts: { parentId } } as Refusal; }
+  }
+  return { parent, revision, admitted, units, chosen, downstream, rerun, prerequisites, bootstrap };
 }
 
 /**
@@ -404,16 +412,14 @@ export async function selectedRerun(store: SentinelStore, parentId: string, sele
   if ('reasonCode' in closure) return closure;
   const { parent, revision: parentPlan, units: parentUnits, chosen } = closure;
   if (parentPlan.kind !== 'analysis') return { reasonCode: 'sentinel.service.bootstrapUnavailable', facts: { parentId } } as Refusal;
-  // The parent's bootstrap, published in its own run or one it reran: reused as published, never captured or parsed again.
-  const lineage = new Set<string>();
-  for (let id: string | null = parentId, n = 0; id && n < 64; n++) { const r = store.ledger.getRun(id); if (!r || r.envelope.snapshotId !== parent.envelope.snapshotId) break; lineage.add(id); id = r.envelope.parentId; }
-  const inventory = parentPlan.reused.find(r => store.ledger.getWork(r) && store.ledger.getPublication(r));
-  const inventoryRun = inventory ? store.ledger.getWork(inventory)!.runId : null;
-  if (!inventory || !inventoryRun || !lineage.has(inventoryRun) || parentPlan.reused.some(r => !store.ledger.getPublication(r))) {
-    return { reasonCode: 'sentinel.service.bootstrapUnavailable', facts: { parentId } } as Refusal;
+  // The same retained proof used by reporting: exact admitted selected edges and the actual accepted inventory
+  // operation. A fresh whole-analysis rerun still follows its separate bootstrap path.
+  let evidence = closure.bootstrap;
+  if (!evidence) {
+    try { evidence = await retainedBootstrapForReport(store, parentId, closure.admitted); }
+    catch { return { reasonCode: 'sentinel.service.bootstrapUnavailable', facts: { parentId } } as Refusal; }
   }
   const { current, packs, profile } = await currentTerms(terms);
-  const evidence = await loadBootstrap(store, inventoryRun, { id: inventory.id, revision: inventory.revision });
   const selectedIds = sortedIds(chosen);
   const runId = rerunIdOf(store, { rerun: parentId, parentPlan: parentPlan.digest, selected: selectedIds, lock: current.digest, policy: terms.policy.revision, profile: profile.digest });
   const plan = planAnalysis({

@@ -18,10 +18,11 @@ export async function retainedBootstrapForReport(store: SentinelStore, runId: st
   if (candidates.length !== 1) return refuse('the analysis does not reuse exactly one accepted inventory');
   const inventory = candidates[0]!;
   const visited = new Set<string>();
+  const revisions: AdmittedPlan[] = [];
   let id = runId, current = admitted;
   for (let depth = 0; depth < 64; depth++) {
     if (visited.has(id)) return refuse('the retained bootstrap lineage cycles');
-    visited.add(id);
+    visited.add(id); revisions.push(current);
     const run = store.ledger.getRun(id);
     if (!run || run.envelope.snapshotId !== snapshotId || current.plan.pins.snapshotId !== snapshotId
       || !current.plan.reused.some(r => sameRef(r, inventory))) return refuse('the retained bootstrap lineage is not this snapshot and inventory');
@@ -52,6 +53,10 @@ export async function retainedBootstrapForReport(store: SentinelStore, runId: st
       try { evidence = await loadBootstrap(store, id, inventory); }
       catch { return refuse('the accepted bootstrap evidence is unavailable or unbound'); }
       if (evidence.snapshot.id !== snapshotId) return refuse('the retained bootstrap snapshot is not the analysis snapshot');
+      for (const revision of revisions) for (const reused of revision.plan.reused) {
+        const owner = store.ledger.getWork(reused);
+        if (!owner || !visited.has(owner.runId) || !store.ledger.getPublication(reused)) return refuse('reused work is not accepted in the proven same-capture lineage');
+      }
       return { ...evidence, selectedAncestors: [...visited].filter(ancestor => ancestor !== runId) };
     }
     const selection = current.selection;

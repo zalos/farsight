@@ -712,7 +712,7 @@ work revision; its accepted attempt must be the pinned coordinator inventory ope
 bound to that plan, snapshot and work. The existing bootstrap reader then verifies the retained inventory and parser
 artifacts. A genuine accepted publication from a sibling over the same snapshot is still refused, as is a parse/check
 publication or a missing invocation. No live registry, current scanner image or source checkout is needed for this
-read. Held units remain gaps; no parent observation or coverage record becomes the child's.
+read. Strict-subset preview and admission use this same retained proof before planning or staging any child work; whole-analysis reruns retain their fresh bootstrap path. Held units remain gaps; no parent observation or coverage record becomes the child's.
 
 Privacy knowledge also survives a selection. An ancestor proven by those same selection bindings may have an accepted
 Gitleaks match while the child holds Gitleaks and reruns Pattern. The minimal scanner report inherits matched-name withholding through the same verified lineage and shared accepted-secret validator, without importing any parent records into its observations or counts. The reader assesses that ancestor's accepted secret
