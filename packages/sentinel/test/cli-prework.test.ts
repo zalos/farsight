@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../dist/cli/args.js';
 import { OUTCOME_EXIT_CODES, isFinalPolicyResult, result } from '../dist/cli/outcome.js';
 import { ActorError, assertMayConfirm, refuseActorClaims, requestedByOf } from '../dist/cli/actor.js';
-import { DEFAULT_SETTINGS, initWorkspace, InitError } from '../dist/cli/init.js';
+import { initialSettings, initWorkspace, InitError } from '../dist/cli/init.js';
 import {
   FrameDecoder, IpcError, MAX_FRAME_BYTES, connectOwnerSocket, encodeFrame, fitsSocketPath, listenOwnerSocket, newOwnerNonce,
   runtimeAddress, socketPathLimit,
@@ -45,7 +45,8 @@ test('arguments: each command takes only its own flags; typos and repeats are re
   no(['capabilities', '--json=yes'], 'sentinel.args.unexpectedArgument');
   no(['scan-everything'], 'sentinel.args.unknownCommand');
   // A command this build does not run is refused as unavailable, whatever its arguments.
-  assert.equal(ok(['run']).command, 'run');
+  assert.equal(ok(['wait']).command, 'wait');
+  no(['run'], 'sentinel.args.missingArgument');
   assert.ok(parseArgs(['nonsense', '--json']).ok === false && (parseArgs(['nonsense', '--json']) as { json: boolean }).json);
 });
 
@@ -90,7 +91,8 @@ test('init writes the private settings once and never again; it downloads and st
   assert.equal(first.outcome, 'prepared');
   const path = join(ws, '.farsight/sentinel/settings.json');
   assert.equal(first.path, path);
-  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
+  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), JSON.parse(JSON.stringify(initialSettings('static'))));
+  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')).grants, [{ actions: ['capture.source', 'run.start'], principals: ['human'], scope: { profiles: ['static'] } }], 'the owner only; never an agent');
   assert.equal(statSync(path).mode & 0o777, 0o600);
   assert.equal(statSync(join(ws, '.farsight/sentinel')).mode & 0o777, 0o700);
   // Twice: the owner's edits survive byte for byte.

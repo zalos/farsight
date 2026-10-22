@@ -62,6 +62,22 @@ export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
   'sentinel.init.next': same('next: review the file, then adopt it as its owner (available with PR 06), then plan a scan (available with PR 09)', 'The settings grant nothing until their owner adopts these exact bytes. Planning and running arrive with the commands named here.'),
   'sentinel.init.noEffects': same('nothing was downloaded and no scan was started', 'Initialization only writes the settings file, and only when it is missing.'),
 
+  // ---- the owner's local service ----
+  'sentinel.service.settingsNotAdopted': same('this workspace\'s settings are not adopted', 'Nothing is planned or run until the owner adopts the workspace\'s settings with farsight-sentinel settings adopt --confirm. Changed settings must be adopted again.'),
+  'sentinel.service.planUnknown': same('no prepared plan has that id', 'Run, status and report name a plan this workspace prepared with farsight-sentinel plan.'),
+  'sentinel.service.policyChanged': same('the adopted settings changed since this plan was prepared; plan again', 'A plan is run only under the policy it was prepared with, so a settings change needs a new plan.'),
+  'sentinel.service.planChanged': same('the plan no longer rebuilds to what was disclosed; plan again', 'Before running, the plan is rebuilt from its snapshot and must match the identity planning disclosed exactly.'),
+  'sentinel.service.runNotCompleted': same('the run did not complete', 'The run stopped before every planned check finished, so there is no complete result to report.'),
+  'sentinel.service.executionFailed': same('a planned check failed to execute', 'At least one check could not run to the end, so the run is an execution failure, not a scan result.'),
+  'sentinel.service.previewNotCoverage': same('foundation preview complete: this is not required coverage', 'The preview detector ran to the end. A preview never satisfies the policy\'s required coverage, so the result is required coverage incomplete, with its findings kept.'),
+  'sentinel.service.runUnknown': same('no run has that id in this store', 'Status reads a run this workspace\'s store has recorded.'),
+  'sentinel.service.detachUnavailable': same('running in the background is not available yet; run in the foreground', 'A detached run needs the owner\'s background service, which is not built yet. Nothing was started.'),
+  'sentinel.cli.usageSettings': same('farsight-sentinel settings adopt [--confirm] [--json]    adopt this workspace\'s settings as their owner', 'Without --confirm it shows what would be adopted and waits (exit 4); with it the owner adopts the exact settings bytes.'),
+  'sentinel.cli.usagePlan': same('farsight-sentinel plan [--confirm] [--json]    capture this workspace and prepare a foundation-preview plan', 'Captures the workspace and prepares a plan. Nothing runs.'),
+  'sentinel.cli.usageRun': same('farsight-sentinel run <planId> [--confirm] [--json]    run a prepared plan in the foreground', 'Runs the plan to the end in this process. A preview ends required coverage incomplete (exit 2), never satisfied.'),
+  'sentinel.cli.usageStatus': same('farsight-sentinel status <runId> [--after <n>] [--limit <n>] [--json]    the run\'s state and a bounded page of its events', 'Reads the run\'s committed state and at most 50 events per page.'),
+  'sentinel.cli.usageReport': same('farsight-sentinel report <runId> [--format md|json]    the preview report, from the ledger alone', 'Renders the report from stored results only; nothing is executed or re-read from the workspace.'),
+
   // ---- the preview report ----
   'sentinel.report.previewTitle': same('Sentinel scan — foundation preview', 'The heading of a preview report: a run\'s counts with their scopes and re-check commands, before full reports exist.'),
   'sentinel.report.previewOnly': same('Foundation preview: these counts show the pipeline works end to end. They are not scanner or framework coverage.', 'A preview report demonstrates planning, running and reporting with one original fixture detector. It makes no claim about what real scanners would find.'),

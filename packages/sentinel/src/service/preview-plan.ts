@@ -70,7 +70,9 @@ export async function previewPlan(store: SentinelStore, options: {
   const inputs: CapturedInput[] = [...byId].map(([id, path]) => ({ id, path })).concat({ id: manifestId, path: manifestPath });
   const inputIds = inputs.map(i => i.id) as `sha256:${string}`[];
 
-  const identity = { snapshotId: options.snapshotId, policyRevision: options.policyRevision, adapter: adapter.digest, rule: PREVIEW_RULE };
+  // The plan's identity is what it would read and do: the captured inventory (not the capture's time), the policy
+  // revision, the adapter and its rule. The same workspace content under the same policy plans to the same id.
+  const identity = { inventory: restored.record.inventoryDigest, policyRevision: options.policyRevision, adapter: adapter.digest, rule: PREVIEW_RULE };
   const planDigest = digest(identity);
   const planId = `plan-${planDigest.slice(7, 39)}`;
   const run: RunEnvelope = {
@@ -81,7 +83,8 @@ export async function previewPlan(store: SentinelStore, options: {
     budgets: { maxTokens: null, maxCost: null, deadlineMs: 600_000 }, createdAt: options.now, state: 'planned',
   } as RunEnvelope;
   const work: WorkEnvelope = {
-    schema: 'sentinel-work/draft-1', id: 'work-preview-detector', revision: 1, runId: planId, planRevision: 1,
+    // Work ids are unique across the ledger, so each plan's unit is named after its plan.
+    schema: 'sentinel-work/draft-1', id: `work-${planId}`, revision: 1, runId: planId, planRevision: 1,
     stage: { contract: PREVIEW_STAGE, contractVersion: 'draft-1', kind: 'coded', implementationDigest: adapter.digest },
     inputFingerprint: inputFingerprintOf(inputIds),
     // The snapshot's manifest: an admitted artifact, so the retained work names something the ledger keeps.

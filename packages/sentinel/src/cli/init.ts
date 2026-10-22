@@ -10,6 +10,14 @@ import { DEFAULT_SETTINGS, parseSettings, SETTINGS_PATH } from '../policy/index.
 /** The settings file's place in a workspace, and its scrubbed defaults: PR 06's own, so init writes what policy reads. */
 export { SETTINGS_PATH, DEFAULT_SETTINGS };
 
+/**
+ * What init writes for a profile: PR 06's defaults plus one grant letting the owner (a human, never an agent) capture
+ * and run that profile. No provider, no budget, no agent action; the file grants nothing until it is adopted.
+ */
+export function initialSettings(profile: string) {
+  return { ...DEFAULT_SETTINGS, grants: [{ actions: ['capture.source', 'run.start'], principals: ['human'], scope: { profiles: [profile] } }] };
+}
+
 /** The one scan profile this build can describe; scanner coverage arrives with later packages. */
 export const PROFILES = ['static'] as const;
 
@@ -77,7 +85,8 @@ export function initWorkspace(options: { workspace: string; profile?: string }):
   try { lstatSync(path); return kept(); } catch (e) {
     if (e instanceof InitError) throw e;
   }
-  const bytes = Buffer.from(`${JSON.stringify(DEFAULT_SETTINGS, null, 2)}\n`, 'utf8');
+  const bytes = Buffer.from(`${JSON.stringify(initialSettings(profile), null, 2)}\n`, 'utf8');
+  parseSettings(bytes); // what init writes is what policy reads
   let fd: number;
   try {
     // O_EXCL: if another init created the file meanwhile, it is kept, not replaced.

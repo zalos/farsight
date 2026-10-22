@@ -83,6 +83,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // The foundation-preview detector, a built-in worker: it reads its copied inputs and writes one artifact.
   'adapters/preview-detector.js': ['node:crypto', 'node:fs'],
   'service/preview-plan.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
+  'service/local.js': ['node:crypto', 'node:fs', 'node:path'],
   // The local service socket: an owner-only Unix socket, used only when a service runs; nothing at import.
   'transport/ipc.js': ['node:crypto', 'node:fs', 'node:net', 'node:path'],
   'reports/preview.js': ['@farsight/core/dist/strings-sentinel-report.js', '@farsight/core/dist/strings-sentinel-service.js'],
@@ -214,7 +215,7 @@ test('draft contracts, store, capture, parser, policy and planner are available;
 });
 
 test('planned commands refuse with exit 3 and start nothing', () => {
-  for (const command of ['plan', 'run', 'status', 'serve', 'report', 'bundle', 'rules']) {
+  for (const command of ['wait', 'pause', 'resume', 'cancel', 'retry', 'rerun', 'serve', 'compare', 'bundle', 'rules']) {
     const r = cli(command, '--json');
     assert.equal(r.status, 3, command);
     assert.match(r.stderr, new RegExp(`^unavailable: ${command} is not implemented in this draft build \\(planned in PR \\d+\\)\\. Nothing was started\\.`));

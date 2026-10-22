@@ -1,9 +1,12 @@
 #!/usr/bin/env node
-// The executable: help, version, the capability list, draft contract validation and workspace initialization.
-// Planning, running and the commands around a run are refused as unavailable until the coordinator exists (PR 08);
-// nothing is started for them. No command downloads a tool, starts a container or contacts a model provider.
-// Every result is typed (cli/outcome.ts); `--json` prints it whole, with the three verdicts.
-import { readFileSync, statSync } from 'node:fs';
+// The executable, the owner's entrypoint: help, version, capabilities, validation, workspace initialization,
+// settings adoption, and a foundation-preview plan → run → status → report in the foreground. The commands that need
+// the owner's background service (wait, pause, resume, cancel, retry, rerun, serve, run --detach) are refused as
+// unavailable; nothing is started for them. No command downloads a tool, starts a container or contacts a model
+// provider. Every result is typed (cli/outcome.ts); `--json` prints it whole, with the three verdicts.
+import { readFileSync, realpathSync, statSync } from 'node:fs';
+import { adoptWorkspaceSettings, planWorkspace, previewReport, runPlan, runStatus, workspaceOf, PolicyError } from './service/local.js';
+import { renderPreviewJson, renderPreviewMarkdown } from './reports/preview.js';
 import { CAPABILITIES } from './capabilities.js';
 import { parseArgs, plannedIn, COMMANDS, type ParsedCommand } from './cli/args.js';
 import { initWorkspace, InitError } from './cli/init.js';
@@ -35,6 +38,11 @@ function help(): string {
     `  ${word('sentinel.cli.usageValidate')}`,
     `      ${word('sentinel.cli.kinds', { kinds: ENVELOPE_KINDS.join(', ') })}`,
     `  ${word('sentinel.cli.usageInit')}`,
+    `  ${word('sentinel.cli.usageSettings')}`,
+    `  ${word('sentinel.cli.usagePlan')}`,
+    `  ${word('sentinel.cli.usageRun')}`,
+    `  ${word('sentinel.cli.usageStatus')}`,
+    `  ${word('sentinel.cli.usageReport')}`,
     '',
     word('sentinel.cli.planned', { commands: planned.join(', ') }),
     '',
@@ -120,7 +128,79 @@ function init(p: ParsedCommand): number {
   return finish(result('init', done.outcome, { facts }));
 }
 
-export function main(argv: string[]): number {
+/** The workspace a command acts on: --workspace or the current folder, by its canonical path. */
+function workspaceFor(p: ParsedCommand) {
+  const given = typeof p.flags['--workspace'] === 'string' ? p.flags['--workspace'] : process.cwd();
+  return workspaceOf(realpathSync.native(given));
+}
+
+/** Prints a service result: JSON whole, or its outcome words, reason and the facts a reader needs. */
+function serviceOut(r: CommandResult, lines: string[] = []): number {
+  if (!jsonOut) {
+    for (const l of lines) out(l);
+    const head = word(`sentinel.outcome.${r.outcome.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())}`);
+    (r.exitCode === 0 ? out : errOut)(r.reasonCode && r.reasonCode !== 'sentinel.outcome.unavailable' ? `${head}: ${word(r.reasonCode)}` : head);
+  }
+  return finish(r);
+}
+
+async function owner(p: ParsedCommand): Promise<number> {
+  const now = new Date();
+  const confirm = p.flags['--confirm'] === true;
+  try {
+    const ws = workspaceFor(p);
+    if (p.command === 'settings') {
+      if (p.args.action !== 'adopt') {
+        errOut(word('sentinel.args.unexpectedArgument', { detail: String(p.args.action) }));
+        return finish(result('settings', 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
+      }
+      const r = adoptWorkspaceSettings(ws, { confirm, now });
+      return serviceOut(r, [`settings ${String(r.facts.settingsDigest)}`]);
+    }
+    if (p.command === 'plan') {
+      const r = await planWorkspace(ws, { confirm, now });
+      return serviceOut(r, r.disclosure ? [`plan ${r.disclosure.planId} · ${r.disclosure.planDigest} · effects: ${r.disclosure.effects.join(', ')} · ${word('sentinel.report.previewOnly')}`] : []);
+    }
+    if (p.command === 'run') {
+      if (p.flags['--detach'] === true) {
+        errOut(word('sentinel.service.detachUnavailable'));
+        return finish(result('run', 'unavailable', { reasonCode: 'sentinel.service.detachUnavailable' }));
+      }
+      const r = await runPlan(ws, { planId: p.args.planId!, confirm, now });
+      return serviceOut(r, r.facts.runId ? [`run ${String(r.facts.runId)} · ${String(r.facts.state)} · preview findings: ${String(r.facts.previewFindings)}`] : []);
+    }
+    if (p.command === 'status') {
+      const num = (f: string) => (typeof p.flags[f] === 'string' ? Number(p.flags[f]) : undefined);
+      const after = num('--after');
+      const limit = num('--limit');
+      if ((after !== undefined && !Number.isSafeInteger(after)) || (limit !== undefined && !Number.isSafeInteger(limit))) {
+        errOut(word('sentinel.args.missingValue', { detail: '--after/--limit' }));
+        return finish(result('status', 'refused', { reasonCode: 'sentinel.args.missingValue' }));
+      }
+      const r = await runStatus(ws, { runId: p.args.runId!, ...(after === undefined ? {} : { after }), ...(limit === undefined ? {} : { limit }) });
+      return serviceOut(r, r.facts.state ? [`run ${p.args.runId} · ${String(r.facts.state)}`] : []);
+    }
+    // report
+    const format = typeof p.flags['--format'] === 'string' ? p.flags['--format'] : 'md';
+    if (format !== 'md' && format !== 'json') {
+      errOut(word('sentinel.args.unexpectedArgument', { detail: format }));
+      return finish(result('report', 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
+    }
+    const doc = await previewReport(ws, { runId: p.args.runId!, now });
+    if ('outcome' in doc) return serviceOut(doc);
+    out(format === 'json' || jsonOut ? renderPreviewJson(doc) : renderPreviewMarkdown(doc));
+    return 0;
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    if (e instanceof PolicyError || (typeof code === 'string' && code.startsWith('sentinel.'))) {
+      errOut(`${code}: ${(e as Error).message}`);
+      return finish(result(p.command, 'configuration-failure', { reasonCode: code }));
+    }
+    throw e;
+  }
+}
+
+export async function main(argv: string[]): Promise<number> {
   const parsed = parseArgs(argv);
   jsonOut = parsed.ok ? parsed.parsed.json : parsed.json;
   if (!parsed.ok) {
@@ -134,6 +214,7 @@ export function main(argv: string[]): number {
     case 'capabilities': return capabilities(p);
     case 'validate': return validate(p);
     case 'init': return init(p);
+    case 'settings': case 'plan': case 'run': case 'status': case 'report': return owner(p);
     default: {
       const change = plannedIn(p.command)!;
       errOut(word('sentinel.cli.unavailable', { command: p.command, change }));
@@ -142,4 +223,4 @@ export function main(argv: string[]): number {
   }
 }
 
-process.exitCode = main(process.argv.slice(2));
+process.exitCode = await main(process.argv.slice(2));

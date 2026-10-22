@@ -4,9 +4,11 @@
 
 /** The commands this executable knows, and the planning change that delivers each one that is not built yet. */
 export const COMMANDS = {
-  help: null, version: null, capabilities: null, validate: null, init: null,
-  plan: 'PR 09', run: 'PR 09', status: 'PR 09', wait: 'PR 09', pause: 'PR 09', resume: 'PR 09', cancel: 'PR 09',
-  retry: 'PR 09', rerun: 'PR 09', report: 'PR 09', serve: 'PR 08', compare: 'PR 19', rules: 'PR 06', bundle: 'PR 26',
+  help: null, version: null, capabilities: null, validate: null, init: null, settings: null,
+  plan: null, run: null, status: null, report: null,
+  // These need the owner's background service, which is not built yet.
+  wait: 'PR 09', pause: 'PR 09', resume: 'PR 09', cancel: 'PR 09', retry: 'PR 09', rerun: 'PR 09', serve: 'PR 09',
+  compare: 'PR 19', rules: 'PR 06', bundle: 'PR 26',
 } as const satisfies Record<string, string | null>;
 export type CommandName = keyof typeof COMMANDS;
 
@@ -19,7 +21,7 @@ interface CommandSpec {
 }
 
 const COMMON: Record<string, FlagKind> = { '--json': 'boolean' };
-const STORE: Record<string, FlagKind> = { '--store': 'value' };
+const STORE: Record<string, FlagKind> = { '--workspace': 'value' };
 const RUN_REF: CommandSpec = { flags: { ...COMMON, ...STORE }, positional: ['runId'], min: 1 };
 
 const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
@@ -28,8 +30,9 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   capabilities: { flags: COMMON, positional: [], min: 0 },
   validate: { flags: COMMON, positional: ['kind', 'file'], min: 2 },
   init: { flags: { ...COMMON, '--workspace': 'value', '--profile': 'value' }, positional: [], min: 0 },
-  plan: { flags: { ...COMMON, ...STORE, '--profile': 'value', '--workspace': 'value' }, positional: [], min: 0 },
-  run: { flags: { ...COMMON, ...STORE, '--detach': 'boolean', '--confirm': 'boolean', '--idempotency-key': 'value' }, positional: ['planId'], min: 1 },
+  settings: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['action'], min: 1 },
+  plan: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: [], min: 0 },
+  run: { flags: { ...COMMON, ...STORE, '--detach': 'boolean', '--confirm': 'boolean' }, positional: ['planId'], min: 1 },
   status: { flags: { ...COMMON, ...STORE, '--after': 'value', '--limit': 'value' }, positional: ['runId'], min: 1 },
   wait: { flags: { ...COMMON, ...STORE, '--timeout': 'value' }, positional: ['runId'], min: 1 },
   pause: RUN_REF, resume: RUN_REF, cancel: RUN_REF, retry: RUN_REF,
