@@ -199,7 +199,6 @@ test('capture refuses a run whose snapshot holds other sources than the plan par
 
 for (const [label, parse, code, field] of [
   ['its deadline', { deadlineMs: 1 }, 'sentinel.execution.deadlineExceeded', 'deadlineMs'],
-  ['its memory bound', { memoryBytes: 1 }, 'sentinel.execution.resourceExceeded', 'resource'],
 ] as const) {
   test(`a bootstrap operation is held to ${label}: the attempt fails and nothing of it is published`, needsStore, async t => {
     const dir = scratch(t, 'sentinel-exec-boot-grant-');
@@ -223,6 +222,48 @@ for (const [label, parse, code, field] of [
     assert.ok(ended.errorDetail && field in ended.errorDetail, JSON.stringify(ended.errorDetail));
     assert.equal(summary.outcome, 'execution-failure');
     assert.deepEqual(store.ledger.listOpenStages(500), [], 'nothing was staged for it');
+  });
+}
+
+// RSS is sampled growth, not an allocation counter: a real parse can reuse pages or finish below its baseline
+// after GC. Keep the real operation and ledger, but control the sampler input to test both sides of the grant.
+for (const [observed, refused] of [[1_025, true], [1_023, false]] as const) {
+  test(`a bootstrap parse with sampled memory growth ${observed} against a 1024-byte grant ${refused ? 'refuses publication' : 'publishes'}`, needsStore, async t => {
+    const dir = scratch(t, 'sentinel-exec-boot-memory-');
+    const work = join(dir, 'work');
+    mkdirSync(work, { mode: 0o700 });
+    const { store, snapshot } = await captured(t, dir);
+    t.after(() => store.close());
+    const { registry, profile, record } = trusted(dir, true, { parse: { memoryBytes: 1_024 } });
+    const { pin } = lockedRules([{ familyId: RULE, adapterId: 'sentinel-pattern' }], []);
+    const { policy } = policyView([RULE]);
+    const boot = planBootstrap({ runId: 'run-boot', sourceIds: ['app'], profile: profile as any });
+    await admitPlan(store, { plan: boot, ruleLock: null, policy: null, profile: record });
+    const parseUnit = boot.units.find(u => u.stage === 'parse')!;
+    let samples = 0;
+    const hooks = { at: (boundary: string, context: any) => {
+      if (boundary !== 'after-attempt-start' || context.work.id !== parseUnit.id) return;
+      const usage = process.memoryUsage();
+      t.mock.method(process, 'memoryUsage', () => ({ ...usage, rss: usage.rss + (samples++ === 0 ? 0 : observed) }));
+    } };
+    const summary = await (await Coordinator.open({ store, runId: 'run-boot', run: runEnvelope(snapshot.id, pin, policy.revision, profile.id), registry,
+      scratchRoot: work, retry: { maxAttempts: 1 }, hooks })).run();
+    assert.ok(samples >= 2, 'the operation took its baseline and at least one growth sample');
+    const [attempt] = store.ledger.listAttempts({ id: parseUnit.id, revision: 1 });
+    const ended = store.ledger.getAttempt(attempt!.id)!;
+    const publication = store.ledger.getPublication({ id: parseUnit.id, revision: 1 });
+    if (refused) {
+      assert.equal(publication, null, 'the real parse produced no accepted publication');
+      assert.equal(ended.state, 'failed');
+      assert.equal(ended.envelope.error?.code, 'sentinel.execution.resourceExceeded');
+      assert.deepEqual(ended.errorDetail, { resource: 'memory', limit: 1_024, observed });
+      assert.equal(summary.outcome, 'execution-failure');
+    } else {
+      assert.ok(publication, 'the real parse below the sampled limit was accepted');
+      assert.equal(ended.state, 'succeeded');
+      assert.equal(summary.published, boot.units.length, JSON.stringify(summary.failures));
+    }
+    assert.deepEqual(store.ledger.listOpenStages(500), [], 'no preparation remains staged');
   });
 }
 
