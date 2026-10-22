@@ -98,9 +98,10 @@ try {
  console.log(JSON.stringify({consumer:'framework',distFiles:files.length,closureEntries:closure.length,entryBytes:entry.length,runMs:Math.round(performance.now()-started),sourceRemovedSelected:true,crashRecovered:true,officialSarif:Boolean(official)}));
 }finally{
  for(const pid of servicePids){try{process.kill(pid,'SIGTERM')}catch{}await gone(pid)}
- // A killed service can leave sealed readonly inputs. Only this consumer's scratch is unlocked, after its exact
- // recorded services stopped; links are never followed and a bounded rm retry handles delayed directory removal.
- const orphan=join(realpathSync.native(c.scratch),'workspace/.farsight/sentinel/scratch');
+ // A killed service can leave sealed readonly inputs in its retained scratch lease, inside the store. Only this
+ // consumer's store scratch is unlocked, after its exact recorded services stopped; links are never followed and a
+ // bounded rm retry handles delayed directory removal.
+ const orphan=join(realpathSync.native(c.scratch),'workspace/.farsight/sentinel/store/scratch');
  const unlock=p=>{const st=lstatSync(p);if(st.isSymbolicLink())return;if(st.isDirectory()){chmodSync(p,0o700);for(const n of readdirSync(p))unlock(join(p,n))}else chmodSync(p,0o600)};
  if(existsSync(orphan))unlock(orphan);
  rmSync(c.scratch,{recursive:true,force:true,maxRetries:5,retryDelay:100});

@@ -5,7 +5,8 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore, qualificationFor, SQLITE_RELEASE_POLICY } from '../dist/store/index.js';
-import { adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, scratchUnder, removeScratch, workspaceOf } from '../dist/service/local.js';
+import { adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, workspaceOf } from '../dist/service/local.js';
+import { scratchUnder, removeScratch } from './lease-helpers.ts';
 import { planWorkspaceCanonical } from '../dist/service/canonical.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
 import { initWorkspace } from '../dist/cli/init.js';
@@ -33,7 +34,7 @@ test('public retry and rerun recover an ended bootstrap as a fresh child over re
         store.close();
     }
     catch { /* closed */ } });
-    const work = scratchUnder(ws);
+    const work = scratchUnder(store);
     try {
         // Capture really publishes, but parse is unbound: the ended parent has accepted bootstrap state to preserve.
         const base = foundationProfile(foundationRegistry());
@@ -103,7 +104,7 @@ test('fatal finalization failure is retained for wait, status and report after t
         store.close();
     }
     catch { } });
-    const work = scratchUnder(ws);
+    const work = scratchUnder(store);
     let planned;
     try {
         planned = await planWorkspaceCanonical(store, { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() });

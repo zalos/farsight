@@ -153,6 +153,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'service/canonical.js': ['node:crypto'],
   'service/local.js': ['node:crypto', 'node:fs', 'node:path'],
   'service/owner-service.js': ['node:crypto', 'node:fs', 'node:path'],
+  // A run's scratch lease inside the held store: no-follow folder checks and a bounded post-order removal.
+  'service/scratch-lease.js': ['node:crypto', 'node:fs', 'node:path'],
   // Fatal-run diagnostics compose a private journal path; filesystem access stays in reviewed journal helpers.
   'service/run-failure.js': ['node:path'],
   // The owner's rule locks: content-addressed revisions and one pointer in private state, through policy/user-state.

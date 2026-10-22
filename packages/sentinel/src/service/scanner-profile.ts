@@ -20,9 +20,9 @@ export function publicRegistry(trustDir?:string):AdapterRegistry{
  if(!registry){const base=foundationRegistry();registry=createAdapterRegistry([...base.ids.map(id=>base.get(id) as AdapterDefinition),...[...externalDrivers().values()].map(e=>e.definition),...(framework?[framework.definition]:[])]);registries.set(key,registry);}return registry;
 }
 /** The same availability terms are used for fresh planning and selected reruns. */
-export async function publicAvailability(trustDir:string,lock:RuleLockEnvelope,packs:readonly ValidatedPack[],ids:readonly string[],scratch:string):Promise<Set<string>>{
+export async function publicAvailability(trustDir:string,lock:RuleLockEnvelope,packs:readonly ValidatedPack[],ids:readonly string[],scratch:string,wrapRunner?:(runner:import('../execution/isolation.js').DockerRunner)=>import('../execution/isolation.js').DockerRunner):Promise<Set<string>>{
  const {installedAdapters,heldDatabases}=await import('./scanner-assets.js');
- const available=new Set(await installedAdapters(trustDir,lock,ids,scratch));
+ const available=new Set(await installedAdapters(trustDir,lock,ids,scratch,wrapRunner));
  if(ids.length)heldDatabases(trustDir,lock);
  if(frameworkAvailable(lock,packs))available.add(FRAMEWORK_CONTROLS_ADAPTER_ID);
  return available;
@@ -44,7 +44,7 @@ export function publicDrivers(registry:AdapterRegistry,records:readonly Database
 }
 
 /** Build a coordinator's execution context entirely from the plan's admitted lock, never the latest lock. */
-export async function scannerExecution(store:import('../store/index.js').SentinelStore,runId:string,trustDir:string|undefined,scratch:string,registry:AdapterRegistry=publicRegistry(trustDir)){
+export async function scannerExecution(store:import('../store/index.js').SentinelStore,runId:string,trustDir:string|undefined,scratch:string,registry:AdapterRegistry=publicRegistry(trustDir),wrapRunner?:(runner:import('../execution/isolation.js').DockerRunner)=>import('../execution/isolation.js').DockerRunner){
  const {loadPlan}=await import('../execution/plans.js');
  const revision=store.ledger.getRun(runId)?.planRevision??store.ledger.latestPlan(runId)?.revision;
  if(revision===undefined)return{drivers:publicDrivers(registry,[],undefined,trustDir)};
@@ -54,7 +54,7 @@ export async function scannerExecution(store:import('../store/index.js').Sentine
  if(!ids.length&&!inspection)return{drivers:publicDrivers(registry,[],undefined,trustDir)};
  const {RuleLockBook}=await import('./rule-locks.js');const {heldDatabases,installedAdapters,checkPlanDatabases,ScannerAssetError}=await import('./scanner-assets.js');
  if(!lock||!trustDir)throw new ScannerAssetError('sentinel.assets.missing');
- if(ids.length){await installedAdapters(trustDir,lock,ids,scratch);checkPlanDatabases(admitted.plan,lock);}
+ if(ids.length){await installedAdapters(trustDir,lock,ids,scratch,wrapRunner);checkPlanDatabases(admitted.plan,lock);}
  const dbs=ids.length?heldDatabases(trustDir,lock):[];const book=new RuleLockBook(trustDir);
  const packs=book.packsOf(lock);if(inspection&&!frameworkAvailable(lock,packs))throw new ScannerAssetError('sentinel.assets.missing');
  const secretsSnapshot=ids.includes('secrets-gitleaks')?(await(await import('../snapshot/materialize.js')).openSnapshot(store,admitted.plan.pins.snapshotId!)).snapshot:undefined;

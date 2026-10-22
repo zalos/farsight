@@ -6,7 +6,8 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync, unlinkSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore } from '../dist/store/index.js';
-import { workspaceOf, adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, scratchUnder } from '../dist/service/local.js';
+import { workspaceOf, adoptedPolicy, adoptWorkspaceSettings, promoteRulePack } from '../dist/service/local.js';
+import { scratchUnder } from './lease-helpers.ts';
 import { initWorkspace } from '../dist/cli/init.js';
 import { planWorkspaceCanonical, executeRun } from '../dist/service/canonical.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
@@ -38,7 +39,7 @@ async function published(t: any, forged: boolean | 'json' | 'utf8' | 'line' | 'o
   const adopted = adoptedPolicy(ws); assert.ok('policy' in adopted);
   const store = await openStore(ws.storePath);
   t.after(() => { store.close(); unlock(dir); rmSync(dir, { recursive: true, force: true }); });
-  const work = scratchUnder(ws);
+  const work = scratchUnder(store);
   const malformed = forged === 'json' || forged === 'utf8' || forged === 'object' || forged === 'shape';
   const worker = join(dir, 'malformed-worker.mjs');
   if (malformed) writeFileSync(worker, 'globalThis.PAYLOAD = ' + JSON.stringify(forged) + '; await import(' + JSON.stringify(new URL('./fixtures/workers/report-malformed-worker.mjs', import.meta.url).href) + ');');
@@ -130,7 +131,7 @@ async function publishedPattern(t: any, mode: string) {
   t.after(() => { store.close(); unlock(dir); rmSync(dir, { recursive: true, force: true }); });
   // Identical bytes at a distinct path remain distinct check scopes, even in one batched worker.
   writeFileSync(join(path, 'src', 'other.ts'), readFileSync(join(path, 'src', 'lookup.ts')));
-  const work = scratchUnder(ws);
+  const work = scratchUnder(store);
   const prepared = await planWorkspaceCanonical(store, { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() });
   const runId = prepared.disclosure.runId;
   const registry = publicRegistry();
@@ -273,10 +274,18 @@ for (const mode of ['object', 'shape', 'duplicate'] as const) test('accepted pre
   await assert.rejects(fullReport({ ...f.request, disclosure: 'shareable' }), (e: any) => e.code === 'sentinel.report.evidenceUnbound');
 });
 
+// `.farsight/sentinel/settings.json` is ordinary captured source now, and no check reads it: the report says so.
+// Every planned check still covered its scope; the one captured file no check was planned over is that file.
+function settingsOnlyUnchecked(doc: any) {
+  assert.equal(doc.completeness, 'partial');
+  assert.equal(doc.counts.seenByNoStage.n, 1);
+  assert.equal(doc.counts.unknownScopeBoundaries.n, 0);
+}
+
 test('accepted preview retains genuine findings beside unrelated auxiliary JSON', async t => {
   const f = await published(t, 'auxiliary');
   const report = await fullReport({ ...f.request, disclosure: 'shareable' });
-  assert.equal(report.document.completeness, 'complete');
+  settingsOnlyUnchecked(report.document);
   assert.equal(report.document.findings.length, 1);
   assert.equal(report.document.gaps.length, 0);
 });
@@ -284,7 +293,7 @@ test('accepted preview retains genuine findings beside unrelated auxiliary JSON'
 test('accepted preview retains an honest empty findings document', async t => {
   const f = await published(t, false, true);
   const report = await fullReport({ ...f.request, disclosure: 'shareable' });
-  assert.equal(report.document.completeness, 'complete');
+  settingsOnlyUnchecked(report.document);
   assert.equal(report.document.findings.length, 0);
   assert.equal(report.document.gaps.length, 0);
 });
