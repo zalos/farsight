@@ -399,8 +399,7 @@ test('probe 4: a configurer argument that reaches the HttpSecurity makes the cha
         .httpBasic(org.springframework.security.config.Customizer.withDefaults());
     return http.build();
   }`), routes: ROUTE_X }))).envelope;
-  assert.deepEqual(verdicts(inert, 'GET /x'), ['unknown:sentinel.spring.configurerArgumentUnsupported', 'unknown:sentinel.spring.configurerArgumentUnsupported'],
-    'a qualified Customizer.withDefaults() is not the short form, so it is not proven inert');
+  assert.deepEqual(verdicts(inert, 'GET /x'), ['applies', 'does-not-apply'], 'Spring\'s own Customizer.withDefaults(), named exactly, is inert');
   const short = (await pack(t, app({ security: security(`
   @Bean
   public SecurityFilterChain c(HttpSecurity http) throws Exception {
@@ -515,4 +514,165 @@ test('probe 8: POM evidence cites exact bytes after multibyte comments, includin
   assert.equal(f.reasonCode, 'sentinel.spring.versionUnsupported');
   const text = (await cited(unsupported.fx, { evidence: f.evidence.filter((e: any) => e.relativePath === 'pom.xml') })).join('\n');
   assert.ok(text.startsWith('<parent>') && text.endsWith('</parent>') && text.includes('<version>3.4.2</version>'), text);
+});
+
+// ---- review round 3 (SOL, ceb6655): builder escapes, composed annotations, inheritance, local parents ----
+
+const IMPORTS = `import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+`;
+const OPEN_BODY = `http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+    return http.build();`;
+const SECURE_CHAIN = `
+  @Bean
+  @Order(2)
+  public SecurityFilterChain secure(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated());
+    return http.build();
+  }`;
+
+test('round 3, probe 1a: a configurer callback that continues past disable() reaches the builder', needsStore, async t => {
+  const env = (await pack(t, app({ security: security(`
+  @Bean
+  public SecurityFilterChain c(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+        .csrf(c -> c.disable().removeConfigurer(org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer.class));
+    return http.build();
+  }`), routes: ROUTE_X }))).envelope;
+  assert.deepEqual(verdicts(env, 'GET /x'), ['unknown:sentinel.spring.configurerArgumentUnsupported', 'unknown:sentinel.spring.configurerArgumentUnsupported']);
+});
+
+test('round 3, probe 1b: an application method reference is opaque, even one that only looks like a configurer', needsStore, async t => {
+  const env = (await pack(t, app({ security: security(`
+  @Bean
+  public SecurityFilterChain c(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+        .csrf(SecurityConfig::relax);
+    return http.build();
+  }
+
+  static void relax(org.springframework.security.config.annotation.web.configurers.CsrfConfigurer<HttpSecurity> c) {
+    c.disable().removeConfigurer(org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer.class);
+  }`), routes: ROUTE_X }))).envelope;
+  assert.deepEqual(verdicts(env, 'GET /x'), ['unknown:sentinel.spring.configurerArgumentUnsupported', 'unknown:sentinel.spring.configurerArgumentUnsupported']);
+  // Spring's own AbstractHttpConfigurer::disable, imported exactly, is still inert.
+  const spring = (await pack(t, app({ security: security(`
+  @Bean
+  public SecurityFilterChain c(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+        .csrf(AbstractHttpConfigurer::disable);
+    return http.build();
+  }`).replace('import org.springframework.security.web.SecurityFilterChain;',
+    'import org.springframework.security.web.SecurityFilterChain;\nimport org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;'), routes: ROUTE_X }))).envelope;
+  assert.deepEqual(verdicts(spring, 'GET /x'), ['applies', 'does-not-apply']);
+});
+
+test('round 3, probe 2: a composed annotation meta-annotated with @Configuration registers its chains', needsStore, async t => {
+  const files = (annotationSource: Record<string, string>, annotationImport: string) => app({
+    security: security(SECURE_CHAIN),
+    routes: ROUTE_X,
+    extra: {
+      ...annotationSource,
+      'src/main/java/app/OpenChains.java': `package app;
+
+${IMPORTS}${annotationImport}
+@OpenConfiguration
+public class OpenChains {
+  @Bean
+  @Order(0)
+  public SecurityFilterChain open(HttpSecurity http) throws Exception {
+    ${OPEN_BODY}
+  }
+}
+`,
+    },
+  });
+  const captured = (await pack(t, files({ 'src/main/java/app/OpenConfiguration.java': `package app;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import org.springframework.context.annotation.Configuration;
+
+@Retention(RetentionPolicy.RUNTIME)
+@Configuration
+public @interface OpenConfiguration {}
+` }, ''))).envelope;
+  assert.deepEqual(verdicts(captured, 'GET /x'), ['does-not-apply', 'does-not-apply'], 'the earlier open chain of the composed configuration decides');
+  // The same annotation from a library the snapshot does not hold: its meaning is unknown, so the chain is too.
+  const external = (await pack(t, files({}, 'import com.example.lib.OpenConfiguration;\n'))).envelope;
+  assert.deepEqual(verdicts(external, 'GET /x'), ['unknown:sentinel.spring.chainRegistrationUnknown', 'unknown:sentinel.spring.chainRegistrationUnknown']);
+});
+
+test('round 3, probe 3: chains inherited from a superclass or an interface default method take part', needsStore, async t => {
+  const superclass = (await pack(t, app({
+    security: security(SECURE_CHAIN).replace('public class SecurityConfig {', 'public class SecurityConfig extends BaseSecurity {'),
+    routes: ROUTE_X,
+    extra: { 'src/main/java/app/BaseSecurity.java': `package app;
+
+${IMPORTS}
+public abstract class BaseSecurity {
+  @Bean
+  @Order(0)
+  public SecurityFilterChain open(HttpSecurity http) throws Exception {
+    ${OPEN_BODY}
+  }
+}
+` },
+  }))).envelope;
+  assert.deepEqual(verdicts(superclass, 'GET /x'), ['does-not-apply', 'does-not-apply'], 'the inherited earlier open chain decides');
+  const iface = (await pack(t, app({
+    security: security(SECURE_CHAIN).replace('public class SecurityConfig {', 'public class SecurityConfig implements OpenDefaults {'),
+    routes: ROUTE_X,
+    extra: { 'src/main/java/app/OpenDefaults.java': `package app;
+
+${IMPORTS}
+public interface OpenDefaults {
+  @Bean
+  @Order(0)
+  default SecurityFilterChain open(HttpSecurity http) throws Exception {
+    ${OPEN_BODY}
+  }
+}
+` },
+  }))).envelope;
+  assert.deepEqual(verdicts(iface, 'GET /x'), ['does-not-apply', 'does-not-apply'], 'the interface default bean decides');
+  const external = (await pack(t, app({
+    security: security(SECURE_CHAIN).replace('public class SecurityConfig {', 'public class SecurityConfig extends com.example.lib.Base {'),
+    routes: ROUTE_X,
+  }))).envelope;
+  assert.deepEqual(verdicts(external, 'GET /x'), ['unknown:sentinel.spring.chainInheritanceUnknown', 'unknown:sentinel.spring.chainInheritanceUnknown']);
+});
+
+test('round 3, probe 4: a parent POM resolved from a relative path is not trusted to be Boot\'s', needsStore, async t => {
+  const localParent = `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-parent</artifactId>
+  <version>3.4.3</version>
+  <packaging>pom</packaging>
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.security</groupId>
+        <artifactId>spring-security-bom</artifactId>
+        <version>6.3.0</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+</project>
+`;
+  for (const [name, pom] of [
+    ['a relative path to a captured parent', POM().replace('<relativePath/>', '<relativePath>parent/pom.xml</relativePath>')],
+    ['the default relative path', POM().replace('<relativePath/>', '')],
+  ] as const) {
+    const { envelope } = await pack(t, { ...ORDERED_CHAINS, 'pom.xml': pom, 'parent/pom.xml': localParent });
+    assert.equal(envelope.framework.version, null, name);
+    assert.ok(envelope.facts.every((f: any) => f.verdict === 'unknown' && f.reasonCode === 'sentinel.spring.versionUnresolved'), name);
+  }
 });

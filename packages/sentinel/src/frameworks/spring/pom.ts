@@ -82,6 +82,12 @@ export function pomScope(text: string, boot: string): PomVerdict {
   const parent = child(project, 'parent');
   const isBootParent = textOf(child(parent, 'groupId')) === 'org.springframework.boot' && textOf(child(parent, 'artifactId')) === 'spring-boot-starter-parent';
   if (!parent || !isBootParent) return { ok: false, reason: 'sentinel.spring.versionUnresolved', evidence: parent ? [parent] : [] };
+  // Maven resolves a parent from its relativePath first (default ../pom.xml): a local parent with the same coordinates
+  // could manage other versions. Only an explicit empty relativePath (repository lookup) is followed.
+  const relativePath = child(parent, 'relativePath');
+  if (!relativePath || textOf(relativePath) !== '' || relativePath.children.length) {
+    return { ok: false, reason: 'sentinel.spring.versionUnresolved', evidence: [parent] };
+  }
   const version = child(parent, 'version');
   if (!textOf(version)) return { ok: false, reason: 'sentinel.spring.versionUnresolved', evidence: [parent] };
   if (textOf(version) !== boot) return { ok: false, reason: 'sentinel.spring.versionUnsupported', evidence: [parent] };

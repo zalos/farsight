@@ -304,6 +304,7 @@ try {
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
     <version>3.4.3</version>
+    <relativePath/>
   </parent>
   <groupId>example</groupId>
   <artifactId>smoke</artifactId>

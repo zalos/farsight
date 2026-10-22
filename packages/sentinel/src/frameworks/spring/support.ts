@@ -1,13 +1,14 @@
 // What the Spring pack models, stated as data. It is part of the pack digest, so a change to the supported subset
 // invalidates every fact computed under the old one. Anything not listed here is reported as unknown with a reason.
 export const SPRING_SUPPORT = Object.freeze({
-  versions: Object.freeze({ springBoot: '3.4.3', springSecurity: '6.4.3', source: 'pom.xml read as XML structure: spring-boot-starter-parent 3.4.3; no profiles, modules, managed dependencies, Spring version properties or explicit Spring Security versions' }),
+  versions: Object.freeze({ springBoot: '3.4.3', springSecurity: '6.4.3', source: 'pom.xml read as XML structure: spring-boot-starter-parent 3.4.3 looked up from the repository (an empty relativePath); no profiles, modules, managed dependencies, Spring version properties or explicit Spring Security versions' }),
   stack: 'servlet',
   notSupported: Object.freeze(['webflux', 'gradle builds', 'version overrides', 'XML configuration', 'WebSecurityConfigurerAdapter']),
   chains: Object.freeze({
     registration: '@Bean method returning SecurityFilterChain or DefaultSecurityFilterChain (any qualified spelling), taking HttpSecurity, in a component class Spring Boot\'s default scan registers: the single @SpringBootApplication package and below; any other scan or import makes outside classes unknown',
     candidates: 'any other @Bean whose type ends in FilterChain is an unknown candidate, never omitted',
-    body: 'fluent calls on the HttpSecurity parameter, then return <http>.build(); configurer arguments must be inert (a lambda calling only its own parameter, a method reference, withDefaults(), literals)',
+    names: 'types and annotations resolve through imports, the package and qualified names in captured source; composed annotations, superclasses and interface default @Bean methods are followed in captured source; anything else is unknown, and an unknown chain sorts first',
+    body: 'fluent calls on the HttpSecurity parameter, then return <http>.build(); configurer arguments must be inert (a lambda calling only its own parameter that never continues past disable(), Spring\'s own AbstractHttpConfigurer::disable or FrameOptionsConfig references, Spring\'s withDefaults(), Spring constants, literals)',
     anonymous: 'default ROLE_ANONYMOUS principal, anonymous(disable) or customised (unknown)',
     order: '@Order with a literal integer; none means lowest precedence; equal orders that could both match are ambiguous',
     activity: '@Profile with plain names or !name (class and method); @Conditional* is unknown',

@@ -715,9 +715,14 @@ attribute or auto-configuration registration makes classes outside that scan `un
 (`sentinel.spring.componentScanUnresolved`). A class Spring does not register enables nothing, so
 `@EnableMethodSecurity` must sit on a registered `@Configuration` or `@SpringBootApplication` class. Every `@Bean`
 whose type is a `SecurityFilterChain`, in any qualified spelling, is a chain. Any other `…FilterChain` bean is an
-unknown candidate, never omitted. A chain's configurer arguments must be provably inert: a lambda that only configures
-its own parameter, a method reference, `withDefaults()` or literals. Anything that could reach the `HttpSecurity`
-again (for example `removeConfigurer`) makes the chain unknown.
+unknown candidate, never omitted. Names resolve through imports, the package and qualified names in captured source:
+composed annotations, superclasses and interface default `@Bean` methods are followed there, and anything resolved
+outside Java's or Spring's own types is unknown. A chain the pack cannot see or place sorts ahead of every known one.
+A chain's configurer arguments must be provably inert: a lambda that only configures its own parameter and never
+continues past `disable()` (which returns the builder); Spring's own `AbstractHttpConfigurer::disable`; Spring's
+`withDefaults()`; Spring constants; or literals. An application method reference, or anything that could reach the
+`HttpSecurity` again (for example `removeConfigurer`), makes the chain unknown. The parent POM must be looked up from
+the repository (an empty `relativePath`); a relative parent could manage other versions.
 
 **Roles and the anonymous principal.** A role or authority check is always authorization. It is authentication only
 when the anonymous principal Spring gives unauthenticated requests cannot hold any authority it admits. By default that
