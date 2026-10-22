@@ -44,6 +44,10 @@ export interface DriverContext {
   readonly inputScopes: readonly { readonly input: ArtifactId; readonly scopes: readonly string[] }[];
   /** The rules of exactly this unit's checks, resolved under the pinned lock; empty when no pack bytes were given. */
   readonly rules: readonly RuleFiles[];
+  /** The tools the plan pins for this unit's adapter (the lock's entry: version and image or artifact digest). */
+  readonly tools: readonly { readonly adapterId: Id; readonly artifactDigest: Digest }[];
+  /** The advisory databases the plan pins, as admitted owner copies, each verified against its snapshot digest. */
+  readonly databases: readonly { readonly databaseId: Id; readonly snapshotDigest: Digest; readonly path: string }[];
   /** Where the pinned snapshot is restored for this drive. */
   readonly restored: string | null;
   /** A private folder for this attempt's prepared files; removed with the attempt. */
@@ -64,12 +68,29 @@ export interface NormalizedOutcome {
   readonly records: readonly { readonly value: unknown; readonly schema: string }[];
 }
 
+export interface VerifiedAttempt {
+  readonly result: ResultMessage;
+  readonly outputs: readonly VerifiedOutput[];
+  readonly workDir: string;
+  /** The job prepare returned (as stored with the attempt's start). */
+  readonly job: unknown;
+  /** A verified output's bytes by id. */
+  output(id: ArtifactId): Uint8Array;
+  /** The attempt's sealed copy of an input (source, job or auxiliary) by id, or undefined. */
+  sealed(id: ArtifactId): Uint8Array | undefined;
+}
+
 export interface CheckDriver {
   readonly adapterId: Id;
   /** The registered adapter's digest this driver is written for; any other digest is refused. */
   readonly implementationDigest: Digest;
+  /**
+   * The exact rule revisions this driver's engine runs, by their pinned definition digest. A plan whose checks name
+   * any other rule for this adapter is refused before anything runs: no arbitrary rule can claim coverage.
+   */
+  supportedRules(): readonly { readonly familyId: string; readonly revision: number; readonly definitionDigest: Digest }[];
   prepare(context: DriverContext): Promise<PreparedJob>;
-  normalize(context: DriverContext, verified: { readonly result: ResultMessage; readonly outputs: readonly VerifiedOutput[]; readonly workDir: string }): Promise<NormalizedOutcome>;
+  normalize(context: DriverContext, verified: VerifiedAttempt): Promise<NormalizedOutcome>;
 }
 
 export interface CheckDriverRegistry {
@@ -87,7 +108,7 @@ const refuse = (reason: string): never => { throw new ExecutionError('sentinel.e
 export function createCheckDriverRegistry(list: readonly CheckDriver[], registry: AdapterRegistry): CheckDriverRegistry {
   const byId = new Map<Id, CheckDriver>();
   for (const d of list) {
-    if (!d || typeof d.prepare !== 'function' || typeof d.normalize !== 'function') refuse('a driver has prepare and normalize');
+    if (!d || typeof d.prepare !== 'function' || typeof d.normalize !== 'function' || typeof d.supportedRules !== 'function') refuse('a driver has supportedRules, prepare and normalize');
     if (!registry.ids.includes(d.adapterId)) refuse(`driver for ${d.adapterId}: the adapter is not registered`);
     const adapter = registry.get(d.adapterId);
     if (adapter.kind === 'operation') refuse(`driver for ${d.adapterId}: an operation runs no check`);
@@ -103,3 +124,23 @@ export function createCheckDriverRegistry(list: readonly CheckDriver[], registry
 export const isCheckDriverRegistry = (v: unknown): v is CheckDriverRegistry => typeof v === 'object' && v !== null && drivers.has(v);
 
 export const fileDigest = (path: string): Digest => `sha256:${createHash('sha256').update(readFileSync(path)).digest('hex')}`;
+
+/**
+ * Every check unit of the plan runs through a driver, and every rule its checks name is one its driver supports at
+ * exactly the pinned definition digest. Returns the reason the plan cannot run, or undefined.
+ */
+export function driverRefusal(plan: Readonly<PlanEnvelope>, registry: CheckDriverRegistry): string | undefined {
+  const pins = new Map(plan.pins.rules.map(r => [`${r.familyId}@${r.revision}`, r]));
+  for (const u of plan.units) {
+    if (u.stage !== 'check' || u.adapterId === null) continue;
+    const d = registry.driverFor(u.adapterId);
+    if (!d) return `adapter ${u.adapterId} has no trusted driver`;
+    const supported = new Set(d.supportedRules().map(r => `${r.familyId}@${r.revision}@${r.definitionDigest}`));
+    for (const id of u.checks) {
+      const c = plan.checks.find(x => x.id === id)!;
+      const pin = pins.get(`${c.familyId}@${c.ruleRevision}`);
+      if (!pin || !supported.has(`${pin.familyId}@${pin.revision}@${pin.definitionDigest}`)) return `the driver for ${u.adapterId} does not run rule ${c.familyId} revision ${c.ruleRevision} at its pinned definition`;
+    }
+  }
+  return undefined;
+}

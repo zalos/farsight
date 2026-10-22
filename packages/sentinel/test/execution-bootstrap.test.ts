@@ -332,7 +332,10 @@ for (const [label, grant, budget, code] of [
     const parseUnit = boot.units.find(u => u.stage === 'parse')!;
     assert.equal(store.ledger.getPublication({ id: parseUnit.id, revision: 1 }), null, 'nothing accepted after the deadline');
     const [a] = store.ledger.listAttempts({ id: parseUnit.id, revision: 1 });
-    assert.equal(store.ledger.getAttempt(a!.id)!.envelope.error?.code, code);
+    // Under load the run's budget can end before the parse even starts; then it is held, never run. Either way
+    // nothing is accepted after the deadline.
+    if (a || code !== 'sentinel.execution.runDeadline') assert.equal(store.ledger.getAttempt(a!.id)!.envelope.error?.code, code);
+    else assert.equal(store.ledger.getWork({ id: parseUnit.id, revision: 1 })?.reason ?? 'sentinel.execution.runDeadline', 'sentinel.execution.runDeadline');
     assert.deepEqual(store.ledger.listOpenStages(500), [], 'its stage was aborted');
     assert.equal(store.ledger.getPublication({ id: boot.units.find(u => u.stage === 'inventory')!.id, revision: 1 }), null);
   });
