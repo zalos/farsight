@@ -79,7 +79,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/assets.js': ['node:fs', 'node:path', 'node:url'],
   'execution/bootstrap.js': ['node:fs', 'node:path'],
-  'execution/coordinator.js': ['node:crypto', 'node:fs'],
+  'execution/check-drivers.js': ['node:crypto', 'node:fs'],
+  'execution/coordinator.js': ['node:crypto', 'node:fs', 'node:path'],
   'execution/coverage.js': ['node:crypto'],
   'execution/durability.js': ['node:fs'],
   'execution/plan.js': ['node:crypto', 'node:path'],
