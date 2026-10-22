@@ -651,8 +651,8 @@ no lock. **Not in this decision:** the full report and finding policy (PR 19); p
 protocol, which would let a unit cover several files. Same-account code is outside this boundary, as for the store.
 
 
-**(Number to be assigned at integration.) The pattern engine runs behind an original protocol shim inside its
-pinned image, and coverage is per file per rule only where the engine timed the rule (2026-10-22).**
+26. **The pattern engine runs behind an original protocol shim inside its pinned image, and coverage is per file per
+rule only where the engine timed the rule (2026-10-22).**
 
 Semgrep 1.181.0 cannot speak the `sentinel-worker` protocol, and PR 07 hands an external worker its inputs only as
 content-addressed blobs (`/input/<digest>`, no paths) with a fixed environment. Rather than add a second execution path
@@ -671,8 +671,16 @@ distinct and cross-file traces are refused. **Coverage:** the engine's `paths.sc
 on a file (its file prefilter skips rules whose required text is absent), so `--time` match times are the evidence: a
 rule is `complete` on a file only with a non-zero match time, `not-run` with zero, `partial` when an engine-reported
 timeout names that rule, and `not-established` when timing is missing; a requested file neither scanned nor skipped is
-`omitted` even on exit zero. **Platforms:** the pinned reference is a multi-platform index; only linux/arm64 is measured
-(darwin-arm64, Docker Desktop), and results from another image architecture are refused until measured natively.
+`omitted` even on exit zero. A zero match time stays a required-coverage gap: no policy option turns absence of execution evidence
+into completion, and accepting a prefilter as proof would need its exact qualified semantics and independent fixtures.
+**Diagnostics:** engine stderr can quote arguments, paths and source text, so the shim forwards it only when the engine
+fails, keeping usage/error lines with quoted spans, target paths and every non-word token replaced, printable ASCII,
+eight lines and 512 bytes at most. **Platforms:** the pinned reference is a multi-platform index; only linux/arm64 is
+measured (darwin-arm64, Docker Desktop), and results from another image architecture are refused. The opt-in
+`sentinel-pattern-qualification` workflow measures linux/amd64 on a native runner, where results are accepted only as
+`candidate`; a green run is the evidence for marking it measured. **Package:** the tarball ships the pack and the worker
+with a digest/rights manifest, but no export can invoke the adapter: the package gate is partial until the PR 09 command
+runs the installed adapter, and the consumer test's engine run uses the workspace service on the installed assets.
 **Rules** come from PR 06's resolved, pinned rules through `patternRulesFromResolved`, which accepts only rules this
 adapter can run faithfully (source-file scope, no framework, source bytes / pattern match / source span, TS/JS/Java),
 checks detector bytes against the pinned pack digest, and returns every other rule as an explicit unsupported check.
