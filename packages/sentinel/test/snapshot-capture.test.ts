@@ -438,11 +438,11 @@ test('source capture and the implemented scanner slice are draft capabilities; l
   const capture = CAPABILITIES.find((c: any) => c.id === 'source-capture');
   assert.deepEqual([capture?.state, capture?.reasonCode], ['available-draft', 'sentinel.capability.draftCapture']);
   assert.ok(STRINGS['sentinel.capability.draftCapture']?.define);
-  for (const id of ['secrets-scan', 'framework-next', 'framework-express', 'framework-nest', 'framework-spring', 'interprocedural-flow', 'dispositions', 'model-review', 'mcp', 'farsight-host-bridge', 'gui', 'replay-bundles']) {
+  for (const id of ['framework-next', 'framework-nest', 'framework-spring', 'interprocedural-flow', 'dispositions', 'model-review', 'mcp', 'farsight-host-bridge', 'gui', 'replay-bundles']) {
     assert.equal(CAPABILITIES.find(c => c.id === id)?.state, 'unavailable', id);
   }
-  for (const id of ['pattern-scan', 'dependency-advisories', 'infrastructure-ci-checks']) assert.equal(CAPABILITIES.find(c => c.id === id)?.reasonCode, 'sentinel.capability.pinnedScanners', id);
-  assert.deepEqual(CAPABILITIES.filter((c: any) => c.state !== 'unavailable').map((c: any) => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'reports']);
+  for (const id of ['pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks']) assert.equal(CAPABILITIES.find(c => c.id === id)?.reasonCode, 'sentinel.capability.pinnedScanners', id);
+  assert.deepEqual(CAPABILITIES.filter((c: any) => c.state !== 'unavailable').map((c: any) => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'reports']);
 });
 
 test('restore recreates empty folders and never an execute bit; the materialization keeps the original as provenance', needsStore, async t => {

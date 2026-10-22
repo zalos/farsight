@@ -714,7 +714,7 @@ in the production registry, the planner's batching, the scan command (PR 09), an
 where the engine proves it matched (2026-10-22).**
 
 `src/adapters/osv/` runs OSV-Scanner 2.7.0 (`ghcr.io/google/osv-scanner@sha256:4f3b7e2c…69fcd0`, Apache-2.0, official
-multi-platform index; linux/arm64 measured, linux/amd64 listed and unmeasured) through PR 07's isolated execution
+multi-platform index; linux/arm64 and linux/amd64 measured) through PR 07's isolated execution
 service only. **Acquisition is separate:** the only network step is `acquireAdvisorySnapshots`, an owner action
 (`tool.acquire`) confirmed by a spent receipt for exactly the request (ecosystems, URLs, size bound). It fetches only
 `https://osv-vulnerabilities.storage.googleapis.com/<npm|Maven>/all.zip`, refuses redirects and anything over the stated
@@ -744,8 +744,9 @@ came from the snapshot (same captured bytes) or the source, and reports `unknown
 component (a failed run is never a resolution). A component the adapter refuses (another ecosystem, malformed) keeps its
 file `partial`. Advisory text is not kept. Package matches never claim
 reachability. **Not decided here:** registering the adapter, the planner's scheduling of acquisition and scans, the
-command (PR 09) and shipping no database in the package. linux/amd64 is measured only by the
-`sentinel-osv-qualification` workflow on a native runner; until a green run is recorded it stays a candidate.
+command (PR 09). No database ships in the package. Native linux/amd64 qualification passed
+[21 tests with zero skips and the installed worker](https://github.com/zalos/farsight/actions/runs/39788785215);
+the adapter records that evidence, and the workflow rechecks the pinned image on affected changes.
 
 33. **Sentinel checks infrastructure configuration with Trivy's misconfiguration scanner only, against one pinned checks
     bundle, and needs the engine's own evidence for every covered file (2026-10-22).** `src/adapters/trivy/` (PR 13)
@@ -841,6 +842,100 @@ shared required-coverage evaluator. Normalized observations and per-check covera
 provenance and shared scoped counts. Regeneration needs neither source checkout nor scanner assets. Full finding
 policy, placement, framework/model integration and complete reports remain subsequent work; no command in this
 slice declares policy satisfaction. Actual verified worker outcomes retain architecture qualification authority.
+28. **Sentinel's secret scan keeps the detector and whole lines, never the value, and a failed scan is never clean (2026-10-22).**
+PR 11 scans captured current-tree bytes with Gitleaks 8.30.1 (MIT) through the PR 07 execution service only: an
+external adapter, the official multi-platform image index pinned by digest (`ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0…`),
+installed ahead of time and never pulled at scan time, no host fallback (`src/adapters/gitleaks/`). **Shape:** Gitleaks
+cannot speak the worker protocol, so an original POSIX shell shim does, inside the unmodified image (alpine: busybox
+sh and applets). The shim runs as `/bin/sh /input/<its digest>`; the adapter digest
+pins it, and with it the configuration and report template it writes. Image architecture authority comes from the
+supervisor-verified outcome and the pinned platform manifest. Qualification is bound to the recorded engine evidence;
+the changed canonical command path must also pass its selected native CI gate. **Inputs:** the shim, a
+line job (`F <index> <content> <path>`) and each captured content once, in any order (the canonical coordinator lists
+captured sources first, then its job record and the auxiliary worker and job). The shim takes as its job the one input
+that is neither itself nor a captured source the start's `inputScopes` names, and whose first line is the job header:
+a captured file shaped like a job is scanned as a source, never read as the job, and without `inputScopes` two
+job-shaped inputs are refused (`inputInvalid`), not guessed. The run record names the job digest it read, which the
+coordinator's normalization requires to be the job it sealed. Files over 8 MiB, names with a line break or
+another control character, and paths the release's own global allowlist skips — the file or any folder above it,
+since the engine prunes a matching folder whole (measured: `images.png/`, `package-lock.json/`, `node_modules/`) —
+are not sent; each is a skipped scope with its reason, never a silent omission. The allowlist patterns are matched in
+JavaScript's Unicode mode (`u`; RE2's `(?i)` as `iu`), because RE2 folds case by Unicode simple case folding (`ſ` with
+`s`, the Kelvin sign with `k`) and ASCII-only folding missed paths the engine skips; a real-engine test holds the host's
+skips equal to the engine's over a case-folding corpus. **No repository control:** the shim rebuilds the tree one folder below the
+scan root, so a captured root `.gitleaksignore` is an ordinary scanned file; Gitleaks gets the pinned configuration
+(the release's built-in rules, nothing allowed), an empty ignore folder, `--ignore-gitleaks-allow` and no baseline.
+Measured by a direct probe of the pinned image (2026-10-22): the same root ignore file suppresses a finding when the tree is the scan root, and
+nothing under the shim's layout. **Redaction:** Gitleaks runs with full redaction and renders its findings through the
+pinned template (rule, lines, file); inside the container an awk pass replaces each file with its job index and the
+rendering is deleted, so the report that leaves carries no path. Its stdout is discarded and its stderr stays in the
+tmpfs, only its digest leaving. The coordinator accepts a report line only as `F, rule, start, end, index` or
+`P, rule, line, line`, the rule one of the 222 the pinned default configuration defines (`rules.ts`, generated from
+the release's own `config/gitleaks.toml`), then builds each observation from a closed field list: the rule, a
+captured file, a whole-line byte span read from the sealed input copy, a fixed message and fixed limitation keys.
+**No path is exported (contract, draft):** a name can hold a secret no detector recognises out of context (a value
+assigned in one file and used as another file's name), so the scan withholds every path rather than judging names.
+Observation evidence is a union: ordinary `SourceEvidence` (unchanged, with `relativePath`) or
+`WithheldLocationEvidence` `{ location: 'withheld', snapshotId, sourceId, entry, content, span }`, where `entry` is
+the cited file's index in the snapshot's `entries`. The schema makes the two exclusive (a withheld citation carries no
+path; an ordinary one cannot claim `location`), and the validator checks a path only on an ordinary one. Every
+secret-scan observation uses the withheld form; scanned, skipped and error scopes are `<sourceId>#entry:<n>` (a source
+ID has no `#`). `resolveWithheldLocation(snapshot, evidence)` (`snapshot/locations.ts`) is the one way back to a path:
+one bounded lookup that resolves only when snapshot, source, entry kind (an included file) and content all agree, so
+two files with the same bytes resolve to their own entries; anything else is `sentinel.capture.locationUnresolved`.
+Exact paths stay in the private snapshot and the private job; the scan's targets name entries, and their paths and
+digests are taken from the snapshot, never from the caller. The shim also writes every name to `scan/paths.txt` beside
+the tree so the same engine screens names; a name it matches is itself a finding (`sentinel.secrets.nameMatch`, a
+zero-length span: the value is not in the content). **Failure:** an engine error, a kill, a missing, oversized, malformed or inconsistent report (exit code and findings
+disagree), an unknown rule or file, lines a file does not have, an unmeasured platform, or a refused job makes the scan
+an `error` over every target with a coded reason; the shim itself reports only a catalog code. **Audit:** the result
+names the engine, adapter digest, image reference and id, platform, configuration and default-rules digests, the shim,
+job and invocation digests, the exit code, and the stderr and report digests. **Packaging:** `scripts/package-assets-gitleaks.mjs`
+ships the shim and a digest/rights manifest as `farsight-sentinel/assets/gitleaks/*`; no image, binary or report ships.
+**Canonical command integration:** the owner promotes the original repository-scoped pack and explicitly adopts the
+pinned image. The admitted snapshot supplies every included source entry; identical content is sealed once while
+findings retain distinct entry identities. The driver preserves the verified supervisor outcome, validates sealed
+job/output digests, and publishes normalized findings with canonical per-check coverage in one accepted attempt.
+Omissions stay partial and failed scans cover nothing. `run.start` requires the plan's `tool-execution` effect.
+Captured names and source-derived job/invocation records remain private; public citations and scopes withhold paths.
+**Not decided here:** Git history scanning, finding policy and replay-bundle command acceptance. **Cost:** a location is whole lines, so a long line cites more than the match; the release's per-rule
+allowlists and stop words are detector semantics and part of the pin; a path whose file is also another's folder is
+refused rather than partly scanned.
+
+
+31. **Sentinel's Express pack reads registration order from source and never credits a refusal as authentication or authorization (2026-10-22).**
+`farsight-sentinel/frameworks/express` (PR 15) answers, for each Express route the public parser found, what runs
+before its handler and whether anything there can refuse the request, for exactly Express 4.21.2. It reads only captured
+source with Oxc; it installs, builds and runs nothing, and leaves the structural graph unchanged (its surfaces are the
+parser's route nodes, its registrations are re-derived from syntax). The version must be pinned exactly in the root
+manifest, or be a range the npm lockfile written for it resolves to exactly 4.21.2; overrides, another lockfile with a
+range or a path alias for `express` leave every fact unknown and `framework.version` null, and so does any registration
+on a route's path that sits under a nested package manifest. Every route the pack discovers is reconciled with the
+parser's surfaces: a `route()` chain, an `all()` route or a route on an object the parser does not index is a frontier
+(`registrationUnsupported` or `routeNotInGraph`), never a silent omission.
+Applications and routers are top-level `express()` / `Router()` constants; their layers are the top-level
+`use`, method, `all`, `route` and `param` statements of their own module, in order. Any other use of the object — a
+registration inside a function, branch or loop, the object handed to other code or registered on from another module —
+makes it open, and every route it could reach is unknown (`sentinel.express.registrationDynamic`): a skipped branch is
+never read as either outcome. Dispatch is simulated as Express runs it: for a route's effective path (mount paths
+joined, case-insensitive, non-strict), the matching layers registered before it on the application and on every router
+on its path, earlier routers whose prefix matches (their own layers), earlier routes matching the same method and path,
+then the route's own handlers before the last. A layer registered after the route is never on its path, so late
+middleware cannot clear a finding. A partial match is unknown, not either side. Middleware effects come from bodies,
+never names: a non-async `(req, res, next)` whose body is one guarded refusal with a literal 401 or 403 on a request
+value, then `next()`; a pass-through; or an error handler. A refusal is cited as evidence at its position but never
+credited: its status code and the request value it reads (which the client may control) do not establish a principal
+or a permission, so both properties stay unknown there (`sentinel.express.refusalUnproven`). Everything else —
+third-party or unresolved functions, `next('route')`/`next('router')`, async bodies, param callbacks, router options or
+routing settings that change matching, sub-applications — is unknown with its reason. Because Express skips ordinary
+layers after an error until an error handler, a refusal followed by an error handler that may resume with `next()`, or
+by a layer whose arity is unknown, is unknown (`sentinel.express.errorPathResumes`). Facts per route and property:
+never `applies`; `unknown` at each refusal and each unreadable position; and `does-not-apply` at the handler's
+position only when every earlier layer was read and none can refuse. Node's `require` is read only where the file does
+not bind its own, and only Node's `http`/`https` `createServer` may receive an application without opening it. Proving
+a principal or permission would need the provenance of the value a refusal reads, which this pack does not model; it is a draft, source-only capability until PR 09 wires it into a
+scan. Reason words are `strings-sentinel-express.ts`.
+
 
 38. **Sentinel reports are one pinned document, rendered offline, placed only through a proven application context (2026-10-22).**
 PR 19 adds `farsight-sentinel/findings` and `farsight-sentinel/reports`. **Identity:** observations are never

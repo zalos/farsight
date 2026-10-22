@@ -57,7 +57,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   runs in the optional, path-filtered CI job, while Echo unit tests remain in required validation.
 
 - `packages/sentinel` — optional security review package (ADR 18). Draft contracts and generated schemas, and a
-  local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The explicit scanner CLI composes pattern, dependency, infrastructure and CI adapters; model runtime is not implemented. `src/store/index.ts` is the store's
+  local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The explicit scanner CLI composes pattern, current-tree secrets, dependency, infrastructure and CI adapters; model runtime is not implemented. `src/store/index.ts` is the store's
   public facade (`openStore`, also re-exported from the root and as `./store`); behind it `runtime.ts` (the SQLite
   release gate), `paths.ts` (canonical, local, owner-only folders), `owner.ts` (the lifetime owner lock and epoch),
   `ledger.ts` + `migrations.ts` + `store-types.ts` (the fenced WAL ledger), `objects.ts` (content-addressed objects),
@@ -89,26 +89,35 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   the unexported `owner-receipts.ts` (issue one; owner CLI only), `admission.ts` (the three verdicts over core
   `decideGrants`) and `user-state.ts` (owner-only files); `src/contracts/controls.ts` is the framework control-fact
   contract PRs 14–17 emit; the reason codes are `strings-sentinel-policy.ts`; `test/rules-policy.test.ts` covers them.
-
+  Current-tree secret scanning (ADR 28), `src/adapters/gitleaks/`: `adapter.ts` (the Gitleaks 8.30.1 pins, the
+  configuration and report template, the shim build and support statement), `worker-source.ts` (the original POSIX
+  shell shim the official image runs), `rules.ts` (rule IDs and global allowlist paths generated from the release's
+  default configuration by `scripts/generate-gitleaks-rules.mjs`), `job.ts` (what is sent, what is a skipped scope),
+  `normalize.ts` (the run record and report read into redacted observations and coverage) and `run.ts` (one attempt
+  through the execution service); `scripts/package-assets-gitleaks.mjs` ships the shim; its words are
+  `strings-sentinel-secrets.ts`; `test/secrets-gitleaks.test.ts` always runs, `test/secrets-conformance.test.ts` runs
+  the pinned engine with `SENTINEL_ISOLATION=1`.
   `src/adapters/sealed-input.ts` reads an attempt's sealed input copies by artifact id for every external adapter.
-  `src/adapters/trivy/` is the Trivy misconfiguration adapter (PR 13, ADR 33), internal until integration:
+  `src/adapters/trivy/` is the Trivy misconfiguration adapter (PR 13, ADR 33), composed by the scanner CLI:
   `adapter.ts` (pins, arguments, support), `bundle.ts` (owner-confirmed checks-bundle acquisition and verified
   loading), `job.ts` (which captured files are sent, and why not), `worker-source.ts` (the in-container shell
   worker), `normalize.ts` (findings and per-file coverage), `run.ts` and `errors.ts` (words: `strings-sentinel-trivy.ts`);
   `scripts/package-assets-trivy.mjs` stages its worker and manifest, `scripts/acquire-trivy-checks.mjs` is the owner's
   acquisition step; `test/trivy-adapter.test.ts` and `test/trivy-conformance.test.ts` (real engine) cover it.
-  `src/adapters/zizmor/` is the zizmor CI-configuration adapter (PR 13, ADR 34), internal until integration, with the
+  `src/adapters/zizmor/` is the zizmor CI-configuration adapter (PR 13, ADR 34), composed by the scanner CLI, with the
   same `adapter`/`job`/`worker-source`/`normalize`/`run`/`errors` split (words: `strings-sentinel-zizmor.ts`);
   `scripts/package-assets-zizmor.mjs` stages its worker; `test/zizmor-adapter.test.ts` and
   `test/zizmor-conformance.test.ts` (real engine) cover it; `test/iac-helpers.ts` and `test/fixtures/iac/` serve both.
-  `src/adapters/drivers/` is the internal production bridge for Pattern, OSV, Trivy and zizmor: `canonical.ts`
+  `src/adapters/drivers/` is the internal production bridge for Pattern, OSV, Trivy, zizmor and Gitleaks: `canonical.ts`
   binds the one coordinator driver contract, sealed source scopes, exact job and same-attempt findings/coverage;
   `kernels.ts` and each scanner module compose the existing adapter normalizers without starting work. `common.ts`
   binds supported family/revision/definition digests and constructs explicit coverage facts. Original rule packs live
-  under `rules/{pattern,advisories,infrastructure,ci}`; `scripts/package-assets-drivers.mjs` stages the three added
+  under `rules/{pattern,advisories,infrastructure,ci,secrets}`; `scripts/package-assets-drivers.mjs` stages the added
   packs and their digest manifest. Tests `drivers-canonical.test.ts` exercise real planning, bootstrap and container
   publication; `drivers-boundary.test.ts` checks outcome identity, scoped sealed reads and source-derived privacy.
-  Public CLI capability registration remains separate integration work.
+  Public scanner commands use this registry only with owner-adopted pinned assets; framework library APIs remain
+  separate from scanner command integration. Gitleaks uses `gitleaks.ts` to bind repository entries and withheld
+  locations to the admitted snapshot while keeping per-entry omissions explicit.
   `src/planner/` is the pure deterministic planner (PR 06, ADR 24), exported as `./planner`: `planner.ts`
   (`planBootstrap`, `planAnalysis`, `checkWorkGraph`, the surface vocabulary), `adapters.ts` (inputs from the rule
   lock and validated packs, the effective policy, the snapshot and parser evidence), `boundary.ts` (canonical work
@@ -136,6 +145,15 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   (offline, no script, CSP), `sarif.ts` and `index.ts` (`generateReport`). Words in core's
   `strings-sentinel-findings.ts`; tests in `test/findings-compare.test.ts` and `test/reports.test.ts`.
   `test/store-integration.test.ts` drives the facade end to end across processes. Depends only on graph, code-parser and core; nothing in the
+
+  `sentinel-pattern-qualification` workflow).
+  `src/frameworks/express/` is the Express 4.21.2 pack (PR 15, ADR 31), exported as `./frameworks/express`:
+  `syntax.ts` (Oxc over captured bytes, exact UTF-8 spans), `modules.ts` (bindings, imports, exports, relative
+  resolution), `model.ts` (applications, routers, layers in order, open objects), `effects.ts` (refusal, pass-through,
+  error-handler bodies), `patterns.ts` (Express 4 path and method matching), `version.ts` (manifest and npm lockfile),
+  `pack.ts` (`analyzeExpress`: dispatch simulation into `sentinel-controls/draft-1` facts) and `support.ts`; words in
+  core's `strings-sentinel-express.ts`, tests in `test/framework-express.test.ts`.
+  Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the
   manifest's `bin` and root export; `scripts/test-sentinel-package.mjs` installs it into a clean npm consumer and

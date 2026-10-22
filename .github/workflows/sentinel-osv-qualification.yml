@@ -78,6 +78,7 @@ jobs:
       - name: Install the packed tarball and run its shipped OSV worker
         env:
           SENTINEL_ISOLATION: '1'
+          SENTINEL_PACKAGE_ENGINE: osv
         run: |
           set -o pipefail
           pnpm pack:sentinel

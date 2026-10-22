@@ -54,6 +54,10 @@
       "types": "./dist/reports/index.d.ts",
       "import": "./dist/reports/index.js"
     },
+    "./frameworks/express": {
+      "types": "./dist/frameworks/express/index.d.ts",
+      "import": "./dist/frameworks/express/index.js"
+    },
     "./schemas/*": "./schemas/*",
     "./package.json": "./package.json"
   },
@@ -75,6 +79,7 @@
     "@farsight/core": "workspace:*",
     "@farsight/graph": "workspace:*",
     "@types/node": "26.1.0",
-    "ajv": "8.20.0"
+    "ajv": "8.20.0",
+    "oxc-parser": "0.138.0"
   }
 }

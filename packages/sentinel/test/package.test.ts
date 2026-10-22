@@ -22,7 +22,8 @@ test('the package is optional, private and exports only files that exist', () =>
   assert.match(manifest.version, /-draft\./);
   // core supplies the shared catalog (and later counts/placement/grants); @types/node because the public store
   // declarations name Node built-ins. No scanner, container client or model SDK dependency.
-  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', 'ajv']);
+  // oxc-parser (the version the public parser pins) because the Express pack reads source syntax itself (ADR 31).
+  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', 'ajv', 'oxc-parser']);
   assert.equal(manifest.bin['farsight-sentinel'], './dist/cli.js');
   for (const [key, target] of Object.entries(manifest.exports as Record<string, any>)) {
     if (key.includes('*')) continue;
@@ -79,6 +80,11 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/zizmor/job.js': ['node:crypto', 'node:fs', 'node:path'],
   'adapters/zizmor/normalize.js': ['node:crypto'],
   'adapters/zizmor/run.js': ['node:fs', 'node:path'],
+  // The Gitleaks secret-scan adapter (PR 11): hashing and its own job files; the engine runs through execution/.
+  'adapters/gitleaks/adapter.js': ['node:crypto'],
+  'adapters/gitleaks/job.js': ['node:crypto', 'node:fs', 'node:path'],
+  'adapters/gitleaks/normalize.js': ['node:crypto'],
+  'adapters/gitleaks/run.js': ['node:fs', 'node:path'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/assets.js': ['node:fs', 'node:path', 'node:url'],
   'execution/bootstrap.js': ['node:fs', 'node:path'],
@@ -166,6 +172,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'reports/document.js': ['@farsight/core/dist/strings.js', '@farsight/graph', 'node:crypto'],
   'reports/index.js': ['@farsight/graph'],
   'reports/place.js': ['@farsight/core/dist/affected.js', '@farsight/core/dist/impact.js', '@farsight/core/dist/journeys.js', '@farsight/core/dist/query.js'],
+  // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
+  'frameworks/express/pack.js': ['@farsight/graph', 'node:crypto'],
+  'frameworks/express/syntax.js': ['dynamic:oxc-parser'],
   'snapshot/worktree.js': ['node:fs'],
 };
 
@@ -201,6 +210,10 @@ test('the library imports only its reviewed modules, and nothing that could star
     ['spawn(process.execPath']);
   assert.match(launch, /shell: false/);
   assert.match(launch, /'serve', '--workspace'/);
+  // The Gitleaks adapter starts nothing itself: its worker is shell text the container runs.
+  for (const f of ['adapter', 'job', 'normalize', 'run', 'rules', 'worker-source', 'index']) {
+    assert.doesNotMatch(readFileSync(`${dist}adapters/gitleaks/${f}.js`, 'utf8'), /node:child_process|(?<![.\w])(spawn|spawnSync|exec|execSync|execFile|execFileSync|fork)\(/, `adapters/gitleaks/${f}.js starts no process`);
+  }
 });
 
 /** Runs `code` in a fresh process that records every child spawn, then reports spawns, SQLite and new files. */
@@ -265,9 +278,10 @@ test('public scanner command support is conditional on explicit adopted pinned a
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'reports']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'reports']);
+  assert.equal(listed.find(c => c.id === 'framework-express')?.reasonCode, 'sentinel.capability.draftExpress');
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
-  for (const id of ['secrets-scan', 'dispositions']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
+  for (const id of ['dispositions']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
   assert.equal(listed.find(c => c.id === 'rules-and-planning')?.state, 'available-draft');
   assert.ok(listed.filter(c => c.state !== 'unavailable').every(c => c.state === 'available-draft'));
   for (const c of listed) assert.match(c.reasonCode, /^sentinel\.capability\./);

@@ -91,7 +91,7 @@ export function supportedRules(): readonly SupportedRule[] {
 }
 
 /** The check adapters this build ships (whose rules are bound by supportedRules). */
-export const SHIPPED_CHECK_ADAPTERS: ReadonlySet<string> = new Set([PREVIEW_DETECTOR_ID, 'pattern-semgrep', 'advisories-osv', 'iac-trivy', 'ci-zizmor']);
+export const SHIPPED_CHECK_ADAPTERS: ReadonlySet<string> = new Set([PREVIEW_DETECTOR_ID, 'pattern-semgrep', 'advisories-osv', 'iac-trivy', 'ci-zizmor', 'secrets-gitleaks']);
 
 /**
  * The plan's rules that a shipped check adapter would be asked to run but does not implement, exactly: any other

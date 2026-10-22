@@ -65,6 +65,11 @@ import { SENTINEL_TRIVY_STRINGS } from './strings-sentinel-trivy.js';
 import { SENTINEL_ZIZMOR_STRINGS } from './strings-sentinel-zizmor.js';
 import { SENTINEL_DRIVERS_STRINGS } from './strings-sentinel-drivers.js';
 import { SENTINEL_FINDINGS_STRINGS } from './strings-sentinel-findings.js';
+import { SENTINEL_SECRETS_STRINGS } from './strings-sentinel-secrets.js';
+
+
+
+import { SENTINEL_EXPRESS_STRINGS } from './strings-sentinel-express.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
 import { TOUR_STRINGS } from './strings-tour.js';
@@ -215,6 +220,14 @@ export const STRINGS: Record<string, StringEntry> = {
 
   // Sentinel findings, comparisons and report words (strings-sentinel-findings.ts)
   ...SENTINEL_FINDINGS_STRINGS,
+  // Sentinel current-tree secret scanning: limitation keys, skipped scope and coded failures (strings-sentinel-secrets.ts)
+  ...SENTINEL_SECRETS_STRINGS,
+
+
+  // Sentinel's OSV advisory adapter: coverage, refusals, engine failures and acquisition (strings-sentinel-osv.ts)
+
+  // the Express framework pack: why a control fact about an Express route is unknown (strings-sentinel-express.ts)
+  ...SENTINEL_EXPRESS_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
   // who may do what — the role × action table's words live in strings-roles.ts (roles.*, gate.roles.*, its counts)

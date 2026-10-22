@@ -6,6 +6,41 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Delayed OOM canary correction — 2026-10-22
+
+Branch `codex/sentinel-oom-settling-investigation` corrects the test-only Docker visibility adapter: it hides the
+first two terminal exit-137 observations, including naturally false flags, instead of hiding the first two true
+OOM flags. The old adapter compounds natural daemon delay and can exhaust the actual backend's four-read bound;
+a deterministic backend regression fails with the old adapter and passes with the correction. Production
+classification, the 500 ms bound, cancellation and exact ownership/cleanup are unchanged. Exit 137 with no
+affirmative OOM evidence remains `workerExited`. Required native positives still require genuine daemon evidence.
+
+Validation: Sentinel dependency-closure build; four pure state controls plus all 20 native isolation checks pass
+with zero skips on Docker Desktop Engine 29.2.1 / Linux arm64. Ten additional focused native OOM/plain-SIGKILL
+trials pass. Native inspect diagnostics retain at most 16 bounded state/timing rows, without paths or source.
+The original Linux CI failure lacked raw inspect observations, so its exact daemon sequence remains unproven;
+required native CI on the corrected head must pass before integration.
+
+## Combined scanner foundations — 2026-10-22
+
+Branch `codex/sentinel-scanner-integration` combines reviewed scanner integration `44ff7fae` with foundation
+head `7d392239` in one feature merge. Scanner, driver, scheduler, policy and report implementation bytes remain
+identical to `44ff7fae`; the incoming Express implementation and corrected bounded OOM visibility controls are
+retained. The pre-start confirmed-cleanup regression and scoped invocation inputs also remain intact. Catalogs,
+ADRs, README, import audits, exports and package consumers retain all four scanner asset sets and the source-only
+Express library. Express is available as a draft library; no framework scanner driver or public framework command
+acceptance is claimed. The IaC package selector and no-selector four-engine behavior are unchanged.
+
+Validation: Sentinel dependency-closure build, typecheck, generated schemas and catalog lint passed. Four pure
+OOM-state controls and ten package controls, plus two capability-union controls, passed with zero skips. The fresh
+npm-only package consumer compiled nine exports and 19 contract types, validated 19 schemas and 53 fixtures,
+reopened the store across processes, analyzed the installed Express before/after/conditional fixture and verified
+all four scanner asset sets. A separate installed public CLI consumer passed owner adoption, missing-asset refusal,
+exact tool/database promotion, plan and detached/joined execution through all four existing pinned containers;
+its report survived service restart and source removal, and incomplete required coverage remained exit 2. No target
+code or host scanner ran; no scanner assets were downloaded and no hosted model was called. This is local arm64 evidence; combined native CI remains an
+integration gate. The earlier 576-test broad suite belongs to `44ff7fae` and was not repeated for this source-preserving merge.
+
 ## Start here
 
 Read `AGENTS.md` for project rules and architecture. Codex loads it as project instructions; `CLAUDE.md` imports it and this handoff. Keep durable facts in those repository files so both providers receive updates. This is project memory, not ChatGPT account memory or a synchronization of private conversation histories.
@@ -70,6 +105,25 @@ bytes, source digests and the exact job. No broader engine, runtime, architectur
 implied; zizmor's offline limits still apply. The workflow now expects the measured platform word.
 Local follow-on validation: build and typecheck passed, all 35 unit/container conformance cases passed with zero
 skips on the existing arm64 runtime, and the installed package ran both unchanged workers successfully.
+
+## Sentinel offline advisory foundation rebased — 2026-10-22
+
+Branch `codex/sentinel-osv-integration` rebases the independently reviewed advisory adapter from `30b618f1`
+onto merged PR 145 (`5196dc70`), preserving PR 158's execution repair. Adapter source, sealed input reader, original
+fixtures, tests and asset hook are byte-identical to that reviewed version. Integration retains both Pattern and
+OSV catalogs, security/ADR sections, asset hooks and installed-worker checks; OSV is ADR 29 on this main branch.
+
+Checked on the rebased source: Sentinel dependency-closure build and typecheck; 54 affected OSV, package, Pattern,
+preview and actual detached-CLI tests, zero skips; 181 script tests, zero skips; catalog and exact-title lint.
+The clean npm consumer validated eight typed exports, 19 schemas, 53 fixtures and cross-process storage. Actual
+installed worker checks passed for Pattern (six original findings), OSV (one original finding), and both together.
+The individual native qualification jobs select their own provisioned worker; both asset sets are always validated,
+and the default local smoke still runs both workers. No image was acquired for these checks.
+
+This is a mergeable adapter foundation, not full PR 12 completion: production scanner command/registry admission,
+owner acquisition CLI and installed public-command acceptance remain integration work. Earlier fixed-source ingest
+and browser evidence below belongs to its named head; this rebase does not alter parser/core graph behavior.
+No primary checkout build, graph replacement or server restart occurred.
 
 ## Sentinel sampled-memory test — 2026-10-22
 
@@ -2028,6 +2082,39 @@ archives, then still requires final exact candidate/provenance receipt admission
 checks-bundle rights sentence now names MIT. Focused coverage includes restricted grants refusing before scanner
 attempts, a sufficient grant running the real pinned scanner, rerun refusal, direct service/receipt denial, no daemon
 contact on asset-policy denial, and preview/lifecycle/receipt regressions.
+
+## Gitleaks and scanner aggregate integration — 2026-10-22
+
+Branch `codex/sol-gitleaks-integration` is a new managed integration of approved Gitleaks `16c2c42f` and frozen scanner
+aggregate `992d40cc` (merge `51488a1e`). Ancestry-only merge `c282fbdf` includes aggregate `a26ca4a4` and merged advisory
+main `6bf00a7d`; its source tree is identical to `51488a1e`. Gitleaks worker, driver, private evidence/contracts and
+source-derived capture/job/invocation classifications retain reviewed bytes. Aggregate execution repairs, the
+OOM/deadline tests, Express implementation, native four-engine workflow and qualification pins retain frozen bytes.
+
+Catalog and package unions preserve secrets plus the Express library. Capability tests assert exact available and
+unavailable lists. Packaging discovers every asset hook once; all six hooks and all five engine manifests remain.
+Both the Gitleaks isolation/public installed-CLI job and the separate four-engine native installed workflow remain.
+
+Affected build, dependency typechecks, generated-schema check, catalog lint and all retained workflow/actionlint
+checks passed. Selected tests passed 70 with no skips: 46 contract/package/scope/bootstrap cases, two capability
+cases, 19 real canonical/public engine cases and three native workflow selector cases. A clean npm package verified
+nine exports, 19 contracts/schemas, 54 fixtures, the installed Express fixture and all scanner asset manifests.
+The actual npm-only secrets consumer and four-engine detached/join/wait/restart/retained-report consumer passed.
+Only existing pinned Linux arm64 images and a held checks bundle were used; no engine/database was downloaded.
+Native amd64 qualification of this combined source remains the selected CI jobs' gate, not a local claim.
+No broad suite repeat, primary build, graph refresh, public push or merge into main occurred. Root owns review,
+existing PR integration and publish. The previous paused checkpoint below is historical and superseded.
+
+## Historical Gitleaks checkpoint — 2026-10-22 (superseded by the reviewed completion)
+
+Branch `codex/sol-gitleaks-cli` combines the reviewed secrets library context with the reviewed scanner CLI and
+admission corrections. The separate repository-input binding seam has four passing focused cases. The in-progress
+canonical Gitleaks driver, repository-scoped pack, secrets preset and private job classification compile, but the
+first real public CLI regression currently ends with `sentinel.execution.workerExited` (exit 3), before normalized
+findings. This checkpoint is not ready to integrate or an installed-command qualification. Resume with that exact
+synthetic regression; installed npm lifecycle, redacted-export acceptance and final compatibility checks remain.
+The reviewed worker and normalizer are unchanged. No source target was executed or engine downloaded.
+
 
 ## Native installed scanner CLI gate — 2026-10-22
 

@@ -30,6 +30,20 @@ import type { AdapterRegistry, TrustedAdapter } from './registry.js';
 import { orderPlan } from './scheduler.js';
 import { inputFingerprintOf, type CapturedInput } from './supervisor.js';
 
+/** A sealed content's path scopes, plus only repository scopes assigned to this same work and source. */
+export function capturedInputScopes(unit: Readonly<PlanWork>, checks: readonly Readonly<PlanCheck>[], sealed: readonly Pick<CapturedInput, 'id'>[]): Array<{ input: ArtifactId; scopes: string[] }> {
+  const scopesOf = new Map<string, Set<string>>();
+  for (const input of unit.inputs) {
+    const scopes = scopesOf.get(input.content) ?? new Set<string>();
+    scopes.add(`${input.sourceId}:${input.relativePath}`);
+    for (const check of checks) if (check.state === 'planned' && check.unit?.id === unit.id && check.unit.revision === unit.revision
+      && unit.checks.includes(check.id) && check.scopeKind === 'repository' && check.sourceId === input.sourceId
+      && check.sourceId === unit.sourceId && check.scopeId === input.sourceId && unit.scopes.includes(check.scopeId)) scopes.add(check.scopeId);
+    scopesOf.set(input.content, scopes);
+  }
+  return sealed.map(input => ({ input: input.id, scopes: [...(scopesOf.get(input.id) ?? [])].sort() }));
+}
+
 export const EXECUTION_BINDING_SCHEMA = 'sentinel-execution-binding/draft-1';
 /** A coordinator's input restore under its scratch root: `inputs.<epoch>.<uuid>`. */
 export const RESTORE_PREFIX = 'inputs.';
@@ -61,7 +75,7 @@ export interface ExecutableUnit {
   readonly adapter: TrustedAdapter | null;
   /** The captured inputs, one per distinct artifact (two captured files with the same bytes are one input). */
   readonly inputs: readonly CapturedInput[];
-  /** Which plan scopes each input is: `<source>:<path>` for every captured file with those bytes. */
+  /** Which admitted scopes each sealed content is: its captured paths and its assigned repository check, if any. */
   readonly inputScopes: readonly { input: ArtifactId; scopes: string[] }[];
   readonly manifest: Readonly<InfluenceManifest>;
   readonly checks: readonly Readonly<PlanCheck>[];
@@ -171,10 +185,8 @@ export async function executablePlan(store: SentinelStore, admitted: AdmittedPla
     const listed = inputsOf(w);
     if (unit.stage === 'check' && adapter) verifyInputSet(plan, w, listed);
     const inputs = deepFreeze(listed.filter((i, n) => listed.findIndex(x => x.id === i.id) === n));
-    const scopesOf = new Map<string, string[]>();
-    for (const i of unit.inputs) (scopesOf.get(i.content) ?? scopesOf.set(i.content, []).get(i.content)!).push(`${i.sourceId}:${i.relativePath}`);
-    const inputScopes = deepFreeze(inputs.map(i => ({ input: i.id, scopes: [...(scopesOf.get(i.id) ?? [])].sort() })));
     const checks = plan.checks.filter(c => c.state === 'planned' && c.unit?.id === w.id && c.unit.revision === w.revision);
+    const inputScopes = deepFreeze(capturedInputScopes(unit, checks, inputs));
     units.set(key(w), deepFreeze({ work: deepFreeze(structuredClone(w)), unit, adapter, inputs, inputScopes, manifest, checks }));
     if (adapter) bindings.set(key(w), deepFreeze(executionBinding(plan, w, adapter, inputs.map(i => i.id))));
   }

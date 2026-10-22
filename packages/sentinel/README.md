@@ -1,8 +1,9 @@
 # @farsight/sentinel (draft)
 
 The optional Sentinel security-analysis package. It captures immutable source, admits canonical plans, runs the
-four pinned scanners through isolated Linux containers, and regenerates observations and coverage from accepted
-publications. `static` keeps the original foundation preview; `scanners` selects Pattern, OSV, Trivy and zizmor.
+pinned Pattern, OSV, Trivy, zizmor and Gitleaks scanners through isolated Linux containers, and regenerates
+observations and coverage from accepted publications. `static` keeps the original foundation preview; `scanners`
+selects all shipped scanner rules, and `secrets` selects current-tree secret scanning only.
 Importing the library starts nothing. Scans acquire no assets and execute no project scripts or package managers.
 Farsight's application packages neither depend on nor import this optional package.
 
@@ -199,7 +200,7 @@ admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR
 ## Explicit pinned scanner commands (draft)
 
 Install the standalone tarball with npm and use the installed executable. The scanner preset is separate from the
-preview and makes its seven shipped rule families mandatory. Initialization never overwrites existing settings;
+preview and makes its selected shipped rule families mandatory. Initialization never overwrites existing settings;
 a second initialization keeps the existing preset until the owner edits and adopts those settings.
 
 ```sh
@@ -209,10 +210,12 @@ farsight-sentinel rules promote builtin:pattern --confirm
 farsight-sentinel rules promote builtin:advisories --confirm
 farsight-sentinel rules promote builtin:infrastructure --confirm
 farsight-sentinel rules promote builtin:ci --confirm
+farsight-sentinel rules promote builtin:secrets --confirm
 farsight-sentinel assets adopt-tool pattern-semgrep --confirm
 farsight-sentinel assets adopt-tool advisories-osv --confirm
 farsight-sentinel assets adopt-tool iac-trivy --confirm
 farsight-sentinel assets adopt-tool ci-zizmor --confirm
+farsight-sentinel assets adopt-tool secrets-gitleaks --confirm
 farsight-sentinel assets adopt-database osv:npm --manifest <snapshot.json> --archive <snapshot.zip> --license <published-SPDX-expression> --confirm
 farsight-sentinel assets adopt-database trivy-checks --manifest <checks.json> --archive <checks.tar.gz> --confirm
 farsight-sentinel plan --json
@@ -255,6 +258,22 @@ four existing pinned images, original inert positive/negative files, a tiny synt
 checks. `SENTINEL_ISOLATION=1` and `SENTINEL_TRIVY_CHECKS_DIR` select the explicit local prerequisites; no test pulls
 an image or downloads a database. Public CLI, profile and asset commands remain internal modules of the executable,
 not new JavaScript exports.
+
+## Current-tree secrets in the public command (draft)
+
+For a new secrets-only workspace, use `init --profile secrets`, adopt its settings, promote `builtin:secrets` and
+adopt the already installed `secrets-gitleaks` image. The same `plan`, `run`, `wait` and `report` commands above apply.
+The Gitleaks 8.30.1 default detectors read captured included files; Git history is outside this scope. Files omitted
+by detector rules or limits remain coverage gaps. A completed scan does not establish that no secret exists.
+
+Public findings and scanned/skipped scopes withhold captured file names as well as matched values. A private
+captured snapshot resolves each opaque source/entry reference to its original location. Identical bytes in two
+files keep distinct entry identities. Exact private source and source-derived job provenance remain retained;
+they are not claimed safe for public export merely because scanner findings withhold values.
+
+`scripts/test-sentinel-secrets-consumer.mjs` runs the actual installed command with synthetic values, an explicit
+omission and a secret-shaped filename, then regenerates the retained report after source removal. The separate
+four-engine installed consumer above remains in place. Both use only existing pinned local container assets.
 
 ## Infrastructure configuration checks (draft)
 
@@ -309,6 +328,23 @@ workspace inputs are read only for an optional context, through bounded regular-
 files and files that exceed their captured size cannot establish a binding. The supplied graph is bounded to 64 MiB.
 A matched context records the owner's confirmation of that graph against these captured bytes. It does not
 independently verify the supplied graph's relationships, labels or producer.
+
+### Express control facts (draft)
+
+```ts
+import { analyzeExpress } from 'farsight-sentinel/frameworks/express';
+
+const facts = await analyzeExpress({ snapshot, sourceId: 'app', analysis: analysis.sources[0], readContent: id => store.readArtifact(id) });
+facts.facts;      // per route and property: applies / does-not-apply / unknown at a position before the handler
+facts.frontiers;  // registrations the pack met and could not follow
+```
+
+For exactly Express 4.21.2 (an exact pin, or a range the npm lockfile resolves to it), the pack reads each route's
+registration and every layer registered before it on the application and the routers on its path, in order, from
+captured source only. No layer is credited with authentication or authorization: a body that refuses with 401 or 403
+on a request value is cited as evidence with both properties unknown there, because the client may control that value;
+a name never establishes anything, and a layer registered after a route never clears it. Conditional or dynamic registration, third-party middleware, unreadable paths and error
+handlers that may resume routing are unknown with their reasons. The envelope is `sentinel-controls/draft-1`; ADR 31.
 
 ## Versions and evolution
 
@@ -400,3 +436,11 @@ no finding, `lodash@4.17.11` (lockfile) 7 advisory groups and `jackson-databind@
 npm archive took about 7–10 s. The public scanner command layer now composes this adapter through the canonical coordinator; adoption and promotion remain explicit, and no JavaScript export starts work.
 
 The offline advisory adapter is measured on Linux arm64 and native Linux amd64. The [amd64 qualification](https://github.com/zalos/farsight/actions/runs/39788785215) passed 21 tests with zero skips and ran the installed worker against its original fixtures. The public installed CLI path is qualified separately with the original synthetic corpus and held assets as described above.
+### Secrets adapter qualification
+
+The pinned Gitleaks 8.30.1 current-tree adapter has real container conformance evidence on ARM64 with Docker
+Desktop (Engine 29.2.1) and native AMD64 on Ubuntu 24.04.5 with Node 24.22.0. The native
+[isolation run](https://github.com/zalos/farsight/actions/runs/39801723971/job/119904045294) passed all 93 cases
+without skips, including Gitleaks positive/negative, omission, malformed output and redaction cases. The same
+image index, default rules and worker bytes apply; other platforms remain refused. This qualification does not
+complete the public scan command integration or add Git-history scanning.

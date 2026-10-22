@@ -426,20 +426,20 @@ export class Coordinator {
     const { reasonCode: _held, ...rest } = structuredClone(work) as WorkEnvelope & { reasonCode?: string };
     void _held;
     const manifest = this.#plan.unitOf(work).manifest;
-    const records = await this.#stageRecords(`manifest.${work.id}.${work.revision}`, [{ value: manifest, schema: 'sentinel-influence/draft-1' }]);
+    const records = await this.#stageRecords(`manifest.${work.id}.${work.revision}`, [{ value: manifest, schema: 'sentinel-influence/draft-1', privacy: 'source-derived' }]);
     try {
       this.#store.ledger.createWork({ ...rest, state, activeAttemptId: null, coordinatorEpoch: this.#store.epoch, createdAt: now() } as WorkEnvelope, { records });
     } catch (error) { this.#abortStage(records.stageId); throw error; }
   }
 
   /** Stage canonical records unbound under this epoch and store their bytes; the first links the rest. */
-  async #stageRecords(tag: string, values: Array<{ value: unknown; schema: string } | { bytes: Uint8Array; schema: string }>, stillWithin?: () => void): Promise<{ stageId: string; receipts: Awaited<ReturnType<SentinelStore['objects']['putCanonicalJson']>>[] }> {
+  async #stageRecords(tag: string, values: Array<({ value: unknown; schema: string } | { bytes: Uint8Array; schema: string }) & { privacy?: 'metadata' | 'source-derived' | 'source' }>, stillWithin?: () => void): Promise<{ stageId: string; receipts: Awaited<ReturnType<SentinelStore['objects']['putCanonicalJson']>>[] }> {
     const ids = values.map(v => ('bytes' in v
       ? { id: `sha256:${createHash('sha256').update(v.bytes).digest('hex')}` as ArtifactId, rawSize: v.bytes.byteLength }
       : this.#store.objects.identifyCanonicalJson(v.value)));
     const stageId = `${tag}.${createHash('sha256').update(`${this.#store.epoch}\u0000${tag}\u0000${Date.now()}\u0000${Math.random()}`).digest('hex').slice(0, 16)}`.slice(0, 128);
     const unique = ids.map((id, i) => ({ id, i })).filter((x, j, all) => all.findIndex(y => y.id.id === x.id.id) === j);
-    this.#store.ledger.registerStaging(stageId, unique.map(({ id, i }) => ({ id: id.id, schema: values[i]!.schema.slice(0, 128), privacy: 'metadata' as const,
+    this.#store.ledger.registerStaging(stageId, unique.map(({ id, i }) => ({ id: id.id, schema: values[i]!.schema.slice(0, 128), privacy: values[i]!.privacy ?? 'metadata',
       ...(i === 0 ? { links: unique.filter(u => u.i !== 0).map(u => u.id.id) } : {}) })));
     try {
       const receipts = [];
@@ -506,7 +506,7 @@ export class Coordinator {
           invocation = inv;
           // The attempt names its exact invocation record, accepted with its start together with the execution
           // binding it links: a failed, canceled or interrupted attempt keeps both.
-          const records = await this.#stageRecords(`invocation.${id}`, [{ value: inv.record, schema: 'sentinel-invocation/draft-1' }, { value: binding, schema: EXECUTION_BINDING_SCHEMA },
+          const records = await this.#stageRecords(`invocation.${id}`, [{ value: inv.record, schema: 'sentinel-invocation/draft-1', privacy: 'source-derived' }, { value: binding, schema: EXECUTION_BINDING_SCHEMA },
             ...(prepared?.records ?? [])], stillWithin);
           if (this.#store.objects.identifyCanonicalJson(inv.record).id !== inv.digest || records.receipts.every(r => r.id !== bindingId(binding))) {
             this.#abortStage(records.stageId);
@@ -634,8 +634,8 @@ export class Coordinator {
     const ids = inputs.map(i => i.id).sort();
     const binding: ExecutionBinding = { ...base, inputs: ids, protocolFingerprint: inputFingerprintOf(ids), sourceInputs: [...base.inputs],
       derived: { job: jobId, auxiliary: auxiliary.map(a => ({ id: a.id, role: a.role })) } };
-    const records = [{ value: job.job, schema: 'sentinel-check-job/draft-1' },
-      ...auxiliary.map(a => ({ bytes: readFileSync(a.path), schema: `sentinel-check-input/${a.role}`.slice(0, 128) }))];
+    const records = [{ value: job.job, schema: 'sentinel-check-job/draft-1', privacy: 'source-derived' as const },
+      ...auxiliary.map(a => ({ bytes: readFileSync(a.path), schema: `sentinel-check-input/${a.role}`.slice(0, 128), privacy: 'source-derived' as const }))];
     return { dir, context, binding, inputs, records, job: job.job };
   }
 

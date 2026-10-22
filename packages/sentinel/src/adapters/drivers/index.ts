@@ -4,6 +4,7 @@ export { DRIVER_REASONS, DriverError, fileScope } from './common.js';
 export { PATTERN_SUPPORTED_RULES } from './pattern.js';
 export { OSV_SUPPORTED_RULES, osvDatabaseId } from './osv.js';
 export { TRIVY_SUPPORTED_RULES, TRIVY_CHECKS_DATABASE_ID } from './trivy.js';
+export { GITLEAKS_SUPPORTED_RULES } from './gitleaks.js';
 export { ZIZMOR_SUPPORTED_RULES } from './zizmor.js';
 export type { CheckDriver } from '../../execution/check-drivers.js';
 

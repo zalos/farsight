@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, writeSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { DEFAULT_SETTINGS, MAX_SETTINGS_BYTES, parseSettings, SETTINGS_PATH } from '../policy/index.js';
-import { PATTERN_SUPPORTED_RULES, OSV_SUPPORTED_RULES, TRIVY_SUPPORTED_RULES, ZIZMOR_SUPPORTED_RULES } from '../adapters/drivers/index.js';
+import { PATTERN_SUPPORTED_RULES, OSV_SUPPORTED_RULES, TRIVY_SUPPORTED_RULES, ZIZMOR_SUPPORTED_RULES, GITLEAKS_SUPPORTED_RULES } from '../adapters/drivers/index.js';
 import { PREVIEW_RULE } from '../adapters/preview-detector.js';
 
 /** The settings file's place in a workspace, and its scrubbed defaults: PR 06's own, so init writes what policy reads. */
@@ -20,14 +20,14 @@ export { SETTINGS_PATH, DEFAULT_SETTINGS };
 export function initialSettings(profile: string) {
   // The one rule this build can check, the foundation-preview rule, is what the owner's settings ask for; it is
   // planned only once the owner promotes its pack, and a run resting on it is never required coverage met.
-  return { ...DEFAULT_SETTINGS, mandatoryRules: profile === 'scanners' ? [...PATTERN_SUPPORTED_RULES, ...OSV_SUPPORTED_RULES, ...TRIVY_SUPPORTED_RULES, ...ZIZMOR_SUPPORTED_RULES].map(r => r.familyId) : [PREVIEW_RULE], grants: [
+  return { ...DEFAULT_SETTINGS, mandatoryRules: profile === 'scanners' ? [...PATTERN_SUPPORTED_RULES, ...OSV_SUPPORTED_RULES, ...TRIVY_SUPPORTED_RULES, ...ZIZMOR_SUPPORTED_RULES, ...GITLEAKS_SUPPORTED_RULES].map(r => r.familyId) : profile === 'secrets' ? GITLEAKS_SUPPORTED_RULES.map(r=>r.familyId) : [PREVIEW_RULE], grants: [
     { actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'], principals: ['human'], scope: { profiles: ['static'] } },
     { actions: ['rule.promote', 'tool.acquire', 'context.pin'], principals: ['human'] },
   ] };
 }
 
 /** The one scan profile this build can describe; scanner coverage arrives with later packages. */
-export const PROFILES = ['static', 'scanners'] as const;
+export const PROFILES = ['static', 'scanners', 'secrets'] as const;
 
 export type InitErrorCode = 'sentinel.init.workspaceUnsafe' | 'sentinel.init.settingsUnsafe' | 'sentinel.init.profileUnknown';
 

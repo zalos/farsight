@@ -65,12 +65,27 @@ repository ignore files are never materialized, in-source suppression comments a
 shaped like a job makes the worker refuse rather than run it. A failed engine run is reported only as a fixed category and its exit code, never its messages, which
 can quote source text. Results are trusted only after the coordinator checks them against the job it supplied and the
 captured bytes; engine fingerprints and messages are not used, and findings
-keep spans and digests, not source text. Dependency advisories (PR 12): the advisory database is downloaded only by an explicit,
+keep spans and digests, not source text.
+
+Dependency advisories (PR 12): the advisory database is downloaded only by an explicit,
 owner-confirmed acquisition, from one allowlisted origin (the OSV project's published archives), size-bounded, with the
 origin's MD5 checked and the archive stored by digest in an owner-only folder; scans run OSV-Scanner fully offline with
 no network and never download, and no project package manager runs. Engine stderr never leaves its container; the
 dependency fixtures are original synthetic files under non-manifest names, and no database ships in the package. The
 package smokes install from npm into temporary directories with their own npm
+providers are opt-in per run.
+
+The secret scan (ADR 28) runs the pinned official Gitleaks image only inside its container, behind an original shell
+shim, over a rebuilt copy of the captured files, with a pinned configuration and no repository ignore list, baseline
+or inline allow. Matched values never leave the container: the tool's messages and raw output stay there, its report
+names only the rule, lines and a job index (no path), and each observation keeps only the detector, the file and whole
+lines. No result prints a file name: a name can hold a secret no detector recognises out of context, so every finding cites
+the file by its place in the captured snapshot (`WithheldLocationEvidence`), and only the private snapshot resolves it,
+exactly, through one bounded resolver. Names the engine finds secret-shaped are reported as findings themselves. A folder the engine's own allowlist prunes is listed as skipped, with everything in it.
+A tool error, an unreadable report or a file that was
+not scanned is a failed or partial scan, never a clean one. The image is installed by digest ahead of time (CI pulls
+it in the isolation job); a scan never pulls. Its tests assemble an inert synthetic token at run time, so the
+repository's own secret scan needs no allowlist for it, and no assertion or report prints it. The package smokes install from npm into temporary directories with their own npm
 cache and user config/state, and start nothing beyond the packaged command and a read-only Farsight server on a
 free loopback port.
 
