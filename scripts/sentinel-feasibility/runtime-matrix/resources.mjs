@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execute } from '../../sentinel-feasibility-scanners.mjs';
+import { execute, scrub } from '../../sentinel-feasibility-scanners.mjs';
 export const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 export const LIMITS = Object.freeze({ maxInputBytes: 16 * 1024 * 1024, totalInputBytes: 32 * 1024 * 1024, maxTrials: 60 });
 export function admission({ inputBytes, totalBytes, trials, measurementAvailable = true }) {
@@ -40,7 +40,7 @@ export async function resourceTrials(out, runner = execute, signal) {
       const command = [process.execPath, join(dirname(fileURLToPath(import.meta.url)), 'codec-worker.mjs'), path, join(directory, artifact), codec];
       const execution = await runner(command[0], command.slice(1), { timeout: 15_000, maxOutput: 16_384, signal });
       let metric = null; try { metric = JSON.parse(execution.stdout); } catch { /* Retain failed child evidence. */ }
-      trials.push({ kind, requestedMinimumBytes: size, repetition, codec, execution, metric, artifact: `resources/${artifact}` });
+      trials.push({ kind, requestedMinimumBytes: size, repetition, codec, command: command.map(scrub), execution, metric, artifact: `resources/${artifact}` });
       await writeFile(join(directory, 'progress.json'), JSON.stringify({ inputs, trials }, null, 2) + '\n', { mode: 0o600 });
       if (execution.exitCode !== 0 || execution.timedOut || execution.outputExceeded || execution.cancelled || metric?.state === 'failed') throw new Error('RESOURCE_CHILD_FAILED');
     }
