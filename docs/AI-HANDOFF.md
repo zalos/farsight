@@ -159,6 +159,21 @@ failure diagnostics passed independent real-container review; secrets and offlin
 implementation/review. Spring registration, callback and inheritance edge cases remain under correction.
 These later packages are not complete. The computer restart removed temporary validation artifacts; the
 planner's comparison and checks above were recreated afterward. No primary build or dogfood refresh occurred.
+## Sentinel driver boundaries — 2026-10-22
+
+Branch `codex/sentinel-driver-fixes` starts from the scheduler's acknowledged-unknown scratch fix. The execution
+coordinator now checks a selected driver's implementation digest against the executing registry and admitted unit
+at open. One absolute unit deadline covers prepare, worker launch/run, normalize and durable publication; drivers
+receive the combined cancellation/deadline signal and workers get only the remaining grant. Deadline refusal during
+attempt-start storage releases a confirmed-stopped worker's scratch while a fenced epoch leaves recovery in charge.
+The implementation is in `execution/check-drivers.ts`, `coordinator.ts`, `publication.ts` and `supervisor.ts`;
+`execution-driver-boundaries.test.ts` and a focused container case cover the new boundaries.
+
+Validated with Node 24 and pnpm 9: the four-package Sentinel closure build, 55 focused driver/coordinator/scratch
+checks, 66 protocol/journal/native recovery smoke checks, and the focused pinned-container cleanup case pass with
+zero skips. The 15 new native behavioral cases fail nine checks on the unchanged baseline and all pass with the fix.
+The broader recovery matrix was not repeated. Independent review is still required; no selected-stage planning,
+publication, push or merge is part of this change.
 
 ## Sentinel parser merged; rules and policy integration — 2026-10-22
 

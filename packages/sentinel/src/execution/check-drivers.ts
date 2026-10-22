@@ -35,6 +35,8 @@ export interface RuleFiles {
 }
 
 export interface DriverContext {
+  /** The same cancellation and absolute unit/run deadline signal used by the worker. */
+  readonly signal: AbortSignal;
   readonly plan: Readonly<PlanEnvelope>;
   readonly unit: Readonly<PlanWork>;
   readonly checks: readonly Readonly<PlanCheck>[];
@@ -129,12 +131,17 @@ export const fileDigest = (path: string): Digest => `sha256:${createHash('sha256
  * Every check unit of the plan runs through a driver, and every rule its checks name is one its driver supports at
  * exactly the pinned definition digest. Returns the reason the plan cannot run, or undefined.
  */
-export function driverRefusal(plan: Readonly<PlanEnvelope>, registry: CheckDriverRegistry): string | undefined {
+export function driverRefusal(plan: Readonly<PlanEnvelope>, registry: CheckDriverRegistry, adapters: AdapterRegistry): string | undefined {
   const pins = new Map(plan.pins.rules.map(r => [`${r.familyId}@${r.revision}`, r]));
   for (const u of plan.units) {
     if (u.stage !== 'check' || u.adapterId === null) continue;
     const d = registry.driverFor(u.adapterId);
     if (!d) return `adapter ${u.adapterId} has no trusted driver`;
+    if (!adapters.ids.includes(u.adapterId)) return `adapter ${u.adapterId} is not in the executing registry`;
+    const adapter = adapters.get(u.adapterId);
+    if (adapter.kind === 'operation' || d.implementationDigest !== adapter.digest || d.implementationDigest !== u.implementationDigest) {
+      return `the driver for ${u.adapterId} is written for another implementation digest than the executing adapter and admitted unit`;
+    }
     const supported = new Set(d.supportedRules().map(r => `${r.familyId}@${r.revision}@${r.definitionDigest}`));
     for (const id of u.checks) {
       const c = plan.checks.find(x => x.id === id)!;

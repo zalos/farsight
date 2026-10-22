@@ -5,7 +5,7 @@
 import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { ContainerBackend, createArgs, validateContainer, LABELS, ISOLATION_POLICY, isolationQualification } from '../dist/execution/isolation.js';
@@ -152,6 +152,18 @@ test('an honest worker in a container succeeds and its container is removed by e
   assert.equal(o.cleanup, 'removed-owned-container');
   assert.ok(absent(o.container!.id));
   assert.equal(o.outputs.length, 1);
+});
+
+test('a refused pre-start attempt removes only its confirmed-stopped container and scratch', { skip }, async () => {
+  const attemptId = `attempt-c${++n}`;
+  let owned = '';
+  const error = Object.assign(new Error('synthetic invocation write exceeded its unit deadline'), { code: 'sentinel.execution.deadlineExceeded' });
+  await assert.rejects(runAttempt(store, s.work, registryFor('ok'), {
+    adapterId: 'canary-ok', attemptId, work, inputs: captured,
+    onWorker: async (worker: any) => { owned = worker.containerId; await Promise.resolve(); throw error; },
+  }, true), e => e === error);
+  assert.ok(owned && absent(owned));
+  assert.deepEqual(readdirSync(s.work).filter(name => name.startsWith(`${attemptId}-`)), []);
 });
 
 test('network canary: egress and name lookup fail, and the attempt is a recorded failure', { skip }, async t => {

@@ -167,10 +167,6 @@ export class Coordinator {
   private constructor(o: CoordinatorOptions, plan: ValidatedPlan, service: ExecutionService, intents: IntentFiles, workers: WorkerFiles, recovery: RecoveryReport) {
     this.#store = o.store; this.#plan = plan; this.#service = service; this.#intents = intents; this.#workers = workers;
     this.#scratchRoot = o.scratchRoot;
-    if (o.drivers !== undefined && !isCheckDriverRegistry(o.drivers)) throw new ExecutionError('sentinel.execution.adapterInvalid', { reason: 'drivers come only from createCheckDriverRegistry' });
-    // With drivers, every check unit runs through one, over rules it supports: a raw worker's claims never count.
-    const refusal = o.drivers ? driverRefusal(plan.admitted.plan, o.drivers) : undefined;
-    if (refusal) throw new ExecutionError('sentinel.execution.planInvalid', { reason: refusal });
     this.#databases = o.databases ? o.databases.map(d => ({ ...d })) : [];
     this.#drivers = o.drivers;
     this.#packs = o.packs ? o.packs.map(p => ({ pack: p.pack, files: new Map([...p.files].map(([k, v]) => [k, Uint8Array.from(v)])) })) : undefined;
@@ -199,6 +195,10 @@ export class Coordinator {
     const revision = recorded?.planRevision ?? run.planRevision;
     // Exactly the admitted revision, read back and checked, bound to its adapters and actual inputs.
     const admitted = await loadPlan(o.store, o.runId, revision);
+    if (o.drivers !== undefined && !isCheckDriverRegistry(o.drivers)) throw new ExecutionError('sentinel.execution.adapterInvalid', { reason: 'drivers come only from createCheckDriverRegistry' });
+    // Rebind selected drivers here: the caller may have built them against a different registry earlier.
+    const refusal = o.drivers ? driverRefusal(admitted.plan, o.drivers, registry) : undefined;
+    if (refusal) throw new ExecutionError('sentinel.execution.planInvalid', { reason: refusal });
     const plan = await executablePlan(o.store, admitted, run, revision, registry, o.scratchRoot);
     for (const w of plan.works) checkRecordedWork(plan, { id: w.id, revision: w.revision }, o.store.ledger.getWork({ id: w.id, revision: w.revision }));
     const service = await createExecutionService(o.store, { scratchRoot: o.scratchRoot, ...(o.registry ? { registry: o.registry } : {}),
@@ -432,7 +432,7 @@ export class Coordinator {
   }
 
   /** Stage canonical records unbound under this epoch and store their bytes; the first links the rest. */
-  async #stageRecords(tag: string, values: Array<{ value: unknown; schema: string } | { bytes: Uint8Array; schema: string }>): Promise<{ stageId: string; receipts: Awaited<ReturnType<SentinelStore['objects']['putCanonicalJson']>>[] }> {
+  async #stageRecords(tag: string, values: Array<{ value: unknown; schema: string } | { bytes: Uint8Array; schema: string }>, stillWithin?: () => void): Promise<{ stageId: string; receipts: Awaited<ReturnType<SentinelStore['objects']['putCanonicalJson']>>[] }> {
     const ids = values.map(v => ('bytes' in v
       ? { id: `sha256:${createHash('sha256').update(v.bytes).digest('hex')}` as ArtifactId, rawSize: v.bytes.byteLength }
       : this.#store.objects.identifyCanonicalJson(v.value)));
@@ -443,9 +443,11 @@ export class Coordinator {
     try {
       const receipts = [];
       for (const { id, i } of unique) {
+        stillWithin?.();
         const v = values[i]!;
         receipts.push('bytes' in v ? await this.#store.objects.put(Buffer.from(v.bytes), { expect: { id: id.id as ArtifactId, rawSize: id.rawSize } })
           : await this.#store.objects.putCanonicalJson(v.value, { expect: id as never }));
+        stillWithin?.();
       }
       return { stageId, receipts };
     } catch (error) { this.#abortStage(stageId); throw error; }
@@ -461,6 +463,7 @@ export class Coordinator {
     let attemptId: Id | null = null;
     let outcome: WorkerOutcome | undefined;
     let prepDir: string | null = null;
+    let stillWithin: (() => void) | undefined;
     try {
       const row = this.#store.ledger.getWork(ref);
       if (!row) await this.#create(work, 'ready');
@@ -469,27 +472,41 @@ export class Coordinator {
       const id = attemptIdFor(ref, ordinal);
       const executable = this.#plan.unitOf(ref);
       if (executable.adapter!.kind === 'operation') { attemptId = await this.#operation(work, ordinal, id); return; }
+      // One monotonic deadline covers preparation, launch, execution, normalization and durable acceptance.
+      // Driver work never earns a fresh grant for the worker or for publication.
+      const t0 = performance.now();
+      const unitDeadlineAt = t0 + work.resources.deadlineMs;
+      const unitDeadline = AbortSignal.timeout(work.resources.deadlineMs);
+      const signal = AbortSignal.any([this.#cancel.signal, this.#deadline.signal, unitDeadline]);
+      stillWithin = () => {
+        if (this.#cancel.signal.aborted) throw new ExecutionError('sentinel.execution.canceled', { reason: 'canceled before acceptance' });
+        if (this.#deadlinePassed || Date.now() >= this.#runDeadline) throw new ExecutionError('sentinel.execution.runDeadline', { reason: 'the run deadline passed before acceptance' });
+        if (unitDeadline.aborted || performance.now() >= unitDeadlineAt) throw new ExecutionError('sentinel.execution.deadlineExceeded', { deadlineMs: work.resources.deadlineMs, elapsedMs: Math.round(performance.now() - t0) });
+      };
+      stillWithin();
       // A trusted check driver prepares the exact job and auxiliary inputs; the source inputs stay the plan's own.
       const driver = this.#drivers?.driverFor(executable.adapter!.id);
-      const prepared = driver ? await this.#prepare(driver, executable, id) : null;
+      const prepared = driver ? await this.#prepare(driver, executable, id, signal, stillWithin) : null;
       prepDir = prepared?.dir ?? null;
+      stillWithin();
       const binding = prepared ? prepared.binding : this.#plan.bindingOf(ref);
       const inputs = prepared ? prepared.inputs : executable.inputs;
       // The attempt's deadline is the work's, cut to what is left of the run's budget.
-      const left = Math.max(1, Math.floor(this.#runDeadline - Date.now()));
+      const left = Math.max(1, Math.floor(Math.min(unitDeadlineAt - performance.now(), this.#runDeadline - Date.now())));
       const resources = { ...structuredClone(work.resources), deadlineMs: Math.min(work.resources.deadlineMs, left) };
       let invocation: { digest: string; record: InvocationRecord } | undefined;
       outcome = await this.#service.run({
         adapterId: executable.adapter!.id, attemptId: id, work: ref, inputs,
         assignment: { checks: executable.checks.map(c => c.id), scopes: [...executable.unit.scopes], inputScopes: executable.inputScopes.map(x => ({ input: x.input, scopes: [...x.scopes] })) },
-        signal: AbortSignal.any([this.#cancel.signal, this.#deadline.signal]), intents: this.#intents, workers: this.#workers, resources,
+        signal, intents: this.#intents, workers: this.#workers, resources,
         ...(this.#hooks ? { hooks: { at: (b: 'before-spawn' | 'after-spawn') => this.#hooks!.at?.(b, { work: ref, attemptId: id }) } } : {}),
         onWorker: async (worker, inv) => {
+          stillWithin!();
           invocation = inv;
           // The attempt names its exact invocation record, accepted with its start together with the execution
           // binding it links: a failed, canceled or interrupted attempt keeps both.
           const records = await this.#stageRecords(`invocation.${id}`, [{ value: inv.record, schema: 'sentinel-invocation/draft-1' }, { value: binding, schema: EXECUTION_BINDING_SCHEMA },
-            ...(prepared?.records ?? [])]);
+            ...(prepared?.records ?? [])], stillWithin);
           if (this.#store.objects.identifyCanonicalJson(inv.record).id !== inv.digest || records.receipts.every(r => r.id !== bindingId(binding))) {
             this.#abortStage(records.stageId);
             throw new ExecutionError('sentinel.execution.resultMismatch', { reason: 'the invocation record is not the one the attempt names' });
@@ -502,8 +519,10 @@ export class Coordinator {
           } catch (error) { this.#abortStage(records.stageId); throw error; }
           attemptId = id;
           this.#hooks?.at?.('after-attempt-start', { work: ref, attemptId: id });
+          stillWithin!();
         },
       });
+      stillWithin();
       const mismatch = outcome.state === 'succeeded' && invocation ? bindingMismatch(binding, invocation.record, outcome.result!) : undefined;
       if (outcome.state === 'succeeded' && attemptId && (mismatch || !invocation)) {
         this.#end(ref, attemptId, 'failed', 'sentinel.execution.resultMismatch', { reason: mismatch ?? 'no invocation was recorded' });
@@ -517,18 +536,17 @@ export class Coordinator {
           const normalized = driver ? await driver.normalize(prepared!.context, { result: out.result!, outputs: out.outputs, workDir: out.workDir, job: prepared!.job,
             output: (oid: ArtifactId) => { const o = out.outputs.find(x => x.id === oid); if (!o) throw new ExecutionError('sentinel.execution.outputMismatch', { reason: 'not a verified output' }); return readFileSync(o.path); },
             sealed: (sid: ArtifactId) => { const m = /^sha256:([0-9a-f]{64})$/.exec(sid); if (!m) return undefined; try { return readFileSync(join(out.workDir, 'input', m[1]!)); } catch { return undefined; } } }) : null;
+          stillWithin();
           const view = normalized ? { ...outcome.result!, ...normalized.coverage } : outcome.result!;
           const coverage = coverageRecords({ runId: this.#plan.run.id, attemptId, work: ref, checks: executable.checks, scopes: this.#scopes,
             adapterGranularity: executable.adapter!.coverage, result: view, recordedAt: now() });
           await publishOutcome({ store: this.#store, work: ref, attemptId, result: outcome.result!, outputs: outcome.outputs, endedAt: now(),
             records: [...coverage.records, ...(normalized?.records ?? [])], ...(this.#hooks ? { hooks: { at: (b, c) => this.#hooks!.at?.(b, c) } } : {}),
-            // A run whose deadline passed while the result's objects were stored accepts nothing more.
-            beforeAccept: () => {
-              if (this.#deadlinePassed || Date.now() >= this.#runDeadline) throw new ExecutionError('sentinel.execution.runDeadline', { reason: 'the run deadline passed before acceptance' });
-            } });
+            beforeAccept: stillWithin });
           this.#coverage.set(key(ref), coverage.envelopes);
         } catch (error) {
-          const canceled = error instanceof LedgerError && error.code === 'sentinel.store.wrongState';
+          try { stillWithin(); } catch (boundary) { error = boundary; }
+          const canceled = (error instanceof LedgerError && error.code === 'sentinel.store.wrongState') || isExecutionError(error, 'sentinel.execution.canceled');
           this.#end(ref, attemptId, canceled ? 'canceled' : 'failed', canceled ? 'sentinel.execution.canceled' : codeOf(error), detailOf(error));
         }
       } else if (attemptId && this.#deadlinePassed && !this.#cancelRequested) {
@@ -539,7 +557,9 @@ export class Coordinator {
         this.#unstarted(ref, outcome.code ?? 'sentinel.execution.workerExited', outcome.detail);
       }
     } catch (error) {
-      if (attemptId) this.#end(ref, attemptId, 'failed', codeOf(error), detailOf(error));
+      // A late driver error cannot hide the budget or cancellation that already ended this unit.
+      try { stillWithin?.(); } catch (boundary) { error = boundary; }
+      if (attemptId) this.#end(ref, attemptId, isExecutionError(error, 'sentinel.execution.canceled') ? 'canceled' : 'failed', codeOf(error), detailOf(error));
       else this.#unstarted(ref, codeOf(error), detailOf(error));
     } finally {
       if (outcome) { try { releaseWorkDir(outcome.workDir); } catch { /* left for an explicit cleanup */ } }
@@ -551,15 +571,15 @@ export class Coordinator {
    * Run a driver's prepare for one attempt: the job as canonical JSON and its auxiliary files become extra inputs,
    * each hashed here, and the execution binding records the plan's exact source inputs apart from them.
    */
-  async #prepare(driver: CheckDriver, executable: ReturnType<ValidatedPlan['unitOf']>, attemptId: Id) {
+  async #prepare(driver: CheckDriver, executable: ReturnType<ValidatedPlan['unitOf']>, attemptId: Id, signal: AbortSignal, stillWithin: () => void) {
     const dir = join(this.#scratchRoot, `${PREP_PREFIX}${attemptId}.${randomUUID()}`);
     mkdirSync(dir, { mode: 0o700 });
-    try { return await this.#prepareIn(dir, driver, executable); } catch (error) { removeOwned(dir); throw error; }
+    try { return await this.#prepareIn(dir, driver, executable, signal, stillWithin); } catch (error) { removeOwned(dir); throw error; }
   }
 
-  async #prepareIn(dir: string, driver: CheckDriver, executable: ReturnType<ValidatedPlan['unitOf']>) {
+  async #prepareIn(dir: string, driver: CheckDriver, executable: ReturnType<ValidatedPlan['unitOf']>, signal: AbortSignal, stillWithin: () => void) {
     const context: DriverContext = {
-      plan: this.#plan.admitted.plan, unit: executable.unit, checks: executable.checks, profile: this.#plan.admitted.profile,
+      signal, plan: this.#plan.admitted.plan, unit: executable.unit, checks: executable.checks, profile: this.#plan.admitted.profile,
       inputs: executable.inputs, inputScopes: executable.inputScopes, rules: this.#rulesOf(executable.checks),
       tools: this.#plan.admitted.plan.pins.tools.filter(t => t.adapterId === executable.unit.adapterId).map(t => ({ ...t })),
       databases: this.#plan.admitted.plan.pins.databases.map(pin => {
@@ -570,7 +590,9 @@ export class Coordinator {
       }),
       restored: this.#plan.restored, workDir: dir,
     };
+    stillWithin();
     const job = await driver.prepare(context);
+    stillWithin();
     const jobBytes = canonicalJsonBytes(job.job);
     const jobPath = join(dir, 'sentinel-job.json');
     writeFileSync(jobPath, jobBytes, { mode: 0o600 });

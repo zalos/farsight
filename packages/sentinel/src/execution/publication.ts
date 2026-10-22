@@ -41,7 +41,7 @@ export interface PublishRequest {
   hooks?: PublicationHooks;
   /** Coordinator records published with the result (the influence manifest, the coverage evaluation), in order. */
   records?: ReadonlyArray<{ value: unknown; schema: string }>;
-  /** Called after every object is durable and immediately before the ledger accepts: it throws to refuse. */
+  /** Checks the budget before staging, after every object write, and immediately before acceptance; throws to refuse. */
   beforeAccept?: () => void;
 }
 
@@ -65,19 +65,27 @@ export async function publishOutcome(request: PublishRequest): Promise<Publicati
       .map(o => ({ id: o.id, schema: o.mediaType.slice(0, 128) || 'application/octet-stream', privacy: 'source-derived' as const })),
   ];
 
+  request.beforeAccept?.();
   hooks?.at?.('before-staging', context);
+  request.beforeAccept?.();
   store.ledger.registerStaging(stageId, staged, { work, attemptId });
   hooks?.at?.('after-staging', context);
   let receipts: StoredObject[];
   try {
+    request.beforeAccept?.();
     receipts = [await store.objects.putCanonicalJson(request.result, { expect: resultIdentity })];
+    request.beforeAccept?.();
     for (const r of records) {
-      if (staged.some(s => s.id === r.identity.id && s.schema === r.schema)) receipts.push(await store.objects.putCanonicalJson(r.value, { expect: r.identity }));
+      if (staged.some(s => s.id === r.identity.id && s.schema === r.schema)) {
+        receipts.push(await store.objects.putCanonicalJson(r.value, { expect: r.identity }));
+        request.beforeAccept?.();
+      }
     }
     for (const o of request.outputs) {
       if (o.id === resultIdentity.id) continue;
       const bytes = readFileSync(o.path);
       receipts.push(await store.objects.put(bytes, { expect: { id: o.id as ArtifactId, rawSize: bytes.byteLength } }));
+      request.beforeAccept?.();
     }
   } catch (error) {
     // Nothing is accepted; the stage is removed so its pins do not outlive the attempt. Its bytes wait for collection.
