@@ -53,7 +53,10 @@ export interface ExecutableUnit {
   readonly unit: Readonly<PlanWork>;
   /** Null for a unit the plan holds (no bound operation). */
   readonly adapter: TrustedAdapter | null;
+  /** The captured inputs, one per distinct artifact (two captured files with the same bytes are one input). */
   readonly inputs: readonly CapturedInput[];
+  /** Which plan scopes each input is: `<source>:<path>` for every captured file with those bytes. */
+  readonly inputScopes: readonly { input: ArtifactId; scopes: string[] }[];
   readonly manifest: Readonly<InfluenceManifest>;
   readonly checks: readonly Readonly<PlanCheck>[];
 }
@@ -129,9 +132,20 @@ export async function executablePlan(store: SentinelStore, admitted: AdmittedPla
     works = workEnvelopesFor(plan, conversion).map(c => c.envelope);
   }
   orderPlan(works, new Set(plan.reused.map(key)));
+  // Reused work must be published in this run, or in a run on this run's parent chain over the same snapshot (a
+  // rerun is a child run of the run it reruns, and never re-executes the prerequisites it reuses).
+  const lineage = new Set<Id>([run.id]);
+  for (let parent = run.parentId, depth = 0; parent && depth < 64; depth++) {
+    const p = store.ledger.getRun(parent);
+    if (!p || p.envelope.snapshotId !== run.snapshotId) break;
+    lineage.add(p.id);
+    parent = p.envelope.parentId;
+  }
   for (const r of plan.reused) {
     const row = store.ledger.getWork(r);
-    if (!row || row.runId !== run.id || !store.ledger.getPublication(r)) refuse(`reused work ${key(r)} is not published in this run`);
+    if (!row || !lineage.has(row.runId) || !store.ledger.getPublication(r)) {
+      refuse(`reused work ${key(r)} is not published in this run or in a parent run over the same snapshot`);
+    }
   }
   const units = new Map<string, ExecutableUnit>();
   const bindings = new Map<string, ExecutionBinding>();
@@ -148,10 +162,14 @@ export async function executablePlan(store: SentinelStore, admitted: AdmittedPla
         refuse(`work ${key(w)} is a ${unit.stage} stage and ${adapter.id} is not its operation`);
       }
     }
-    const inputs = deepFreeze(inputsOf(w));
-    if (unit.stage === 'check' && adapter) verifyInputSet(plan, w, inputs);
+    const listed = inputsOf(w);
+    if (unit.stage === 'check' && adapter) verifyInputSet(plan, w, listed);
+    const inputs = deepFreeze(listed.filter((i, n) => listed.findIndex(x => x.id === i.id) === n));
+    const scopesOf = new Map<string, string[]>();
+    for (const i of unit.inputs) (scopesOf.get(i.content) ?? scopesOf.set(i.content, []).get(i.content)!).push(`${i.sourceId}:${i.relativePath}`);
+    const inputScopes = deepFreeze(inputs.map(i => ({ input: i.id, scopes: [...(scopesOf.get(i.id) ?? [])].sort() })));
     const checks = plan.checks.filter(c => c.state === 'planned' && c.unit?.id === w.id && c.unit.revision === w.revision);
-    units.set(key(w), deepFreeze({ work: deepFreeze(structuredClone(w)), unit, adapter, inputs, manifest, checks }));
+    units.set(key(w), deepFreeze({ work: deepFreeze(structuredClone(w)), unit, adapter, inputs, inputScopes, manifest, checks }));
     if (adapter) bindings.set(key(w), deepFreeze(executionBinding(plan, w, adapter, inputs.map(i => i.id))));
   }
   const get = <T>(m: Map<string, T>, r: WorkRef): T => m.get(key(r)) ?? refuse(`work ${key(r)} is not in the plan`);

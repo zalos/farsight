@@ -490,7 +490,8 @@ test('an attempt names its invocation record, accepted with its start and linkin
     assert.equal(record.attemptId, a.id);
     assert.equal(record.adapter.digest, unit.implementationDigest);
     assert.deepEqual(record.inputs, unit.inputs.map((i: any) => i.content).sort());
-    assert.deepEqual(record.assignment, { checks: unit.checks, scopes: unit.scopes }, 'the start carried the plan\'s checks and scopes');
+    assert.deepEqual(record.assignment, { checks: unit.checks, scopes: unit.scopes,
+      inputScopes: unit.inputs.map((i: any) => ({ input: i.content, scopes: [`${i.sourceId}:${i.relativePath}`] })) }, 'the start carried the plan\'s checks, scopes and input scopes');
     const binding = await bindingOf(store, p, p.ids.A);
     assert.deepEqual({ schema: binding.schema, plan: binding.plan, inputFingerprint: binding.inputFingerprint },
       { schema: 'sentinel-execution-binding/draft-1', plan: { runId: p.runId, revision: 1, digest: p.plan.digest }, inputFingerprint: unit.inputFingerprint });

@@ -161,7 +161,7 @@ export interface SessionBinding {
   inputs: ArtifactId[];
   deadlineAt: Timestamp;
   /** The plan's assignment for this attempt, carried by the start. */
-  assignment?: { checks: Id[]; scopes: ScopeId[] };
+  assignment?: { checks: Id[]; scopes: ScopeId[]; inputScopes?: Array<{ input: ArtifactId; scopes: ScopeId[] }> };
 }
 
 export type SessionPhase = 'awaiting-hello' | 'running' | 'canceling' | 'finished' | 'failed';
@@ -187,7 +187,8 @@ export class WorkerSession {
 
   constructor(binding: SessionBinding) {
     this.binding = Object.freeze({ ...binding, work: Object.freeze({ ...binding.work }), inputs: Object.freeze([...binding.inputs]) as ArtifactId[],
-      ...(binding.assignment ? { assignment: Object.freeze({ checks: [...binding.assignment.checks], scopes: [...binding.assignment.scopes] }) } : {}) });
+      ...(binding.assignment ? { assignment: Object.freeze({ checks: [...binding.assignment.checks], scopes: [...binding.assignment.scopes],
+        ...(binding.assignment.inputScopes ? { inputScopes: binding.assignment.inputScopes.map(x => ({ input: x.input, scopes: [...x.scopes] })) } : {}) }) } : {}) });
   }
 
   get phase(): SessionPhase { return this.#phase; }
@@ -259,7 +260,8 @@ export class WorkerSession {
     const start: StartMessage = {
       protocol: PROTOCOL, type: 'start', ...this.#nextBinding(),
       inputFingerprint: this.binding.inputFingerprint, inputs: [...this.binding.inputs], deadlineAt: this.binding.deadlineAt,
-      ...(this.binding.assignment ? { checks: [...this.binding.assignment.checks], scopes: [...this.binding.assignment.scopes] } : {}),
+      ...(this.binding.assignment ? { checks: [...this.binding.assignment.checks], scopes: [...this.binding.assignment.scopes],
+        ...(this.binding.assignment.inputScopes ? { inputScopes: this.binding.assignment.inputScopes.map(x => ({ input: x.input, scopes: [...x.scopes] })) } : {}) } : {}),
     };
     return { send: [answer, start] };
   }

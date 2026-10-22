@@ -338,6 +338,31 @@
             "$ref": "#/definitions/ScopeId"
           },
           "maxItems": 256
+        },
+        "inputScopes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "$ref": "#/definitions/ArtifactId"
+              },
+              "scopes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/ScopeId"
+                },
+                "maxItems": 256
+              }
+            },
+            "required": [
+              "input",
+              "scopes"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Which plan scopes each input is (`<source>:<path>` for each captured file with those bytes), so one attempt can cover several files and still say which is which.",
+          "maxItems": 1024
         }
       },
       "required": [
