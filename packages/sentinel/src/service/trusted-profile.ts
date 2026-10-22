@@ -1,11 +1,6 @@
-// The command line's trusted execution profile: the narrow adapter registry this build ships and what Sentinel's own
-// code says it establishes. The registry holds the coordinator's own bootstrap operations (capture, parse, inventory)
-// and one check adapter, the built-in foundation-preview detector, which establishes source bytes, pattern match and
-// source spans on the evidence of the original pack's fixtures, per file and rule. Nothing else: every scanner,
-// framework or model capability stays unavailable, and a rule that needs one is planned unsupported, never run.
-//
-// The profile is kept as the coordinator's canonical execution profile record (execution/profile.ts), which a plan
-// admission stores and the coordinator checks against this registry before anything runs.
+// The compatibility preview profile and exact shipped rule inventory. scanner-profile.ts composes the public
+// registry and adds planner capability facts only for explicitly adopted and verified external assets. No module
+// import starts work; plan admission stores the profile and the coordinator checks the executing registry again.
 import { createHash } from 'node:crypto';
 import type { Digest } from '../contracts/common.js';
 import type { PlanStage } from '../contracts/plan.js';
@@ -14,6 +9,7 @@ import { createCapabilityTable, type CapabilityFact, type PlannerProfile } from 
 import { createAdapterRegistry, type AdapterRegistry } from '../execution/registry.js';
 import { executionProfileRecord, EXECUTION_PROFILE_SCHEMA, type ExecutionProfileRecord } from '../execution/profile.js';
 import { canonicalJsonBytes } from '../store/objects.js';
+import { productionDrivers } from '../adapters/drivers/index.js';
 import { PREVIEW_DETECTOR_ID } from '../adapters/preview-detector.js';
 import { builtinPackDir, ownExecutable } from './package-paths.js';
 import { readPackDirectory, validatePack } from '../rules/index.js';
@@ -90,11 +86,12 @@ export function supportedRules(): readonly SupportedRule[] {
     const locked = pack.rules.find(r => r.familyId === definition.familyId && r.revision === definition.revision)!;
     return Object.freeze({ adapterId: definition.implementation.adapterId, familyId: locked.familyId, revision: locked.revision, definitionDigest: locked.definitionDigest });
   }));
+  supportedCache = Object.freeze([...supportedCache, ...[...productionDrivers({ maxAdvisoryAgeMs: 7 * 86400000 }).values()].flatMap(e => e.driver.supportedRules().map(r => ({ ...r, adapterId: e.definition.id })))]);
   return supportedCache;
 }
 
 /** The check adapters this build ships (whose rules are bound by supportedRules). */
-export const SHIPPED_CHECK_ADAPTERS: ReadonlySet<string> = new Set([PREVIEW_DETECTOR_ID]);
+export const SHIPPED_CHECK_ADAPTERS: ReadonlySet<string> = new Set([PREVIEW_DETECTOR_ID, 'pattern-semgrep', 'advisories-osv', 'iac-trivy', 'ci-zizmor']);
 
 /**
  * The plan's rules that a shipped check adapter would be asked to run but does not implement, exactly: any other

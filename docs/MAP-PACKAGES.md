@@ -63,7 +63,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `ledger.ts` + `migrations.ts` + `store-types.ts` (the fenced WAL ledger), `objects.ts` (content-addressed objects),
   `objects-ledger.ts` (the ledger seam and verifier) and `gc.ts` (read-only reachability and the dry-run prune plan).
   `test/store-integration.test.ts` drives the facade end to end across processes. The OSV advisory adapter (PR 12, ADR 29,
-  `src/adapters/osv/`, not yet registered; `src/adapters/sealed-input.ts` is the shared sealed-copy reader): `adapter.ts` (OSV-Scanner 2.7.0 pins, offline arguments, support), `worker-source.ts`
+  `src/adapters/osv/`, composed by the explicit scanner CLI; `src/adapters/sealed-input.ts` is the shared sealed-copy reader): `adapter.ts` (OSV-Scanner 2.7.0 pins, offline arguments, support), `worker-source.ts`
   (the original shell shim), `job.ts` (dependency-file kinds, snapshot inputs, the line job), `normalize.ts` (components with
   certainty and transitive limits, findings once per component and advisory, per-file coverage, `explainAdvisoryChanges`),
   `acquire.ts` (the separate, receipt-confirmed download of OSV archives and `loadAdvisorySnapshot`) and `run.ts` (one attempt
@@ -114,8 +114,8 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   lock and validated packs, the effective policy, the snapshot and parser evidence), `boundary.ts` (canonical work
   envelopes, influence manifests, exact coverage and captured inputs for the coordinator) and `errors.ts`. The
   revision contract is `contracts/plan.ts` (`sentinel-plan/draft-1`); persistence and admission belong to PR 08.
-  The pattern adapter (PR 10,
-  `src/adapters/pattern/`, not yet in the production registry): `adapter.ts` (Semgrep 1.181.0 pinned by image digest
+  `test/store-integration.test.ts` drives the facade end to end across processes. The pattern adapter (PR 10,
+  `src/adapters/pattern/`, composed by the explicit scanner CLI): `adapter.ts` (Semgrep 1.181.0 pinned by image digest
   with its measured and unmeasured platforms, the fixed engine arguments, `buildPatternAdapter` for the registry
   definition and test variants, and the support statement), `resolved.ts` (PR 06 resolved rules → adapter rules, or
   explicit unsupported checks), `worker-source.ts` (the original
@@ -213,3 +213,12 @@ whose `@business` sentence or doc comment names it by path or as *ADR NNNN*).
 Design reconciliation (`core/src/design.ts`) separates unclaimed pages tagged `fallback` into `DesignReconcile.fallbacks`; declared wildcard screens still match normally. `strings-design.ts` supplies the heading and definition.
 
 Declaration health also audits scoped glossary keys with the same class/member name lookup used to label nodes, gate tier matchers against indexed gates, and each manifest flow’s local docs references through the existing bounded document reader. New diagnostics include declaration file/line; remote document URLs are not fetched.
+
+
+Sentinel public scanner dispatch extends the CLI/service boundary: `service/scanner-profile.ts` composes the four
+reviewed external drivers and the exact preview driver (`service/preview-driver.ts`), `service/scanner-assets.ts`
+handles explicit bounded owner acquisition/adoption and receipt-bound private asset records, and
+`reports/scanner.ts` projects only accepted current-plan observations through the shared coverage evaluator.
+`test/cli-scanners-e2e.test.ts`, `test/scanner-assets.test.ts` and
+`scripts/test-sentinel-scanner-consumer.mjs` cover the public command path, strict asset boundaries and installed
+npm-only detached execution. These are executable internals, not new JavaScript package exports.

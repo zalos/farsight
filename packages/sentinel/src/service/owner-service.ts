@@ -34,7 +34,7 @@ import {
 } from './local.js';
 import { assertSupportedRules, canonicalResult, currentPlan } from './canonical.js';
 import { loadPlan } from '../execution/plans.js';
-import { foundationRegistry } from './trusted-profile.js';
+import { publicRegistry, scannerExecution } from './scanner-profile.js';
 import { recordRunFailure, runFailureCode } from './run-failure.js';
 
 export type ServiceErrorCode =
@@ -93,6 +93,8 @@ const RECEIPT_VERDICTS: PrintedVerdicts = Object.freeze({
 });
 
 export interface OwnerServiceOptions {
+  /** Internal test seam: explicit trusted drivers for a supplied synthetic registry, never request data. */
+  readonly drivers?: import('../execution/check-drivers.js').CheckDriverRegistry;
   /** The trusted registry runs execute under; the shipped one by default. A test passes its own. */
   readonly registry?: AdapterRegistry;
   /** A run the ledger does not hold yet, recorded by its first execution (test seam; `plan` records production runs). */
@@ -105,6 +107,7 @@ export class OwnerService {
   readonly #store: SentinelStore;
   readonly #ws: Workspace;
   readonly #registry: AdapterRegistry;
+  readonly #drivers?: import('../execution/check-drivers.js').CheckDriverRegistry;
   readonly #runEnvelope: (runId: string) => RunEnvelope | undefined;
   readonly #now: () => Date;
   readonly #active = new Map<string, ActiveRun>();
@@ -116,7 +119,8 @@ export class OwnerService {
   constructor(store: SentinelStore, ws: Workspace, options: OwnerServiceOptions = {}) {
     this.#store = store;
     this.#ws = ws;
-    this.#registry = options.registry ?? foundationRegistry();
+    this.#registry = options.registry ?? publicRegistry();
+    this.#drivers = options.drivers;
     this.#runEnvelope = options.runEnvelope ?? (() => undefined);
     this.#now = options.now ?? (() => new Date());
   }
@@ -247,7 +251,8 @@ export class OwnerService {
         const first = this.#store.ledger.getRun(planId) ? undefined : this.#runEnvelope(planId);
         const admitted = await currentPlan(this.#store, planId);
         if (admitted) assertSupportedRules((await loadPlan(this.#store, planId, admitted.revision)).plan);
-        const coordinator = await Coordinator.open({ store: this.#store, runId: planId, scratchRoot: scratch, registry: this.#registry, ...(first ? { run: first } : {}) });
+        const assets = this.#drivers ? { drivers: this.#drivers } : await scannerExecution(this.#store, planId, this.#ws.trustDir, scratch, this.#registry);
+        const coordinator = await Coordinator.open({ ...assets, store: this.#store, runId: planId, scratchRoot: scratch, registry: this.#registry, ...(first ? { run: first } : {}) });
         run.coordinator = coordinator;
         settle(undefined);
         if (run.cancel) coordinator.cancel();

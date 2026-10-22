@@ -5,8 +5,8 @@ import type { StringEntry } from './strings.js';
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
 
 export const SENTINEL_CLI_STRINGS: Record<string, StringEntry> = {
-  'sentinel.cli.title': same('farsight-sentinel: optional security-analysis companion to Farsight (draft, no scanner yet)', 'Sentinel is an optional companion installed separately from Farsight. This draft build defines and validates its record formats only.'),
-  'sentinel.cli.scope': same('This build only defines and validates draft contracts. It cannot capture source, plan or run a scan, and it never downloads a tool, starts a container or contacts a model provider.', 'Every analysis capability is listed as unavailable until the planned change that delivers it is merged.'),
+  'sentinel.cli.title': same('farsight-sentinel: optional security-analysis companion to Farsight (draft)', 'Sentinel is installed separately from Farsight and records immutable captured inputs, accepted scanner observations and explicit coverage.'),
+  'sentinel.cli.scope': same('Initialize, adopt settings, promote rules, plan, run pinned scanners and regenerate reports. Scans never acquire assets or use a host scanner. External engines need explicitly adopted pinned local images and offline assets; framework and model commands remain unavailable.', 'The static preset retains the original foundation preview. The scanners preset selects the four shipped scanner rule packs. Assets are separate explicit owner actions, and a completed run never means policy satisfaction in this command slice.'),
   'sentinel.cli.usageHeading': same('usage:', 'The commands this build accepts.'),
   'sentinel.cli.usageHelp': same('farsight-sentinel --help | --version', 'Print this help, or the package version and the contract draft it reads.'),
   'sentinel.cli.usageCapabilities': same('farsight-sentinel capabilities [--json]    what this build can and cannot do, with reasons', 'Lists every planned capability with its state, the reason and the planned change that delivers it.'),
@@ -31,7 +31,7 @@ export const SENTINEL_CLI_STRINGS: Record<string, StringEntry> = {
   'sentinel.capability.draftStore': same('draft local store only', 'A library can open a local store, record runs and publish verified evidence objects. Nothing scans source with it yet.'),
   'sentinel.capability.draftParser': same('draft parser reconciliation only', 'A library can parse a captured snapshot\'s TypeScript, JavaScript and Java source with the public parser, check every read it made against the captured files, and record which files it parsed. That is syntax evidence over captured source only: it scans nothing and no check relies on it.'),
   'sentinel.capability.draftPolicy': same('draft policy library only', 'A library can validate and lock rule packs, adopt trusted settings, issue owner receipts and decide admission. No plan or scan uses it yet.'),
-  'sentinel.capability.draftPlanning': same('draft deterministic planner only', 'A library can plan checks from a pinned rule lock, policy and parsed snapshot and hand canonical work to a coordinator. Nothing runs a scanner from the plan yet.'),
+  'sentinel.capability.draftPlanning': same('draft deterministic planner only', 'A library can plan checks from a pinned rule lock, policy and parsed snapshot and hand canonical work to a coordinator. The public command layer separately admits execution through exact trusted drivers and owner-adopted assets.'),
   'sentinel.capability.notImplemented': same('not implemented yet', 'The capability is planned and has not been built, so no check relies on it.'),
   'sentinel.capability.noQualifiedEngine': same('no engine qualified', 'No evaluated engine followed a flow across files in the feasibility trials, so no deep analysis is promised.'),
 

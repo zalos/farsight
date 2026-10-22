@@ -6,7 +6,23 @@ import type { StringEntry } from './strings.js';
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
 
 export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
-  'sentinel.cli.usageInit': same('farsight-sentinel init [--workspace <dir>] [--profile static] [--json]    create the private settings file once; never overwrites, downloads or scans', 'Writes the workspace\'s Sentinel settings from scrubbed defaults when the file is missing, and leaves an existing file exactly as it is.'),
+  'sentinel.capability.localCoordinator': same('canonical local scheduling and isolated worker execution are built; runtime prerequisites are verified before use', 'The coordinator accepts only the admitted plan and exact trusted drivers, and the external worker backend requires a qualified local runtime and existing pinned image. This feature listing does not claim any check ran.'),
+
+  'sentinel.report.scannerRun': same('Run: {run}', 'The exact durable run whose accepted publications this report reads.'),
+  'sentinel.report.scannerSnapshot': same('Snapshot: {snapshot}', 'The immutable captured source identity pinned by this run.'),
+  'sentinel.assets.disclosure': same('Asset {id} · candidate {candidate} · provenance {metadata}', 'The exact asset candidate and acquisition metadata digests bound to the owner confirmation and prior lock. Full structured provenance is available with --json.'),
+
+  'sentinel.capability.pinnedScanners': same('command support is built; execution requires explicitly adopted pinned local tools and offline assets', 'The public scanner commands are implemented. A planner capability exists only after exact owner-promoted tools and required databases are held and verified; this package feature listing is not an installed-tool or completed-coverage claim.'),
+
+  'sentinel.report.scannerHeading': same('Pinned scanner observations', 'Accepted normalized scanner observations and canonical required coverage for one immutable captured snapshot and admitted plan.'),
+  'sentinel.report.scannerSlice': same('The pinned scanners report observations and exact required coverage. Finding policy, framework checks and model review are not evaluated by this report.', 'This command slice exposes accepted records from the four isolated scanners. It does not claim policy satisfaction or the later complete report features.'),
+
+  'sentinel.cli.usageAssets': same('farsight-sentinel assets adopt-tool <adapter> | adopt-database <database> --manifest <file> --archive <file> [--license <expression>] | acquire-database <database> [--max-bytes <limit>] [--confirm] [--json]', 'Explicitly adopts an already installed pinned image, or a separately named local archive and its provenance. OSV archives also require the owner to state the published license expression with --license. The owner confirms the exact candidate, metadata, rights and previous lock; scans never download assets.'),
+  'sentinel.assets.invalid': same('the asset bytes, provenance or owner record do not match', 'A held tool or database must match its exact digest, bounded provenance, spent owner receipt and promoted lock entry. A mismatch is refused before scanner execution.'),
+  'sentinel.assets.missing': same('a required pinned asset has not been adopted or is no longer held', 'The selected scanner requires its exact installed image and any offline database or checks bundle. Planning or execution stops before starting a scanner when one is missing.'),
+  'sentinel.assets.unsupported': same('this asset or asset action is not supported', 'Only the shipped pinned scanner images and the supported OSV ecosystem snapshots and Trivy checks bundle may be adopted by this command.'),
+
+  'sentinel.cli.usageInit': same('farsight-sentinel init [--workspace <dir>] [--profile static|scanners] [--json]    create the private settings file once; never overwrites, downloads or scans', 'Writes the workspace\'s Sentinel settings from scrubbed defaults when the file is missing, and leaves an existing file exactly as it is.'),
 
   'sentinel.capability.draftPreviewCli': same('foundation preview only: plan and run in the foreground or in the background', 'The command line can initialize a workspace, adopt its settings, plan and run one original preview check in the foreground and print its report. It is not scanner coverage; background runs, waits and pause, resume and cancel go through the owner\'s local service.'),
 

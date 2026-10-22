@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { adoptedPolicy, workspaceOf } from '../../dist/service/local.js';
 import { serveWorkspace } from '../../dist/service/owner-service.js';
 import { openStore } from '../../dist/store/index.js';
-import { registryFor, syntheticPlan } from '../coordinator-helpers.ts';
+import { registryFor, syntheticPlan, syntheticServiceDrivers } from '../coordinator-helpers.ts';
 
 const [workspacePath, root, behaviour, ...runIds] = process.argv.slice(2) as [string, string, string, ...string[]];
 const ws = workspaceOf(workspacePath);
@@ -21,16 +21,18 @@ const registry = registryFor(root, behaviours);
 const envelopes = join(root, 'run-envelopes.json');
 const runs: Record<string, unknown> = existsSync(envelopes) ? JSON.parse(readFileSync(envelopes, 'utf8')) : {};
 const store = await openStore(ws.storePath);
+let drivers;
 try {
   for (const runId of runIds) {
     if (store.ledger.latestPlan(runId)) continue;
     const planned = await syntheticPlan(store, root, behaviours, { runId, policy: adopted.policy, registry });
     runs[runId] = planned.run;
   }
+  drivers = await syntheticServiceDrivers(store, registry, runIds[0]!);
 } finally { store.close(); }
 writeFileSync(envelopes, JSON.stringify(runs));
 
 const stop = new AbortController();
 process.once('SIGTERM', () => stop.abort());
-await serveWorkspace(ws, { idleMs: 0, signal: stop.signal, service: { registry, runEnvelope: (id: string) => runs[id] as never },
+await serveWorkspace(ws, { idleMs: 0, signal: stop.signal, service: { registry, drivers, runEnvelope: (id: string) => runs[id] as never },
   onListening: () => process.stdout.write('listening\n') });

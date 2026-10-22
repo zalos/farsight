@@ -816,3 +816,28 @@ command (PR 09) and shipping no database in the package. linux/amd64 is measured
 
     Not decided here: online audits with an owner-supplied token, pre-commit inputs, other personas, registration and
     planning (PR 08/09).
+
+
+**ADR 37 extension — explicit scanner command dispatch (2026-10-22).** The owner CLI composes the four reviewed
+production drivers through the canonical coordinator; the preview also has an exact-rule trusted driver and its
+worker distinguishes captured scoped inputs from the sealed auxiliary job. The `scanners` initialization preset
+selects seven original families; the default `static` preset preserves preview compatibility. A shipped adapter
+registry entry does not grant an installed capability: selected external rules need exact owner-promoted tool pins,
+a qualified existing local image and required held databases/checks. Plan and execution verify these prerequisites,
+including databases removed after planning, before scanner attempts. Production jobs batch at most 32 scopes;
+preview jobs retain one scope. Skips and omitted files remain explicit coverage gaps.
+
+`assets adopt-tool` and `assets adopt-database` are owner-only receipt-confirmed promotions, with no network. The
+owner names both archive and provenance; metadata never gains trust because it is beside a file. The spent receipt
+state digest binds provenance in addition to the candidate and previous lock. Private immutable records are keyed
+by that receipt and verified against the admitted lock entry, while archives are held by content digest. OSV imports
+require an explicitly stated published SPDX expression; Trivy checks retain their fixed Apache-2.0 provenance.
+Separate `assets acquire-database` actions call the existing bounded allowlisted brokers under a one-use receipt,
+with a deadline; acquisition never silently promotes or runs an asset. Plans and scanners never autoacquire.
+
+The initial public scanner report is an internal draft document in CLI `facts.report`, not the full report envelope
+or a new package export. It reads only accepted same-attempt publications of the exact admitted plan and uses the
+shared required-coverage evaluator. Normalized observations and per-check coverage remain separate, with pinned
+provenance and shared scoped counts. Regeneration needs neither source checkout nor scanner assets. Full finding
+policy, placement, framework/model integration and complete reports remain subsequent work; no command in this
+slice declares policy satisfaction. Actual verified worker outcomes retain architecture qualification authority.

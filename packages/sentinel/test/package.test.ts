@@ -51,6 +51,8 @@ test('no Farsight package depends on or imports Sentinel', () => {
 // Every module import outside the package, per built file. A new import fails here until it is reviewed and
 // added; nothing networked, no worker or cluster, and no static node:sqlite import anywhere.
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
+  'service/scanner-assets.js': ['node:crypto', 'node:fs', 'node:path'],
+  'reports/scanner.js': ['@farsight/core/dist/counts.js', '@farsight/core/dist/strings.js'],
   // The pattern adapter (PR 10): hashing and its own job files only; the engine runs through execution/ in a container.
   'adapters/drivers/canonical.js': ['node:fs'],
   'adapters/drivers/common.js': ['node:crypto'],
@@ -231,32 +233,32 @@ test('importing the root and the store, and asking the CLI for help, start nothi
   assert.deepEqual(help.spawns, []);
   assert.equal(help.sqlite, false);
   assert.deepEqual(help.files, []);
-  assert.match(help.stdout, /no scanner yet/);
+  assert.match(help.stdout, /pinned scanners/);
   // Positive controls: the probe sees SQLite once loaded, and a spawn made through a named import.
   assert.equal(probe(`await import('node:sqlite');`).sqlite, true);
   assert.deepEqual(probe(`const { spawnSync } = await import('node:child_process'); spawnSync(process.execPath, ['-e', '0']);`).spawns,
     [`spawnSync ${process.execPath}`]);
 });
 
-test('help and version say plainly that no scanner exists', () => {
+test('help and version describe explicit pinned scanner execution', () => {
   const help = cli('--help');
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /no scanner yet/);
-  assert.match(help.stdout, /never downloads a tool, starts a container or contacts a model provider/);
+  assert.match(help.stdout, /pinned scanners/);
+  assert.match(help.stdout, /Scans never acquire assets/);
   assert.match(help.stdout, /4 awaiting owner confirmation/);
   const version = cli('--version');
   assert.equal(version.status, 0);
   assert.equal(version.stdout.trim(), `farsight-sentinel ${manifest.version}, contracts draft-1`);
 });
 
-test('draft contracts, store, capture, parser, policy and planner are available; scanners remain unavailable', () => {
+test('public scanner command support is conditional on explicit adopted pinned assets', () => {
   const r = cli('capabilities', '--json');
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'dependency-advisories', 'infrastructure-ci-checks']);
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
-  for (const id of ['pattern-scan', 'coordinator', 'reports']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
+  for (const id of ['secrets-scan', 'reports']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
   assert.equal(listed.find(c => c.id === 'rules-and-planning')?.state, 'available-draft');
   assert.ok(listed.filter(c => c.state !== 'unavailable').every(c => c.state === 'available-draft'));
   for (const c of listed) assert.match(c.reasonCode, /^sentinel\.capability\./);

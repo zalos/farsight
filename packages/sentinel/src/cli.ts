@@ -1,9 +1,7 @@
 #!/usr/bin/env node
-// The executable, the owner's entrypoint: help, version, capabilities, validation, workspace initialization,
-// settings adoption, and a foundation-preview plan → run → status → report, in the foreground or handed to the owner's
-// background service (serve, run --detach, wait, pause, resume, cancel). Retry and rerun are refused as unavailable.
-// No command downloads a tool, starts a container or contacts a model provider. Every result is typed
-// (cli/outcome.ts); `--json` prints it whole, with the three verdicts.
+// The owner's executable: initialization, adoption, exact rule/asset promotion, canonical local and detached runs,
+// bounded lifecycle controls and retained reports. External scanners use the reviewed container drivers only.
+// Acquisition is a separate explicit owner action; no plan or scan downloads or uses a host scanner.
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import {
   adoptWorkspaceSettings, confirmForService, currentRules, followWorkspaceRun, promoteRulePack, planWorkspace, previewReport, runPlan, describeRun, runStatus, workspaceOf, PolicyError,
@@ -15,9 +13,11 @@ import { launchService } from './service/launch.js';
 import { builtinPackDir } from './service/package-paths.js';
 import { openStore } from './store/index.js';
 import type { ServiceClient } from './transport/ipc.js';
+import { renderScannerMarkdown, type ScannerReport } from './reports/scanner.js';
 import type { PreviewReport } from './reports/preview.js';
 import { renderPreviewJson, renderPreviewMarkdown } from './reports/preview.js';
 import { PREVIEW_DETECTOR_ID, runPreviewWorker } from './adapters/preview-detector.js';
+import { adoptScannerAsset, acquireScannerDatabase } from './service/scanner-assets.js';
 import { CAPABILITIES } from './capabilities.js';
 import { parseArgs, plannedIn, COMMANDS, type ParsedCommand } from './cli/args.js';
 import { initWorkspace, InitError } from './cli/init.js';
@@ -59,6 +59,7 @@ function help(): string {
     `  ${word('sentinel.cli.usageReport')}`,
     `  ${word('sentinel.cli.usageServe')}`,
     `  ${word('sentinel.cli.usageRules')}`,
+    `  ${word('sentinel.cli.usageAssets')}`,
     `  ${word('sentinel.cli.usageFollow')}`,
     '',
     word('sentinel.cli.planned', { commands: planned.join(', ') }),
@@ -207,6 +208,17 @@ async function owner(p: ParsedCommand): Promise<number> {
       errOut(word('sentinel.args.unexpectedArgument', { detail: format }));
       return finish(result('report', 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
     }
+    if (p.command === 'assets') {
+      if (p.args.action === 'acquire-database') {
+        if (p.flags['--archive'] || p.flags['--manifest'] || p.flags['--license']) return serviceOut(result('assets', 'configuration-failure', { reasonCode: 'sentinel.assets.invalid' }));
+        return serviceOut(await acquireScannerDatabase(ws, { id: p.args.assetId!, maxBytes: typeof p.flags['--max-bytes'] === 'string' ? Number(p.flags['--max-bytes']) : undefined, confirm, now }));
+      }
+      if (p.flags['--max-bytes']) return serviceOut(result('assets', 'configuration-failure', { reasonCode: 'sentinel.assets.invalid' }));
+      const kind = p.args.action === 'adopt-tool' ? 'tool' : p.args.action === 'adopt-database' ? 'database' : undefined;
+      if (!kind) return serviceOut(result('assets', 'configuration-failure', { reasonCode: 'sentinel.assets.unsupported' }));
+      const adopted = await adoptScannerAsset(ws, { kind, id: p.args.assetId!, license: typeof p.flags['--license'] === 'string' ? p.flags['--license'] : undefined, archive: typeof p.flags['--archive'] === 'string' ? p.flags['--archive'] : undefined, manifest: typeof p.flags['--manifest'] === 'string' ? p.flags['--manifest'] : undefined, confirm, now });
+      return serviceOut(adopted, adopted.facts.candidate ? [word('sentinel.assets.disclosure', { id: String(adopted.facts.id), candidate: String(adopted.facts.candidate), metadata: String(adopted.facts.metadataDigest) })] : []);
+    }
     if (p.command === 'serve') return await serve(p, ws);
     if (p.command === 'wait') return await waitFor(p, ws);
     if ((p.command === 'run' && p.flags['--detach'] === true) || p.command === 'resume' || p.command === 'pause' || p.command === 'cancel') {
@@ -265,7 +277,7 @@ async function owner(p: ParsedCommand): Promise<number> {
       return serviceOut(r, r.facts.state ? [`run ${p.args.runId} · ${String(r.facts.state)}`] : []);
     }
     if (live && p.command === 'report') {
-      const doc = await ask(live, 'report', { runId: p.args.runId! }) as unknown as PreviewReport | CommandResult;
+      const doc = await ask(live, 'report', { runId: p.args.runId! }) as unknown as PreviewReport | ScannerReport | CommandResult;
       return printReport(p, doc);
     }
     live?.close();
@@ -300,7 +312,7 @@ async function owner(p: ParsedCommand): Promise<number> {
     }
     if (p.command === 'plan') {
       const r = await planWorkspace(ws, { confirm, now });
-      return serviceOut(r, r.disclosure ? [`plan ${r.disclosure.planId} · ${r.disclosure.planDigest} · effects: ${r.disclosure.effects.join(', ')} · ${word('sentinel.report.previewOnly')}`] : []);
+      return serviceOut(r, r.disclosure ? [`plan ${r.disclosure.planId} · ${r.disclosure.planDigest} · effects: ${r.disclosure.effects.join(', ')} · ${word(r.disclosure.label === 'foundation-preview' ? 'sentinel.report.previewOnly' : 'sentinel.report.scannerSlice')}`] : []);
     }
     if (p.command === 'run') {
       const r = await runPlan(ws, { planId: p.args.planId!, confirm, now });
@@ -329,13 +341,14 @@ async function owner(p: ParsedCommand): Promise<number> {
   }
 }
 
-function printReport(p: ParsedCommand, doc: PreviewReport | CommandResult): number {
+function printReport(p: ParsedCommand, doc: PreviewReport | ScannerReport | CommandResult): number {
   const format = typeof p.flags['--format'] === 'string' ? p.flags['--format'] : 'md';
   {
     if ('outcome' in doc) return serviceOut(doc);
     // --json is the typed result with the report inside it; --format json alone prints the report document.
     if (jsonOut) return finish(result('report', 'answered', { facts: { report: doc } }));
-    out(format === 'json' ? renderPreviewJson(doc) : renderPreviewMarkdown(doc));
+    if (doc.schema === 'sentinel-scanner-report/draft-1') out(format === 'json' ? JSON.stringify(doc, null, 2) : renderScannerMarkdown(doc));
+    else out(format === 'json' ? renderPreviewJson(doc) : renderPreviewMarkdown(doc));
     return 0;
   }
 }
@@ -415,7 +428,7 @@ async function dispatch(p: ParsedCommand): Promise<number> {
     case 'validate': return validate(p);
     case 'init': return init(p);
     case 'settings': case 'plan': case 'run': case 'status': case 'report':
-    case 'serve': case 'wait': case 'pause': case 'resume': case 'cancel': case 'rules': case 'retry': case 'rerun': return owner(p);
+    case 'serve': case 'wait': case 'pause': case 'resume': case 'cancel': case 'rules': case 'assets': case 'retry': case 'rerun': return owner(p);
     default: {
       const change = plannedIn(p.command)!;
       errOut(word('sentinel.cli.unavailable', { command: p.command, change }));
