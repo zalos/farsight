@@ -20,7 +20,8 @@ let n = 0;
 const fresh = () => join(scratch, `case-${++n}`);
 const is = (code: string) => (e: unknown) => isStoreError(e) && e.code === code;
 const qualifiedHost = SQLITE_RELEASE_POLICY.hosts.includes(currentHost());
-const onQualifiedHost = { skip: !qualifiedHost && `host ${currentHost()} is not in SQLITE_RELEASE_POLICY.hosts` };
+// On CI nothing skips: an unqualified CI host runs the qualified-host tests and fails at the gate, loudly.
+const onQualifiedHost = { skip: !qualifiedHost && !process.env.CI && `host ${currentHost()} is not in SQLITE_RELEASE_POLICY.hosts` };
 // The path checks need no SQLite, so they run (and gather evidence) on a host before it is qualified.
 const checkStore = (root: string) => { prepareStoreRoot(root); return preparePrivateFile(storeLayout(root).owner); };
 const refuses = (code: string, root: string) => assert.throws(() => checkStore(root), is(code));
@@ -35,6 +36,17 @@ test('every store error code is a catalog entry and every store catalog entry is
 test('an unqualified host is refused by the default gate before node:sqlite is used', { skip: qualifiedHost }, async () => {
   await assert.rejects(checkSqliteRuntime(), (e: unknown) => is('sentinel.store.platformUnqualified')(e)
     && (e as StoreError).detail.platform === currentHost());
+});
+
+test('every listed host carries its evidence', () => {
+  assert.deepEqual(Object.keys(SQLITE_RELEASE_POLICY.hostEvidence).sort(), [...SQLITE_RELEASE_POLICY.hosts].sort());
+});
+
+test('qualification facts for this host, printed for the run log', onQualifiedHost, async t => {
+  const rt = await checkSqliteRuntime();
+  const fs = prepareStoreRoot(join(fresh(), 'store')).filesystem;
+  t.diagnostic(`sentinel-store-qualification host=${currentHost()} node=${rt.node} sqlite=${rt.sqliteVersion} `
+    + `filesystem=${fs.type} evidence=${fs.evidence} checks=${rt.checks.join(',')} ci=${process.env.CI ? 'yes' : 'no'}`);
 });
 
 test('the gate passes the qualified runtime and names every behaviour it checked', onQualifiedHost, async () => {

@@ -13,7 +13,8 @@ import { OwnerProcesses, probeOwnership } from './helpers/owner-processes.ts';
 
 // Ownership is exercised only on hosts the release policy qualifies; elsewhere the gate refuses first (tested
 // in store-runtime.test.ts). Qualifying a host means adding it to the policy and running this suite there.
-const unqualified = !SQLITE_RELEASE_POLICY.hosts.includes(currentHost())
+// On CI nothing skips: an unqualified CI host runs these tests and fails at the gate, loudly.
+const unqualified = !SQLITE_RELEASE_POLICY.hosts.includes(currentHost()) && !process.env.CI
   && `host ${currentHost()} is not in SQLITE_RELEASE_POLICY.hosts`;
 const test = (name: string, fn: () => Promise<void> | void) => nodeTest(name, { skip: unqualified }, fn);
 

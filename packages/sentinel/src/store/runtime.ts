@@ -18,19 +18,27 @@ export interface SqliteReleasePolicy {
    * through SQLite's default unix VFS. A host is added only after the store tests have run on it.
    */
   readonly hosts: readonly string[];
+  /** What qualified each listed host, or that its qualification is still pending. */
+  readonly hostEvidence: Readonly<Record<string, string>>;
   /** Where the qualification came from, for reports and error detail. */
   readonly evidence: string;
 }
 
 /**
- * Measured: PR 01's E4 probe and the PR 03 store tests, SQLite 3.53.3 linked by Node 24.19.0, on darwin-arm64
- * only. Linux (for example linux-x64 on CI) is not qualified until the store tests have passed there; the
- * Linux file-system checks in paths.ts exist for that run. Add a release or host only with that evidence.
+ * darwin-arm64 is measured: PR 01's E4 probe and the PR 03 store tests, SQLite 3.53.3 linked by Node 24.19.0.
+ * linux-x64 is a candidate: it is listed so the full store tests run, unskipped, on GitHub's ubuntu runners
+ * (ext4) before this merges, and its evidence entry is replaced with that run's facts. If that run links
+ * another SQLite release, the gate refuses it and the tests fail; the release list is not widened to pass.
+ * Add a release or host only with such evidence.
  */
 export const SQLITE_RELEASE_POLICY: SqliteReleasePolicy = Object.freeze({
   qualifiedSqlite: Object.freeze(['3.53.3']),
-  hosts: Object.freeze(['darwin-arm64']),
-  evidence: 'PR 01 E4 storage probe and PR 03 store tests: SQLite 3.53.3, Node 24.19.0, darwin-arm64',
+  hosts: Object.freeze(['darwin-arm64', 'linux-x64']),
+  hostEvidence: Object.freeze({
+    'darwin-arm64': 'PR 01 E4 storage probe and PR 03 store tests: SQLite 3.53.3, Node 24.19.0',
+    'linux-x64': 'candidate: pending the PR 03 store tests on GitHub ubuntu CI (ext4)',
+  }),
+  evidence: 'PR 01 E4 storage probe and PR 03 store tests: SQLite 3.53.3; darwin-arm64 measured, linux-x64 pending CI',
 });
 
 /** This process's host in policy form, `platform-arch`. */
