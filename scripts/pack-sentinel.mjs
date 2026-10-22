@@ -16,7 +16,7 @@ import { builtinModules } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildClosure, missingBuildOutputs } from './pack-preflight.mjs';
+import { assertTarball, buildClosure, missingBuildOutputs, npmPackEnv } from './pack-preflight.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dir = join(root, 'packages', 'sentinel');
@@ -155,7 +155,8 @@ try {
     ...(Object.keys(dependencies).length ? { dependencies } : {}),
     engines: { node: sentinel.engines?.node ?? pkg.engines?.node ?? '>=24' },
   }, null, 2) + '\n');
-  execFileSync('npm', ['pack', '--pack-destination', '..'], { cwd: out, stdio: 'inherit' });
+  execFileSync('npm', ['pack', '--pack-destination', '..'], { cwd: out, stdio: 'inherit', env: npmPackEnv() });
+  assertTarball(join(stage, `farsight-sentinel-${version}.tgz`)); // before build/sentinel is replaced
 } catch (error) {
   rmSync(stage, { recursive: true, force: true });
   const detail = error?.errors?.length ? error.errors.map((e) => `${e.location?.file ?? ''} ${e.text}`.trim()) : [error?.message];

@@ -18,7 +18,7 @@ import { cpSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, writeF
 import { execSync } from 'node:child_process';
 import { join, dirname, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { missingBuildOutputs } from './pack-preflight.mjs';
+import { assertTarball, missingBuildOutputs, npmPackEnv } from './pack-preflight.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const buildDir = join(root, 'build');
@@ -112,7 +112,10 @@ try {
     ) + '\n',
   );
 
-  if (!check) execSync('npm pack --pack-destination ..', { cwd: out, stdio: 'inherit' });
+  if (!check) {
+    execSync('npm pack --pack-destination ..', { cwd: out, stdio: 'inherit', env: npmPackEnv() });
+    assertTarball(join(stage, tarball)); // before anything prior is removed
+  }
 } catch (error) {
   rmSync(stage, { recursive: true, force: true });
   const detail = error?.errors?.length ? error.errors.map((e) => `${e.location?.file ?? ''} ${e.text}`.trim()).join('\n  ') : error?.message;

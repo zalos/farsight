@@ -3,7 +3,7 @@
 // compiled by tsc). The real package's contracts are its own; CI smokes the real tarball.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, existsSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, existsSync, readFileSync, readdirSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -214,5 +214,26 @@ test('a successful Sentinel pack replaces build/sentinel only', () => {
     assert.equal(existsSync(join(root, 'build/farsight-cli-0.0.0.tgz')), true);
     assert.equal(existsSync(join(root, 'build/echo/farsight-echo-0.0.0.tgz')), true);
     assert.deepEqual(readdirSync(join(root, 'build')).filter((n) => n.startsWith('.stage-')), []);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('npm pack exiting 0 without a tarball keeps build/sentinel; an inherited dry run is switched off', () => {
+  const root = workspace();
+  try {
+    write(root, 'build/sentinel/farsight-sentinel-prior.tgz', 'prior');
+    write(root, 'fake-bin/npm', '#!/bin/sh\nexit 0\n');
+    chmodSync(join(root, 'fake-bin/npm'), 0o755);
+    const env = (extra) => ({ cwd: root, encoding: 'utf8', timeout: 180_000, env: { ...process.env, ...extra } });
+    const silent = spawnSync(process.execPath, [join(root, 'scripts/pack-sentinel.mjs')], env({ PATH: `${join(root, 'fake-bin')}:${process.env.PATH}` }));
+    assert.equal(silent.status, 1);
+    assert.match(silent.stderr, /prior artifacts in build\/ are unchanged[\s\S]*wrote no farsight-sentinel-0\.0\.0-draft\.1\.tgz/);
+    assert.equal(readFileSync(join(root, 'build/sentinel/farsight-sentinel-prior.tgz'), 'utf8'), 'prior');
+    assert.equal(existsSync(join(root, 'build/sentinel/keep.txt')), true);
+    assert.deepEqual(readdirSync(join(root, 'build')).filter((n) => n.startsWith('.stage-')), []);
+
+    const dry = spawnSync(process.execPath, [join(root, 'scripts/pack-sentinel.mjs')], env({ npm_config_dry_run: 'true' }));
+    assert.equal(dry.status, 0, dry.stderr);
+    assert.ok(existsSync(tarball(root)));
+    assert.equal(existsSync(join(root, 'build/sentinel/farsight-sentinel-prior.tgz')), false, 'replaced by the real output');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

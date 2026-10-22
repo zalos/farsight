@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, copyFileSync, writeFileSync, symlinkSync, rmSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, copyFileSync, writeFileSync, symlinkSync, rmSync, existsSync, readdirSync, readFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -20,6 +20,13 @@ function workspace(prefix) {
 const write = (root, path, text) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); };
 const manifest = (root, dir, body) => write(root, `packages/${dir}/package.json`, JSON.stringify(body));
 const pack = (root, ...args) => spawnSync(process.execPath, [join(root, 'scripts/pack.mjs'), ...args], { cwd: root, encoding: 'utf8' });
+const packWith = (root, env) => spawnSync(process.execPath, [join(root, 'scripts/pack.mjs')], { cwd: root, encoding: 'utf8', env: { ...process.env, ...env } });
+// an `npm` that exits 0 and writes nothing, first on PATH
+function silentNpm(root) {
+  write(root, 'fake-bin/npm', '#!/bin/sh\nexit 0\n');
+  chmodSync(join(root, 'fake-bin/npm'), 0o755);
+  return { PATH: `${join(root, 'fake-bin')}:${process.env.PATH}` };
+}
 
 // The CLI's real shape in miniature: cli → core → graph, built.
 function builtCli(root) {
@@ -139,6 +146,26 @@ test('a successful pack replaces only farsight-cli outputs and keeps other packa
     for (const kept of ['build/keep.txt', 'build/echo/farsight-echo-0.0.0.tgz', 'build/sentinel/farsight-sentinel-0.0.0-draft.1.tgz']) {
       assert.equal(existsSync(join(root, kept)), true, kept);
     }
+    assert.deepEqual(stages(root), []);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('npm pack exiting 0 without a tarball publishes nothing; an inherited dry run is switched off', () => {
+  const root = workspace('farsight-pack-noartifact-');
+  try {
+    builtCli(root);
+    write(root, 'build/farsight-cli-0.0.0.tgz', 'prior tarball');
+    write(root, 'build/farsight-cli/package.json', '{"prior":true}');
+    const silent = packWith(root, silentNpm(root));
+    assert.equal(silent.status, 1);
+    assert.match(silent.stderr, /wrote no farsight-cli-0\.0\.0\.tgz/);
+    assert.equal(readFileSync(join(root, 'build/farsight-cli-0.0.0.tgz'), 'utf8'), 'prior tarball');
+    assert.equal(readFileSync(join(root, 'build/farsight-cli/package.json'), 'utf8'), '{"prior":true}');
+    assert.deepEqual(stages(root), []);
+
+    const dry = packWith(root, { npm_config_dry_run: 'true', NPM_CONFIG_DRY_RUN: 'true' });
+    assert.equal(dry.status, 0, dry.stderr);
+    assert.notEqual(readFileSync(join(root, 'build/farsight-cli-0.0.0.tgz'), 'utf8'), 'prior tarball', 'a real tarball replaced the prior one');
     assert.deepEqual(stages(root), []);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

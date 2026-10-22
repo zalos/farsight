@@ -3,8 +3,8 @@
 // each workspace package's `main`, so only that package's workspace dependency closure
 // must be built. An optional package outside the closure (Sentinel, Echo, the app)
 // may be absent or unbuilt without blocking the pack.
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { basename, join } from 'node:path';
 
 const DEPENDENCY_FIELDS = ['dependencies', 'optionalDependencies', 'peerDependencies'];
 
@@ -55,4 +55,20 @@ export function missingBuildOutputs(root, entry, extra = []) {
   const needed = [...extra];
   for (const pkg of closure) if (typeof pkg.manifest.main === 'string') needed.push(join(pkg.dir, pkg.manifest.main));
   return [...missing.map((name) => `${name} (no workspace manifest)`), ...needed.filter((path) => !existsSync(path))];
+}
+
+/**
+ * The environment for `npm pack`: the caller's, with npm's dry-run switched off explicitly
+ * (an inherited `npm_config_dry_run=true` makes `npm pack` exit 0 and write nothing).
+ */
+export function npmPackEnv(base = process.env) {
+  const env = Object.fromEntries(Object.entries(base).filter(([key]) => !/^npm_config_dry_run$/i.test(key)));
+  return { ...env, npm_config_dry_run: 'false' };
+}
+
+/** Throws unless `npm pack` really produced `path`: a regular, non-empty file. Checked before publishing. */
+export function assertTarball(path) {
+  let stat;
+  try { stat = statSync(path); } catch { throw new Error(`npm pack exited 0 but wrote no ${basename(path)}`); }
+  if (!stat.isFile() || stat.size === 0) throw new Error(`npm pack wrote ${basename(path)}, but it is not a non-empty file`);
 }
