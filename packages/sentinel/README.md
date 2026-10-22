@@ -332,8 +332,9 @@ independently verify the supplied graph's relationships, labels or producer.
 Secret-scan findings are reported with their locations withheld in every profile and never placed; two files with the
 same bytes stay two findings. A file whose name the secret scan matched is withheld from every report, including other
 scanners' citations of it and the minimal `report <runId>` output. A missing, extra or forged accepted secret record
-refuses the report. Every long token on a line the secret scan matched, and in a matched file name, is replaced in
-every report string, including the labels and ids of a confirmed application graph and private excerpts. Names and
+refuses the report. Every candidate a matched line or name yields (the whole value, whatever punctuation joins
+it, and its long pieces) is replaced in every report string that source or a confirmed graph can supply, including
+context labels and ids and private excerpts; generated structure such as enums, catalog keys and digests is kept. Names and
 values the scan did not match are not detected or withheld. A secret finding's identity is keyed by a per-store random secret kept in the owner's
 trust folder (never the public store id, and never in the store, a bundle or a report), so the same file keeps its
 identity across captures without anyone being able to confirm a guessed name from a report.
