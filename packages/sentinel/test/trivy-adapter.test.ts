@@ -38,6 +38,19 @@ test('the pins name the official release, image, and checks bundle, and only con
   assert.doesNotMatch(args, /vuln|secret|license/);
 });
 
+test('native amd64 qualification is bound to the measured CI revision and actual outcome architecture', t => {
+  assert.deepEqual(TRIVY_SUPPORT.platforms.map(p => [p.architecture, p.state]), [['arm64', 'measured'], ['amd64', 'measured']]);
+  const amd64 = TRIVY_SUPPORT.platforms.find(p => p.architecture === 'amd64')!;
+  assert.ok(amd64.evidence.includes('https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627'));
+  assert.ok(amd64.evidence.includes('0d6daa8cd369835fe6ec8ec5a89b4d25cb23edc5'));
+  const result = run(t, REPORT, {}, { arch: 'amd64' });
+  assert.deepEqual(result.platform, { architecture: 'amd64', state: 'measured' });
+  assert.ok(result.findings.length > 0);
+  const elsewhere = run(t, REPORT, {}, { arch: 'riscv64' });
+  assert.deepEqual(elsewhere.platform, { architecture: 'riscv64', state: 'refused' });
+  assert.equal(elsewhere.findings.length, 0);
+});
+
 test('which files are Trivy inputs, by the engine’s own name rules', () => {
   const kinds = Object.fromEntries(['Dockerfile', 'a/Dockerfile.prod', 'a/app.dockerfile', 'a/Containerfile', 'a/DOCKERFILE', 'a/Dockerfile.dev.x',
     'infra/main.tf', 'infra/x.tf.json', 'infra/terraform.tfvars', 'k/pod.yaml', 'k/pod.yml', 'k/pod.json', 'README.md'].map(p => [p, trivyKindOf(p) ?? null]));
@@ -141,9 +154,9 @@ test('a run that did not evaluate the pinned bundle, failed, was truncated or ra
   assert.equal(failed.findings.length, 0);
   assert.equal(run(t, REPORT, { exitCode: 2, failure: { category: 'words from stderr', exitCode: 2 } }).engineFailure, 'sentinel.trivy.engine.unknown');
   assert.equal(row(run(t, REPORT, { stdoutTruncated: true }), 'deploy/pod.yaml'), 'error:outputTruncated');
-  const amd = run(t, REPORT, {}, { arch: 'amd64' });
-  assert.equal(amd.platform.state, 'refused');
-  assert.equal(amd.findings.length, 0);
+  const elsewhere = run(t, REPORT, {}, { arch: 'riscv64' });
+  assert.equal(elsewhere.platform.state, 'refused');
+  assert.equal(elsewhere.findings.length, 0);
   assert.equal(row(run(t, REPORT, {}, { state: 'timed-out' }), 'deploy/pod.yaml'), 'error:attemptTimedOut');
   assert.equal(row(run(t, REPORT, {}, { mutate: 'privileged' }), 'deploy/pod.yaml'), 'error:inputMismatch');
   return Promise.all([

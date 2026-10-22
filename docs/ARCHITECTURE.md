@@ -758,8 +758,9 @@ command (PR 09) and shipping no database in the package. linux/amd64 is measured
       the configuration type, the captured path and artifact (a module folder has none) and lines validated against
       the captured bytes; never the engine's message, which quotes the file, and never a new graph node. Checks outside
       the pinned bundle's `builtin.` namespace, unknown targets and impossible lines are refused, with a reason.
-    - **Platforms.** linux/arm64 is measured on a darwin-arm64 Docker Desktop host; linux/amd64 is unmeasured until the
-      native `sentinel-iac-qualification` workflow passes with zero skips.
+    - **Platforms.** linux/arm64 is measured on a darwin-arm64 Docker Desktop host; linux/amd64 is measured on
+      native Ubuntu 24.04.5 with Docker Engine 28.0.4 by [CI run 39817213827](https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627) (33 tests, zero skips, and both installed workers).
+      The exact tested revision and pins are in [the evidence record](proposals/farsight-sentinel/evidence/2026-10-22-iac-native.json).
 
     Not decided here: registering the adapter in the production registry and planning its checks (PR 08/09),
     Terraform variable files and plans, Helm rendering, and any additional configuration type.
@@ -786,8 +787,8 @@ command (PR 09) and shipping no database in the package. linux/amd64 is measured
     - **Findings are CI configuration facts at captured paths.** A finding keeps the audit, severity, confidence and
       its primary and related locations as UTF-8 byte spans checked against the captured bytes; never the engine's
       annotations, quoted features, descriptions or fixes, and never a new graph node.
-    - **Platforms.** linux/arm64 is measured; linux/amd64 is unmeasured until the native `sentinel-iac-qualification`
-      workflow passes with zero skips.
+    - **Platforms.** linux/arm64 is measured; linux/amd64 is measured on native Ubuntu 24.04.5 with
+      Docker Engine 28.0.4 by [the same native CI job](https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627); its offline gaps remain unchanged.
 
     The worker change found here applies to every shell worker: a frame binding built in a command substitution never
     advances the sequence number, so a diagnostic followed by a result repeats it and PR 07 refuses the attempt. Both

@@ -41,6 +41,18 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel Trivy/zizmor native qualification — 2026-10-22
+
+A separate follow-on records Linux amd64 as measured for the existing pinned Trivy and zizmor workers only.
+[Native CI job 119958735627](https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627) checked out merge
+`0d6daa8cd369835fe6ec8ec5a89b4d25cb23edc5` (PR head `454667ed8f254ac11b6e030b1ad9e44dcd333b8b` onto
+`e25424fb637e5491e307a2be8d9124af2463450d`): all 33 adapter/conformance tests passed with zero skips, then both
+installed workers produced the expected findings. The sanitized evidence record binds image manifests, worker
+bytes, source digests and the exact job. No broader engine, runtime, architecture, CLI or coverage qualification is
+implied; zizmor's offline limits still apply. The workflow now expects the measured platform word.
+Local follow-on validation: build and typecheck passed, all 35 unit/container conformance cases passed with zero
+skips on the existing arm64 runtime, and the installed package ran both unchanged workers successfully.
+
 ## Sentinel sampled-memory test — 2026-10-22
 
 Branch `codex/sol-memory-test` changes only the bootstrap resource regression: the real parse and store now receive

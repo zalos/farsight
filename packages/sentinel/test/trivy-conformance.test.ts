@@ -55,7 +55,8 @@ test('positives, a negative, recognition and Terraform limits, from the pinned b
   const wall = Date.now() - t0;
   assert.equal(r.attempt, 'succeeded');
   assert.equal(r.engineExit, 0);
-  assert.equal(r.platform.state, QUALIFY ? 'candidate' : 'measured');
+  assert.equal(r.platform.state, 'measured');
+  if (QUALIFY) assert.equal(r.platform.architecture, QUALIFY, 'the outcome, not the host or qualification request, names the measured architecture');
   assert.ok(r.bundle.checksLoaded > 500, 'the engine loaded the pinned bundle from disk');
   console.log(`# trivy conformance: ${r.findings.length} findings, ${r.refused.length} refused, ${wall} ms`);
   for (const c of r.coverage) console.log(`# ${c.relativePath} ${c.status} ${c.limitations.join(',')} [${checks(r, c.relativePath).join(' ')}]`);

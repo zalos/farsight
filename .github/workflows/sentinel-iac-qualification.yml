@@ -103,8 +103,8 @@ jobs:
           export SENTINEL_TRIVY_CHECKS_DIR="$RUNNER_TEMP/iac-owner"
           pnpm pack:sentinel
           node scripts/test-sentinel-package.mjs | tee package.log
-          grep -q 'installed trivy worker run by the workspace service: .* (amd64 candidate' package.log
-          grep -q 'installed zizmor worker run by the workspace service: .* (amd64 candidate' package.log
+          grep -q 'installed trivy worker run by the workspace service: .* (amd64 measured' package.log
+          grep -q 'installed zizmor worker run by the workspace service: .* (amd64 measured' package.log
       - name: No container left behind
         if: always()
         run: |
