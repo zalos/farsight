@@ -113,7 +113,9 @@ test('a linked worktree\'s Git directory is used only when explicitly permitted'
   git(main, ['worktree', 'add', '--quiet', join(dir, 'linked')]);
   assert.throws(() => GitRepository.open(join(dir, 'linked')), (e: unknown) => e instanceof GitReadError && e.code === 'unsupported');
   const gitDir = join(main, '.git/worktrees/linked');
-  const repo = GitRepository.open(join(dir, 'linked'), { gitDir });
+  assert.throws(() => GitRepository.open(join(dir, 'linked'), { gitDir }), (e: unknown) => e instanceof GitReadError && e.code === 'unsupported',
+    'its common directory needs its own grant');
+  const repo = GitRepository.open(join(dir, 'linked'), { gitDir, commonDir: join(main, '.git') });
   assert.equal(repo.resolveCommit(), head, 'HEAD from the worktree, objects from the common directory');
   assert.equal(repo.readObject(git(main, ['rev-parse', 'HEAD:a.ts']).trim(), 64)!.data.toString(), 'a\n');
 });

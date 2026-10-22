@@ -13,6 +13,9 @@ export interface SubmoduleRequest {
   /** Canonical absolute folder of a local clone holding the pinned commit. */
   readonly root: string;
   readonly lfsObjects?: string;
+  /** As for a primary source: a Git directory and common directory outside `root`, permitted explicitly. */
+  readonly gitDir?: string;
+  readonly commonDir?: string;
 }
 
 export interface CommittedSource {

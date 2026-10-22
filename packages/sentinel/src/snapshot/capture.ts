@@ -41,6 +41,8 @@ export interface CaptureSourceRequest {
   readonly revision?: string;
   /** A Git directory outside `root` (a linked worktree's), permitted explicitly. */
   readonly gitDir?: string;
+  /** The common Git directory a linked worktree's Git directory names, permitted explicitly (with `gitDir`). */
+  readonly commonDir?: string;
   /** A local Git LFS object folder the capture may read pointer content from. Nothing is downloaded. */
   readonly lfsObjects?: string;
   /** Committed-tree only: submodules to capture as their own sources, from local clones. */
@@ -100,6 +102,7 @@ function checkRequest(request: CaptureRequest): CapturePolicy {
     canonical(s.root, s.sourceId);
     if (s.lfsObjects !== undefined) canonical(s.lfsObjects, `${s.sourceId} lfsObjects`);
     if (s.gitDir !== undefined) canonical(s.gitDir, `${s.sourceId} gitDir`);
+    if (s.commonDir !== undefined) canonical(s.commonDir, `${s.sourceId} commonDir`);
     if (request.mode === 'working-copy' && (s.revision !== undefined || (s.submodules?.length ?? 0) > 0)) {
       bad(`${s.sourceId}: revision and submodules apply to committed-tree capture only`);
     }
@@ -114,6 +117,8 @@ function checkRequest(request: CaptureRequest): CapturePolicy {
       paths.add(sub.path);
       canonical(sub.root, sub.sourceId);
       if (sub.lfsObjects !== undefined) canonical(sub.lfsObjects, `${sub.sourceId} lfsObjects`);
+      if (sub.gitDir !== undefined) canonical(sub.gitDir, `${sub.sourceId} gitDir`);
+      if (sub.commonDir !== undefined) canonical(sub.commonDir, `${sub.sourceId} commonDir`);
     }
   }
   if (request.stageSize !== undefined && (!Number.isSafeInteger(request.stageSize) || request.stageSize < 1 || request.stageSize > STAGE_LIMIT)) {
@@ -131,8 +136,12 @@ function storeInside(root: string, storePath: string): string | undefined {
   return relative(root, store).split(sep).join('/');
 }
 
-function openRepo(root: string, gitDir: string | undefined): GitRepository {
-  try { return GitRepository.open(root, gitDir === undefined ? {} : { gitDir }); } catch (e) {
+/** The Git directories a source explicitly permits outside its root, as the reader's options. */
+const gitGrants = (s: { gitDir?: string; commonDir?: string }) =>
+  ({ ...(s.gitDir === undefined ? {} : { gitDir: s.gitDir }), ...(s.commonDir === undefined ? {} : { commonDir: s.commonDir }) });
+
+function openRepo(root: string, grants: { gitDir?: string; commonDir?: string }): GitRepository {
+  try { return GitRepository.open(root, grants); } catch (e) {
     if (e instanceof GitReadError && e.code === 'unsupported') throw new SnapshotError('sentinel.capture.gitUnsupported', e.message);
     throw new SnapshotError('sentinel.capture.notRepository', e instanceof Error ? e.message : '');
   }
@@ -169,7 +178,7 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
       if (!st.isDirectory()) throw new SnapshotError('sentinel.capture.rootUnreadable', s.sourceId);
       const storeRel = storeInside(root, store.storePath);
       if (request.mode === 'committed-tree') {
-        const repo = openRepo(root, s.gitDir);
+        const repo = openRepo(root, gitGrants(s));
         repos.push(repo);
         let commit: string;
         let found;
@@ -180,7 +189,7 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
         sources.push({ sourceId: s.sourceId, repositoryId: s.repositoryId, commit, dirty: false, capturedAt: now() });
         for (const sub of found) {
           const subRoot = canonical(sub.request.root, sub.request.sourceId);
-          const subRepo = openRepo(subRoot, undefined);
+          const subRepo = openRepo(subRoot, gitGrants(sub.request));
           repos.push(subRepo);
           let present = false;
           try { present = subRepo.readObject(sub.commit, 64 * 1024 * 1024)?.type === 'commit'; } catch { present = false; }
@@ -198,7 +207,7 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
         }
       } else {
         let repo: GitRepository | undefined;
-        try { repo = GitRepository.open(root, s.gitDir === undefined ? {} : { gitDir: s.gitDir }); } catch { repo = undefined; }
+        try { repo = GitRepository.open(root, gitGrants(s)); } catch { repo = undefined; }
         if (repo) repos.push(repo);
         let commit: string | null = null;
         if (repo) { try { commit = repo.resolveCommit('HEAD'); } catch { commit = null; } }

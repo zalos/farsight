@@ -619,3 +619,22 @@ test('a collision whose folder holds an excluded child reports its descendants a
   await restoreSnapshot(fx.store, r.record.snapshotId, target);
   assert.deepEqual(observe(join(target, 'app')), ['keep.ts']);
 });
+
+test('a linked worktree is captured only with its Git and common directories both granted', needsStore, async t => {
+  const dir = scratch(t);
+  const main = join(dir, 'main');
+  const head = commitRepo(main, { 'a.ts': 'a\n' });
+  git(main, ['worktree', 'add', '--quiet', join(dir, 'linked')]);
+  const linked = join(dir, 'linked');
+  const gitDir = join(main, '.git/worktrees/linked');
+  const fx = await openCaptureStore(t, dir);
+  const source = { sourceId: 'app', repositoryId: 'r', root: linked };
+  await assert.rejects(captureSnapshot(fx.store, { mode: 'committed-tree', sources: [source] }), coded('sentinel.capture.gitUnsupported'));
+  await assert.rejects(captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{ ...source, gitDir }] }), coded('sentinel.capture.gitUnsupported'));
+  await assert.rejects(captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{ ...source, gitDir, commonDir: 'relative' }] }), coded('sentinel.capture.rootNotCanonical'));
+  const r = await captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{ ...source, gitDir, commonDir: join(main, '.git') }] });
+  assert.equal(r.snapshot.sources[0].commit, head);
+  assert.equal(entryOf(r.snapshot, 'a.ts').disposition, 'included');
+  const wc = await captureSnapshot(fx.store, { mode: 'working-copy', sources: [{ ...source, gitDir, commonDir: join(main, '.git') }] });
+  assert.equal(wc.snapshot.sources[0].commit, head, 'the working copy names its commit through the same grants');
+});
