@@ -121,7 +121,7 @@
             "$ref": "#/definitions/SentinelAction"
           },
           "minItems": 1,
-          "maxItems": 9
+          "maxItems": 11
         },
         "principals": {
           "type": "array",
@@ -184,7 +184,9 @@
         "tool.acquire",
         "paid.admit",
         "disclosure.send",
-        "settings.adopt"
+        "settings.adopt",
+        "run.pause",
+        "run.cancel"
       ],
       "description": "Every action the Sentinel gate decides."
     },

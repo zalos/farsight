@@ -161,7 +161,7 @@ const PINS: Array<[string, readonly string[], string[], string[]]> = [
   ['coverage granularity', COVERAGE_GRANULARITIES, ['per-file-per-rule', 'per-file', 'aggregate'], schemaEnum('coverage', 'CoverageGranularity')],
   ['coverage basis', COVERAGE_BASES, ['executed', 'reused', 'imported', 'unavailable'], schemaEnum('coverage', 'CoverageBasis', 'kind')],
   ['decisions', DISPOSITION_DECISIONS, ['accepted-risk', 'false-positive', 'mitigated', 'deferred'], schemaEnum('disposition', 'DispositionDecision')],
-  ['decision channels', DECISION_CHANNELS, ['owner-cli', 'mcp', 'http-bridge', 'model'], schemaEnum('disposition', 'DecisionChannel')],
+  ['decision channels', DECISION_CHANNELS, ['owner-cli', 'mcp', 'http-bridge', 'model', 'local-service'], schemaEnum('disposition', 'DecisionChannel')],
   ['assertion trust', ASSERTION_TRUSTS, ['asserted', 'imported-config', 'runtime-observed'], schemaEnum('disposition', 'AssertionTrust')],
   ['comparison labels', COMPARISON_LABELS, ['new', 'persistent', 'changed-evidence', 'changed-detection', 'reopened', 'reopened-disposition-expired', 'resolved-by-comparable-check', 'removed-surface', 'unassessed-in-current-scope', 'incomparable-conditions'], schemaEnum('report', 'ComparisonLabel')],
   ['protocol messages', PROTOCOL_MESSAGE_TYPES, ['hello', 'welcome', 'refuse', 'start', 'cancel', 'progress', 'checkpoint', 'heartbeat', 'diagnostic', 'cancel-ack', 'result'], schemaEnum('protocol', 'ProtocolMessage', 'type')],

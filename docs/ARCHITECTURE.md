@@ -582,3 +582,71 @@ executes the analysis, and crashes and resumes in both revisions.
 
 **Not decided here:** the run's admission receipt (`run.start` on the plan digest) and its CLI, child runs over a
 parent's bootstrap, reuse derivations (PR 27), and planning in the coordinator itself.
+
+37. **Sentinel's command line is the owner's entrypoint; its local service never grants owner authority (2026-10-22).**
+
+`farsight-sentinel` is where the owner acts: `init` writes the workspace's settings once (PR 06's defaults plus a
+human-only `capture.source`/`run.start` grant for the chosen profile) and never overwrites them; `settings adopt`
+shows the settings digest and waits (exit 4) until `--confirm`, when the owner's receipt is issued and spent in that
+same process and the exact bytes adopted; `plan`, `run`, `status` and `report` work in the foreground over the store
+facade, each change decided first by admission's three verdicts. Commands parse only the options they declare;
+every result is typed (`cli/outcome.ts`): Sentinel's exit codes 0–4 for policy results, plus `submitted`,
+`unavailable`, `prepared`, `kept`, `answered` and `refused`, which never borrow a policy word, and `--json` always
+carries the outcome, the exit code and the three verdicts.
+
+**Who asks is the entrypoint's, never the request's.** The owner channel is the command line in its own process. A
+client of the local service (`transport/ipc.ts`) is always a non-owner agent, whatever its hello names: `cli`,
+`mcp` and `http-bridge` only label the channel (`local-service`, `mcp`, `http-bridge` in the draft `DecisionChannel`).
+A request body that names an actor, principal, channel or confirmer is refused, so owner authority can reach the
+service only as a receipt id the owner's own process minted, which the service verifies. The socket lives in a
+private runtime folder keyed by the canonical store path and an owner nonce (`$XDG_RUNTIME_DIR`, `$TMPDIR`, else a
+short 0700 folder under `/tmp`); its path is measured in bytes with room for the terminator (103 on macOS, 107 on
+Linux); folder and socket must be this user's and closed to others; a stale socket of ours is replaced and anything
+else refused; frames are length-bounded JSON; the handshake must name the store and owner the client expects.
+
+**The canonical path, with a foundation preview as its only check.** The command line plans nothing itself. `plan`
+captures the workspace (admitted as `capture.source`), admits the bootstrap revision, has the coordinator's own
+capture, parse and inventory operations publish it (ADR 25), plans the analysis with PR 06's planner from exactly that
+published evidence, under the owner's promoted rule lock and the adopted policy, and admits it with the lock, policy
+and execution profile before anything is scheduled; `run`, foreground or in the service, executes only the run's
+current admitted revision. A run's identity is its captured inventory, lock, policy and profile, so the same content
+under the same terms is the same run (`kept`). The profile is the coordinator's execution profile record over the
+shipped registry: the bootstrap operations and one check adapter, an original preview detector (SQL text assembled
+from strings in TS/JS and Java) shipped as the pack `rules/foundation-preview` the owner promotes. The analysis plans
+one scope per unit, because a worker receives its inputs by artifact id and must tell which file is which scope; the
+detector covers a unit only when it can, and reports anything else skipped, so an unread file stays partial. Results
+are read from the ledger: the recorded outcome and the coverage records. A run resting on the preview rule ends
+`required-coverage-incomplete` (exit 2), and this build never prints `satisfied` (findings are judged against the
+policy only with the full report). `rerun <run> [--stage <unit,…>]` and `retry <run>` (the units that did not
+publish) plan a new run naming an ended one as its parent, over its retained snapshot with nothing captured again,
+after previewing the consequences from the parent's admitted plan: the selected units and everything downstream run
+again, prerequisites and the bootstrap are reused as published. Only a whole-analysis rerun executes today; a strict
+subset is previewed and refused, because planning just those units and reusing another run's published work are not
+built yet. Changed source is a new `plan`. The report is rendered from the ledger and stored artifacts, pinned to the run's last
+event. The published bundle ships the modules the code names by file URL (the launch gate, the bootstrap operations'
+implementations) as entries of their own, references rewritten and digests recorded in its manifest.
+
+**The owner's background service holds the store; authority reaches it as a receipt.** `serve` (or `run --detach`,
+starting it on demand as this same executable with a fixed argument list and an explicit environment) opens the
+store for its lifetime, listens on the socket and records its address and owner nonce in the owner's private user
+state, never the checkout. While it runs it alone opens the store: status, wait and report go through it; plan and
+foreground run refuse until it stops (after an idle period, or on SIGTERM, pausing work in flight). Starting or
+resuming a run needs either a receipt the owner's own CLI issued after `--confirm`, bound to `run.start`, the run's
+current admitted plan digest, the policy revision and the exact instance (workspace identity, store and run), spent
+once by the service, or what the adopted grants give the connection's
+agent principal, by admission; the defaults give agents nothing. Pause and cancel are writes decided the same way
+under their own actions (`run.pause`, `run.cancel`), so a receipt for one never serves another and being connected
+grants nothing. The launcher captures its own invocation and stops exactly the process it started; the service
+record is removed only by the process that wrote it. One run executes at a time; a second start of the same plan joins it, a start of a
+finished run prints its result again, and a run whose service died reads as interrupted and resumes through the
+coordinator's recovery with each output accepted once.
+
+**The owner's rule lock is kept in owner-private state, one immutable revision per digest.** `rules promote <pack>`
+validates the folder with the rules module's `validatePack` and, only after `--confirm`, promotes it with its
+`promote` under a receipt for exactly that candidate against exactly the current revision; each revision is filed once
+under its digest and read back through `verifyPinnedLock`, and the current pointer is replaced atomically, only from
+the revision the promotion was confirmed against (a create-once link per revision, published whole through a synced
+temporary name), and the pack's exact files are kept so a plan resolves the lock against them. A repository supplies
+no lock. **Not in this decision:** the full report and finding policy (PR 19); per-input paths in the worker
+protocol, which would let a unit cover several files. Same-account code is outside this boundary, as for the store.
+

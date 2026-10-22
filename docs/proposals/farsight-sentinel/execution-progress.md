@@ -15,7 +15,10 @@ identifiers, not GitHub PR numbers.
   prerequisite merged as [#137](https://github.com/zalos/farsight/pull/137), `2df3dc2`, after SOL review, identical
   real-ingest output and all seven CI checks. Parser integration merged as [#141](https://github.com/zalos/farsight/pull/141),
   `500351c`; rules and adopted policy merged as [#142](https://github.com/zalos/farsight/pull/142), `074ee43`.
-  The canonical planner passed SOL review and final local integration checks; scheduler and CLI integration continue.
+  The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`.
+  The scheduler merged as [#147](https://github.com/zalos/farsight/pull/147), `2587eb16`, after independent SOL review,
+  421 local tests and the full native Linux process/container crash matrix at 20 repetitions with zero failures or skips.
+  CLI and scanner integration continue.
   A Git header capture correction merged as [#143](https://github.com/zalos/farsight/pull/143), `9a0fd21`.
 - PR 02 merged as [#134](https://github.com/zalos/farsight/pull/134), `269c3bc`, after contract/packaging
   review and all nine CI checks.
@@ -88,29 +91,29 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 | 03 | Ledger, object store, coordinator ownership | 02, 01 ownership probe | done | One owner on simultaneous starts; safe takeover; upgrade failure safe | [#135](https://github.com/zalos/farsight/pull/135) `97ff419`; macOS 135 passed/3 explicit skips, Linux 134/4; clean npm reopen; independent SOL review and all nine CI checks |
 | 04 | Immutable capture and security inventory | 03 | done | E1 reconciles all entries; unreadable scope stays unknown | [#140](https://github.com/zalos/farsight/pull/140), `464da4e`; SOL reviews, 252 integrated tests/17 explicit skips, identical real ingests, browser checks and all eight final CI checks |
 | 05 | Parser integration and inventory reconciliation | 04 | done | TS/Java malformed, unsupported and limit cases reconciled; real-ingest comparison vs `main` | [#141](https://github.com/zalos/farsight/pull/141), `500351c`; SOL approved, 266 tests/17 explicit skips, clean npm parser types, identical real ingests, browser checks and ten final CI checks |
-| 06 | Rules, policy merge, deterministic planning | 05 | in progress | Repository config cannot weaken mandatory rules | Shared matcher prerequisite [#137](https://github.com/zalos/farsight/pull/137), `2df3dc2`; rules/policy [#142](https://github.com/zalos/farsight/pull/142), `074ee43`; canonical planner SOL approved, 336 combined tests/17 explicit skips, clean npm consumer and identical real ingests; PR checks pending |
+| 06 | Rules, policy merge, deterministic planning | 05 | done | Repository config cannot weaken mandatory rules | Shared matcher [#137](https://github.com/zalos/farsight/pull/137), rules/policy [#142](https://github.com/zalos/farsight/pull/142), canonical planner [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`; independent review, 336 local tests, clean npm consumer, identical real ingests and final CI passed |
 | 07 | Worker protocol and scanner isolation | 03, 01 isolation decision, 02 | done | Network, host-file, resource and malformed-output canaries fail safely; no host fallback | [#139](https://github.com/zalos/farsight/pull/139), `625a920`; SOL approved, macOS real-container checks 92 passed, Linux qualification 82 passed/zero skipped, all eight final CI checks |
-| 08 | Scheduler, resume, pause, cancellation | 03, 06, 07 | in progress | E4 kills at every boundary, 20 repetitions, zero lost/duplicate outputs | — |
+| 08 | Scheduler, resume, pause, cancellation | 03, 06, 07 | done | E4 kills at every boundary, 20 repetitions, zero lost/duplicate outputs | [#147](https://github.com/zalos/farsight/pull/147), `2587eb16`; SOL reviewed, 421 local tests, clean npm consumer, identical real ingests, final CI and native [20-repetition recovery](https://github.com/zalos/farsight/actions/runs/39803836156) passed |
 | 09 | Standalone CLI and minimal report slice | 08 | in progress | Duplicate starts return one run; disconnect does not stop work; bounded status | — |
-| 10 | Pattern scanner and original rules | 09, 01 engine decision | in progress | Pinned engine matches known positives/negatives incl. exit-zero omissions | — |
-| 11 | Current-tree secrets | 09 | in progress | Synthetic secrets never appear in output, export or logs | — |
-| 12 | Offline dependency advisories | 09 | in progress | Lockfile/Maven complete vs partial matching distinguished; advisory DB gate measured | — |
-| 13 | Infrastructure and CI checks | 09, 12 | pending | Workflow/Dockerfile/IaC positives and negatives against installed tools | — |
-| 14 | Next matcher semantics | 05, 06, 09 | pending | Matching, excluded, dynamic and version-mismatch cases correct | — |
-| 15 | Express order and mounts | 05, 06, 09 | pending | Auth before/after route, nested mounts and bypass fixtures | — |
-| 16 | Nest guards, pipes, interceptors | 05, 06, 09 | pending | Direct providers pass; dynamic/unresolved stay unknown | — |
-| 17 | Spring servlet security | 05, 06, 09 | in progress | E2 six review cases plus bypass negatives; no false protected verdict | — |
-| 18 | Bounded paths, optional deep engine | 10, 14–17, E3 | pending | Cross-file distinguished from a call path; no invented deep backend | — |
-| 19 | Finding identity, comparison, standalone report | 10–18 | pending | Identity stable under movement; standalone HTML/Markdown/JSON readable offline | — |
+| 10 | Pattern scanner and original rules | 09, 01 engine decision | in progress | Pinned engine matches known positives/negatives incl. exit-zero omissions | Adapter draft [#145](https://github.com/zalos/farsight/pull/145); native qualification passed; canonical public command integration open |
+| 11 | Current-tree secrets | 09 | in progress | Synthetic secrets never appear in output, export or logs | Adapter draft [#150](https://github.com/zalos/farsight/pull/150); native ARM64/AMD64 conformance and independent review passed; command integration open |
+| 12 | Offline dependency advisories | 09 | in progress | Lockfile/Maven complete vs partial matching distinguished; advisory DB gate measured | Adapter draft [#146](https://github.com/zalos/farsight/pull/146); real offline scanner qualification passed; command integration open |
+| 13 | Infrastructure and CI checks | 09, 12 | in progress | Workflow/Dockerfile/IaC positives and negatives against installed tools | Adapter draft [#148](https://github.com/zalos/farsight/pull/148); omission corrections independently reviewed; command integration open |
+| 14 | Next matcher semantics | 05, 06, 09 | in progress | Matching, excluded, dynamic and version-mismatch cases correct | Framework draft [#151](https://github.com/zalos/farsight/pull/151); reviewed package API and installed consumer pass; command integration open |
+| 15 | Express order and mounts | 05, 06, 09 | in progress | Auth before/after route, nested mounts and bypass fixtures | Framework draft [#152](https://github.com/zalos/farsight/pull/152); reviewed package API and installed consumer pass; command integration open |
+| 16 | Nest guards, pipes, interceptors | 05, 06, 09 | in progress | Direct providers pass; dynamic/unresolved stay unknown | Captured-registration implementation and correction under independent review; command integration open |
+| 17 | Spring servlet security | 05, 06, 09 | in progress | E2 six review cases plus bypass negatives; no false protected verdict | Framework draft [#149](https://github.com/zalos/farsight/pull/149); reviewed package API and installed consumer pass; sample application and command integration open |
+| 18 | Bounded paths, optional deep engine | 10, 14–17, E3 | in progress | Cross-file distinguished from a call path; no invented deep backend | Analysis draft [#153](https://github.com/zalos/farsight/pull/153); reviewed static paths and owner-approved import; command integration open |
+| 19 | Finding identity, comparison, standalone report | 10–18 | in progress | Identity stable under movement; standalone HTML/Markdown/JSON readable offline | Report identity, offline outputs and context placement implemented; context authority corrections under review |
 | 20 | Dispositions, assertions, runtime-evidence import | 19 | pending | Decisions bound to scoped evidence and expiry | — |
-| 21 | Ollama and hosted transport | 08, 09 | pending | Redirects, truncation, cancellation, unpriced endpoints handled | — |
-| 22 | Guided and general model review | 18–21 | pending | E5/E8 under configured budgets and accepted thresholds; live evaluation awaits the second-model configuration | — |
+| 21 | Ollama and hosted transport | 08, 09 | in progress | Redirects, truncation, cancellation, unpriced endpoints handled | Transport and budget implementation independently reviewed; public command integration open |
+| 22 | Guided and general model review | 18–21 | in progress | E5/E8 under configured budgets and accepted thresholds; live evaluation awaits the second-model configuration | Review implementation and model settings exist; review corrections and live qualification open |
 | 23a | Deterministic MCP and placed evidence | 20, schema with 24 | pending | Read access cannot mutate or admit paid work | — |
 | 23b | Fenced external review claims | 22, 23a | pending | Cross-workspace, expired and duplicate submissions fail | — |
 | 24 | Optional Farsight host bridge | 09, 20 | pending | Origin/body/path guards, version mismatch, absent service handled | — |
 | 25 | Deterministic GUI and placement | 23a, 24 | pending | CLI/MCP/GUI agree; configure → preview → run → stage I/O → rerun → compare demonstrated | — |
 | 25b | Model review and disclosure in the GUI | 22, 25 | pending | Model picker; review never changes deterministic totals | — |
-| 26 | Replay, retention, packaging, deterministic release gate | 01–20, 23a, 24, 25 | pending | Restored bundle works without the checkout; accepted E1–E4/E7/E8 | — |
+| 26 | Replay, retention, packaging, deterministic release gate | 01–20, 23a, 24, 25 | in progress | Restored bundle works without the checkout; accepted E1–E4/E7/E8 | Packaging prework reviewed; replay and retention corrections in progress; release gates remain open |
 | 27 | Conservative differential selection | 26 | pending | Every reuse justified by explicit dependencies | — |
 | 28 | Differential/full audit and enablement | 27 | pending | Zero unexplained differences vs full scans | — |
 | 29 | Optional isolated Java builds | 26, new owner review | pending | Per backlog §PR 29 after its review; builds only synthetic/sample sources | — |

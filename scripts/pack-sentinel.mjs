@@ -18,6 +18,7 @@ import { build } from 'esbuild';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertTarball, buildClosure, missingBuildOutputs, npmPackEnv } from './pack-preflight.mjs';
@@ -75,7 +76,8 @@ if (!Object.keys(bins).length || !jsExports.some(([subpath]) => subpath === '.')
 // Files started or hashed by path rather than imported ship as their own entries (not exports): the launch gate
 // a built-in worker process runs first (src/execution/assets.ts finds it from the package root).
 // It is required whenever the package can start a built-in worker (it has the supervisor).
-for (const [asset, needs] of [['execution/launch-gate', 'execution/supervisor']]) {
+const ASSETS = [['execution/launch-gate', 'execution/supervisor']];
+for (const [asset, needs] of ASSETS) {
   const source = join(dir, 'src', `${asset}.ts`);
   if (!existsSync(join(dir, 'src', `${needs}.ts`))) continue;
   if (!existsSync(source)) fail(`packages/sentinel/src/${asset}.ts is missing; the launch gate must ship with the package.`);
@@ -230,6 +232,14 @@ try {
     files.push('schemas');
     exportsMap['./schemas/*'] = './schemas/*';
   }
+  // The rule packs Sentinel ships (data only: a manifest, detector descriptions, fixtures), promoted by the owner.
+  if (existsSync(join(dir, 'rules'))) { cpSync(join(dir, 'rules'), join(out, 'rules'), { recursive: true }); files.push('rules'); }
+  // Provenance of the files the package starts by path rather than imports (the launch gate): where and which bytes.
+  const assets = {};
+  for (const [asset] of ASSETS) {
+    const emitted = join(out, 'dist', `${asset}.mjs`);
+    if (existsSync(emitted)) assets[asset] = { path: `dist/${asset}.mjs`, sha256: createHash('sha256').update(readFileSync(emitted)).digest('hex') };
+  }
   for (const doc of ['README.md']) if (existsSync(join(dir, doc))) { cpSync(join(dir, doc), join(out, doc)); files.push(doc); }
   writeFileSync(join(out, 'package.json'), JSON.stringify({
     name: 'farsight-sentinel', version,
@@ -237,6 +247,7 @@ try {
     description: sentinel.description ?? 'Optional Sentinel package for Farsight, installed and run separately from farsight-cli.',
     license: 'MIT', ...(pkg.repository ? { repository: pkg.repository } : {}), type: 'module',
     bin: bins, types: exportsMap['.'].types, exports: exportsMap, files,
+    ...(Object.keys(assets).length ? { sentinel: { assets } } : {}),
     ...(Object.keys(dependencies).length ? { dependencies } : {}),
     engines: { node: sentinel.engines?.node ?? pkg.engines?.node ?? '>=24' },
   }, null, 2) + '\n');
