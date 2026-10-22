@@ -57,6 +57,19 @@ independent probes). The eight new durable cases against a fresh immutable build
 failures and one positive-control pass. Affected builds/types, catalog and exact commit subject lint passed.
 All fixtures remain inert capture/parse/analysis inputs; no target code is executed. Independent review is pending.
 
+### Export, namespace and runtime-import boundaries (follow-up)
+
+The follow-up after `d2bfd655` proves a supported alias stays in a local, nonexported declaration outside an
+unmodeled namespace. Later assignments to exported live bindings are escapes too. Qualified runtime
+import-equals references are no longer erased as types. Framework CommonJS/dynamic loads and retained host or
+Node loader capabilities are unknown; actual lexical/module declarations shadow those host loader names.
+Valid type-only imports, unrelated namespace member names and a shadowed local `require` remain positive controls.
+
+Validation: 91 focused captured-source cases passed, 0 failed, 0 skipped (58 durable owner cases plus 33
+independent probes, including all three new review failures). Thirteen new durable cases against a fresh
+immutable `d2bfd655` build produced 10 negative failures and 3 positive-control passes. Sentinel build/typecheck,
+catalog and exact subject lint passed. No target application code was executed. Independent review is pending.
+
 ## Provider access
 
 - Codex: `.codex/config.toml` configures the workspace CLI over MCP stdio.

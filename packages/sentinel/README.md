@@ -222,6 +222,8 @@ aggregates, tagged-template arguments or class fields leave an explicit `framewo
 or assume they preserve the constructor: validation and absence remain unknown. Supported local aliases are still
 checked for mutation, and a separate shadowed parameter does not imply a mutation of the imported framework.
 Every other runtime use defaults to unknown until the pack explicitly models how it consumes the value.
+An alias is followed only while its declaration stays local: exports, namespace containers and unsupported
+module-loading paths remain explicit boundaries. Type-only imports and unrelated local member names are harmless.
 
 ## Versions and evolution
 

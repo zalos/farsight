@@ -309,15 +309,48 @@ const RUNTIME_TS = new Set([
 ]);
 const MEMBER = new Set(['MemberExpression', 'StaticMemberExpression', 'ComputedMemberExpression']);
 
+/** A host loader name is unavailable when a lexical or module declaration owns that spelling. */
+function unboundGlobal(file: ParsedFile, name: string, at: number): boolean {
+  if (file.imports.has(name) || resolveAt(file, { local: name }, at).shadowed) return false;
+  return !(file.program.body ?? []).some((st: AstNode) => {
+    const d = st.type === 'ExportNamedDeclaration' || st.type === 'ExportDefaultDeclaration' ? st.declaration : st;
+    return d && ((d.id?.name === name) || (d.type === 'VariableDeclaration'
+      && (d.declarations ?? []).some((v: AstNode) => patternNames(v.id).includes(name))));
+  });
+}
+
+/** A followed local alias must stay inside a declaration the binding pass understands, never an export/container. */
+function bindingEscapes(file: ParsedFile, id: AstNode): boolean {
+  const name = String(id.name);
+  const scope = bindingScopeAt(file, name, id.start);
+  let declared = isFunction(scope) && (scope.params ?? []).some((p: AstNode) => patternNames(p).includes(name));
+  let escapes = false;
+  walkWithAncestors(file.program, (n, anc) => {
+    if (n.type !== 'VariableDeclarator' || !patternNames(n.id).includes(name)
+      || bindingScopeAt(file, name, n.id.start) !== scope) return;
+    declared = true;
+    // A variable export is a live binding: an assignment made later escapes as well as its initializer.
+    if (anc[anc.length - 2]?.type === 'ExportNamedDeclaration'
+      || anc.some(a => a.type === 'TSModuleDeclaration' || a.type === 'TSModuleBlock')) escapes = true;
+  });
+  return !declared || escapes;
+}
+
 /** Declaration names, types and plain property names are not runtime values passed to another expression. */
 function valueReference(n: AstNode, anc: readonly AstNode[]): boolean {
-  if (anc.some(a => a.type === 'ImportDeclaration' || (a.type.startsWith('TS') && !RUNTIME_TS.has(a.type)))) return false;
+  // TSQualifiedName is normally a type. Under a value import-equals declaration its module reference is a
+  // runtime value, so it must reach the default-unknown consumer rather than disappear with type annotations.
+  const runtimeImport = anc.find(a => a.type === 'TSImportEqualsDeclaration' && a.importKind !== 'type'
+    && a.moduleReference?.start <= n.start && a.moduleReference?.end >= n.end);
+  if (anc.some(a => a.type === 'ImportDeclaration' || (a.type === 'TSImportEqualsDeclaration' && a.importKind === 'type')
+    || (a.type.startsWith('TS') && !RUNTIME_TS.has(a.type) && !(a.type === 'TSQualifiedName' && runtimeImport)))) return false;
   const parent = anc[anc.length - 1];
   if (!parent) return false;
   if (parent.type === 'AssignmentExpression' && parent.left === n) return false;
   if ((MEMBER.has(parent.type) && parent.property === n && !parent.computed)
     || (['Property', 'MethodDefinition', 'PropertyDefinition', 'AccessorProperty'].includes(parent.type) && parent.key === n && !parent.computed)
     || (['LabeledStatement', 'BreakStatement', 'ContinueStatement'].includes(parent.type) && parent.label === n)
+    || (parent.type === 'TSQualifiedName' && parent.right === n)
     || (parent.type === 'TSEnumMember' && parent.id === n)) return false;
   let child = n;
   for (let i = anc.length - 1; i >= 0; i--) {
@@ -350,9 +383,9 @@ function frameworkReferenceEscapes(file: ParsedFile, n: AstNode, anc: readonly A
       || (p.type === 'LogicalExpression' && (p.left === child || p.right === child))) { child = p; continue; }
     if ((p.type === 'Property' && p.value === child) || ['ObjectExpression', 'ArrayExpression', 'SequenceExpression'].includes(p.type)
       || (p.type === 'NewExpression' && p.callee === child)) { opaque = true; child = p; continue; }
-    if (p.type === 'VariableDeclarator' && p.init === child) return opaque || p.id.type !== 'Identifier';
+    if (p.type === 'VariableDeclarator' && p.init === child) return opaque || p.id.type !== 'Identifier' || bindingEscapes(file, p.id);
     if (p.type === 'AssignmentExpression' && p.right === child) {
-      if (opaque || p.left.type !== 'Identifier' || !['=', '||=', '&&=', '??='].includes(p.operator)) return true;
+      if (opaque || p.left.type !== 'Identifier' || !['=', '||=', '&&=', '??='].includes(p.operator) || bindingEscapes(file, p.left)) return true;
       child = p;
       continue;
     }
@@ -732,6 +765,22 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
     walkWithAncestors(file.program, (n, anc) => {
       if (['MemberExpression', 'StaticMemberExpression', 'ComputedMemberExpression'].includes(n.type)
         && isWriteTarget([...anc, n], anc.length) && mayReferenceFramework(file, n)) frontier(ctx, file.path, 'frameworkMutated');
+      // Framework values obtained through unmodeled module loaders are not proven local ESM bindings. A
+      // captured literal load is explicit; a loader handed on as a value may load the framework later as well.
+      if (n.type === 'ImportExpression' && (n.source?.type !== 'Literal' || FRAMEWORK.test(String(n.source.value)))) frontier(ctx, file.path, 'frameworkEscapes');
+      if (n.type === 'Identifier' && valueReference(n, anc)) {
+        const imported = resolveAt(file, { local: String(n.name) }, n.start);
+        const loaderFactory = ['node:module', 'module'].includes(imported.module ?? '') && ['createRequire', '*', 'default'].includes(imported.name);
+        const require = n.name === 'require' && unboundGlobal(file, 'require', n.start);
+        if (loaderFactory || (n.name === 'module' && unboundGlobal(file, 'module', n.start))) frontier(ctx, file.path, 'frameworkEscapes');
+        if (require) {
+          const p = anc[anc.length - 1];
+          if (p?.type !== 'CallExpression' || p.callee !== n || p.arguments?.[0]?.type !== 'Literal'
+            || FRAMEWORK.test(String(p.arguments[0].value))) frontier(ctx, file.path, 'frameworkEscapes');
+        }
+      }
+      if (n.type === 'TSImportEqualsDeclaration' && n.importKind !== 'type'
+        && n.moduleReference?.type === 'TSExternalModuleReference' && FRAMEWORK.test(String(n.moduleReference.expression?.value ?? ''))) frontier(ctx, file.path, 'frameworkEscapes');
       if (['ExportNamedDeclaration', 'ExportAllDeclaration'].includes(n.type) && FRAMEWORK.test(String(n.source?.value ?? ''))) frontier(ctx, file.path, 'frameworkEscapes');
       if (n.type === 'Identifier' && valueReference(n, anc) && mayReferenceFramework(file, n)
         && frameworkReferenceEscapes(file, n, anc, followed)) frontier(ctx, file.path, 'frameworkEscapes');

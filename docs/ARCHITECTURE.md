@@ -767,6 +767,12 @@ in the production registry, the planner's batching, the scan command (PR 09), an
       to helpers, subclasses, returns and exports. A new syntax form therefore stays unknown until explicitly
       modeled. Types, declaration/property names, discarded reads and unused shadowed parameters are not escapes.
       Existing registrations that cannot certainly run retain their precise `registrationNotFollowed` frontier.
+    - **Local binding boundaries (sixth review, 2026-10-22).** Keeping a framework value in a variable is supported
+      only when that declaration is local and not inside an unmodeled namespace. Exports, including live bindings
+      assigned after declaration, remain unknown at the boundary. Qualified names in runtime TypeScript
+      import-equals declarations are values, while type-only imports and qualified type names remain erased.
+      Unmodeled framework module loads, dynamic import targets, retained host loaders and Node loader factories
+      also leave a frontier; a local function merely named `require` grants no loading capability.
     - **Digests.** `packDigest` covers the support manifest, `environmentDigest` the resolved versions and
       `registrationDigest` every cited registration span; a change to any invalidates the facts.
 

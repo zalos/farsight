@@ -698,3 +698,42 @@ test('unmodeled framework use: reassigned local bindings still require proof at 
   assert.equal(validation(local.analysis).verdict, 'applies');
   assert.ok(!reasons(local.analysis).includes('sentinel.nest.frameworkEscapes'));
 });
+
+// A local alias is supported only while its binding stays local. Namespace and module boundaries are not
+// interprocedural alias proofs; both exported initializers and subsequent live-binding assignments escape.
+const boundaryUses = [
+  { name: 'exported const', head: "import { Alias } from './binding';", extra: { 'binding.ts': "import { ValidationPipe } from '@nestjs/common';\nexport const Alias = ValidationPipe;\n" }, mutation: 'Alias.prototype.transform = async (v: unknown) => v;' },
+  { name: 'exported live binding', head: "import { Alias } from './binding';", extra: { 'binding.ts': "import { ValidationPipe } from '@nestjs/common';\nexport let Alias: any; Alias = ValidationPipe;\n" }, mutation: 'Alias.prototype.transform = async (v: unknown) => v;' },
+  { name: 'namespace binding', head: 'namespace Holder { export const Alias = ValidationPipe; }', extra: {}, mutation: 'Holder.Alias.prototype.transform = async (v: unknown) => v;' },
+  { name: 'qualified value import', head: "import * as Common from '@nestjs/common';\nimport Alias = Common.ValidationPipe;", extra: {}, mutation: 'Alias.prototype.transform = async (v: unknown) => v;' },
+  { name: 'CommonJS module object', head: "const Common = module.require('@nestjs/common');", extra: {}, mutation: 'Common.ValidationPipe.prototype.transform = async (v: unknown) => v;' },
+  { name: 'CommonJS framework load', head: "const Common = require('@nestjs/common');", extra: {}, mutation: 'Common.ValidationPipe.prototype.transform = async (v: unknown) => v;' },
+  { name: 'aliased module loader', head: "const load = require; const Common = load('@nestjs/common');", extra: {}, mutation: 'Common.ValidationPipe.prototype.transform = async (v: unknown) => v;' },
+  { name: 'Node loader factory', head: "import { createRequire } from 'node:module'; const load = createRequire(import.meta.url); const Common = load('@nestjs/common');", extra: {}, mutation: 'Common.ValidationPipe.prototype.transform = async (v: unknown) => v;' },
+  { name: 'dynamic framework import', head: '', extra: {}, mutation: "const Common = await import('@nestjs/common'); Common.ValidationPipe.prototype.transform = async (v: unknown) => v;" },
+  { name: 'external value import', head: "import Common = require('@nestjs/common');", extra: {}, mutation: 'Common.ValidationPipe.prototype.transform = async (v: unknown) => v;' },
+];
+for (const { name, head, extra, mutation } of boundaryUses) {
+  test(`framework binding boundary: ${name}`, needsStore, async t => {
+    const r = await run(t, { ...extra, 'main.ts': mainWith(`  ${mutation}\n  app.useGlobalPipes(new ValidationPipe());`, head) });
+    assert.equal(validation(r.analysis).verdict, 'unknown');
+    assert.ok(reasons(r.analysis).includes('sentinel.nest.frameworkEscapes'));
+  });
+}
+test('framework binding boundary: type-only external import and qualified type do not export the constructor', needsStore, async t => {
+  const r = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());', "import type Common = require('@nestjs/common');\ntype Alias = typeof Common.ValidationPipe;") });
+  assert.equal(validation(r.analysis).verdict, 'applies');
+  assert.ok(!reasons(r.analysis).includes('sentinel.nest.frameworkEscapes'));
+});
+
+test('framework binding boundary: a local namespace member name is not the imported constructor', needsStore, async t => {
+  const r = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());', 'namespace Model { export class ValidationPipe {} }\nimport Alias = Model.ValidationPipe;') });
+  assert.equal(validation(r.analysis).verdict, 'applies');
+  assert.ok(!reasons(r.analysis).includes('sentinel.nest.frameworkEscapes'));
+});
+
+test('framework binding boundary: a shadowed require is an ordinary local helper', needsStore, async t => {
+  const r = await run(t, { 'main.ts': mainWith('  require("@nestjs/common");\n  app.useGlobalPipes(new ValidationPipe());', 'function require(name: string) { return name; }') });
+  assert.equal(validation(r.analysis).verdict, 'applies');
+  assert.ok(!reasons(r.analysis).includes('sentinel.nest.frameworkEscapes'));
+});
