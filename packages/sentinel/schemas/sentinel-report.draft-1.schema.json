@@ -110,6 +110,10 @@
             "unknownScopeBoundaries": {
               "$ref": "#/definitions/ReportCount",
               "description": "Inventory boundaries whose descendants were never enumerated: unknown scope, counted apart, never folded into the exact number above and never read as zero files."
+            },
+            "historical": {
+              "$ref": "#/definitions/ReportCount",
+              "description": "Baseline findings the current findings do not continue, by comparison label."
             }
           },
           "required": [
@@ -142,6 +146,20 @@
             "$ref": "#/definitions/ReportDecision"
           },
           "maxItems": 25000
+        },
+        "historical": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReportHistoricalFinding"
+          },
+          "maxItems": 25000
+        },
+        "definitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReportDefinition"
+          },
+          "maxItems": 2048
         },
         "artifactClosure": {
           "type": "array",
@@ -328,6 +346,16 @@
         },
         "comparison": {
           "$ref": "#/definitions/ComparisonLabel"
+        },
+        "comparisonReason": {
+          "$ref": "#/definitions/CatalogKey",
+          "description": "Why the comparison label was given."
+        },
+        "match": {
+          "$ref": "#/definitions/FindingMatch"
+        },
+        "fingerprint": {
+          "$ref": "#/definitions/FindingFingerprint"
         },
         "evidence": {
           "type": "array",
@@ -596,6 +624,54 @@
       ],
       "description": "Why a finding pairs or does not pair with the baseline. Absence alone never resolves an issue."
     },
+    "FindingMatch": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "probable",
+            "ambiguous"
+          ]
+        },
+        "baselineFindingIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Id"
+          },
+          "minItems": 1,
+          "maxItems": 64
+        }
+      },
+      "required": [
+        "kind",
+        "baselineFindingIds"
+      ],
+      "additionalProperties": false,
+      "description": "How a finding paired with the baseline. Probable and ambiguous pairings never resolve or silently continue an issue."
+    },
+    "FindingFingerprint": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "$ref": "#/definitions/ShortText"
+        },
+        "exact": {
+          "$ref": "#/definitions/Digest"
+        },
+        "probable": {
+          "$ref": "#/definitions/Digest"
+        }
+      },
+      "required": [
+        "version",
+        "exact",
+        "probable"
+      ],
+      "additionalProperties": false,
+      "description": "Sentinel's versioned issue fingerprint: exact (rule family and anchor set) and probable (rule family and symbols)."
+    },
     "ReportEvidence": {
       "type": "object",
       "properties": {
@@ -634,6 +710,9 @@
               },
               "content": {
                 "$ref": "#/definitions/ArtifactId"
+              },
+              "location": {
+                "$ref": "#/definitions/EvidenceLocation"
               }
             },
             "required": [
@@ -669,6 +748,9 @@
               },
               "content": {
                 "$ref": "#/definitions/ArtifactId"
+              },
+              "location": {
+                "$ref": "#/definitions/EvidenceLocation"
               }
             },
             "required": [
@@ -682,6 +764,41 @@
         }
       ],
       "description": "Permitted evidence is embedded; omitted evidence keeps its identity and the reason it was withheld."
+    },
+    "EvidenceLocation": {
+      "type": "object",
+      "properties": {
+        "relativePath": {
+          "$ref": "#/definitions/RelativePath"
+        },
+        "startByte": {
+          "$ref": "#/definitions/Count"
+        },
+        "endByte": {
+          "$ref": "#/definitions/Count"
+        },
+        "startLine": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "endLine": {
+          "$ref": "#/definitions/Ordinal"
+        }
+      },
+      "required": [
+        "relativePath",
+        "startByte",
+        "endByte",
+        "startLine",
+        "endLine"
+      ],
+      "additionalProperties": false,
+      "description": "Where evidence sits in the captured source. Absent for evidence whose location is itself withheld (secrets)."
+    },
+    "RelativePath": {
+      "type": "string",
+      "description": "A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL. A newline or other line break inside a name is a legal POSIX name and is kept as captured; the checks use `[\\s\\S]`, never `.`, so a line break cannot hide a `..` segment from them.",
+      "pattern": "^(?![/])(?![\\s\\S]*[/]$)(?!([\\s\\S]*[/])?\\.{1,2}([/]|$))(?![\\s\\S]*[/][/])[^\\\\\\u0000]+$",
+      "maxLength": 4096
     },
     "ReportGap": {
       "type": "object",
@@ -754,6 +871,84 @@
         "expiresAt"
       ],
       "additionalProperties": false
+    },
+    "ReportHistoricalFinding": {
+      "type": "object",
+      "properties": {
+        "baselineFindingId": {
+          "$ref": "#/definitions/Id"
+        },
+        "ruleFamilyId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "info"
+          ]
+        },
+        "title": {
+          "$ref": "#/definitions/RegisterText"
+        },
+        "label": {
+          "type": "string",
+          "enum": [
+            "resolved-by-comparable-check",
+            "removed-surface",
+            "unassessed-in-current-scope",
+            "changed-detection",
+            "incomparable-conditions",
+            "changed-evidence"
+          ]
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        },
+        "match": {
+          "$ref": "#/definitions/FindingMatch"
+        },
+        "place": {
+          "$ref": "#/definitions/FindingPlace"
+        }
+      },
+      "required": [
+        "baselineFindingId",
+        "ruleFamilyId",
+        "severity",
+        "title",
+        "label",
+        "reasonCode",
+        "place"
+      ],
+      "additionalProperties": false,
+      "description": "A baseline finding the current findings do not continue, with why: resolved by a comparable check, a removed surface, unassessed in the current scope, changed detection, incomparable conditions, or an ambiguous pairing that stays open. It is never dropped, and only `resolved-by-comparable-check` says the issue is gone."
+    },
+    "ReportDefinition": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "text": {
+          "$ref": "#/definitions/RegisterText"
+        },
+        "define": {
+          "$ref": "#/definitions/BoundedText"
+        }
+      },
+      "required": [
+        "key",
+        "text",
+        "define"
+      ],
+      "additionalProperties": false,
+      "description": "A word the report uses, with its definition, so a recipient never needs the catalog or the product."
     }
   },
   "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-report.draft-1.schema.json",

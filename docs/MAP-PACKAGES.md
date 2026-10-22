@@ -126,6 +126,16 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `strings-sentinel-pattern.ts`, its tests `test/pattern-adapter.test.ts` and, with `SENTINEL_ISOLATION=1`,
   `test/pattern-conformance.test.ts` against the real image (ADR 26; linux/amd64 through the scoped PR/manual
   `sentinel-pattern-qualification` workflow). Depends only on graph, code-parser and core; nothing in the
+
+  `src/findings/` (PR 19, ADR 38), exported as `./findings`: `normalize.ts` (rule family, severity, anchors by symbol and
+  cited-text digest), `correlate.ts` (observations into findings, the versioned fingerprint), `match.ts` (exact,
+  probable, ambiguous) and `compare.ts` (labels for two complete assessments; absence resolves only through a comparable
+  check). `src/reports/`, exported as `./reports`: `context.ts` (pinning an application context against the capture,
+  with its source-binding receipt), `place.ts` (core's `flowWalks`/`affectedReach`/`personaOfScreen` over it),
+  `document.ts` (the `sentinel-report/draft-1` fold, disclosure profiles, definitions), `markdown.ts`, `html.ts`
+  (offline, no script, CSP), `sarif.ts` and `index.ts` (`generateReport`). Words in core's
+  `strings-sentinel-findings.ts`; tests in `test/findings-compare.test.ts` and `test/reports.test.ts`.
+  `test/store-integration.test.ts` drives the facade end to end across processes. Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the
   manifest's `bin` and root export; `scripts/test-sentinel-package.mjs` installs it into a clean npm consumer and

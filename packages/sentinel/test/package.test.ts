@@ -156,6 +156,14 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'snapshot/parser.js': ['@farsight/core/dist/strings-sentinel-parser.js', '@farsight/graph', 'dynamic:@farsight/code-parser', 'dynamic:@farsight/code-parser/adapters/java',
     'dynamic:@farsight/code-parser/adapters/tsjs', 'node:crypto', 'node:fs', 'node:path'],
   'snapshot/policy.js': ['node:crypto', 'node:path'],
+  // Findings and reports (ADR 38): pure folds over observations, captured bytes and a pinned context; core's own
+  // journey, impact and persona folds and its catalog; no process, no network, no file access.
+  'findings/correlate.js': ['@farsight/graph', 'node:crypto'],
+  'findings/normalize.js': ['node:crypto'],
+  'reports/context.js': ['@farsight/graph', 'node:crypto'],
+  'reports/document.js': ['@farsight/core/dist/strings.js', '@farsight/graph', 'node:crypto'],
+  'reports/index.js': ['@farsight/graph'],
+  'reports/place.js': ['@farsight/core/dist/affected.js', '@farsight/core/dist/impact.js', '@farsight/core/dist/journeys.js', '@farsight/core/dist/query.js'],
   'snapshot/worktree.js': ['node:fs'],
 };
 
@@ -255,9 +263,9 @@ test('public scanner command support is conditional on explicit adopted pinned a
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'dependency-advisories', 'infrastructure-ci-checks']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'reports']);
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
-  for (const id of ['secrets-scan', 'reports']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
+  for (const id of ['secrets-scan', 'dispositions']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
   assert.equal(listed.find(c => c.id === 'rules-and-planning')?.state, 'available-draft');
   assert.ok(listed.filter(c => c.state !== 'unavailable').every(c => c.state === 'available-draft'));
   for (const c of listed) assert.match(c.reasonCode, /^sentinel\.capability\./);

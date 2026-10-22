@@ -376,6 +376,22 @@ const report: Check<ReportEnvelope> = (v, out) => {
   for (const i of duplicates(v.artifactClosure, a => a)) out.add(err(`/artifactClosure/${i}`, 'duplicate artifact'));
   if (v.baseline?.reportId === v.id) out.add(err('/baseline', 'a report cannot be its own baseline'));
   if (v.baseline === null && v.findings.some(f => f.comparison !== undefined)) out.add(err('/findings', 'comparison labels need a baseline'));
+  const historical = v.historical ?? [];
+  if (v.baseline === null && historical.length) out.add(err('/historical', 'historical findings need a baseline'));
+  if (historical.length && !v.counts.historical) out.add(err('/counts/historical', 'historical findings are counted'));
+  if (v.counts.historical) countErrors(out, '/counts/historical', v.counts.historical, historical.length);
+  for (const i of duplicates(historical, h => h.baselineFindingId)) out.add(err(`/historical/${i}`, 'each baseline finding is listed once'));
+  historical.forEach((h, i) => placeErrors(out, `/historical/${i}/place`, h.place));
+  v.findings.forEach((f, i) => {
+    if (f.match && !f.comparison) out.add(err(`/findings/${i}/match`, 'a match is part of a comparison'));
+    // Only an exact pairing may say an issue persists unchanged.
+    if (f.comparison === 'persistent' && f.match && f.match.kind !== 'exact') out.add(err(`/findings/${i}/comparison`, 'persistent needs an exact match'));
+    for (const e of f.evidence) if (e.location) {
+      pathError(out, `/findings/${i}/evidence/location`, e.location.relativePath);
+      if (e.location.startByte >= e.location.endByte || e.location.startLine > e.location.endLine) out.add(err(`/findings/${i}/evidence`, 'a location is a non-empty span'));
+    }
+  });
+  for (const i of duplicates(v.definitions ?? [], d => d.key)) out.add(err(`/definitions/${i}`, 'each word is defined once'));
 };
 
 const protocol: Check<ProtocolMessage> = (v, out) => {
