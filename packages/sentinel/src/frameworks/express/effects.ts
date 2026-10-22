@@ -1,8 +1,9 @@
 // What a middleware function certainly does on a request that reaches it, read from its body. Three shapes are read:
 //
 // - a refusal: `if (<condition on the request>) <respond 401 or 403>; next();` — the request is refused with that
-//   status when the condition holds and passed on otherwise. 401 establishes the authentication property, 403 the
-//   authorization property; the function's or the file's name never does.
+//   status when the condition holds and passed on otherwise. It is evidence that a conditional refusal runs at that
+//   position, not that a principal is authenticated or a permission checked: the condition reads a value the client
+//   may control, and neither the status nor the function's name establishes either property.
 // - a pass-through: statements that do not touch the response, never write to or hand on the request, then `next()`.
 // - an error handler: four parameters. Express calls it only with an error, so it holds no position on the normal
 //   path; whether it may resume routing with next() is read, because a resumed request has skipped the ordinary

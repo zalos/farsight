@@ -3,8 +3,8 @@
 // and what each middleware function certainly does. Only top-level registration statements are read as layers. Any
 // other use of an application or router (a registration inside a function, branch or loop, the object passed to a
 // function, assigned, or registered on from another module) makes that object open: its layers are not known, so
-// every route it could reach stays unknown. Middleware establishes a property only through a body this pack reads
-// (a single refusal with 401 or 403 when a request value is absent or differs, then next()); its name never does.
+// every route it could reach stays unknown. Middleware never establishes a property here: a body read as a refusal
+// is evidence of a conditional refusal only, and a name is evidence of nothing.
 import { ModuleIndex, type Binding } from './modules.js';
 import {
   identifierName, isFunction, memberPath, numberValue, stringValue, unwrap, walk, type JsFile, type JsNode,
@@ -19,6 +19,7 @@ export const EXPRESS_REASON_CODES = Object.freeze([
   'sentinel.express.middlewareEffectUnknown', 'sentinel.express.nextSkip', 'sentinel.express.routeNotMounted',
   'sentinel.express.routeObjectUnresolved', 'sentinel.express.surfaceAmbiguous', 'sentinel.express.mountsDisagree',
   'sentinel.express.routeNotIndexed', 'sentinel.express.mountCycle', 'sentinel.express.errorPathResumes',
+  'sentinel.express.refusalUnproven',
 ] as const);
 export type ExpressReason = typeof EXPRESS_REASON_CODES[number];
 
@@ -62,6 +63,7 @@ export type Value =
 /** A factory argument a returned middleware closes over: a literal value, or anything else (unknown). */
 export type BoundArg = { readonly literal: string | number | boolean | null } | { readonly literal?: undefined };
 
+const NODE_HTTP = new Set(['http', 'https', 'node:http', 'node:https']);
 const VERBS = new Set(['get', 'post', 'put', 'delete', 'patch', 'options', 'head', 'all']);
 const BUILTINS = new Set(['json', 'urlencoded', 'text', 'raw', 'static']);
 const ROUTING_SETTINGS = new Set(['case sensitive routing', 'strict routing']);
@@ -163,7 +165,7 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
     if (node.type === 'CallExpression') {
       const callee = unwrap(node.callee as JsNode)!;
       const args = node.arguments as JsNode[];
-      if (callee.type === 'Identifier' && callee.name === 'require' && !index.binding(file, 'require')) {
+      if (callee.type === 'Identifier' && callee.name === 'require' && index.nodeRequire(file)) {
         const spec = args.length === 1 ? stringValue(args[0]) : undefined;
         if (spec === undefined) return unknown(file, node);
         return resolveImport({ kind: 'import', file, name: '', specifier: spec, imported: 'require', at: node });
@@ -363,10 +365,19 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
       const gp = parents[parents.length - 2];
       if (!p || !isReference(n, p)) return;
       if (p.type === 'MemberExpression' && p.object === n && identifierName(p.property as JsNode) === 'listen' && gp?.type === 'CallExpression' && gp.callee === p) return;
-      if (p.type === 'CallExpression' && (p.arguments as JsNode[]).includes(n) && memberPath(p.callee as JsNode)?.pop() === 'createServer') return;
+      if (p.type === 'CallExpression' && (p.arguments as JsNode[]).includes(n) && nodeCreateServer(file, p.callee as JsNode)) return;
       if (isExportPosition(n, parents)) return;
       obj.open ??= { file, node: n };
     });
+  }
+
+  /** `createServer` from Node's own http or https module (a named import, or a member of the module), nothing else. */
+  function nodeCreateServer(file: JsFile, callee: JsNode): boolean {
+    const path = memberPath(callee);
+    if (!path || path[path.length - 1] !== 'createServer' || path.length > 2) return false;
+    const b = index.binding(file, path[0]!);
+    if (b?.kind !== 'import' || !NODE_HTTP.has(b.specifier)) return false;
+    return path.length === 1 ? b.imported === 'createServer' : b.imported === 'default' || b.imported === '*' || b.imported === 'require';
   }
 
   for (const o of objects) {

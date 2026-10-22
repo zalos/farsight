@@ -39,6 +39,19 @@ function reassigned(program: JsNode): Set<string> {
   return out;
 }
 
+/** Every name a file binds at the top level: declarations, functions, classes and imports. */
+export function topLevelNames(program: JsNode): Set<string> {
+  const out = new Set<string>();
+  const ids = (n: JsNode | undefined) => { if (n) walk(n, x => { if (x.type === 'Identifier') out.add(x.name as string); }); };
+  for (const s of program.body as JsNode[]) {
+    const decl = s.type.startsWith('Export') && s.declaration ? s.declaration as JsNode : s;
+    if (decl.type === 'VariableDeclaration') for (const d of decl.declarations as JsNode[]) ids(d.id as JsNode);
+    else if ((decl.type === 'FunctionDeclaration' || decl.type === 'ClassDeclaration' || decl.type === 'TSImportEqualsDeclaration') && decl.id) out.add((decl.id as JsNode).name as string);
+    else if (s.type === 'ImportDeclaration') for (const sp of (s.specifiers as JsNode[]) ?? []) out.add((sp.local as JsNode).name as string);
+  }
+  return out;
+}
+
 export class ModuleIndex {
   private readonly modules = new Map<JsFile, FileModule>();
   private readonly byPath = new Map<string, JsFile>();
@@ -58,12 +71,18 @@ export class ModuleIndex {
     const mod: FileModule = { bindings, exports, reexports, starReexports, opaqueExports: false,
       esm: (file.program.body as JsNode[]).some(s => s.type === 'ImportDeclaration' || s.type.startsWith('Export')) };
     const again = reassigned(file.program);
+    // A file that declares or imports its own `require`, `module` or `exports` at the top level does not use Node's:
+    // its require calls and CommonJS exports are not read.
+    const shadowed = topLevelNames(file.program);
+    const nodeRequire = !shadowed.has('require');
+    if (shadowed.has('module') || shadowed.has('exports')) mod.opaqueExports = true;
     const bind = (b: Binding) => {
       // A name declared twice at the top level is not resolved.
       if (bindings.has(b.name)) bindings.set(b.name, { kind: 'unresolved', file, name: b.name, at: (b as { at?: JsNode }).at ?? file.program });
       else bindings.set(b.name, b);
     };
     const requireOf = (init: JsNode | undefined): string | undefined => {
+      if (!nodeRequire) return undefined;
       const n = unwrap(init);
       if (n?.type !== 'CallExpression' || identifierName(n.callee as JsNode) !== 'require') return undefined;
       const args = n.arguments as JsNode[];
@@ -184,6 +203,9 @@ export class ModuleIndex {
   }
 
   binding(file: JsFile, name: string): Binding | undefined { return this.modules.get(file)?.bindings.get(name); }
+
+  /** Whether `require` in this file is Node's (the file binds no top-level name of its own for it). */
+  nodeRequire(file: JsFile): boolean { return !this.modules.get(file)?.bindings.has('require') && !topLevelNames(file.program).has('require'); }
 
   /** Resolves a module specifier written in `from` to a captured file, a package, or nothing certain. */
   resolve(from: JsFile, specifier: string): ModuleTarget {

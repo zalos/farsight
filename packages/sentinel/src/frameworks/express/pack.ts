@@ -3,8 +3,10 @@
 // a request passes through (the application, then each router mount down to the route's router) and the route's own
 // handlers before the last are read again from the captured syntax. Express dispatches a request through those
 // layers in registration order, so only a layer registered before the route can act on it: a control registered
-// after a route never clears a finding for it. A property applies only at a layer whose body this pack reads as a
-// refusal for that property; anything the subset cannot resolve is unknown with its reason, never protected.
+// after a route never clears a finding for it. No layer is read as establishing authentication or authorization: a
+// refusal the pack can read is kept as evidence at its position, with both properties unknown there, because a status
+// code and a request value do not show a principal or a permission. A property does not apply only when every layer
+// before the handler was read and none can refuse; anything else is unknown with its reason, never protected.
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@farsight/graph';
 import type { AnalysisArtifact } from '@farsight/code-parser';
@@ -69,7 +71,7 @@ function pushEffect(model: ExpressModel, file: JsFile, fn: JsNode, match: 'match
   const e = effectOf(model.resolveValue(file, fn));
   if (e.kind === 'error-only') { if (e.resumes) out.push({ kind: 'resume', at: e.at }); return; }
   if (match === 'unknown') {
-    if (e.kind === 'refusal') out.push({ kind: 'unknown', properties: [e.property], reason: 'sentinel.express.layerMatchUnknown', at: e.at });
+    if (e.kind === 'refusal') out.push({ kind: 'unknown', properties: PROPERTIES, reason: 'sentinel.express.layerMatchUnknown', at: e.at });
     else if (e.kind === 'unknown') out.push({ kind: 'unknown', properties: PROPERTIES, reason: e.reason, at: e.at, mayHandleErrors: e.mayHandleErrors });
     return;
   }
@@ -128,7 +130,7 @@ function resolveErrorPaths(entries: Entry[]): Entry[] {
     if (e.kind !== 'refusal') return e;
     const after = entries.slice(entries.indexOf(e) + 1);
     const resumer = after.find(x => x.kind === 'resume' || (x.kind === 'unknown' && x.mayHandleErrors));
-    return resumer ? { kind: 'unknown', properties: [e.property], reason: 'sentinel.express.errorPathResumes', at: [...e.at, ...resumer.at] } : e;
+    return resumer ? { kind: 'unknown', properties: PROPERTIES, reason: 'sentinel.express.errorPathResumes', at: [...e.at, ...resumer.at] } : e;
   });
 }
 
@@ -320,12 +322,14 @@ export async function analyzeExpress(input: ExpressPackInput): Promise<ControlFa
     const mountEvidence = evidenceOf(results.flatMap(r => (r.ok ? r.mounts : [])));
     const base = [...regEvidence, ...mountEvidence];
     first.entries.forEach((e, order) => {
-      if (e.kind === 'refusal') add(node.id, e.property, order, 'applies', [...base, ...evidenceOf(e.at), ...versionEvidence]);
+      // A refusal is kept as evidence at its position, but its status code and the request value it reads cannot show
+      // who the principal is or what they may do: both properties stay unknown there, never applied.
+      if (e.kind === 'refusal') for (const p of PROPERTIES) add(node.id, p, order, 'unknown', [...base, ...evidenceOf(e.at), ...versionEvidence], 'sentinel.express.refusalUnproven');
       else if (e.kind === 'unknown') for (const p of e.properties) add(node.id, p, order, 'unknown', [...base, ...evidenceOf(e.at)], e.reason);
     });
     // No layer before the handler refuses for a property, and every one was read: it does not apply.
     for (const p of PROPERTIES) {
-      const touched = first.entries.some(e => (e.kind === 'refusal' && e.property === p) || (e.kind === 'unknown' && e.properties.includes(p)));
+      const touched = first.entries.some(e => e.kind === 'refusal' || (e.kind === 'unknown' && e.properties.includes(p)));
       if (!touched) add(node.id, p, first.entries.length, 'does-not-apply', [...base, ...evidenceOf(first.entries.flatMap(e => e.at)), ...versionEvidence]);
     }
   }

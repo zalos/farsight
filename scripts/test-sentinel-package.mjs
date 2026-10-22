@@ -356,7 +356,7 @@ second.listen(3001);
     assert.equal(result.version, '4.21.2');
     assert.deepEqual(result.out, {
       'app::route::GET /early': '0:does-not-apply',
-      'app::route::GET /late': '0:applies',
+      'app::route::GET /late': '0:sentinel.express.refusalUnproven',
       'app::route::GET /maybe': '0:sentinel.express.registrationDynamic',
     }, 'a route before its check, one after it and a conditional registration, from the installed package alone');
     return ', Express pack analysed an installed fixture (before, after, conditional)';

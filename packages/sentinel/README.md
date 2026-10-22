@@ -210,9 +210,9 @@ facts.frontiers;  // registrations the pack met and could not follow
 
 For exactly Express 4.21.2 (an exact pin, or a range the npm lockfile resolves to it), the pack reads each route's
 registration and every layer registered before it on the application and the routers on its path, in order, from
-captured source only. A property applies only where a middleware body refuses with 401 (authentication) or 403
-(authorization) and otherwise passes the request on; a name never establishes it, and a layer registered after a
-route never clears it. Conditional or dynamic registration, third-party middleware, unreadable paths and error
+captured source only. No layer is credited with authentication or authorization: a body that refuses with 401 or 403
+on a request value is cited as evidence with both properties unknown there, because the client may control that value;
+a name never establishes anything, and a layer registered after a route never clears it. Conditional or dynamic registration, third-party middleware, unreadable paths and error
 handlers that may resume routing are unknown with their reasons. The envelope is `sentinel-controls/draft-1`; ADR 31.
 
 ## Versions and evolution

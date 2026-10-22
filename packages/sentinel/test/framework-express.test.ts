@@ -56,22 +56,24 @@ async function cited(fx: any, f: any): Promise<string[]> {
 const factAt = (env: any, r: string, property: string, order: number) =>
   env.facts.find((f: any) => f.surfaceId === route(r) && f.property === property && f.order === order);
 
-test('registration order: a control registered after a route never clears it, one before it applies', needsStore, async t => {
+test('registration order: a control registered after a route never clears it; one before it is cited, never credited', needsStore, async t => {
   const { envelope, fx } = await pack(t, ORDER);
   assert.equal(envelope.framework.id, 'express');
   assert.equal(envelope.framework.version, '4.21.2');
   assert.equal(envelope.capability, 'framework-order');
   // Registered before requireUser: only the JSON body parser runs first.
   assert.deepEqual(both(envelope, 'GET /reports'), { authentication: ['1:does-not-apply'], authorization: ['1:does-not-apply'] });
-  // After requireUser: authentication applies at its position; nothing refuses with 403.
-  assert.deepEqual(both(envelope, 'GET /account'), { authentication: ['1:applies'], authorization: ['2:does-not-apply'] });
+  // After requireUser: its refusal is cited at position 1, but a 401 on a missing request value is not proof of a
+  // principal (review round 1 corrected the earlier 'applies' expectation), so both properties are unknown there.
+  assert.deepEqual(both(envelope, 'GET /account'), { authentication: ['1:unknown:refusalUnproven'], authorization: ['1:unknown:refusalUnproven'] });
   // The route's own requireRole('owner') runs after the application's layers.
-  assert.deepEqual(both(envelope, 'POST /account'), { authentication: ['1:applies'], authorization: ['2:applies'] });
+  assert.deepEqual(both(envelope, 'POST /account'), { authentication: ['1:unknown:refusalUnproven', '2:unknown:refusalUnproven'], authorization: ['1:unknown:refusalUnproven', '2:unknown:refusalUnproven'] });
   // The evidence is the refusal itself, the route and the exact version pin, never a name.
   const text = (await cited(fx, factAt(envelope, 'GET /account', 'authentication', 1))).join('\n');
   assert.match(text, /if \(!req\.user\) return res\.status\(401\)/);
   assert.match(text, /app\.get\('\/account'/);
   assert.match(text, /"express": "4\.21\.2"/);
+  assert.equal(factAt(envelope, 'GET /account', 'authentication', 1).verdict, 'unknown');
   const admin = (await cited(fx, factAt(envelope, 'POST /account', 'authorization', 2))).join('\n');
   assert.match(admin, /requireRole\('owner'\)/);
   assert.match(admin, /res\.sendStatus\(403\)/);
@@ -79,10 +81,11 @@ test('registration order: a control registered after a route never clears it, on
 
 test('nested mounts: each router\'s layers run in order, and an application route below a mount passes its router first', needsStore, async t => {
   const { envelope } = await pack(t, NESTED);
-  assert.deepEqual(both(envelope, 'GET /me'), { authentication: ['0:applies'], authorization: ['1:does-not-apply'] });
-  assert.deepEqual(both(envelope, 'GET /stats'), { authentication: ['0:applies'], authorization: ['1:applies'] });
+  // Refusals are cited in mount order; none is credited as a property (review round 1).
+  assert.deepEqual(both(envelope, 'GET /me'), { authentication: ['0:unknown:refusalUnproven'], authorization: ['0:unknown:refusalUnproven'] });
+  assert.deepEqual(both(envelope, 'GET /stats'), { authentication: ['0:unknown:refusalUnproven', '1:unknown:refusalUnproven'], authorization: ['0:unknown:refusalUnproven', '1:unknown:refusalUnproven'] });
   // Express gotcha: the api router's requireUser also runs for /api/health, registered on the app after the mount.
-  assert.deepEqual(both(envelope, 'GET /api/health'), { authentication: ['0:applies'], authorization: ['1:does-not-apply'] });
+  assert.deepEqual(both(envelope, 'GET /api/health'), { authentication: ['0:unknown:refusalUnproven'], authorization: ['0:unknown:refusalUnproven'] });
   assert.deepEqual(both(envelope, 'GET /status'), { authentication: ['0:does-not-apply'], authorization: ['0:does-not-apply'] });
 });
 
@@ -111,7 +114,7 @@ app.use(requireUser);
 app.listen(3000);
 ` }))).envelope;
   assert.deepEqual(both(elsewhere, 'GET /account'), { authentication: ['0:unknown:registrationDynamic'], authorization: ['0:unknown:registrationDynamic'] });
-  // Near neighbour: the same control registered unconditionally in the application's own module applies.
+  // Near neighbour: the same control registered unconditionally in the application's own module is cited at its position.
   const plain = (await pack(t, expressApp(`import express from 'express';
 import { requireUser } from './auth.js';
 
@@ -121,7 +124,7 @@ app.get('/account', (req, res) => { res.json({}); });
 
 export default app;
 `))).envelope;
-  assert.deepEqual(both(plain, 'GET /account'), { authentication: ['0:applies'], authorization: ['1:does-not-apply'] });
+  assert.deepEqual(both(plain, 'GET /account'), { authentication: ['0:unknown:refusalUnproven'], authorization: ['0:unknown:refusalUnproven'] });
 });
 
 test('names establish nothing: a pass-through named like a guard and a library middleware are not protection', needsStore, async t => {
@@ -156,10 +159,10 @@ app.get('/catalog/special', requireUser, (req, res) => { res.json({}); });
 
 export default app;
 `))).envelope;
-  assert.deepEqual(both(env, 'GET /preview'), { authentication: ['0:unknown:nextSkip', '1:applies'], authorization: ['0:unknown:nextSkip'] });
-  assert.deepEqual(both(env, 'GET /orders'), { authentication: ['0:applies'], authorization: ['1:does-not-apply'] });
+  assert.deepEqual(both(env, 'GET /preview'), { authentication: ['0:unknown:nextSkip', '1:unknown:refusalUnproven'], authorization: ['0:unknown:nextSkip', '1:unknown:refusalUnproven'] });
+  assert.deepEqual(both(env, 'GET /orders'), { authentication: ['0:unknown:refusalUnproven'], authorization: ['0:unknown:refusalUnproven'] });
   assert.deepEqual(both(env, 'GET /catalog/special'), {
-    authentication: ['0:unknown:middlewareEffectUnknown', '1:applies'], authorization: ['0:unknown:middlewareEffectUnknown'],
+    authentication: ['0:unknown:middlewareEffectUnknown', '1:unknown:refusalUnproven'], authorization: ['0:unknown:middlewareEffectUnknown', '1:unknown:refusalUnproven'],
   });
 });
 
@@ -178,9 +181,9 @@ app.get('/trailing/', (req, res) => { res.json({}); });
 export default app;
 `))).envelope;
   // Express matches paths case-insensitively by default.
-  assert.deepEqual(both(env, 'GET /admin/panel'), { authentication: ['0:applies'], authorization: ['1:does-not-apply'] });
+  assert.deepEqual(both(env, 'GET /admin/panel'), { authentication: ['0:unknown:refusalUnproven'], authorization: ['0:unknown:refusalUnproven'] });
   // The /api/users layer runs for some /api/:resource requests only.
-  assert.deepEqual(both(env, 'GET /api/:resource'), { authentication: ['0:unknown:layerMatchUnknown'], authorization: ['1:does-not-apply'] });
+  assert.deepEqual(both(env, 'GET /api/:resource'), { authentication: ['0:unknown:layerMatchUnknown'], authorization: ['0:unknown:layerMatchUnknown'] });
   // A prefix matches whole segments: /api/users is not a prefix of /apiary.
   assert.deepEqual(both(env, 'GET /apiary'), { authentication: ['0:does-not-apply'], authorization: ['0:does-not-apply'] });
   assert.deepEqual(both(env, 'GET /trailing/'), { authentication: ['0:unknown:pathUnsupported'], authorization: ['0:unknown:pathUnsupported'] });
@@ -201,8 +204,8 @@ app.get('/account', (req, res) => { res.json({}); });
 export default app;
 `;
   const cases: [string, Record<string, string>, string | null, string][] = [
-    ['an exact pin', {}, '4.21.2', '0:applies'],
-    ['a range the lockfile resolves', { 'package.json': MANIFEST('^4.21.0'), 'package-lock.json': LOCK('^4.21.0', '4.21.2') }, '4.21.2', '0:applies'],
+    ['an exact pin', {}, '4.21.2', '0:unknown:refusalUnproven'],
+    ['a range the lockfile resolves', { 'package.json': MANIFEST('^4.21.0'), 'package-lock.json': LOCK('^4.21.0', '4.21.2') }, '4.21.2', '0:unknown:refusalUnproven'],
     ['a range without a lockfile', { 'package.json': MANIFEST('^4.21.0') }, null, '0:unknown:versionUnresolved'],
     ['a range the lockfile resolves elsewhere', { 'package.json': MANIFEST('^4.21.0'), 'package-lock.json': LOCK('^4.21.0', '4.21.1') }, null, '0:unknown:versionUnsupported'],
     ['a lockfile written for another declaration', { 'package.json': MANIFEST('^4.21.0'), 'package-lock.json': LOCK('^4.20.0', '4.21.2') }, null, '0:unknown:versionUnresolved'],
@@ -284,7 +287,7 @@ export default app;
   assert.deepEqual(both(env, 'GET /a'), { authentication: ['0:unknown:middlewareEffectUnknown'], authorization: ['0:unknown:middlewareEffectUnknown'] });
   assert.deepEqual(both(env, 'GET /b'), { authentication: ['0:unknown:middlewareEffectUnknown'], authorization: ['0:unknown:middlewareEffectUnknown'] });
   assert.deepEqual(both(env, 'GET /c'), { authentication: ['0:unknown:middlewareUnresolved'], authorization: ['0:unknown:middlewareUnresolved'] });
-  assert.deepEqual(both(env, 'GET /d'), { authentication: ['1:does-not-apply'], authorization: ['0:applies'] });
+  assert.deepEqual(both(env, 'GET /d'), { authentication: ['0:unknown:refusalUnproven'], authorization: ['0:unknown:refusalUnproven'] });
 });
 
 test('another framework\'s routes are not this pack\'s surfaces, and the envelope is keyed by its inputs', needsStore, async t => {
@@ -341,18 +344,95 @@ app.get('/account', (req, res) => { res.json({}); });
 export default app;
 `);
   const resumes = (await pack(t, body('(err, req, res, next) => { next(); }'))).envelope;
-  assert.deepEqual(both(resumes, 'GET /account'), { authentication: ['1:unknown:errorPathResumes'], authorization: ['2:does-not-apply'] });
+  assert.deepEqual(both(resumes, 'GET /account'), { authentication: ['1:unknown:errorPathResumes'], authorization: ['1:unknown:errorPathResumes'] });
   // Near neighbours: an error handler that answers or passes the error on keeps the request on the error path.
   const answers = (await pack(t, body('(err, req, res, next) => { res.status(400).json({ error: \'bad request\' }); }'))).envelope;
-  assert.deepEqual(both(answers, 'GET /account'), { authentication: ['1:applies'], authorization: ['2:does-not-apply'] });
+  assert.deepEqual(both(answers, 'GET /account'), { authentication: ['1:unknown:refusalUnproven'], authorization: ['1:unknown:refusalUnproven'] });
   const passes = (await pack(t, body('(err, req, res, next) => { next(err); }'))).envelope;
-  assert.deepEqual(both(passes, 'GET /account'), { authentication: ['1:applies'], authorization: ['2:does-not-apply'] });
+  assert.deepEqual(both(passes, 'GET /account'), { authentication: ['1:unknown:refusalUnproven'], authorization: ['1:unknown:refusalUnproven'] });
   // A library layer after the refusal could be an error handler that resumes.
   const withLibrary: Record<string, string> = body('errorHandler()');
   withLibrary['src/app.ts'] = withLibrary['src/app.ts']!.replace("import { requireUser } from './auth.js';",
     "import { requireUser } from './auth.js';\nimport errorHandler from 'errorhandler';");
   const library = (await pack(t, withLibrary)).envelope;
   assert.deepEqual(both(library, 'GET /account'), {
-    authentication: ['1:unknown:errorPathResumes', '2:unknown:middlewareThirdParty'], authorization: ['2:unknown:middlewareThirdParty'],
+    authentication: ['1:unknown:errorPathResumes', '2:unknown:middlewareThirdParty'], authorization: ['1:unknown:errorPathResumes', '2:unknown:middlewareThirdParty'],
   });
+});
+
+// ---- review round 1 (SOL, 0a2bab4): refusals prove no principal; shadowed require; foreign createServer ----
+
+test('round 1, probe 1: a refusal on a client-controlled value is cited, never credited as authentication or authorization', needsStore, async t => {
+  const { envelope, fx } = await pack(t, expressApp(`import express from 'express';
+
+const app = express();
+app.use((req, res, next) => { if (!req.get('x-anything')) return res.sendStatus(401); next(); });
+app.get('/header', (req, res) => { res.json({}); });
+
+const admin = express.Router();
+admin.use((req, res, next) => { if (req.query.role !== 'admin') return res.sendStatus(403); next(); });
+admin.get('/panel', (req, res) => { res.json({}); });
+app.use('/admin', admin);
+
+export default app;
+`));
+  assert.deepEqual(both(envelope, 'GET /header'), { authentication: ['0:unknown:refusalUnproven'], authorization: ['0:unknown:refusalUnproven'] });
+  assert.ok(!envelope.facts.some((f: any) => f.verdict === 'applies'), 'no Express fact is ever applied');
+  // The refusal stays as evidence on the unknown fact.
+  const text = (await cited(fx, factAt(envelope, 'GET /header', 'authentication', 0))).join('\n');
+  assert.match(text, /req\.get\('x-anything'\)/);
+});
+
+test('round 1, probe 2: a file\'s own require is not Node\'s, so its express import is not read', needsStore, async t => {
+  const env = (await pack(t, expressApp(`const require = (name: string) => ({ default: () => ({ get() {}, use() {} }) });
+const express = require('express');
+
+const app = express();
+app.get('/shadowed', (req, res) => { res.json({}); });
+
+export default app;
+`))).envelope;
+  assert.deepEqual(both(env, 'GET /shadowed'), { authentication: ['0:unknown:routeObjectUnresolved'], authorization: ['0:unknown:routeObjectUnresolved'] });
+  // Near neighbour: Node's require of express is read, and the route has nothing before it.
+  const node = (await pack(t, expressApp(`const express = require('express');
+
+const app = express();
+app.get('/required', (req, res) => { res.json({}); });
+
+module.exports = app;
+`, { 'src/server.ts': `const app = require('./app');
+
+app.listen(3000);
+` }))).envelope;
+  assert.deepEqual(both(node, 'GET /required'), { authentication: ['0:does-not-apply'], authorization: ['0:does-not-apply'] });
+});
+
+test('round 1, probe 3: only Node\'s own createServer may receive the application', needsStore, async t => {
+  const app = `import express from 'express';
+import { requireUser } from './auth.js';
+
+const app = express();
+app.use('/ADMIN', requireUser);
+app.get('/admin/item', (req, res) => { res.json({}); });
+
+export default app;
+`;
+  const helper = (await pack(t, expressApp(app, { 'src/server.ts': `import app from './app.js';
+import * as helpers from './helpers.js';
+
+helpers.createServer(app).listen(3000);
+`, 'src/helpers.ts': `export function createServer(app: any) {
+  app.set('case sensitive routing', true);
+  return app;
+}
+` }))).envelope;
+  assert.deepEqual(both(helper, 'GET /admin/item'), { authentication: ['0:unknown:registrationDynamic'], authorization: ['0:unknown:registrationDynamic'] });
+  // Near neighbours: Node's http and https modules, by named import or namespace.
+  for (const server of [
+    `import http from 'node:http';\nimport app from './app.js';\n\nhttp.createServer(app).listen(3000);\n`,
+    `import { createServer } from 'https';\nimport app from './app.js';\n\ncreateServer({}, app).listen(3443);\n`,
+  ]) {
+    const env = (await pack(t, expressApp(app, { 'src/server.ts': server }))).envelope;
+    assert.deepEqual(both(env, 'GET /admin/item'), { authentication: ['0:unknown:refusalUnproven'], authorization: ['0:unknown:refusalUnproven'] }, server);
+  }
 });
