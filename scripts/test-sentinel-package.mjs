@@ -3,14 +3,16 @@
 // alone: the bin answers --help; every export imports and its public types compile in a
 // strict TypeScript consumer that uses the contracts; the installed schemas are exactly the
 // source set, one per envelope; the package's valid fixtures validate through the installed
-// package and a changed version is refused; and no Farsight application package arrives. No scanner, container, model or network
-// service is started; npm may fetch Sentinel's declared third-party dependencies.
+// package and a changed version is refused; the draft store (`farsight-sentinel/store`) opens, publishes
+// verified evidence in one process and reads it back in another; and no Farsight application package
+// arrives. No scanner, container, model or network service is started; npm may fetch Sentinel's declared
+// third-party dependencies.
 //
 //   pnpm test:sentinel:package        # builds Sentinel's closure, packs, then runs this
 //   node scripts/test-sentinel-package.mjs [build/sentinel/farsight-sentinel-<v>.tgz]
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { npmConsumer } from './npm-consumer.mjs';
@@ -56,7 +58,7 @@ try {
     runtimeKeys[subpath] = JSON.parse(await evalModule(`const m = await import(${JSON.stringify(specifierOf(subpath))}); console.log(JSON.stringify(Object.keys(m)));`));
     assert.ok(runtimeKeys[subpath].length > 0, `${specifierOf(subpath)} exposes named exports`);
   }
-  assert.ok(subpaths.includes('.') && subpaths.includes('./contracts'), 'the root and ./contracts exports');
+  assert.ok(subpaths.includes('.') && subpaths.includes('./contracts') && subpaths.includes('./store'), 'the root, ./contracts and ./store exports');
 
   // The envelope registry, as the installed package reports it.
   const registry = JSON.parse(await evalModule("const { ENVELOPES } = await import('farsight-sentinel'); console.log(JSON.stringify(ENVELOPES));"));
@@ -96,6 +98,23 @@ try {
       `else { const code: string = r${i}.errors[0]?.code ?? ''; const path: string = r${i}.errors[0]?.path ?? ''; void code; void path; }`,
     ].join('\n')),
     'void kinds;',
+    // The store facade's public types: opening, staging, a typed receipt, publication and inspection.
+    "import { openStore, STORAGE_ERROR_CODES, type SentinelStore, type StoredObject, type PublicationReceipt, type ReachabilityReport } from 'farsight-sentinel/store';",
+    "import { openStore as rootOpenStore } from 'farsight-sentinel';",
+    'export async function storeDemo(path: string, work: { id: string; revision: number }, attemptId: string): Promise<[PublicationReceipt, ReachabilityReport]> {',
+    '  const store: SentinelStore = await openStore(path, { waitMs: 0 });',
+    '  try {',
+    "    const bytes = new TextEncoder().encode('evidence');",
+    '    const id = store.objects.identify(bytes);',
+    "    store.ledger.registerStaging('stage-1', [{ id: id.id, schema: 'text/plain', privacy: 'source' }], { work, attemptId });",
+    '    const receipt: StoredObject = await store.objects.put(bytes, { expect: id });',
+    "    const accepted = store.ledger.publish({ work, attemptId, stageId: 'stage-1', receipts: [receipt], outputs: [id.id], endedAt: '2026-10-21T12:01:00Z' });",
+    '    const buffer: Buffer = await store.readArtifact(id.id);',
+    '    void buffer;',
+    '    return [accepted, await store.inspect()];',
+    '  } finally { store.close(); }',
+    '}',
+    'const codes: readonly string[] = STORAGE_ERROR_CODES.ledger; void codes; void rootOpenStore;',
   ];
   writeFileSync(join(consumer.dir, 'consumer.mts'), lines.join('\n') + '\n');
   await consumer.exec(process.execPath, [join(root, 'node_modules', 'typescript', 'bin', 'tsc'), '--noEmit', '--strict',
@@ -128,12 +147,58 @@ try {
   const validated = Number((await consumer.exec(process.execPath, ['fixtures.mjs'])).stdout);
   assert.equal(validated, cases.length);
 
+  // The store, as a consumer uses it: one process opens a new store and publishes verified evidence; a
+  // fresh process reopens it under a new epoch, reads the artifact back and is refused a record from the
+  // earlier epoch. The store lives in a canonical, private folder of the consumer's scratch directory.
+  const storeRoot = join(realpathSync.native(consumer.scratch), 'store-demo');
+  mkdirSync(storeRoot, { mode: 0o700 });
+  const storePath = join(storeRoot, 'store');
+  const load = (name) => JSON.parse(readFileSync(join(fixtures, `${name}.json`), 'utf8'));
+  const work = { id: 'work-pattern-api', revision: 1 };
+  writeFileSync(join(consumer.dir, 'store-write.mjs'), `
+    import { openStore } from 'farsight-sentinel/store';
+    const store = await openStore(${JSON.stringify(storePath)});
+    try {
+      const e = store.epoch;
+      store.ledger.createRun({ ...${JSON.stringify(load('run-active'))}, coordinatorEpoch: e });
+      store.ledger.createWork({ ...${JSON.stringify(load('work-idle'))}, coordinatorEpoch: e, id: ${JSON.stringify(work.id)}, state: 'ready', dependencies: [] });
+      store.ledger.startAttempt({ ...${JSON.stringify(load('attempt-running'))}, coordinatorEpoch: e, id: 'att-1', ordinal: 1, work: ${JSON.stringify(work)},
+        worker: { kind: 'owned-child', pid: 4242, processStartedAt: '2026-10-21T12:00:00Z' } });
+      const bytes = Buffer.from('evidence written by the first process');
+      const id = store.objects.identify(bytes);
+      store.ledger.registerStaging('stage-1', [{ id: id.id, schema: 'text/plain', privacy: 'source' }], { work: ${JSON.stringify(work)}, attemptId: 'att-1' });
+      const receipt = await store.objects.put(bytes, { expect: id });
+      store.ledger.publish({ work: ${JSON.stringify(work)}, attemptId: 'att-1', stageId: 'stage-1', receipts: [receipt], outputs: [id.id], endedAt: '2026-10-21T12:01:00Z' });
+      console.log(JSON.stringify({ epoch: e, id: id.id }));
+    } finally { store.close(); }
+  `);
+  writeFileSync(join(consumer.dir, 'store-read.mjs'), `
+    import { openStore } from 'farsight-sentinel';
+    const [epoch] = process.argv.slice(2);
+    const store = await openStore(${JSON.stringify(storePath)});
+    try {
+      const pub = store.ledger.getPublication(${JSON.stringify(work)});
+      const text = (await store.readArtifact(pub.outputs[0].id)).toString('utf8');
+      let stale = null;
+      try { store.ledger.createRun({ ...${JSON.stringify(load('run-active'))}, id: 'run-old', coordinatorEpoch: epoch }); } catch (e) { stale = e.code; }
+      const report = await store.inspect();
+      console.log(JSON.stringify({ epoch: store.epoch, text, stale, ok: report.ok, integrity: store.checkIntegrity().integrity }));
+    } finally { store.close(); }
+  `);
+  const node = (file, args = []) => consumer.exec(process.execPath, ['--disable-warning=ExperimentalWarning', file, ...args]);
+  const written = JSON.parse((await node('store-write.mjs')).stdout.trim());
+  const read = JSON.parse((await node('store-read.mjs', [written.epoch])).stdout.trim());
+  assert.notEqual(read.epoch, written.epoch, 'a new process owns the store under a new epoch');
+  assert.equal(read.text, 'evidence written by the first process', 'the artifact reads back in a new process');
+  assert.equal(read.stale, 'sentinel.store.staleEpoch', 'a record from the earlier epoch is refused');
+  assert.ok(read.ok && read.integrity === 'ok', 'reachability and SQLite integrity hold after the reopen');
+
   // Standalone: everything @farsight/* is inlined, and farsight-cli is not pulled in.
   const modules = readdirSync(join(consumer.dir, 'node_modules'));
   assert.ok(!modules.includes('farsight-cli'), 'farsight-cli is not installed with Sentinel');
   assert.ok(!modules.includes('@farsight'), 'no workspace package is resolved from a registry');
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, npm consumer`);
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, store reopened across processes, npm consumer`);
 } finally {
   consumer.cleanup();
 }

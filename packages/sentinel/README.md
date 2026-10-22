@@ -1,9 +1,10 @@
 # @farsight/sentinel (draft)
 
 The optional Sentinel security-analysis boundary. **This package does not scan anything yet.** It defines the
-draft contracts the later implementation PRs build on, validates them, and ships a placeholder
-`farsight-sentinel` executable that lists what is unavailable. Nothing in it captures source, opens a ledger,
-starts a process or container, downloads a tool or contacts a model provider. Farsight's own packages neither
+draft contracts the later implementation PRs build on, validates them, provides a draft local store for runs and
+evidence (below), and ships a placeholder `farsight-sentinel` executable that lists what is unavailable. Nothing in
+it captures source, starts a scanner or container, downloads a tool or contacts a model provider, and importing it
+opens nothing: a store is opened only by an explicit `openStore()` call. Farsight's own packages neither
 depend on it nor import it (a test checks this).
 
 Plan: [`docs/proposals/farsight-sentinel/implementation-plan.md`](../../docs/proposals/farsight-sentinel/implementation-plan.md),
@@ -54,6 +55,36 @@ Spans are zero-based, half-open UTF-8 byte offsets. Paths are source-relative PO
 segment. Money is a decimal string. Resource ceilings are the PR 01 proposed defaults (2 GiB, 2 CPUs,
 128 PIDs, 120 s, 4 MiB output); a profile can only lower them.
 
+## The local store (draft)
+
+```ts
+import { openStore } from 'farsight-sentinel/store'; // also exported from 'farsight-sentinel'
+
+const store = await openStore('/absolute/canonical/path/to/store'); // created 0700 when absent
+try {
+  const bytes = Buffer.from('evidence');
+  const id = store.objects.identify(bytes);
+  store.ledger.registerStaging('stage-1', [{ id: id.id, schema: 'text/plain', privacy: 'source' }], { work, attemptId });
+  const receipt = await store.objects.put(bytes, { expect: id });           // written, fsynced, verified, linked
+  store.ledger.publish({ work, attemptId, stageId: 'stage-1', receipts: [receipt], outputs: [id.id], endedAt });
+  await store.readArtifact(id.id);                                          // any process, after a reopen
+} finally {
+  store.close();                                                            // closes the ledger, then the lock
+}
+```
+
+`openStore` takes the real owner lock before it opens or migrates the ledger, binds the ledger to the object
+store's own verifier, and releases everything if any step fails. One process owns a store at a time; each owner
+has its own epoch, and records from an earlier epoch are refused. A publication is accepted in one transaction,
+only after each named object was re-read and hashed in this store. `inspect()` and `planPrune()` are read-only;
+nothing is ever deleted automatically. Every refusal carries a stable reason code (`STORAGE_ERROR_CODES`) whose
+words are in the shared catalog.
+
+Qualified, and refused otherwise: SQLite 3.53.3 (Node 24.19.0), macOS and Linux, a canonical owner-only folder on
+a local file system. Durability holds across process death, not physical power loss (see ADR 19 in
+`docs/ARCHITECTURE.md`). A store is a library facility in this draft: the `capabilities` list shows `ledger` as
+`available-draft` and every scan capability as unavailable; there is no store command until the CLI (PR 09).
+
 ## Versions and evolution
 
 - **Draft until review.** Every name ends in `/draft-1`. A name moves to `/v1` only after an independent
@@ -71,7 +102,8 @@ segment. Money is a decimal string. Resource ceilings are the PR 01 proposed def
 
 Everything the executable prints comes from the shared two-register catalog in core
 (`packages/core/src/strings-sentinel-cli.ts`, keys `sentinel.cli.*`, `sentinel.capability.*`,
-`sentinel.contract.*` and `sentinel.protocol.*`). There is no catalog of Sentinel's own. Human output prints each validation error as its
+`sentinel.contract.*` and `sentinel.protocol.*`; the store's reason codes in `strings-sentinel-store.ts` and
+`strings-sentinel-storage-errors.ts`). There is no catalog of Sentinel's own. Human output prints each validation error as its
 code, location and catalog words; the validator's diagnostic `message` appears only in `--json` output.
 
 ## Exit codes
@@ -86,5 +118,6 @@ then findings (`policyResultOf`). Every unavailable command in this draft exits 
 `pnpm --filter @farsight/sentinel build && pnpm --filter @farsight/sentinel test`. The tests import `dist/`. They
 cover valid fixtures for every kind and union branch, over 100 invalid cases (each with its expected error code
 and location), exact-limit bounds, version refusal, the drift check, the enum pins, the CLI and the package
-boundary. They need no scanner, container, network or credential. `test/fixtures/` holds PR 01's feasibility
+boundary, and the store: runtime gate, owner lock across real processes, ledger, objects, reachability and the
+facade end to end (`test/store-integration.test.ts`). They need no scanner, container, network or credential. `test/fixtures/` holds PR 01's feasibility
 inputs, which this package leaves untouched.

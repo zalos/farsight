@@ -2,7 +2,7 @@
   "name": "@farsight/sentinel",
   "version": "0.0.0-draft.1",
   "private": true,
-  "description": "Optional Sentinel security-analysis boundary: draft contracts and schemas only, no scanner yet",
+  "description": "Optional Sentinel security-analysis boundary: draft contracts and a draft local store, no scanner yet",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -22,6 +22,10 @@
       "types": "./dist/contracts/index.d.ts",
       "import": "./dist/contracts/index.js"
     },
+    "./store": {
+      "types": "./dist/store/index.d.ts",
+      "import": "./dist/store/index.js"
+    },
     "./schemas/*": "./schemas/*",
     "./package.json": "./package.json"
   },
@@ -39,6 +43,7 @@
   },
   "dependencies": {
     "@farsight/core": "workspace:*",
+    "@types/node": "26.1.0",
     "ajv": "8.20.0"
   }
 }

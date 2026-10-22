@@ -20,8 +20,21 @@ The compatibility `extractRepository` API retains the application's legacy IO se
 Sentinel (`packages/sentinel`, ADR 18) is optional and ships as its own `farsight-sentinel` tarball.
 `farsight-cli` does not bundle, import or start it, so installing Farsight installs no scanner, container client
 or model SDK; the `sentinel-package` CI job checks the CLI bundle and a clean consumer for that. The current
-package defines draft contracts and a placeholder command that claims no scanning support. It reads no settings,
-credentials or source and makes no network calls. Later scanner, container and model work arrives with its
+package defines draft contracts, a draft local store and a placeholder command that claims no scanning support.
+It reads no settings, credentials or source and makes no network calls.
+
+The store (`openStore`, ADR 19) writes only inside the folder it is given, and only after checking it: absolute and
+already canonical (no link, alias, dot segment or other letter case), every folder above it owned by the user or
+root and not writable by others unless sticky, the folder 0700 and its files 0600 with one link each (existing
+broader permissions are refused, never changed), on a measured local file system. On macOS that measurement runs
+`/sbin/mount` once with no shell, an empty environment and a 5 s bound; nothing else is spawned. One process owns
+a store at a time through an OS file lock on `owner.sqlite`, which is never deleted and never opened by anything
+else; `owner.json` only describes the holder. Records from an earlier owner's epoch are refused. Evidence objects
+are immutable and content-addressed; a publication is accepted only after their bytes are re-read and hashed, and
+the ledger keeps schema, privacy class and links per reference, so shared bytes cannot lower a reference's class.
+Nothing is deleted automatically; the prune plan is a dry run. The store holds no credential and no settings, and
+durability is claimed against process death, not power loss (ADR 19). The local runtime folder
+(`.farsight/sentinel/*`) is ignored by git. Later scanner, container and model work arrives with its
 own trust-boundary section here: external scanners run only in containers, with no host fallback, and model
 providers are opt-in per run. The package smokes install from npm into temporary directories with their own npm
 cache and user config/state, and start nothing beyond the packaged command and a read-only Farsight server on a
