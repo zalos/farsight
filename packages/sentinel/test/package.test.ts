@@ -165,12 +165,12 @@ test('help and version say plainly that no scanner exists', () => {
   assert.equal(version.stdout.trim(), `farsight-sentinel ${manifest.version}, contracts draft-1`);
 });
 
-test('every analysis capability is explicitly unavailable; only contracts and the draft store are available', () => {
+test('every analysis capability is explicitly unavailable; only contracts, the draft store and draft capture are available', () => {
   const r = cli('capabilities', '--json');
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture']);
   assert.ok(listed.filter(c => c.state !== 'unavailable').every(c => c.state === 'available-draft'));
   for (const c of listed) assert.match(c.reasonCode, /^sentinel\.capability\./);
   assert.equal(listed.find(c => c.id === 'interprocedural-flow')?.reasonCode, 'sentinel.capability.noQualifiedEngine');

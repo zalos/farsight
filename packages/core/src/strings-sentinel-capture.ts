@@ -6,6 +6,7 @@ import type { StringEntry } from './strings.js';
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
 
 export const SENTINEL_CAPTURE_STRINGS: Record<string, StringEntry> = {
+  'sentinel.capability.draftCapture': same('draft source capture only', 'A library can capture committed trees and working copies into an immutable snapshot, record what it could not read, and restore it from the store. Nothing parses or scans the snapshot yet.'),
   // ---- entry reasons: recorded, never silently dropped ----
   'sentinel.capture.excludedGitInternals': same('Git internals are not captured', 'The repository\'s own .git folder holds history and configuration, not the source being scanned. It is recorded as a boundary whose contents were not listed.'),
   'sentinel.capture.excludedStore': same('the Sentinel store is not captured', 'The folder holding Sentinel\'s own records sits inside the source. It is recorded as a boundary and never read as source.'),

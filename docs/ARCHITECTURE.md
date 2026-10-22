@@ -271,3 +271,42 @@ target check (`miss`), and its own capability and credential verdicts: Work's `c
 `provider.can()` stay in Work and are not a model or scanner credential check. Confirmation receipts, budgets and
 Sentinel's settings adoption are not part of this boundary. **Cost:** a public core export that Work, code hosts and
 Sentinel must all keep compatible; a change to its rules is a change to every gate at once, which is the point.
+
+20. **Sentinel captures source with its own Git object reader, stages before it writes, and records what it cannot read (2026-10-22).**
+
+`@farsight/sentinel` gains a public `./snapshot` export (also re-exported from the root): `captureSnapshot(store,
+request)`, `restoreSnapshot(store, snapshotArtifact, target)`, `readSnapshot` and `reconcileInventory`. Capture works
+through the PR 03 store facade only; it never opens the ledger database or the owner lock.
+
+*Committed-tree* capture reads the pinned commit's objects with a plain TypeScript reader (`snapshot/git.ts`): loose
+objects and version-2 pack indexes and packs, offset and reference deltas, SHA-1 and SHA-256 object formats, file-based
+refs and `packed-refs`, annotated tags, and a linked worktree's Git directory when the request names it. No `git`
+process is started, so no hook, filter, attribute, textconv, replace ref, fsmonitor, configured command or promisor
+(lazy) fetch can run, and the repository's own configuration is read for its object and ref formats only. Every object
+is size-bounded before it is inflated and hash-verified against its id. An object that is not stored locally (a partial
+clone, an alternate the capture does not follow, a pruned pack) is recorded as missing, never fetched; reftable refs
+and other formats are refused. The alternative, spawning `git cat-file` with hardened flags, was rejected: it trusts the
+repository's configuration and git version for every guarantee above, and it would add a second process to a library
+whose only spawn is the macOS mount table. *Working-copy* capture reads every file without following a link, stores it,
+then enumerates the tree again; any difference discards the attempt (its stages aborted) and retries, and a tree that
+never holds still is reported unstable rather than mixed. Its mode says so (`working-copy-stability-checked`); it
+never claims an atomic revision, and `dirty` is false only when every tracked file was captured with its committed
+blob id and nothing else was.
+
+The inventory is the owner's policy, never the repository's ignore files. Hidden workflow and configuration files are
+captured like any source. `.git`, the store itself, dependency caches and policy exclusions are folder boundaries with
+unknown (null) descendants, never zero. Links, special files, unsafe names (dot segments, slashes, NUL, backslash, a
+committed `.git`), names that are not UTF-8 and case- or normalisation-colliding restore paths are refused; unreadable,
+too-large and over-quota files keep their sizes. Missing or corrupt Git objects, LFS content and submodule commits are
+recorded; LFS content and submodules are read only from local inputs the request names, and a captured submodule is
+a separate source with its own repository identity and commit. `reconcileInventory` accounts every path an
+independent walk finds, by its own entry or a boundary above it (E1).
+
+Before a byte is written, the snapshot is checked against its contract and every artifact it will store (source
+bytes as `source`, the manifest as `source-derived`) is registered as staging. Bytes are re-read and re-hashed against
+the inventory as they are stored. Each stage is then published under a running attempt the caller supplies; a stage
+holds at most 4095 artifacts, so a larger capture publishes content stages first and the manifest last, linking only
+accepted content. A failure before publication aborts every unpublished stage. `restoreSnapshot` writes a new
+read-only tree from the store alone, reads it back and lists it again. The capture reason codes are catalog keys
+(`strings-sentinel-capture.ts`); the `source-capture` capability is `available-draft`. Not in this decision: parser
+artifacts and file outcomes (PR 05), framework versions from lockfiles (left empty), and any scan coverage.
