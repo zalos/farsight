@@ -9,10 +9,12 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAdapterRegistry } from '../dist/execution/registry.js';
 import { createExecutionService } from '../dist/execution/service.js';
-import { PATTERN_ADAPTER, ENGINE_ARGS, buildPatternAdapter, patternRuleOf, runPatternAttempt } from '../dist/adapters/pattern/index.js';
+import { PATTERN_ADAPTER, ENGINE_ARGS, buildPatternAdapter, buildPatternJob, patternRuleOf, runPatternAttempt } from '../dist/adapters/pattern/index.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
 
 const enabled = process.env.SENTINEL_ISOLATION === '1';
+/** The opt-in platform qualification job sets this (linux/amd64) to measure a listed, unmeasured platform. */
+const QUALIFY = process.env.SENTINEL_PATTERN_QUALIFY ? process.env.SENTINEL_PATTERN_QUALIFY.replace(/^linux\//, '') : undefined;
 const skip = !enabled && 'real pinned engine: set SENTINEL_ISOLATION=1 with a qualified local Docker and the pinned Semgrep image installed';
 const PACK = fileURLToPath(new URL('../rules/pattern/', import.meta.url));
 const sha = (b: Uint8Array | string) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
@@ -20,6 +22,9 @@ const manifest = JSON.parse(readFileSync(`${PACK}sentinel-pack.json`, 'utf8'));
 const RULES = manifest.rules.map((r: any) => patternRuleOf(r.familyId, r.revision, readFileSync(`${PACK}${r.implementation.rulePath}`)));
 
 /** A test variant with a one-second per-rule engine timeout (the engine's smallest): its own shim and adapter digest. */
+/** A variant whose engine invocation fails with an adversarial value the engine echoes back in its error. */
+const SECRET = 'ghp_FAKEtoken0123456789abcdefSECRET';
+const LEAKY = buildPatternAdapter({ id: 'pattern-semgrep-leaky-error', engineArgs: ENGINE_ARGS.map((a, i) => (ENGINE_ARGS[i - 1] === '--max-target-bytes' ? `${SECRET} const password = 'Hunter2-src' \x60db.query(x)\x60` : a)) });
 const RULE_TIMEOUT = buildPatternAdapter({ id: 'pattern-semgrep-rule-timeout', engineArgs: ENGINE_ARGS.map((a, i) => (ENGINE_ARGS[i - 1] === '--timeout' ? '1' : a)) });
 let root: { root: string; work: string };
 let store: any;
@@ -30,7 +35,7 @@ before(async () => {
   root = scratch('pattern');
   store = await storeIn(root.root);
   const deadline = { ...PATTERN_ADAPTER, id: 'pattern-semgrep-deadline', limits: { timeoutMs: 1500, helloTimeoutMs: 1500, cancelGraceMs: 500 } };
-  service = await createExecutionService(store, { scratchRoot: root.work, registry: createAdapterRegistry([PATTERN_ADAPTER, deadline, RULE_TIMEOUT.definition]), containers: true });
+  service = await createExecutionService(store, { scratchRoot: root.work, registry: createAdapterRegistry([PATTERN_ADAPTER, deadline, RULE_TIMEOUT.definition, LEAKY.definition]), containers: true });
 });
 after(async () => { if (enabled) { await store.close(); removeScratch(root.root); } });
 
@@ -51,7 +56,7 @@ function targets(extra: Record<string, string | Buffer> = {}) {
 }
 const attempt = (t: ReturnType<typeof targets>, adapterId?: string, adapter?: typeof RULE_TIMEOUT) => runPatternAttempt(service, {
   attemptId: `att-pattern-${n++}`, work: { id: 'work-pattern', revision: 1 }, rules: RULES, targets: t, scratch: root.root,
-  ...(adapterId ? { adapterId } : {}), ...(adapter ? { adapter } : {}),
+  ...(adapterId ? { adapterId } : {}), ...(adapter ? { adapter } : {}), ...(QUALIFY ? { qualifyingArchitecture: QUALIFY } : {}),
 });
 const POSITIVE = 'export function f(db, id) {\n  return db.query("SELECT * FROM t WHERE id = " + id);\n}\n';
 
@@ -66,6 +71,7 @@ test('the pinned engine finds the original positives, none of the negatives, and
   const wall = Date.now() - t0;
   assert.equal(r.attempt, 'succeeded');
   assert.equal(r.engineExit, 0);
+  assert.equal(r.platform.state, QUALIFY ? 'candidate' : 'measured', `platform ${r.platform.architecture}`);
   assert.deepEqual(r.findings.map(f => `${f.familyId} ${f.relativePath} ${f.evidence.kind}`).sort(), [
     'sentinel.sql.concatenated-query-java java/Direct.java structural-locator',
     'sentinel.sql.concatenated-query-tsjs controls/broken.ts structural-locator',
@@ -160,6 +166,20 @@ test('changing or deleting the caller’s files after the worker copied them cha
   assert.equal(captured.subarray(f.span.startByte, f.span.endByte).toString('utf8'), query);
   assert.ok(r.findings.some(x => x.relativePath === 'live/deleted.ts'), 'a deleted original was already captured');
   assert.ok(r.coverage.filter(c => c.relativePath.startsWith('live/')).every(c => c.status === 'complete' || c.status === 'not-run'));
+});
+
+test('an engine failure reaches diagnostics scrubbed: no argument value, quoted source or target path survives', { skip }, async () => {
+  const t = targets({ [`leak/${SECRET}.ts`]: `export const token = "${SECRET}";\nexport const password = 'Hunter2-src';\n${POSITIVE}` });
+  const dir = join(root.root, `leaky-job-${n++}`);
+  mkdirSync(dir, { mode: 0o700 });
+  const built = buildPatternJob(RULES, t, dir, LEAKY);
+  const outcome = await service.run({ adapterId: LEAKY.definition.id, attemptId: `att-leaky-${n++}`, work: { id: 'work-pattern', revision: 1 }, inputs: built.inputs });
+  const text = outcome.diagnostics.text;
+  assert.ok(text.length > 0 && text.length <= 600, `bounded diagnostics: ${text.length}`);
+  for (const leaked of [SECRET, 'Hunter2', 'password', 'db.query', '/tmp/sentinel-pattern', 'leak/']) assert.ok(!text.includes(leaked), `diagnostics leaked ${leaked}`);
+  assert.match(text, /^(Error|Usage|semgrep|Invalid|invalid)/m, 'the engine’s own error line still explains the failure');
+  assert.match(text, /^[\x20-\x7e\n]*$/, 'printable ASCII only');
+  console.log(`# scrubbed diagnostics: ${JSON.stringify(text)}`);
 });
 
 test('the attempt deadline stops the engine and leaves every applicable file in error', { skip }, async () => {

@@ -113,7 +113,7 @@ function run(t: { after(fn: () => void): void }, engine: Record<string, unknown>
   const built = buildPatternJob(RULES, targets, scratch(t));
   const scanned = ((engine.paths as any)?.scanned ?? []) as string[];
   const engineBytes = Buffer.from(JSON.stringify({ version: '1.181.0', engine_requested: 'OSS', results: [], errors: [], paths: { scanned: [], skipped: [] }, time: timing(scanned), ...engine }));
-  const { __arch: _arch, __targets: _targets, ...recordFields } = record as any;
+  const { __arch: _arch, __targets: _targets, __qualify: _qualify, ...recordFields } = record as any;
   const recordBytes = Buffer.from(JSON.stringify({ schema: 'sentinel-pattern-run/draft-1', job: built.jobDigest, exitCode: 0, timedOut: false, stdoutTruncated: false, excluded: [], engineOutput: sha(engineBytes), ...recordFields }));
   const bytes = new Map([[sha(engineBytes), engineBytes], [sha(recordBytes), recordBytes]]);
   const outcome: any = {
@@ -125,7 +125,8 @@ function run(t: { after(fn: () => void): void }, engine: Record<string, unknown>
   };
   const byArtifact = new Map(targets.map(x => [x.artifact, readFileSync(x.path)]));
   const override = (record as any).__targets as ((a: string, b: Buffer | undefined) => Buffer | undefined) | undefined;
-  return normalizePatternRun({ job: built.job, jobDigest: built.jobDigest, rules: RULES, outcome, outputBytes: id => bytes.get(id)!, targetBytes: a => (override ? override(a, byArtifact.get(a)) : byArtifact.get(a)) });
+  const qualify = (record as any).__qualify as string | undefined;
+  return normalizePatternRun({ job: built.job, jobDigest: built.jobDigest, rules: RULES, outcome, outputBytes: id => bytes.get(id)!, targetBytes: a => (override ? override(a, byArtifact.get(a)) : byArtifact.get(a)), ...(qualify ? { qualifyingArchitecture: qualify } : {}) });
 }
 const all = packTargets().map(x => TREE + x.relativePath);
 const directTs = readFileSync(`${PACK}fixtures/typescript/direct.ts.fixture`);
@@ -249,6 +250,14 @@ test('results from an image platform conformance has not measured are not truste
   assert.equal(r.findings.length, 0);
   assert.ok(r.coverage.every((c: any) => c.status === 'error' && c.reasonCode === 'sentinel.pattern.coverage.platformUnmeasured'));
   assert.deepEqual(PATTERN_SUPPORT.platforms.map((p: any) => `${p.platform}:${p.state}`), ['linux/arm64:measured', 'linux/amd64:unmeasured']);
+  assert.deepEqual(r.platform, { architecture: 'amd64', state: 'refused' });
+  // Only a qualification run that names the listed, unmeasured platform gets results, and they are marked candidate.
+  const q = run(t, { paths: { scanned: all, skipped: [] }, results: [good] }, { __arch: 'amd64', __qualify: 'amd64' });
+  assert.deepEqual(q.platform, { architecture: 'amd64', state: 'candidate' });
+  assert.equal(q.findings.length, 1);
+  const unlisted = run(t, { paths: { scanned: all, skipped: [] }, results: [good] }, { __arch: 'riscv64', __qualify: 'riscv64' });
+  assert.equal(unlisted.platform.state, 'refused', 'a platform the pinned index does not list cannot be qualified this way');
+  assert.deepEqual(run(t, { paths: { scanned: all, skipped: [] } }).platform, { architecture: 'arm64', state: 'measured' });
 });
 
 test('output that names another job, another engine output or another engine version is refused', t => {

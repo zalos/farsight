@@ -10,7 +10,7 @@
 // Kept as a string so the package ships it inside dist with no extra build step; its SHA-256 is part of the adapter's
 // fixed command and therefore of the adapter digest. Avoid backticks and dollar-brace in the Python below.
 export const PATTERN_WORKER_SOURCE = String.raw`# Sentinel pattern worker (sentinel-pattern-worker/1). Original; standard library only.
-import hashlib, json, os, subprocess, sys, threading, time
+import hashlib, json, os, re, subprocess, sys, threading, time
 
 PROTOCOL = 'sentinel-worker/draft-1'
 JOB_SCHEMA = 'sentinel-pattern-job/draft-1'
@@ -66,6 +66,27 @@ def safe_rel(path):
     if path.startswith('/') or '\\' in path or '\x00' in path or path.endswith('/'):
         return False
     return all(seg not in ('', '.', '..') for seg in path.split('/'))
+
+SCRUB_KEEP = re.compile(r'^(Error|Usage|semgrep( scan)?:|\[ERROR\]|Fatal error|Invalid|invalid)')
+SCRUB_QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"|[\x60][^\x60]*[\x60]")
+SCRUB_PATH = re.compile(r'/tmp/sentinel-pattern/\S*')
+SCRUB_WORD = re.compile(r'^(\(?[A-Za-z][a-z]*[)\],.:;!?]*|--?[a-z][a-z-]*=?|[0-9]{1,6}[,.:;)]?|\.\.\.|<target>|[|/=\-:()\[\]]+)$')
+
+def scrub(raw):
+    kept = []
+    for line in raw.decode('utf-8', 'replace').splitlines():
+        line = line.strip()
+        if not SCRUB_KEEP.match(line):
+            continue
+        line = SCRUB_QUOTED.sub('\u2026', line)
+        line = SCRUB_PATH.sub('<target>', line)
+        line = ' '.join(w if SCRUB_WORD.match(w) else '\u2026' for w in line.split())
+        line = ''.join(ch if (' ' <= ch <= '~') else '?' for ch in line.replace('\u2026', '...'))
+        kept.append(line[:160])
+        if len(kept) == 8:
+            break
+    text = '\n'.join(kept)
+    return (text[:512] + '\n') if text else 'the engine failed; its messages were withheld\n'
 
 def finish(status):
     # A daemon thread is blocked reading stdin; a normal interpreter shutdown would wait on its lock. Flush and leave.
@@ -189,9 +210,11 @@ def main():
 
     engine = result['out']
     if code != 0:
-        # A failed engine run explains itself through the supervisor's bounded diagnostics channel, never parsed.
-        sys.stderr.buffer.write(result['err'][:4096])
-        sys.stderr.buffer.flush()
+        # A failed engine run explains itself through the supervisor's diagnostics channel, scrubbed first: engine
+        # messages can quote arguments, paths and source text, so only usage/error lines pass, with every quoted span,
+        # target path and token-like run replaced, as printable ASCII, at most eight lines and 512 bytes.
+        sys.stderr.write(scrub(result['err']))
+        sys.stderr.flush()
     record = {
         'schema': 'sentinel-pattern-run/draft-1', 'job': job_digest, 'exitCode': code, 'timedOut': timed_out,
         'stdoutBytes': result['outBytes'], 'stdoutTruncated': result['outBytes'] > MAX_ENGINE_STDOUT,
