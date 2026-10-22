@@ -10,7 +10,7 @@ import { compareTimestamps, isCalendarTimestamp, validateEnvelope } from '../val
 import type {
   AttemptEnvelope, AttemptUsage, Id, RunEnvelope, RunOutcome, RunState, WorkEnvelope, WorkRef,
 } from '../contracts/index.js';
-import { digestOf } from './ledger-json.js';
+import { canonicalJson, digestOf } from './ledger-json.js';
 import { LEDGER_MIGRATIONS, migrateLedger, type LedgerGuard } from './migrations.js';
 import {
   ARTIFACT_CODECS, ARTIFACT_PRIVACY, LedgerError, MAX_ARTIFACT_BYTES, MAX_EVENT_PAGE,
@@ -797,21 +797,46 @@ export class Ledger {
         if (live) active.add(id);
       }
     };
-    for (const r of this.#all('SELECT id, revision, state, influence_manifest, envelope FROM work_units')) {
+    const same = (a: unknown, b: unknown) => canonicalJson(a) === canonicalJson(b);
+    for (const r of this.#all(`SELECT id, revision, run_id, plan_revision, input_fingerprint, influence_manifest,
+        coordinator_epoch, state, envelope FROM work_units`)) {
       const w = parse('work', r.envelope);
-      if (w.id !== r.id || w.revision !== r.revision || w.influenceManifest !== r.influence_manifest) throw corrupt('work');
+      // The stored envelope is the creation record: its identity must be the row's, and its state the creation
+      // state (pending/ready, the only ones createWork writes) or the row's own state for a record born final.
+      if (w.id !== r.id || w.revision !== r.revision || w.runId !== r.run_id || w.planRevision !== r.plan_revision
+        || w.inputFingerprint !== r.input_fingerprint || w.influenceManifest !== r.influence_manifest
+        || w.coordinatorEpoch !== r.coordinator_epoch || !(w.state === 'pending' || w.state === 'ready' || w.state === r.state)) {
+        throw corrupt('work');
+      }
       add([w.influenceManifest, w.state === 'satisfied-by-reuse' ? w.reuse.derivationArtifact : undefined],
         !['published', 'failed', 'satisfied-by-reuse'].includes(String(r.state)));
     }
-    for (const r of this.#all('SELECT id, state, envelope, final_envelope FROM attempts')) {
+    for (const r of this.#all(`SELECT id, work_id, work_revision, ordinal, coordinator_epoch, state, usage_certainty,
+        started_at, ended_at, final_usage_certainty, envelope, final_envelope FROM attempts`)) {
       const start = parse('attempt', r.envelope);
-      if (start.id !== r.id) throw corrupt('attempt');
+      // The start envelope is immutable and always the running record; its identity must be the row's.
+      if (start.state !== 'running' || start.id !== r.id || start.work.id !== r.work_id
+        || start.work.revision !== r.work_revision || start.ordinal !== r.ordinal
+        || start.coordinatorEpoch !== r.coordinator_epoch || start.startedAt !== r.started_at
+        || start.usage.certainty !== r.usage_certainty) {
+        throw corrupt('attempt');
+      }
       const running = r.state === 'running';
+      if (running !== (r.final_envelope === null)) throw corrupt('attempt');
       add([start.invocation], running);
       if (!running) {
+        // The final envelope repeats the start's identity unchanged and adds only the end facts.
         const end = parse('attempt', r.final_envelope);
-        if (end.id !== r.id || end.state !== r.state || end.state === 'running') throw corrupt('attempt');
-        add([end.invocation, ...end.outputs, end.error?.diagnostics], false);
+        if (end.state === 'running' || end.state !== r.state || end.endedAt !== r.ended_at
+          || end.usage.certainty !== r.final_usage_certainty
+          || !same({ ...start, state: null, usage: null }, {
+            schema: end.schema, id: end.id, work: end.work, ordinal: end.ordinal, coordinatorEpoch: end.coordinatorEpoch,
+            operationId: end.operationId, worker: end.worker, startedAt: end.startedAt, state: null, usage: null,
+            ...(end.invocation === undefined ? {} : { invocation: end.invocation }),
+          })) {
+          throw corrupt('attempt');
+        }
+        add([...end.outputs, end.error?.diagnostics], false);
       }
     }
     return { retained, active };

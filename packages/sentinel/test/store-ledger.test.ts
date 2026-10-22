@@ -485,3 +485,42 @@ test('an unreadable retained record fails the snapshot closed instead of shrinki
     NULL, '{}')`).run(sha('f'), sha('m'));
   assert.throws(() => ledger.gcSnapshot(), code('sentinel.store.corruptRecord'));
 });
+
+test('a retained record whose envelopes disagree with its row or with each other fails the snapshot closed', async t => {
+  const VALID = new URL('./contracts/valid/', import.meta.url);
+  const fixture = async (n: string) => JSON.parse(await (await import('node:fs/promises')).readFile(new URL(`${n}.json`, VALID), 'utf8'));
+  const endedFixture = await fixture('attempt-ended');
+  const insertAttempt = (db: DatabaseSync, row: { state: string; envelope: unknown; final: unknown | null; endedAt: string | null }) =>
+    db.prepare(`INSERT INTO attempts (id, work_id, work_revision, ordinal, coordinator_epoch, state, usage_certainty, started_at,
+      ended_at, envelope, final_usage_certainty, final_envelope) VALUES ('att-x', 'work-pattern-api', 1, 9, 'epoch-1', ?,
+      'not-applicable', '2026-10-21T12:00:00Z', ?, ?, ?, ?)`).run(row.state, row.endedAt, JSON.stringify(row.envelope),
+      row.final === null ? null : 'not-applicable', row.final === null ? null : JSON.stringify(row.final));
+  const begun = attemptEnvelope('epoch-1', { id: 'att-x', ordinal: 9 });
+  const ended = { ...endedFixture, id: 'att-x', ordinal: 9, coordinatorEpoch: 'epoch-1', worker: begun.worker,
+    outputs: [sha('smuggled output')], error: { code: 'sentinel.error.timeout', retryable: false, diagnostics: sha('smuggled diag') } };
+
+  const cases: Array<[string, (db: DatabaseSync) => void]> = [
+    ['a running row whose start envelope is an ended envelope',
+      db => insertAttempt(db, { state: 'running', envelope: ended, final: null, endedAt: null })],
+    ['an ended row whose final envelope changes the worker',
+      db => insertAttempt(db, { state: 'failed', envelope: begun, endedAt: ended.endedAt,
+        final: { ...ended, worker: { kind: 'owned-child', pid: 1, processStartedAt: '2026-10-21T12:00:00Z' } } })],
+    ['an ended row whose final envelope names another work revision',
+      db => insertAttempt(db, { state: 'failed', envelope: begun, endedAt: ended.endedAt,
+        final: { ...ended, work: { id: 'work-pattern-api', revision: 2 } } })],
+    ['an ended row whose end time differs from its envelope',
+      db => insertAttempt(db, { state: 'failed', envelope: begun, endedAt: '2026-10-21T12:09:00Z', final: ended })],
+    ['a work row whose envelope names another run',
+      db => db.prepare(`INSERT INTO work_units (id, revision, run_id, plan_revision, input_fingerprint, influence_manifest,
+        coordinator_epoch, state, active_attempt_id, envelope) VALUES ('work-x', 1, 'run-1', 2, ?, ?, 'epoch-1', 'ready', NULL, ?)`)
+        .run('sha256:5555555555555555555555555555555555555555555555555555555555555555', sha('m'),
+          JSON.stringify(workEnvelope('epoch-1', { id: 'work-x', runId: 'run-other', influenceManifest: sha('m') })))],
+  ];
+  for (const [name, corrupt] of cases) {
+    const { ledger } = await setup(t);
+    const db = raw(ledger);
+    t.after(() => db.close());
+    corrupt(db);
+    assert.throws(() => ledger.gcSnapshot(), code('sentinel.store.corruptRecord'), name);
+  }
+});
