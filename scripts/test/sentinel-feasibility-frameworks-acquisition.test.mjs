@@ -66,6 +66,10 @@ async function fixture(t, settings = {}, selected = ['express-order']) {
   t.after(() => rm(directory, { recursive: true, force: true }));
   const fake = fakeRunner(settings), acquired = join(directory, 'acquired');
   const manifest = await runAcquire({ out: acquired, cases: selected }, { runner: fake.runner, host: nativeHost });
+  // This entire acquisition is a synthetic protocol double, not observed runtime evidence.
+  // Keep its retained metadata consistent with the simulated host on every test runner OS/architecture.
+  manifest.runtime = { ...manifest.runtime, platform: nativeHost.os, arch: nativeHost.arch };
+  await writeFile(join(acquired, 'acquisition.json'), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
   return { directory, acquired, manifest, fake };
 }
 
@@ -94,6 +98,16 @@ test('manifest rejects changed corpus/harness, missing imported helper and incom
     m => m.provenance.revisionEvidence.stdout = 'wrong', m => m.state = 'running', m => delete m.endedAt,
     m => delete m.platform.host, m => m.platform.dockerVersion.timedOut = true, m => m.runtime.arch = 'x64',
   ]) { const broken = structuredClone(f.manifest); change(broken); assert.throws(() => validateAcquisitionManifest(broken, current, ['express-order'])); }
+});
+test('synthetic host identity is consistent across runners while mismatched OS/architecture evidence still fails', async t => {
+  const f = await fixture(t), current = { indexSha256: corpus.indexSha256, harness: await harnessFileHashes() };
+  const retained = JSON.parse(await readFile(join(f.acquired, 'acquisition.json'), 'utf8'));
+  assert.equal(retained.runtime.platform, nativeHost.os); assert.equal(retained.runtime.arch, nativeHost.arch);
+  assert.deepEqual(validateAcquisitionManifest(retained, current, ['express-order']), ['express-order']);
+  for (const host of [{ os: 'linux', arch: 'x64' }, { os: 'darwin', arch: 'x64' }, { os: 'linux', arch: 'arm64' }]) {
+    const mismatched = structuredClone(retained); mismatched.runtime.platform = host.os; mismatched.runtime.arch = host.arch;
+    assert.throws(() => validateAcquisitionManifest(mismatched, current, ['express-order']), /ACQUISITION_PLATFORM_EVIDENCE_REQUIRED/);
+  }
 });
 test('manifest and requested selections reject duplicate, missing, unknown and extra cases without shrinking the request', async t => {
   const f = await fixture(t), current = { indexSha256: corpus.indexSha256, harness: await harnessFileHashes() };
