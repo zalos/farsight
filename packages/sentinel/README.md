@@ -92,6 +92,20 @@ stays charged until the owner reconciles it. Redirects are never followed and th
 provider (ADR 35). Nothing here runs unless a caller opens an envelope; the package's tests use local mock endpoints
 only.
 
+## Next middleware applicability (draft)
+
+`farsight-sentinel/frameworks/next` reads a captured Next 14.2.25 / React 18.3.1 project (versions from its lockfile
+only) and says, for each App Router route and page the parser placed, whether the middleware matcher reaches all,
+none or only some of its requests. `analyzeNext({ snapshot, analysis, read })` returns one
+`sentinel-controls/draft-1` envelope per project. A surface the matcher never reaches gets `does-not-apply`, citing
+the matcher bytes. A matched surface stays `unknown`: running middleware is not protection. Dynamic or unsupported
+matchers, another version, a non-empty next.config and the pages router are unknowns or frontiers (ADR 30). No
+application code runs. Qualification requires the pinned public registry tarball integrity as well as its version.
+Recorded pnpm patches for Next, React or React DOM (patch maps, importer hashes, package modification metadata,
+or project/workspace-root package declarations) leave applicability unknown: the original tarball integrity does
+not identify patched installed bytes. Ordinary peer dependency suffixes and unrelated package patches remain
+supported. This source-only check reads captured installation evidence; it does not attest a running installation.
+
 ## The local store (draft)
 
 ```ts
@@ -208,6 +222,29 @@ client of the service gets what the adopted grants give agents, which by default
 say *unavailable* (exit 3) until plan revisions exist. With `--json`, every result carries its `outcome`, `exitCode`, the three
 admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR 37 in `docs/ARCHITECTURE.md`.
 
+## Spring Security servlet pack (draft, PR 17)
+
+`src/frameworks/spring/` turns one source's parser evidence into `sentinel-controls/draft-1` control facts for its
+Spring routes, for exactly **Spring Boot 3.4.3 with Spring Security 6.4.3**, servlet stack. The library export is `farsight-sentinel/frameworks/spring`; canonical scan CLI integration remains open. Inputs are the captured snapshot, the PR 05 parser evidence for the source, a reader
+for captured bytes and the selected environment (`activeProfiles`, or `null` when none was selected). Nothing is
+built, resolved or run. The public graph supplies route identities. The pack reads every route mapping, security
+chain, matcher, rule and method-security annotation again from the captured Java syntax (tree-sitter's Java grammar),
+and each resolved fact cites exact byte spans of captured files.
+
+Per route, facts sit at four positions in Spring's order:
+1. servlet filters and filters a chain adds, which are unknown when present;
+2. the selected chain's authorization rule;
+3. MVC interceptors, which are unknown when present;
+4. method security.
+
+Spring runs the first chain whose `securityMatcher` matches, and the first matching rule in it decides. A route no
+chain matches is `unknown` (`sentinel.spring.noChainMatches`), with every chain matcher cited, and never protected:
+source cannot exclude a chain a dependency contributes. Anything outside the supported subset is `unknown` with a
+`sentinel.spring.*` reason and, where it applies to the whole source, a frontier: helper-built chains, non-literal
+matchers, partial matches, equal orders, profiles not selected, conditional beans, filters, customizers,
+interceptors, servlet paths, other versions and WebFlux. `src/frameworks/spring/support.ts` states the subset and is
+part of the pack digest. The environment and the configuration bytes read key the facts.
+
 ### Express control facts (draft)
 
 ```ts
@@ -291,3 +328,29 @@ only as a fixed category and its exit code; no engine text is forwarded. The tar
 `rules/pattern/` and the worker with a digest/rights manifest under `assets/pattern/`; nothing exported invokes the
 adapter, so the package gate is partial until the PR 09 command (ADR 26). Integration still open:
 registering the adapter, the planner supplying the shim, job, rules and targets as inputs, and the scan command (PR 09).
+
+## Dependency advisories (draft, not registered)
+
+`src/adapters/osv/` matches dependency files against pinned OSV advisory snapshots with OSV-Scanner 2.7.0, fully offline,
+through the PR 07 execution service. Inputs: `package-lock.json`, `pnpm-lock.yaml` (resolved, transitive as locked),
+`pom.xml` (declared directs only; ranges and managed versions unknown; transitives never resolved offline) and
+`*.cdx.json` (as the SBOM lists). Each component keeps its file, artifact, identity, version certainty and transitive
+limit; findings are once per component and advisory group, keyed by the snapshot; coverage is per file (complete,
+partial, database-absent, database-stale, error, empty, not applicable).
+
+**Acquisition is a separate, owner-confirmed step** (the proposed PR 09 command):
+
+```sh
+farsight-sentinel advisories acquire --ecosystem npm --ecosystem Maven --max-bytes 536870912   # preview, then --confirm
+```
+
+It fetches only `https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`, within the bound, checks the
+origin's MD5 and stores the archive by SHA-256 with its provenance. Until that command exists,
+`scripts/qualify-osv-database.mjs --acquire --dir <private folder>` is the owner-run qualification (real archives,
+synthetic fixtures and runtime-only positive controls). Measured on 2026-10-22 (darwin-arm64, Docker Desktop): npm
+218,843,332 bytes and Maven 10,427,762 bytes acquired in about 12.5 s; on the real databases the synthetic fixtures gave
+no finding, `lodash@4.17.11` (lockfile) 7 advisory groups and `jackson-databind@2.9.8` (POM, exact) 60; a scan with the
+npm archive took about 7–10 s. The adapter is not registered and nothing exported runs it: the package gate is partial
+until the planner and command integrate it.
+
+The offline advisory adapter is measured on Linux arm64 and native Linux amd64. The [amd64 qualification](https://github.com/zalos/farsight/actions/runs/39788785215) passed 21 tests with zero skips and ran the installed worker against its original fixtures. Full installed CLI registration remains a separate integration gate.

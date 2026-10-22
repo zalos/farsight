@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.6.0",
+  "id": "SENTINEL-FIXTURE-2026-0001",
+  "modified": "2026-10-01T00:00:00Z",
+  "published": "2026-10-01T00:00:00Z",
+  "aliases": [
+    "SENTINEL-ALIAS-0001"
+  ],
+  "summary": "Synthetic advisory: a made-up flaw in a made-up npm package.",
+  "affected": [
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "sentinel-fixture-alpha"
+      },
+      "ranges": [
+        {
+          "type": "SEMVER",
+          "events": [
+            {
+              "introduced": "0"
+            },
+            {
+              "fixed": "1.0.1"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

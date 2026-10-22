@@ -57,16 +57,28 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   runs in the optional, path-filtered CI job, while Echo unit tests remain in required validation.
 
 - `packages/sentinel` — optional security review package (ADR 18). Draft contracts and generated schemas, and a
-  local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The pattern adapter remains unregistered; model runtime is not implemented. `src/store/index.ts` is the store's
+  local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The pattern and advisory adapters remain unregistered; model runtime is not implemented. `src/store/index.ts` is the store's
   public facade (`openStore`, also re-exported from the root and as `./store`); behind it `runtime.ts` (the SQLite
   release gate), `paths.ts` (canonical, local, owner-only folders), `owner.ts` (the lifetime owner lock and epoch),
   `ledger.ts` + `migrations.ts` + `store-types.ts` (the fenced WAL ledger), `objects.ts` (content-addressed objects),
   `objects-ledger.ts` (the ledger seam and verifier) and `gc.ts` (read-only reachability and the dry-run prune plan).
-  `test/store-integration.test.ts` drives the facade end to end across processes. `src/snapshot/index.ts` is the
+  `test/store-integration.test.ts` drives the facade end to end across processes. The OSV advisory adapter (PR 12, ADR 29,
+  `src/adapters/osv/`, not yet registered; `src/adapters/sealed-input.ts` is the shared sealed-copy reader): `adapter.ts` (OSV-Scanner 2.7.0 pins, offline arguments, support), `worker-source.ts`
+  (the original shell shim), `job.ts` (dependency-file kinds, snapshot inputs, the line job), `normalize.ts` (components with
+  certainty and transitive limits, findings once per component and advisory, per-file coverage, `explainAdvisoryChanges`),
+  `acquire.ts` (the separate, receipt-confirmed download of OSV archives and `loadAdvisorySnapshot`) and `run.ts` (one attempt
+  through the PR 07 service); `scripts/package-assets-osv.mjs` ships the worker with its digest manifest;
+  `scripts/qualify-osv-database.mjs` is the owner-run real-database qualification; tests `test/osv-adapter.test.ts` and, with
+  `SENTINEL_ISOLATION=1`, `test/osv-conformance.test.ts`; fixtures `test/fixtures/advisories/` (original, synthetic, `.fixture`
+  names). `src/snapshot/index.ts` is the
   capture facade (ADR 21; also `./snapshot` and the root): `git.ts` (a read-only Git object reader, no git process),
   `committed.ts` and `worktree.ts` (the two enumerations), `inventory.ts` (entries, budget, quota, case collisions,
   LFS), `policy.ts` (capture policy and path rules), `materialization.ts` (the provenance sidecar), `capture.ts` (stage,
   write, recheck, admit), `materialize.ts` (reopen and restore from the store alone) and `reconcile.ts` (E1).
+  `src/frameworks/spring/` is the Spring Security servlet pack (ADR 27; `./frameworks/spring` only): `syntax.ts` (tree-sitter
+  Java over captured bytes, exact UTF-8 spans), `config.ts` (chains, rules, method security, frontiers), `patterns.ts`
+  (template matching), `support.ts` (the stated subset) and `pack.ts` (versions, mappings, selection, the envelope); its
+  reasons are `strings-sentinel-spring.ts`.
   `src/snapshot/parser.ts` is the parser-evidence facade (ADR 22; `./parser` only): the public code parser over a
   private restore, its reads reconciled by kind, file outcomes joined, an index of captured spans, and one retaining
   publication; its words are `strings-sentinel-parser.ts`. The
@@ -86,6 +98,15 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   lock and validated packs, the effective policy, the snapshot and parser evidence), `boundary.ts` (canonical work
   envelopes, influence manifests, exact coverage and captured inputs for the coordinator) and `errors.ts`. The
   revision contract is `contracts/plan.ts` (`sentinel-plan/draft-1`); persistence and admission belong to PR 08.
+  `src/frameworks/next/` is the Next middleware pack (PR 14, ADR 30), exported as `./frameworks/next`: `support.ts`
+  (the support manifest; its digest is the pack digest), `version.ts` (installed versions from lockfiles only),
+  `config.ts` (literal-only Oxc reads of the middleware exports and next.config, with UTF-8 spans), `pattern.ts`
+  (the whole-segment matcher subset, App Router folder forms and the automaton decision), `analyze.ts`
+  (`analyzeNext`: projects, applicability per surface, one `sentinel-controls/draft-1` envelope per project) and
+  `errors.ts`; its words are `strings-sentinel-next.ts`. `test/next-*.test.ts` covers it over real captures and
+  the packed package.
+  `test/store-integration.test.ts` drives the facade end to end across processes.
+
   The pattern adapter (PR 10,
   `src/adapters/pattern/`, not yet in the production registry): `adapter.ts` (Semgrep 1.181.0 pinned by image digest
   with its measured and unmeasured platforms, the fixed engine arguments, `buildPatternAdapter` for the registry
@@ -106,6 +127,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   reservation ledger), `broker.ts` (`openEnvelope` through the shared admission gate, `generate`), `decimal.ts` and
   `errors.ts`; its words are `strings-sentinel-providers.ts`. `test/providers.test.ts` drives local mock endpoints.
   `test/store-integration.test.ts` drives the facade end to end across processes.
+
 
   `src/frameworks/express/` is the Express 4.21.2 pack (PR 15, ADR 31), exported as `./frameworks/express`:
   `syntax.ts` (Oxc over captured bytes, exact UTF-8 spans), `modules.ts` (bindings, imports, exports, relative

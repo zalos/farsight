@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.6.0",
+  "id": "SENTINEL-FIXTURE-2026-0005",
+  "modified": "2026-10-05T00:00:00Z",
+  "published": "2026-10-01T00:00:00Z",
+  "aliases": [
+    "SENTINEL-ALIAS-0005"
+  ],
+  "summary": "Synthetic advisory for a transitive component an SBOM lists.",
+  "affected": [
+    {
+      "package": {
+        "ecosystem": "Maven",
+        "name": "org.example.sentinel:fixture-transitive"
+      },
+      "ranges": [
+        {
+          "type": "ECOSYSTEM",
+          "events": [
+            {
+              "introduced": "0"
+            },
+            {
+              "fixed": "1.0.0"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
