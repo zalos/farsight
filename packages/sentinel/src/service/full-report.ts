@@ -74,12 +74,17 @@ export interface RunAssessment {
   readonly ledgerSequence: number;
   readonly ruleLock: unknown;
   /**
-   * The opaque, store-keyed identity of a withheld citation's file: stable across this store's captures, never its path,
-   * and not derivable from the report without the store. Identical bytes in two files are two keys.
+   * The opaque, store-keyed identity of a withheld citation's file: stable across this store's captures, never its path.
+   * Identical bytes in two files are two keys. The store id it is keyed by is not secret (withheldKeyFor).
    */
   readonly withheldKey: (e: WithheldLocationEvidence) => string;
   /** Files (`sourceId:relativePath`) whose name the secret scan matched: never printed or used to place anything. */
   readonly withheldFiles: ReadonlySet<string>;
+  /**
+   * Every token of 8 or more letters, digits, `_` or `-` the secret scan matched, read from the private snapshot only:
+   * the matched file names and the matched lines. No report string may carry one (redactSecretTokens).
+   */
+  readonly secretTokens: ReadonlySet<string>;
 }
 
 function lastSequence(store: SentinelStore, runId: string): number {
@@ -148,6 +153,7 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
 
   // Files whose name the secret scan matched: a path that may hold a secret is never printed, in any profile.
   const nameWithheld = new Set<string>();
+  const secretTokens = new Set<string>();
   const entryIndex = new Map<string, number>();
   snapshot.entries.forEach((e, i) => { if (e.kind === 'file' && e.disposition === 'included') entryIndex.set(fileScope(e.sourceId, e.relativePath), i); });
   const locationKeyOf = withheldKeyFor(store.storeId, snapshot);
@@ -216,6 +222,7 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
           const secret = await secretObservation(value, { unit, attemptId: pub.attemptId, runId, snapshot, assignedCheck, adapterDigest: adapterDigest(SECRETS_ADAPTER), bytesOf, severityOf });
           observations.push(secret.observation);
           for (const path of secret.names) nameWithheld.add(path);
+          for (const token of secret.tokens) secretTokens.add(token);
           continue;
         }
         if (value?.runId !== runId || value.snapshotId !== snapshot.id || value.work?.id !== unit.id || value.work?.revision !== unit.revision || value.attemptId !== pub.attemptId
@@ -305,16 +312,43 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
   return {
     runId, planRevision: run.planRevision, snapshot, checks: plan.checks, units: plan.units, observations, coverage, plannedChecks, inventory,
     analyses: evidence.analyses, conditions, ledgerSequence: lastSequence(store, runId), ruleLock: admitted.ruleLock,
-    withheldKey: e => locationKeyOf(e), withheldFiles: nameWithheld,
+    withheldKey: e => locationKeyOf(e), withheldFiles: nameWithheld, secretTokens,
   };
 }
 
 /**
- * The opaque key of a withheld citation's file: an HMAC of its source and path under a key only this store holds. It
- * is the same for the same file in any capture of this store (so a comparison can continue a secret finding) and is
- * not a digest of the path anyone could recompute from the report. A reference that does not resolve in this
- * snapshot refuses the report.
+ * The opaque key of a withheld citation's file: an HMAC of its source and path keyed by this store's id. It is the same
+ * for the same file in any capture of this store (so a comparison can continue a secret finding), and a report alone
+ * neither carries the key nor the store id. The store id is not a secret, though: it labels the store's containers and
+ * appears in its owner records and in a failed run's facts, so someone who has it and guesses a path exactly can
+ * confirm the guess against a report's fingerprints. This keeps a path from being read off a report; it does not hide
+ * a low-entropy path from a holder of the store id. A reference that does not resolve in this snapshot refuses.
  */
+/** The tokens a value or a name can hide in: runs of 8 or more letters, digits, `_` or `-`. */
+const tokensOf = (text: string) => text.match(/[A-Za-z0-9_-]{8,}/g) ?? [];
+
+/**
+ * Replaces every secret token in every string of a report document, except the catalog's own definitions, which
+ * carry no evidence or context text. Context labels, ids, metadata, sentences, titles and excerpts are all covered,
+ * from whichever file or graph they came, in every disclosure profile. Each token becomes one fixed word, the same
+ * everywhere in the document, so the ids that reference each other still match. The result is checked against the
+ * report contract again.
+ */
+export function redactSecretTokens<T>(doc: T, tokens: ReadonlySet<string>): T {
+  if (!tokens.size) return doc;
+  const ordered = [...tokens].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
+  const word = new Map(ordered.map((t, i) => [t, `withheld-${i + 1}`]));
+  const scrub = (v: string) => ordered.reduce((s, t) => (s.includes(t) ? s.split(t).join(word.get(t)!) : s), v);
+  const walk = (v: unknown, key?: string): unknown => {
+    if (key === 'definitions') return v;
+    if (typeof v === 'string') return scrub(v);
+    if (Array.isArray(v)) return v.map(x => walk(x));
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [scrub(k), walk(x, k)]));
+    return v;
+  };
+  return walk(doc) as T;
+}
+
 function withheldKeyFor(storeId: string, snapshot: SnapshotEnvelope): (e: WithheldLocationEvidence) => string {
   return e => {
     const resolved = resolveWithheldLocation(snapshot, e);
@@ -334,7 +368,7 @@ async function secretObservation(v: any, ctx: {
   unit: PlanWork; attemptId: string; runId: string; snapshot: SnapshotEnvelope; adapterDigest: string | undefined;
   assignedCheck: (id: string) => { check: PlanCheck; pin: { familyId: string; definitionDigest: string } };
   bytesOf: (id: string) => Promise<Buffer>; severityOf: ReadonlyMap<string, string>;
-}): Promise<{ observation: ObservationEnvelope; names: string[] }> {
+}): Promise<{ observation: ObservationEnvelope; names: string[]; tokens: string[] }> {
   const { unit, snapshot } = ctx;
   if (v.adapter !== SECRETS_ADAPTER || v.runId !== ctx.runId || v.snapshotId !== snapshot.id || v.work?.id !== unit.id || v.work?.revision !== unit.revision
     || v.attemptId !== ctx.attemptId || v.schema !== 'sentinel-observation/draft-1') unbound('an accepted secret finding is bound to another run, unit or attempt');
@@ -355,6 +389,7 @@ async function secretObservation(v: any, ctx: {
   if (!name && !content) unbound('a secret finding carries text other than the redacted message');
   if (!Array.isArray(v.evidence) || !v.evidence.length || v.evidence.length > 256) unbound('a secret finding cites nothing');
   const names: string[] = [];
+  const tokens: string[] = [];
   const assigned = new Set(unit.inputs.map(i => `${i.sourceId}\u0000${i.relativePath}\u0000${i.content}`));
   for (const e of v.evidence) {
     if (!isRecord(e) || e.location !== 'withheld' || 'relativePath' in e || 'nodeId' in e || e.snapshotId !== snapshot.id || e.sourceId !== unit.sourceId) unbound('a secret finding cites a location it may not');
@@ -367,7 +402,9 @@ async function secretObservation(v: any, ctx: {
     const span = e.span;
     if (!isRecord(span) || !Number.isSafeInteger(span.startByte) || !Number.isSafeInteger(span.endByte) || span.startByte < 0 || span.endByte < span.startByte || span.endByte > bytes.length
       || (name && (span.startByte !== 0 || span.endByte !== 0)) || (content && span.endByte === span.startByte)) unbound('a secret finding cites a span outside its captured file');
-    if (name) names.push(fileScope(resolved.entry.sourceId, resolved.entry.relativePath));
+    if (name) { names.push(fileScope(resolved.entry.sourceId, resolved.entry.relativePath)); tokens.push(...tokensOf(resolved.entry.relativePath)); }
+    // The matched lines hold the value somewhere; every long token on them is treated as secret.
+    else tokens.push(...tokensOf(bytes.subarray(span.startByte, span.endByte).toString('utf8')));
   }
   const original = String(v.originalSeverity ?? '');
   const o = observation({
@@ -377,7 +414,7 @@ async function secretObservation(v: any, ctx: {
     message: v.message, evidence: v.evidence.map((e: any) => ({ location: 'withheld', snapshotId: e.snapshotId, sourceId: e.sourceId, entry: e.entry, content: e.content, span: { startByte: e.span.startByte, endByte: e.span.endByte } })),
     limitationKeys: [...v.limitationKeys], observedAt: v.observedAt,
   } as ObservationEnvelope);
-  return { observation: o, names };
+  return { observation: o, names, tokens };
 }
 
 function observation(o: ObservationEnvelope): ObservationEnvelope {
@@ -613,8 +650,10 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
   const readContent = (id: string) => store.readArtifact(id as never);
   let comparison: { baselineReportId: string; result: Comparison; baselineFindings: Map<string, BaselineFindingSummary> } | undefined;
   let currentFindings: readonly Finding[] | undefined;
+  let baselineTokens: ReadonlySet<string> | undefined;
   if (req.baselineRunId) {
     const baseline = await assessRun(store, req.baselineRunId, { trustDir: req.trustDir });
+    baselineTokens = baseline.secretTokens;
     const b = await sideOf(store, baseline);
     const c = await sideOf(store, current);
     currentFindings = c.findings;
@@ -642,7 +681,11 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
     inventory: current.inventory, readContent, withheldFiles: current.withheldFiles, ...(contexts ? { contexts } : {}), rules: ruleWords(req.trustDir, current.ruleLock),
     ...(comparison ? { comparison } : {}),
   }, currentFindings ?? await findingsOf(current.observations, readContent, { withheldKey: current.withheldKey }));
-  const doc = build.document;
+  // Nothing the secret scan matched reaches any rendering, whichever file or confirmed graph a string came from.
+  const tokens = new Set([...current.secretTokens, ...(baselineTokens ?? [])]);
+  const doc = redactSecretTokens(build.document, tokens);
+  const valid = validateEnvelope('report', doc);
+  if (!valid.ok) throw new FullReportError('sentinel.report.evidenceUnbound', { reason: 'the redacted report does not fit its contract' });
   return {
     document: doc, json: canonicalJson(doc), markdown: renderMarkdown(doc), html: renderHtml(doc), sarif: toSarif(doc),
     ...(comparison ? { comparison: comparison.result } : {}),
