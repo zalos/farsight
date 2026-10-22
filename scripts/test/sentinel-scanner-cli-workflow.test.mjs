@@ -36,3 +36,7 @@ test('full-report native acceptance builds its context-ingestion dependency and 
  assert.ok(workflow.includes('test/report-redaction.test.ts'),'pure projection controls remain in the native union too');
  for(const name of ['selected-rerun-containers','selected-rerun-secrets']) assert.ok(workflow.includes(`test/${name}.test.ts`),name);
 });
+
+test('framework inspection privacy and genuine installed delivery remain mandatory in native acceptance',()=>{
+ assert.ok(workflow.includes('test/framework-report-secrets.test.ts'));assert.ok(workflow.includes('node scripts/test-sentinel-framework-consumer.mjs'));assert.ok(workflow.includes('framework-delivery/clean.html'));assert.ok(workflow.includes('framework-delivery/secret.html'));
+});

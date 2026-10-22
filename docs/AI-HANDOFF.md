@@ -15,12 +15,22 @@ consumer ran capture/parse/inspection, source-removed selected rerun and read-on
 installed dependency refused before worker import. Facts remain observations/findings-free and unsupported sources
 remain partial. Focused coordinator/report fault probes, package import audit, schema and types pass.
 
-This is an implementation checkpoint, not final framework acceptance. Merge the final selected-rerun main ancestry,
-run genuine current/baseline/canceled-selected secret privacy controls over the inspection section, retain installed
-report delivery evidence, exercise interruption/resume and multi-source binding, then obtain independent review.
-The original framework source libraries are not thereby qualified for unmodeled versions or shapes. No target code,
-external host scanner, download or model call is part of this path. Public GUI work and policy assessment remain open.
+Main `64d86ae9` is normal-merged. Production bytes remain the reviewed `43ec307d` checkpoint. Acceptance-only
+follow-up controls pass: four genuine Gitleaks/framework cases cover current, baseline, selected and canceled-parent
+privacy with clean useful-detail controls; a genuine two-source capture keeps original analysis ids and separate
+extents after both sources are removed. The fresh npm-only consumer delivers clean and secret-withheld reports,
+recovers an actual service SIGKILL during an unpublished inspection and records exactly one accepted publication.
+It uses existing official npm cache bytes offline and existing pinned container assets, with no acquisition.
+The installed package retains all 16 exports, 21 contract types, 21 schemas, 56 fixtures, all four framework library
+hooks, provider budget reopen controls and five scanner asset manifests. Two delivered reports open offline with
+JavaScript disabled, no external request or browser error, and print. Private delivery/screenshots remain outside Git.
 
+Observed limitation: the canonical capture's owner-policy omission of `.farsight` leaves an honest source-incomplete
+frontier in Express/Spring, so simple canonical routes may still have unknown answers. The libraries' absence proof
+is unchanged; no omitted folder is treated as empty. Original framework support remains bounded to its modeled
+versions/shapes; public GUI work, policy assessment and general analysis reuse remain open. Independent final delta
+review, one Opus PR review and remote CI/merge are still required. Shared readonly source-proof and worker-descriptor
+refactoring belongs to a separate subsequent path integration, with no changes on this framework branch.
 
 ## Selected-rerun crash-window recovery — 2026-10-22
 

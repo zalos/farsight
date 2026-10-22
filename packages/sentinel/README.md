@@ -573,3 +573,9 @@ The trusted child has enforced wall-clock, cancellation and output bounds. It is
 hard memory, CPU or process limit; it runs only Sentinel's shipped code. The worker closure pins the complete shipped
 build and installed dependency bytes/lookups. Reinstalling, moving or changing those bytes requires a new plan.
 Public GUI configuration and policy assessment remain separate work.
+
+Canonical working-copy capture currently omits the workspace's private `.farsight` directory by owner policy.
+The Express and Spring libraries conservatively retain a source-incomplete frontier for that omitted scope; they
+may leave route control answers unknown even when the visible application is simple. The report shows that boundary
+and keeps required coverage incomplete. Captures with owner state outside the source can establish the supported
+facts; this integration does not broaden the libraries' absence proofs or treat the omitted scope as empty.

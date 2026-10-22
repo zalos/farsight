@@ -51,3 +51,29 @@ test('unrecognized source retains partial required inspection even over an empty
  const f=await frameworkFixture(t,{'src/example.ts':'export const answer=42;\n'});const r=await fullReport(req(f));
  assert.equal(r.document.inspections[0].recognised,false);assert.equal(r.document.inspections[0].extent,0);assert.equal(r.document.counts.controlAnswers.n,0);assert.ok(r.document.gaps.length>=3);assert.ok(r.document.inspections[0].checks.every(c=>c.state==='partial'));assert.equal(r.document.completeness,'partial');
 });
+
+test('two genuine captured sources keep original analysis identities and independent inspection extents after removal',needsStore,async t=>{
+ const f=await frameworkFixture(t,ORDER,{run:false});
+ const {commitRepo,unlock}=await import('./snapshot-helpers.ts');const alpha=join(f.dir,'alpha');commitRepo(alpha,ORDER);const other=join(f.dir,'neighbor');commitRepo(other,{...ORDER,'src/app.ts':ORDER['src/app.ts'].replace('/reports','/neighbor')});
+ const{captureSnapshot}=await import('../dist/snapshot/index.js');const{RuleLockBook}=await import('../dist/service/rule-locks.js');
+ const{publicAvailability,publicProfile}=await import('../dist/service/scanner-profile.js');const{planBootstrap,planAnalysis,plannerSnapshotFrom,plannerAnalysisFrom,plannerLockFrom,plannerPolicyFrom}=await import('../dist/planner/index.js');
+ const{admitPlan}=await import('../dist/execution/plans.js');const{Coordinator}=await import('../dist/execution/coordinator.js');const{loadBootstrap}=await import('../dist/execution/bootstrap.js');
+ const{snapshot}=await captureSnapshot(f.store,{mode:'committed-tree',sources:[{sourceId:'alpha',repositoryId:'example/alpha',root:alpha},{sourceId:'beta',repositoryId:'example/beta',root:other}]});
+ for(const path of [alpha,other]){unlock(path);rmSync(path,{recursive:true,force:true})}
+ const book=new RuleLockBook(f.ws.trustDir),current=book.current();assert.ok(current);const packs=book.packsOf(current.lock),registry=publicRegistry(f.ws.trustDir);
+ const available=await publicAvailability(f.ws.trustDir,current.lock,packs,[],f.work),profile=publicProfile(registry,available,packs);
+ const runId='run-two-framework-sources',boot=planBootstrap({runId,sourceIds:['alpha','beta'],profile:profile.planner});await admitPlan(f.store,{plan:boot,ruleLock:null,policy:null,profile:profile.record});
+ const run:any={schema:'sentinel-run/draft-1',id:runId,parentId:null,baselineId:null,snapshotId:snapshot.id,planRevision:1,coordinatorEpoch:f.store.epoch,ruleLockDigest:current.digest,toolLockDigest:current.digest,policyRevisionDigest:f.terms.policy.revision,requestedScope:{sourceIds:['alpha','beta'],profile:profile.planner.id},budgets:{maxTokens:null,maxCost:null,deadlineMs:600000},createdAt:new Date().toISOString(),state:'planned'};
+ const booted=await(await Coordinator.open({store:f.store,runId,run,registry,scratchRoot:f.work})).run();assert.equal(booted.published,boot.units.length,JSON.stringify(booted));
+ const inventory=boot.units.find(u=>u.stage==='inventory');const evidence=await loadBootstrap(f.store,runId,inventory);
+ const plan=planAnalysis({runId,revision:2,previous:boot,bootstrap:[inventory],profile:profile.planner,snapshot:plannerSnapshotFrom(snapshot),analyses:evidence.analyses.map(a=>plannerAnalysisFrom(a)),lock:plannerLockFrom(current.lock,packs,current.digest),policy:plannerPolicyFrom(f.terms.policy)});
+ await admitPlan(f.store,{plan,ruleLock:current.lock,policy:f.terms.policy,profile:profile.record});f.store.ledger.advanceRunPlan(runId,2);
+ const done=await executeRun(f.store,runId,{scratchRoot:f.work,trustDir:f.ws.trustDir});assert.equal(done.state,'completed',JSON.stringify(done));assert.equal(done.published,2);
+ const report=await fullReport({...req(f),runId});assert.equal(report.document.inspections.length,2);
+ for(const section of report.document.inspections){
+  const original=evidence.record.analyses.find(a=>a.sourceId===section.sourceId);assert.deepEqual(section.analysis,{result:original.result,index:original.index,artifact:original.artifact,manifest:evidence.record.manifest});
+  assert.equal(section.extent,3);assert.equal(section.rows.length,9);assert.ok(section.rows.every(r=>r.surfaceId.startsWith(section.sourceId+'::')));
+  const otherSource=section.sourceId==='alpha'?'beta':'alpha';assert.equal(JSON.stringify(section).includes(otherSource+'::'),false);
+ }
+ assert.equal(report.document.counts.controlAnswers.n,18);assert.equal(report.document.findings.length,0);
+});

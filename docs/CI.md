@@ -5,6 +5,12 @@ cancels the run in progress. `.github/workflows/commits.yml` checks PR titles an
 title edits; its separate concurrency group leaves running tests alone. Both workflows have read-only repository
 access and no secrets beyond the run's own `GITHUB_TOKEN`.
 
+The native scanner CLI gate also runs framework inspection privacy against genuine accepted Gitleaks publications,
+then installs the tarball with npm alone and exercises framework report delivery, source-removed replay and an actual
+mid-inspection service kill/resume. Both clean and secret-withheld delivered HTML reports are opened offline and
+printed in the browser-provisioned job. A missing pinned image after native opt-in fails; the new native test file is
+in the explicit zero-skip test list. Ordinary package acceptance runs the framework consumer without Docker.
+
 ## What runs
 
 The six required check names are **affected checks · validate · e2e · echo-package · secrets · commits**.
