@@ -505,7 +505,7 @@ export function validateContainer(c: Record<string, unknown>, spec: ContainerSpe
   if (host.IpcMode !== 'none') fail('ipc');
   if (host.PidMode || host.UTSMode || host.UsernsMode === 'host' || host.CgroupnsMode === 'host') fail('namespaces');
   if (host.Memory !== l.memoryBytes || host.MemorySwap !== l.memoryBytes) fail('memory');
-  if (host.NanoCpus !== l.cpus * 1_000_000_000) fail('cpus');
+  if (host.NanoCpus !== Math.round(l.cpus * 1_000_000_000)) fail('cpus');
   if (host.PidsLimit !== l.pids) fail('pids');
   if ((host.Devices ?? []).length || (host.DeviceRequests ?? []).length) fail('devices');
   if (Object.keys(host.PortBindings ?? {}).length || host.PublishAllPorts === true) fail('ports');

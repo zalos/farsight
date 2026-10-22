@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import type { Digest, Id } from '../contracts/common.js';
+import type { ResourcePolicy } from '../contracts/work.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { ExecutionError } from './errors.js';
 
@@ -111,6 +112,29 @@ function limitsOf(partial: Partial<AdapterLimits> | undefined): Readonly<Adapter
   if (limits.maxFrameBytes > limits.stdoutBytes) invalid('limit maxFrameBytes');
   if (limits.helloTimeoutMs > limits.timeoutMs || limits.cancelGraceMs > limits.timeoutMs) invalid('limit timeouts');
   return Object.freeze(limits);
+}
+
+/**
+ * The limits one attempt runs under: the adapter's, lowered by the work's own resource policy where that is
+ * stricter (deadline, memory, CPU, processes, process output). A policy never raises a limit. The CPU quota may be
+ * fractional (0.1–2); output is split so stdout and stderr together stay within the policy's output bound.
+ */
+export function effectiveLimits(adapter: Readonly<AdapterLimits>, policy?: ResourcePolicy): Readonly<AdapterLimits> {
+  if (!policy) return adapter;
+  const l = { ...adapter };
+  l.timeoutMs = Math.min(l.timeoutMs, policy.deadlineMs);
+  l.memoryBytes = Math.min(l.memoryBytes, policy.memoryBytes);
+  l.cpus = Math.min(l.cpus, Math.max(0.1, Math.round(policy.cpuQuota * 100) / 100));
+  l.pids = Math.min(l.pids, policy.maxPids);
+  const combined = Math.min(l.stdoutBytes + l.stderrBytes, policy.maxOutputBytes);
+  if (combined < l.stdoutBytes + l.stderrBytes) {
+    l.stderrBytes = Math.min(l.stderrBytes, Math.floor(combined / 4));
+    l.stdoutBytes = combined - l.stderrBytes;
+  }
+  l.maxFrameBytes = Math.min(l.maxFrameBytes, l.stdoutBytes);
+  l.helloTimeoutMs = Math.min(l.helloTimeoutMs, l.timeoutMs);
+  l.cancelGraceMs = Math.min(l.cancelGraceMs, l.timeoutMs);
+  return Object.freeze(l);
 }
 
 /** Hash a built-in module's bytes; refuses links and non-files. */
