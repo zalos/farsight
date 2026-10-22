@@ -133,6 +133,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'snapshot/parser.js': ['@farsight/core/dist/strings-sentinel-parser.js', '@farsight/graph', 'dynamic:@farsight/code-parser', 'dynamic:@farsight/code-parser/adapters/java',
     'dynamic:@farsight/code-parser/adapters/tsjs', 'node:crypto', 'node:fs', 'node:path'],
   'snapshot/policy.js': ['node:crypto', 'node:path'],
+  // Bounded call paths and attested deep import (ADR 36): pure over parser evidence and captured bytes; no engine, no process.
+  'analysis/paths/paths.js': ['@farsight/graph', 'node:crypto'],
+  'analysis/deep/import.js': ['@farsight/graph', 'node:crypto'],
   'snapshot/worktree.js': ['node:fs'],
 };
 
@@ -232,7 +235,8 @@ test('draft contracts, store, capture, parser, policy and planner are available;
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli', 'bounded-call-paths', 'deep-import']);
+  assert.equal(listed.find(c => c.id === 'interprocedural-flow')?.state, 'unavailable', 'no deep engine is claimed');
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
   for (const id of ['pattern-scan', 'coordinator', 'reports']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
   assert.equal(listed.find(c => c.id === 'rules-and-planning')?.state, 'available-draft');

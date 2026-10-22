@@ -224,7 +224,7 @@ test('the facade exposes domain operations only', needsStore, async t => {
   assert.equal(typeof store.runtime.sqlite, 'string', 'the SQLite release, not the module');
   assert.equal(root.openStore, openStore, 'the root export is the same facade');
   assert.equal(root.CAPABILITIES.find(c => c.id === 'ledger')?.state, 'available-draft');
-  assert.ok(root.CAPABILITIES.filter(c => !['ledger', 'contract-validation', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli'].includes(c.id)).every(c => c.state === 'unavailable'),
+  assert.ok(root.CAPABILITIES.filter(c => !['ledger', 'contract-validation', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli', 'bounded-call-paths', 'deep-import'].includes(c.id)).every(c => c.state === 'unavailable'),
     'no scan capability is claimed');
 });
 

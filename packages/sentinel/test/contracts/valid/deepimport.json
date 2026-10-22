@@ -1,0 +1,29 @@
+{
+  "schema": "sentinel-deep-import/draft-1",
+  "tool": { "name": "example-analyzer", "version": "9.9.9", "distributionDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+  "attestation": {
+    "license": { "identifier": "LicenseRef-example", "termsDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "acceptedBy": "owner@example.com", "acceptedAt": "2026-10-22T09:00:00Z" },
+    "provenance": { "obtainedFrom": "customer-internal-mirror", "attestedBy": "security-team@example.com", "attestedAt": "2026-10-22T09:05:00Z" }
+  },
+  "binding": {
+    "snapshotId": "snap-1",
+    "sourceId": "app",
+    "files": [
+      { "relativePath": "src/routes.ts", "content": "sha256:1111111111111111111111111111111111111111111111111111111111111111" },
+      { "relativePath": "src/db.ts", "content": "sha256:2222222222222222222222222222222222222222222222222222222222222222" }
+    ],
+    "configurationDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "mode": "source-only",
+    "buildPerformed": false
+  },
+  "flows": [
+    {
+      "toolRuleId": "example/sql-injection",
+      "message": "request input reaches a SQL string",
+      "originalSeverity": "high",
+      "source": { "relativePath": "src/routes.ts", "content": "sha256:1111111111111111111111111111111111111111111111111111111111111111", "span": { "startByte": 10, "endByte": 22 } },
+      "steps": [],
+      "sink": { "relativePath": "src/db.ts", "content": "sha256:2222222222222222222222222222222222222222222222222222222222222222", "span": { "startByte": 4, "endByte": 30 } }
+    }
+  ]
+}

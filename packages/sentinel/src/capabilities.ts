@@ -32,6 +32,9 @@ export const CAPABILITIES: readonly Capability[] = Object.freeze([
   { id: 'framework-express', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 15' },
   { id: 'framework-nest', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 16' },
   { id: 'framework-spring', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 17' },
+  // Bounded static call paths and the attested import contract are drafts; neither is data flow.
+  { id: 'bounded-call-paths', state: 'available-draft', reasonCode: 'sentinel.capability.draftPaths', plannedIn: 'PR 18' },
+  { id: 'deep-import', state: 'available-draft', reasonCode: 'sentinel.capability.draftDeepImport', plannedIn: 'PR 18' },
   // PR 01 rejected the evaluated cross-file profiles; no deep engine is promised.
   { id: 'interprocedural-flow', state: 'unavailable', reasonCode: 'sentinel.capability.noQualifiedEngine', plannedIn: 'PR 18' },
   { id: 'reports', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 19' },

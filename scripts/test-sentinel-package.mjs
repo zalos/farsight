@@ -14,6 +14,7 @@
 //   node scripts/test-sentinel-package.mjs [build/sentinel/farsight-sentinel-<v>.tgz]
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -84,6 +85,8 @@ try {
   const sourceExports = JSON.parse(readFileSync(join(sourceDir, 'package.json'), 'utf8')).exports ?? {};
   const parserExported = Object.hasOwn(sourceExports, './parser');
   assert.equal(subpaths.includes('./parser'), parserExported, 'the installed ./parser export matches the source package');
+  const analysisExported = Object.hasOwn(sourceExports, './analysis');
+  assert.equal(subpaths.includes('./analysis'), analysisExported, 'the installed ./analysis export matches the source package');
 
   // The envelope registry, as the installed package reports it.
   const registry = JSON.parse(await evalModule("const { ENVELOPES } = await import('farsight-sentinel'); console.log(JSON.stringify(ENVELOPES));"));
@@ -154,6 +157,16 @@ try {
       '    a.analysis.complete, input?.kind, limits.maxDurationMs, r.parserComplete, r.clearsChecks, r.counts.parsed,',
       '    r.counts.unknownScopeDescendants, r.inputs[0]?.outcome, r.entries[0]?.class, r.tree.before, i.occurrences[0]?.byteSpan?.startByte,',
       '    i.spanUnavailable.invalidUtf8, i.unplaced.count, i.omitted, reason, typeof parseSnapshot, typeof retainSnapshotAnalysis];',
+      '}',
+    ] : []),
+    ...(analysisExported ? [
+      "import { boundedCallPaths, importDeepAnalysis, DEEP_ANALYSIS_SUPPORT, PATH_REASON_CODES, type PathRequest, type DeepImportResult, type PathReason } from 'farsight-sentinel/analysis';",
+      'export async function analysisFields(request: PathRequest): Promise<unknown[]> {',
+      '  const env: PathEvidenceEnvelope = await boundedCallPaths(request);',
+      '  const reason: PathReason = PATH_REASON_CODES[0];',
+      "  const r: DeepImportResult = await importDeepAnalysis({ document: '{}', snapshot: { id: 'x', entries: [] }, trust: { trustedAttesters: [], acceptedTerms: [] }, readContent: async () => new Uint8Array(), importedAt: '2026-10-22T10:00:00Z' });",
+      '  const doc: DeepImportEnvelope | undefined = undefined;',
+      "  return [env.establishes, env.results[0]?.outcome, reason, r.status, DEEP_ANALYSIS_SUPPORT.engine, doc];",
       '}',
     ] : []),
   ];
@@ -269,11 +282,74 @@ try {
     assert.equal(read.stale, 'sentinel.store.staleEpoch', 'a record from the earlier epoch is refused');
     assert.ok(read.ok && read.integrity === 'ok', 'reachability and SQLite integrity hold after the reopen');
     storeDemo = `store reopened across processes (${host} SQLite ${process.versions.sqlite}, ${pair?.status ?? 'unqualified on CI'})`;
+    if (analysisExported) storeDemo += await analysisDemo();
   } else {
     const refused = await node('store-write.mjs').then(() => null, (error) => `${error.stderr}`);
     assert.match(refused ?? '', /sentinel\.store\.(platformUnqualified|runtimeUnqualified)/, `an unqualified pair (${host}, SQLite ${process.versions.sqlite}) is refused`);
     assert.ok(!existsSync(storePath), 'no store folder was created on an unqualified host');
     storeDemo = `store refused on unqualified ${host} (not qualification evidence)`;
+  }
+
+  /**
+   * The installed analysis API, run for real: an original two-file fixture is captured and parsed through the installed
+   * package alone; a bounded call path is found across the files, and an attested import is refused without trust and
+   * accepted with it. Nothing in the fixture is built or run, and no analyzer exists or is invoked.
+   */
+  async function analysisDemo() {
+    const appDir = join(storeRoot, 'paths-app');
+    const files = {
+      'src/a.ts': "import { b } from './b.js';\n\nexport function a(input: string) {\n  return b(input);\n}\n",
+      'src/b.ts': 'export function b(value: string) {\n  return value.length;\n}\n',
+    };
+    for (const [path, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(appDir, path)), { recursive: true });
+      writeFileSync(join(appDir, path), text);
+    }
+    const gitEnv = { PATH: process.env.PATH ?? '', HOME: appDir, LANG: 'C', LC_ALL: 'C', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'dev@example.com', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'dev@example.com' };
+    const gitRun = (args) => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'init.defaultBranch=main', ...args], { cwd: appDir, env: gitEnv, stdio: 'ignore' });
+    gitRun(['init', '--quiet']);
+    gitRun(['add', '--all']);
+    gitRun(['commit', '--quiet', '--no-verify', '-m', 'fixture']);
+    const workDir = join(storeRoot, 'paths-work');
+    mkdirSync(workDir, { mode: 0o700 });
+    writeFileSync(join(consumer.dir, 'analysis-demo.mjs'), `
+      import { createHash } from 'node:crypto';
+      import { openStore } from 'farsight-sentinel/store';
+      import { captureSnapshot } from 'farsight-sentinel/snapshot';
+      import { parseSnapshot } from 'farsight-sentinel/parser';
+      import { boundedCallPaths, importDeepAnalysis, DEEP_ANALYSIS_SUPPORT } from 'farsight-sentinel/analysis';
+      const store = await openStore(${JSON.stringify(join(storeRoot, 'paths-store'))});
+      try {
+        const { snapshot } = await captureSnapshot(store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'example/smoke', root: ${JSON.stringify(appDir)} }] });
+        const parsed = await parseSnapshot(store, { snapshotId: snapshot.id, workDir: ${JSON.stringify(workDir)},
+          selection: { gitignore: true, testFiles: 'include' },
+          limits: { maxFiles: 100, maxFileBytes: 1 << 20, maxTotalBytes: 1 << 24, maxEntries: 1000, maxDurationMs: 60000 } });
+        const readContent = id => store.readArtifact(id);
+        const paths = await boundedCallPaths({ snapshotId: snapshot.id, analysis: parsed.sources[0], readContent,
+          queries: [{ from: 'app::src/a.ts::a', to: 'app::src/b.ts::b' }] });
+        const file = p => snapshot.entries.find(e => e.relativePath === p);
+        const terms = 'sha256:' + createHash('sha256').update('terms').digest('hex');
+        const doc = JSON.stringify({ schema: 'sentinel-deep-import/draft-1',
+          tool: { name: 'example-analyzer', version: '1.0.0', distributionDigest: 'sha256:' + 'a'.repeat(64) },
+          attestation: { license: { identifier: 'LicenseRef-example', termsDigest: terms, acceptedBy: 'owner@example.com', acceptedAt: '2026-10-22T09:00:00Z' },
+            provenance: { obtainedFrom: 'mirror', attestedBy: 'team@example.com', attestedAt: '2026-10-22T09:00:00Z' } },
+          binding: { snapshotId: snapshot.id, sourceId: 'app', files: ['src/a.ts', 'src/b.ts'].map(p => ({ relativePath: p, content: file(p).content })),
+            configurationDigest: 'sha256:' + 'c'.repeat(64), mode: 'source-only', buildPerformed: false },
+          flows: [{ toolRuleId: 'example/flow', message: 'input reaches b', originalSeverity: 'low',
+            source: { relativePath: 'src/a.ts', content: file('src/a.ts').content, span: { startByte: 40, endByte: 45 } }, steps: [],
+            sink: { relativePath: 'src/b.ts', content: file('src/b.ts').content, span: { startByte: 0, endByte: 10 } } }] });
+        const args = { document: doc, snapshot, readContent, importedAt: '2026-10-22T10:00:00Z' };
+        const refused = await importDeepAnalysis({ ...args, trust: { trustedAttesters: [], acceptedTerms: [] } });
+        const imported = await importDeepAnalysis({ ...args, trust: { trustedAttesters: ['team@example.com'], acceptedTerms: [{ tool: 'example-analyzer', termsDigest: terms }] } });
+        console.log(JSON.stringify({ outcome: paths.results[0].outcome, establishes: paths.establishes, steps: paths.results[0].paths[0]?.steps.length,
+          refused: refused.status, imported: imported.status, observations: imported.observations?.length, producer: imported.observations?.[0]?.producer.kind, engine: DEEP_ANALYSIS_SUPPORT.engine }));
+      } finally { store.close(); }
+    `);
+    const result = JSON.parse((await node('analysis-demo.mjs')).stdout.trim());
+    assert.deepEqual(result, { outcome: 'reached', establishes: 'call-reachability', steps: 1, refused: 'untrusted', imported: 'imported', observations: 1, producer: 'imported', engine: null },
+      'a bounded call path, and an attested import refused without trust and accepted with it, from the installed package alone');
+    return ', analysis API ran installed (call path, attested import)';
   }
 
   // Standalone: everything @farsight/* is inlined, and farsight-cli is not pulled in.
@@ -343,7 +419,7 @@ try {
     }
   }
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}npm consumer`);
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}${analysisExported ? ', analysis types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}npm consumer`);
 } finally {
   consumer.cleanup();
 }

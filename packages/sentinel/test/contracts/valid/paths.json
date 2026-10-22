@@ -1,0 +1,71 @@
+{
+  "schema": "sentinel-paths/draft-1",
+  "snapshotId": "snap-1",
+  "sourceId": "app",
+  "analysisFingerprint": "fixture",
+  "graphDigest": "sha256:ef69aea876fe5a8b6a950bd54462bc1a42d0e9a51aab5b3cc9ae1a3bae40a7ea",
+  "bounds": {
+    "edgeKinds": [
+      "calls"
+    ],
+    "maxDepth": 12,
+    "maxFanout": 256,
+    "maxVisited": 50000
+  },
+  "boundsDigest": "sha256:2c7ae6533955cd716a7e4242726c8c935d117e57addd0222515be128a39ce78a",
+  "establishes": "call-reachability",
+  "results": [
+    {
+      "from": "app::src/a.ts::a",
+      "to": "app::src/a.ts::b",
+      "outcome": "reached",
+      "paths": [
+        {
+          "id": "sha256:dc80950fe9446824a24fe9a03d2a3db1059b7621d2bdd6add8e0c48259cbfd10",
+          "steps": [
+            {
+              "edgeId": "e1",
+              "from": "app::src/a.ts::a",
+              "to": "app::src/a.ts::b",
+              "kind": "calls",
+              "resolution": "resolved",
+              "deferred": false,
+              "sites": [
+                {
+                  "relativePath": "src/a.ts",
+                  "content": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                  "span": {
+                    "startByte": 31,
+                    "endByte": 34
+                  },
+                  "occurrenceId": "o1"
+                }
+              ]
+            }
+          ],
+          "cyclic": []
+        }
+      ],
+      "frontierReasons": [],
+      "visited": 2
+    },
+    {
+      "from": "app::src/a.ts::b",
+      "to": "app::src/a.ts::a",
+      "outcome": "not-reached-complete",
+      "paths": [],
+      "frontierReasons": [],
+      "visited": 1
+    }
+  ],
+  "cycles": [],
+  "limitationKeys": [
+    "sentinel.paths.graphOnly",
+    "sentinel.paths.notDataFlow"
+  ],
+  "frontiers": [],
+  "producer": {
+    "implementation": "sentinel-bounded-paths/draft-1",
+    "digest": "sha256:2cd63ed330f05c6dea457d3afcf9caaf85872ddf7e754263b5411279cb6a9f98"
+  }
+}
