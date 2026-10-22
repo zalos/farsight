@@ -119,6 +119,15 @@ and no credential beyond this repository's own inert `NOT_A_SECRET_DO_NOT_USE`/`
 (`express-order`'s opaque-middleware scenario pins `SENTINEL_FIXTURE_OPAQUE_MODE=deny` so that branch is the
 one actually exercised). Every number and statement below is read directly from those envelopes.
 
+**This table predates the independent corpus review in "Corpus correctness" below** and is retained as the
+historical record of what was actually measured at revision `536e6b1`, not edited to match the corrected
+labels. In particular, `spring-chains`'s `unmatched-no-chain-applies` row shows the real value this run
+observed (200, no credentials) from before `cases.json` froze any expectation for that scenario — the
+review correctly found that, at this revision, there was no independent oracle for that scenario to agree
+or disagree with. A fresh `--acquire`/`--run` against the corrected commit, confirming (or refuting) the
+now-frozen 200 expectation, is deferred to the integrating lead's own reviewed final run rather than
+reported here as a second "final" measurement.
+
 | Case | Scenario | Static label | Expected runtime | Observed runtime | Agrees |
 |---|---|---|---|---|---|
 | express-order | auth-before-route | bounded-safe-pattern | 401 / 200 | 401 / 200 | yes |
@@ -131,12 +140,16 @@ one actually exercised). Every number and statement below is read directly from 
 | next-matcher | excluded-by-matcher | unknown-enforcement | 200 | 200 | yes |
 | spring-chains | overlapping-open-chain | unknown-enforcement | 200 (no credentials) | 200 | yes |
 | spring-chains | later-authenticated-chain | bounded-safe-pattern | 401 / 200 | 401 / 200 | yes |
-| spring-chains | unmatched-no-chain-applies | unknown-enforcement | measured, not assumed | **200 (no credentials)** | n/a by design |
+| spring-chains | unmatched-no-chain-applies | unknown-enforcement | no frozen oracle at this revision | **200 (no credentials)** | not assessed at this revision |
 
+A `bounded-safe-pattern` label and an `unknown-enforcement` label are two different *static* claims about
+what the source text supports; neither predicts the other's runtime measurement, so a measurement under an
+`unknown-enforcement` label is not "diverging" from anything — unknown is an abstention, not a prediction.
 Every `bounded-safe-pattern` scenario's runtime agreed with its static label, as intended: these are the
 cases where source order/declaration genuinely supports a gate claim. Every `unknown-enforcement` scenario
-is where the static label *correctly declined to claim protection*, and the runtime measurement shows real,
-divergent behavior underneath that honest abstention — not a defect in the fixtures, the lesson itself:
+is where the static label *correctly declined to claim protection*, and the runtime measurement adds real,
+concrete evidence underneath that honest abstention — refining what one configured, synthetic run actually
+did, never by itself establishing a vulnerability or a safety guarantee beyond this fixture's narrow scope:
 
 - **Express**: a `requireAuth` middleware registered with `app.use` *after* the route it names never runs
   for that route (`auth-after-route`: 200 with no token, same as with one). Registration order, not the
@@ -160,14 +173,18 @@ divergent behavior underneath that honest abstention — not a defect in the fix
   authentication, not CSRF — ever applied. This is a known, genuinely easy-to-miss Spring Security 6
   multi-chain pitfall, reproduced here from real HTTP behavior rather than cited from memory, and it is the
   clearest case in this slice for why "no implicit fallback chain is invented" has to stay a measured fact,
-  never a convenient assumption, in any later Spring adapter (PR 17).
+  never a convenient assumption, in any later Spring adapter (PR 17). This 200 is now frozen in
+  `cases.json` as the scenario's `expectedRuntime`, reasoned from Spring Security's documented
+  `FilterChainProxy` contract rather than reverse-engineered from this run; see "Corpus correctness" below.
 
 Dependency acquisition evidence retained per case (also in `acquisition.json`, version-checked as described
 above): `express-order`, `nest-validation` and `next-matcher` each retain the exact `package-lock.json` npm
 resolved during their image build, every pinned candidate's resolved version matching its declared pin
 exactly (`valid: true, mismatches: []`); `spring-chains` retains a real `mvn dependency:tree` naming
 `spring-security-config`/`spring-security-core`/`spring-security-web` all at `6.4.3` under
-`spring-boot-starter-security:3.4.3` (`resolvedSpringSecurityCoreVersion: "6.4.3"`). These are read back from
+`spring-boot-starter-security:3.4.3` (`resolvedSpringSecurityCoreVersion: "6.4.3"`). `cases.json` now pins
+this exact value as `spring-security-core`'s declared version going forward, so a future acquisition whose
+Maven resolution disagrees fails outright rather than silently recording a different number. These are read back from
 the already-built image through the same owned, `--network none`, UID-65534, read-only container lifecycle
 as the probe itself — reading a baked-in file, never a second acquisition.
 
@@ -214,6 +231,59 @@ named here in full rather than folded into a clean-looking final run:
 
 All four cases were re-measured clean after every one of these four fixes, under the new pipeline, against
 the committed revision cited above.
+
+## Corpus correctness, found by an independent review
+
+A separate, independent review of the corpus itself (labels, pins and fixture wording — not the harness
+code) accepted all eleven static labels and verified all nineteen source hashes at index
+`sha256:29e04e72bf44aee2c970d7f2dc7c90964122d23d2b755cb8eb8edc692ecc780a` (`cases.json`'s own bytes at the
+revision this document first measured), then found two acceptance blockers and two further notes against
+that accepted baseline:
+
+1. **Spring Security's version was a descriptive placeholder, not an exact pin.** `cases.json`'s candidate
+   list named it `"resolved-by-boot-3.4.3-dependency-management"` instead of a checkable version string, so
+   nothing actually verified the resolved version against anything. Fixed: the candidate now pins the exact
+   value `"6.4.3"`, with a `resolutionPolicy` note explaining it is transitively managed by
+   `spring-boot-starter-parent` rather than an independent `pom.xml.fixture` coordinate. Acquisition's
+   existing version-validation step (which already skips the parent POM itself) now checks this pin like
+   any other, and a future acquisition that resolves a different `spring-security-core` version fails
+   outright instead of silently recording it.
+2. **The `unmatched-no-chain-applies` scenario had no fixed, independent oracle.** Its `expectedRuntime` was
+   the literal string `"measured-not-assumed"`, and `spring.mjs`'s `assess()` special-cased it to
+   `matchesExpected: null` — so this scenario could never fail a mismatch, only ever report whatever
+   happened. Fixed by freezing `expectedRuntime.withoutCredentials` to `200`, reasoned from Spring
+   Security's own documented `FilterChainProxy` contract (described above) before any confirming
+   measurement against the corrected commit, not reverse-engineered from the measurement already on record
+   in this document. The scenario's **static** label stays `unknown-enforcement` — unknown-enforcement
+   describes what the source text can support claiming, which has not changed; what changed is that the
+   **runtime** layer now has a real, checkable prediction instead of an open-ended observation.
+   `spring.mjs`'s now-dead special case for the literal `"measured-not-assumed"` string was removed, and the
+   regression tests were extended to cover both an agreeing and a disagreeing measurement for this scenario.
+
+Two further notes, also fixed:
+
+3. **This document's and the fixture README's "diverge, on purpose" framing was misleading.** It read as
+   though a measurement under an `unknown-enforcement` label necessarily contradicts something, when
+   `unknown-enforcement` is an abstention, not a prediction — there is nothing for a runtime result to
+   diverge *from*. Both documents now say plainly that the runtime measurement refines one configured run
+   without contradicting the unknown label or, by itself, establishing a vulnerability or a safety
+   guarantee.
+4. **Express's `resolveOpaqueMiddleware()` comment said its branch was chosen "at request time," and named a
+   stale environment variable (`MIDDLEWARE_MODE`) that this fixture never reads.** The function is actually
+   called once, at route-registration time during process startup — `app.get('/admin/opaque',
+   resolveOpaqueMiddleware(), handler)` evaluates it once when the route is registered, not per request —
+   and the real variable is `SENTINEL_FIXTURE_OPAQUE_MODE`. The comment is corrected to "chosen once at
+   startup"; the scope label (`unknown-enforcement`, because static review still cannot see which branch is
+   live without knowing that startup-time switch) is unchanged, since the underlying lesson was always about
+   a startup-time, not a per-request, decision.
+
+Because 1, 2 and 4 change reviewed source bytes, `server.fixture.js`'s hash changed and is updated in
+`cases.json`; the corrected index's own bytes necessarily differ from the accepted
+`29e04e72...` snapshot and need their own re-review. **No new "final" acquire/run cycle is reported in this
+document for this commit**; the Measured Results table above remains the historical pre-correction record,
+and a fresh confirming run — in particular confirming or refuting the now-frozen 200 for
+`unmatched-no-chain-applies` — is left to the integrating lead's own reviewed final run, per that review's
+explicit instruction.
 
 ## Limitations
 

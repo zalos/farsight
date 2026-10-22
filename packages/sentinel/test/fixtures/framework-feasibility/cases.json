@@ -17,7 +17,7 @@
     { "id": "react", "version": "18.3.1", "registry": "npm", "case": "next-matcher" },
     { "id": "react-dom", "version": "18.3.1", "registry": "npm", "case": "next-matcher" },
     { "id": "org.springframework.boot:spring-boot-starter-parent", "version": "3.4.3", "registry": "maven", "case": "spring-chains" },
-    { "id": "org.springframework.security:spring-security-core", "version": "resolved-by-boot-3.4.3-dependency-management", "registry": "maven", "case": "spring-chains", "note": "Not independently pinned here; the acquired build records the actually resolved version (expected 6.4.3 per Spring Boot 3.4.3's managed dependencies) rather than assuming it." }
+    { "id": "org.springframework.security:spring-security-core", "version": "6.4.3", "registry": "maven", "case": "spring-chains", "resolutionPolicy": "transitive-managed-by-spring-boot-starter-parent", "note": "Pinned here as the exact version this candidate's acquisition must resolve to. Not an independent coordinate in pom.xml.fixture: Spring Boot 3.4.3's dependency management resolves spring-boot-starter-security to this spring-security-core version by itself. Acquisition parses the real mvn dependency:tree and fails the case outright if the actually resolved version does not equal this exact pin." }
   ],
   "cases": [
     {
@@ -26,7 +26,7 @@
       "purpose": "Early vs. late auth middleware registration order, and a gate whose body is chosen outside the source text (unknown custom middleware).",
       "files": [
         { "path": "package.json", "source": "sources/express-order/package.json.fixture", "sha256": "e043eee40241a8afcec1fd1866db58db7a3b2dd4b74fbaf8767c2ffef4c5a945" },
-        { "path": "server.js", "source": "sources/express-order/server.fixture.js", "sha256": "df1b5425c28653b58555311133db6f7e074047b3804508db1470d8641c77443a" }
+        { "path": "server.js", "source": "sources/express-order/server.fixture.js", "sha256": "d6b08ea46da75de3ce84dd7e4bffb407ea928a857f8f471a87c4fe239b3c094b" }
       ],
       "healthRoute": { "method": "GET", "path": "/healthz" },
       "scenarios": [
@@ -51,7 +51,7 @@
           "method": "GET",
           "path": "/admin/opaque",
           "staticLabel": "unknown-enforcement",
-          "staticNote": "The middleware function is produced by resolveOpaqueMiddleware(), chosen at runtime from an environment switch; static source review cannot see which function fills this slot.",
+          "staticNote": "The middleware function is produced by resolveOpaqueMiddleware(), chosen once at startup (route-registration time) from an environment switch; static source review cannot see which function fills this slot without knowing that switch as the process starts.",
           "env": { "SENTINEL_FIXTURE_OPAQUE_MODE": "deny" },
           "expectedRuntime": { "anyRequest": 403 },
           "runtimeNote": "This run pins the switch to its denying branch to show the gate can be real; the static label stays unknown-enforcement regardless, because source text alone never reveals which branch runs."
@@ -168,8 +168,9 @@
           "method": "GET",
           "path": "/api/other/thing",
           "staticLabel": "unknown-enforcement",
-          "staticNote": "No SecurityFilterChain's securityMatcher reaches this path. Spring Security's actual behaviour for a request no configured chain claims is measured below, not assumed from either chain's declared policy.",
-          "expectedRuntime": { "withoutCredentials": "measured-not-assumed" }
+          "staticNote": "No SecurityFilterChain's securityMatcher reaches this path. The static label stays unknown-enforcement: neither chain's declared policy says anything about this path, so source review alone cannot certify it protected or unprotected either way.",
+          "expectedRuntime": { "withoutCredentials": 200 },
+          "runtimeNote": "Frozen before the confirming measurement, from Spring Security's own documented FilterChainProxy contract, not from having already run this fixture: when no configured SecurityFilterChain's securityMatcher matches a request, Spring Security applies none of that chain's filters to it at all (no authentication, no CSRF) rather than falling back to any other chain's policy, so the request reaches the controller as if no security configuration existed for this path. 200 without credentials is that documented behaviour's predicted outcome, checked here like any other scenario's expectedRuntime — not an exploratory probe outside the pass/fail denominator. A different outcome would mean this fixture's understanding of that contract, or the pinned Spring Security version's actual behaviour, is wrong, and must be investigated rather than silently re-labelled."
         }
       ]
     }

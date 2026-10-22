@@ -1,8 +1,8 @@
 // Synthetic Sentinel E2 fixture (express-order). Original, inert, never installed outside a bounded
 // probe container. Demonstrates that Express runs middleware and route handlers strictly in the order
 // they were registered: a check registered before a route can gate it, a check registered after the
-// route that already answered the request cannot, and a check whose body is resolved at runtime from
-// outside the fixture cannot be labelled from source text alone.
+// route that already answered the request cannot, and a check whose active branch is picked once at
+// startup from outside the fixture cannot be labelled from source text alone.
 'use strict';
 const express = require('express');
 const app = express();
@@ -14,8 +14,11 @@ function requireAuth(req, res, next) {
   return res.status(401).json({ blocked: 'requireAuth' });
 }
 
-// Resolved only at request time from an environment switch; a static reader cannot see which function
-// this becomes without evaluating MIDDLEWARE_MODE, matching the "unknown custom middleware" lesson.
+// Called once, at route-registration time during process startup, from an environment switch; a
+// static reader cannot see which function this becomes without evaluating SENTINEL_FIXTURE_OPAQUE_MODE
+// as it is set when the process starts, matching the "unknown custom middleware" lesson. This is a
+// startup-time branch, not a per-request decision: every request to /admin/opaque for the life of this
+// process is handled by whichever single function this call returned when the route was registered.
 function resolveOpaqueMiddleware() {
   if (process.env.SENTINEL_FIXTURE_OPAQUE_MODE === 'deny') return (req, res) => res.status(403).json({ blocked: 'opaque' });
   return (req, res, next) => next();
@@ -32,7 +35,7 @@ app.get('/admin/early', (req, res) => res.status(200).json({ reached: 'early' })
 app.get('/admin/late', (req, res) => res.status(200).json({ reached: 'late' }));
 app.use('/admin/late', requireAuth);
 
-// unknown-custom-middleware: the gate function is chosen at runtime, not declared at this call site.
+// unknown-custom-middleware: the gate function is chosen once at startup, not declared at this call site.
 app.get('/admin/opaque', resolveOpaqueMiddleware(), (req, res) => res.status(200).json({ reached: 'opaque' }));
 
 const port = Number(process.env.PORT || 3000);

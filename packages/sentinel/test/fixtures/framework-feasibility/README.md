@@ -12,9 +12,15 @@ Spring Security, resolved version recorded by the build rather than assumed). Th
 `scripts/sentinel-feasibility/frameworks/` builds each app into a pinned container image (acquisition,
 network allowed) and then runs that image with `--network none` (execution, no network): the container's
 own entrypoint starts the app, sends it loopback HTTP requests, and reports the real status codes. Real
-runtime evidence is kept as a field distinct from the static label; the two are expected to agree on the
-`bounded-safe-pattern` scenarios and to diverge, on purpose, on every `unknown-enforcement` scenario — that
-divergence is the lesson, not a defect in the fixture.
+runtime evidence is kept as a field distinct from the static label, and every scenario still carries its
+own frozen `expectedRuntime` the measurement is checked against — including `unknown-enforcement`
+scenarios, which are frozen from source-level reasoning about the framework's documented behaviour before
+the confirming run, not reverse-engineered from it. A `bounded-safe-pattern` label and an
+`unknown-enforcement` label describe two different *static* claims the source text can or cannot support;
+neither predicts the other's runtime measurement. The runtime observation refines what one configured,
+synthetic run actually did; it never "contradicts" `unknown-enforcement` (unknown is an abstention, not a
+prediction, so there is nothing for a measurement to diverge from) and it never by itself establishes a
+vulnerability or a safety guarantee beyond this one fixture's narrow, bounded scope.
 
 No private application code, external benchmark code, real credential, or provider transcript is included.
 `spring-chains`'s in-memory password uses this repository's existing inert marker,

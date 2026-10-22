@@ -142,8 +142,10 @@ test('evaluateCaseOutcome fails on any missing observation, and never passes an 
   ];
   assert.equal(evaluateCaseOutcome(allPresentOneMismatch).state, 'measured-with-mismatch');
 
-  // A scenario with no fixed expectation (matchesExpected: null, e.g. Spring's unmatched-chain case)
-  // still requires a real, present observation to count as measured.
+  // evaluateCaseOutcome's contract: a scenario with no fixed expectation (matchesExpected: null) is
+  // exempt from the match requirement but never from being observed at all. No corpus scenario
+  // currently uses matchesExpected: null — every one has a frozen expectedRuntime — so this is a
+  // generic contract test, not tied to a real case.
   const noExpectationButObserved = [
     { scenario: 'a', observed: { x: 1 }, matchesExpected: true },
     { scenario: 'b', observed: { x: 200 }, matchesExpected: null },
@@ -192,9 +194,13 @@ test('next assess treats matcher inclusion as necessary but not sufficient', asy
   assert.equal(evaluateCaseOutcome(result).state, 'measured');
 });
 
-test('spring assess leaves the unmatched-chain scenario unlabelled as a pass/fail, but still requires it be observed', async () => {
+test('spring assess checks the unmatched-chain scenario against its own frozen expectation, not an exploratory null', async () => {
   const { index } = await loadCorpus(CORPUS);
   const caseEntry = index.cases.find(c => c.id === 'spring-chains');
+  const unmatchedScenario = caseEntry.scenarios.find(s => s.id === 'unmatched-no-chain-applies');
+  assert.equal(unmatchedScenario.staticLabel, 'unknown-enforcement');
+  assert.equal(unmatchedScenario.expectedRuntime.withoutCredentials, 200);
+
   const observed = {
     'overlapping-open-chain': { withoutCredentials: 200 },
     'later-authenticated-chain': { withoutCredentials: 401, withCredentials: 200 },
@@ -204,9 +210,16 @@ test('spring assess leaves the unmatched-chain scenario unlabelled as a pass/fai
   assert.equal(result.find(a => a.scenario === 'overlapping-open-chain').matchesExpected, true);
   assert.equal(result.find(a => a.scenario === 'later-authenticated-chain').matchesExpected, true);
   const unmatched = result.find(a => a.scenario === 'unmatched-no-chain-applies');
-  assert.equal(unmatched.matchesExpected, null);
+  assert.equal(unmatched.matchesExpected, true);
   assert.equal(unmatched.observed.withoutCredentials, 200);
   assert.equal(evaluateCaseOutcome(result).state, 'measured');
+
+  // A different real-world outcome for this scenario is a genuine mismatch, not a reason to relabel
+  // the scenario as exploratory after the fact.
+  const unexpectedlyBlocked = { ...observed, 'unmatched-no-chain-applies': { withoutCredentials: 401 } };
+  const mismatched = springFramework.assess(caseEntry, unexpectedlyBlocked);
+  assert.equal(mismatched.find(a => a.scenario === 'unmatched-no-chain-applies').matchesExpected, false);
+  assert.equal(evaluateCaseOutcome(mismatched).state, 'measured-with-mismatch');
 
   const droppedObservation = { ...observed, 'unmatched-no-chain-applies': undefined };
   const incomplete = springFramework.assess(caseEntry, droppedObservation);

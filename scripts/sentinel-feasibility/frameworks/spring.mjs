@@ -45,15 +45,17 @@ printf 'SENTINEL_FIXTURE_PROBE_RESULT={"status":"ok","observations":{"overlappin
 `;
 }
 
+// Every scenario here, including unmatched-no-chain-applies, carries a fixed expectedRuntime frozen
+// in cases.json before this file's measurement; none is exploratory or exempt from the match check.
 export function assess(caseEntry, observations) {
   const results = [];
   for (const scenario of caseEntry.scenarios) {
     const observed = observations?.[scenario.id] ?? null;
     let matches = null;
     if (observed) {
-      if (scenario.id === 'later-authenticated-chain') matches = observed.withoutCredentials === scenario.expectedRuntime.withoutCredentials && observed.withCredentials === scenario.expectedRuntime.withCredentials;
-      else if (scenario.expectedRuntime.withoutCredentials === 'measured-not-assumed') matches = null; // no fixed expectation; the measured status is the evidence itself.
-      else matches = observed.withoutCredentials === scenario.expectedRuntime.withoutCredentials;
+      matches = scenario.id === 'later-authenticated-chain'
+        ? observed.withoutCredentials === scenario.expectedRuntime.withoutCredentials && observed.withCredentials === scenario.expectedRuntime.withCredentials
+        : observed.withoutCredentials === scenario.expectedRuntime.withoutCredentials;
     }
     results.push({ scenario: scenario.id, staticLabel: scenario.staticLabel, expectedRuntime: scenario.expectedRuntime, observed, matchesExpected: matches });
   }
