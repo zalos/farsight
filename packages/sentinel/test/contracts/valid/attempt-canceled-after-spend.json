@@ -1,0 +1,28 @@
+{
+  "schema": "sentinel-attempt/draft-1",
+  "id": "att-3",
+  "work": {
+    "id": "work-pattern-api",
+    "revision": 1
+  },
+  "ordinal": 3,
+  "coordinatorEpoch": "epoch-7",
+  "operationId": "op-1",
+  "worker": {
+    "kind": "external-claim",
+    "fencingGeneration": 3,
+    "identitySource": "host-reported"
+  },
+  "startedAt": "2026-10-21T12:00:00Z",
+  "usage": {
+    "certainty": "confirmed",
+    "inputTokens": 1200,
+    "outputTokens": 80,
+    "monetaryCost": "0.004",
+    "currency": "USD"
+  },
+  "invocation": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+  "state": "canceled-after-spend",
+  "endedAt": "2026-10-21T12:05:00.250Z",
+  "outputs": []
+}

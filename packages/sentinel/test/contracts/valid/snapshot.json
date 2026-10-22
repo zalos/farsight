@@ -1,0 +1,86 @@
+{
+  "schema": "sentinel-snapshot/draft-1",
+  "id": "snap-1",
+  "inventoryDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "createdAt": "2026-10-21T12:00:00Z",
+  "capture": {
+    "mode": "committed-tree",
+    "policyDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "environmentProfileDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "sources": [
+    {
+      "sourceId": "api",
+      "repositoryId": "example/api",
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "dirty": false,
+      "capturedAt": "2026-10-21T12:00:00Z"
+    }
+  ],
+  "entries": [
+    {
+      "sourceId": "api",
+      "relativePath": "src/routes/invoice.ts",
+      "kind": "file",
+      "disposition": "included",
+      "content": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "bytes": 2048,
+      "generated": false
+    },
+    {
+      "sourceId": "api",
+      "relativePath": ".github/workflows/ci.yml",
+      "kind": "file",
+      "disposition": "included",
+      "content": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "bytes": 512,
+      "generated": false
+    },
+    {
+      "sourceId": "api",
+      "relativePath": "assets/big.bin",
+      "kind": "file",
+      "disposition": "too-large",
+      "reasonCode": "sentinel.reason.tooLarge",
+      "bytes": 99999999,
+      "generated": false
+    },
+    {
+      "sourceId": "api",
+      "relativePath": "link-out",
+      "kind": "symlink",
+      "disposition": "refused",
+      "reasonCode": "sentinel.reason.symlinkEscape"
+    },
+    {
+      "sourceId": "api",
+      "relativePath": "node_modules",
+      "kind": "directory-boundary",
+      "disposition": "excluded",
+      "reasonCode": "sentinel.reason.dependencyCache",
+      "knownDescendants": null
+    }
+  ],
+  "frameworkVersions": [
+    {
+      "framework": "express",
+      "state": "resolved",
+      "version": "4.21.2",
+      "provenance": {
+        "sourceId": "api",
+        "relativePath": "package-lock.json"
+      }
+    },
+    {
+      "framework": "spring-boot",
+      "state": "unknown",
+      "reasonCode": "sentinel.reason.noLockfile"
+    }
+  ],
+  "artifacts": {
+    "parser": [
+      "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    ],
+    "diagnostics": []
+  }
+}

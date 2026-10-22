@@ -1,0 +1,10 @@
+{
+  "protocol": "sentinel-worker/draft-1",
+  "type": "hello",
+  "supported": [
+    "sentinel-worker/draft-1",
+    "sentinel-worker/draft-2"
+  ],
+  "adapterId": "pattern-engine",
+  "adapterDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+}

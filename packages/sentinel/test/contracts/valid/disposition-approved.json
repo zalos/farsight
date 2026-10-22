@@ -1,0 +1,37 @@
+{
+  "schema": "sentinel-disposition/draft-1",
+  "id": "disp-2",
+  "findingGroupId": "fg-1",
+  "scope": {
+    "surfaceIds": [
+      "route-submit"
+    ],
+    "environmentDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+  },
+  "decision": "mitigated",
+  "rationale": "Internal only until the gateway rule lands.",
+  "evidence": [
+    "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+  ],
+  "assertions": [
+    {
+      "id": "as-1",
+      "trust": "imported-config",
+      "environmentDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "evidence": [
+        "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+      ],
+      "lastVerifiedAt": "2026-10-21T12:00:00Z",
+      "expiresAt": null
+    }
+  ],
+  "createdAt": "2026-10-21T12:00:00Z",
+  "expiresAt": "2026-11-21T12:00:00Z",
+  "supersedes": "disp-1",
+  "state": "approved",
+  "actor": {
+    "channel": "owner-cli",
+    "principal": "owner",
+    "confirmationReceipt": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+  }
+}

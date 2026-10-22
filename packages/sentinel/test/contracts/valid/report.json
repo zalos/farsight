@@ -1,0 +1,215 @@
+{
+  "schema": "sentinel-report/draft-1",
+  "id": "rep-1",
+  "run": {
+    "id": "run-2",
+    "snapshotId": "snap-1",
+    "planRevision": 2
+  },
+  "ledgerSequence": 4182,
+  "evaluatedAt": "2026-10-21T12:05:00.250Z",
+  "catalogVersion": "draft-1",
+  "disclosure": {
+    "profile": "shareable",
+    "profileDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "completeness": "partial",
+  "baseline": {
+    "reportId": "rep-0"
+  },
+  "counts": {
+    "findings": {
+      "n": 1,
+      "unit": "sentinel.unit.findings",
+      "scope": "sentinel.scope.report",
+      "source": "sentinel report fold draft-1",
+      "breakdown": [
+        {
+          "key": "sentinel.part.high",
+          "n": 1
+        }
+      ]
+    },
+    "observations": {
+      "n": 2,
+      "unit": "sentinel.unit.observations",
+      "scope": "sentinel.scope.report",
+      "source": "sentinel report fold draft-1"
+    },
+    "coverageGaps": {
+      "n": 1,
+      "unit": "sentinel.unit.gaps",
+      "scope": "sentinel.scope.report",
+      "source": "sentinel report fold draft-1"
+    },
+    "plannedChecks": {
+      "n": 3,
+      "unit": "sentinel.unit.checks",
+      "scope": "sentinel.scope.report",
+      "source": "sentinel report fold draft-1",
+      "of": 3
+    },
+    "seenByNoStage": {
+      "n": null,
+      "unknownScope": true,
+      "scope": "sentinel.scope.inventory"
+    }
+  },
+  "findings": [
+    {
+      "id": "f-1",
+      "observationIds": [
+        "obs-1",
+        "obs-2"
+      ],
+      "ruleFamilyId": "sentinel.sql.dynamic-query",
+      "severity": "high",
+      "title": {
+        "business": "Invoice submission builds a database query from text",
+        "code": "sentinel.sql.dynamic-query at src/routes/invoice.ts"
+      },
+      "explanation": {
+        "business": "Invoice submission needs review: the query is built from text.",
+        "code": "String concatenation reaches a SQL facade."
+      },
+      "place": {
+        "binding": "matched",
+        "context": {
+          "artifact": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sourceBindingReceipt": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "projectionVersion": "draft-1"
+        },
+        "nodeIds": [
+          "api::src/routes/invoice.ts::submit"
+        ],
+        "screens": [
+          {
+            "id": "submit-invoice",
+            "label": {
+              "business": "Submit invoice",
+              "code": "INV-03 /invoices/new"
+            },
+            "via": "direct-use",
+            "evidenceArtifact": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          }
+        ],
+        "journeys": [
+          {
+            "id": "new-invoice",
+            "label": {
+              "business": "New invoice",
+              "code": "new-invoice"
+            },
+            "screenIds": [
+              "submit-invoice"
+            ]
+          }
+        ],
+        "personas": [
+          {
+            "id": "contractor",
+            "label": {
+              "business": "Contractor",
+              "code": "contractor"
+            },
+            "screenIds": [
+              "submit-invoice"
+            ],
+            "declared": true,
+            "evidenceArtifact": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        ],
+        "counts": {
+          "screens": {
+            "n": 1,
+            "unit": "sentinel.unit.screens",
+            "scope": "sentinel.scope.finding",
+            "source": "sentinel report fold draft-1"
+          },
+          "journeys": {
+            "n": 1,
+            "unit": "sentinel.unit.journeys",
+            "scope": "sentinel.scope.finding",
+            "source": "sentinel report fold draft-1"
+          },
+          "personas": {
+            "n": 1,
+            "unit": "sentinel.unit.personas",
+            "scope": "sentinel.scope.finding",
+            "source": "sentinel report fold draft-1"
+          }
+        },
+        "limitationKeys": []
+      },
+      "comparison": "persistent",
+      "evidence": [
+        {
+          "id": "ev-1",
+          "state": "embedded",
+          "excerpt": "db.query('SELECT ' + name)",
+          "content": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        {
+          "id": "ev-2",
+          "state": "withheld",
+          "reasonCode": "sentinel.disclosure.sourceExcluded",
+          "content": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        }
+      ]
+    }
+  ],
+  "gaps": [
+    {
+      "checkId": "chk-ci",
+      "status": "unsupported",
+      "reasonCode": "sentinel.capability.notImplemented",
+      "explanation": {
+        "business": "Delivery configuration was not checked.",
+        "code": "infrastructure-ci-checks unavailable"
+      },
+      "place": {
+        "binding": "unavailable",
+        "nodeIds": [],
+        "screens": [],
+        "journeys": [],
+        "personas": [],
+        "counts": {
+          "screens": {
+            "n": 0,
+            "unit": "sentinel.unit.screens",
+            "scope": "sentinel.scope.finding",
+            "source": "sentinel report fold draft-1"
+          },
+          "journeys": {
+            "n": 0,
+            "unit": "sentinel.unit.journeys",
+            "scope": "sentinel.scope.finding",
+            "source": "sentinel report fold draft-1"
+          },
+          "personas": {
+            "n": 0,
+            "unit": "sentinel.unit.personas",
+            "scope": "sentinel.scope.finding",
+            "source": "sentinel report fold draft-1"
+          }
+        },
+        "limitationKeys": [
+          "sentinel.place.deliveryConfiguration"
+        ]
+      }
+    }
+  ],
+  "decisions": [
+    {
+      "dispositionId": "disp-2",
+      "findingId": "f-1",
+      "validity": "valid",
+      "expiresAt": null
+    }
+  ],
+  "artifactClosure": [
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  ]
+}

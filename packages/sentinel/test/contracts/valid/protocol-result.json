@@ -1,0 +1,48 @@
+{
+  "protocol": "sentinel-worker/draft-1",
+  "attemptId": "att-1",
+  "work": {
+    "id": "work-pattern-api",
+    "revision": 1
+  },
+  "coordinatorEpoch": "epoch-7",
+  "type": "result",
+  "seq": 7,
+  "inputFingerprint": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+  "granularity": "aggregate",
+  "artifacts": [
+    {
+      "id": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+      "mediaType": "application/json",
+      "bytes": 4096
+    }
+  ],
+  "observations": [
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ],
+  "coveredChecks": [
+    {
+      "checkId": "chk-1",
+      "coverage": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "scannedSet": [
+    "api:src/routes/invoice.ts"
+  ],
+  "skipped": [
+    {
+      "scopeId": "api:src/huge.ts",
+      "reasonCode": "sentinel.reason.timeout"
+    }
+  ],
+  "actualReadSet": [
+    "api:src/routes/invoice.ts"
+  ],
+  "unresolvedFrontiers": [],
+  "diagnostics": [
+    {
+      "code": "sentinel.diagnostic.partialParse",
+      "scopeId": "api:src/huge.ts"
+    }
+  ]
+}

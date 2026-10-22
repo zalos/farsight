@@ -1,0 +1,25 @@
+{
+  "schema": "sentinel-observation/draft-1",
+  "id": "obs-2",
+  "snapshotId": "snap-1",
+  "producer": {
+    "kind": "model-review",
+    "adapterId": "ollama",
+    "adapterDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "attemptId": "att-3",
+    "model": {
+      "requestedModel": "example-model:latest",
+      "returnedModel": null,
+      "immutableRevision": null,
+      "source": "unknown"
+    },
+    "promptDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  "producerRuleId": "guided-review",
+  "originalSeverity": "medium",
+  "originalConfidence": "low",
+  "message": "<script>alert(1)</script> is kept as data.",
+  "evidence": [],
+  "limitationKeys": [],
+  "observedAt": "2026-10-21T12:05:00.250Z"
+}

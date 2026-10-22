@@ -1,0 +1,13 @@
+{
+  "protocol": "sentinel-worker/draft-1",
+  "attemptId": "att-1",
+  "work": {
+    "id": "work-pattern-api",
+    "revision": 1
+  },
+  "coordinatorEpoch": "epoch-7",
+  "type": "diagnostic",
+  "seq": 4,
+  "code": "sentinel.diagnostic.partialParse",
+  "scopeId": "api:src/huge.ts"
+}

@@ -1,0 +1,739 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/ReportEnvelope",
+  "definitions": {
+    "ReportEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-report/draft-1"
+        },
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "run": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/Id"
+            },
+            "snapshotId": {
+              "$ref": "#/definitions/Id"
+            },
+            "planRevision": {
+              "$ref": "#/definitions/Ordinal"
+            }
+          },
+          "required": [
+            "id",
+            "snapshotId",
+            "planRevision"
+          ],
+          "additionalProperties": false
+        },
+        "ledgerSequence": {
+          "$ref": "#/definitions/Count"
+        },
+        "evaluatedAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "catalogVersion": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "disclosure": {
+          "type": "object",
+          "properties": {
+            "profile": {
+              "type": "string",
+              "enum": [
+                "private",
+                "shareable"
+              ]
+            },
+            "profileDigest": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "profile",
+            "profileDigest"
+          ],
+          "additionalProperties": false
+        },
+        "completeness": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial"
+          ]
+        },
+        "baseline": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "reportId": {
+                  "$ref": "#/definitions/Id"
+                }
+              },
+              "required": [
+                "reportId"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "counts": {
+          "type": "object",
+          "properties": {
+            "findings": {
+              "$ref": "#/definitions/ReportCount"
+            },
+            "observations": {
+              "$ref": "#/definitions/ReportCount"
+            },
+            "coverageGaps": {
+              "$ref": "#/definitions/ReportCount"
+            },
+            "plannedChecks": {
+              "$ref": "#/definitions/ReportCount"
+            },
+            "seenByNoStage": {
+              "type": "object",
+              "properties": {
+                "n": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/Count"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "unknownScope": {
+                  "type": "boolean"
+                },
+                "scope": {
+                  "$ref": "#/definitions/CatalogKey"
+                }
+              },
+              "required": [
+                "n",
+                "unknownScope",
+                "scope"
+              ],
+              "additionalProperties": false,
+              "description": "Always printed, including zero; null when unknown directory scope makes the count unknowable."
+            }
+          },
+          "required": [
+            "findings",
+            "observations",
+            "coverageGaps",
+            "plannedChecks",
+            "seenByNoStage"
+          ],
+          "additionalProperties": false
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReportFinding"
+          },
+          "maxItems": 25000
+        },
+        "gaps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReportGap"
+          },
+          "maxItems": 25000
+        },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReportDecision"
+          },
+          "maxItems": 25000
+        },
+        "artifactClosure": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactId"
+          },
+          "maxItems": 4096
+        }
+      },
+      "required": [
+        "schema",
+        "id",
+        "run",
+        "ledgerSequence",
+        "evaluatedAt",
+        "catalogVersion",
+        "disclosure",
+        "completeness",
+        "baseline",
+        "counts",
+        "findings",
+        "gaps",
+        "decisions",
+        "artifactClosure"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-report/draft-1 — one deterministic projection at a pinned ledger sequence and evaluation time."
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "Ordinal": {
+      "type": "integer",
+      "description": "A positive integer ordinal or revision.",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "A UTC RFC 3339 timestamp with an explicit Z offset.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ReportCount": {
+      "type": "object",
+      "properties": {
+        "n": {
+          "$ref": "#/definitions/Count"
+        },
+        "of": {
+          "$ref": "#/definitions/Count"
+        },
+        "unit": {
+          "$ref": "#/definitions/CatalogKey"
+        },
+        "scope": {
+          "$ref": "#/definitions/CatalogKey"
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "breakdown": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReportCountPart"
+          },
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "n",
+        "unit",
+        "scope",
+        "source"
+      ],
+      "additionalProperties": false,
+      "description": "A scoped number, structurally compatible with core's `Counted`: what it counts, over which scope, from where. Unit and scope keys are catalog keys; the report never prints a bare number."
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "ReportCountPart": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/definitions/CatalogKey"
+        },
+        "n": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "required": [
+        "key",
+        "n"
+      ],
+      "additionalProperties": false,
+      "description": "A part of a count's breakdown. Parts sum to the count they explain."
+    },
+    "ReportFinding": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "observationIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Id"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "ruleFamilyId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "info"
+          ]
+        },
+        "title": {
+          "$ref": "#/definitions/RegisterText"
+        },
+        "explanation": {
+          "$ref": "#/definitions/RegisterText"
+        },
+        "place": {
+          "$ref": "#/definitions/FindingPlace"
+        },
+        "comparison": {
+          "$ref": "#/definitions/ComparisonLabel"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReportEvidence"
+          },
+          "maxItems": 64
+        }
+      },
+      "required": [
+        "id",
+        "observationIds",
+        "ruleFamilyId",
+        "severity",
+        "title",
+        "explanation",
+        "place",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "RegisterText": {
+      "type": "object",
+      "properties": {
+        "business": {
+          "$ref": "#/definitions/BoundedText"
+        },
+        "code": {
+          "$ref": "#/definitions/BoundedText"
+        }
+      },
+      "required": [
+        "business",
+        "code"
+      ],
+      "additionalProperties": false,
+      "description": "The same thing said in both registers; the report carries both so it never looks a label up later."
+    },
+    "BoundedText": {
+      "type": "string",
+      "description": "Untrusted text supplied by a producer (a scanner message, a rationale). Always escaped when rendered.",
+      "maxLength": 4000
+    },
+    "FindingPlace": {
+      "type": "object",
+      "properties": {
+        "binding": {
+          "type": "string",
+          "enum": [
+            "matched",
+            "mismatched",
+            "unavailable"
+          ]
+        },
+        "context": {
+          "type": "object",
+          "properties": {
+            "artifact": {
+              "$ref": "#/definitions/ArtifactId"
+            },
+            "sourceBindingReceipt": {
+              "$ref": "#/definitions/ArtifactId"
+            },
+            "projectionVersion": {
+              "$ref": "#/definitions/ShortText"
+            }
+          },
+          "required": [
+            "artifact",
+            "sourceBindingReceipt",
+            "projectionVersion"
+          ],
+          "additionalProperties": false
+        },
+        "nodeIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ShortText"
+          },
+          "maxItems": 256
+        },
+        "screens": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/Id"
+              },
+              "label": {
+                "$ref": "#/definitions/PlaceLabel"
+              },
+              "via": {
+                "type": "string",
+                "enum": [
+                  "direct-use",
+                  "potential-impact"
+                ]
+              },
+              "evidenceArtifact": {
+                "$ref": "#/definitions/ArtifactId"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "via",
+              "evidenceArtifact"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 512
+        },
+        "journeys": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/Id"
+              },
+              "label": {
+                "$ref": "#/definitions/PlaceLabel"
+              },
+              "screenIds": {
+                "$ref": "#/definitions/ScreenIds"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "screenIds"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 512
+        },
+        "personas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/Id"
+              },
+              "label": {
+                "$ref": "#/definitions/PlaceLabel"
+              },
+              "screenIds": {
+                "$ref": "#/definitions/ScreenIds"
+              },
+              "declared": {
+                "type": "boolean"
+              },
+              "evidenceArtifact": {
+                "$ref": "#/definitions/ArtifactId"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "screenIds",
+              "declared",
+              "evidenceArtifact"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 64
+        },
+        "counts": {
+          "type": "object",
+          "properties": {
+            "screens": {
+              "$ref": "#/definitions/ReportCount"
+            },
+            "journeys": {
+              "$ref": "#/definitions/ReportCount"
+            },
+            "personas": {
+              "$ref": "#/definitions/ReportCount"
+            }
+          },
+          "required": [
+            "screens",
+            "journeys",
+            "personas"
+          ],
+          "additionalProperties": false
+        },
+        "limitationKeys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CatalogKey"
+          },
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "binding",
+        "nodeIds",
+        "screens",
+        "journeys",
+        "personas",
+        "counts",
+        "limitationKeys"
+      ],
+      "additionalProperties": false,
+      "description": "Report-side application placement. Reachability is navigation evidence, never proof of exploitation."
+    },
+    "ArtifactId": {
+      "$ref": "#/definitions/Digest",
+      "description": "An immutable object-store identity: the digest of canonical uncompressed bytes."
+    },
+    "ShortText": {
+      "type": "string",
+      "description": "A short label (a severity as supplied, a framework name).",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "PlaceLabel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "business": {
+          "$ref": "#/definitions/BoundedText"
+        },
+        "code": {
+          "$ref": "#/definitions/BoundedText"
+        }
+      },
+      "required": [
+        "business",
+        "code"
+      ],
+      "description": "A readable label captured from pinned context, so a recipient never looks one up in today's graph."
+    },
+    "ScreenIds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Id"
+      },
+      "maxItems": 512
+    },
+    "ComparisonLabel": {
+      "type": "string",
+      "enum": [
+        "new",
+        "persistent",
+        "changed-evidence",
+        "changed-detection",
+        "reopened",
+        "reopened-disposition-expired",
+        "resolved-by-comparable-check",
+        "removed-surface",
+        "unassessed-in-current-scope",
+        "incomparable-conditions"
+      ],
+      "description": "Why a finding pairs or does not pair with the baseline. Absence alone never resolves an issue."
+    },
+    "ReportEvidence": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "enum": [
+            "embedded",
+            "withheld"
+          ]
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "embedded"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/Id"
+              },
+              "state": {
+                "type": "string",
+                "const": "embedded"
+              },
+              "excerpt": {
+                "$ref": "#/definitions/BoundedText"
+              },
+              "content": {
+                "$ref": "#/definitions/ArtifactId"
+              }
+            },
+            "required": [
+              "id",
+              "state",
+              "excerpt",
+              "content"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "withheld"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/Id"
+              },
+              "state": {
+                "type": "string",
+                "const": "withheld"
+              },
+              "reasonCode": {
+                "$ref": "#/definitions/CatalogKey"
+              },
+              "content": {
+                "$ref": "#/definitions/ArtifactId"
+              }
+            },
+            "required": [
+              "id",
+              "state",
+              "reasonCode",
+              "content"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ],
+      "description": "Permitted evidence is embedded; omitted evidence keeps its identity and the reason it was withheld."
+    },
+    "ReportGap": {
+      "type": "object",
+      "properties": {
+        "checkId": {
+          "$ref": "#/definitions/Id"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "partial",
+            "unsupported",
+            "not-run",
+            "error"
+          ],
+          "description": "Coverage is separate from findings: \"complete\" says the check ran over its scope, not that nothing was found."
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        },
+        "explanation": {
+          "$ref": "#/definitions/RegisterText"
+        },
+        "place": {
+          "$ref": "#/definitions/FindingPlace"
+        }
+      },
+      "required": [
+        "checkId",
+        "status",
+        "reasonCode",
+        "explanation",
+        "place"
+      ],
+      "additionalProperties": false
+    },
+    "ReportDecision": {
+      "type": "object",
+      "properties": {
+        "dispositionId": {
+          "$ref": "#/definitions/Id"
+        },
+        "findingId": {
+          "$ref": "#/definitions/Id"
+        },
+        "validity": {
+          "type": "string",
+          "enum": [
+            "valid",
+            "expired",
+            "invalidated"
+          ],
+          "description": "Validity as of the report's evaluation time; opening an old report never recalculates it."
+        },
+        "expiresAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "dispositionId",
+        "findingId",
+        "validity",
+        "expiresAt"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-report.draft-1.schema.json",
+  "title": "sentinel-report/draft-1"
+}

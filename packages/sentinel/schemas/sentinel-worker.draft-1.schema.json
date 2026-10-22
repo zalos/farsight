@@ -1,0 +1,832 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/ProtocolMessage",
+  "definitions": {
+    "ProtocolMessage": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "hello",
+            "welcome",
+            "refuse",
+            "start",
+            "cancel",
+            "progress",
+            "checkpoint",
+            "heartbeat",
+            "diagnostic",
+            "cancel-ack",
+            "result"
+          ]
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "hello"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/HelloMessage"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "welcome"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/WelcomeMessage"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "refuse"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/RefuseMessage"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "start"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/StartMessage"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "cancel"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/CancelMessage"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "progress"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/ProgressMessage"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "checkpoint"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/CheckpointMessage"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "heartbeat"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/HeartbeatMessage"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "diagnostic"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/DiagnosticMessage"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "cancel-ack"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/CancelAckMessage"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "result"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/ResultMessage"
+          }
+        }
+      ],
+      "description": "sentinel-worker/draft-1 — every message either side may send."
+    },
+    "HelloMessage": {
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "const": "sentinel-worker/draft-1"
+        },
+        "type": {
+          "type": "string",
+          "const": "hello"
+        },
+        "supported": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProtocolVersion"
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "adapterId": {
+          "$ref": "#/definitions/Id"
+        },
+        "adapterDigest": {
+          "$ref": "#/definitions/Digest"
+        }
+      },
+      "required": [
+        "protocol",
+        "type",
+        "supported",
+        "adapterId",
+        "adapterDigest"
+      ],
+      "additionalProperties": false,
+      "description": "The worker opens with every version it speaks; the coordinator answers with one or refuses explicitly."
+    },
+    "ProtocolVersion": {
+      "type": "string",
+      "description": "A supported protocol version string.",
+      "pattern": "^sentinel-worker/(draft-[1-9][0-9]*|v[1-9][0-9]*)$"
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "WelcomeMessage": {
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "const": "sentinel-worker/draft-1"
+        },
+        "type": {
+          "type": "string",
+          "const": "welcome"
+        },
+        "selected": {
+          "type": "string",
+          "const": "sentinel-worker/draft-1"
+        }
+      },
+      "required": [
+        "protocol",
+        "type",
+        "selected"
+      ],
+      "additionalProperties": false
+    },
+    "RefuseMessage": {
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "const": "sentinel-worker/draft-1"
+        },
+        "type": {
+          "type": "string",
+          "const": "refuse"
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        },
+        "supported": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProtocolVersion"
+          },
+          "maxItems": 8
+        }
+      },
+      "required": [
+        "protocol",
+        "type",
+        "reasonCode",
+        "supported"
+      ],
+      "additionalProperties": false,
+      "description": "No shared version: the coordinator refuses rather than guessing a compatible subset."
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "StartMessage": {
+      "type": "object",
+      "properties": {
+        "attemptId": {
+          "$ref": "#/definitions/Id"
+        },
+        "work": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "coordinatorEpoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "fencingGeneration": {
+          "$ref": "#/definitions/Count",
+          "description": "Required for an external claim, absent for an owned child."
+        },
+        "seq": {
+          "$ref": "#/definitions/Count",
+          "description": "Monotonic per attempt and direction; a gap or repeat is a protocol error."
+        },
+        "protocol": {
+          "type": "string",
+          "const": "sentinel-worker/draft-1"
+        },
+        "type": {
+          "type": "string",
+          "const": "start"
+        },
+        "inputFingerprint": {
+          "$ref": "#/definitions/Digest"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactId"
+          },
+          "maxItems": 1024
+        },
+        "deadlineAt": {
+          "$ref": "#/definitions/Timestamp"
+        }
+      },
+      "required": [
+        "attemptId",
+        "coordinatorEpoch",
+        "deadlineAt",
+        "inputFingerprint",
+        "inputs",
+        "protocol",
+        "seq",
+        "type",
+        "work"
+      ],
+      "additionalProperties": false
+    },
+    "WorkRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false,
+      "description": "A logical work unit at one immutable revision; every reference to work names both."
+    },
+    "Ordinal": {
+      "type": "integer",
+      "description": "A positive integer ordinal or revision.",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "ArtifactId": {
+      "$ref": "#/definitions/Digest",
+      "description": "An immutable object-store identity: the digest of canonical uncompressed bytes."
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "A UTC RFC 3339 timestamp with an explicit Z offset.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    },
+    "CancelMessage": {
+      "type": "object",
+      "properties": {
+        "attemptId": {
+          "$ref": "#/definitions/Id"
+        },
+        "work": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "coordinatorEpoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "fencingGeneration": {
+          "$ref": "#/definitions/Count",
+          "description": "Required for an external claim, absent for an owned child."
+        },
+        "seq": {
+          "$ref": "#/definitions/Count",
+          "description": "Monotonic per attempt and direction; a gap or repeat is a protocol error."
+        },
+        "protocol": {
+          "type": "string",
+          "const": "sentinel-worker/draft-1"
+        },
+        "type": {
+          "type": "string",
+          "const": "cancel"
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        }
+      },
+      "required": [
+        "attemptId",
+        "coordinatorEpoch",
+        "protocol",
+        "reasonCode",
+        "seq",
+        "type",
+        "work"
+      ],
+      "additionalProperties": false
+    },
+    "ProgressMessage": {
+      "type": "object",
+      "properties": {
+        "attemptId": {
+          "$ref": "#/definitions/Id"
+        },
+        "work": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "coordinatorEpoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "fencingGeneration": {
+          "$ref": "#/definitions/Count",
+          "description": "Required for an external claim, absent for an owned child."
+        },
+        "seq": {
+          "$ref": "#/definitions/Count",
+          "description": "Monotonic per attempt and direction; a gap or repeat is a protocol error."
+        },
+        "protocol": {
+          "type": "string",
+          "const": "sentinel-worker/draft-1"
+        },
+        "type": {
+          "type": "string",
+          "const": "progress"
+        },
+        "completed": {
+          "$ref": "#/definitions/Count"
+        },
+        "planned": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "required": [
+        "attemptId",
+        "completed",
+        "coordinatorEpoch",
+        "planned",
+        "protocol",
+        "seq",
+        "type",
+        "work"
+      ],
+      "additionalProperties": false
+    },
+    "CheckpointMessage": {
+      "type": "object",
+      "properties": {
+        "attemptId": {
+          "$ref": "#/definitions/Id"
+        },
+        "work": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "coordinatorEpoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "fencingGeneration": {
+          "$ref": "#/definitions/Count",
+          "description": "Required for an external claim, absent for an owned child."
+        },
+        "seq": {
+          "$ref": "#/definitions/Count",
+          "description": "Monotonic per attempt and direction; a gap or repeat is a protocol error."
+        },
+        "protocol": {
+          "type": "string",
+          "const": "sentinel-worker/draft-1"
+        },
+        "type": {
+          "type": "string",
+          "const": "checkpoint"
+        },
+        "checkpoint": {
+          "$ref": "#/definitions/ArtifactId"
+        }
+      },
+      "required": [
+        "attemptId",
+        "checkpoint",
+        "coordinatorEpoch",
+        "protocol",
+        "seq",
+        "type",
+        "work"
+      ],
+      "additionalProperties": false
+    },
+    "HeartbeatMessage": {
+      "type": "object",
+      "properties": {
+        "attemptId": {
+          "$ref": "#/definitions/Id"
+        },
+        "work": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "coordinatorEpoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "fencingGeneration": {
+          "$ref": "#/definitions/Count",
+          "description": "Required for an external claim, absent for an owned child."
+        },
+        "seq": {
+          "$ref": "#/definitions/Count",
+          "description": "Monotonic per attempt and direction; a gap or repeat is a protocol error."
+        },
+        "protocol": {
+          "type": "string",
+          "const": "sentinel-worker/draft-1"
+        },
+        "type": {
+          "type": "string",
+          "const": "heartbeat"
+        }
+      },
+      "required": [
+        "attemptId",
+        "coordinatorEpoch",
+        "fencingGeneration",
+        "protocol",
+        "seq",
+        "type",
+        "work"
+      ],
+      "additionalProperties": false,
+      "description": "Client-hosted claims only; owned children are supervised by process exit, not wall-clock leases."
+    },
+    "DiagnosticMessage": {
+      "type": "object",
+      "properties": {
+        "attemptId": {
+          "$ref": "#/definitions/Id"
+        },
+        "work": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "coordinatorEpoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "fencingGeneration": {
+          "$ref": "#/definitions/Count",
+          "description": "Required for an external claim, absent for an owned child."
+        },
+        "seq": {
+          "$ref": "#/definitions/Count",
+          "description": "Monotonic per attempt and direction; a gap or repeat is a protocol error."
+        },
+        "protocol": {
+          "type": "string",
+          "const": "sentinel-worker/draft-1"
+        },
+        "type": {
+          "type": "string",
+          "const": "diagnostic"
+        },
+        "code": {
+          "$ref": "#/definitions/CatalogKey"
+        },
+        "scopeId": {
+          "$ref": "#/definitions/ScopeId"
+        }
+      },
+      "required": [
+        "attemptId",
+        "code",
+        "coordinatorEpoch",
+        "protocol",
+        "seq",
+        "type",
+        "work"
+      ],
+      "additionalProperties": false
+    },
+    "ScopeId": {
+      "type": "string",
+      "description": "A scope reference such as `<sourceId>:<relativePath>` or a surface ID. Untrusted protocol data: bounded, free of control characters, never resolved as a filesystem path.",
+      "pattern": "^[A-Za-z0-9][^\\u0000-\\u001f\\u007f]*$",
+      "maxLength": 4300
+    },
+    "CancelAckMessage": {
+      "type": "object",
+      "properties": {
+        "attemptId": {
+          "$ref": "#/definitions/Id"
+        },
+        "work": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "coordinatorEpoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "fencingGeneration": {
+          "$ref": "#/definitions/Count",
+          "description": "Required for an external claim, absent for an owned child."
+        },
+        "seq": {
+          "$ref": "#/definitions/Count",
+          "description": "Monotonic per attempt and direction; a gap or repeat is a protocol error."
+        },
+        "protocol": {
+          "type": "string",
+          "const": "sentinel-worker/draft-1"
+        },
+        "type": {
+          "type": "string",
+          "const": "cancel-ack"
+        }
+      },
+      "required": [
+        "attemptId",
+        "coordinatorEpoch",
+        "protocol",
+        "seq",
+        "type",
+        "work"
+      ],
+      "additionalProperties": false
+    },
+    "ResultMessage": {
+      "type": "object",
+      "properties": {
+        "attemptId": {
+          "$ref": "#/definitions/Id"
+        },
+        "work": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "coordinatorEpoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "fencingGeneration": {
+          "$ref": "#/definitions/Count",
+          "description": "Required for an external claim, absent for an owned child."
+        },
+        "seq": {
+          "$ref": "#/definitions/Count",
+          "description": "Monotonic per attempt and direction; a gap or repeat is a protocol error."
+        },
+        "protocol": {
+          "type": "string",
+          "const": "sentinel-worker/draft-1"
+        },
+        "type": {
+          "type": "string",
+          "const": "result"
+        },
+        "inputFingerprint": {
+          "$ref": "#/definitions/Digest"
+        },
+        "granularity": {
+          "$ref": "#/definitions/CoverageGranularity"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResultArtifact"
+          },
+          "maxItems": 1024
+        },
+        "observations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactId"
+          },
+          "maxItems": 10000
+        },
+        "coveredChecks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "checkId": {
+                "$ref": "#/definitions/Id"
+              },
+              "coverage": {
+                "$ref": "#/definitions/ArtifactId"
+              }
+            },
+            "required": [
+              "checkId",
+              "coverage"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 10000
+        },
+        "scannedSet": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScopeId"
+          },
+          "description": "Never finer than the engine exposes.",
+          "maxItems": 100000
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScopedReason"
+          },
+          "maxItems": 100000
+        },
+        "actualReadSet": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScopeId"
+          },
+          "maxItems": 100000
+        },
+        "unresolvedFrontiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScopedReason"
+          },
+          "maxItems": 10000
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "$ref": "#/definitions/CatalogKey"
+              },
+              "scopeId": {
+                "$ref": "#/definitions/ScopeId"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 10000
+        }
+      },
+      "required": [
+        "actualReadSet",
+        "artifacts",
+        "attemptId",
+        "coordinatorEpoch",
+        "coveredChecks",
+        "diagnostics",
+        "granularity",
+        "inputFingerprint",
+        "observations",
+        "protocol",
+        "scannedSet",
+        "seq",
+        "skipped",
+        "type",
+        "unresolvedFrontiers",
+        "work"
+      ],
+      "additionalProperties": false,
+      "description": "A bounded candidate result. The coordinator recomputes digests and revalidates every field before publishing."
+    },
+    "CoverageGranularity": {
+      "type": "string",
+      "enum": [
+        "per-file-per-rule",
+        "per-file",
+        "aggregate"
+      ],
+      "description": "The finest scope an engine can establish. An aggregate scan cannot populate per-file/per-rule cells."
+    },
+    "ResultArtifact": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "mediaType": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "bytes": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "required": [
+        "id",
+        "mediaType",
+        "bytes"
+      ],
+      "additionalProperties": false
+    },
+    "ScopedReason": {
+      "type": "object",
+      "properties": {
+        "scopeId": {
+          "$ref": "#/definitions/ScopeId"
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        }
+      },
+      "required": [
+        "scopeId",
+        "reasonCode"
+      ],
+      "additionalProperties": false,
+      "description": "A coded reason attached to a scope (a skipped file, an unresolved frontier)."
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-worker.draft-1.schema.json",
+  "title": "sentinel-worker/draft-1"
+}

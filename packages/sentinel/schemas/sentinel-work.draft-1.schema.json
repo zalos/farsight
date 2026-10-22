@@ -1,0 +1,640 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/WorkEnvelope",
+  "definitions": {
+    "WorkEnvelope": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "enum": [
+            "pending",
+            "ready",
+            "published",
+            "failed",
+            "running",
+            "leased",
+            "blocked",
+            "disabled-by-policy",
+            "satisfied-by-reuse"
+          ]
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "ready",
+                  "published",
+                  "failed"
+                ]
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/IdleWork"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "running"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/RunningWork"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "leased"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/LeasedWork"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "blocked",
+                  "disabled-by-policy"
+                ]
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/HeldWork"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "satisfied-by-reuse"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/ReusedWork"
+          }
+        }
+      ],
+      "description": "sentinel-work/draft-1 — one logical work unit at one immutable revision."
+    },
+    "IdleWork": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-work/draft-1"
+        },
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "runId": {
+          "$ref": "#/definitions/Id"
+        },
+        "planRevision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "stage": {
+          "$ref": "#/definitions/StageRef"
+        },
+        "inputFingerprint": {
+          "$ref": "#/definitions/Digest"
+        },
+        "influenceManifest": {
+          "$ref": "#/definitions/ArtifactId",
+          "description": "The artifact listing every fingerprint input, kept so the hash can be inspected."
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/WorkRef"
+          },
+          "maxItems": 1024
+        },
+        "resources": {
+          "$ref": "#/definitions/ResourcePolicy"
+        },
+        "coordinatorEpoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "createdAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "ready",
+            "published",
+            "failed"
+          ]
+        },
+        "activeAttemptId": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "activeAttemptId",
+        "coordinatorEpoch",
+        "createdAt",
+        "dependencies",
+        "id",
+        "influenceManifest",
+        "inputFingerprint",
+        "planRevision",
+        "resources",
+        "revision",
+        "runId",
+        "schema",
+        "stage",
+        "state"
+      ],
+      "additionalProperties": false,
+      "description": "Waiting, ready, or finished without an active attempt."
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "Ordinal": {
+      "type": "integer",
+      "description": "A positive integer ordinal or revision.",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "StageRef": {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "contractVersion": {
+          "type": "string",
+          "pattern": "^draft-[1-9][0-9]*$|^v[1-9][0-9]*$"
+        },
+        "kind": {
+          "$ref": "#/definitions/StageKind"
+        },
+        "implementationDigest": {
+          "$ref": "#/definitions/Digest"
+        }
+      },
+      "required": [
+        "contract",
+        "contractVersion",
+        "kind",
+        "implementationDigest"
+      ],
+      "additionalProperties": false
+    },
+    "StageKind": {
+      "type": "string",
+      "enum": [
+        "coded",
+        "agentic",
+        "external-tool"
+      ],
+      "description": "Who implements a stage. An agentic stage never inherits a deterministic stage's provenance."
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ArtifactId": {
+      "$ref": "#/definitions/Digest",
+      "description": "An immutable object-store identity: the digest of canonical uncompressed bytes."
+    },
+    "WorkRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false,
+      "description": "A logical work unit at one immutable revision; every reference to work names both."
+    },
+    "ResourcePolicy": {
+      "type": "object",
+      "properties": {
+        "deadlineMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120000
+        },
+        "memoryBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483648
+        },
+        "cpuQuota": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 2
+        },
+        "maxPids": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        },
+        "maxOutputBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4194304
+        }
+      },
+      "required": [
+        "deadlineMs",
+        "memoryBytes",
+        "cpuQuota",
+        "maxPids",
+        "maxOutputBytes"
+      ],
+      "additionalProperties": false,
+      "description": "Bounds the supervisor enforces. The PR 01 proposed ceilings (2 GiB, 2 CPUs, 128 PIDs, 120 s, 4 MiB output) are the maxima here; a profile may only lower them."
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "A UTC RFC 3339 timestamp with an explicit Z offset.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    },
+    "RunningWork": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-work/draft-1"
+        },
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "runId": {
+          "$ref": "#/definitions/Id"
+        },
+        "planRevision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "stage": {
+          "$ref": "#/definitions/StageRef"
+        },
+        "inputFingerprint": {
+          "$ref": "#/definitions/Digest"
+        },
+        "influenceManifest": {
+          "$ref": "#/definitions/ArtifactId",
+          "description": "The artifact listing every fingerprint input, kept so the hash can be inspected."
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/WorkRef"
+          },
+          "maxItems": 1024
+        },
+        "resources": {
+          "$ref": "#/definitions/ResourcePolicy"
+        },
+        "coordinatorEpoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "createdAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "state": {
+          "type": "string",
+          "const": "running"
+        },
+        "activeAttemptId": {
+          "$ref": "#/definitions/Id"
+        }
+      },
+      "required": [
+        "activeAttemptId",
+        "coordinatorEpoch",
+        "createdAt",
+        "dependencies",
+        "id",
+        "influenceManifest",
+        "inputFingerprint",
+        "planRevision",
+        "resources",
+        "revision",
+        "runId",
+        "schema",
+        "stage",
+        "state"
+      ],
+      "additionalProperties": false,
+      "description": "An owned child or container attempt is running."
+    },
+    "LeasedWork": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-work/draft-1"
+        },
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "runId": {
+          "$ref": "#/definitions/Id"
+        },
+        "planRevision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "stage": {
+          "$ref": "#/definitions/StageRef"
+        },
+        "inputFingerprint": {
+          "$ref": "#/definitions/Digest"
+        },
+        "influenceManifest": {
+          "$ref": "#/definitions/ArtifactId",
+          "description": "The artifact listing every fingerprint input, kept so the hash can be inspected."
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/WorkRef"
+          },
+          "maxItems": 1024
+        },
+        "resources": {
+          "$ref": "#/definitions/ResourcePolicy"
+        },
+        "coordinatorEpoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "createdAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "state": {
+          "type": "string",
+          "const": "leased"
+        },
+        "activeAttemptId": {
+          "$ref": "#/definitions/Id"
+        },
+        "claim": {
+          "type": "object",
+          "properties": {
+            "leaseExpiresAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "fencingGeneration": {
+              "$ref": "#/definitions/Count"
+            }
+          },
+          "required": [
+            "leaseExpiresAt",
+            "fencingGeneration"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "activeAttemptId",
+        "claim",
+        "coordinatorEpoch",
+        "createdAt",
+        "dependencies",
+        "id",
+        "influenceManifest",
+        "inputFingerprint",
+        "planRevision",
+        "resources",
+        "revision",
+        "runId",
+        "schema",
+        "stage",
+        "state"
+      ],
+      "additionalProperties": false,
+      "description": "An external client holds an expiring, fenced claim. Expiry is an interruption, not proof the client stopped."
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "HeldWork": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-work/draft-1"
+        },
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "runId": {
+          "$ref": "#/definitions/Id"
+        },
+        "planRevision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "stage": {
+          "$ref": "#/definitions/StageRef"
+        },
+        "inputFingerprint": {
+          "$ref": "#/definitions/Digest"
+        },
+        "influenceManifest": {
+          "$ref": "#/definitions/ArtifactId",
+          "description": "The artifact listing every fingerprint input, kept so the hash can be inspected."
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/WorkRef"
+          },
+          "maxItems": 1024
+        },
+        "resources": {
+          "$ref": "#/definitions/ResourcePolicy"
+        },
+        "coordinatorEpoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "createdAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "blocked",
+            "disabled-by-policy"
+          ]
+        },
+        "activeAttemptId": {
+          "type": "null"
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        }
+      },
+      "required": [
+        "activeAttemptId",
+        "coordinatorEpoch",
+        "createdAt",
+        "dependencies",
+        "id",
+        "influenceManifest",
+        "inputFingerprint",
+        "planRevision",
+        "reasonCode",
+        "resources",
+        "revision",
+        "runId",
+        "schema",
+        "stage",
+        "state"
+      ],
+      "additionalProperties": false,
+      "description": "Blocked by a dependency or disabled by policy: a decision with a reason, not a fake successful attempt."
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "ReusedWork": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-work/draft-1"
+        },
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "runId": {
+          "$ref": "#/definitions/Id"
+        },
+        "planRevision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "stage": {
+          "$ref": "#/definitions/StageRef"
+        },
+        "inputFingerprint": {
+          "$ref": "#/definitions/Digest"
+        },
+        "influenceManifest": {
+          "$ref": "#/definitions/ArtifactId",
+          "description": "The artifact listing every fingerprint input, kept so the hash can be inspected."
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/WorkRef"
+          },
+          "maxItems": 1024
+        },
+        "resources": {
+          "$ref": "#/definitions/ResourcePolicy"
+        },
+        "coordinatorEpoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "createdAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "state": {
+          "type": "string",
+          "const": "satisfied-by-reuse"
+        },
+        "activeAttemptId": {
+          "type": "null"
+        },
+        "reuse": {
+          "type": "object",
+          "properties": {
+            "publication": {
+              "$ref": "#/definitions/WorkRef"
+            },
+            "derivationArtifact": {
+              "$ref": "#/definitions/ArtifactId"
+            }
+          },
+          "required": [
+            "publication",
+            "derivationArtifact"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "activeAttemptId",
+        "coordinatorEpoch",
+        "createdAt",
+        "dependencies",
+        "id",
+        "influenceManifest",
+        "inputFingerprint",
+        "planRevision",
+        "resources",
+        "reuse",
+        "revision",
+        "runId",
+        "schema",
+        "stage",
+        "state"
+      ],
+      "additionalProperties": false,
+      "description": "Satisfied by explicit reuse: it points at the original publication and never counts as executed now."
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-work.draft-1.schema.json",
+  "title": "sentinel-work/draft-1"
+}

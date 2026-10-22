@@ -1,0 +1,389 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/ObservationEnvelope",
+  "definitions": {
+    "ObservationEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-observation/draft-1"
+        },
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "snapshotId": {
+          "$ref": "#/definitions/Id"
+        },
+        "producer": {
+          "$ref": "#/definitions/ObservationProducer"
+        },
+        "producerRuleId": {
+          "type": "string",
+          "description": "The producer's own rule ID, kept as supplied.",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "rule": {
+          "type": "object",
+          "properties": {
+            "familyId": {
+              "$ref": "#/definitions/Id"
+            },
+            "revisionDigest": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "familyId",
+            "revisionDigest"
+          ],
+          "additionalProperties": false,
+          "description": "The Sentinel rule family and revision this observation was planned under, when one exists."
+        },
+        "originalSeverity": {
+          "$ref": "#/definitions/ShortText",
+          "description": "As the producer supplied it: never normalized in place."
+        },
+        "originalConfidence": {
+          "$ref": "#/definitions/ShortText"
+        },
+        "message": {
+          "$ref": "#/definitions/BoundedText"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SourceEvidence"
+          },
+          "maxItems": 256
+        },
+        "limitationKeys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CatalogKey"
+          },
+          "maxItems": 64
+        },
+        "mappings": {
+          "type": "object",
+          "properties": {
+            "cwe": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/CweId"
+              },
+              "maxItems": 16
+            }
+          },
+          "additionalProperties": false
+        },
+        "observedAt": {
+          "$ref": "#/definitions/Timestamp"
+        }
+      },
+      "required": [
+        "schema",
+        "id",
+        "snapshotId",
+        "producer",
+        "producerRuleId",
+        "originalSeverity",
+        "message",
+        "evidence",
+        "limitationKeys",
+        "observedAt"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-observation/draft-1 — one producer's immutable original claim. Correlation never rewrites it."
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "ObservationProducer": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "scanner",
+            "framework-pack",
+            "model-review",
+            "imported"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "scanner",
+                  "framework-pack"
+                ]
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "scanner",
+                  "framework-pack"
+                ]
+              },
+              "adapterId": {
+                "$ref": "#/definitions/Id"
+              },
+              "adapterDigest": {
+                "$ref": "#/definitions/Digest"
+              },
+              "attemptId": {
+                "$ref": "#/definitions/Id"
+              }
+            },
+            "required": [
+              "kind",
+              "adapterId",
+              "adapterDigest",
+              "attemptId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "model-review"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "model-review"
+              },
+              "adapterId": {
+                "$ref": "#/definitions/Id"
+              },
+              "adapterDigest": {
+                "$ref": "#/definitions/Digest"
+              },
+              "attemptId": {
+                "$ref": "#/definitions/Id"
+              },
+              "model": {
+                "$ref": "#/definitions/ModelIdentity"
+              },
+              "promptDigest": {
+                "$ref": "#/definitions/Digest"
+              }
+            },
+            "required": [
+              "kind",
+              "adapterId",
+              "adapterDigest",
+              "attemptId",
+              "model",
+              "promptDigest"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "imported",
+                "description": "Imported evidence never counts as a newly executed check."
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "imported",
+                "description": "Imported evidence never counts as a newly executed check."
+              },
+              "provenanceArtifact": {
+                "$ref": "#/definitions/Digest"
+              }
+            },
+            "required": [
+              "kind",
+              "provenanceArtifact"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ]
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ModelIdentity": {
+      "type": "object",
+      "properties": {
+        "requestedModel": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "returnedModel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "immutableRevision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "source": {
+          "$ref": "#/definitions/IdentitySource"
+        }
+      },
+      "required": [
+        "requestedModel",
+        "returnedModel",
+        "immutableRevision",
+        "source"
+      ],
+      "additionalProperties": false,
+      "description": "A model's identity at the strength it is actually known, never inferred from response text."
+    },
+    "IdentitySource": {
+      "type": "string",
+      "enum": [
+        "provider-response",
+        "local-weight-digest",
+        "host-reported",
+        "self-reported",
+        "unknown"
+      ],
+      "description": "How a worker's identity is known. Host-reported identity is not provider attestation."
+    },
+    "ShortText": {
+      "type": "string",
+      "description": "A short label (a severity as supplied, a framework name).",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "BoundedText": {
+      "type": "string",
+      "description": "Untrusted text supplied by a producer (a scanner message, a rationale). Always escaped when rendered.",
+      "maxLength": 4000
+    },
+    "SourceEvidence": {
+      "type": "object",
+      "properties": {
+        "snapshotId": {
+          "$ref": "#/definitions/Id"
+        },
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "relativePath": {
+          "$ref": "#/definitions/RelativePath"
+        },
+        "content": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "span": {
+          "$ref": "#/definitions/ByteSpan"
+        },
+        "quoteDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "nodeId": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "occurrenceId": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "snapshotId",
+        "sourceId",
+        "relativePath",
+        "content",
+        "span"
+      ],
+      "additionalProperties": false,
+      "description": "A citation into captured snapshot bytes. Source ID is part of identity: equal paths in two repositories differ."
+    },
+    "RelativePath": {
+      "type": "string",
+      "description": "A source-relative POSIX path: no leading slash, no `.`/`..` segment, no empty segment, no backslash or NUL.",
+      "pattern": "^(?![/])(?!(.*[/])?\\.{1,2}([/]|$))(?!.*[/][/])[^\\\\\\u0000]+$",
+      "maxLength": 4096
+    },
+    "ArtifactId": {
+      "$ref": "#/definitions/Digest",
+      "description": "An immutable object-store identity: the digest of canonical uncompressed bytes."
+    },
+    "ByteSpan": {
+      "type": "object",
+      "properties": {
+        "startByte": {
+          "$ref": "#/definitions/Count"
+        },
+        "endByte": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "required": [
+        "startByte",
+        "endByte"
+      ],
+      "additionalProperties": false,
+      "description": "Zero-based, half-open UTF-8 byte offsets."
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "CweId": {
+      "type": "string",
+      "pattern": "^CWE-[1-9][0-9]{0,4}$"
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "A UTC RFC 3339 timestamp with an explicit Z offset.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-observation.draft-1.schema.json",
+  "title": "sentinel-observation/draft-1"
+}

@@ -1,0 +1,12 @@
+{
+  "protocol": "sentinel-worker/draft-1",
+  "attemptId": "att-9",
+  "work": {
+    "id": "work-pattern-api",
+    "revision": 1
+  },
+  "coordinatorEpoch": "epoch-7",
+  "type": "heartbeat",
+  "seq": 4,
+  "fencingGeneration": 3
+}

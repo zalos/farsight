@@ -1,0 +1,394 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/DispositionEnvelope",
+  "definitions": {
+    "DispositionEnvelope": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "enum": [
+            "proposed",
+            "approved"
+          ]
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "proposed"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/ProposedDisposition"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "approved"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/ApprovedDisposition"
+          }
+        }
+      ],
+      "description": "sentinel-disposition/draft-1 — an append-only, scoped, expiring decision about one finding group."
+    },
+    "ProposedDisposition": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-disposition/draft-1"
+        },
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "findingGroupId": {
+          "$ref": "#/definitions/Id"
+        },
+        "scope": {
+          "type": "object",
+          "properties": {
+            "surfaceIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Id"
+              },
+              "maxItems": 1024
+            },
+            "environmentDigest": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "surfaceIds",
+            "environmentDigest"
+          ],
+          "additionalProperties": false,
+          "description": "Never wider than the finding's own scope; partial path coverage leaves the other paths open."
+        },
+        "decision": {
+          "$ref": "#/definitions/DispositionDecision"
+        },
+        "rationale": {
+          "$ref": "#/definitions/BoundedText"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Digest"
+          },
+          "maxItems": 256
+        },
+        "assertions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DeploymentAssertionRef"
+          },
+          "maxItems": 64
+        },
+        "createdAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "expiresAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "type": "string",
+          "const": "proposed"
+        },
+        "actor": {
+          "type": "object",
+          "properties": {
+            "channel": {
+              "$ref": "#/definitions/DecisionChannel"
+            },
+            "principal": {
+              "$ref": "#/definitions/ShortText"
+            }
+          },
+          "required": [
+            "channel",
+            "principal"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "actor",
+        "assertions",
+        "createdAt",
+        "decision",
+        "evidence",
+        "expiresAt",
+        "findingGroupId",
+        "id",
+        "rationale",
+        "schema",
+        "scope",
+        "state",
+        "supersedes"
+      ],
+      "additionalProperties": false,
+      "description": "A proposal from any channel. A claimed human name in the body grants nothing."
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "DispositionDecision": {
+      "type": "string",
+      "enum": [
+        "accepted-risk",
+        "false-positive",
+        "mitigated",
+        "deferred"
+      ],
+      "description": "An accepted risk remains a risk; a mitigation is only as strong as the evidence it names."
+    },
+    "BoundedText": {
+      "type": "string",
+      "description": "Untrusted text supplied by a producer (a scanner message, a rationale). Always escaped when rendered.",
+      "maxLength": 4000
+    },
+    "DeploymentAssertionRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "trust": {
+          "$ref": "#/definitions/AssertionTrust"
+        },
+        "environmentDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Digest"
+          },
+          "maxItems": 64
+        },
+        "lastVerifiedAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expiresAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "trust",
+        "environmentDigest",
+        "evidence",
+        "lastVerifiedAt",
+        "expiresAt"
+      ],
+      "additionalProperties": false
+    },
+    "AssertionTrust": {
+      "type": "string",
+      "enum": [
+        "asserted",
+        "imported-config",
+        "runtime-observed"
+      ],
+      "description": "Assertion provenance, kept apart from graph evidence classes."
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "A UTC RFC 3339 timestamp with an explicit Z offset.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    },
+    "DecisionChannel": {
+      "type": "string",
+      "enum": [
+        "owner-cli",
+        "mcp",
+        "http-bridge",
+        "model"
+      ],
+      "description": "Where a decision came from. Only a trusted local owner action approves; MCP, HTTP and model output propose."
+    },
+    "ShortText": {
+      "type": "string",
+      "description": "A short label (a severity as supplied, a framework name).",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "ApprovedDisposition": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-disposition/draft-1"
+        },
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "findingGroupId": {
+          "$ref": "#/definitions/Id"
+        },
+        "scope": {
+          "type": "object",
+          "properties": {
+            "surfaceIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Id"
+              },
+              "maxItems": 1024
+            },
+            "environmentDigest": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "surfaceIds",
+            "environmentDigest"
+          ],
+          "additionalProperties": false,
+          "description": "Never wider than the finding's own scope; partial path coverage leaves the other paths open."
+        },
+        "decision": {
+          "$ref": "#/definitions/DispositionDecision"
+        },
+        "rationale": {
+          "$ref": "#/definitions/BoundedText"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Digest"
+          },
+          "maxItems": 256
+        },
+        "assertions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DeploymentAssertionRef"
+          },
+          "maxItems": 64
+        },
+        "createdAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "expiresAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "type": "string",
+          "const": "approved"
+        },
+        "actor": {
+          "type": "object",
+          "properties": {
+            "channel": {
+              "type": "string",
+              "const": "owner-cli"
+            },
+            "principal": {
+              "$ref": "#/definitions/ShortText"
+            },
+            "confirmationReceipt": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "channel",
+            "principal",
+            "confirmationReceipt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "actor",
+        "assertions",
+        "createdAt",
+        "decision",
+        "evidence",
+        "expiresAt",
+        "findingGroupId",
+        "id",
+        "rationale",
+        "schema",
+        "scope",
+        "state",
+        "supersedes"
+      ],
+      "additionalProperties": false,
+      "description": "An approval, which only the owner's local CLI flow can record."
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-disposition.draft-1.schema.json",
+  "title": "sentinel-disposition/draft-1"
+}
