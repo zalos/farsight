@@ -18,7 +18,9 @@ import { canonicalJsonBytes } from '../store/objects.js';
 import { LedgerError } from '../store/store-types.js';
 import { ExecutionError, isExecutionError } from './errors.js';
 import { publishOutcome, PUBLICATION_BOUNDARIES, type BoundaryContext } from './publication.js';
-import { IntentFiles, recoverStore, WorkerFiles, type RecoveryReport } from './recovery.js';
+import { IntentFiles, recoverStore, UnknownCleanup, WorkerFiles, type RecoveryReport } from './recovery.js';
+import type { DockerRunner } from './isolation.js';
+import type { ContainerIntent } from './supervisor.js';
 import { effectiveLimits, TRUSTED_ADAPTERS, type AdapterRegistry } from './registry.js';
 import {
   checkRetryPolicy, decide, DEFAULT_CAPACITY, DEFAULT_RETRY, orderPlan, ReservationPool, retryable,
@@ -38,7 +40,7 @@ export interface PlanBoundary {
   inputsFor(work: WorkEnvelope): readonly CapturedInput[];
 }
 
-export const COORDINATOR_BOUNDARIES = ['after-attempt-start', ...PUBLICATION_BOUNDARIES] as const;
+export const COORDINATOR_BOUNDARIES = ['before-spawn', 'after-spawn', 'after-attempt-start', ...PUBLICATION_BOUNDARIES] as const;
 export type CoordinatorBoundary = typeof COORDINATOR_BOUNDARIES[number];
 
 /** Test seam (deterministic crash injection). Production passes none. */
@@ -56,6 +58,14 @@ export interface CoordinatorOptions {
   capacity?: Capacity;
   retry?: RetryPolicy;
   hooks?: CoordinatorHooks;
+  /**
+   * How long run() keeps re-checking cleanup that recovery could not confirm (a create that may still commit, a
+   * container whose removal failed, a worker whose identity could not be read, an unreadable journal record)
+   * before it returns blocked. Nothing new is admitted meanwhile. 0–600000 ms, default 30000.
+   */
+  cleanupWaitMs?: number;
+  /** Package-internal test seam for the container runtime (see ContainerBackend.connect). */
+  backendOptions?: { wrapRunner?: (runner: DockerRunner) => DockerRunner };
 }
 
 export interface UnitFailure { work: WorkRef; attemptId: Id | null; code: string; detail?: Readonly<Record<string, unknown>> }
@@ -71,6 +81,13 @@ export interface RunSummary {
   published: number;
   /** False while recovery holds an obligation, a pending intent, an unreadable journal record or an uncertain container. */
   clean: boolean;
+  /**
+   * Cleanup still unconfirmed when run() returned: while any remains, no new work was admitted, since a prior
+   * worker may still be running and holding resources. Empty when admission was free.
+   */
+  blockedByCleanup: string[];
+  /** Records acknowledged as terminal-unknown by acknowledgeUnknownCleanup(): kept for audit, never clean. */
+  unknownCleanup: string[];
 }
 
 const key = (r: WorkRef) => `${r.id}@${r.revision}`;
@@ -94,12 +111,23 @@ export class Coordinator {
   readonly #failures: UnitFailure[] = [];
   /** Units refused before any worker existed (no attempt in the ledger): not retried in this coordinator. */
   readonly #failedUnstarted = new Map<string, string>();
-  readonly recovery: RecoveryReport;
+  readonly #unknown: UnknownCleanup;
+  readonly #cleanupWaitMs: number;
+  readonly #backendOptions: CoordinatorOptions['backendOptions'];
+  /** The latest recovery; replaced each time unconfirmed cleanup is re-checked. */
+  recovery: RecoveryReport;
+  /** This epoch's own creates that ended without a confirmed answer: they block admission until settled. */
+  readonly #pendingNow: ContainerIntent[] = [];
   #pauseRequested = false;
   #cancelRequested = false;
 
   private constructor(o: CoordinatorOptions, service: ExecutionService, intents: IntentFiles, workers: WorkerFiles, recovery: RecoveryReport) {
     this.#store = o.store; this.#plan = o.plan; this.#service = service; this.#intents = intents; this.#workers = workers;
+    this.#unknown = new UnknownCleanup(o.store.storePath);
+    const wait = o.cleanupWaitMs ?? 30_000;
+    if (!Number.isInteger(wait) || wait < 0 || wait > 600_000) throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'cleanupWaitMs is 0 to 600000' });
+    this.#cleanupWaitMs = wait;
+    this.#backendOptions = o.backendOptions;
     this.#pool = new ReservationPool(o.capacity ?? DEFAULT_CAPACITY);
     this.#retry = checkRetryPolicy(o.retry ?? DEFAULT_RETRY);
     this.#registry = o.registry ?? TRUSTED_ADAPTERS;
@@ -116,7 +144,8 @@ export class Coordinator {
         throw new ExecutionError('sentinel.execution.planInvalid', { reason: `work ${key(w)} belongs to another run or plan revision` });
       }
     }
-    const service = await createExecutionService(o.store, { scratchRoot: o.scratchRoot, ...(o.registry ? { registry: o.registry } : {}), ...(o.containers ? { containers: true } : {}) });
+    const service = await createExecutionService(o.store, { scratchRoot: o.scratchRoot, ...(o.registry ? { registry: o.registry } : {}),
+      ...(o.containers ? { containers: true } : {}), ...(o.backendOptions?.wrapRunner ? { wrapRunner: o.backendOptions.wrapRunner } : {}) });
     const intents = new IntentFiles(o.store.storePath);
     const workers = new WorkerFiles(o.store.storePath);
     const recovery = await recoverStore(o.store, { intents, workers, ...(service.backend ? { backend: service.backend } : {}) });
@@ -135,6 +164,18 @@ export class Coordinator {
     const s = this.#runState();
     if (s && s !== 'canceling' && s !== 'canceled' && s !== 'completed') this.#store.ledger.setRunState(this.#plan.run.id, 'canceling');
     this.#cancel.abort();
+  }
+
+  /**
+   * The explicit decision that unconfirmed cleanup will not be confirmed: every pending intent, worker obligation
+   * and unreadable journal record is moved, byte for byte, into the terminal-unknown journal, kept for audit and
+   * reported in every later summary, and admission continues. A container whose removal failed is not covered: it
+   * is still present and keeps blocking until it is removed.
+   */
+  acknowledgeUnknownCleanup(): string[] {
+    const moved = this.#unknown.acknowledge([this.#intents.dir, this.#workers.dir], this.recovery);
+    this.recovery = { ...this.recovery, pendingIntents: [], obligations: [], unresolved: [] };
+    return moved;
   }
 
   /** The plan's units as the ledger has them now. */
@@ -159,11 +200,15 @@ export class Coordinator {
     }
     this.#pauseRequested = false;
 
+    // Unconfirmed cleanup holds admission: a prior worker may still run and hold what a new one would be given.
+    const blocked = await this.#awaitCleanup();
+    if (blocked.length) return this.#summary(blocked);
+
     const inflight = new Map<string, Promise<void>>();
     for (;;) {
       const decisions = this.progress();
       this.#persistHolds(decisions);
-      const admitting = !this.#pauseRequested && !this.#cancelRequested && this.#runState() === 'running';
+      const admitting = !this.#pauseRequested && !this.#cancelRequested && this.#runState() === 'running' && this.#pendingNow.length === 0;
       let admitted = 0;
       if (admitting) {
         for (const d of decisions) {
@@ -179,6 +224,11 @@ export class Coordinator {
       }
       if (inflight.size === 0) {
         if (this.#cancelRequested) { this.#finishRunState('canceled'); break; }
+        if (this.#pendingNow.length) {
+          const still = await this.#awaitCleanup();
+          if (still.length) return this.#summary(still);
+          continue;
+        }
         if (this.#pauseRequested || this.#runState() === 'pausing') { this.#finishRunState('paused'); break; }
         const final = this.progress();
         if (final.every(d => ['published', 'failed', 'blocked', 'disabled'].includes(d.state))) {
@@ -195,6 +245,34 @@ export class Coordinator {
       }
     }
     return this.#summary();
+  }
+
+  /** What recovery could not confirm and nobody acknowledged: each one blocks admission. */
+  #outstanding(): string[] {
+    const r = this.recovery;
+    return [
+      ...this.#pendingNow.map(i => `pending container create ${i.name}`),
+      ...r.pendingIntents.map(i => `pending container create ${i.name}`),
+      ...r.uncertain.map(c => `container ${c} not confirmed removed`),
+      ...r.obligations.map(o => `worker ${o.pid || '?'} of attempt ${o.attempt}: ${o.reason}`),
+      ...r.unresolved.map(u => `unreadable ${u.journal} record ${u.file}: ${u.reason}`),
+    ];
+  }
+
+  /** Re-check unconfirmed cleanup about once a second, up to cleanupWaitMs; returns what still blocks. */
+  async #awaitCleanup(): Promise<string[]> {
+    const deadline = Date.now() + this.#cleanupWaitMs;
+    for (;;) {
+      const left = this.#outstanding();
+      if (left.length === 0 || this.#cancelRequested) return left;
+      if (Date.now() >= deadline) return left;
+      await new Promise(r => setTimeout(r, Math.min(1_000, Math.max(0, deadline - Date.now()))));
+      this.recovery = await recoverStore(this.#store, { intents: this.#intents, workers: this.#workers, ...(this.#service.backend ? { backend: this.#service.backend } : {}) });
+      for (const intent of [...this.#pendingNow]) {
+        const r = await this.#service.backend?.settleIntent(intent).catch(() => 'uncertain' as const);
+        if (r === 'removed') { this.#intents.settle(intent); this.#pendingNow.splice(this.#pendingNow.indexOf(intent), 1); }
+      }
+    }
   }
 
   /** Record in the ledger each hold the plan or the scheduler decided: disabled by policy, blocked by a dependency. */
@@ -243,6 +321,7 @@ export class Coordinator {
       outcome = await this.#service.run({
         adapterId: this.#plan.adapterFor(work), attemptId: id, work: ref, inputs: this.#plan.inputsFor(work),
         signal: this.#cancel.signal, intents: this.#intents, workers: this.#workers, resources: work.resources,
+        ...(this.#hooks ? { hooks: { at: (b: 'before-spawn' | 'after-spawn') => this.#hooks!.at?.(b, { work: ref, attemptId: id }) } } : {}),
         onWorker: worker => {
           this.#store.ledger.startAttempt({
             schema: 'sentinel-attempt/draft-1', id, work: ref, ordinal, coordinatorEpoch: this.#store.epoch, operationId: id,
@@ -291,6 +370,12 @@ export class Coordinator {
 
   #unstarted(ref: WorkRef, code: string, detail?: Readonly<Record<string, unknown>>): void {
     this.#failures.push({ work: ref, attemptId: null, code, ...(detail ? { detail } : {}) });
+    // A create that may still commit: hold admission until its container is confirmed absent, then try the unit again.
+    if (code === 'sentinel.execution.reconciliationPending' && detail && typeof detail.owner === 'string') {
+      this.#pendingNow.push({ name: String(detail.name), owner: String(detail.owner), store: String(detail.store), attempt: String(detail.attempt),
+        epoch: String(detail.epoch), invocation: String(detail.invocation) });
+      return;
+    }
     // Refused before any worker acted (an unknown adapter, a mismatched input, a pending create): not retried here.
     if (!this.#cancelRequested && !this.#pauseRequested) this.#failedUnstarted.set(key(ref), code);
   }
@@ -318,13 +403,14 @@ export class Coordinator {
     return this.#store.ledger.getRun(this.#plan.run.id)?.state;
   }
 
-  #summary(): RunSummary {
+  #summary(blockedByCleanup: string[] = []): RunSummary {
     const units = this.progress();
     const run = this.#store.ledger.getRun(this.#plan.run.id);
     let published = 0;
     for (const w of this.#plan.works) if (this.#store.ledger.getPublication({ id: w.id, revision: w.revision })) published++;
     return { runId: this.#plan.run.id, state: run?.state ?? 'planned', ...(run?.outcome ? { outcome: run.outcome } : {}), units,
-      failures: [...this.#failures], recovery: this.recovery, published, clean: this.recovery.clean };
+      failures: [...this.#failures], recovery: this.recovery, published, blockedByCleanup,
+      unknownCleanup: this.#unknown.list(), clean: this.recovery.clean && this.#unknown.list().length === 0 };
   }
 }
 

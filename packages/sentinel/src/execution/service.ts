@@ -4,7 +4,7 @@
 // its caller. There is no other production path to an owner than openStore().
 import type { SentinelStore } from '../store/index.js';
 import { boundOwner } from '../store/owner-binding.js';
-import { ContainerBackend } from './isolation.js';
+import { ContainerBackend, type DockerRunner } from './isolation.js';
 import { TRUSTED_ADAPTERS, type AdapterRegistry } from './registry.js';
 import { superviseAttempt, type AttemptRequest, type WorkerOutcome } from './supervisor.js';
 
@@ -24,6 +24,8 @@ export interface ExecutionServiceOptions {
   /** Connect and qualify the local container runtime now; external adapters cannot run without it. */
   containers?: boolean;
   signal?: AbortSignal;
+  /** Package-internal test seam: wraps the container runtime client (fault injection). */
+  wrapRunner?: (runner: DockerRunner) => DockerRunner;
 }
 
 export async function createExecutionService(store: SentinelStore, options: ExecutionServiceOptions): Promise<ExecutionService> {
@@ -31,7 +33,7 @@ export async function createExecutionService(store: SentinelStore, options: Exec
   owner.assertHeld();
   const registry = options.registry ?? TRUSTED_ADAPTERS;
   const backend = options.containers
-    ? await ContainerBackend.connect({ privateDir: options.scratchRoot, ...(options.signal ? { signal: options.signal } : {}) })
+    ? await ContainerBackend.connect({ privateDir: options.scratchRoot, ...(options.signal ? { signal: options.signal } : {}), ...(options.wrapRunner ? { wrapRunner: options.wrapRunner } : {}) })
     : undefined;
   return Object.freeze({
     ...(backend ? { backend } : {}),

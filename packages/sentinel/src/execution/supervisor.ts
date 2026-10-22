@@ -67,6 +67,8 @@ export interface AttemptRequest {
   workers?: WorkerJournal;
   /** The work's own resource policy; it lowers the adapter's limits (never raises them) for this attempt. */
   resources?: ResourcePolicy;
+  /** Test seam: called with the worker's durable identity in place, just before and just after it is started. */
+  hooks?: { at?(boundary: 'before-spawn' | 'after-spawn'): void };
 }
 
 export type OutcomeState = 'succeeded' | 'failed' | 'canceled' | 'timed-out';
@@ -226,6 +228,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     const intent = intentDetail({ labels });
     try {
       request.intents?.record(intent);
+      request.hooks?.at?.('before-spawn');
       guard.createPending = true;
       containerId = await b.create({
         image: image!, command: adapter.command, limits, inputDir, outputDir, adapter: { id: adapter.id, digest: adapter.digest }, user: containerUser(), labels,
@@ -245,6 +248,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       }
       outcome.container = { id: containerId, image: image! };
       outcome.worker = { kind: 'owned-container', containerId, ownershipLabels: { store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch } };
+      request.hooks?.at?.('after-spawn');
       request.onWorker?.(outcome.worker);
     } catch (error) {
       // A container that exists is removed before the error leaves; its intent is settled only when that is confirmed.
@@ -261,6 +265,11 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     const id = containerId;
     proc = b.startAttached(id);
   } else {
+    // Durable before the process exists: its random token, so a worker started just before a crash can be found by
+    // the token in its kernel argument list even though its process id was never recorded.
+    identity = { attempt: request.attemptId, store: owner.storeId, epoch: owner.epoch, pid: 0, token, kernelStart: '' };
+    request.workers?.record(identity);
+    request.hooks?.at?.('before-spawn');
     // A built-in worker inherits nothing: its environment is exactly these four names.
     proc = spawnWorker(process.execPath, [adapter.module, inputDir, outputDir, tokenArgument(token)], { cwd: workDir, env: {
       SENTINEL_INPUT: inputDir, SENTINEL_OUTPUT: outputDir, SENTINEL_ADAPTER_ID: adapter.id, SENTINEL_ADAPTER_DIGEST: adapter.digest,
@@ -269,9 +278,10 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     if (pid) outcome.worker = { kind: 'owned-child', pid, processStartedAt: proc.startedAt.toISOString() };
     try {
       if (!outcome.worker || !pid) throw new ExecutionError('sentinel.execution.workerExited', { reason: 'no process id' });
-      // The identity is durable before the attempt is recorded, so a crash at any later point leaves a verifiable worker.
+      // Now with its process id and, on Linux, its exact kernel start; still before the attempt is recorded.
       identity = { attempt: request.attemptId, store: owner.storeId, epoch: owner.epoch, pid, token, kernelStart: kernelStartOf(pid) ?? '' };
       request.workers?.record(identity);
+      request.hooks?.at?.('after-spawn');
       request.onWorker?.(outcome.worker);
     } catch (error) {
       proc.kill();

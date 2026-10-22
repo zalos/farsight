@@ -60,3 +60,22 @@ export function ledgerState(store: any, plan: any) {
     work: Object.fromEntries(plan.works.map((w: any) => [w.id, store.ledger.getWork({ id: w.id, revision: w.revision })])),
   };
 }
+
+/** node:22-alpine as an OCI index pinned by digest; installed ahead for the container tests, never pulled by them. */
+export const CANARY_IMAGE = 'node@sha256:ebc216c22db53dbde85719a874978d5aec04e6e405ad26a3804c6f9abc4ca1a9';
+
+/** The same diamond plan, executed by the hostile worker inside real containers (external adapters). */
+export async function containerPlan(root: string, behaviours: Record<string, string> = {}) {
+  const { readFileSync } = await import('node:fs');
+  const { createAdapterRegistry } = await import('../dist/execution/registry.js');
+  const { WORKER } = await import('./execution-helpers.ts');
+  const base = syntheticPlan(root, behaviours);
+  const source = readFileSync(WORKER, 'utf8');
+  const kinds = [...new Set(base.units.map(u => behaviours[u] ?? 'ok'))];
+  const registry = createAdapterRegistry(kinds.map(b => ({
+    id: `canary-${b}`, version: '0.0.0-test', kind: 'external' as const, isolation: 'container' as const, image: CANARY_IMAGE,
+    command: ['node', '--input-type=module', '-e', source, b], limits: { timeoutMs: 30_000, helloTimeoutMs: 15_000, cancelGraceMs: 2_000, memoryBytes: 256 * 1024 * 1024, pids: 64, tmpfsBytes: 16 * 1024 * 1024 },
+  })));
+  const plan = { ...base.plan, adapterFor: (w: { id: string }) => `canary-${behaviours[w.id.slice(5)] ?? 'ok'}` };
+  return { plan, registry };
+}

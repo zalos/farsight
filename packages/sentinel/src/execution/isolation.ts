@@ -167,7 +167,7 @@ export class ContainerBackend {
    * configuration. Refuses a remote endpoint, an unqualified combination or missing resource controllers.
    * `runner` is the package-internal test seam (see DockerRunner); production never passes one.
    */
-  static async connect(options: { privateDir: string; policy?: IsolationPolicy; docker?: string; signal?: AbortSignal; runner?: DockerRunner }): Promise<ContainerBackend> {
+  static async connect(options: { privateDir: string; policy?: IsolationPolicy; docker?: string; signal?: AbortSignal; runner?: DockerRunner; wrapRunner?: (runner: DockerRunner) => DockerRunner }): Promise<ContainerBackend> {
     let runner = options.runner;
     if (!runner) {
       const docker = options.docker ?? locateDocker();
@@ -175,6 +175,8 @@ export class ContainerBackend {
       const config = mkdtempSync(join(options.privateDir, 'docker-config-'));
       runner = clientRunner(docker, { PATH: SAFE_PATH, DOCKER_HOST: endpoint, DOCKER_CONFIG: config });
     }
+    // Package-internal fault injection around the real client (lost replies, delayed commits); never in production.
+    if (options.wrapRunner) runner = options.wrapRunner(runner);
     const version = await runner.run(['version', '--format', '{{json .Server}}'], options.signal);
     if (!succeeded(version)) unavailable('docker server unreachable');
     const info = await runner.run(['info', '--format', '{{json .}}'], options.signal);
