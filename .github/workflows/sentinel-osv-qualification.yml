@@ -1,0 +1,94 @@
+# Qualification of the OSV advisory adapter on a native Linux/amd64 runner (PR 12, ADR 29). It runs on a pull request
+# only when the OSV adapter, its fixtures, the execution service it uses or this workflow changes, and by hand:
+#   gh workflow run sentinel-osv-qualification.yml --ref <branch>   (once the workflow is on the default branch)
+# It is not a required check. Provisioning (the only network step, an explicit setup step) installs the pinned
+# OSV-Scanner index and checks that it lists the linux/amd64 manifest the adapter records; the scans never pull
+# (`--pull never` in PR 07), run with no network and use synthetic advisory snapshots built from original fixtures. Every
+# test must run: a skipped, failed or cancelled test fails the job, and so does a container left behind or a daemon that
+# cannot be asked. A green run is evidence for moving linux/amd64 from unmeasured to measured; it changes nothing itself.
+name: sentinel-osv-qualification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/sentinel-osv-qualification.yml
+      - packages/sentinel/src/adapters/osv/**
+      - packages/sentinel/src/adapters/sealed-input.ts
+      - packages/sentinel/src/execution/**
+      - packages/sentinel/test/osv-*.ts
+      - packages/sentinel/test/fixtures/advisories/**
+      - packages/sentinel/scripts/package-assets-osv.mjs
+      - scripts/pack-sentinel.mjs
+      - scripts/test-sentinel-package.mjs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sentinel-osv-qualification-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  osv-linux-amd64:
+    name: osv-linux-amd64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      IMAGE_INDEX: ghcr.io/google/osv-scanner@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0
+      AMD64_MANIFEST: sha256:d2c46aa2483c4e02759bc25f2224d28a5ceeb3dca5a1ecd1f569fbed83a626f0
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Native amd64 host
+        run: |
+          test "$(uname -m)" = x86_64 || { echo "::error::not a native amd64 host"; exit 1; }
+          docker version --format '{{.Server.Version}} {{.Server.Os}}/{{.Server.Arch}}'
+      - name: Provision the pinned image (provenance; the only network step)
+        run: |
+          set -euo pipefail
+          docker manifest inspect "$IMAGE_INDEX" > index.json
+          # shellcheck disable=SC2016 # the JavaScript is single-quoted on purpose
+          node -e '
+            const i = JSON.parse(require("fs").readFileSync("index.json", "utf8"));
+            const m = (i.manifests ?? []).find(x => x.platform?.os === "linux" && x.platform?.architecture === "amd64");
+            if (!m || m.digest !== process.env.AMD64_MANIFEST) { console.error("::error::the index does not list the expected linux/amd64 manifest"); process.exit(1); }
+            console.log(`linux/amd64 manifest ${m.digest} (${m.size} bytes)`);'
+          docker pull --platform linux/amd64 "$IMAGE_INDEX"
+          docker image inspect "$IMAGE_INDEX" --format 'installed {{.Architecture}} {{.Os}} id {{.Id}}'
+          test "$(docker image inspect "$IMAGE_INDEX" --format '{{.Architecture}}')" = amd64
+      - run: pnpm install --frozen-lockfile
+      - name: Build Sentinel and its workspace closure
+        run: pnpm --filter '@farsight/sentinel...' build
+      - name: OSV unit and real-engine conformance on linux/amd64, nothing skipped
+        working-directory: packages/sentinel
+        env:
+          SENTINEL_ISOLATION: '1'
+          SENTINEL_OSV_QUALIFY: linux/amd64
+        run: |
+          set -o pipefail
+          node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=600000 \
+            --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=osv.tap \
+            test/osv-adapter.test.ts test/osv-conformance.test.ts
+          grep -qx '# skipped 0' osv.tap || { echo "::error::an OSV test was skipped"; exit 1; }
+          grep -qx '# fail 0' osv.tap && grep -qx '# cancelled 0' osv.tap
+      - name: Install the packed tarball and run its shipped OSV worker
+        env:
+          SENTINEL_ISOLATION: '1'
+          SENTINEL_OSV_QUALIFY: linux/amd64
+        run: |
+          set -o pipefail
+          pnpm pack:sentinel
+          node scripts/test-sentinel-package.mjs | tee package.log
+          grep -q 'installed osv worker run by the workspace service: 1 finding (amd64 candidate' package.log
+      - name: No container left behind
+        if: always()
+        run: |
+          set -euo pipefail
+          # A failing daemon query must fail this step: the listing is its own command, then tested.
+          containers=$(docker ps -aq --filter label=org.farsight.sentinel.store)
+          if [ -n "$containers" ]; then echo "::error::Sentinel containers left behind: $containers"; exit 1; fi

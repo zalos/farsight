@@ -62,8 +62,8 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   release gate), `paths.ts` (canonical, local, owner-only folders), `owner.ts` (the lifetime owner lock and epoch),
   `ledger.ts` + `migrations.ts` + `store-types.ts` (the fenced WAL ledger), `objects.ts` (content-addressed objects),
   `objects-ledger.ts` (the ledger seam and verifier) and `gc.ts` (read-only reachability and the dry-run prune plan).
-  `test/store-integration.test.ts` drives the facade end to end across processes. The OSV advisory adapter (PR 12,
-  `src/adapters/osv/`, not yet registered): `adapter.ts` (OSV-Scanner 2.7.0 pins, offline arguments, support), `worker-source.ts`
+  `test/store-integration.test.ts` drives the facade end to end across processes. The OSV advisory adapter (PR 12, ADR 29,
+  `src/adapters/osv/`, not yet registered; `src/adapters/sealed-input.ts` is the shared sealed-copy reader): `adapter.ts` (OSV-Scanner 2.7.0 pins, offline arguments, support), `worker-source.ts`
   (the original shell shim), `job.ts` (dependency-file kinds, snapshot inputs, the line job), `normalize.ts` (components with
   certainty and transitive limits, findings once per component and advisory, per-file coverage, `explainAdvisoryChanges`),
   `acquire.ts` (the separate, receipt-confirmed download of OSV archives and `loadAdvisorySnapshot`) and `run.ts` (one attempt
