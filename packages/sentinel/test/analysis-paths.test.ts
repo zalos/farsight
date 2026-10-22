@@ -335,3 +335,18 @@ test('round 2: an artifact, an index, a snapshot and a reader from different cap
   assert.equal(own.snapshotId, b.snapshot.id);
   assert.notEqual(own.results[0].outcome, 'reached');
 });
+
+test('round 2: returning a Unicode-named function hands it on as a value: a frontier, never absence', needsStore, async t => {
+  const { paths } = await setup(t, { ...PATHS_APP, 'src/value.ts': `import { query } from './db.js';
+
+export function ƒlush() {
+  return query('select 1');
+}
+
+export function pickUnicode() {
+  return [ƒlush];
+}
+` });
+  const env = await paths([{ from: id('src/value.ts', 'pickUnicode'), to: id('src/db.ts', 'query') }]);
+  assert.deepEqual(outcome(env), ['not-reached-bounded', 'functionAsValue']);
+});
