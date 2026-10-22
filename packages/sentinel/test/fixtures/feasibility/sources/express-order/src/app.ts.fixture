@@ -1,0 +1,19 @@
+import express from 'express';
+import { customAuth } from 'unknown-auth-fixture';
+const before = express();
+function requireSession(req, res, next) { if (!req.session) return res.sendStatus(401); next(); }
+before.use(requireSession);
+before.get('/private', (req, res) => res.send('private'));
+const late = express();
+late.get('/private', (req, res) => res.send('private'));
+late.use(requireSession);
+const unknown = express();
+unknown.use(customAuth);
+unknown.get('/private', (req, res) => res.send('private'));
+const bypass = express();
+bypass.use((req, res, next) => { if (req.query.preview) return next(); return requireSession(req, res, next); });
+bypass.get('/private', (req, res) => res.send('private'));
+const failOpen = express();
+async function checkSession(req) { if (!req.session) throw new Error('unauthorized'); }
+failOpen.use(async (req, res, next) => { try { await checkSession(req); next(); } catch { next(); } });
+failOpen.get('/private', (req, res) => res.send('private'));

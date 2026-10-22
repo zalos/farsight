@@ -1,0 +1,126 @@
+{
+  "format": "sentinel-feasibility-manifest/draft-1",
+  "fixtureRoot": "packages/sentinel/test/fixtures/feasibility",
+  "candidates": [
+    {
+      "id": "@farsight/code-parser",
+      "version": "0.3.1",
+      "source": "packages/code-parser/package.json",
+      "decision": "deferred"
+    },
+    {
+      "id": "@farsight/graph",
+      "version": "0.3.1",
+      "source": "packages/graph/package.json",
+      "decision": "deferred"
+    },
+    {
+      "id": "oxc-parser",
+      "version": "0.138.0",
+      "source": "pnpm-lock.yaml",
+      "decision": "deferred"
+    },
+    {
+      "id": "@vscode/tree-sitter-wasm",
+      "version": "0.3.1",
+      "source": "pnpm-lock.yaml",
+      "decision": "deferred"
+    }
+  ],
+  "effects": {
+    "network": false,
+    "providerDisclosure": false,
+    "sourceExecution": false,
+    "acquisition": false,
+    "localReads": [
+      "pinned synthetic fixtures",
+      "compiled public parser",
+      "local runtime identity"
+    ],
+    "localWrites": [
+      "new output directory",
+      "owned temporary probe directories"
+    ],
+    "executedPrograms": [
+      "git (revision identity and isolated synthetic fixture index)",
+      "Node child processes (owned SQLite prototype only)"
+    ]
+  },
+  "prerequisites": [
+    {
+      "id": "node24",
+      "required": true,
+      "reason": "The local probes require Node 24 or later and actual SQLite capability."
+    },
+    {
+      "id": "parser-build",
+      "required": true,
+      "reason": "Build the public graph/code-parser packages before the E1 probe; no download occurs during a run."
+    }
+  ],
+  "experiments": [
+    {
+      "id": "E1",
+      "probe": "parser",
+      "decision": "deferred",
+      "reason": "Measure public-parser selection against independent captured inventory; production capture acceptance remains PR 04/05.",
+      "prerequisites": [
+        "node24",
+        "parser-build"
+      ]
+    },
+    {
+      "id": "E2",
+      "probe": null,
+      "decision": "deferred",
+      "reason": "Review synthetic framework labels and controls now; execution-order and protection semantics are not implemented until PR 14-17.",
+      "prerequisites": []
+    },
+    {
+      "id": "E3",
+      "probe": null,
+      "decision": "deferred",
+      "reason": "Container-only candidate trials have separate acquisition and effect records. A local harness result cannot select an engine or establish deep-analysis quality.",
+      "prerequisites": []
+    },
+    {
+      "id": "E4",
+      "probe": "storage",
+      "decision": "deferred",
+      "reason": "Measure ownership and relational-publication prototypes only; full coordinator recovery and container orphan cleanup remain separate gates.",
+      "prerequisites": [
+        "node24"
+      ]
+    },
+    {
+      "id": "E5",
+      "probe": null,
+      "decision": "deferred",
+      "reason": "No live models or paid calls in this slice; model thresholds and paired repeated trials remain with PR 22.",
+      "prerequisites": []
+    },
+    {
+      "id": "E6",
+      "probe": null,
+      "decision": "deferred",
+      "reason": "Controlled edit cases are specified now; incremental/full equivalence cannot run before PR 27/28.",
+      "prerequisites": []
+    },
+    {
+      "id": "E7",
+      "probe": null,
+      "decision": "deferred",
+      "reason": "External scanner network-denial and missing-resource trials use a separate container-only command; local no-network intent is not isolation proof.",
+      "prerequisites": []
+    },
+    {
+      "id": "E8",
+      "probe": "codec",
+      "decision": "deferred",
+      "reason": "Measure synthetic raw-byte codec/resource behavior; production quotas, scanner resources and model accounting require later evidence.",
+      "prerequisites": [
+        "node24"
+      ]
+    }
+  ]
+}

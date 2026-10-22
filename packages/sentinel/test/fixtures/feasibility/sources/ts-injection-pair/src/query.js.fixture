@@ -1,0 +1,6 @@
+export function interpolated(db, request) {
+  return db.query("SELECT id FROM accounts WHERE name = '" + request.query.name + "'");
+}
+export function parameterized(db, request) {
+  return db.query('SELECT id FROM accounts WHERE name = ?', [request.query.name]);
+}

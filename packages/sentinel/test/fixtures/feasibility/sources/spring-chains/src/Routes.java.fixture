@@ -1,0 +1,7 @@
+package fixture;
+import org.springframework.web.bind.annotation.*;
+@RestController class Routes {
+  @GetMapping("/api/private") String checked() { return "private"; }
+  @GetMapping("/api/public/report") String overlap() { return "public"; }
+  @GetMapping("/outside") String missing() { return "outside"; }
+}

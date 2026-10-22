@@ -1,0 +1,1093 @@
+{
+  "schemaVersion": "sentinel-feasibility-corpus-v1",
+  "provenance": {
+    "origin": "original-synthetic",
+    "author": "Codex corpus lane",
+    "license": "repository-license",
+    "externalSources": [],
+    "frameworkVersions": "candidate declarations only; uninstalled and not asserted supported",
+    "execution": "source text is inert; do not install, build, import or execute fixture programs",
+    "hashScheme": "SHA-256 of exact stored UTF-8 bytes; generated repeat is UTF-8 repeat concatenated count times; cases.json hashed as exact bytes by the run manifest"
+  },
+  "cases": [
+    {
+      "id": "ts-injection-pair",
+      "gates": [
+        "E1",
+        "E3"
+      ],
+      "purpose": "Distinguish SQL interpolation from bound parameters for the same user-controlled value; neither label covers database authorization.",
+      "files": [
+        {
+          "source": "sources/ts-injection-pair/src/query.ts.fixture",
+          "path": "src/query.ts",
+          "sha256": "73757546e357ca04d86c10d772a42a4a0134e0c80aada107f1551b2d1c7df9dd",
+          "inventory": "source"
+        },
+        {
+          "source": "sources/ts-injection-pair/src/query.js.fixture",
+          "path": "src/query.js",
+          "sha256": "6449c1ad02ece0219d21efcd5faa1bb82a594d9d0cf64cec214b6739d0f44ab8",
+          "inventory": "source"
+        }
+      ],
+      "generated": [],
+      "expected": {
+        "enumerated": [
+          "src/query.js",
+          "src/query.ts"
+        ],
+        "parserCandidates": [
+          "src/query.js",
+          "src/query.ts"
+        ],
+        "parserExcluded": [],
+        "facts": [
+          {
+            "id": "js.sql.concat",
+            "subject": "src/query.js::interpolated",
+            "value": "vulnerable-pattern",
+            "reason": "Request value is concatenated into SQL text.",
+            "label": "vulnerable-pattern"
+          },
+          {
+            "id": "js.sql.bound",
+            "subject": "src/query.js::parameterized",
+            "value": "bounded-safe-pattern",
+            "reason": "Constant SQL with separate bind argument; assumes API honors placeholders.",
+            "label": "bounded-safe-pattern"
+          },
+          {
+            "id": "ts.sql.concat",
+            "subject": "src/query.ts::interpolated",
+            "value": "vulnerable-pattern",
+            "reason": "Request value concatenated into SQL text.",
+            "label": "vulnerable-pattern"
+          },
+          {
+            "id": "ts.sql.bound",
+            "subject": "src/query.ts::parameterized",
+            "value": "bounded-safe-pattern",
+            "reason": "SQL structure is constant and request value is a separate bind argument; assumes DB API honors placeholders.",
+            "label": "bounded-safe-pattern"
+          }
+        ],
+        "outcomes": []
+      },
+      "labels": {
+        "author": "Codex corpus lane",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
+        "scope": "synthetic-static",
+        "rationale": "Distinguish SQL interpolation from bound parameters for the same user-controlled value; neither label covers database authorization."
+      }
+    },
+    {
+      "id": "js-cross-file-pair",
+      "gates": [
+        "E1",
+        "E3"
+      ],
+      "purpose": "Retain a cross-file request-to-command lesson and safe sibling; a pattern-only miss must not imply cross-file support.",
+      "files": [
+        {
+          "source": "sources/js-cross-file-pair/src/entry.js.fixture",
+          "path": "src/entry.js",
+          "sha256": "5f2fff4ed24638d7ff2b81ba36b6d2b6ef208f2d5241212a85a026e8d5bd7d5f",
+          "inventory": "source"
+        },
+        {
+          "source": "sources/js-cross-file-pair/src/lookup.js.fixture",
+          "path": "src/lookup.js",
+          "sha256": "a4fbe3c3c34f643a77f1affb3c20bef7baaff81960d8f39294148bb14cbaadcc",
+          "inventory": "source"
+        }
+      ],
+      "generated": [],
+      "expected": {
+        "enumerated": [
+          "src/entry.js",
+          "src/lookup.js"
+        ],
+        "parserCandidates": [
+          "src/entry.js",
+          "src/lookup.js"
+        ],
+        "parserExcluded": [],
+        "facts": [
+          {
+            "id": "js.command.flow",
+            "subject": "src/entry.js::unsafeRoute -> src/lookup.js::unsafeLookup",
+            "value": "vulnerable-pattern",
+            "reason": "Request text becomes shell syntax across a file boundary.",
+            "label": "vulnerable-pattern"
+          },
+          {
+            "id": "js.command.argv",
+            "subject": "src/entry.js::boundedRoute -> src/lookup.js::boundedLookup",
+            "value": "bounded-safe-pattern",
+            "reason": "Fixed executable and format, shell disabled, request value is a positional argument; this only addresses shell interpolation.",
+            "label": "bounded-safe-pattern"
+          }
+        ],
+        "outcomes": []
+      },
+      "labels": {
+        "author": "Codex corpus lane",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
+        "scope": "synthetic-static",
+        "rationale": "Retain a cross-file request-to-command lesson and safe sibling; a pattern-only miss must not imply cross-file support."
+      }
+    },
+    {
+      "id": "java-injection-pair",
+      "gates": [
+        "E1",
+        "E3"
+      ],
+      "purpose": "Compare JDBC SQL concatenation and a PreparedStatement bound value using only synthetic Java source.",
+      "files": [
+        {
+          "source": "sources/java-injection-pair/src/Queries.java.fixture",
+          "path": "src/Queries.java",
+          "sha256": "ef8c1e185cc679b3dd8ae56bd03ad1a15a96f32dd6203e46012dce7e1a622fa1",
+          "inventory": "source"
+        }
+      ],
+      "generated": [],
+      "expected": {
+        "enumerated": [
+          "src/Queries.java"
+        ],
+        "parserCandidates": [
+          "src/Queries.java"
+        ],
+        "parserExcluded": [],
+        "facts": [
+          {
+            "id": "java.sql.concat",
+            "subject": "src/Queries.java::interpolated",
+            "value": "vulnerable-pattern",
+            "reason": "Caller-controlled name is concatenated into SQL.",
+            "label": "vulnerable-pattern"
+          },
+          {
+            "id": "java.sql.bound",
+            "subject": "src/Queries.java::parameterized",
+            "value": "bounded-safe-pattern",
+            "reason": "JDBC binds requestName separately; only SQL structure is labeled.",
+            "label": "bounded-safe-pattern"
+          }
+        ],
+        "outcomes": []
+      },
+      "labels": {
+        "author": "Codex corpus lane",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
+        "scope": "synthetic-static",
+        "rationale": "Compare JDBC SQL concatenation and a PreparedStatement bound value using only synthetic Java source."
+      }
+    },
+    {
+      "id": "express-order",
+      "gates": [
+        "E1",
+        "E2"
+      ],
+      "purpose": "Order, unresolved middleware and a conditional bypass must remain distinct; no runtime framework proof is claimed.",
+      "files": [
+        {
+          "source": "sources/express-order/src/app.ts.fixture",
+          "path": "src/app.ts",
+          "sha256": "f8eee11da82b08b769e09a81a3b9b2c2c863171cbff0b767f1e4e3a1ea2902a1",
+          "inventory": "source"
+        },
+        {
+          "source": "sources/express-order/package.json.fixture",
+          "path": "package.json",
+          "sha256": "b105519ca33c4fe077717c81797e424b1e19f943cfcb9eb8dcb60f724d63f8fb",
+          "inventory": "dependency-manifest"
+        },
+        {
+          "source": "sources/express-order/package-lock.json.fixture",
+          "path": "package-lock.json",
+          "sha256": "c0ee24f6d3a12378fbd0c34c18671528008cba9e247d6556103a2190ebcde1e4",
+          "inventory": "lockfile"
+        }
+      ],
+      "generated": [],
+      "expected": {
+        "enumerated": [
+          "package-lock.json",
+          "package.json",
+          "src/app.ts"
+        ],
+        "parserCandidates": [
+          "src/app.ts"
+        ],
+        "parserExcluded": [],
+        "facts": [
+          {
+            "id": "express.before",
+            "subject": "src/app.ts::before /private",
+            "value": "ordered-check",
+            "reason": "Session presence refusal is registered before the route; no identity-strength or live execution claim.",
+            "label": "bounded-safe-pattern"
+          },
+          {
+            "id": "express.late",
+            "subject": "src/app.ts::late /private",
+            "value": "unprotected-by-late-middleware",
+            "reason": "The route responds before the later middleware can run.",
+            "label": "vulnerable-pattern"
+          },
+          {
+            "id": "express.unknown",
+            "subject": "src/app.ts::unknown /private",
+            "value": "unknown-enforcement",
+            "reason": "Unresolved external customAuth cannot establish an enforced property.",
+            "label": "unknown-enforcement"
+          },
+          {
+            "id": "express.bypass",
+            "subject": "src/app.ts::bypass /private",
+            "value": "conditional-bypass",
+            "reason": "preview causes next() without the session check.",
+            "label": "vulnerable-pattern"
+          },
+          {
+            "id": "express.exception",
+            "subject": "src/app.ts::failOpen /private",
+            "value": "async-exception-bypass",
+            "reason": "Session rejection is caught and converted into next(), allowing the route to respond.",
+            "label": "vulnerable-pattern"
+          }
+        ],
+        "outcomes": []
+      },
+      "labels": {
+        "author": "Codex corpus lane",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
+        "scope": "synthetic-static",
+        "rationale": "Order, unresolved middleware and a conditional bypass must remain distinct; no runtime framework proof is claimed."
+      }
+    },
+    {
+      "id": "nest-validation",
+      "gates": [
+        "E1",
+        "E2"
+      ],
+      "purpose": "A decorated DTO declaration and multipart parsing are negative controls for enforced validation.",
+      "files": [
+        {
+          "source": "sources/nest-validation/src/controller.ts.fixture",
+          "path": "src/controller.ts",
+          "sha256": "30c505b26a6a31f24d50e7525f920dba07db003fa9f9688ceeb5a8cc85ec963d",
+          "inventory": "source"
+        },
+        {
+          "source": "sources/nest-validation/src/bootstrap.ts.fixture",
+          "path": "src/bootstrap.ts",
+          "sha256": "eedf8c127d2acf6329fb2d88c045f865317af4fc7afa809e3c3d419808b62706",
+          "inventory": "source"
+        },
+        {
+          "source": "sources/nest-validation/package.json.fixture",
+          "path": "package.json",
+          "sha256": "8f79eacf8a74ec1b6c96b364d4b5aeddf5952fda3aa099a741ec0ae1866855be",
+          "inventory": "dependency-manifest"
+        }
+      ],
+      "generated": [],
+      "expected": {
+        "enumerated": [
+          "package.json",
+          "src/bootstrap.ts",
+          "src/controller.ts"
+        ],
+        "parserCandidates": [
+          "src/bootstrap.ts",
+          "src/controller.ts"
+        ],
+        "parserExcluded": [],
+        "facts": [
+          {
+            "id": "nest.declared",
+            "subject": "src/controller.ts::declared",
+            "value": "declaration-only",
+            "reason": "DTO decorators exist but neither this route nor bootstrap registers a validation pipe.",
+            "label": "unknown-enforcement"
+          },
+          {
+            "id": "nest.checked",
+            "subject": "src/controller.ts::checked",
+            "value": "registered-validation-candidate",
+            "reason": "An explicit route pipe exists; runtime transformation, validation options and error behavior still need framework-version probes.",
+            "label": "bounded-safe-pattern"
+          },
+          {
+            "id": "nest.multipart",
+            "subject": "src/controller.ts::upload",
+            "value": "parse-only",
+            "reason": "Reading multipart parts states no size, type, filename or authorization restriction.",
+            "label": "unknown-enforcement"
+          }
+        ],
+        "outcomes": []
+      },
+      "labels": {
+        "author": "Codex corpus lane",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
+        "scope": "synthetic-static",
+        "rationale": "A decorated DTO declaration and multipart parsing are negative controls for enforced validation."
+      }
+    },
+    {
+      "id": "next-matcher",
+      "gates": [
+        "E1",
+        "E2"
+      ],
+      "purpose": "Matcher exclusion must defeat a global-protection claim even if middleware contains an authentication check.",
+      "files": [
+        {
+          "source": "sources/next-matcher/middleware.ts.fixture",
+          "path": "middleware.ts",
+          "sha256": "0475510e7d27f6d32db68ee3a55f126701c0e3f149fb9754303c22f62ef5876e",
+          "inventory": "source"
+        },
+        {
+          "source": "sources/next-matcher/app/private/route.ts.fixture",
+          "path": "app/private/route.ts",
+          "sha256": "7fe8f7485d39d641e78d1f0b02010884a93afc47fb5b06d24247d374ac386ff4",
+          "inventory": "source"
+        },
+        {
+          "source": "sources/next-matcher/app/public/route.ts.fixture",
+          "path": "app/public/route.ts",
+          "sha256": "1507f5fbd3ab6cedec5e8fe6fc213d8f51934785bdacdbe8ffcd8d5bbaa87da1",
+          "inventory": "source"
+        },
+        {
+          "source": "sources/next-matcher/package.json.fixture",
+          "path": "package.json",
+          "sha256": "f00549975a3fae956cb15f5f293e9039af3c0506e53d345f11561b4be8975201",
+          "inventory": "dependency-manifest"
+        }
+      ],
+      "generated": [],
+      "expected": {
+        "enumerated": [
+          "app/private/route.ts",
+          "app/public/route.ts",
+          "middleware.ts",
+          "package.json"
+        ],
+        "parserCandidates": [
+          "app/private/route.ts",
+          "app/public/route.ts",
+          "middleware.ts"
+        ],
+        "parserExcluded": [],
+        "facts": [
+          {
+            "id": "next.included",
+            "subject": "/private",
+            "value": "matcher-included",
+            "reason": "Literal matcher includes /private; cookie existence is the only declared check.",
+            "label": "bounded-safe-pattern"
+          },
+          {
+            "id": "next.excluded",
+            "subject": "/public",
+            "value": "matcher-excluded",
+            "reason": "/public is not selected by this middleware matcher; never inherit its check. No required-access policy is declared, so this does not establish a vulnerability.",
+            "label": "unknown-enforcement"
+          }
+        ],
+        "outcomes": []
+      },
+      "labels": {
+        "author": "Codex corpus lane",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
+        "scope": "synthetic-static",
+        "rationale": "Matcher exclusion must defeat a global-protection claim even if middleware contains an authentication check."
+      }
+    },
+    {
+      "id": "spring-chains",
+      "gates": [
+        "E1",
+        "E2"
+      ],
+      "purpose": "Retain explicit ordered-chain, overlap and missing-chain cases; source labels do not certify Spring runtime enforcement.",
+      "files": [
+        {
+          "source": "sources/spring-chains/src/Security.java.fixture",
+          "path": "src/Security.java",
+          "sha256": "096d0b608e4c3a0afce92dcb52a799909200ec2abf357072001f94170597564f",
+          "inventory": "source"
+        },
+        {
+          "source": "sources/spring-chains/src/Routes.java.fixture",
+          "path": "src/Routes.java",
+          "sha256": "337ceea5a248fd9c641893cf12b0b5628fc526ac33bb4f52ffc4b99f10a3b285",
+          "inventory": "source"
+        },
+        {
+          "source": "sources/spring-chains/pom.xml.fixture",
+          "path": "pom.xml",
+          "sha256": "681e02bb6786401902131226652173c02fb1e025d36f832400b5ddf93e2e5706",
+          "inventory": "dependency-manifest"
+        }
+      ],
+      "generated": [],
+      "expected": {
+        "enumerated": [
+          "pom.xml",
+          "src/Routes.java",
+          "src/Security.java"
+        ],
+        "parserCandidates": [
+          "src/Routes.java",
+          "src/Security.java"
+        ],
+        "parserExcluded": [],
+        "facts": [
+          {
+            "id": "spring.checked",
+            "subject": "/api/private",
+            "value": "authenticated-chain-candidate",
+            "reason": "The explicit /api chain declares authenticated(); runtime proof remains pending.",
+            "label": "bounded-safe-pattern"
+          },
+          {
+            "id": "spring.overlap",
+            "subject": "/api/public/report",
+            "value": "earlier-permit-all-chain",
+            "reason": "Both matchers overlap; explicit order selects permitAll before authenticated. No required-access policy is declared, so this does not establish a vulnerability.",
+            "label": "unknown-enforcement"
+          },
+          {
+            "id": "spring.missing",
+            "subject": "/outside",
+            "value": "no-declared-chain",
+            "reason": "Neither declared chain matcher selects this path; do not infer a fallback from these sources.",
+            "label": "unknown-enforcement"
+          }
+        ],
+        "outcomes": []
+      },
+      "labels": {
+        "author": "Codex corpus lane",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
+        "scope": "synthetic-static",
+        "rationale": "Retain explicit ordered-chain, overlap and missing-chain cases; source labels do not certify Spring runtime enforcement."
+      }
+    },
+    {
+      "id": "hidden-security-config",
+      "gates": [
+        "E1",
+        "E7"
+      ],
+      "purpose": "Independent inventory includes hidden security inputs, inert credential placeholders and workflow configuration without executing them.",
+      "files": [
+        {
+          "source": "sources/hidden-security-config/github/workflows/check.yml.fixture",
+          "path": ".github/workflows/check.yml",
+          "sha256": "3ff8ed7c53db36edab3fd08bb913a4f97abc63919f56fd9cc2c6d7a036fbde92",
+          "inventory": "security-config"
+        },
+        {
+          "source": "sources/hidden-security-config/env.fixture-input.fixture",
+          "path": ".env.fixture-input",
+          "sha256": "44b664453bad26a29b59c02d28827e5072fc0e2b9e9ac78ca395ae3fb5a4961d",
+          "inventory": "security-config"
+        },
+        {
+          "source": "sources/hidden-security-config/npmrc.fixture",
+          "path": ".npmrc",
+          "sha256": "b962362ebe7560b534e834c2ede51186c2e3fceb94e12cc434a11180f22391f2",
+          "inventory": "security-config"
+        },
+        {
+          "source": "sources/hidden-security-config/config/security.yaml.fixture",
+          "path": "config/security.yaml",
+          "sha256": "56bbdf58e5d96feb1681c22cc5bc9c00a56385df621580150fe934e06fccd85c",
+          "inventory": "security-config"
+        },
+        {
+          "source": "sources/hidden-security-config/src/index.ts.fixture",
+          "path": "src/index.ts",
+          "sha256": "ddf066ee341c060cca67ed6faa462602690b490d98c6fecdf607c447754e14bb",
+          "inventory": "source"
+        }
+      ],
+      "generated": [],
+      "expected": {
+        "enumerated": [
+          ".env.fixture-input",
+          ".github/workflows/check.yml",
+          ".npmrc",
+          "config/security.yaml",
+          "src/index.ts"
+        ],
+        "parserCandidates": [
+          "src/index.ts"
+        ],
+        "parserExcluded": [
+          ".env.fixture-input",
+          ".github/workflows/check.yml",
+          ".npmrc",
+          "config/security.yaml"
+        ],
+        "facts": [
+          {
+            "id": "hidden.inventory",
+            "subject": ".github/workflows/check.yml",
+            "value": "must-enumerate",
+            "reason": "A hidden workflow is a security input regardless of parser language support.",
+            "label": "inventory-control"
+          },
+          {
+            "id": "secret.inert",
+            "subject": ".env.fixture-input",
+            "value": "inert-placeholder",
+            "reason": "NOT_A_SECRET_DO_NOT_USE is synthetic text, never a live credential.",
+            "label": "inventory-control"
+          }
+        ],
+        "outcomes": []
+      },
+      "labels": {
+        "author": "Codex corpus lane",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
+        "scope": "synthetic-static",
+        "rationale": "Independent inventory includes hidden security inputs, inert credential placeholders and workflow configuration without executing them."
+      }
+    },
+    {
+      "id": "ignored-security-inputs",
+      "gates": [
+        "E1"
+      ],
+      "purpose": "Ignored tracked-intent and generated-intent source remains in the independent inventory; nested negation is retained.",
+      "files": [
+        {
+          "source": "sources/ignored-security-inputs/gitignore.fixture",
+          "path": ".gitignore",
+          "sha256": "edbc2bc040eddb423c19e42f23a6a9b5977e046117e1edcf7d13e6cac86ed688",
+          "inventory": "ignore-input"
+        },
+        {
+          "source": "sources/ignored-security-inputs/tracked-secret.ts.fixture",
+          "path": "tracked-secret.ts",
+          "sha256": "63b5fabf2196efc6f8f66769e3c9dd486fb65e00d6c088387799c72b3e962038",
+          "inventory": "ignored-source"
+        },
+        {
+          "source": "sources/ignored-security-inputs/generated/auth.ts.fixture",
+          "path": "generated/auth.ts",
+          "sha256": "1926ff22db4b29cd6f0e9f545eb6a41bc20f7a2175f7af65169d823e645b2048",
+          "inventory": "ignored-source"
+        },
+        {
+          "source": "sources/ignored-security-inputs/nested/.gitignore.fixture",
+          "path": "nested/.gitignore",
+          "sha256": "589567f4e0b6c4fee9839cfeadcc25e54f7974096af35d7d2b7b94cc2d222686",
+          "inventory": "ignore-input"
+        },
+        {
+          "source": "sources/ignored-security-inputs/nested/keep.ts.fixture",
+          "path": "nested/keep.ts",
+          "sha256": "42730ed8581d2444fe30f19fe09830aef22ae7b2c7ad7fa1c63968167fc8db2b",
+          "inventory": "source"
+        },
+        {
+          "source": "sources/ignored-security-inputs/nested/drop.ts.fixture",
+          "path": "nested/drop.ts",
+          "sha256": "da32b5f4141cc656728b556ea422ee2f3dae5ee1e5702890ce47636460ad1cd5",
+          "inventory": "ignored-source"
+        },
+        {
+          "source": "sources/ignored-security-inputs/src/app.ts.fixture",
+          "path": "src/app.ts",
+          "sha256": "d5684c6907babe396d7ea0bc5593187b77d43a6ab68f1289ce193c099d609501",
+          "inventory": "source"
+        }
+      ],
+      "generated": [],
+      "expected": {
+        "enumerated": [
+          ".gitignore",
+          "generated/auth.ts",
+          "nested/.gitignore",
+          "nested/drop.ts",
+          "nested/keep.ts",
+          "src/app.ts",
+          "tracked-secret.ts"
+        ],
+        "parserCandidates": [
+          "nested/keep.ts",
+          "src/app.ts"
+        ],
+        "parserExcluded": [
+          ".gitignore",
+          "generated/auth.ts",
+          "nested/.gitignore",
+          "nested/drop.ts",
+          "tracked-secret.ts"
+        ],
+        "facts": [
+          {
+            "id": "ignored.tracked",
+            "subject": "tracked-secret.ts",
+            "value": "tracked-materialization-intent",
+            "reason": "gitIndex instructs the harness to stage this ignored file in a disposable synthetic Git repository; actual index evidence is retained by the probe.",
+            "label": "inventory-control"
+          },
+          {
+            "id": "ignored.generated",
+            "subject": "generated/auth.ts",
+            "value": "generated-intent",
+            "reason": "Ignored generated source is still an inventoried security input.",
+            "label": "inventory-control"
+          },
+          {
+            "id": "ignored.nested",
+            "subject": "nested/keep.ts",
+            "value": "negation-under-ignored-parent-rule",
+            "reason": "Retain both root and nested ignore bytes and measure parser behavior; do not assume it honors negation.",
+            "label": "inventory-control"
+          }
+        ],
+        "outcomes": [
+          {
+            "kind": "git-index",
+            "subject": "tracked-secret.ts",
+            "value": "materialize-and-verify",
+            "reason": "Copying alone does not establish tracked status; initialize a disposable synthetic repository, force-add this path and retain index evidence."
+          }
+        ]
+      },
+      "labels": {
+        "author": "Codex corpus lane",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
+        "scope": "synthetic-static",
+        "rationale": "Ignored tracked-intent and generated-intent source remains in the independent inventory; nested negation is retained."
+      },
+      "gitIndex": [
+        "tracked-secret.ts"
+      ]
+    },
+    {
+      "id": "malformed-unsupported",
+      "gates": [
+        "E1",
+        "E3"
+      ],
+      "purpose": "Syntax failures and unsupported languages must remain visible separately from files the parser selects.",
+      "files": [
+        {
+          "source": "sources/malformed-unsupported/src/broken.ts.fixture",
+          "path": "src/broken.ts",
+          "sha256": "a3fb1bf706e21f00ff73d9143b409bc650fc8c59d1f35d5e1a9e349f7c2d721c",
+          "inventory": "malformed"
+        },
+        {
+          "source": "sources/malformed-unsupported/src/unknown.rs.fixture",
+          "path": "src/unknown.rs",
+          "sha256": "7ddfb6ebf3b75cad9f97dfc2510608fcba65e6fe501b66f803e3d293965f2dab",
+          "inventory": "unsupported"
+        },
+        {
+          "source": "sources/malformed-unsupported/src/valid.ts.fixture",
+          "path": "src/valid.ts",
+          "sha256": "9ba8610918afca985b8d2181c26a95e09d11c200567a81bc19e6a127bb14d4ad",
+          "inventory": "source"
+        }
+      ],
+      "generated": [],
+      "expected": {
+        "enumerated": [
+          "src/broken.ts",
+          "src/unknown.rs",
+          "src/valid.ts"
+        ],
+        "parserCandidates": [
+          "src/broken.ts",
+          "src/valid.ts"
+        ],
+        "parserExcluded": [
+          "src/unknown.rs"
+        ],
+        "facts": [
+          {
+            "id": "malformed.syntax",
+            "subject": "src/broken.ts",
+            "value": "malformed-input",
+            "reason": "Known malformed TypeScript; selected input is not equivalent to successful parse.",
+            "label": "inventory-control"
+          },
+          {
+            "id": "unsupported.rust",
+            "subject": "src/unknown.rs",
+            "value": "unsupported-input",
+            "reason": "Rust is an inventory control outside this TS/Java candidate matrix.",
+            "label": "inventory-control"
+          }
+        ],
+        "outcomes": []
+      },
+      "labels": {
+        "author": "Codex corpus lane",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
+        "scope": "synthetic-static",
+        "rationale": "Syntax failures and unsupported languages must remain visible separately from files the parser selects."
+      }
+    },
+    {
+      "id": "oversized-input",
+      "gates": [
+        "E1",
+        "E8"
+      ],
+      "purpose": "A generated source exceeds the pinned probe maxFileBytes=4096 without storing a bulky artifact.",
+      "files": [
+        {
+          "source": "sources/oversized-input/src/small.ts.fixture",
+          "path": "src/small.ts",
+          "sha256": "66a15e4578b88e15a135cf601517a89cffe77d7cfce7dcefb26107f99e143c6c",
+          "inventory": "source"
+        }
+      ],
+      "generated": [
+        {
+          "path": "src/large.ts",
+          "repeat": "//x\n",
+          "count": 2048,
+          "inventory": "oversized",
+          "sha256": "fb4c70d3ed0a78f504ee7b2097b5dbdd5f72be4a78996168269e054bfbee19d4"
+        }
+      ],
+      "expected": {
+        "enumerated": [
+          "src/large.ts",
+          "src/small.ts"
+        ],
+        "parserCandidates": [
+          "src/small.ts"
+        ],
+        "parserExcluded": [
+          "src/large.ts"
+        ],
+        "facts": [
+          {
+            "id": "oversized.limit",
+            "subject": "src/large.ts",
+            "value": "over-4096-byte-limit",
+            "reason": "The generated UTF-8 source is 8192 bytes; omission must retain an explicit size-limit gap.",
+            "label": "inventory-control"
+          }
+        ],
+        "outcomes": [
+          {
+            "kind": "parser-option",
+            "subject": "maxFileBytes",
+            "value": 4096,
+            "reason": "Explicit experiment bound, not a product default."
+          }
+        ]
+      },
+      "labels": {
+        "author": "Codex corpus lane",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
+        "scope": "synthetic-static",
+        "rationale": "A generated source exceeds the pinned probe maxFileBytes=4096 without storing a bulky artifact."
+      }
+    },
+    {
+      "id": "refused-inputs",
+      "gates": [
+        "E1"
+      ],
+      "purpose": "Missing and symbolic boundary entries require explicit inventory outcomes; unreadable ignore is a host-dependent probe.",
+      "files": [
+        {
+          "source": "sources/refused-inputs/src/valid.ts.fixture",
+          "path": "src/valid.ts",
+          "sha256": "9ba8610918afca985b8d2181c26a95e09d11c200567a81bc19e6a127bb14d4ad",
+          "inventory": "source"
+        }
+      ],
+      "generated": [
+        {
+          "path": "src/outside.ts",
+          "type": "symlink",
+          "target": "../../outside.ts",
+          "inventory": "refused"
+        },
+        {
+          "path": ".gitignore",
+          "type": "missing",
+          "inventory": "missing"
+        }
+      ],
+      "expected": {
+        "enumerated": [
+          ".gitignore",
+          "src/outside.ts",
+          "src/valid.ts"
+        ],
+        "parserCandidates": [
+          "src/valid.ts"
+        ],
+        "parserExcluded": [
+          ".gitignore",
+          "src/outside.ts"
+        ],
+        "facts": [
+          {
+            "id": "refused.symlink",
+            "subject": "src/outside.ts",
+            "value": "refused-symbolic-input",
+            "reason": "Do not follow a symlink outside the temporary case root.",
+            "label": "inventory-control"
+          },
+          {
+            "id": "refused.missing",
+            "subject": ".gitignore",
+            "value": "missing-input",
+            "reason": "A requested missing ignore file has no content hash; never substitute an empty file or fabricated diagnostic.",
+            "label": "inventory-control"
+          }
+        ],
+        "outcomes": [
+          {
+            "kind": "unreadable-ignore",
+            "subject": ".gitignore",
+            "value": "deferred",
+            "reason": "Separate real permission-denial trial required; chmod alone is unreliable for privileged users and no read failure is claimed here."
+          }
+        ]
+      },
+      "labels": {
+        "author": "Codex corpus lane",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
+        "scope": "synthetic-static",
+        "rationale": "Missing and symbolic boundary entries require explicit inventory outcomes; unreadable ignore is a host-dependent probe."
+      }
+    },
+    {
+      "id": "model-packets",
+      "gates": [
+        "E5"
+      ],
+      "purpose": "Prepare paired clean/hostile evidence and invalid replies without calling a model; output labels are validation controls.",
+      "files": [
+        {
+          "source": "sources/model-packets/packets/clean.json.fixture",
+          "path": "packets/clean.json",
+          "sha256": "3119d9fb38574df29a95dbdd0ced2268a339aaa2157a8109669c003bff1be436",
+          "inventory": "model-control"
+        },
+        {
+          "source": "sources/model-packets/packets/hostile.json.fixture",
+          "path": "packets/hostile.json",
+          "sha256": "884fb37129a16a1518ef6a49887e9af4bf49e0f8301ee6a8b3970e895bd7482e",
+          "inventory": "model-control"
+        },
+        {
+          "source": "sources/model-packets/packets/replies.json.fixture",
+          "path": "packets/replies.json",
+          "sha256": "b8d55b5a8cea05ed5ca4f98858a58276658c87df47f0289e0760993914a23cd3",
+          "inventory": "model-control"
+        }
+      ],
+      "generated": [],
+      "expected": {
+        "enumerated": [
+          "packets/clean.json",
+          "packets/hostile.json",
+          "packets/replies.json"
+        ],
+        "parserCandidates": [],
+        "parserExcluded": [
+          "packets/clean.json",
+          "packets/hostile.json",
+          "packets/replies.json"
+        ],
+        "facts": [
+          {
+            "id": "model.citations",
+            "subject": "packets/replies.json",
+            "value": "validator-controls",
+            "reason": "Valid citation membership does not make wrongAnswer semantically correct; validate both separately.",
+            "label": "inventory-control"
+          },
+          {
+            "id": "model.canary",
+            "subject": "packets/hostile.json",
+            "value": "untrusted-source-control",
+            "reason": "Canary is inert; preparation is neither a live trial nor injection-resistance evidence.",
+            "label": "inventory-control"
+          }
+        ],
+        "outcomes": []
+      },
+      "labels": {
+        "author": "Codex corpus lane",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
+        "scope": "synthetic-static",
+        "rationale": "Prepare paired clean/hostile evidence and invalid replies without calling a model; output labels are validation controls."
+      }
+    },
+    {
+      "id": "differential-edits",
+      "gates": [
+        "E6"
+      ],
+      "purpose": "Define future full-scan comparison inputs; this corpus does not implement or measure incremental equivalence.",
+      "files": [
+        {
+          "source": "sources/differential-edits/before/routes.ts.fixture",
+          "path": "before/routes.ts",
+          "sha256": "93a2fff6b444d81017b4c4eb3e2de096a6f872065b34341cbcaba431e7be985a",
+          "inventory": "edit-control"
+        },
+        {
+          "source": "sources/differential-edits/after/routes.ts.fixture",
+          "path": "after/routes.ts",
+          "sha256": "a61e615aa38ad2cccae59dd7a0c2e64b7f9cc247e88c7a1812b746deed0a98b3",
+          "inventory": "edit-control"
+        },
+        {
+          "source": "sources/differential-edits/siblings/policy.ts.fixture",
+          "path": "siblings/policy.ts",
+          "sha256": "ad7786b824ed16b798b47daf31951bf370cce64e8202facbb11beb4b6ff85b85",
+          "inventory": "edit-control"
+        },
+        {
+          "source": "sources/differential-edits/edits.json.fixture",
+          "path": "edits.json",
+          "sha256": "e25bd2c6dd8b143708ff05f9410a5b9b3db07161e96975926f51ea5cead2ed7a",
+          "inventory": "edit-control"
+        }
+      ],
+      "generated": [],
+      "expected": {
+        "enumerated": [
+          "after/routes.ts",
+          "before/routes.ts",
+          "edits.json",
+          "siblings/policy.ts"
+        ],
+        "parserCandidates": [
+          "after/routes.ts",
+          "before/routes.ts",
+          "siblings/policy.ts"
+        ],
+        "parserExcluded": [
+          "edits.json"
+        ],
+        "facts": [
+          {
+            "id": "diff.future",
+            "subject": "edits.json",
+            "value": "deferred",
+            "reason": "No incremental runtime exists in PR01; route/rename snapshots and edit classes are future controls, not equivalence results.",
+            "label": "inventory-control"
+          }
+        ],
+        "outcomes": []
+      },
+      "labels": {
+        "author": "Codex corpus lane",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
+        "scope": "synthetic-static",
+        "rationale": "Define future full-scan comparison inputs; this corpus does not implement or measure incremental equivalence."
+      }
+    }
+  ],
+  "rules": [
+    {
+      "id": "sentinel-fixture-sql-concat-tsjs",
+      "source": "rules/sentinel-fixture-sql-concat-tsjs.yaml.fixture",
+      "sha256": "2484d2b9ff015f808a8f9056edd6d3bfa705933d4bc1f6bb4bcafe15feedda71",
+      "scope": "narrow-call-pattern",
+      "provenance": "original synthetic rule; no imported rules",
+      "expectedMatches": [
+        {
+          "case": "ts-injection-pair",
+          "path": "src/query.ts",
+          "symbol": "interpolated",
+          "startLine": 2,
+          "endLine": 4
+        },
+        {
+          "case": "ts-injection-pair",
+          "path": "src/query.js",
+          "symbol": "interpolated",
+          "startLine": 1,
+          "endLine": 3
+        }
+      ],
+      "expectedNoMatches": [
+        {
+          "case": "ts-injection-pair",
+          "path": "src/query.ts",
+          "symbol": "parameterized",
+          "startLine": 5,
+          "endLine": 7
+        },
+        {
+          "case": "ts-injection-pair",
+          "path": "src/query.js",
+          "symbol": "parameterized",
+          "startLine": 4,
+          "endLine": 6
+        }
+      ]
+    },
+    {
+      "id": "sentinel-fixture-sql-concat-java",
+      "source": "rules/sentinel-fixture-sql-concat-java.yaml.fixture",
+      "sha256": "4e09df8e463ceb7bd1f50fe65549cc5e4df2f30260fb4ba6aee601b84ea3e8d2",
+      "scope": "narrow-call-pattern",
+      "provenance": "original synthetic rule; no imported rules",
+      "expectedMatches": [
+        {
+          "case": "java-injection-pair",
+          "path": "src/Queries.java",
+          "symbol": "interpolated",
+          "startLine": 4,
+          "endLine": 6
+        }
+      ],
+      "expectedNoMatches": [
+        {
+          "case": "java-injection-pair",
+          "path": "src/Queries.java",
+          "symbol": "parameterized",
+          "startLine": 7,
+          "endLine": 11
+        }
+      ]
+    }
+  ]
+}

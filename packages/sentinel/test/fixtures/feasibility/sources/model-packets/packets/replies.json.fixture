@@ -1,0 +1,24 @@
+{
+  "valid": {
+    "verdict": "vulnerable-pattern",
+    "citations": [
+      "source:query:3"
+    ]
+  },
+  "missingCitation": {
+    "verdict": "vulnerable-pattern",
+    "citations": []
+  },
+  "inventedCitation": {
+    "verdict": "vulnerable-pattern",
+    "citations": [
+      "source:missing:99"
+    ]
+  },
+  "wrongAnswer": {
+    "verdict": "bounded-safe-pattern",
+    "citations": [
+      "source:query:3"
+    ]
+  }
+}

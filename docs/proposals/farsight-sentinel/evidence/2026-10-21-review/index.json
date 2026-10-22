@@ -1,0 +1,32 @@
+{
+  "format": "sentinel-feasibility-evidence/draft-1",
+  "date": "2026-10-21",
+  "scope": "Review follow-up synthetic measurements; prior evidence is unchanged. Failed noexec trial retained. No tool binaries, materialized source trees or provider content.",
+  "files": [
+    {
+      "path": "compiled-parser-files.json",
+      "sha256": "39355e4952ca828f757cc535421a5f2e96821fb72c96552359809c13a4f868a5",
+      "bytes": 17010
+    },
+    {
+      "path": "local-artifacts.tgz",
+      "sha256": "b5a1ffe0d4f179f8ec23baebde3c6030d37433d35fd425f317e635f05c71e697",
+      "bytes": 238134
+    },
+    {
+      "path": "local-results.json",
+      "sha256": "c3b3eb79efcd50664cd40b90db9af9ec487a01dc41a2e362f9c1c49512a894c0",
+      "bytes": 62505
+    },
+    {
+      "path": "scanner-results.json",
+      "sha256": "36916fbf9c2285c97ccecbd240d37a5e5b9b64e19355d689c5cd3bb7e8786a5f",
+      "bytes": 306605
+    },
+    {
+      "path": "scanners-noexec-failed.json",
+      "sha256": "a1f5ab55d23248008e0e11b0bc8061280779456b7e196541dd18ea5ba15a40cc",
+      "bytes": 170977
+    }
+  ]
+}

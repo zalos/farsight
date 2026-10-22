@@ -1,0 +1,3 @@
+import { unsafeLookup, boundedLookup } from './lookup.js';
+export const unsafeRoute = req => unsafeLookup(req.query.name);
+export const boundedRoute = req => boundedLookup(req.query.name);

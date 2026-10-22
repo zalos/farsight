@@ -524,6 +524,16 @@ work; permission expansion requires a new reviewed plan/run rather than changing
 | Farsight HTTP | `/api/sentinel/...` proxy only when configured; handshake/version mismatch; all writes guarded/read-only aware |
 | Farsight GUI | PR 25 deterministic overview/checks/execution/evidence/comparison and placed findings; PR 25b adds model-specific views |
 
+The owner confirmed the visible workflow before PR 01 dispatch: **configure → preview stages → run → inspect
+inputs/outputs → rerun selected work → compare**. PR 25 includes scan-profile/scope/stage configuration and an
+execution view with dependencies, progress, attempts, retained inputs/outputs and retry/rerun controls. Required
+checks cannot be silently disabled; unavailable capabilities and resulting gaps are visible before admission.
+A selected-stage rerun previews its dependency consequences and creates a linked run with prior results
+preserved; this does not promise the later PR 27 incremental-selection optimization. PR 25b adds an explicit
+provider/model picker for the review stages, showing configured availability, disclosure and budget effects,
+and records the requested and actual model identity with each result. This UI consumes the existing service
+contracts and pinned evidence; no alternative scheduler or result calculation lives in the viewer.
+
 Proposed HTTP mapping (all IDs are workspace-bound; the service uses equivalent typed operations):
 
 | Route | Effect and response |

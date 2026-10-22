@@ -1,0 +1,6 @@
+import { NextResponse } from 'next/server';
+export function middleware(request) {
+  if (!request.cookies.get('session')) return new NextResponse('unauthorized', { status: 401 });
+  return NextResponse.next();
+}
+export const config = { matcher: ['/private/:path*'] };

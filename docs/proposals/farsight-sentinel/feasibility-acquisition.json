@@ -1,0 +1,127 @@
+{
+  "format": "sentinel-feasibility-acquisition/draft-1",
+  "recordedAt": "2026-10-21",
+  "scope": "PR 01 synthetic local trials",
+  "authorization": "Owner requested PR 01 implementation and validated pull request; bounded tool acquisition and synthetic tests are within that scope. Container-only policy is confirmed. No private source or model disclosure.",
+  "policy": {
+    "externalScannerExecution": "linux-container-only",
+    "hostFallback": false,
+    "providerCalls": false,
+    "fixtureDependencyInstallation": false,
+    "sourceExecution": false
+  },
+  "candidates": [
+    {
+      "id": "semgrep",
+      "version": "1.181.0",
+      "source": "https://github.com/semgrep/semgrep/releases/tag/v1.181.0",
+      "image": "semgrep/semgrep@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b",
+      "acquisition": "downloaded-pinned-image",
+      "rights": "Repository LICENSE declares LGPL-2.1; trial uses original rules. Production redistribution/terms review remains pending.",
+      "licenseSource": "https://github.com/semgrep/semgrep/blob/v1.181.0/LICENSE",
+      "decision": "deferred"
+    },
+    {
+      "id": "opengrep",
+      "version": "1.31.0",
+      "source": "https://github.com/opengrep/opengrep/releases/tag/v1.31.0",
+      "binaryUrl": "https://github.com/opengrep/opengrep/releases/download/v1.31.0/opengrep_manylinux_aarch64",
+      "binarySha256": "2b713a29a00237f85408b83002fc111db5b94c7fa8d263f0a93184a960655d9d",
+      "binaryBytes": 47910328,
+      "runnerImage": "debian@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8",
+      "acquisition": "downloaded-pinned-binary-and-runner-image",
+      "rights": "Repository LICENSE declares LGPL-2.1; trial uses original rules. No redistribution of tool binary in this repository. Production terms review remains pending.",
+      "licenseSource": "https://github.com/opengrep/opengrep/blob/v1.31.0/LICENSE",
+      "decision": "deferred"
+    }
+  ],
+  "externalCorpora": [
+    {
+      "id": "WebGoat",
+      "repository": "https://github.com/WebGoat/WebGoat",
+      "revision": "e7b131360d74336c0c94ab5c8a21259503f59be8",
+      "reportedLicense": "Other/NOASSERTION",
+      "status": "not-acquired",
+      "decision": "deferred",
+      "reason": "Explicit archive/content and rights review required; metadata is not license approval."
+    },
+    {
+      "id": "Juice Shop",
+      "repository": "https://github.com/juice-shop/juice-shop",
+      "revision": "399fba76194305a312693eee44f4df64bdf0c3ce",
+      "reportedLicense": "MIT",
+      "status": "not-acquired",
+      "decision": "deferred",
+      "reason": "No external corpus executed or scored; content/label selection and archive digest remain pending."
+    },
+    {
+      "id": "OWASP Benchmark Java",
+      "repository": "https://github.com/OWASP-Benchmark/BenchmarkJava",
+      "revision": "a0f07b8451902de4e3ff37aa03e40f4aeb3b4dbe",
+      "reportedLicense": "GPL-2.0",
+      "status": "not-acquired",
+      "decision": "deferred",
+      "reason": "No external corpus executed or redistributed; content/label and rights review remain pending."
+    }
+  ],
+  "frameworkCandidates": [
+    {
+      "framework": "Express",
+      "version": "4.21.2"
+    },
+    {
+      "framework": "Nest",
+      "version": "10.4.15",
+      "companion": "class-validator 0.14.1"
+    },
+    {
+      "framework": "Next",
+      "version": "14.2.25"
+    },
+    {
+      "framework": "Spring Boot",
+      "version": "3.4.3",
+      "companion": "Spring Security 6.4.3"
+    }
+  ],
+  "frameworkStatus": "Uninstalled synthetic declarations only; no supported-version matrix or runtime protection claim.",
+  "containerHost": {
+    "host": "macOS arm64",
+    "dockerEngine": "29.2.1",
+    "dockerDesktop": "4.65.0 (221669)",
+    "vmOS": "linux",
+    "vmArch": "aarch64",
+    "vmCPUs": 10,
+    "vmMemoryBytes": 8217059328,
+    "trialCPUs": 2,
+    "trialMemoryBytes": 2147483648,
+    "trialPids": 128,
+    "trialTmpfsBytes": 268435456,
+    "network": "none",
+    "rootfs": "read-only",
+    "uid": 65534,
+    "capabilities": "all dropped",
+    "privilegeEscalation": false,
+    "limits": "Per-container test ceilings, not accepted product defaults or measured peak usage."
+  },
+  "acquisitionEffects": {
+    "networkDestinations": [
+      "Docker Hub (versioned image acquisition)",
+      "GitHub releases and release-asset redirects (checksum-pinned binary)",
+      "GitHub API (public corpus revision/license metadata)"
+    ],
+    "executionNetwork": "none",
+    "paidServices": false,
+    "content": "Original synthetic fixtures and rules only"
+  },
+  "openDecisions": [
+    "Engine and exact supported-runtime selection",
+    "Production redistribution and installation terms",
+    "Deterministic corpus and thresholds",
+    "Framework runtime semantics",
+    "Deep-analysis capability",
+    "Resource and retention defaults",
+    "External corpus acquisition and labeling",
+    "Model-specific trials and thresholds"
+  ]
+}

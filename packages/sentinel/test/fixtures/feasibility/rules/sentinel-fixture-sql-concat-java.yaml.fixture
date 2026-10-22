@@ -1,0 +1,6 @@
+rules:
+  - id: sentinel-fixture-sql-concat-java
+    languages: [java]
+    severity: WARNING
+    message: Synthetic SQL concatenation fixture; narrow syntax match only.
+    pattern: $DB.createStatement().executeQuery($LEFT + $RIGHT)

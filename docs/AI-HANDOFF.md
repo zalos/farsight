@@ -41,6 +41,46 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel PR 01 first implementation slice — 2026-10-21
+
+PR #132 review follow-up on `codex/sentinel-feasibility` tightens platform refusal, network-denial evidence
+and symbol attribution, makes silent parser omissions explicit unknown coverage gaps, and retains scrubbed
+probe exceptions. Two SOL lanes implemented the fixes; the lead reviewed and reran actual measurements.
+The [follow-up evidence](proposals/farsight-sentinel/evidence/2026-10-21-review/index.json) preserves the
+earlier records. Local E1/E4/E8 again passed 78/12/30 controls. The final scanner rerun passed 66 scenario
+and four run controls with all nine containers removed. A retained failed trial shows the pinned Opengrep
+binary cannot launch its version command with `noexec`; only that candidate has a fixed `exec` exception,
+disclosed in preview/results. Semgrep retains `noexec`, and neither has a host fallback. This is a measured
+experiment limitation, not accepted production isolation. Complete PR 01 acceptance remains open.
+Follow-up validation passed build/type checks, 1,615 package tests (two expected live skips), 79 script
+tests, string lint, Echo package smoke, 345 browser/MCP tests and 11 small perf checks. Claude CLI's final
+source review reported no remaining actionable findings; the lead verified literal fixture spans and
+executed measurements. Original review files and earlier evidence are unchanged. Isolated dependency
+installation refreshed shared Git hook metadata but did not build or test the primary checkout.
+
+PR #131 merged at `0cb2d34`. Branch `codex/sentinel-feasibility` adds inert reviewed fixtures, draft
+manifest/effect preview, bounded parser/SQLite/codec probes and explicit container-only scanner trials.
+The [results and decision record](proposals/farsight-sentinel/feasibility-results.md) links retained synthetic
+evidence, the failed initial scanner attempt, corrected measurements and remaining acceptance gates.
+No production Sentinel package or public contract exists. This is a validated first PR 01 slice; the complete
+measured-decision gate remains open and PR 02 is not dispatched. Framework support, corpus/threshold
+acceptance, engine selection, terms and resource defaults remain unresolved; model work stays independent.
+
+Three SOL lanes implemented and cross-reviewed the work. The lead fixed shared labels/formats, integrated
+commits and ran actual trials. Local E1/E4/E8 passed 78/12/30 controls. Semgrep 1.181.0 and Opengrep 1.31.0
+both found three SQL-concatenation symbols and no safe siblings under two original rules; oversized files were
+explicitly skipped on exit zero and missing-rule files failed with diagnostic/exit 7. The denied-network control
+and exact-owner cleanup passed. These narrow trials do not establish deep security or framework capability.
+The acquisition record pins Linux arm64 containers and the binary; no scanner ran on the host or used network.
+
+Validation: Node 24 build, type checks, 1,615 package tests (two expected live skips), 70 script tests,
+string lint, Echo package smoke, final 345-test e2e and 11-check small perf suite passed. An initial e2e run's
+build-currency and navigation failures passed the stable rebuild, focused rerun and full rerun; see the results
+record. Original Claude review files are unchanged. All builds/tests used the isolated implementation worktree;
+no primary-checkout build, dogfood refresh, global installation or provider trial. The primary checkout remains
+on main with the pre-existing editor-settings edit preserved. PR 25/25b now explicitly require scan/stage
+configuration, pinned inputs/outputs, visual progress, linked reruns/comparison and model selection.
+
 ## Sentinel review and execution preparation — 2026-10-21
 
 Branch `codex/sentinel-readiness`, [PR #131](https://github.com/zalos/farsight/pull/131), prepares the next bounded implementation after reviewing recent main

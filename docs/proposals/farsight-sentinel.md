@@ -24,6 +24,7 @@ evidence with provenance; add managed runtime scanning after the static executio
 | File | Purpose |
 |---|---|
 | This proposal | Product scope, phases, architecture, delivery sequence and acceptance criteria |
+| [Feasibility protocol](farsight-sentinel/feasibility-protocol.md) · [Results and decisions](farsight-sentinel/feasibility-results.md) | PR 01 synthetic fixtures, bounded probes, measured evidence and remaining decision gates |
 | [Execution and data contracts](farsight-sentinel/contracts.md) | Draft records, retry semantics, invalidation, commands and configuration |
 | [Scanner research](farsight-sentinel/research-scanners.md) | Standards, deterministic engines, licenses, Java support and runtime options |
 | [Workflow research](farsight-sentinel/research-workflows.md) | SQLite, Temporal, LangGraph, SARIF, VEX and VS Code integration |

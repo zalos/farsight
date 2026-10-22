@@ -628,6 +628,10 @@ catalog/count definitions, `docs/MAP-VIEWER.md`, focused e2e.
 
 Build overview, checks table, execution timeline/DAG detail, finding evidence, decision proposal and full-run
 comparison for deterministic runs. Show gaps alongside findings, scope on counts and plan revisions on progress.
+Include scan-profile/scope/stage configuration, a pre-run dependency/effect preview, and stage detail showing
+retained inputs, outputs, versions, attempts, failures and gaps. Provide retry and selected-stage rerun controls;
+preview prerequisites and affected downstream work, preserve previous results in a linked run, and expose
+required checks that cannot be disabled. This is an explicit user workflow, not just a status dashboard.
 Use PR 19's place for business-register sentences on known screens, journeys and personas. Add one shared
 Sentinel chip on the gate card and Map property's Gates & rules tab, linking to the same finding/gap detail;
 there is no new journey surface or per-card graph scan. Evidence reads pinned bytes. Links validate snapshot/source
@@ -642,6 +646,8 @@ same route issue is understandable from both the Map and Sentinel. **Demo:** a b
 screen/journey and action affected, sees what is uncertain and follows the existing gate card to evidence.
 Compare that explanation, its counts and its evidence limits with the standalone report, including a report
 whose application graph is unavailable or has changed.
+Also demonstrate configure → preview → run → inspect one stage's inputs/outputs → rerun that stage → compare
+the retained results, including an unavailable stage and required-check constraint.
 Run the review swarm at this checkpoint once authorized, before model-specific UI work is required.
 
 ### PR 25b — model review and disclosure in the GUI
@@ -654,6 +660,9 @@ Run the review swarm at this checkpoint once authorized, before model-specific U
 Show guided/general partitions, provider identity strength, exact source disclosure, approval effects, budget
 reservations and uncertain usage. Keep review evidence distinguishable from deterministic coverage. Reuse the
 same service verdicts and human confirmation flow; no model can approve through the UI adapter.
+Provide an explicit configured provider/model picker for model-review stages. Preview availability, disclosure
+and budget changes before admission; changing a model creates a linked rerun over the selected retained inputs.
+Show requested versus reported actual model identity and preserve both outputs for comparison.
 
 **Done when:** enabling review does not change deterministic totals, absent provider states are clear, canceled
 paid calls retain uncertainty, and business/code registers explain the same evidence limits. Run applicable

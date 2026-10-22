@@ -1,0 +1,12 @@
+{
+  "edits": [
+    "new-route",
+    "removed-route",
+    "renamed-guard-with-same-named-sibling",
+    "framework-version-only",
+    "rule-narrowing-only",
+    "advisory-database-only"
+  ],
+  "oracle": "Compare normalized accepted outputs and explicit coverage gaps from fresh full and incremental runs over identical inputs.",
+  "state": "deferred-until-PR27-28"
+}

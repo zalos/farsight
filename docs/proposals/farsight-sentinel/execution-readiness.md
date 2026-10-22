@@ -4,6 +4,10 @@ Prepared 2026-10-21 against `main` at `46018cb`. This packet prepares bounded PR
 the [architecture](implementation-plan.md), [backlog](implementation-prs.md) and
 [kickoff](execution-kickoff.md); it does not authorize execution of the whole backlog.
 
+Execution update, 2026-10-21: the owner authorized PR 01 implementation after merging PR #131.
+The [results record](feasibility-results.md) is the current evidence/status; the preparation checkpoint below
+remains historical. Its complete measured-decision gate still applies.
+
 ## Verified state and scope
 
 - Planning PR [#118](https://github.com/zalos/farsight/pull/118) merged on
