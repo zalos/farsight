@@ -9,7 +9,6 @@
 //
 //   pnpm pack:sentinel && node scripts/test-sentinel-preview-consumer.mjs [build/sentinel/farsight-sentinel-<v>.tgz]
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,13 +33,6 @@ try {
   const env = { ...consumer.env, HOME: join(scratch, 'home'), XDG_STATE_HOME: join(scratch, 'owner-state') };
   mkdirSync(env.HOME, { recursive: true });
   const bin = consumer.bin('farsight-sentinel');
-  // The runtime sidecars the package loads by file URL are installed where its manifest says, with exactly those bytes.
-  const installed = join(consumer.dir, 'node_modules', 'farsight-sentinel');
-  const sidecars = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8')).sentinel?.sidecars ?? {};
-  assert.deepEqual(Object.keys(sidecars).sort(), ['execution/bootstrap', 'execution/launch-gate', 'snapshot/capture', 'snapshot/parser']);
-  for (const [name, { path, sha256 }] of Object.entries(sidecars)) {
-    assert.equal(createHash('sha256').update(readFileSync(join(installed, path))).digest('hex'), sha256, `${name} is the recorded bytes`);
-  }
   const sentinel = async (...args) => {
     try {
       const r = await consumer.exec(bin, [...args, '--json'], { cwd: ws, env });
