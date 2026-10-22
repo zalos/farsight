@@ -6,6 +6,50 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Sentinel capture boundary and owned scratch — 2026-10-22
+
+PR #160 (bounded framework inspection) merged as `0b1f74a7`. Branch `codex/sentinel-owned-capture`, from exactly
+that commit, implements ADR 46 and is not yet pushed or merged:
+
+- A working-copy capture leaves out only the store this process holds, at its exact canonical folder with its
+  acquired identity and a live hold check. An alias refuses (`capture.storeAliased`), a source inside the store
+  refuses, a look-alike store exempts nothing, and committed trees get no live-store exemption.
+- The canonical plan no longer leaves `.farsight` out by name. Settings are captured as bounded data and never become
+  policy. Retained snapshots keep their recorded boundaries; the same content now plans as a new run.
+- Owner commands and the service take their scratch from a lease at `<store>/scratch/<epoch>/w-…`. A lease is released
+  only on scoped proof that each consumer stopped: attempts ended in this epoch with no worker, intent or
+  terminal-unknown record, and every container client from the lease's runner has exited. Anything uncertain
+  retains it and the result says why.
+- Removal is a bounded post-order walk through no-follow descriptors. Path-based removal under an active
+  same-account race is detection, not confinement. Earlier epochs' leases are retained, never swept.
+- Trust state is checked against the workspace by its prospective path before anything is made. The service refuses
+  a reached runtime-folder candidate inside the workspace (`ipc.runtimeDirInsideSource`) before it makes anything;
+  the disjoint long-path `/tmp` fallback is kept.
+
+On the default layout the Express inspection answers without a capture gap: an open route is established
+does-not-apply, and a guarded route is a cited refusalUnproven unknown.
+
+Found and left for an owner decision:
+- Farsight's code parser lists no hidden folder, so a route under `.farsight` is a cited `routeNotInGraph`
+  frontier, never a fact.
+- A minimal workspace's full report is partial, because the captured settings file is seen by no check.
+- The coordinator's drive can throw while units are still in flight, and attempts are recorded only after spawn.
+  That is why release never trusts a settled promise.
+
+Validation (Node 24, pnpm 9, isolated worktree):
+- builds and typechecks of core and Sentinel;
+- core 404 tests passed;
+- the Sentinel suite ran once: 1,143 tests, 1,002 passed, 0 failed, 141 skipped (the opt-in container and scanner
+  isolation cases);
+- catalog lint passed.
+
+The installed npm-only consumer script was updated, but it could not install offline here: the local npm cache lacks
+a dependency, and nothing was downloaded. The same canonical flow through the workspace CLI produced the asserted
+rows and left the store's scratch empty.
+
+Remaining: independent SOL verification, root real-ingest and browser measurement, the installed consumer and
+container cases in CI, and the merge. Nothing was installed globally, and no server or primary checkout was touched.
+
 ## Framework canonical wiring checkpoint — 2026-10-22
 
 The framework integration branch combines the retained analysis seam and bounded worker closure with the selected

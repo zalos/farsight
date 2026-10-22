@@ -209,7 +209,7 @@ export function releaseScratchLease(store: SentinelStore, lease: ScratchLease, l
   const leaf = s.chain[s.chain.length - 1]!;
   let removedAny = false;
   try {
-    const outcome = removeTree(leaf.path, leaf.identity, 0, budget, () => { removedAny = true; }, () => { store.assertHeld(); return chainIntact(s); });
+    const outcome = removeTree(leaf.path, leaf.identity, 0, budget, () => { removedAny = true; }, () => { store.assertHeld(); return chainIntact(s); }, new Set(names));
     if (outcome !== 'removed') return retain(outcome, removedAny);
   } catch { return retain('removeFailed', removedAny); }
   s.released = true;
@@ -218,11 +218,11 @@ export function releaseScratchLease(store: SentinelStore, lease: ScratchLease, l
   return { removed: true };
 }
 
-type TreeOutcome = 'removed' | 'budgetExhausted' | 'leaseChanged' | 'ownerNotHeld';
+type TreeOutcome = 'removed' | 'budgetExhausted' | 'leaseChanged' | 'ownerNotHeld' | 'consumerUnknown';
 
 /** Post-order removal of one folder with its identity checked through a no-follow descriptor; bounded by `budget`. */
 function removeTree(path: string, identity: FileIdentity, depth: number, budget: { entries: number; deadline: number; readonly maxEntries: number; readonly maxDepth: number },
-  removed: () => void, fence: () => boolean): TreeOutcome {
+  removed: () => void, fence: () => boolean, checked?: ReadonlySet<string>): TreeOutcome {
   if (depth > budget.maxDepth || Date.now() > budget.deadline) return 'budgetExhausted';
   let fd: number;
   try { fd = openSync(path, DIR_FLAGS); } catch { return 'leaseChanged'; }
@@ -235,6 +235,9 @@ function removeTree(path: string, identity: FileIdentity, depth: number, budget:
   try { names = readdirSync(path); } catch { return 'leaseChanged'; }
   const again = lstatOrUndefined(path);
   if (!again || again.isSymbolicLink() || identityOf(again) !== identity) return 'leaseChanged';
+  // At the lease's top level only the children whose consumers were just checked are removed: one that appeared
+  // since belongs to a consumer nobody checked, so the walk stops and the lease is kept.
+  if (checked && names.some(n => !checked.has(n))) return 'consumerUnknown';
   for (const name of names) {
     if (++budget.entries > budget.maxEntries || Date.now() > budget.deadline) return 'budgetExhausted';
     const child = join(path, name);

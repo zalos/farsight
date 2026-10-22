@@ -35,6 +35,14 @@ the ledger keeps schema, privacy class and links per reference, so shared bytes 
 Nothing is deleted automatically; the prune plan is a dry run, and never lists the provenance (manifest, invocation, outputs, diagnostics) of a retained work or attempt record. The store holds no credential and no settings, and
 durability is claimed against process death, not power loss (ADR 19).
 
+A capture (ADR 46) leaves out only the store this process holds, at its exact canonical folder with the identity
+it was opened with; the store reached under another name, replaced, renamed or released refuses the capture, and no
+folder is left out by its name. A run's scratch is a lease inside that store, removed only when every attempt,
+worker, container and container client tied to it is proven stopped by the store's own records, by a bounded walk
+that opens each folder without following a link; anything uncertain is kept. Path-based removal under an active
+same-account race is detection, not confinement. Owner trust state and the service's runtime folder are checked
+against the captured workspace before anything is made, and a selected location inside it is refused.
+
 Trusted policy (ADR 23) reads `.farsight/sentinel/settings.json` and the repository's `sentinel.config.json` as data,
 never following a link. The settings hold keychain references only (`keychain:farsight/<name>`); a value shaped like a
 credential anywhere else is refused and not repeated in the error. The file grants nothing until the owner adopts its
@@ -57,7 +65,7 @@ with no token, no repository configuration and no ignore comments; the audits th
 reported as skipped, never as passed.
 The Nest framework pack (ADR 32) reads only captured bytes from the store and the parser's artifact; it parses them
 as data and never imports, installs or runs the target or its package manager. Guard and pipe names are never read
-as protection, and a registration it cannot follow is reported as a frontier, not resolved. The local runtime folder
+as protection, and a registration it cannot follow is reported as a frontier, not resolved. Sentinel's local folder
 (`.farsight/sentinel/*`) is ignored by git. Later scanner, container and model work arrives with its
 own trust-boundary section here: external scanners run only in containers, with no host fallback, and model
 providers are opt-in per run. The pattern adapter (PR 10) is the first external scanner: Semgrep 1.181.0, the image pinned by

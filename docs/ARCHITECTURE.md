@@ -1548,3 +1548,33 @@ offline HTML and SARIF properties. Facts create no SARIF results. The minimal sc
 privacy-projected section instead of raw controls envelopes. Every new source-controlled identity, version and
 frontier passes through the coarse secret-run projection before rendering; required partial checks remain gaps.
 Per-surface execution and assessment policy (PR 20) remain separate work. Words are `strings-sentinel-framework-controls.ts`; the pack is `rules/framework-controls/`.
+
+46. **Sentinel captures everything but the exact store it holds, and keeps run scratch in a lease inside that store (2026-10-22).**
+A working-copy capture leaves out one folder only: the store this process holds, at its exact canonical path and
+with the identity the owner acquired, and only while the hold is still checked there (`store/owner-binding.ts`
+`heldStoreRoot`). The store's identity reached under any other name refuses the capture (`capture.storeAliased`), a
+source that is or lies inside the store refuses, and a look-alike store object exempts nothing. A committed tree
+gets no live-store exemption: blobs at the store's path are committed source. No folder is left out by name, so
+`.farsight` is ordinary source in the canonical path and `.farsight/sentinel/settings.json` is captured as bounded
+data that never becomes adopted policy. Snapshots captured under the earlier `.farsight` exclusion keep their
+recorded boundaries; nothing is reinterpreted, and the same content now plans as a new run.
+Every owner command and the background service take their scratch from a lease at
+`<store>/scratch/<epoch>/w-…` (`service/scratch-lease.ts`), made only from a genuine held store, one private level at
+a time, with the identities recorded privately. A lease is removed only when each consumer tied to it is proven
+stopped by the store's existing lifecycle records: its attempt folders belong to attempts of this store and epoch
+that the ledger ended (the coordinator ends an attempt only after the supervisor reaped its worker; a worker record
+is settled after the process exited and a container intent after its removal was confirmed) and that no worker,
+intent or terminal-unknown record still names; every container client the lease's runner started has exited. A
+restore, a parser folder, an unknown name, an unreadable or unattributable record, owner loss or a changed folder
+retains it, and the result says why. Removal is a bounded post-order walk (entries, depth, time) through no-follow
+descriptors with non-recursive rmdir; exhaustion keeps the rest and reports a partial cleanup. The descriptor
+checks keep a chmod from following an observed link; later path-based unlink and rmdir are not descriptor-relative,
+so a same-account process racing paths is detected only when observed — the owner-only boundary of ADR 19, not a
+filesystem confinement. Earlier epochs' leases are retained, never swept; global worker recovery is unchanged.
+The trust folder is checked against the captured workspace by its prospective canonical path before anything is
+created, and the service refuses a reached runtime-folder candidate inside the workspace before it makes a folder,
+socket or descriptor (`ipc.runtimeDirInsideSource`); a disjoint long-path base keeps the `/tmp` fallback. The
+multi-source `captureSnapshot` API knows no trust or runtime state and checks only the store boundary; a caller that
+captures several sources checks them all (`assertTrustOutside`). Farsight's code parser lists no hidden folder, so a
+route under `.farsight` is captured and read by a framework pack but has no graph surface: it is a cited
+`routeNotInGraph` frontier, never a fact. Number 45 is reserved for the path protocol.

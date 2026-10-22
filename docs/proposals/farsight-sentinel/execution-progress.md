@@ -61,7 +61,18 @@ identifiers, not GitHub PR numbers.
   the exact final `147eb71c` tree, all sixteen final CI checks, the native twenty-repetition recovery gate, and both
   post-merge checks successful. General analysis reuse remains PR 27's separate gate.
 
-  The current bounded framework candidate combines the retained source seam and closure with `64d86ae9`; its
+  The bounded framework inspection merged as [#160](https://github.com/zalos/farsight/pull/160), `0b1f74a7`, with
+  its reviewed tree unchanged and all twenty final CI checks, including the twenty-repetition recovery gate and the
+  installed Linux scanner and offline report workflow. Its candidate notes follow. The capture-boundary follow-up
+  (ADR 46, not yet merged) removes the owner-policy omission of `.farsight` described there: a capture leaves out only
+  the exact held store; run scratch is a lease inside it, released only on scoped stopped-consumer proof; trust state
+  and the service runtime folder are refused inside the workspace. On the default layout the Express inspection then
+  answers without a capture gap (open route established does-not-apply; guarded route a cited refusalUnproven
+  unknown). Routes under hidden folders stay cited `routeNotInGraph` frontiers because Farsight's parser lists no
+  hidden folder, and a minimal workspace's report counts the captured settings file as seen by no check. Independent
+  SOL verification, root real-ingest and browser measurement, selected CI and merge remain.
+
+  The framework candidate combined the retained source seam and closure with `64d86ae9`; its
   production checkpoint is `43ec307d`. Genuine current/baseline/canceled-selected secret privacy, independent
   two-source readback after removal, installed npm-only report delivery, actual mid-inspection service SIGKILL/resume
   and once-only publication pass. Existing exports, five scanner assets and four framework library consumers remain
