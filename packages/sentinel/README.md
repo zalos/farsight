@@ -207,15 +207,16 @@ const paths = await boundedCallPaths({ snapshotId, analysis: analysis.sources[0]
 paths.results[0].outcome;   // reached | not-reached-complete | not-reached-bounded (with its frontiers)
 paths.establishes;          // always 'call-reachability': a path is never a data flow
 
-const imported = await importDeepAnalysis({ document, snapshot, trust, readContent, importedAt });
+const imported = await importDeepAnalysis({ document, snapshot, authorization: spentReceipt, readContent, importedAt });
 imported.status;            // refused | untrusted | unbound | imported (observations limited to the tool's scope)
 ```
 
 Sentinel ships no deep engine: none qualified for cross-file flow (E3), so deep checks stay unsupported. A path
 search follows the parser's call edges within explicit bounds and reports cycles; it says "not reached" without a
 frontier only when every visited function's calls are accounted for by the graph. A customer's own analyzer output
-is imported only with an attestation the owner trusts, accepted licence terms, and a binding to the exact captured
-bytes; imported flows never count as checks Sentinel ran. ADR 36.
+is imported only with the owner's spent receipt for exactly that document and snapshot (`deepImportIntent`; the
+document's own attestation is never trusted alone) and a binding to the exact captured bytes; imported flows never
+count as checks Sentinel ran. ADR 36.
 
 ## Versions and evolution
 

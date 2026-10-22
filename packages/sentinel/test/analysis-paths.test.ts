@@ -9,8 +9,10 @@ import { join } from 'node:path';
 import { captureSnapshot } from '../dist/snapshot/index.js';
 import { parseSnapshot } from '../dist/snapshot/parser.js';
 import {
-  boundedCallPaths, importDeepAnalysis, DEEP_ANALYSIS_SUPPORT, DEEP_REASON_CODES, PATH_REASON_CODES, PathError,
+  boundedCallPaths, importDeepAnalysis, deepImportIntent, DEEP_ANALYSIS_SUPPORT, DEEP_REASON_CODES, PATH_REASON_CODES, PathError,
 } from '../dist/analysis/index.js';
+import { ReceiptBook } from '../dist/policy/receipts.js';
+import { issueReceipt } from '../dist/policy/owner-receipts.js';
 import { validateEnvelope } from '../dist/index.js';
 import { capability } from '../dist/capabilities.js';
 import { commitRepo, needsStore, openCaptureStore, scratch } from './snapshot-helpers.ts';
@@ -110,7 +112,15 @@ test('depth, fan-out and visit bounds are frontiers; unknown nodes and invalid r
 // ---- imported deep-analysis results ----
 
 const TERMS = `sha256:${createHash('sha256').update('example analyzer licence terms').digest('hex')}`;
-const TRUST = { trustedAttesters: ['security-team@example.com'], acceptedTerms: [{ tool: 'example-analyzer', termsDigest: TERMS }] };
+const STATE = `sha256:${'5'.repeat(64)}`;
+const POLICY = `sha256:${'6'.repeat(64)}`;
+/** The owner's local CLI confirms one intent; the coordinator spends the receipt. */
+function ownerConfirms(t: any, intent: any) {
+  const book = new ReceiptBook(join(scratch(t, 'sentinel-trust-'), 'receipts'));
+  const now = new Date('2026-10-22T09:30:00Z');
+  const r = issueReceipt(book, { channel: 'owner-cli', principal: 'owner' }, { intent, stateDigest: STATE, policyRevision: POLICY }, { now, ttlMs: 600_000 });
+  return book.consume(r.id, { intent, stateDigest: STATE, policyRevision: POLICY }, now);
+}
 
 async function importFixture(t: any) {
   const { fx, snapshot, readContent } = await setup(t);
@@ -138,8 +148,11 @@ async function importFixture(t: any) {
       sink: await spanOf('src/service.ts', '`select * from users where id = \'${id}\'`'),
     }],
   };
-  const run = (d: unknown, trust = TRUST) => importDeepAnalysis({ document: typeof d === 'string' ? d : JSON.stringify(d), snapshot, trust, readContent, importedAt: '2026-10-22T10:00:00Z' });
-  return { doc, run, snapshot, spanOf, entry };
+  const text = (d: unknown) => (typeof d === 'string' ? d : JSON.stringify(d));
+  // By default the owner confirmed exactly the document being imported, so the binding checks are what is tested.
+  const run = (d: unknown, authorization: unknown = 'confirm') => importDeepAnalysis({ document: text(d), snapshot, readContent, importedAt: '2026-10-22T10:00:00Z',
+    authorization: authorization === 'confirm' ? (deepImportIntent(text(d), snapshot.id) ? ownerConfirms(t, deepImportIntent(text(d), snapshot.id)) : undefined) : authorization });
+  return { doc, run, snapshot, spanOf, entry, text };
 }
 
 test('an attested, trusted and bound import becomes imported observations beside the structural path', needsStore, async t => {
@@ -165,15 +178,29 @@ test('an attested, trusted and bound import becomes imported observations beside
   assert.equal(capability('interprocedural-flow')?.reasonCode, 'sentinel.capability.noQualifiedEngine');
 });
 
-test('an untrusted attester or unaccepted terms yield nothing', needsStore, async t => {
-  const { doc, run } = await importFixture(t);
-  const other: any = await run({ ...doc, attestation: { ...doc.attestation, provenance: { ...doc.attestation.provenance, attestedBy: 'someone@example.com' } } });
-  assert.deepEqual([other.status, other.reasonCode], ['untrusted', 'sentinel.deep.untrustedAttestation']);
-  assert.equal(other.observations, undefined);
-  const terms: any = await run({ ...doc, attestation: { ...doc.attestation, license: { ...doc.attestation.license, termsDigest: `sha256:${'c'.repeat(64)}` } } });
-  assert.deepEqual([terms.status, terms.reasonCode], ['untrusted', 'sentinel.deep.termsNotAccepted']);
-  const noTrust: any = await run(doc, { trustedAttesters: [], acceptedTerms: [] });
-  assert.equal(noTrust.status, 'untrusted');
+test('only the owner\'s spent receipt for this exact document and snapshot trusts an import; self-asserted attestation counts for nothing', needsStore, async t => {
+  const { doc, run, snapshot, text } = await importFixture(t);
+  const untrusted = (r: any) => [r.status, r.reasonCode, r.observations];
+  const NOT = ['untrusted', 'sentinel.deep.notOwnerConfirmed', undefined];
+  // No receipt at all: the attester name the owner would recognise is just a string in the document.
+  assert.deepEqual(untrusted(await run(doc, null)), NOT);
+  // A receipt-shaped object that this package's receipt book did not spend authorizes nothing.
+  assert.deepEqual(untrusted(await run(doc, { receipt: { action: 'evidence.import', intentDigest: 'x' }, digest: 'y' })), NOT);
+  // The owner confirmed the original document; a fabricated one copying its attester with another tool version,
+  // distribution, origin or configuration is a different document.
+  const confirmed = ownerConfirms(t, deepImportIntent(text(doc), snapshot.id));
+  for (const [name, forged] of [
+    ['another tool version', { ...doc, tool: { ...doc.tool, version: '10.0.0' } }],
+    ['another distribution', { ...doc, tool: { ...doc.tool, distributionDigest: `sha256:${'f'.repeat(64)}` } }],
+    ['another origin', { ...doc, attestation: { ...doc.attestation, provenance: { ...doc.attestation.provenance, obtainedFrom: 'somewhere-else' } } }],
+    ['another configuration', { ...doc, binding: { ...doc.binding, configurationDigest: `sha256:${'c'.repeat(64)}` } }],
+    ['an extra flow', { ...doc, flows: [...doc.flows, doc.flows[0]] }],
+  ] as const) assert.deepEqual(untrusted(await run(forged, confirmed)), NOT, name);
+  // The same document confirmed for another snapshot, or under another owner action, does not authorize this one.
+  assert.deepEqual(untrusted(await run(doc, ownerConfirms(t, deepImportIntent(text(doc), 'snapshot-elsewhere')))), NOT);
+  assert.deepEqual(untrusted(await run(doc, ownerConfirms(t, { ...deepImportIntent(text(doc), snapshot.id)!, action: 'tool.acquire' }))), NOT);
+  // The exact confirmation imports.
+  assert.equal((await run(doc, confirmed) as any).status, 'imported');
 });
 
 test('results bound to other bytes, another snapshot or out-of-range spans are unbound or unknown', needsStore, async t => {
@@ -206,7 +233,7 @@ test('a malformed document is refused whole', needsStore, async t => {
     const r: any = await run(d);
     assert.deepEqual([r.status, r.reasonCode], ['refused', 'sentinel.deep.malformed'], name);
   }
-  const bad: any = await importDeepAnalysis({ document: Buffer.from([0x7b, 0xff, 0x7d]), snapshot: { id: 'x', entries: [] }, trust: TRUST, readContent: async () => new Uint8Array(), importedAt: '2026-10-22T10:00:00Z' });
+  const bad: any = await importDeepAnalysis({ document: Buffer.from([0x7b, 0xff, 0x7d]), snapshot: { id: 'x', entries: [] }, authorization: undefined, readContent: async () => new Uint8Array(), importedAt: '2026-10-22T10:00:00Z' });
   assert.deepEqual([bad.status, bad.reasonCode], ['refused', 'sentinel.deep.malformed']);
 });
 
@@ -218,4 +245,71 @@ test('every reason code is a catalog entry, and the capabilities are drafts besi
   }
   assert.equal(capability('bounded-call-paths')?.state, 'available-draft');
   assert.equal(capability('deep-import')?.state, 'available-draft');
+});
+
+// ---- review round 1 (SOL, f8d98b1): Unicode and keyword calls, lexical shadowing, analysis identity ----
+
+test('round 1: a Unicode-named call and a call to a property named like a keyword are unrecorded calls, never absence', needsStore, async t => {
+  const { paths } = await setup(t, { ...PATHS_APP, 'src/unicode.ts': `import { query } from './db.js';
+
+export function π() {
+  return query('select 1');
+}
+
+export function dispatchπ(λ: () => void) {
+  λ();
+}
+
+export function viaKeyword(obj: { return(): void }) {
+  obj.return();
+}
+` });
+  const env = await paths([
+    { from: id('src/unicode.ts', 'dispatchπ'), to: id('src/db.ts', 'query') },
+    { from: id('src/unicode.ts', 'viaKeyword'), to: id('src/db.ts', 'query') },
+  ]);
+  for (const i of [0, 1]) {
+    assert.equal(env.results[i].outcome, 'not-reached-bounded', String(i));
+    assert.ok(env.results[i].frontierReasons.includes('sentinel.paths.unrecordedCall'), String(i));
+  }
+});
+
+test('round 1: a parameter or local named like a top-level function shadows it; the parser\'s edge is not followed', needsStore, async t => {
+  const { paths } = await setup(t, { ...PATHS_APP, 'src/shadow.ts': `import { query } from './db.js';
+
+export function sink() {
+  return query('drop');
+}
+
+export function dispatch(sink: () => void) {
+  sink();
+}
+
+export function local() {
+  const sink = () => 0;
+  return sink();
+}
+
+export function direct() {
+  return sink();
+}
+` });
+  const env = await paths([
+    { from: id('src/shadow.ts', 'dispatch'), to: id('src/shadow.ts', 'sink') },
+    { from: id('src/shadow.ts', 'local'), to: id('src/shadow.ts', 'sink') },
+    { from: id('src/shadow.ts', 'direct'), to: id('src/shadow.ts', 'sink') },
+  ]);
+  assert.deepEqual(outcome(env, 0).slice(0, 1), ['not-reached-bounded']);
+  assert.notEqual(env.results[0].outcome, 'reached', 'never reached through a shadowed name');
+  assert.notEqual(env.results[1].outcome, 'reached');
+  // Near neighbour: the same call without a local binding is followed.
+  assert.deepEqual(outcome(env, 2), ['reached']);
+});
+
+test('round 1: an index from another analysis than the artifact is refused, and the envelope names the artifact\'s own fingerprint', needsStore, async t => {
+  const { snapshot, analysis, readContent } = await setup(t);
+  const spoofed = { ...analysis, index: { ...analysis.index, analysisFingerprint: `sha256:${'9'.repeat(64)}` } };
+  await assert.rejects(boundedCallPaths({ snapshotId: snapshot.id, analysis: spoofed, queries: [], readContent }), (e: any) => e.code === 'sentinel.paths.unbound');
+  const env = await boundedCallPaths({ snapshotId: snapshot.id, analysis, queries: [], readContent });
+  assert.equal(env.analysisFingerprint, analysis.artifact.analysis.fingerprint);
 });

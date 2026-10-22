@@ -14,7 +14,7 @@ import type {
 } from '../../contracts/index.js';
 import { validateEnvelope } from '../../validate.js';
 import { digestOf } from '../../store/ledger-json.js';
-import { scanBody } from './body.js';
+import { localNames, scanBody } from './body.js';
 
 export const PATHS_IMPLEMENTATION = 'sentinel-bounded-paths/draft-1';
 
@@ -22,7 +22,7 @@ export const PATH_REASON_CODES = Object.freeze([
   'sentinel.paths.unresolvedCall', 'sentinel.paths.fanoutLimit', 'sentinel.paths.depthLimit', 'sentinel.paths.visitLimit',
   'sentinel.paths.analysisIncomplete', 'sentinel.paths.unknownNode', 'sentinel.paths.inactiveEdge',
   'sentinel.paths.notDataFlow', 'sentinel.paths.graphOnly', 'sentinel.paths.deferredStep', 'sentinel.paths.siteUnplaced',
-  'sentinel.paths.unrecordedCall', 'sentinel.paths.functionAsValue', 'sentinel.paths.bodyUnread',
+  'sentinel.paths.unrecordedCall', 'sentinel.paths.functionAsValue', 'sentinel.paths.bodyUnread', 'sentinel.paths.shadowedCall',
 ] as const);
 export type PathReason = typeof PATH_REASON_CODES[number];
 
@@ -67,8 +67,8 @@ interface GraphIndex {
   /** Distinct recorded call sites (byte starts of call-edge occurrences) per file. */
   readonly callSites: ReadonlyMap<string, readonly number[]>;
   readonly functionNames: ReadonlySet<string>;
-  /** Whether a node's text is accounted for by recorded calls, computed once. */
-  readonly accounted: Map<string, PathReason | null>;
+  /** Whether a node's text is accounted for by recorded calls, and the names it binds locally, computed once. */
+  readonly accounted: Map<string, { reason: PathReason | null; locals: ReadonlySet<string> }>;
 }
 
 const indexes = new WeakMap<object, Map<string, GraphIndex>>();
@@ -114,7 +114,7 @@ function indexOf(analysis: PathAnalysis, kinds: readonly PathEdgeKind[]): GraphI
   }
   const functionNames = new Set(graph.nodes.filter(n => n.kind === 'function' || n.kind === 'component')
     .map(n => n.id.split('::').pop()!.split('.').pop()!).filter(Boolean));
-  const index = { nodes, out, sites, graphDigest, cycleOf, cycles, bodies, callSites, functionNames, accounted: new Map<string, PathReason | null>() };
+  const index = { nodes, out, sites, graphDigest, cycleOf, cycles, bodies, callSites, functionNames, accounted: new Map<string, { reason: PathReason | null; locals: ReadonlySet<string> }>() };
   perArtifact.set(key, index);
   return index;
 }
@@ -179,11 +179,12 @@ const CODE_KINDS = new Set(['function', 'component', 'page', 'route', 'class']);
  * frontier. Exactly placed whole-line text is read lexically (body.ts) and compared with the recorded call sites in
  * the same bytes.
  */
-async function accountedFor(ix: GraphIndex, id: string, read: (content: string) => Promise<Uint8Array>): Promise<PathReason | null> {
+async function accountedFor(ix: GraphIndex, id: string, read: (content: string) => Promise<Uint8Array>): Promise<{ reason: PathReason | null; locals: ReadonlySet<string> }> {
   const known = ix.accounted.get(id);
   if (known !== undefined) return known;
   const node = ix.nodes.get(id)!;
   let reason: PathReason | null = null;
+  let locals: ReadonlySet<string> = new Set();
   if (CODE_KINDS.has(node.kind)) {
     const body = ix.bodies.get(id);
     if (!body || !body.hasEndLine) reason = 'sentinel.paths.bodyUnread';
@@ -192,16 +193,22 @@ async function accountedFor(ix: GraphIndex, id: string, read: (content: string) 
       if (body.endByte > bytes.length) reason = 'sentinel.paths.bodyUnread';
       else {
         const text = bytes.subarray(body.startByte, body.endByte).toString('utf8');
-        const scan = scanBody(text, ix.functionNames, id.split('::').pop()!.split('.').pop());
+        const own = id.split('::').pop()!.split('.').pop();
+        const scan = scanBody(text, ix.functionNames, own);
+        locals = localNames(text, own);
         const recorded = (ix.callSites.get(body.path) ?? []).filter(b => b >= body.startByte && b < body.endByte).length;
         if (scan.callSites > recorded) reason = 'sentinel.paths.unrecordedCall';
         else if (scan.valueReferences) reason = 'sentinel.paths.functionAsValue';
       }
     }
   }
-  ix.accounted.set(id, reason);
-  return reason;
+  const result = { reason, locals };
+  ix.accounted.set(id, result);
+  return result;
 }
+
+/** The name a call edge's target is called by: the last segment of its id (`path::Class.method` → `method`). */
+const calleeName = (id: string) => id.split('::').pop()!.split('.').pop()!;
 
 async function search(ix: GraphIndex, q: PathQuery, bounds: PathBounds, complete: boolean, read: (content: string) => Promise<Uint8Array>): Promise<{ result: PathQueryResult; reasons: Set<PathReason> }> {
   const reasons = new Set<PathReason>();
@@ -218,14 +225,17 @@ async function search(ix: GraphIndex, q: PathQuery, bounds: PathBounds, complete
     if (depth >= bounds.maxDepth) { reasons.add('sentinel.paths.depthLimit'); break; }
     const next: string[] = [];
     for (const v of frontier) {
-      const unaccounted = await accountedFor(ix, v, read);
-      if (unaccounted) reasons.add(unaccounted);
+      const body = await accountedFor(ix, v, read);
+      if (body.reason) reasons.add(body.reason);
       const edges = ix.out.get(v) ?? [];
       if (edges.length > bounds.maxFanout) reasons.add('sentinel.paths.fanoutLimit');
       for (const e of edges.slice(0, bounds.maxFanout)) {
         if (e.meta?.inactive) { reasons.add('sentinel.paths.inactiveEdge'); continue; }
         // An unresolved call could reach anything: the search cannot continue through it, and absence is unknown.
         if (e.resolution?.status === 'unresolved' || !ix.nodes.has(e.to)) { reasons.add('sentinel.paths.unresolvedCall'); continue; }
+        // A local binding of the callee's name (a parameter, a local function) may be what is really called: the
+        // parser's edge to a top-level function of that name is not followed, and absence is not claimed past it.
+        if (e.kind === 'calls' && e.to !== v && body.locals.has(calleeName(e.to))) { reasons.add('sentinel.paths.shadowedCall'); continue; }
         if (parent.has(e.to)) continue;
         if (parent.size >= bounds.maxVisited) { reasons.add('sentinel.paths.visitLimit'); break; }
         parent.set(e.to, e);
@@ -274,6 +284,11 @@ export async function boundedCallPaths(request: PathRequest): Promise<PathEviden
   if (analysis.index.snapshotId !== request.snapshotId || analysis.index.sourceId !== analysis.sourceId) {
     throw new PathError('sentinel.paths.unbound', 'the parser evidence is for another snapshot or source');
   }
+  // The index and the artifact must be one analysis: the envelope names the artifact's own fingerprint.
+  const fingerprint = (analysis.artifact.analysis as { fingerprint?: unknown }).fingerprint;
+  if (typeof fingerprint !== 'string' || fingerprint !== analysis.index.analysisFingerprint) {
+    throw new PathError('sentinel.paths.unbound', 'the index and the artifact are not the same parser analysis');
+  }
   if (!Array.isArray(request.queries) || request.queries.length > MAX_QUERIES) throw new PathError('sentinel.paths.invalidInput', `at most ${MAX_QUERIES} queries`);
   const bounds = boundsOf(request.bounds);
   const ix = indexOf(analysis, bounds.edgeKinds);
@@ -299,7 +314,7 @@ export async function boundedCallPaths(request: PathRequest): Promise<PathEviden
   const cycles: CallCycle[] = [...cyclesMet].sort((a, b) => a - b).slice(0, MAX_CYCLES).map(i => ({ members: ix.cycles[i]!.slice(0, 1000) }));
   const envelope: PathEvidenceEnvelope = {
     schema: 'sentinel-paths/draft-1', snapshotId: request.snapshotId, sourceId: analysis.sourceId,
-    analysisFingerprint: analysis.index.analysisFingerprint, graphDigest: ix.graphDigest,
+    analysisFingerprint: fingerprint, graphDigest: ix.graphDigest,
     bounds, boundsDigest: digestOf(bounds) as Digest, establishes: 'call-reachability', results, cycles,
     limitationKeys: [...limitations].sort(), frontiers,
     producer: { implementation: PATHS_IMPLEMENTATION, digest: sha({ implementation: PATHS_IMPLEMENTATION, reasons: PATH_REASON_CODES }) },

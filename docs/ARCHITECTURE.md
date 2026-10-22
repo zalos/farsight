@@ -701,13 +701,18 @@ reported as call cycles, and every node is visited once, so cycles terminate. A 
 path, each step with the parser's resolution and its captured call sites), `not-reached-bounded` with the frontier
 kinds it met, or `not-reached-complete` only when nothing was left unexplored and every visited function's captured
 text is accounted for: the parser records no edge for a computed call, a call on an unknown value, a global or a
-function handed on as a value, so each visited function's whole-line bytes are scanned lexically and any call-like
-site beyond the recorded ones, or any function name used as a value, is a frontier (the scan may over-count, never
-under-count). The envelope binds the snapshot, source, analysis fingerprint, a digest of the graph read and the
+function handed on as a value, so each visited function's whole-line bytes are scanned lexically (Unicode
+identifiers included, a keyword read as a property counted) and any call-like site beyond the recorded ones, or any
+function name used as a value, is a frontier (the scan may over-count, never under-count). A parser edge to a
+top-level function whose name the calling function also binds (a parameter, a local) is not followed
+(`shadowedCall`), and the index must be the artifact's own analysis: the envelope names the artifact's fingerprint. The envelope binds the snapshot, source, analysis fingerprint, a digest of the graph read and the
 bounds, and always states `establishes: call-reachability` with `notDataFlow` and `graphOnly`: a path never claims
 flow, taint, sanitization or protection. **Attested deep import** (`sentinel-deep-import/draft-1`,
 `importDeepAnalysis`): a customer-run analyzer's flows are untrusted input. A document that does not validate is
-refused; one whose attester or licence terms (by digest, per tool) the owner's trust does not list yields nothing;
+refused. Nothing it asserts about itself is trusted: it is used only with the owner's spent receipt for the new
+owner-only `evidence.import` action, bound to the canonical digest of the whole document (tool, version,
+distribution, licence terms, provenance, configuration and flows) and to the snapshot and source
+(`deepImportIntent`); without it, or with one for any other document, snapshot or action, it yields nothing;
 one bound to another snapshot or source, or to any file whose content differs from the capture, is unbound; a flow
 location outside a file the tool read, or past its bytes, is unknown. Accepted flows become `imported` observations
 (producer `imported`, the document digest as provenance) limited to the tool's stated files and configuration; they

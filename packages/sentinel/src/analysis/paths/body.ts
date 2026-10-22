@@ -6,9 +6,17 @@
 // count can only be too high, never too low, so a function is "accounted for" only when the parser recorded at least
 // as many call sites inside it. A function name used as a value (not called where it appears) is counted as well.
 
-/** Words that precede a parenthesis without calling anything. */
-const NOT_CALLS = new Set(['if', 'for', 'while', 'switch', 'catch', 'with', 'return', 'typeof', 'void', 'delete', 'in', 'of',
-  'instanceof', 'await', 'yield', 'case', 'do', 'else', 'throw', 'function']);
+/**
+ * Reserved words that precede a parenthesis without calling anything. Only words that can never name a function are
+ * listed (`of`, `await`, `yield` and `async` can, so they count), and a word read as a property (`obj.return(`) or a
+ * private name is always a call.
+ */
+const NOT_CALLS = new Set(['if', 'for', 'while', 'switch', 'catch', 'with', 'return', 'typeof', 'void', 'delete', 'in',
+  'instanceof', 'case', 'do', 'else', 'throw', 'function']);
+/** Identifier characters, Unicode included: `π()` is a call. */
+const ID_CHAR = /[\p{ID_Continue}$\u200c\u200d]/u;
+const ID_START = /[\p{ID_Start}$_]/u;
+const IDENT = /[\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*/gu;
 
 export interface BodyScan {
   /** Places that could be a call: `x(`, `x)(`, `x](`, `x>(`, `x.(`, `x/(`, a tagged template, `new`. */
@@ -28,23 +36,25 @@ export function scanBody(text: string, functionNames: ReadonlySet<string>, ownNa
     if (c === '`') {
       // A tagged template is a call: an identifier, `)` or `]` right before the backtick.
       const p = prevSignificant(text, i);
-      if (p >= skipUntil && /[\w$)\]]/.test(text[p]!) && !endsWithWord(text, p, NOT_CALLS)) callSites++;
+      if (p >= skipUntil && (ID_CHAR.test(text[p]!) || /[)\]]/.test(text[p]!)) && !endsWithWord(text, p, NOT_CALLS)) callSites++;
       continue;
     }
     if (c !== '(' || i < skipUntil) continue;
     const p = prevSignificant(text, i);
     if (p < 0) continue;
     const before = text[p]!;
-    if (/[\w$]/.test(before)) { if (!endsWithWord(text, p, NOT_CALLS)) callSites++; }
+    if (ID_CHAR.test(before)) { if (!endsWithWord(text, p, NOT_CALLS)) callSites++; }
     else if (/[)\].>/]/.test(before)) callSites++;
+    // Anything else directly before a parenthesis that is not an operator or opener could still be a callee.
+    else if (!/[(,;{}=!&|?:+\-*%^~<\[]/.test(before)) callSites++;
   }
   for (const m of text.matchAll(/\bnew\b/g)) if (m.index! >= skipUntil) callSites++;
   let valueReferences = 0;
-  for (const m of text.matchAll(/[A-Za-z_$][\w$]*/g)) {
+  for (const m of text.matchAll(IDENT)) {
     const name = m[0];
     const at = m.index!;
     if (!functionNames.has(name) || at < skipUntil || (name === ownName && at < skipUntil + 1)) continue;
-    if (at > 0 && /[\w$]/.test(text[at - 1]!)) continue;
+    if (at > 0 && ID_CHAR.test(text[at - 1]!)) continue;
     const next = nextSignificant(text, at + name.length);
     if (next >= 0 && (text[next] === '(' || text[next] === '`')) continue;
     valueReferences++;
@@ -64,6 +74,40 @@ function nextSignificant(text: string, i: number): number {
 }
 function endsWithWord(text: string, end: number, words: ReadonlySet<string>): boolean {
   let s = end;
-  while (s > 0 && /[\w$]/.test(text[s - 1]!)) s--;
-  return words.has(text.slice(s, end + 1));
+  while (s > 0 && ID_CHAR.test(text[s - 1]!)) s--;
+  if (!words.has(text.slice(s, end + 1))) return false;
+  // `obj.return(`, `obj?.if(`, `this.#x(`: a property name, so a call.
+  const before = prevSignificant(text, s);
+  return !(before >= 0 && (text[before] === '.' || text[before] === '#'));
 }
+
+/**
+ * Names a function's text binds itself: parameters, local declarations, catch bindings and destructured names. A
+ * call edge the parser drew to a top-level function of one of these names may really call the local one, so the
+ * search does not follow it. The scan collects too many names rather than too few.
+ */
+export function localNames(text: string, ownName: string | undefined): Set<string> {
+  const out = new Set<string>();
+  const addAll = (part: string) => { for (const m of part.matchAll(IDENT)) out.add(m[0]); };
+  for (const m of text.matchAll(/\b(?:const|let|var|class|function\s*\*?)\s+([\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*)/gu)) out.add(m[1]!);
+  for (const m of text.matchAll(/\b(?:const|let|var)\s*([{[][^=;]*?[}\]])\s*=/gu)) addAll(m[1]!);
+  for (const m of text.matchAll(/\bcatch\s*\(([^)]*)\)/gu)) addAll(m[1]!);
+  // Parameter lists: every balanced parenthesised group followed (after an optional type) by `=>` or a body. Nested
+  // parentheses (`(sink: () => void)`) are included whole.
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== '(') continue;
+    let depth = 0, j = i;
+    for (; j < text.length; j++) { if (text[j] === '(') depth++; else if (text[j] === ')' && --depth === 0) break; }
+    if (j >= text.length) break;
+    if (/^\s*(?::[^;{}]*?)?(=>|\{)/u.test(text.slice(j + 1, j + 400))) addAll(text.slice(i + 1, j));
+  }
+  for (const m of text.matchAll(/([\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*)\s*=>/gu)) out.add(m[1]!);
+  if (ownName) {
+    // The function's own name in its own header refers to itself, not a local.
+    const own = new RegExp(`\\bfunction\\s*\\*?\\s*${ownName.replace(/[$]/g, '\\$')}\\b`, 'gu');
+    const declared = [...text.matchAll(own)].length;
+    if (declared <= 1) out.delete(ownName);
+  }
+  return out;
+}
+export { ID_START };

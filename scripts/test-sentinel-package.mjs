@@ -164,7 +164,7 @@ try {
       'export async function analysisFields(request: PathRequest): Promise<unknown[]> {',
       '  const env: PathEvidenceEnvelope = await boundedCallPaths(request);',
       '  const reason: PathReason = PATH_REASON_CODES[0];',
-      "  const r: DeepImportResult = await importDeepAnalysis({ document: '{}', snapshot: { id: 'x', entries: [] }, trust: { trustedAttesters: [], acceptedTerms: [] }, readContent: async () => new Uint8Array(), importedAt: '2026-10-22T10:00:00Z' });",
+      "  const r: DeepImportResult = await importDeepAnalysis({ document: '{}', snapshot: { id: 'x', entries: [] }, authorization: null, readContent: async () => new Uint8Array(), importedAt: '2026-10-22T10:00:00Z' });",
       '  const doc: DeepImportEnvelope | undefined = undefined;',
       "  return [env.establishes, env.results[0]?.outcome, reason, r.status, DEEP_ANALYSIS_SUPPORT.engine, doc];",
       '}',
@@ -318,7 +318,7 @@ try {
       import { openStore } from 'farsight-sentinel/store';
       import { captureSnapshot } from 'farsight-sentinel/snapshot';
       import { parseSnapshot } from 'farsight-sentinel/parser';
-      import { boundedCallPaths, importDeepAnalysis, DEEP_ANALYSIS_SUPPORT } from 'farsight-sentinel/analysis';
+      import { boundedCallPaths, importDeepAnalysis, deepImportIntent, DEEP_ANALYSIS_SUPPORT } from 'farsight-sentinel/analysis';
       const store = await openStore(${JSON.stringify(join(storeRoot, 'paths-store'))});
       try {
         const { snapshot } = await captureSnapshot(store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'example/smoke', root: ${JSON.stringify(appDir)} }] });
@@ -339,17 +339,18 @@ try {
           flows: [{ toolRuleId: 'example/flow', message: 'input reaches b', originalSeverity: 'low',
             source: { relativePath: 'src/a.ts', content: file('src/a.ts').content, span: { startByte: 40, endByte: 45 } }, steps: [],
             sink: { relativePath: 'src/b.ts', content: file('src/b.ts').content, span: { startByte: 0, endByte: 10 } } }] });
-        const args = { document: doc, snapshot, readContent, importedAt: '2026-10-22T10:00:00Z' };
-        const refused = await importDeepAnalysis({ ...args, trust: { trustedAttesters: [], acceptedTerms: [] } });
-        const imported = await importDeepAnalysis({ ...args, trust: { trustedAttesters: ['team@example.com'], acceptedTerms: [{ tool: 'example-analyzer', termsDigest: terms }] } });
+        // Without the owner's spent receipt for exactly this document, nothing is imported; the attester it names is
+        // just text. (Receipts are issued only by the owner's local CLI flow, which the package does not export.)
+        const refused = await importDeepAnalysis({ document: doc, snapshot, readContent, importedAt: '2026-10-22T10:00:00Z', authorization: null });
+        const intent = deepImportIntent(doc, snapshot.id);
         console.log(JSON.stringify({ outcome: paths.results[0].outcome, establishes: paths.establishes, steps: paths.results[0].paths[0]?.steps.length,
-          refused: refused.status, imported: imported.status, observations: imported.observations?.length, producer: imported.observations?.[0]?.producer.kind, engine: DEEP_ANALYSIS_SUPPORT.engine }));
+          refused: refused.status, reason: refused.reasonCode, intent: intent?.action, engine: DEEP_ANALYSIS_SUPPORT.engine }));
       } finally { store.close(); }
     `);
     const result = JSON.parse((await node('analysis-demo.mjs')).stdout.trim());
-    assert.deepEqual(result, { outcome: 'reached', establishes: 'call-reachability', steps: 1, refused: 'untrusted', imported: 'imported', observations: 1, producer: 'imported', engine: null },
-      'a bounded call path, and an attested import refused without trust and accepted with it, from the installed package alone');
-    return ', analysis API ran installed (call path, attested import)';
+    assert.deepEqual(result, { outcome: 'reached', establishes: 'call-reachability', steps: 1, refused: 'untrusted', reason: 'sentinel.deep.notOwnerConfirmed', intent: 'evidence.import', engine: null },
+      'a bounded call path, and an import refused without the owner\'s receipt, from the installed package alone');
+    return ', analysis API ran installed (call path, import refused without owner receipt)';
   }
 
   // Standalone: everything @farsight/* is inlined, and farsight-cli is not pulled in.

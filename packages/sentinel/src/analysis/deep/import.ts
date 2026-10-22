@@ -1,10 +1,12 @@
 // Customer-provided deep-analysis results (PR 18, ADR 36). Sentinel has no deep engine: none qualified for cross-file
 // flow in E3, so nothing is selected, downloaded, executed or claimed here. `importDeepAnalysis` reads a
 // `sentinel-deep-import/draft-1` document that a customer produced with an analyzer they are licensed to use, and
-// accepts its flows only when (1) the document validates, (2) the owner's policy trusts its attester and has accepted
-// the exact licence terms it names for that tool, and (3) every file it says it read is a captured file with the same
-// content, and every flow location is inside one of those files' bytes. A document failing (1) is refused; failing (2)
-// yields nothing; a flow failing (3) is unknown, never an observation. Accepted flows become `imported` observations
+// accepts its flows only when (1) the document validates, (2) the owner confirmed exactly this document for exactly
+// this snapshot with a spent receipt (the owner-only `evidence.import` action, bound to the canonical digest of the
+// whole document: tool, version, distribution, licence terms, provenance, configuration and flows), and (3) every file
+// it says it read is a captured file with the same content, and every flow location is inside one of those files'
+// bytes. Nothing the document says about itself, such as who attested it, is trusted on its own. A document failing
+// (1) is refused; failing (2) yields nothing; a flow failing (3) is unknown, never an observation. Accepted flows become `imported` observations
 // that carry the tool's claim and its stated scope only: they never count as a check Sentinel executed, and the
 // analyzer's mode name is recorded, never read as a capability.
 import { createHash } from 'node:crypto';
@@ -13,9 +15,11 @@ import type {
   ArtifactId, DeepImportEnvelope, DeepImportLocation, Digest, ObservationEnvelope, SnapshotEnvelope, SourceEvidence,
 } from '../../contracts/index.js';
 import { parseEnvelope, validateEnvelope } from '../../validate.js';
+import { intentDigest, receiptAuthority } from '../../policy/receipts.js';
+import type { ActionIntent } from '../../contracts/index.js';
 
 export const DEEP_REASON_CODES = Object.freeze([
-  'sentinel.deep.malformed', 'sentinel.deep.untrustedAttestation', 'sentinel.deep.termsNotAccepted', 'sentinel.deep.unbound',
+  'sentinel.deep.malformed', 'sentinel.deep.notOwnerConfirmed', 'sentinel.deep.unbound',
   'sentinel.deep.fileNotCaptured', 'sentinel.deep.contentMismatch', 'sentinel.deep.locationOutOfRange', 'sentinel.deep.locationNotRead',
   'sentinel.deep.importedNotExecuted', 'sentinel.deep.toolScopeOnly', 'sentinel.deep.buildStated',
 ] as const);
@@ -30,17 +34,29 @@ export const DEEP_ANALYSIS_SUPPORT = Object.freeze({
   importContract: 'sentinel-deep-import/draft-1',
 });
 
-/** The owner's trust for imports, from adopted policy: which attesters, and which tools' terms by digest. */
-export interface DeepImportTrust {
-  readonly trustedAttesters: readonly string[];
-  readonly acceptedTerms: readonly { readonly tool: string; readonly termsDigest: string }[];
+/**
+ * The exact owner action an import needs: `evidence.import` of this document's canonical digest into this snapshot's
+ * source. The owner's local CLI issues a receipt for it; the coordinator spends it with `ReceiptBook.consume` and hands
+ * the spent receipt to `importDeepAnalysis`. A receipt for any other document, snapshot or source authorizes nothing.
+ */
+export function deepImportIntent(document: string | Uint8Array, snapshotId: string): ActionIntent | undefined {
+  const text = typeof document === 'string' ? document : Buffer.from(document).toString('utf8');
+  const parsed = parseEnvelope('deepimport', text);
+  if (!parsed.ok) return undefined;
+  const doc = parsed.value as DeepImportEnvelope;
+  return {
+    action: 'evidence.import', input: sha(canonicalJson(doc)), effects: ['local-artifacts'],
+    budget: { maxTokens: null, maxCost: null, currency: null },
+    scope: { profile: null, provider: null, targets: [`snapshot:${snapshotId}`, `source:${doc.binding.sourceId}`] },
+  };
 }
 
 export interface DeepImportRequest {
   /** The raw document bytes or text: untrusted, parsed and validated here. */
   readonly document: string | Uint8Array;
   readonly snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>;
-  readonly trust: DeepImportTrust;
+  /** The owner's spent receipt for exactly `deepImportIntent(document, snapshot.id)`; only `ReceiptBook.consume` makes one. */
+  readonly authorization: unknown;
   readonly readContent: (id: ArtifactId) => Promise<Uint8Array>;
   /** When the import happened, for the observations' timestamp. */
   readonly importedAt: string;
@@ -74,12 +90,13 @@ export async function importDeepAnalysis(request: DeepImportRequest): Promise<De
   const doc = parsed.value as DeepImportEnvelope;
   const documentDigest = sha(canonicalJson(doc));
 
-  // (2) Trust is the owner's decision, never the document's.
-  if (!request.trust.trustedAttesters.includes(doc.attestation.provenance.attestedBy)) {
-    return { status: 'untrusted', reasonCode: 'sentinel.deep.untrustedAttestation', documentDigest };
+  // (2) Trust is the owner's confirmation of this exact document and snapshot, held in a spent receipt that only this
+  // package's receipt book can produce; nothing the document asserts about itself counts.
+  const authority = receiptAuthority(request.authorization);
+  const intent = deepImportIntent(text, request.snapshot.id)!;
+  if (!authority || authority.action !== 'evidence.import' || authority.intentDigest !== intentDigest(intent)) {
+    return { status: 'untrusted', reasonCode: 'sentinel.deep.notOwnerConfirmed', documentDigest };
   }
-  const accepted = request.trust.acceptedTerms.some(t => t.tool === doc.tool.name && t.termsDigest === doc.attestation.license.termsDigest);
-  if (!accepted) return { status: 'untrusted', reasonCode: 'sentinel.deep.termsNotAccepted', documentDigest };
 
   // (3) The binding: this snapshot, a captured source, and every file read identical to the capture.
   if (doc.binding.snapshotId !== request.snapshot.id) return { status: 'unbound', reasonCode: 'sentinel.deep.unbound', documentDigest, files: [] };
