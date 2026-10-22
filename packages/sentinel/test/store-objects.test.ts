@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync, mkdirSync, symlinkSync, chmodSync, realpathSync, renameSync, linkSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync, mkdirSync, symlinkSync, chmodSync, realpathSync, renameSync, linkSync, openSync, closeSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -263,15 +263,20 @@ test('concurrent writers in one process and across processes publish one winner 
   assert.equal(new Set(receipts.map(r => `${r.encodedDigest}:${r.encodedSize}:${r.relPath}`)).size, 1);
 
   const fresh = Buffer.from('cross-process synthetic evidence\n'.repeat(4096));
+  // The bytes reach the children through a file: Linux caps one argv string at 128 KiB (E2BIG), and the fixture
+  // must stay this large so the writers overlap. The file lives outside the store root.
+  const freshPath = join(scratch(t), 'fresh.bin');
+  writeFileSync(freshPath, fresh, { mode: 0o600 });
   const script = `
     const { ObjectStore } = await import(${JSON.stringify(objectsModule)});
+    const { readFileSync } = await import('node:fs');
     const store = new ObjectStore({ storePath: process.argv[1], storeId: 'store-test-1', assertHeld() {} });
-    const bytes = Buffer.from(process.argv[2], 'base64');
+    const bytes = readFileSync(process.argv[2]);
     await new Promise(r => setTimeout(r, Number(process.argv[3]) - Date.now()));
     process.stdout.write(JSON.stringify(await store.put(bytes)));`;
   const start = Date.now() + 500;
   const runs = await Promise.all(Array.from({ length: 6 }, () => new Promise<{ status: number | null; out: string; err: string }>(resolve => {
-    const child = spawn(process.execPath, ['--input-type=module', '-e', script, dir, fresh.toString('base64'), String(start)]);
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script, dir, freshPath, String(start)]);
     let out = '', err = '';
     child.stdout.on('data', d => { out += d; });
     child.stderr.on('data', d => { err += d; });
@@ -402,15 +407,30 @@ test('a parent directory swapped before link(2) yields no receipt', async t => {
 
 test('a staged file or a published name replaced by another inode yields no receipt', async t => {
   const id = identify(SOURCE);
+  // Identical bytes under a new inode. The old inode is held open until the test ends: a filesystem may hand a
+  // freed inode number straight to the next file (ext4 does), and then (dev, ino) cannot tell the two apart.
+  const held: number[] = [];
+  t.after(() => { for (const fd of held) closeSync(fd); });
   const replace = (path: string) => {
     const bytes = readFileSync(path);
+    const fd = openSync(path, 'r');
+    held.push(fd);
+    const old = statSync(path).ino;
     rmSync(path);
-    writeFileSync(path, bytes, { mode: 0o600 }); // identical bytes, new inode
+    writeFileSync(path, bytes, { mode: 0o600 });
+    assert.notEqual(statSync(path).ino, old, 'the replacement has its own inode');
   };
   {
     const dir = scratch(t);
     const io: ObjectStoreIo = { ...NODE_OBJECT_IO, link: async (a, b) => { replace(a); return NODE_OBJECT_IO.link(a, b); } };
     assert.equal(await code(new ObjectStore(owner(dir), { io }).put(SOURCE)), 'sentinel.object.unsafePath', 'staged file replaced before link');
+  }
+  {
+    // Same inode, other bytes: what a reused inode number looks like to (dev, ino). The receipt rests on the bytes
+    // verified at the final name, so this is refused too.
+    const dir = scratch(t);
+    const io: ObjectStoreIo = { ...NODE_OBJECT_IO, link: async (a, b) => { writeFileSync(a, gzipSync(Buffer.from('impostor'))); return NODE_OBJECT_IO.link(a, b); } };
+    assert.equal(await code(new ObjectStore(owner(dir), { io }).put(SOURCE)), 'sentinel.object.unsafePath', 'staged file rewritten in place before link');
   }
   {
     const dir = scratch(t);

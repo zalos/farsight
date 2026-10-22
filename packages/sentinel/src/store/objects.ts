@@ -16,7 +16,14 @@
 // name is reported, never removed. The checks are finite: a same-account process that swaps a path and restores
 // it between two observations is not seen, and no check constrains what it does outside the store. That is the
 // owner's own account and outside the threat model; within it, an observed change of any directory or object
-// identity refuses the receipt.
+// identity refuses the receipt. These checks guard against mistakes and other accounts, not as an OS sandbox
+// against code running as the owner.
+//
+// (dev, ino) names an inode only while it exists: a filesystem may give a freed inode number to the next file
+// (ext4 does so at once), so a file deleted and recreated between two observations can compare equal. Identity
+// therefore never stands alone: the receipt is issued only after the bytes at the final name are read, sized and
+// hashed against what was written (or against the verified winner), with the owner-only mode and single-name rule
+// checked on the same open file.
 import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readdirSync, readSync, realpathSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
