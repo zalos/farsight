@@ -7,7 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   partitionInventory, EvidenceBroker, validateReply, runSession, FileCheckpointStore, guidedSpec, guidedReview, generalSpec, reviewAllPartitions,
-  planEvaluation, runEvaluation, e5Gate, estimatePlan, wilson, GUIDED_PROMPT, providerCaller, specDigest,
+  pathFactsFrom, planEvaluation, runEvaluation, e5Gate, estimatePlan, wilson, GUIDED_PROMPT, providerCaller, specDigest,
   TOOL_REFUSAL_CODES, REPLY_REJECTION_CODES, REVIEW_FRONTIER_CODES, REVIEW_LIMITATION_CODES, REVIEW_ERROR_CODES, EVALUATION_CODES,
 } from '../dist/review/index.js';
 import { validateEnvelope } from '../dist/index.js';
@@ -333,4 +333,21 @@ test('the spec digest binds scope, prompt, budget and tools; every code is in th
     const e = STRINGS[key];
     assert.ok(e && e.hud && e.professional && e.define, key);
   }
+});
+
+test('PR 18 path evidence enters only as structural reachability for the same snapshot and source', async () => {
+  const view = { schema: 'sentinel-paths/draft-1' as const, snapshotId: 'snap-1', sourceId: 'web', establishes: 'call-reachability' as const, results: [
+    { from: 'web::route::GET /q', to: 'web::src/db.ts::query', outcome: 'reached' as const, paths: [{ steps: [{ from: 'web::route::GET /q', to: 'web::src/a.ts::q' }, { from: 'web::src/a.ts::q', to: 'web::src/db.ts::query' }] }] },
+    { from: 'web::route::GET /q', to: 'web::src/exec.ts::run', outcome: 'not-reached-bounded' as const, paths: [] },
+  ] };
+  const facts = pathFactsFrom(view, { snapshotId: 'snap-1', sourceId: 'web' });
+  assert.deepEqual(facts.map(f => f.nodeId), ['web::route::GET /q']);
+  assert.match(facts[0]!.summary, /reaches web::src\/db.ts::query via web::route::GET \/q -> web::src\/a.ts::q -> web::src\/db.ts::query/);
+  assert.match(facts[0]!.summary, /unknown: the search was bounded/);
+  assert.throws(() => pathFactsFrom(view, { snapshotId: 'other', sourceId: 'web' }), (e: any) => e.code === 'sentinel.review.invalidInput');
+  assert.throws(() => pathFactsFrom({ ...view, schema: 'sentinel-paths/draft-2' } as any, { snapshotId: 'snap-1', sourceId: 'web' }), (e: any) => e.code === 'sentinel.review.invalidInput');
+  const f = files(SRC);
+  const b = new EvidenceBroker({ snapshotId: 'snap-1', sourceId: 'web', files: f.members, rules: [], paths: facts }, LIMITS, f.read);
+  const r = await b.run({ action: 'paths', nodeId: 'web::route::GET /q' });
+  assert.ok(r.ok && (r as any).data.establishes === 'call-reachability, not data flow');
 });

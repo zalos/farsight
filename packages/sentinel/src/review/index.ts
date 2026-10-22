@@ -1,9 +1,9 @@
 // Bounded model review (PR 22): `@farsight/sentinel/review`. Deterministic partitions, a constrained evidence broker,
 // strict reply validation, checkpointed sessions for guided and general review, and the E5/E8 harness. Providers
 // (PR 21) are `@farsight/sentinel/review/providers`.
-export { partitionInventory, EvidenceBroker, isIdText } from './evidence.js';
+export { partitionInventory, EvidenceBroker, isIdText, pathFactsFrom } from './evidence.js';
 export type { PartitionBounds, PartitionMember, Partition, PartitionPlan, EvidenceLimits, PinnedRule, PathFact, EvidenceItem, ToolRequest, ToolResult,
-  EvidenceScope, DisclosureFilter, BrokerState } from './evidence.js';
+  EvidenceScope, DisclosureFilter, BrokerState, PathEvidenceView } from './evidence.js';
 export { validateReply, REPLY_BOUNDS } from './validator.js';
 export type { Verdict, Claim, FinalAssessment, ValidatedReply } from './validator.js';
 export { runSession, specDigest, FileCheckpointStore } from './session.js';

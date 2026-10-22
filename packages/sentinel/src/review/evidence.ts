@@ -103,6 +103,37 @@ export interface PinnedRule { readonly familyId: string; readonly revisionDigest
 /** Recorded call reachability for a node, from PR 18's path evidence; structural, never data flow. */
 export interface PathFact { readonly nodeId: string; readonly summary: string }
 
+/**
+ * The fields of PR 18's `sentinel-paths/draft-1` envelope the review reads, typed structurally so this module neither
+ * imports nor restates that contract; a different schema version is refused.
+ */
+export interface PathEvidenceView {
+  readonly schema: 'sentinel-paths/draft-1';
+  readonly snapshotId: string;
+  readonly sourceId: string;
+  readonly establishes: 'call-reachability';
+  readonly results: readonly {
+    readonly from: string; readonly to: string; readonly outcome: 'reached' | 'not-reached-complete' | 'not-reached-bounded';
+    readonly paths: readonly { readonly steps: readonly { readonly from: string; readonly to: string }[] }[];
+  }[];
+}
+
+/** Path facts for a review scope: one per `from` node, each result summarized; bounded, structural, never data flow. */
+export function pathFactsFrom(view: PathEvidenceView, scope: { snapshotId: string; sourceId: string }, maxPerNode = 16): PathFact[] {
+  if (view.schema !== 'sentinel-paths/draft-1' || view.establishes !== 'call-reachability') reviewFail('sentinel.review.invalidInput', 'not a sentinel-paths/draft-1 envelope');
+  if (view.snapshotId !== scope.snapshotId || view.sourceId !== scope.sourceId) reviewFail('sentinel.review.invalidInput', 'the path evidence is for another snapshot or source');
+  const byNode = new Map<string, string[]>();
+  for (const r of view.results) {
+    const line = r.outcome === 'reached'
+      ? `reaches ${r.to} via ${[r.paths[0]?.steps[0]?.from ?? r.from, ...(r.paths[0]?.steps ?? []).map(s => s.to)].join(' -> ')}`
+      : r.outcome === 'not-reached-complete' ? `does not reach ${r.to} in the parser's call graph` : `reach of ${r.to} unknown: the search was bounded`;
+    const list = byNode.get(r.from) ?? [];
+    if (list.length < maxPerNode) list.push(line);
+    byNode.set(r.from, list);
+  }
+  return [...byNode].sort(([a], [b]) => (a < b ? -1 : 1)).map(([nodeId, lines]) => ({ nodeId, summary: lines.join('\n') }));
+}
+
 /** One served slice. `id` is what a reply cites; `citation` is the exact captured bytes. */
 export interface EvidenceItem {
   readonly id: string;
