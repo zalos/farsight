@@ -1280,8 +1280,15 @@ the coordinator stage and capability-table entry that run the pack (PR 09 integr
 configuration, manifests and code across the source, and a repository check's sealed inputs are every captured file,
 so no surface check claims to have read configuration outside its own inputs. Each check's extent is every route and
 page surface the parser indexed, and each surface keeps its own row in the report. The packs run in `worker.ts`, a
-built-in adapter the supervisor starts as a child process: the module is pinned by digest and runs through the launch
-gate with only the worker environment and its sealed inputs (the job, the snapshot envelope, the source's retained
+built-in adapter the supervisor starts as a child process. The supervisor pins a built-in adapter by the digest of
+its one module file, and the worker's behaviour lives in the files it imports, so the registered module is a generated
+entry (`closure.ts`) that embeds the byte manifest of the worker's whole closure: every Sentinel file reached by
+static or literal dynamic imports, and every package used, whole (an installed package's folder with its folder
+listings, a workspace package's published files), with each package's dependencies in turn and an absent optional
+dependency recorded as absent. A change anywhere in the closure is a different module digest and so a different
+adapter; an entry whose closure changed after it was written exits before importing the worker, writing nothing.
+This detects a changed build or installation, not a writer racing the check and the import. The module runs through
+the launch gate with only the worker environment and its sealed inputs (the job, the snapshot envelope, the source's retained
 parser artifact, result and index, and its captured files, each read only by id and checked against its digest). The
 deadline, cancel and the stdout, stderr and output budgets are enforced by killing the process; memory, CPU and
 process counts are not hard limits on this path and the child is not network-isolated. It is Sentinel's own code, it
@@ -1294,7 +1301,8 @@ supported scope, whether a control is on the surface's request path; neither bec
 policy failure (a public route, or one with no input, can be correct). The rules are `candidate` with
 `evidenceRequired: control-fact` and the limitation `sentinel.controls.limitation.inspectionOnly`; the report record is
 `kind: framework-inspection`, `assessment: none`. Judging facts against a policy is PR 20's. A surface is established
-when every pack that claims it resolved every position it gives for the property and those packs agree; one pack's
+when every pack that claims it gives the property at least one fact, resolves every position it gives, and those
+packs agree (a pack that claims the surface and gives no fact for the property leaves it unanswered there); one pack's
 positions fold along the path (a Spring chain that permits, then method security that applies, applies). A check is
 complete only when every surface in its extent is established and no pack that found its framework left a frontier.
 An unknown position, disagreeing packs (`sentinel.controls.conflict`), an unclaimed surface, a property the claiming

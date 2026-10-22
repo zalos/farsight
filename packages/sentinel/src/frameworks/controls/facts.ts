@@ -121,12 +121,15 @@ export function inspect(checks: readonly InspectionCheck[], libraries: readonly 
       if (!claiming.length) { row('not-run', null, refused.length ? refused[0]!.refused! : 'sentinel.controls.unclaimed'); continue; }
       if (!claims.length) { row('not-run', null, 'sentinel.controls.propertyNotModeled'); continue; }
       const unknown = claims.find(c => c.verdict === 'unknown');
+      // Every library that claims the surface must answer the property: one that claims it and gives no fact for P
+      // (Express claims a route and models no input validation) leaves P unanswered there, whatever another says.
+      const silent = claiming.some(l => !claims.some(c => c.framework === l.framework));
       // One library's facts for a property are positions along the request path (a Spring chain, then method
       // security): its control applies when any position applies. Only libraries that disagree are a conflict.
-      const answering = claiming.filter(l => claims.some(c => c.framework === l.framework));
-      const verdicts = new Set(answering.map(l => (claims.some(c => c.framework === l.framework && c.verdict === 'applies') ? 'applies' : 'does-not-apply')));
+      const verdicts = new Set(claiming.map(l => (claims.some(c => c.framework === l.framework && c.verdict === 'applies') ? 'applies' : 'does-not-apply')));
       // A refused library could also have claimed this surface: what the others established is then not the whole story.
-      const limit = unknown ? (unknown.reasonCode ?? 'sentinel.controls.conflict') : verdicts.size > 1 ? 'sentinel.controls.conflict' : refused[0]?.refused ?? null;
+      const limit = unknown ? (unknown.reasonCode ?? 'sentinel.controls.conflict') : silent ? 'sentinel.controls.propertyNotModeled'
+        : verdicts.size > 1 ? 'sentinel.controls.conflict' : refused[0]?.refused ?? null;
       if (limit) row('partial', null, limit);
       else row('established', [...verdicts][0] as Exclude<ControlVerdict, 'unknown'>, null);
     }

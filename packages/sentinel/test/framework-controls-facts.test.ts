@@ -61,6 +61,24 @@ test('one library\'s positions fold along the request path; only libraries that 
   assert.deepEqual([rowOf(u.rows, A, 'authentication').state, rowOf(u.rows, A, 'authentication').reasonCode], ['partial', 'sentinel.spring.interceptor']);
 });
 
+test('a surface is established only when every library that claims it answers the property (review blocker)', () => {
+  // Express claims S for authentication only; Nest claims S and says input validation applies. Express gives no answer
+  // for input validation on a surface it claims, so input validation there is not established.
+  const r = inspect([check('input-validation')], [
+    lib('express', [envelope([fact(A, 'authentication', 'does-not-apply')])]),
+    lib('nest', [envelope([fact(A, 'input-validation', 'applies'), fact(A, 'authentication', 'does-not-apply')])]),
+  ], [A], REPORT);
+  assert.deepEqual([rowOf(r.rows, A, 'input-validation').state, rowOf(r.rows, A, 'input-validation').reasonCode, rowOf(r.rows, A, 'input-validation').verdict],
+    ['partial', 'sentinel.controls.propertyNotModeled', null]);
+  assert.deepEqual(stateOf(r, 'input-validation'), { checkId: 'app|input-validation', familyId: 'sentinel.controls.input-validation', state: 'partial', reasons: ['sentinel.controls.propertyNotModeled'] });
+  // The silent library is not outvoted by agreement either: both answering is what establishes it.
+  const both = inspect([check('authentication')], [
+    lib('express', [envelope([fact(A, 'authentication', 'does-not-apply')])]),
+    lib('nest', [envelope([fact(A, 'authentication', 'does-not-apply')])]),
+  ], [A], REPORT);
+  assert.equal(stateOf(both, 'authentication').state, 'complete');
+});
+
 test('a refused library keeps the check partial; all refusing leaves it not run; only a present library\'s frontiers count', () => {
   const ok = lib('express', [envelope([fact(A, 'authentication', 'applies')])]);
   const refused = inspect([check('authentication')], [ok, lib('spring', [], { refused: 'sentinel.controls.libraryRefused' })], [A], REPORT);

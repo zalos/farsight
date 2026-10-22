@@ -14,12 +14,11 @@ import { createAdapterRegistry } from '../dist/execution/registry.js';
 import { createExecutionService } from '../dist/execution/service.js';
 import { readPackDirectory, validatePack } from '../dist/rules/index.js';
 import { surfacesFromIndex } from '../dist/planner/index.js';
-import { CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_SCHEMA, FRAMEWORK_CONTROLS_ADAPTER_ID, inspect, inspectSealed } from '../dist/frameworks/controls/index.js';
+import { CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_SCHEMA, FRAMEWORK_CONTROLS_ADAPTER_ID, inspect, inspectSealed, writeClosureEntry } from '../dist/frameworks/controls/index.js';
 import { commitRepo, needsStore, openCaptureStore, scratch } from './snapshot-helpers.ts';
 import { ORDER } from './express-fixtures.ts';
 
 const HERE = import.meta.dirname;
-const MODULE = fileURLToPath(new URL('../dist/frameworks/controls/worker.js', import.meta.url));
 const E2 = join(HERE, 'fixtures/framework-feasibility/sources/nest-validation');
 const LIMITS = { maxFiles: 1000, maxFileBytes: 1 << 20, maxTotalBytes: 16 << 20, maxEntries: 10_000, maxDurationMs: 60_000 };
 const sha = (b: Uint8Array | string) => createHash('sha256').update(b).digest('hex');
@@ -65,6 +64,10 @@ async function sealed(t: any, files: Record<string, string>, jobs = 1) {
 }
 
 async function child(fx: Awaited<ReturnType<typeof sealed>>, limits: Record<string, number> = {}, n = 'a', signal?: AbortSignal) {
+  // The registered module is the generated entry that pins and checks the worker's whole byte closure.
+  const entryDir = join(fx.dir, `entry-${n}`);
+  mkdirSync(entryDir, { mode: 0o700 });
+  const MODULE = writeClosureEntry(entryDir).module;
   const registry = createAdapterRegistry([{ id: FRAMEWORK_CONTROLS_ADAPTER_ID, version: '0.1.0', kind: 'built-in' as const, isolation: 'child' as const, module: MODULE,
     limits: { timeoutMs: 60_000, cancelGraceMs: 1_000, helloTimeoutMs: 10_000, ...limits } }]);
   const scratchRoot = join(fx.dir, `exec-${n}`);
