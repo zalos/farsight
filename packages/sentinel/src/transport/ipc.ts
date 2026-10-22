@@ -12,8 +12,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, unlinkSync, type Stats } from 'node:fs';
 import { connect, createServer, type Server, type Socket } from 'node:net';
 import { isAbsolute, join } from 'node:path';
-import type { RequestedBy } from '../cli/actor.js';
-import { refuseActorClaims, ActorError } from '../cli/actor.js';
+import type { ServiceGrant } from '../cli/actor.js';
+import { refuseActorClaims, requestedByOf, ActorError } from '../cli/actor.js';
 
 export const SERVICE_PROTOCOL = 'sentinel-service/draft-1';
 /** Each frame is a 4-byte big-endian length then that many bytes of UTF-8 JSON. */
@@ -151,11 +151,14 @@ export class FrameDecoder {
 
 // ---- handshake and service ----
 
-/** The client kinds a product entrypoint identifies itself as. Each maps to a fixed requester. */
+/**
+ * The client kinds a product entrypoint identifies itself as. A kind only labels the channel a connection is
+ * recorded under: every one is a non-owner agent, so no hello can select owner authority. The owner's CLI is a
+ * `local-service` client like any other; owner authority travels only as a receipt its own process minted.
+ */
 export type ClientKind = 'cli' | 'mcp' | 'http-bridge';
-const GRANTS: Readonly<Record<ClientKind, RequestedBy>> = Object.freeze({
-  // The owner's command line talks to its own service as the owner; the channel stays the CLI's.
-  'cli': Object.freeze({ principal: 'human', channel: 'owner-cli' }),
+const GRANTS: Readonly<Record<ClientKind, ServiceGrant>> = Object.freeze({
+  'cli': Object.freeze({ principal: 'agent', channel: 'local-service' }),
   'mcp': Object.freeze({ principal: 'agent', channel: 'mcp' }),
   'http-bridge': Object.freeze({ principal: 'agent', channel: 'http-bridge' }),
 });
@@ -166,7 +169,7 @@ export interface ServiceIdentity {
 }
 
 export interface ServiceRequest { readonly id: number; readonly op: string; readonly body: unknown }
-export type ServiceHandler = (op: string, body: unknown, by: RequestedBy) => Promise<unknown>;
+export type ServiceHandler = (op: string, body: unknown, by: ReturnType<typeof requestedByOf>) => Promise<unknown>;
 
 export interface OwnerSocket {
   readonly address: RuntimeAddress;
@@ -214,7 +217,7 @@ function answers(path: string): Promise<boolean> {
 
 function serveConnection(socket: Socket, identity: ServiceIdentity, handler: ServiceHandler): void {
   const decoder = new FrameDecoder();
-  let by: RequestedBy | undefined;
+  let by: ReturnType<typeof requestedByOf> | undefined;
   const send = (v: unknown) => { if (!socket.destroyed) socket.write(encodeFrame(v)); };
   const refuse = (code: string) => { send({ type: 'error', code }); socket.end(); };
   socket.on('data', chunk => {
@@ -229,7 +232,8 @@ function serveConnection(socket: Socket, identity: ServiceIdentity, handler: Ser
         }
         // The hello names a client kind and nothing else: any requester claim in it is refused too.
         try { refuseActorClaims({ ...f, client: undefined }); } catch (e) { refuse((e as ActorError).code); return; }
-        by = GRANTS[f.client as ClientKind];
+        // Through the one actor rule: a service connection is a non-owner, whatever it asked for.
+        by = requestedByOf({ kind: 'service-connection', granted: GRANTS[f.client as ClientKind] });
         send({ protocol: SERVICE_PROTOCOL, type: 'welcome', storeId: identity.storeId, ownerNonce: identity.ownerNonce });
         continue;
       }

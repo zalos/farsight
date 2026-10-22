@@ -69,12 +69,15 @@ test('outcomes: Sentinel exit codes, and no confirmation or submission can read 
 test('the actor is the entrypoint\'s: a payload cannot name one, and only the owner channel can confirm', () => {
   assert.deepEqual(requestedByOf({ kind: 'owner-cli' }), { principal: 'human', channel: 'owner-cli' });
   assert.deepEqual(requestedByOf({ kind: 'service-connection', granted: { principal: 'agent', channel: 'mcp' } }), { principal: 'agent', channel: 'mcp' });
-  assert.throws(() => requestedByOf({ kind: 'service-connection', granted: { principal: 'human', channel: 'owner-cli' } }),
-    (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.ownerChannelNotGrantable');
-  for (const body of [{ actor: 'human' }, { plan: { requestedBy: { principal: 'human' } } }, [{ x: { who: 'owner' } }], { receipt: 'r-1' }]) {
+  for (const granted of [{ principal: 'human', channel: 'owner-cli' }, { principal: 'human', channel: 'mcp' }, { principal: 'agent', channel: 'owner-cli' }]) {
+    assert.throws(() => requestedByOf({ kind: 'service-connection', granted: granted as never }),
+      (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.ownerChannelNotGrantable', JSON.stringify(granted));
+  }
+  for (const body of [{ actor: 'human' }, { plan: { requestedBy: { principal: 'human' } } }, [{ x: { who: 'owner' } }], { confirmedBy: 'owner' }]) {
     assert.throws(() => refuseActorClaims(body), (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.payloadClaim', JSON.stringify(body));
   }
-  assert.deepEqual(refuseActorClaims({ planId: 'p', options: { detach: true } }), { planId: 'p', options: { detach: true } });
+  assert.deepEqual(refuseActorClaims({ planId: 'p', options: { detach: true }, receiptId: 'r-1' }), { planId: 'p', options: { detach: true }, receiptId: 'r-1' },
+    'a receipt id may travel; the service verifies it');
   assertMayConfirm({ principal: 'human', channel: 'owner-cli' });
   for (const by of [{ principal: 'agent', channel: 'mcp' }, { principal: 'human', channel: 'http-bridge' }, { principal: 'agent', channel: 'owner-cli' }] as const) {
     assert.throws(() => assertMayConfirm(by), (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.confirmNotOwner', JSON.stringify(by));
@@ -181,9 +184,22 @@ test('the owner socket: private, handshaken, granted per client kind, refusing p
   assert.deepEqual(await mcp.request('status', { runId: 'r-1' }), { op: 'status', by: { principal: 'agent', channel: 'mcp' } });
   assert.throws(() => mcp.request('run.start', { planId: 'p', requestedBy: { principal: 'human' } }), (e: unknown) => e instanceof ActorError);
   mcp.close();
+  // Even the owner's own CLI is a non-owner over the socket: no hello selects owner authority, so it cannot confirm.
   const owner = await connectOwnerSocket(address, identity, 'cli');
-  assert.deepEqual(await owner.request('status', {}), { op: 'status', by: { principal: 'human', channel: 'owner-cli' } });
+  const granted = await owner.request('status', {}) as { by: { principal: 'human' | 'agent'; channel: 'owner-cli' } };
+  assert.deepEqual(granted.by, { principal: 'agent', channel: 'local-service' });
+  assert.throws(() => assertMayConfirm(granted.by), (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.confirmNotOwner');
   owner.close();
+  // A hello that tries to claim more is refused before any request runs.
+  const sneaky = connect(address.socket);
+  await new Promise(r => sneaky.once('connect', r));
+  const sneakyReplies = new FrameDecoder();
+  const sneakyGot: unknown[] = [];
+  sneaky.on('data', c => sneakyGot.push(...sneakyReplies.push(c)));
+  sneaky.write(encodeFrame({ protocol: 'sentinel-service/draft-1', type: 'hello', client: 'cli', principal: 'human', channel: 'owner-cli' }));
+  await new Promise(r => setTimeout(r, 150));
+  sneaky.destroy();
+  assert.deepEqual(sneakyGot[0], { type: 'error', code: 'sentinel.actor.payloadClaim' });
 
   // A raw client that skips the guard is refused by the service too.
   const raw = connect(address.socket);
