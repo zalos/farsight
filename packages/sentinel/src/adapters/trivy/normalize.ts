@@ -114,12 +114,18 @@ const UNSENT: Record<string, { status: TrivyCoverageStatus; reason: TrivyCoverag
 
 /**
  * Trivy 0.76.1 reads a YAML file as Kubernetes only when one of its documents has the keys apiVersion, kind and
- * metadata (pkg/iac/detection/detect.go). A file whose bytes lack one of those words, with no backslash that could
- * escape one inside a quoted key, cannot match; anything else the engine did not log is an omission.
+ * metadata (pkg/iac/detection/detect.go). YAML can encode those keys as BOM-marked UTF-16 LE or BE, so decode
+ * those forms before proving a word absent. Malformed encoding or an escaped key cannot prove absence; anything
+ * else the engine did not log is an omission.
  */
 export function cannotBeKubernetes(bytes: Uint8Array): boolean {
-  const text = Buffer.from(bytes).toString('latin1');
-  if (text.includes('\\')) return false;
+  const input = Buffer.from(bytes);
+  let text: string;
+  if ((input[0] === 0xff && input[1] === 0xfe) || (input[0] === 0xfe && input[1] === 0xff)) {
+    try { text = new TextDecoder(input[0] === 0xff ? 'utf-16le' : 'utf-16be', { fatal: true }).decode(input); }
+    catch { return false; }
+  } else text = input.toString('latin1');
+  if (text.includes('\\') || text.includes('\0')) return false;
   return !['apiVersion', 'kind', 'metadata'].every(word => text.includes(word));
 }
 

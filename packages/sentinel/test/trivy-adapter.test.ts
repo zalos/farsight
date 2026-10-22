@@ -83,9 +83,9 @@ test('the job sends supported files with their paths, and records every file it 
 
 // ---- normalization over synthetic engine output ------------------------------------------------------------------
 
-function run(t: { after(fn: () => void): void }, report: unknown, record: Record<string, unknown> = {}, opts: { arch?: string; mutate?: string; state?: string } = {}) {
+function run(t: { after(fn: () => void): void }, report: unknown, record: Record<string, unknown> = {}, opts: { arch?: string; mutate?: string; state?: string; layout?: Record<string, string | { text: string | Buffer }> } = {}) {
   const dir = scratch(t);
-  const tree = capturedTree(join(dir, 'tree'), TRIVY_LAYOUT);
+  const tree = capturedTree(join(dir, 'tree'), opts.layout ?? TRIVY_LAYOUT);
   const bundlePath = join(dir, 'b');
   writeFileSync(bundlePath, 'x');
   const built = buildTrivyJob(tree, { bundle: FAKE_BUNDLE, path: bundlePath }, dir);
@@ -230,4 +230,23 @@ test('an unlogged YAML file is not applicable only when the engine’s Kubernete
   assert.equal(yes('apiVersion: v1\nkind: Pod\nmetadata:\n  name: x\n'), false);
   assert.equal(yes('apiVersion: v1\nkind: Pod\n"meta\\u0064ata": {}\n'), false, 'an escape could spell a key');
   assert.equal(yes('{"apiVersion": "v1", "kind": "Pod", "metadata": {}}\n'), false);
+});
+
+function utf16(text: string, bigEndian: boolean): Buffer {
+  const bytes = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, 'utf16le')]);
+  return bigEndian ? bytes.swap16() : bytes;
+}
+
+test('UTF-16 BOM documents cannot make an unreported Kubernetes manifest not applicable', t => {
+  for (const bigEndian of [false, true]) {
+    const manifest = utf16('apiVersion: v1\nkind: Pod\nmetadata:\n  name: synthetic\n', bigEndian);
+    assert.equal(cannotBeKubernetes(manifest), false);
+    assert.equal(cannotBeKubernetes(utf16('name: settings\nitems: [1]\n', bigEndian)), true, 'a decoded non-manifest still cannot match');
+    assert.equal(cannotBeKubernetes(utf16('apiVersion: v1\nkind: Pod\n"meta\\u0064ata": {}\n', bigEndian)), false, 'escaped keys remain uncertain');
+    assert.equal(cannotBeKubernetes(manifest.subarray(0, manifest.length - 1)), false, 'malformed UTF-16 cannot prove absence');
+    const r = run(t, { SchemaVersion: 2, Trivy: { Version: '0.76.1' }, Results: [] }, { scanned: [] }, {
+      layout: { 'hidden/.git/pod.yaml': { text: manifest } },
+    });
+    assert.equal(row(r, 'hidden/.git/pod.yaml'), 'error:notReported');
+  }
 });
