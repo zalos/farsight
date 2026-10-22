@@ -640,7 +640,7 @@ are read from the ledger: the recorded outcome and the coverage records. A run r
 policy only with the full report). `rerun <run> [--stage <unit,…>]` and `retry <run>` (the units that did not
 publish) plan a new run naming an ended one as its parent, over its retained snapshot with nothing captured again,
 after previewing the consequences from the parent's admitted plan: the selected units and everything downstream run
-again, prerequisites and the bootstrap are reused as published. A strict subset is a selected rerun (ADR 38).
+again, prerequisites and the bootstrap are reused as published. A strict subset is a selected rerun (ADR 43).
 Changed source is a new `plan`. The report is rendered from the ledger and stored artifacts, pinned to the run's last
 event. The published bundle ships the modules the code names by file URL (the launch gate, the bootstrap operations'
 implementations) as entries of their own, references rewritten and digests recorded in its manifest.
@@ -669,7 +669,7 @@ temporary name), and the pack's exact files are kept so a plan resolves the lock
 no lock. **Not in this decision:** the full report and finding policy (PR 19); per-input paths in the worker
 protocol, which would let a unit cover several files. Same-account code is outside this boundary, as for the store.
 
-38. **A selected rerun is a linked run over the parent's retained snapshot that runs exactly its selection and holds
+43. **A selected rerun is a linked run over the parent's retained snapshot that runs exactly its selection and holds
 the rest (2026-10-22).**
 
 `rerun <run> --stage <unit,…>` naming a strict subset of an ended run's analysis units plans a new run whose parent

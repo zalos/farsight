@@ -178,7 +178,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   coordinator starts it), `src/cli/` (`args.ts` typed parsing, `outcome.ts` typed results and exit codes, `actor.ts`
   the entrypoint actor rule, `init.ts`), `src/service/local.ts` (adopt, plan, run, status, report in the owner's
   process), `src/service/canonical.ts` (plan and run through the canonical planner, admission and coordinator; results from the
-  ledger; `selectedRerun` plans a strict-subset rerun, ADR 38), `src/execution/selection.ts` (the admitted
+  ledger; `selectedRerun` plans a strict-subset rerun, ADR 43), `src/execution/selection.ts` (the admitted
   `sentinel-rerun-selection/draft-1` record and its check), `src/service/owner-service.ts` (the background service: socket, descriptor, receipts bound to their instance,
   one run at a time, pause/cancel/wait), `src/service/launch.ts` (the one process the CLI starts: its own `serve`),
   `src/service/rule-locks.ts` + `publish-once.ts` (the owner's lock revisions, packs and chain links, published whole),
