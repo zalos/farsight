@@ -650,3 +650,38 @@ temporary name), and the pack's exact files are kept so a plan resolves the lock
 no lock. **Not in this decision:** the full report and finding policy (PR 19); per-input paths in the worker
 protocol, which would let a unit cover several files. Same-account code is outside this boundary, as for the store.
 
+
+38. **Sentinel reports are one pinned document, rendered offline, placed only through a proven application context (2026-10-22).**
+PR 19 adds `farsight-sentinel/findings` and `farsight-sentinel/reports`. **Identity:** observations are never
+rewritten; normalizing derives a rule family, a severity on Sentinel's scale (the original kept) and one anchor per
+evidence location: the canonical symbol (`nodeId`) and a digest of the cited text with whitespace collapsed. No
+line or offset enters identity. Observations with the same rule family and anchor set, from any producer or version,
+correlate into one finding; a shared sink or symbol alone never merges two. The versioned fingerprint
+(`sentinel-issue/1`) has an exact key (rule family and anchors) and a probable key (rule family and symbols).
+**Matching** pairs one-to-one on the exact key, then on the probable key; a key shared by more than one finding on
+either side is ambiguous and nothing is chosen. **Comparison** labels every current finding (`new`, `persistent`,
+`changed-evidence`, `changed-detection`, `reopened`, `reopened-disposition-expired`) and keeps every baseline finding
+nothing continues in `historical` with a reason: it is `resolved-by-comparable-check` only when its files and
+symbols are still there, a complete current check of its rule family covered all of its files, and detection (rule
+revision, engine, capabilities, or a reviewed compatibility mapping) and conditions (environment, limits) are the
+same. Otherwise it is a removed surface (file or symbol gone; a folder that could not be listed is unknown, not
+removed), unassessed scope (no check, a failed or partial check, a narrower scope), changed detection or
+incomparable conditions; probable and ambiguous pairings stay open. **Context:** a retained enriched graph is pinned
+only when every input file it names has the captured content id, every node it locates for the source is in a named
+input, and every captured `farsight.config.json` or `screens.json` is among its inputs; the receipt records what was
+verified. A mismatched context, a graph without journeys (a portable parser artifact) or no context leaves the place
+empty with its reason; no current graph is consulted and nothing enriches or fetches. **Placement** reuses core's cached
+`flowWalks`, `impactOf` + `affectedReach` and `personaOfScreen`: direct use where a screen's walk contains the symbol,
+potential impact where only dependents reach it, screens deduplicated, personas kept with their screens, bounds
+explicit (`of` carries the full count), one business sentence from the same fold. **The document**
+(`sentinel-report/draft-1`, extended additively with evidence locations, fingerprints, match strength, `historical`
+and `definitions`) carries every word it uses with its definition. A disclosure profile (`private` embeds excerpts,
+`shareable` withholds them) never changes a finding, a place or a count; secret evidence is never embedded or located
+in any profile. **Renderings** read only the document: Markdown escapes and fences source; HTML is one file with
+inline styles, no script, no external resource, a content security policy that refuses loads anyway, internal anchors
+and a print stylesheet; SARIF 2.1.0 uses the rule family as `ruleId`, Sentinel's fingerprints under their own
+`partialFingerprints` keys (never GitHub's line hash), and refuses more results than a limit rather than cutting.
+`generateReport` is the integration hook for a CLI or service; it needs no Farsight server, bridge or network, and a
+delivered report needs neither product nor the source. Not decided here: dispositions and imported evidence in the
+same document (PR 20), the CLI's report command (PR 09), the integrated view (PR 25), and building a context from
+captured configuration rather than verifying a retained one.

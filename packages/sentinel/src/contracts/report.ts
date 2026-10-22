@@ -1,5 +1,5 @@
 import type {
-  ArtifactId, BoundedText, CatalogKey, Count, Digest, Id, NodeId, Ordinal, RegisterText, SharedCatalogKey, ShortText,
+  ArtifactId, BoundedText, CatalogKey, Count, Digest, Id, NodeId, Ordinal, RegisterText, RelativePath, SharedCatalogKey, ShortText,
   Timestamp,
 } from './common.js';
 import type { CoverageStatus } from './coverage.js';
@@ -78,6 +78,23 @@ export type ComparisonLabel =
   | 'unassessed-in-current-scope'
   | 'incomparable-conditions';
 
+/** How a finding paired with the baseline. Probable and ambiguous pairings never resolve or silently continue an issue. */
+export interface FindingMatch {
+  kind: 'exact' | 'probable' | 'ambiguous';
+  /**
+   * @minItems 1
+   * @maxItems 64
+   */
+  baselineFindingIds: Id[];
+}
+
+/** Sentinel's versioned issue fingerprint: exact (rule family and anchor set) and probable (rule family and symbols). */
+export interface FindingFingerprint {
+  version: ShortText;
+  exact: Digest;
+  probable: Digest;
+}
+
 export interface ReportFinding {
   id: Id;
   /**
@@ -92,8 +109,46 @@ export interface ReportFinding {
   explanation: RegisterText;
   place: FindingPlace;
   comparison?: ComparisonLabel;
+  /** Why the comparison label was given. */
+  comparisonReason?: CatalogKey;
+  match?: FindingMatch;
+  fingerprint?: FindingFingerprint;
   /** @maxItems 64 */
   evidence: ReportEvidence[];
+}
+
+/**
+ * A baseline finding the current findings do not continue, with why: resolved by a comparable check, a removed
+ * surface, unassessed in the current scope, changed detection, incomparable conditions, or an ambiguous pairing that
+ * stays open. It is never dropped, and only `resolved-by-comparable-check` says the issue is gone.
+ */
+export interface ReportHistoricalFinding {
+  baselineFindingId: Id;
+  /** @maxLength 128 */
+  ruleFamilyId: string;
+  severity: ReportFinding['severity'];
+  title: RegisterText;
+  label: 'resolved-by-comparable-check' | 'removed-surface' | 'unassessed-in-current-scope' | 'changed-detection' | 'incomparable-conditions' | 'changed-evidence';
+  reasonCode: CatalogKey;
+  match?: FindingMatch;
+  place: FindingPlace;
+}
+
+/** Where evidence sits in the captured source. Absent for evidence whose location is itself withheld (secrets). */
+export interface EvidenceLocation {
+  relativePath: RelativePath;
+  startByte: Count;
+  endByte: Count;
+  startLine: Ordinal;
+  endLine: Ordinal;
+}
+
+/** A word the report uses, with its definition, so a recipient never needs the catalog or the product. */
+export interface ReportDefinition {
+  /** @maxLength 128 */
+  key: string;
+  text: RegisterText;
+  define: BoundedText;
 }
 
 /**
@@ -101,8 +156,8 @@ export interface ReportFinding {
  * @discriminator state
  */
 export type ReportEvidence =
-  | { id: Id; state: 'embedded'; excerpt: BoundedText; content: ArtifactId }
-  | { id: Id; state: 'withheld'; reasonCode: CatalogKey; content: ArtifactId };
+  | { id: Id; state: 'embedded'; excerpt: BoundedText; content: ArtifactId; location?: EvidenceLocation }
+  | { id: Id; state: 'withheld'; reasonCode: CatalogKey; content: ArtifactId; location?: EvidenceLocation };
 
 export interface ReportGap {
   checkId: Id;
@@ -146,6 +201,8 @@ export interface ReportEnvelope {
      * into the exact number above and never read as zero files.
      */
     unknownScopeBoundaries: ReportCount;
+    /** Baseline findings the current findings do not continue, by comparison label. */
+    historical?: ReportCount;
   };
   /** @maxItems 25000 */
   findings: ReportFinding[];
@@ -153,6 +210,10 @@ export interface ReportEnvelope {
   gaps: ReportGap[];
   /** @maxItems 25000 */
   decisions: ReportDecision[];
+  /** @maxItems 25000 */
+  historical?: ReportHistoricalFinding[];
+  /** @maxItems 2048 */
+  definitions?: ReportDefinition[];
   /** @maxItems 4096 */
   artifactClosure: ArtifactId[];
 }

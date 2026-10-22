@@ -198,6 +198,23 @@ client of the service gets what the adopted grants give agents, which by default
 say *unavailable* (exit 3) until plan revisions exist. With `--json`, every result carries its `outcome`, `exitCode`, the three
 admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR 37 in `docs/ARCHITECTURE.md`.
 
+## Findings, comparisons and reports (draft)
+
+```ts
+import { compareAssessments } from 'farsight-sentinel/findings';
+import { pinApplicationContext, generateReport } from 'farsight-sentinel/reports';
+
+const context = pinApplicationContext({ snapshot, sourceId: 'app', repo: 'invoice-app', graph, inputs });
+const { document, json, markdown, html, sarif } = await generateReport({ /* run, observations, coverage, counts,
+  readContent, contexts: new Map([['app', context]]), disclosure: 'shareable', comparison? */ });
+```
+
+Observations are grouped into findings by rule family and anchors (symbol and cited text, never line numbers), and
+compared with a baseline as exact, probable or ambiguous matches; a baseline finding is resolved only by a comparable
+complete check. Findings are placed on screens, journeys and personas only through an application context whose
+inputs match the capture; otherwise they are reported unplaced with the reason. The HTML file works offline with
+JavaScript disabled and loads nothing; Markdown, JSON and SARIF carry the same counts. ADR 38.
+
 ## Versions and evolution
 
 - **Draft until review.** Every name ends in `/draft-1`. A name moves to `/v1` only after an independent
