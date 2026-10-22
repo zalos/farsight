@@ -179,8 +179,16 @@ export async function planWorkspace(ws: Workspace, options: { confirm: boolean; 
     const work = scratchUnder(ws);
     try {
       const plan = await previewPlan(store, { snapshotId: captured.record.snapshotId, policyRevision: policy.revision, workDir: join(work, 'plan'), now: options.now.toISOString() });
-      try { store.ledger.createRun(plan.boundary.run as never); } catch (e) {
-        if ((e as { code?: string }).code !== 'sentinel.store.conflict') throw e; // the same plan, already recorded
+      // The same content under the same policy is the same plan: planning it again keeps the run and the snapshot
+      // first recorded for it (the coordinator refuses a run re-recorded with another snapshot).
+      const existing = readPlanRecord(ws, plan.disclosure.planId);
+      let recorded = false;
+      try { store.ledger.createRun(plan.boundary.run as never); recorded = true; } catch (e) {
+        if ((e as { code?: string }).code !== 'sentinel.store.conflict') throw e;
+      }
+      if (!recorded && existing && existing.planDigest === plan.disclosure.planDigest) {
+        const disclosure = Object.freeze({ ...plan.disclosure, snapshotId: existing.snapshotId });
+        return { ...result('plan', 'kept', { verdicts: printed(decided.record), facts: { ...disclosure } }), disclosure };
       }
       mkdirSync(ws.planDir, { recursive: true, mode: 0o700 });
       const record: PlanRecord = { schema: 'sentinel-plan-record/draft-1', planId: plan.disclosure.planId, planDigest: plan.disclosure.planDigest,
@@ -228,9 +236,10 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
       failures: summary.failures.length, previewFindings: findings?.findings.length ?? null, label: 'foundation-preview' };
     const verdicts = printed(decided.record);
     if (summary.state !== 'completed') return result('run', 'configuration-failure', { verdicts, facts, reasonCode: 'sentinel.service.runNotCompleted' });
-    // A run another process completed: the ledger records no outcome yet (PR 08), so it is read from the units.
-    const outcome = summary.outcome ?? (summary.units.every(u => u.state === 'published') ? 'complete-coverage' : 'execution-failure');
-    if (outcome !== 'complete-coverage') return result('run', 'configuration-failure', { verdicts, facts, reasonCode: 'sentinel.service.executionFailed' });
+    // The outcome the ledger recorded at completion. Without evaluated coverage it is never complete coverage, and a
+    // preview never satisfies required coverage whatever it records; only an execution failure says more.
+    const outcome = summary.outcome ?? store.ledger.getRun(record.planId)?.outcome ?? null;
+    if (outcome === 'execution-failure' || !findings) return result('run', 'configuration-failure', { verdicts, facts, reasonCode: 'sentinel.service.executionFailed' });
     return result('run', 'required-coverage-incomplete', { verdicts, facts, reasonCode: 'sentinel.service.previewNotCoverage' });
   });
 }
@@ -392,7 +401,7 @@ export async function runResultIn(store: SentinelStore, command: string, planId:
   const findings = state === 'completed' ? await previewFindings(store, planId) : undefined;
   const facts = { ...(options.facts ?? {}), runId: planId, state, previewFindings: findings?.findings.length ?? null, label: 'foundation-preview' };
   if (state === 'completed') {
-    return findings
+    return findings && store.ledger.getRun(planId)?.outcome !== 'execution-failure'
       ? result(command, 'required-coverage-incomplete', { ...base, facts, reasonCode: 'sentinel.service.previewNotCoverage' })
       : result(command, 'configuration-failure', { ...base, facts, reasonCode: 'sentinel.service.executionFailed' });
   }

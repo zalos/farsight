@@ -40,8 +40,9 @@ test('capture → preview plan → coordinator → published findings', needsSto
   assert.deepEqual(plan.disclosure.effects, ['local-artifacts']);
   const coordinator = await Coordinator.open({ store, plan: plan.boundary, scratchRoot: scratch, registry: PREVIEW_ADAPTERS });
   const summary = await coordinator.run();
-  assert.deepEqual([summary.state, summary.outcome, summary.published], ['completed', 'complete-coverage', 1], JSON.stringify(summary.failures));
-  const pub = store.ledger.getPublication({ id: 'work-preview-detector', revision: 1 })!;
+  // No required coverage was evaluated for the preview unit, so its run is never complete coverage (execution/plan.ts).
+  assert.deepEqual([summary.state, summary.outcome, summary.published], ['completed', 'partial-coverage', 1], JSON.stringify(summary.failures));
+  const pub = store.ledger.getPublication({ id: plan.boundary.works[0]!.id, revision: 1 })!;
   const outputs = await Promise.all(pub.outputs.map(o => store.readArtifact(o.id)));
   const findings = outputs.map(b => { try { return JSON.parse(b.toString()); } catch { return null; } }).find(d => d?.schema === 'sentinel-preview-findings/draft-1');
   assert.deepEqual(findings.findings.map((f: any) => [f.path, f.line]), [['app/src/users.ts', 1]]);

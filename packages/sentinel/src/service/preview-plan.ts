@@ -14,6 +14,7 @@ import type { ActionEffect } from '../contracts/index.js';
 import type { PlanBoundary } from '../execution/coordinator.js';
 import { createAdapterRegistry, type AdapterRegistry } from '../execution/registry.js';
 import { inputFingerprintOf, type CapturedInput } from '../execution/supervisor.js';
+import { influenceManifest } from '../execution/plan.js';
 import { restoreSnapshot } from '../snapshot/materialize.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import type { SentinelStore } from '../store/index.js';
@@ -116,15 +117,19 @@ export async function previewPlan(store: SentinelStore, options: {
     requestedScope: { sourceIds: restored.snapshot.sources.map(s => s.sourceId), profile: PREVIEW_PROFILE },
     budgets: { maxTokens: null, maxCost: null, deadlineMs: 600_000 }, createdAt: options.now, state: 'planned',
   } as RunEnvelope;
-  const work: WorkEnvelope = {
+  const unit = {
     // Work ids are unique across the ledger, so each plan's unit is named after its plan.
-    schema: 'sentinel-work/draft-1', id: `work-${planId}`, revision: 1, runId: planId, planRevision: 1,
-    stage: { contract: PREVIEW_STAGE, contractVersion: 'draft-1', kind: 'coded', implementationDigest: adapter.digest },
+    id: `work-${planId}`, revision: 1,
+    stage: { contract: PREVIEW_STAGE, contractVersion: 'draft-1', kind: 'coded' as const, implementationDigest: adapter.digest },
     inputFingerprint: inputFingerprintOf(inputIds),
-    // The snapshot's manifest: an admitted artifact, so the retained work names something the ledger keeps.
-    influenceManifest: store.ledger.getSnapshot(options.snapshotId)!.manifest,
     dependencies: [],
     resources: { deadlineMs: 120_000, memoryBytes: 2_147_483_648, cpuQuota: 2, maxPids: 128, maxOutputBytes: 4_194_304 },
+  };
+  const work: WorkEnvelope = {
+    schema: 'sentinel-work/draft-1', runId: planId, planRevision: 1, ...unit,
+    // The coordinator's binding: the canonical listing of the stage, adapter, inputs, fingerprint, dependencies and
+    // resources, published with the result (execution/plan.ts).
+    influenceManifest: influenceManifest(unit as never, adapter, inputIds).id,
     coordinatorEpoch: store.epoch, createdAt: options.now, state: 'pending', activeAttemptId: null,
   } as unknown as WorkEnvelope;
   const disclosure: PlanDisclosure = Object.freeze({
