@@ -90,8 +90,47 @@ try {
   const sourceExports = JSON.parse(readFileSync(join(sourceDir, 'package.json'), 'utf8')).exports ?? {};
   const parserExported = Object.hasOwn(sourceExports, './parser');
   assert.equal(subpaths.includes('./parser'), parserExported, 'the installed ./parser export matches the source package');
+  const analysisExported = Object.hasOwn(sourceExports, './analysis');
+  assert.equal(subpaths.includes('./analysis'), analysisExported, 'the installed ./analysis export matches the source package');
+  const springExported = Object.hasOwn(sourceExports, './frameworks/spring');
+  assert.equal(subpaths.includes('./frameworks/spring'), springExported, 'the installed ./frameworks/spring export matches the source package');
+
   const expressExported = Object.hasOwn(sourceExports, './frameworks/express');
   assert.equal(subpaths.includes('./frameworks/express'), expressExported, 'the installed ./frameworks/express export matches the source package');
+
+  const nextExported = Object.hasOwn(sourceExports, './frameworks/next');
+  assert.equal(subpaths.includes('./frameworks/next'), nextExported, 'the installed Next export matches the source package');
+  const providersExported = Object.hasOwn(sourceExports, './review/providers');
+  assert.equal(subpaths.includes('./review/providers'), providersExported, 'the installed provider export matches the source package');
+
+  // The Nest pack (ADR 32), when the source package exports it: the installed API analyses a tiny synthetic tree from
+  // memory, loading the pinned oxc-parser from the consumer's own install. No store and no target code are involved.
+  const nestExported = Object.hasOwn(sourceExports, './frameworks/nest');
+  assert.equal(subpaths.includes('./frameworks/nest'), nestExported, 'the installed ./frameworks/nest export matches the source package');
+  if (nestExported) {
+    const nest = JSON.parse(await evalModule(`
+      import { createHash } from 'node:crypto';
+      const { analyzeNest, NEST_PACK } = await import('farsight-sentinel/frameworks/nest');
+      const files = {
+        'package.json': JSON.stringify({ dependencies: { '@nestjs/common': '10.4.15', '@nestjs/core': '10.4.15', 'class-validator': '0.14.1' } }),
+        'tsconfig.json': JSON.stringify({ compilerOptions: { experimentalDecorators: true, emitDecoratorMetadata: true } }),
+        'main.ts': "import { NestFactory } from '@nestjs/core';\\nimport { AppModule } from './app.module';\\nasync function boot() {\\n  const app = await NestFactory.create(AppModule);\\n  await app.listen(3000);\\n}\\nboot();\\n",
+        'app.module.ts': "import { Module } from '@nestjs/common';\\nimport { NotesController } from './notes.controller';\\n@Module({ controllers: [NotesController] })\\nexport class AppModule {}\\n",
+        'notes.controller.ts': "import { Body, Controller, Post, UsePipes, ValidationPipe } from '@nestjs/common';\\nimport { IsString } from 'class-validator';\\nexport class NoteDto {\\n  @IsString()\\n  text!: string;\\n}\\n@Controller('notes')\\nexport class NotesController {\\n  @Post()\\n  @UsePipes(new ValidationPipe())\\n  create(@Body() dto: NoteDto) {\\n    return dto;\\n  }\\n}\\n",
+      };
+      const bytes = new Map(), entries = [];
+      for (const [relativePath, text] of Object.entries(files)) {
+        const b = Buffer.from(text, 'utf8'), content = 'sha256:' + createHash('sha256').update(b).digest('hex');
+        bytes.set(content, b);
+        entries.push({ sourceId: 'app', relativePath, kind: 'file', disposition: 'included', content, bytes: b.length });
+      }
+      const graph = { repo: 'app', nodes: [{ id: 'app::route::POST /notes', kind: 'route' }], edges: [{ kind: 'calls', from: 'app::route::POST /notes', to: 'app::notes.controller.ts::NotesController.create' }] };
+      const a = await analyzeNest({ snapshot: { id: 'snap-smoke', entries }, sourceId: 'app', graph, readArtifact: async id => bytes.get(id) });
+      console.log(JSON.stringify({ version: a.controls.framework.version, pack: NEST_PACK.versions['@nestjs/common'], facts: a.controls.facts.map(f => f.property + ':' + f.verdict) }));
+    `));
+    assert.equal(nest.version, nest.pack, 'the installed pack resolves the exact pinned Nest version');
+    assert.deepEqual(nest.facts.sort(), ['authentication:does-not-apply', 'authorization:does-not-apply', 'input-validation:applies'], 'the installed pack analyses through its own oxc-parser');
+  }
 
   // The envelope registry, as the installed package reports it.
   const registry = JSON.parse(await evalModule("const { ENVELOPES } = await import('farsight-sentinel'); console.log(JSON.stringify(ENVELOPES));"));
@@ -162,6 +201,36 @@ try {
       '    a.analysis.complete, input?.kind, limits.maxDurationMs, r.parserComplete, r.clearsChecks, r.counts.parsed,',
       '    r.counts.unknownScopeDescendants, r.inputs[0]?.outcome, r.entries[0]?.class, r.tree.before, i.occurrences[0]?.byteSpan?.startByte,',
       '    i.spanUnavailable.invalidUtf8, i.unplaced.count, i.omitted, reason, typeof parseSnapshot, typeof retainSnapshotAnalysis];',
+      '}',
+    ] : []),
+    ...(analysisExported ? [
+      "import { boundedCallPaths, importDeepAnalysis, DEEP_ANALYSIS_SUPPORT, PATH_REASON_CODES, type PathRequest, type DeepImportResult, type PathReason } from 'farsight-sentinel/analysis';",
+      'export async function analysisFields(request: PathRequest): Promise<unknown[]> {',
+      '  const env: PathEvidenceEnvelope = await boundedCallPaths(request);',
+      '  const reason: PathReason = PATH_REASON_CODES[0];',
+      "  const r: DeepImportResult = await importDeepAnalysis({ document: '{}', snapshot: { id: 'x', entries: [] }, authorization: null, readContent: async () => new Uint8Array(), importedAt: '2026-10-22T10:00:00Z' });",
+      '  const doc: DeepImportEnvelope | undefined = undefined;',
+      "  return [env.establishes, env.results[0]?.outcome, reason, r.status, DEEP_ANALYSIS_SUPPORT.engine, doc];",
+      '}',
+    ] : []),
+    ...(springExported ? [
+      "import { analyzeSpring, SPRING_PACK, SPRING_ORDER, SPRING_SUPPORT, SPRING_REASON_CODES, matchTemplate, type SpringPackInput, type SpringReason } from 'farsight-sentinel/frameworks/spring';",
+      'export function springFields(input: SpringPackInput): unknown[] {',
+      '  const reason: SpringReason = SPRING_REASON_CODES[0];',
+      '  const profiles: readonly string[] | null = input.environment.activeProfiles;',
+      "  return [SPRING_PACK.version, SPRING_ORDER.chain, SPRING_SUPPORT.stack, reason, profiles, matchTemplate('/a', '/a/**'), typeof analyzeSpring];",
+      '}',
+    ] : []),
+    ...(nextExported ? [
+      "import { analyzeNext, NEXT_PACK_REVISION, type NextPackInput, type NextPackResult } from 'farsight-sentinel/frameworks/next';",
+      'export const nextRevision: number = NEXT_PACK_REVISION;',
+      'export const nextCheck = (input: NextPackInput): Promise<NextPackResult> => analyzeNext(input);',
+    ] : []),
+    ...(providersExported ? [
+      "import { BudgetLedger, toNanos, type EnvelopeTotals } from 'farsight-sentinel/review/providers';",
+      'export async function providerFields(path: string): Promise<EnvelopeTotals> {',
+      '  const ledger: BudgetLedger = await BudgetLedger.open(path);',
+      "  try { const cost: bigint | null = toNanos('0.125'); void cost; return ledger.totals('fixture'); } finally { ledger.close(); }",
       '}',
     ] : []),
     ...(expressExported ? [
@@ -285,7 +354,11 @@ try {
     assert.equal(read.stale, 'sentinel.store.staleEpoch', 'a record from the earlier epoch is refused');
     assert.ok(read.ok && read.integrity === 'ok', 'reachability and SQLite integrity hold after the reopen');
     storeDemo = `store reopened across processes (${host} SQLite ${process.versions.sqlite}, ${pair?.status ?? 'unqualified on CI'})`;
+    if (analysisExported) storeDemo += await analysisDemo();
+    if (springExported) storeDemo += await springDemo();
     if (expressExported) storeDemo += await expressDemo();
+    if (nextExported) storeDemo += await nextDemo();
+    if (providersExported) storeDemo += await providersDemo();
   } else {
     const refused = await node('store-write.mjs').then(() => null, (error) => `${error.stderr}`);
     assert.match(refused ?? '', /sentinel\.store\.(platformUnqualified|runtimeUnqualified)/, `an unqualified pair (${host}, SQLite ${process.versions.sqlite}) is refused`);
@@ -294,10 +367,164 @@ try {
   }
 
   /**
+   * The installed analysis API, run for real: an original two-file fixture is captured and parsed through the installed
+   * package alone; a bounded call path is found across the files and a deep import is refused without the owner's
+   * spent receipt. Nothing in the fixture is built or run, and no analyzer exists or is invoked.
+   */
+  async function analysisDemo() {
+    const appDir = join(storeRoot, 'paths-app');
+    const files = {
+      'src/a.ts': "import { b } from './b.js';\n\nexport function a(input: string) {\n  return b(input);\n}\n",
+      'src/b.ts': 'export function b(value: string) {\n  return value.length;\n}\n',
+    };
+    for (const [path, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(appDir, path)), { recursive: true });
+      writeFileSync(join(appDir, path), text);
+    }
+    const gitEnv = { PATH: process.env.PATH ?? '', HOME: appDir, LANG: 'C', LC_ALL: 'C', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'dev@example.com', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'dev@example.com' };
+    const gitRun = (args) => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'init.defaultBranch=main', ...args], { cwd: appDir, env: gitEnv, stdio: 'ignore' });
+    gitRun(['init', '--quiet']);
+    gitRun(['add', '--all']);
+    gitRun(['commit', '--quiet', '--no-verify', '-m', 'fixture']);
+    const workDir = join(storeRoot, 'paths-work');
+    mkdirSync(workDir, { mode: 0o700 });
+    writeFileSync(join(consumer.dir, 'analysis-demo.mjs'), `
+      import { createHash } from 'node:crypto';
+      import { openStore } from 'farsight-sentinel/store';
+      import { captureSnapshot } from 'farsight-sentinel/snapshot';
+      import { parseSnapshot } from 'farsight-sentinel/parser';
+      import { boundedCallPaths, importDeepAnalysis, deepImportIntent, DEEP_ANALYSIS_SUPPORT } from 'farsight-sentinel/analysis';
+      const store = await openStore(${JSON.stringify(join(storeRoot, 'paths-store'))});
+      try {
+        const { snapshot } = await captureSnapshot(store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'example/smoke', root: ${JSON.stringify(appDir)} }] });
+        const parsed = await parseSnapshot(store, { snapshotId: snapshot.id, workDir: ${JSON.stringify(workDir)},
+          selection: { gitignore: true, testFiles: 'include' },
+          limits: { maxFiles: 100, maxFileBytes: 1 << 20, maxTotalBytes: 1 << 24, maxEntries: 1000, maxDurationMs: 60000 } });
+        const readContent = id => store.readArtifact(id);
+        const paths = await boundedCallPaths({ snapshot, analysis: parsed.sources[0], readContent,
+          queries: [{ from: 'app::src/a.ts::a', to: 'app::src/b.ts::b' }] });
+        const file = p => snapshot.entries.find(e => e.relativePath === p);
+        const terms = 'sha256:' + createHash('sha256').update('terms').digest('hex');
+        const doc = JSON.stringify({ schema: 'sentinel-deep-import/draft-1',
+          tool: { name: 'example-analyzer', version: '1.0.0', distributionDigest: 'sha256:' + 'a'.repeat(64) },
+          attestation: { license: { identifier: 'LicenseRef-example', termsDigest: terms, acceptedBy: 'owner@example.com', acceptedAt: '2026-10-22T09:00:00Z' },
+            provenance: { obtainedFrom: 'mirror', attestedBy: 'team@example.com', attestedAt: '2026-10-22T09:00:00Z' } },
+          binding: { snapshotId: snapshot.id, sourceId: 'app', files: ['src/a.ts', 'src/b.ts'].map(p => ({ relativePath: p, content: file(p).content })),
+            configurationDigest: 'sha256:' + 'c'.repeat(64), mode: 'source-only', buildPerformed: false },
+          flows: [{ toolRuleId: 'example/flow', message: 'input reaches b', originalSeverity: 'low',
+            source: { relativePath: 'src/a.ts', content: file('src/a.ts').content, span: { startByte: 40, endByte: 45 } }, steps: [],
+            sink: { relativePath: 'src/b.ts', content: file('src/b.ts').content, span: { startByte: 0, endByte: 10 } } }] });
+        // Without the owner's spent receipt for exactly this document, nothing is imported; the attester it names is
+        // just text. (Receipts are issued only by the owner's local CLI flow, which the package does not export.)
+        const refused = await importDeepAnalysis({ document: doc, snapshot, readContent, importedAt: '2026-10-22T10:00:00Z', authorization: null });
+        const intent = deepImportIntent(doc, snapshot.id);
+        console.log(JSON.stringify({ outcome: paths.results[0].outcome, establishes: paths.establishes, steps: paths.results[0].paths[0]?.steps.length,
+          refused: refused.status, reason: refused.reasonCode, intent: intent?.action, engine: DEEP_ANALYSIS_SUPPORT.engine }));
+      } finally { store.close(); }
+    `);
+    const result = JSON.parse((await node('analysis-demo.mjs')).stdout.trim());
+    assert.deepEqual(result, { outcome: 'reached', establishes: 'call-reachability', steps: 1, refused: 'untrusted', reason: 'sentinel.deep.notOwnerConfirmed', intent: 'evidence.import', engine: null },
+      'a bounded call path, and an import refused without the owner\'s receipt, from the installed package alone');
+    return ', analysis API ran installed (call path, import refused without owner receipt)';
+  }
+
+  /**
    * The installed Express pack, run for real: an original fixture with a route registered before its check, one after
    * it and one behind a conditional registration in a second application is captured, parsed and analysed through the
    * installed package alone. git builds the fixture's repository only; nothing in it is installed or run.
    */
+
+  // Original Next fixtures, now exercised by the installed package only. The lock is inert fixture data, not a
+  // fetched dependency. Every parse and analysis happens after that fixture's checkout has been removed.
+  async function nextDemo() {
+    const lock = "lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: true\n\nimporters:\n\n  .:\n    dependencies:\n      next:\n        specifier: 14.2.25\n        version: 14.2.25(react-dom@18.3.1(react@18.3.1))(react@18.3.1)\n      react:\n        specifier: 18.3.1\n        version: 18.3.1\n      react-dom:\n        specifier: 18.3.1\n        version: 18.3.1(react@18.3.1)\n\npackages:\n\n  next@14.2.25:\n    resolution: {integrity: sha512-N5M7xMc4wSb4IkPvEV5X2BRRXUmhVHNyaXwEM86+voXthSZz8ZiRyQW4p9mwAoAPIm6OzuVZtn7idgEJeAJN3Q==}\n\n  react-dom@18.3.1:\n    resolution: {integrity: sha512-5m4nQKp+rZRb09LNH59GM4BxTh9251/ylbKIbpe7TpGxfJ+9kv6BLkLBXIjjspbgbnIBNqlI23tRnTWT0snUIw==}\n\n  react@18.3.1:\n    resolution: {integrity: sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==}\n";
+    const patch = 'patchedDependencies:\n# Original inert column-zero comment\n    next@14.2.25:\n        path: patches/next.patch\n        hash: fixture\n\n';
+    const cases = [
+      { label: 'peer-positive', lock, supported: true },
+      { label: 'tagged-patch', lock: lock.replace('importers:', '!!str ' + patch + 'importers:'), supported: false },
+      { label: 'comment-patch', lock: lock.replace('importers:', patch + 'importers:'), supported: false },
+      { label: 'quoted-patch', lock: lock.replace('  next@14.2.25:\n', '  next@14.2.25:\n    "patched": true\n'), supported: false },
+      { label: 'dynamic', lock, supported: true, dynamic: true },
+    ];
+    writeFileSync(join(consumer.dir, 'next-demo.mjs'), `
+      import assert from 'node:assert/strict';
+      import { mkdirSync, writeFileSync, rmSync, readdirSync } from 'node:fs';
+      import { join } from 'node:path';
+      import { execFileSync } from 'node:child_process';
+      import { openStore } from 'farsight-sentinel/store';
+      import { captureSnapshot } from 'farsight-sentinel/snapshot';
+      import { parseSnapshot } from 'farsight-sentinel/parser';
+      import { analyzeNext } from 'farsight-sentinel/frameworks/next';
+      assert.ok(!readdirSync('node_modules').includes('@farsight'), 'no workspace packages in this consumer');
+      const root = ${JSON.stringify(join(storeRoot, 'next'))};
+      for (const c of ${JSON.stringify(cases)}) {
+        const dir = join(root, c.label), repo = join(dir, 'repo'), work = join(dir, 'work');
+        mkdirSync(repo, { recursive: true }); mkdirSync(work);
+        const files = {
+          'package.json': JSON.stringify({ name: 'original-next-fixture', private: true, dependencies: { next: '14.2.25', react: '18.3.1', 'react-dom': '18.3.1' } }),
+          'pnpm-lock.yaml': c.lock,
+          'middleware.ts': c.dynamic ? "const matcher = process.env.ROUTES; export function middleware() {}\\nexport const config = { matcher };\\n" : "export function middleware() {}\\nexport const config = { matcher: '/private/:path*' };\\n",
+          'app/private/route.ts': 'export function GET() { return new Response(null); }\\n',
+          'app/public/route.ts': 'export function GET() { return new Response(null); }\\n',
+          'patches/next.patch': '# Original inert patch\\n',
+        };
+        for (const [path, text] of Object.entries(files)) { mkdirSync(join(repo, path, '..'), { recursive: true }); writeFileSync(join(repo, path), text); }
+        const env = { PATH: process.env.PATH, HOME: dir, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
+          GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'dev@example.com', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'dev@example.com' };
+        for (const args of [['init', '--quiet'], ['add', '--all'], ['commit', '--quiet', '-m', 'fixture']]) execFileSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd: repo, env, stdio: 'ignore' });
+        const store = await openStore(join(dir, 'store'));
+        try {
+          const { snapshot } = await captureSnapshot(store, { mode: 'working-copy', sources: [{ sourceId: 'web', repositoryId: 'example/web', root: repo }] });
+          rmSync(repo, { recursive: true, force: true });
+          const analysis = await parseSnapshot(store, { snapshotId: snapshot.id, workDir: work, selection: { gitignore: true, testFiles: 'include' },
+            limits: { maxFiles: 100, maxFileBytes: 65536, maxTotalBytes: 1048576, maxEntries: 1000, maxDurationMs: 60000 } });
+          const result = await analyzeNext({ snapshot, analysis: analysis.sources[0], read: id => store.readArtifact(id) });
+          assert.equal(result.projects[0].supported, c.supported, c.label);
+          const facts = result.envelopes[0].facts.filter(f => f.surfaceId === 'web::route::GET /public');
+          assert.ok(facts.length > 0, c.label);
+          assert.ok(facts.every(f => f.verdict === (c.supported && !c.dynamic ? 'does-not-apply' : 'unknown')), c.label);
+        } finally { store.close(); }
+      }
+      console.log('Next peer-positive, modified identity and dynamic matcher after checkout removal');
+    `);
+    const r = await node('next-demo.mjs');
+    assert.match(r.stdout, /Next peer-positive, modified identity and dynamic matcher after checkout removal/);
+    return ', Next retained-byte peer/patch/dynamic checks';
+  }
+
+  // The provider library's offline budget seam only: no provider profile, credential, endpoint or request exists.
+  // Direct ledger calls here are a trusted fixture, not a claim that an imported digest grants owner authority.
+  async function providersDemo() {
+    const path = join(storeRoot, 'provider-budget.db');
+    writeFileSync(join(consumer.dir, 'provider-demo.mjs'), `
+      import assert from 'node:assert/strict';
+      import { BudgetLedger, toNanos } from 'farsight-sentinel/review/providers';
+      assert.equal(toNanos('0.125'), 125000000n);
+      const path = ${JSON.stringify(path)}, at = '2026-10-22T12:00:00.000000000Z';
+      const ledger = await BudgetLedger.open(path);
+      try {
+        ledger.createEnvelope({ id: 'fixture', runId: 'fixture-run', bindingDigest: 'sha256:' + '1'.repeat(64), admissionDigest: 'sha256:' + '2'.repeat(64), receiptDigest: null,
+          maxTokens: 10, maxCostNanos: 0n, currency: 'USD', createdAt: at });
+        const held = ledger.reserve({ envelopeId: 'fixture', operationId: 'first', tokens: 6, costNanos: 0n, epoch: 'fixture-epoch', at });
+        assert.equal(ledger.reserve({ envelopeId: 'fixture', operationId: 'first', tokens: 6, costNanos: 0n, epoch: 'fixture-epoch', at }).id, held.id);
+        assert.throws(() => ledger.reserve({ envelopeId: 'fixture', operationId: 'overspend', tokens: 5, costNanos: 0n, epoch: 'fixture-epoch', at }), e => e.code === 'sentinel.provider.budgetExhausted');
+        assert.equal(ledger.totals('fixture').chargedTokens, 6);
+      } finally { ledger.close(); }
+    `);
+    await node('provider-demo.mjs');
+    writeFileSync(join(consumer.dir, 'provider-reopen.mjs'), `
+      import assert from 'node:assert/strict';
+      import { BudgetLedger } from 'farsight-sentinel/review/providers';
+      const ledger = await BudgetLedger.open(${JSON.stringify(path)});
+      try { assert.equal(ledger.totals('fixture').chargedTokens, 6); assert.equal(ledger.totals('fixture').byState.held, 1); }
+      finally { ledger.close(); }
+      console.log('provider offline budget reservation, overspend refusal and cross-process reopen');
+    `);
+    assert.match((await node('provider-reopen.mjs')).stdout, /provider offline budget reservation, overspend refusal and cross-process reopen/);
+    return ', provider offline budget checks';
+  }
+
   async function expressDemo() {
     const appDir = join(storeRoot, 'express-app');
     const files = {
@@ -365,6 +592,116 @@ second.listen(3001);
       'app::route::GET /maybe': '0:sentinel.express.registrationDynamic',
     }, 'a route before its check, one after it and a conditional registration, from the installed package alone');
     return ', Express pack analysed an installed fixture (before, after, conditional)';
+  }
+
+  /**
+   * The installed Spring pack, run for real: an original fixture with a deliberately open route (the earlier, narrower
+   * chain), a protected one and one no chain matches is captured, parsed and analysed through the installed package
+   * alone, so the bundled parser, its native binding and the Java grammar all resolve from the consumer's own install.
+   * git builds the fixture's repository only; nothing from the checkout or pnpm is used.
+   */
+  async function springDemo() {
+    const appDir = join(storeRoot, 'spring-app');
+    const files = {
+      'pom.xml': `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.4.3</version>
+    <relativePath/>
+  </parent>
+  <groupId>example</groupId>
+  <artifactId>smoke</artifactId>
+  <version>0.0.0</version>
+  <dependencies>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>
+  </dependencies>
+</project>
+`,
+      'src/main/java/app/App.java': 'package app;\n\n@org.springframework.boot.autoconfigure.SpringBootApplication\npublic class App {}\n',
+      'src/main/java/app/SecurityConfig.java': `package app;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+public class SecurityConfig {
+  @Bean
+  @Order(1)
+  public SecurityFilterChain open(HttpSecurity http) throws Exception {
+    http.securityMatcher("/api/public/**").authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+    return http.build();
+  }
+
+  @Bean
+  @Order(2)
+  public SecurityFilterChain secure(HttpSecurity http) throws Exception {
+    http.securityMatcher("/api/**").authorizeHttpRequests(auth -> auth.anyRequest().authenticated());
+    return http.build();
+  }
+}
+`,
+      'src/main/java/app/Routes.java': `package app;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class Routes {
+  @GetMapping("/api/public/info")
+  public String open() { return "open"; }
+
+  @GetMapping("/api/data")
+  public String secure() { return "secure"; }
+
+  @GetMapping("/other")
+  public String other() { return "other"; }
+}
+`,
+    };
+    for (const [path, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(appDir, path)), { recursive: true });
+      writeFileSync(join(appDir, path), text);
+    }
+    const gitEnv = { PATH: process.env.PATH ?? '', HOME: appDir, LANG: 'C', LC_ALL: 'C', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'dev@example.com', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'dev@example.com' };
+    const gitRun = (args) => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'init.defaultBranch=main', ...args], { cwd: appDir, env: gitEnv, stdio: 'ignore' });
+    gitRun(['init', '--quiet']);
+    gitRun(['add', '--all']);
+    gitRun(['commit', '--quiet', '--no-verify', '-m', 'fixture']);
+    const workDir = join(storeRoot, 'spring-work');
+    mkdirSync(workDir, { mode: 0o700 });
+    writeFileSync(join(consumer.dir, 'spring-demo.mjs'), `
+      import { openStore } from 'farsight-sentinel/store';
+      import { captureSnapshot } from 'farsight-sentinel/snapshot';
+      import { parseSnapshot } from 'farsight-sentinel/parser';
+      import { analyzeSpring, SPRING_ORDER } from 'farsight-sentinel/frameworks/spring';
+      const store = await openStore(${JSON.stringify(join(storeRoot, 'spring-store'))});
+      try {
+        const { snapshot } = await captureSnapshot(store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'example/smoke', root: ${JSON.stringify(appDir)} }] });
+        const parsed = await parseSnapshot(store, { snapshotId: snapshot.id, workDir: ${JSON.stringify(workDir)},
+          selection: { gitignore: true, testFiles: 'include' },
+          limits: { maxFiles: 100, maxFileBytes: 1 << 20, maxTotalBytes: 1 << 24, maxEntries: 1000, maxDurationMs: 60000 } });
+        const facts = await analyzeSpring({ snapshot, sourceId: 'app', analysis: parsed.sources[0], readContent: id => store.readArtifact(id),
+          environment: { activeProfiles: [] } });
+        const out = {};
+        for (const f of facts.facts) if (f.property === 'authentication' && f.order === SPRING_ORDER.chain) out[f.surfaceId] = f.verdict === 'unknown' ? f.reasonCode : f.verdict;
+        console.log(JSON.stringify({ version: facts.framework.version, out }));
+      } finally { store.close(); }
+    `);
+    const result = JSON.parse((await node('spring-demo.mjs')).stdout.trim());
+    assert.equal(result.version, 'boot-3.4.3+security-6.4.3');
+    assert.deepEqual(result.out, {
+      'app::route::GET /api/public/info': 'does-not-apply',
+      'app::route::GET /api/data': 'applies',
+      'app::route::GET /other': 'sentinel.spring.noChainMatches',
+    }, 'open, protected and unmatched routes, from the installed package alone');
+    return ', Spring pack analysed an installed fixture (open, protected, unknown)';
   }
 
   // Standalone: everything @farsight/* is inlined, and farsight-cli is not pulled in.
@@ -623,7 +960,7 @@ second.listen(3001);
     gitleaksDemo = `gitleaks assets (worker ${gitleaks.worker.digest.slice(7, 19)}, no image), `;
   }
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}${expressExported ? ', Express pack types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}${osvDemo}${trivyDemo}${zizmorDemo}${gitleaksDemo}npm consumer`);
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}${analysisExported ? ', analysis types compiled' : ''}${springExported ? ', Spring pack types compiled' : ''}${expressExported ? ', Express pack types compiled' : ''}${nestExported ? ', Nest pack analysed' : ''}${nextExported ? ', Next types compiled' : ''}${providersExported ? ', provider types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}${osvDemo}${trivyDemo}${zizmorDemo}${gitleaksDemo}npm consumer`);
 } finally {
   consumer.cleanup();
 }

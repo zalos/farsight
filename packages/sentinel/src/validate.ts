@@ -8,7 +8,7 @@ import type {
   ReportCount, ReportEnvelope, RunEnvelope, SnapshotEnvelope, WorkEnvelope, FindingPlace, HelloMessage,
   WelcomeMessage, RefuseMessage, RulePackManifest, RuleLockEnvelope, SettingsEnvelope, RepoConfigEnvelope,
   EffectivePolicyEnvelope, AdoptionEnvelope, ReceiptEnvelope, AdmissionEnvelope, ControlFactsEnvelope, Rights, Budget,
-  PlanEnvelope,
+  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
 import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf } from './planner/identity.js';
@@ -34,6 +34,8 @@ export interface EnvelopeTypes {
   admission: AdmissionEnvelope;
   controls: ControlFactsEnvelope;
   plan: PlanEnvelope;
+  paths: PathEvidenceEnvelope;
+  deepimport: DeepImportEnvelope;
 }
 
 /** Stable error codes; message text is safe context, never raw input. */
@@ -646,9 +648,50 @@ const plan: Check<PlanEnvelope> = (v, out) => {
   if (digest !== digestOf(rest)) out.add(err('/digest', 'the digest is not the canonical digest of the revision'));
 };
 
+/** A path is call reachability over one graph: its answer, steps and identities agree, and it never claims flow. */
+const paths: Check<PathEvidenceEnvelope> = (v, out) => {
+  for (const key of ['sentinel.paths.notDataFlow', 'sentinel.paths.graphOnly']) {
+    if (!v.limitationKeys.includes(key)) out.add(err('/limitationKeys', `${key} is always stated`));
+  }
+  if (v.boundsDigest !== digestOf(v.bounds)) out.add(err('/boundsDigest', 'the bounds digest is the canonical digest of the bounds'));
+  for (const i of duplicates(v.results, r => `${r.from}\u0000${r.to}`)) out.add(err(`/results/${i}`, 'one result per query'));
+  v.results.forEach((r, i) => {
+    if (r.from === r.to) out.add(err(`/results/${i}`, 'a query has two different ends'));
+    if ((r.outcome === 'reached') !== (r.paths.length === 1)) out.add(err(`/results/${i}/paths`, 'exactly a reached query carries its path'));
+    if (r.outcome === 'not-reached-complete' && r.frontierReasons.length) out.add(err(`/results/${i}/frontierReasons`, 'a complete search met no frontier'));
+    if (r.outcome === 'not-reached-bounded' && !r.frontierReasons.length) out.add(err(`/results/${i}/frontierReasons`, 'a bounded search names its frontier'));
+    for (const p of r.paths) {
+      if (p.steps.length > v.bounds.maxDepth) out.add(err(`/results/${i}/paths/0/steps`, 'a path is within the depth bound'));
+      if (p.steps[0]?.from !== r.from || p.steps[p.steps.length - 1]?.to !== r.to) out.add(err(`/results/${i}/paths/0/steps`, 'a path runs from the query\'s start to its end'));
+      p.steps.forEach((s, j) => {
+        if (j > 0 && p.steps[j - 1]!.to !== s.from) out.add(err(`/results/${i}/paths/0/steps/${j}`, 'consecutive steps join'));
+        if (!v.bounds.edgeKinds.includes(s.kind)) out.add(err(`/results/${i}/paths/0/steps/${j}/kind`, 'a step follows a bounded edge kind'));
+        s.sites.forEach((x, k) => pathError(out, `/results/${i}/paths/0/steps/${j}/sites/${k}/relativePath`, x.relativePath));
+      });
+      const nodes = [r.from, ...p.steps.map(s => s.to)];
+      if (new Set(nodes).size !== nodes.length) out.add(err(`/results/${i}/paths/0`, 'a path visits each node once'));
+      if (p.id !== digestOf({ nodes, edges: p.steps.map(s => s.edgeId) })) out.add(err(`/results/${i}/paths/0/id`, 'the path id is the digest of its nodes and edges'));
+    }
+  });
+};
+
+/** An import binds each file it read once, and every flow points into a file it read. */
+const deepimport: Check<DeepImportEnvelope> = (v, out) => {
+  for (const i of duplicates(v.binding.files, f => f.relativePath)) out.add(err(`/binding/files/${i}`, 'each file read is listed once'));
+  v.binding.files.forEach((f, i) => pathError(out, `/binding/files/${i}/relativePath`, f.relativePath));
+  const read = new Map(v.binding.files.map(f => [f.relativePath, f.content]));
+  v.flows.forEach((f, i) => {
+    [f.source, ...f.steps, f.sink].forEach((l, j) => {
+      pathError(out, `/flows/${i}/locations/${j}/relativePath`, l.relativePath);
+      if (read.get(l.relativePath) !== l.content) out.add(err(`/flows/${i}/locations/${j}`, 'a flow location is in a file the tool read, with the same content'));
+      if (l.span.startByte >= l.span.endByte) out.add(err(`/flows/${i}/locations/${j}/span`, 'a location is a non-empty span'));
+    });
+  });
+};
+
 const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   snapshot, run, work, attempt, observation, coverage, disposition, report, protocol,
-  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan,
+  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan, paths, deepimport,
 };
 
 /**

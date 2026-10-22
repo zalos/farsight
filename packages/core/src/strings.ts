@@ -60,6 +60,16 @@ import { SENTINEL_STORAGE_ERROR_STRINGS } from './strings-sentinel-storage-error
 import { SENTINEL_PATTERN_STRINGS } from './strings-sentinel-pattern.js';
 import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
+import { SENTINEL_NEST_STRINGS } from './strings-sentinel-nest.js';
+
+import { SENTINEL_PROVIDER_STRINGS } from './strings-sentinel-providers.js';
+
+import { SENTINEL_ANALYSIS_STRINGS } from './strings-sentinel-analysis.js';
+
+import { SENTINEL_NEXT_STRINGS } from './strings-sentinel-next.js';
+
+import { SENTINEL_SPRING_STRINGS } from './strings-sentinel-spring.js';
+
 import { SENTINEL_OSV_STRINGS } from './strings-sentinel-osv.js';
 import { SENTINEL_TRIVY_STRINGS } from './strings-sentinel-trivy.js';
 import { SENTINEL_ZIZMOR_STRINGS } from './strings-sentinel-zizmor.js';
@@ -218,6 +228,19 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_GLOSSARY_STRINGS,
   // Sentinel current-tree secret scanning: limitation keys, skipped scope and coded failures (strings-sentinel-secrets.ts)
   ...SENTINEL_SECRETS_STRINGS,
+
+  // Sentinel's Nest framework pack: why a control fact is unknown, and the registrations it could not follow (strings-sentinel-nest.ts)
+  ...SENTINEL_NEST_STRINGS,
+
+  ...SENTINEL_PROVIDER_STRINGS,
+
+  // Sentinel's bounded call paths and imported deep-analysis results (strings-sentinel-analysis.ts)
+  ...SENTINEL_ANALYSIS_STRINGS,
+
+  ...SENTINEL_NEXT_STRINGS,
+
+  // Sentinel's Spring Security servlet pack: why a control fact is unknown (strings-sentinel-spring.ts)
+  ...SENTINEL_SPRING_STRINGS,
 
 
   // Sentinel's OSV advisory adapter: coverage, refusals, engine failures and acquisition (strings-sentinel-osv.ts)

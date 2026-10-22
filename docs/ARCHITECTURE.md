@@ -710,6 +710,217 @@ checks detector bytes against the pinned pack digest, and returns every other ru
 batch of at most 2,000 targets to keep timed output under its 3 MiB bound. **Not decided here:** registering the adapter
 in the production registry, the planner's batching, the scan command (PR 09), and amd64 qualification.
 
+32. **Sentinel's Nest pack resolves request controls from registrations, and never from names (2026-10-22).**
+    `packages/sentinel/src/frameworks/nest/` (PR 16, exported as `./frameworks/nest`) emits `sentinel-controls/draft-1`
+    facts for one captured source, with a `sentinel-nest-scope/draft-1` scope report of each surface's ordered chain.
+    Its inputs are the snapshot, the bytes the store captured and the public parser's artifact for the same snapshot.
+    The parser graph names the surfaces (a route node and the controller method it calls) and nothing more: an
+    annotation match, a guard node, a declared `validates` edge or a reachable reader is never protection evidence.
+    The pack reads the captured TypeScript itself with the parser's pinned `oxc-parser` (loaded on first analysis),
+    converts its UTF-16 offsets to UTF-8 byte spans (refusing one inside a surrogate pair) and cites every resolved fact
+    by content id, span and quote digest. Nothing is executed, installed or imported from the target.
+
+    - **One exact version.** `@nestjs/common` and `@nestjs/core` 10.4.15, from the captured `package-lock.json` or an
+      exact `package.json` pin, and class-validator 0.14.1 for validation. A range, a missing entry or another release
+      leaves `framework.version` null and every fact unknown.
+    - **What is followed.** One `NestFactory.create(RootModule)` kept in a named variable and its literal
+      `useGlobalGuards`/`useGlobalInterceptors`/`useGlobalPipes`; `@Module` metadata from the root module through local
+      imports; `{ provide: APP_GUARD | APP_INTERCEPTOR | APP_PIPE, useClass }`; `@UseGuards`/`@UseInterceptors`/
+      `@UsePipes` on a controller or handler and pipes passed to a parameter decorator. The chain is ordered as Nest
+      10.4.15 evaluates it: guards, interceptors, pipes, each global → controller → method (pipes also per parameter).
+    - **Distinct effects.** Only `ValidationPipe` imported from `@nestjs/common`, with literal options, over a
+      parameter whose type is a local class with class-validator rules, is validation. `Parse*Pipe` and the
+      `@nestjs/platform-express` file interceptors are parsing; `DefaultValuePipe` and `ClassSerializerInterceptor` are
+      transformation. A guard's effect is never inferred, so authentication and authorization are `unknown`
+      (`guardEffectUnresolved`) whenever a guard is in the chain, and `does-not-apply` only when the chain has no
+      guard, no unmodeled interceptor and no frontier. A local class named `ValidationPipe` is a local pipe.
+    - **Frontiers stay explicit.** Dynamic and external modules, provider factories/values/aliases, middleware,
+      non-literal registrations, custom decorators, inherited controllers, unregistered controllers, unresolved
+      providers and unreadable files are `sentinel.nest.*` frontiers. A frontier that could change a verdict leaves
+      it unknown: global frontiers apply to every surface, surface frontiers to that surface only. A handler on the
+      HTTP adapter is a frontier outside the controller surfaces.
+    - **E2.** The accepted framework corpus's route-scoped ValidationPipe gives `input-validation: applies`; the same
+      DTO with no pipe registered gives `does-not-apply`, citing the parameter and the bootstrap. A multipart
+      interceptor only parses: the upload stays `does-not-apply` with the interceptor cited.
+    - **Only what certainly runs counts (review, 2026-10-22).** The application is the `const` the bootstrap declares from
+      `NestFactory.create`; a global registration counts only as a straight-line statement on it, after the create and
+      before `init`/`listen`, before any statement that can return or throw, in a bootstrap the module calls
+      unconditionally. Every other `useGlobal*` call (conditional, in a `try`, after initialization, in another
+      function, on another binding) is `registrationNotFollowed`, and handing the application to other code is
+      `applicationEscapes`; both leave the facts they could change unknown. Names resolve lexically: a parameter or
+      local declaration that rebinds an imported name (a bootstrap parameter called `ValidationPipe`) is not the
+      import, while aliased and namespace imports are. Stacked `UseGuards`/`UseInterceptors`/`UsePipes` register bottom
+      to top (each appends to the metadata the decorators below it wrote).
+    - **Validation needs its preconditions.** `applies` also needs ValidationPipe options known not to weaken it
+      (whitelist, forbidNonWhitelisted, transform, error and debug settings, `forbidUnknownValues: true`), no conditional
+      rule on the DTO (`ValidateIf`, `IsOptional`, `groups`, `always`), no inherited rules, and decorator metadata: the
+      captured tsconfig nearest the controller must set `experimentalDecorators` and `emitDecoratorMetadata` to true
+      itself (cited as evidence); off is `decoratorMetadataOff`, inherited, missing or SWC-built is
+      `decoratorMetadataUnknown`.
+    - **Owning projects, constraints and interceptors (second review, 2026-10-22).** Versions are those of the project
+      that owns each analysed file (the nearest manifest declaring Nest; its nearest lockfile, nested installs before
+      hoisted ones; else an exact pin); the envelope's one version is set only when every owning project resolves to the
+      supported release. `Allow` is not a constraint; custom (`Validate`, `ValidateBy`, `ValidatePromise`) and nested
+      (`ValidateNested`) constraints hold logic the pack does not read, so they leave validation unknown. An interceptor
+      the pack does not model runs before the pipes and can answer without the handler, so it blocks `applies`; it, or a
+      guard, also blocks `does-not-apply`, since unmodelled code may check the input itself.
+    - **Decorators, dependency copies and rewritten code (third review, 2026-10-22).** Any DTO decorator that is not
+      class-validator's own (a local wrapper such as one returning `ValidateIf(() => false)`, class-transformer's, one
+      on the class) and any rule argument the pack cannot read leave validation unknown. Every dependency resolves as
+      Node would from the file that loads it: the nearest lockfile install for that folder, else an exact pin in the
+      nearest manifest that declares it; ranges and missing installs are unresolved. ValidationPipe loads
+      class-validator from where @nestjs/common is installed and a DTO registers its rules with the copy its own folder
+      resolves, so `applies` needs both to be the same installed copy of 0.14.1. Writing to a member of the
+      application (`app.useGlobalPipes = ...`) is `applicationMutated`; writing to anything imported from Nest,
+      class-validator or class-transformer, through assignment, `Object.defineProperty` and the like, or rewriting
+      reflected metadata, is `frameworkMutated`; both block every fact they could change.
+    - **Framework values leaving followed bindings (fourth review, 2026-10-22).** A local framework alias is
+      followed only through supported identifier/member bindings, type wrappers and conditional/logical alternatives.
+      A constructor hidden in a sequence, aggregate or class field, supplied as a parameter/default, returned, or
+      handed to an ordinary function is `frameworkEscapes`. Constructor methods such as `bind`, `call` and `apply`
+      are also outside the modeled exports and factory call. Such code may mutate the actual framework, so every
+      control fact stays unknown. Modeled registration arguments and framework decorators remain supported; type
+      names, noncomputed property names and unused shadowed parameters do not pass the imported value anywhere.
+    - **Supported uses, with unknown as the default (fifth review, 2026-10-22).** Each runtime reference to a
+      framework value is followed only through supported local bindings, member/type wrappers and modeled receivers.
+      Any other consumer is `frameworkEscapes`, including tagged-template arguments, constructor instances handed
+      to helpers, subclasses, returns and exports. A new syntax form therefore stays unknown until explicitly
+      modeled. Types, declaration/property names, discarded reads and unused shadowed parameters are not escapes.
+      Existing registrations that cannot certainly run retain their precise `registrationNotFollowed` frontier.
+    - **Local binding boundaries (sixth review, 2026-10-22).** Keeping a framework value in a variable is supported
+      only when that declaration is local and not inside an unmodeled namespace. Exports, including live bindings
+      assigned after declaration, remain unknown at the boundary. Qualified names in runtime TypeScript
+      import-equals declarations are values, while type-only imports and qualified type names remain erased.
+      Unmodeled framework module loads, dynamic import targets, retained host loaders and Node loader factories
+      also leave a frontier; a local function merely named `require` grants no loading capability.
+    - **Digests.** `packDigest` covers the support manifest, `environmentDigest` the resolved versions and
+      `registrationDigest` every cited registration span; a change to any invalidates the facts.
+
+    Not decided here: CLI and planner integration (PR 09 still pending), CSRF/CORS/rate-limit/header properties,
+    guard bodies, Fastify, and versions other than 10.4.15.
+
+36. **Sentinel retains bounded call paths as structural evidence and imports deep analysis only when attested and bound (2026-10-22).**
+No evaluated engine qualified for cross-file flow in E3 (`feasibility-decisions.json`, `engine.crossFile`), so
+Sentinel selects, bundles, downloads and runs no deep engine, and `interprocedural-flow` stays unavailable with
+`sentinel.capability.noQualifiedEngine`. Two draft boundaries replace it honestly, exported as
+`farsight-sentinel/analysis`. **Bounded call paths** (`sentinel-paths/draft-1`, `boundedCallPaths`): one index per
+parser artifact; a breadth-first search over the parser's `calls` edges (optionally `http` and `renders`; never
+guard, validation or test edges) within explicit depth, fan-out and visit bounds; strongly connected components are
+reported as call cycles, and every node is visited once, so cycles terminate. A query is `reached` (the shortest
+path, each step with the parser's resolution and its captured call sites), `not-reached-bounded` with the frontier
+kinds it met, or `not-reached-complete` only when nothing was left unexplored and every visited function's captured
+text is accounted for: the parser records no edge for a computed call, a call on an unknown value, a global or a
+function handed on as a value, so each visited function's whole-line bytes are scanned lexically (Unicode
+identifiers included, a keyword read as a property counted) and any call-like site beyond the recorded ones, or any
+function name used as a value, is a frontier (the scan may over-count, never under-count). A parser edge to a
+top-level function whose name the calling function also binds (a parameter, a local) is not followed
+(`shadowedCall`). The artifact, its parser index, the snapshot and the reader are bound before anything is cached or
+read: the index must be the artifact's own analysis (the envelope names the artifact's fingerprint), every location it
+cites must be a captured file of that snapshot with the same content id, bytes read must hash to the id cited, and
+caches are keyed by the artifact and index together, so nothing computed for one capture is served for another. The envelope binds the snapshot, source, analysis fingerprint, a digest of the graph read and the
+bounds, and always states `establishes: call-reachability` with `notDataFlow` and `graphOnly`: a path never claims
+flow, taint, sanitization or protection. **Attested deep import** (`sentinel-deep-import/draft-1`,
+`importDeepAnalysis`): a customer-run analyzer's flows are untrusted input. A document that does not validate is
+refused. Nothing it asserts about itself is trusted: it is used only with the owner's spent receipt for the new
+owner-only `evidence.import` action, bound to the canonical digest of the whole document (tool, version,
+distribution, licence terms, provenance, configuration and flows) and to the snapshot and source
+(`deepImportIntent`); without it, or with one for any other document, snapshot or action, it yields nothing;
+one bound to another snapshot or source, or to any file whose content differs from the capture, is unbound; a flow
+location outside a file the tool read, or past its bytes, is unknown. Accepted flows become `imported` observations
+(producer `imported`, the document digest as provenance) limited to the tool's stated files and configuration; they
+never count as executed checks, and the analyzer's mode name and stated build are recorded, never read as a
+capability. Runtime control facts and framework packs stay separate: nothing here reads guard edges or turns a path
+into an authorization proof. Not decided here: scan wiring (PR 09/10), selecting an engine if a future one
+qualifies, and how imported observations are correlated (PR 19). Words are `strings-sentinel-analysis.ts`.
+
+27. **Sentinel's first framework pack reads Spring Security servlet chains from source, for one exact version (2026-10-22).**
+
+`@farsight/sentinel` gains a public `./frameworks/spring` export: `analyzeSpring(input)`, which returns one validated
+`sentinel-controls/draft-1` envelope for one captured source's Spring routes, together with `SPRING_PACK`,
+`SPRING_ORDER`, `SPRING_SUPPORT`, `SPRING_REASON_CODES` and `matchTemplate`. It is a library: no scan runs it until the
+CLI (PR 09) integrates it, so PR 17's full acceptance depends on that work. The `framework-spring` capability is
+`available-draft` with reason `sentinel.capability.draftSpring`: source only, exactly the stated versions.
+
+**Scope.** Exactly Spring Boot 3.4.3 with the Spring Security 6.4.3 its dependency list pins, servlet stack. These are
+read from the captured `pom.xml` as XML structure (elements by name and nesting, never by child order).
+The envelope's version is `null`, and every fact `unknown`, for any of:
+- an explicit Spring Security version anywhere;
+- a Spring version property;
+- managed or imported dependencies;
+- profiles or modules;
+- WebFlux, a Gradle build, or a build that does not parse.
+
+Documentation for other versions is not evidence for these.
+
+**Registration.** A configuration class counts only when Spring Boot's default component scan registers it: the single
+`@SpringBootApplication`'s package and below, for a component class. Any explicit scan or import annotation, scan
+attribute or auto-configuration registration makes classes outside that scan `unknown`
+(`sentinel.spring.componentScanUnresolved`). A class Spring does not register enables nothing, so
+`@EnableMethodSecurity` must sit on a registered `@Configuration` or `@SpringBootApplication` class. Every `@Bean`
+whose type is a `SecurityFilterChain`, in any qualified spelling, is a chain. Any other `…FilterChain` bean is an
+unknown candidate, never omitted. Names resolve through imports, the package and qualified names in captured source:
+composed annotations, superclasses and interface default `@Bean` methods are followed there, and anything resolved
+outside Java's or Spring's own types is unknown. Java shadowing is honoured: a type the file declares, or a member
+type inherited from a captured supertype, shadows an import of the same name, so where it could, the name is unknown
+rather than the import. Spring merges meta-annotations, so `@Bean`, `@Order`, `@Profile` and `@Conditional` are read
+through captured composed annotations: a composed `@Bean` declares a chain, while a composed order or condition, or an
+annotation from uncaptured code that could carry one, leaves the chain's position or activity unknown
+(`sentinel.spring.chainOrderUnsupported`, `sentinel.spring.conditionComposed`, `sentinel.spring.beanDeclarationUnknown`).
+Spring registers an inherited `@Bean` but invokes the most specific method, so an inherited chain whose method name a
+subclass declares again without `@Bean` is unknown (`sentinel.spring.chainOverridden`), never read from the superclass.
+A chain the pack cannot see or place sorts ahead of every known one.
+A chain's configurer arguments must be provably inert: a lambda that only configures its own parameter and never
+continues past `disable()` (which returns the builder); Spring's own `AbstractHttpConfigurer::disable`; Spring's
+`withDefaults()`; Spring constants; or literals. An application method reference, or anything that could reach the
+`HttpSecurity` again (for example `removeConfigurer`), makes the chain unknown. The parent POM must be looked up from
+the repository (an empty `relativePath`); a relative parent could manage other versions.
+
+**Roles and the anonymous principal.** A role or authority check is always authorization. It is authentication only
+when the anonymous principal Spring gives unauthenticated requests cannot hold any authority it admits. By default that
+principal holds `ROLE_ANONYMOUS`, so `hasRole("ANONYMOUS")` does not require authentication. `anonymous(disable)`
+removes it, and a customised anonymous principal leaves authentication unknown. A `GrantedAuthorityDefaults` bean,
+which can change the `ROLE_` prefix, leaves role checks unknown.
+
+**Inputs and evidence.** The input is the captured snapshot, the PR 05 parser evidence for the source, a reader for
+captured bytes by content id, and the selected environment (`activeProfiles`, `null` when none was selected). The
+public graph supplies route identities only. Its route names are lossy: variables rewritten, the first path kept, and
+a method-less `@RequestMapping` named GET. So each route's mapping is read again from captured syntax. So are every
+`SecurityFilterChain` bean and its `@Order`, `@Profile`, `securityMatcher`, `authorizeHttpRequests` rules and added
+filters, `@EnableMethodSecurity`, method-security annotations, filter beans, `WebSecurityCustomizer` and MVC
+interceptors. Syntax comes from tree-sitter's Java grammar (`@vscode/tree-sitter-wasm`, the version the parser pins),
+loaded on first analysis. Nothing is compiled, resolved or run. Evidence spans are exact UTF-8 bytes of captured
+files; a file that is not exact UTF-8 gives no span, and its facts are unknown. Graph tags and the parser's guard nodes
+are never proof.
+
+**Semantics.** The facts follow Spring's own order:
+- order 0: filters, unknown when any are present;
+- order 1: the first matching chain's first matching rule;
+- order 2: MVC interceptors, unknown when present;
+- order 3: method security, resolved only with an active proxy-mode enablement for that annotation kind and a
+  proxyable handler.
+
+Chains are taken in `@Order`, and a chain without a `securityMatcher` matches every request. Path patterns are compared
+as templates: a result is `match` or `no-match` only when it holds for every request the route can receive. A trailing slash is never trimmed: Spring Framework 6.2's patterns do not equate `/x/` and `/x` by default, and configuration can change that, so a pattern or route ending in `/` is unknown. Partial
+matches, equal orders that could both match, profiles not selected, conditional beans, non-literal matchers and
+helper-built chains are `unknown`. A route no chain matches is `unknown` (`sentinel.spring.noChainMatches`), with every
+chain matcher cited, and never protected: source alone cannot exclude a chain a dependency contributes. Missing or
+unlisted Java source, configuration that does not parse, or a configured servlet path leave chain selection unknown.
+
+**Keys.** `packDigest` covers the pack identity, its order and `SPRING_SUPPORT`. `environmentDigest` covers the
+selected profiles. `registrationDigest` covers the path and content id of every file read. A change to any of them
+changes the facts' key. Reason codes are catalog words (`strings-sentinel-spring.ts`).
+
+**Not in this decision:**
+- what Spring does when no rule in a selected chain matches;
+- Boot's default chain when no chain bean exists;
+- XML or adapter-style configuration;
+- async dispatch;
+- multi-module builds;
+- other Boot or Security versions.
+
+Each is unknown, not inferred. Later packs (PRs 14–16) follow the same envelope, positions-in-order and "unknown, never
+rounded" rules.
+
 29. **Dependency advisories come from pinned, separately acquired OSV snapshots, matched fully offline, and counted only
 where the engine proves it matched (2026-10-22).**
 
@@ -935,3 +1146,129 @@ position only when every earlier layer was read and none can refuse. Node's `req
 not bind its own, and only Node's `http`/`https` `createServer` may receive an application without opening it. Proving
 a principal or permission would need the provenance of the value a refusal reads, which this pack does not model; it is a draft, source-only capability until PR 09 wires it into a
 scan. Reason words are `strings-sentinel-express.ts`.
+
+35. **Sentinel's model providers are one owner-bound broker over a durable shared budget (2026-10-22).**
+
+`@farsight/sentinel/review/providers` is the only Sentinel code that reads a provider credential or contacts a model
+endpoint. It is separate from Echo and imports none of it, though it follows Echo's reviewed transport rules:
+`redirect: error`, byte caps and one deadline. It supports two kinds: Ollama's native API and an OpenAI-compatible
+chat-completions API. Compatibility is per endpoint. `probeCapability` lists what one origin offers (an unpaid
+listing), and a binding needs a capability record for exactly its kind, origin and model.
+
+**Binding.** `bindProvider(policy, profile)` joins a provider from the adopted settings (kind, origin, keychain
+reference, disclosure, per-action budget) with a model profile. The profile names the model, hard limits, a rate
+schedule or an explicit local no-fee basis, recorded hosted terms, and the capability record. A local-only provider
+must be a literal loopback address; a hosted one must use https and needs recorded retention and training terms.
+An unpriced profile is refused, and only a local runtime may declare no fee. The binding's canonical digest is the
+`input` of the `paid.admit` intent (`envelopeIntent`), so the owner's receipt confirms the origin, credential
+reference, disclosure, model, limits, price, terms and capability together. Any change needs a new receipt
+(`bindingChanged`); so does any change of the policy revision, since each call re-makes the binding under the policy
+in force, and a revoked grant therefore stops the envelope. The profile is a Sentinel-owned type, not a settings field yet; moving it into the settings
+contract is a follow-up for the policy owner.
+
+**Admission.** `openEnvelope` admits one run budget under one binding through the shared gate (ADR 23).
+- The policy verdict is the reused grant matcher, evaluated first with no credential read; a denial reads and
+  contacts nothing.
+- Capability is the binding's probed record.
+- Credential authority is either "local-only, none needed" or a keychain value actually read, in process, through
+  core's reader for the approved reference. The value lives in a `Secret` that prints, serializes and inspects as
+  redacted, and no error carries it.
+- Priced or hosted use needs a spent owner receipt for this exact intent, whatever the grants say. The receipt is
+  required before the keychain is read.
+
+**Calls.** `generate` builds one non-streaming request and refuses it if it is over its byte limit or if its worst
+case does not fit the model context (Ollama is given `num_ctx`, so input is never cut silently). The worst case is
+every request byte as a token, plus a per-message template allowance and the full output allowance, priced at the
+trusted rates in exact nano-unit integers, rounded up. That worst case is reserved durably first and marked
+dispatched before the request leaves.
+
+The transport is node:http/https with `agent: false`. The URL is the binding origin plus a fixed path and is
+re-checked. Any 3xx is refused and never followed. Certificates are always verified, whatever the environment says.
+The response is read to its byte cap. One deadline and the caller's signal stop the call. Each error says whether
+the request may have reached the provider, judged by whether the (TLS) connection came up.
+- A reply with both usage counts settles the reservation at its use.
+- No usage, or any failure after sending, leaves it `uncertain` and charged at its worst case.
+- Only a call proven never connected is released.
+
+A reply that names no model, or another model, is not used, but its usage is still charged. Identity is recorded at
+its actual strength: host-reported for Ollama (with the probe's weight digest as a probe-time fact) and
+provider-response for OpenAI-compatible. Output stopped at the allowance is returned as truncated. There is no
+retry, and no fallback to another provider: an envelope has exactly one binding.
+
+**Budget ledger.** `BudgetLedger` is a narrow standalone seam until the coordinator's durable store (PR 08) can hold
+it. It is one SQLite file behind the store's release gate; every mutation is one `BEGIN IMMEDIATE` transaction, and
+it holds no run, work or attempt state.
+- A reservation moves `held → dispatched → settled | uncertain`. `released` is only for a call never sent.
+- An operation id reserves once: a repeat is refused rather than re-sent, and other amounts conflict.
+- Reservations from any number of processes share one envelope; a multi-process test shows exactly the fitting
+  number succeed.
+- `recover(staleEpochs)`, for epochs the coordinator has fenced, releases what was only held and turns dispatched
+  into uncertain, so a restart never forgets a call that may have been billed.
+- An uncertain reservation is settled only by `reconcile`, which names its authority (a spent receipt's digest).
+- Usage above a reservation is charged in full, recorded as an overrun, and overdraws the envelope, which then
+  refuses every further reservation until the owner approves a new budget. Nothing is clamped.
+
+**Tests.** Ordinary tests use original local mock endpoints on 127.0.0.1, a throwaway self-signed certificate for
+the TLS check, and in-memory credential sources. No hosted provider is called, no model is downloaded and no real
+keychain entry is read.
+
+Not decided here: the evidence broker, prompts and review lanes (PR 22); the coordinator stage that opens envelopes
+and fences epochs (PR 08 integration); a settings-contract home for profiles and capability records; live
+model acceptance; and a second model configuration.
+
+30. **Sentinel's Next pack decides middleware applicability statically and never claims an effect (2026-10-22).**
+
+`@farsight/sentinel/frameworks/next` (`analyzeNext`) is the first framework pack behind the shared control-fact
+contract (`contracts/controls.ts`). Its inputs are the snapshot envelope, the parser evidence for one of its sources
+(PR 05, checked through the planner's `plannerAnalysisFrom`) and the captured bytes by content id, each read
+hash-checked. It never runs application code, never runs a package manager and never reads the parser's broad
+`guard::middleware:` heuristic, whose edges cover every entry under the file's folder without reading its matcher.
+
+Support is one manifest (`support.ts`), and its canonical digest is the pack digest every envelope pins: Next
+14.2.25 with React and React DOM 18.3.1, the combination PR 01 measured, and nothing else. Support is the exact
+packages, not their version strings: the manifest pins each one's registry tarball integrity, read from the resolved
+lockfile PR 01's acquisition captured (the retained archive's SHA-256 is in the manifest). Versions come only from a
+lockfile that records what was installed with its content identity (an npm 2/3 entry with the public registry
+tarball URL for that version and a sha512 integrity; a pnpm 6.0/9.0 importer version and its package's
+`resolution.integrity`), resolved from the project folder upwards. The lockfile and the package manifest are
+untrusted input: every value is shape- and size-checked, and a shape the readers do not expect is invalid, never a
+crash. These are unknown: a version written only in the package manifest; a manifest specifier that is not a
+registry version or range (`file:`, `link:`, Git, a URL, `npm:` aliases, `workspace:`); a local, linked, Git or
+mirrored package; an entry without an integrity; the pinned version with another integrity (a repacked or
+substituted package); two candidate lockfiles; an unread lockfile kind; and an exact manifest pin that disagrees
+with the lockfile. Another registry version is recorded as resolved and analyzed as nothing: every fact is
+unknown.
+
+The middleware handler and `config` export, and next.config, are read with Oxc (loaded on first read) as literal
+syntax only, with exact UTF-8 spans and a quote digest for every cited span. Anything Next would have to compute,
+or syntax not verified to be extracted the same way (`as const`, `satisfies`, identifiers, spreads, re-exports), is
+dynamic. Only an absent or statically empty next.config is supported: base paths, locales, rewrites and page
+extensions all change which request reaches which file. The middleware must sit beside the router folder (the
+project, or `src/` when the router lives there); a file elsewhere is a frontier, never the project's middleware.
+
+The matcher subset is whole path segments: literals of unreserved URL characters and `:name`, `:name?`, `:name*`,
+`:name+`, including Next's root form (which also matches `/index`). App Router surfaces are the parser's `route` and
+`page` nodes under the router's `app/` folder. Their request paths come from the captured folder segments, never
+from the graph's display name, which folds every dynamic form to `:param`. Groups and slots vanish, `[x]` is one
+segment, `[...x]` one or more, `[[...x]]` zero or more, and `_private` folders are not routable. A segment automaton
+product over the literals of both sides, plus one symbol for every other value, answers whether the matcher reaches
+all, none or only some request paths. Unconditional entries prove `all`; every entry, conditional ones included, has
+to miss for `none`. An entry outside the subset (custom regular-expression groups, brace groups, escapes, parameters
+inside a segment) blocks `none` without blocking another entry's `all`. A decision that changes under case folding
+is unknown. Dynamic segments are taken to serve every value, including ones a static sibling would win, which only
+turns `all` or `none` into `some`.
+
+Applicability is kept apart from effect. A matched surface's facts stay `unknown`
+(`sentinel.next.reason.effectNotEstablished`) for every property: running middleware, and its name, are not
+authentication or authorization evidence, and its body is not read. Only provable exclusion resolves, as
+`does-not-apply` citing the matcher bytes: the matcher reaches none of the surface's own request paths, so the
+middleware is no control on them (a middleware rewrite from a matched path can still arrive there, which only adds
+an unprotected route in). No excluded surface can be marked protected and the pack emits no `applies`. One envelope per Next project carries the facts at order 0 and the frontiers. These include the pages
+router (the graph has no surfaces for it), router files the graph has no surface for (`route.tsx`, folders that
+name one path) and unlisted router folders. Its `registrationDigest` covers the manifest, lockfile, middleware,
+next.config and the router's file inventory. Each surface's own `influenceDigest` names what decided it.
+
+Generic parser corrections the pack exposes (Pages Router surfaces, `route.tsx`, lossless dynamic segment names,
+`app/` folders outside a Next project) are separate measured parser changes, not reinterpretations here. Not decided:
+the coordinator stage and capability-table entry that run the pack (PR 09 integration), populating the snapshot's
+`frameworkVersions` from its resolution, effect analysis of middleware bodies, and other Next versions.

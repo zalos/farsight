@@ -75,6 +75,10 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `committed.ts` and `worktree.ts` (the two enumerations), `inventory.ts` (entries, budget, quota, case collisions,
   LFS), `policy.ts` (capture policy and path rules), `materialization.ts` (the provenance sidecar), `capture.ts` (stage,
   write, recheck, admit), `materialize.ts` (reopen and restore from the store alone) and `reconcile.ts` (E1).
+  `src/frameworks/spring/` is the Spring Security servlet pack (ADR 27; `./frameworks/spring` only): `syntax.ts` (tree-sitter
+  Java over captured bytes, exact UTF-8 spans), `config.ts` (chains, rules, method security, frontiers), `patterns.ts`
+  (template matching), `support.ts` (the stated subset) and `pack.ts` (versions, mappings, selection, the envelope); its
+  reasons are `strings-sentinel-spring.ts`.
   `src/snapshot/parser.ts` is the parser-evidence facade (ADR 22; `./parser` only): the public code parser over a
   private restore, its reads reconciled by kind, file outcomes joined, an index of captured spans, and one retaining
   publication; its words are `strings-sentinel-parser.ts`. The
@@ -123,6 +127,15 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   lock and validated packs, the effective policy, the snapshot and parser evidence), `boundary.ts` (canonical work
   envelopes, influence manifests, exact coverage and captured inputs for the coordinator) and `errors.ts`. The
   revision contract is `contracts/plan.ts` (`sentinel-plan/draft-1`); persistence and admission belong to PR 08.
+  `src/frameworks/next/` is the Next middleware pack (PR 14, ADR 30), exported as `./frameworks/next`: `support.ts`
+  (the support manifest; its digest is the pack digest), `version.ts` (installed versions from lockfiles only),
+  `config.ts` (literal-only Oxc reads of the middleware exports and next.config, with UTF-8 spans), `pattern.ts`
+  (the whole-segment matcher subset, App Router folder forms and the automaton decision), `analyze.ts`
+  (`analyzeNext`: projects, applicability per surface, one `sentinel-controls/draft-1` envelope per project) and
+  `errors.ts`; its words are `strings-sentinel-next.ts`. `test/next-*.test.ts` covers it over real captures and
+  the packed package.
+  `test/store-integration.test.ts` drives the facade end to end across processes.
+
   The pattern adapter (PR 10,
   `src/adapters/pattern/`, composed by the explicit scanner CLI): `adapter.ts` (Semgrep 1.181.0 pinned by image digest
   with its measured and unmeasured platforms, the fixed engine arguments, `buildPatternAdapter` for the registry
@@ -135,13 +148,32 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `strings-sentinel-pattern.ts`, its tests `test/pattern-adapter.test.ts` and, with `SENTINEL_ISOLATION=1`,
   `test/pattern-conformance.test.ts` against the real image (ADR 26; linux/amd64 through the scoped PR/manual
   `sentinel-pattern-qualification` workflow).
+  `src/frameworks/nest/` is the Nest framework pack (PR 16, ADR 32), exported as `./frameworks/nest`: `syntax.ts`
+  (captured bytes through the pinned `oxc-parser`, loaded on first use, with UTF-8 byte spans), `analyze.ts`
+  (`analyzeNest`: version, bootstrap, module graph, ordered chains, control facts and the scope report),
+  `support.ts` (`NEST_PACK`, the support manifest) and `errors.ts` (reason codes, `strings-sentinel-nest.ts`);
+  `test/frameworks-nest.test.ts` runs capture → parse → analyze over `test/fixtures/nest/` and the E2 corpus.
+
+  `src/review/providers/` is the opt-in model broker (PR 21, ADR 35), exported as `./review/providers`: `profile.ts`
+  (model profiles and the owner-bound provider binding), `kinds.ts` (Ollama and OpenAI-compatible wire formats and
+  `probeCapability`), `transport.ts` (one bounded node:http/https exchange, no redirects, verified TLS),
+  `credentials.ts` (keychain references read in-process into a redacted `Secret`), `budget.ts` (the durable SQLite
+  reservation ledger), `broker.ts` (`openEnvelope` through the shared admission gate, `generate`), `decimal.ts` and
+  `errors.ts`; its words are `strings-sentinel-providers.ts`. `test/providers.test.ts` drives local mock endpoints.
+  `test/store-integration.test.ts` drives the facade end to end across processes.
+
+  `src/analysis/` is PR 18 (ADR 36), exported as `./analysis`: `paths/paths.ts` (`boundedCallPaths`, one graph
+  index per artifact, bounded search, call cycles, `sentinel-paths/draft-1`), `paths/body.ts` (the lexical check that
+  the graph records every call a visited function could make) and `deep/import.ts` (`importDeepAnalysis` for
+  attested, bound `sentinel-deep-import/draft-1` documents; `DEEP_ANALYSIS_SUPPORT` states that no engine exists).
+  Words in core's `strings-sentinel-analysis.ts`; tests in `test/analysis-paths.test.ts`.
   `src/frameworks/express/` is the Express 4.21.2 pack (PR 15, ADR 31), exported as `./frameworks/express`:
   `syntax.ts` (Oxc over captured bytes, exact UTF-8 spans), `modules.ts` (bindings, imports, exports, relative
   resolution), `model.ts` (applications, routers, layers in order, open objects), `effects.ts` (refusal, pass-through,
   error-handler bodies), `patterns.ts` (Express 4 path and method matching), `version.ts` (manifest and npm lockfile),
   `pack.ts` (`analyzeExpress`: dispatch simulation into `sentinel-controls/draft-1` facts) and `support.ts`; words in
   core's `strings-sentinel-express.ts`, tests in `test/framework-express.test.ts`.
-  Depends only on graph, code-parser and core; nothing in the
+  `test/store-integration.test.ts` drives the facade end to end across processes. Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the
   manifest's `bin` and root export; `scripts/test-sentinel-package.mjs` installs it into a clean npm consumer and
