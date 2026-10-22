@@ -21,7 +21,8 @@ export type GitObjectType = 'commit' | 'tree' | 'blob' | 'tag';
 export type GitHashAlgorithm = 'sha1' | 'sha256';
 
 export class GitReadError extends Error {
-  constructor(readonly code: 'unsupported' | 'corrupt' | 'notRepository' | 'unresolved', message: string) {
+  /** `limit`: the object may be intact, but reading it would exceed a bound this reader keeps (never `corrupt`). */
+  constructor(readonly code: 'unsupported' | 'corrupt' | 'notRepository' | 'unresolved' | 'limit', message: string) {
     super(message);
     this.name = 'GitReadError';
   }
@@ -839,32 +840,55 @@ function looseHeader(buf: Buffer): { type: GitObjectType; size: number; end: num
   return Number.isSafeInteger(size) ? { type: m[1] as GitObjectType, size, end: nul + 1 } : undefined;
 }
 /**
- * Compressed prefixes tried, smallest first. A deflate stream can spend a few hundred bytes on its Huffman tables
- * before its first output byte (so one fixed 64-byte prefix can stop inside the header), but no valid stream needs more
- * than the last step before the first few output bytes.
+ * The most compressed bytes read to find one header. A legal zlib stream may open with any number of empty DEFLATE
+ * blocks (5 bytes each) before its first output byte, so no fixed prefix is enough; this budget bounds the search, and
+ * a header not found within it is a `limit`, never `corrupt`.
  */
-export const HEADER_PREFIX_STEPS = Object.freeze([64, 256, 1024, 4096]);
-/** Deflate's largest expansion: one compressed byte decodes to at most 1032 output bytes (258-byte matches). */
-const DEFLATE_MAX_RATIO = 1032;
+export const HEADER_COMPRESSED_BUDGET = 1024 * 1024;
+/** The most output any one header probe may decode. A header is at most a few dozen bytes. */
+const HEADER_OUTPUT_CAP = 64 * 1024;
+
+type Probe = { kind: 'out'; out: Buffer } | { kind: 'big' } | { kind: 'invalid' };
+
+function probe(compressed: Buffer, length: number): Probe {
+  try {
+    return { kind: 'out', out: inflateSync(compressed.subarray(0, length), { finishFlush: zconstants.Z_SYNC_FLUSH, maxOutputLength: HEADER_OUTPUT_CAP }) };
+  } catch (e) {
+    return (e as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE' ? { kind: 'big' } : { kind: 'invalid' };
+  }
+}
 
 /**
- * Inflates the shortest prefix of `compressed`, from {@link HEADER_PREFIX_STEPS}, whose output satisfies `complete`
- * (sync flush: a stream cut short is not an error). Each attempt's output is bounded by what that prefix can decode
- * to, so a highly compressed stream (a decompression bomb) can never decode more than about 4 MiB here. Returns the
- * last output when no prefix completes it, for the caller to refuse; a stream that does not decode is corrupt.
+ * The decoded start of a zlib stream, from the shortest compressed prefix whose output satisfies `complete`. Each probe
+ * decodes a prefix with a sync flush (a stream cut short is not an error) and at most 64 KiB of output; the shortest
+ * sufficient prefix is found by doubling and then bisecting, within {@link HEADER_COMPRESSED_BUDGET}. Bisection is sound
+ * because a prefix's output only grows with its length, and data that does not decode stays undecodable in every
+ * longer prefix. Outcomes:
+ * - the header completes before any undecodable byte: its output, which is small because the prefix is minimal;
+ * - the stream stops decoding first: `corrupt`;
+ * - the whole stream decodes without completing the header: its output, which the caller refuses as corrupt;
+ * - the budget is spent first: `limit`, since the object may be intact.
  */
 export function inflateHeader(compressed: Buffer, complete: (out: Buffer) => boolean, what: string): Buffer {
-  let out = Buffer.alloc(0);
-  for (const step of HEADER_PREFIX_STEPS) {
-    const prefix = compressed.subarray(0, Math.min(step, compressed.length));
-    try {
-      out = inflateSync(prefix, { finishFlush: zconstants.Z_SYNC_FLUSH, maxOutputLength: prefix.length * DEFLATE_MAX_RATIO + 64 });
-    } catch {
-      throw new GitReadError('corrupt', `${what} does not inflate`);
-    }
-    if (complete(out) || prefix.length === compressed.length) return out;
+  const limit = Math.min(compressed.length, HEADER_COMPRESSED_BUDGET);
+  const settled = (p: Probe) => p.kind !== 'out' || complete(p.out);
+  // Find a settled prefix by doubling (the common case settles at 64 bytes), then the shortest one by bisection.
+  let lo = 0;
+  let hi = Math.min(64, limit);
+  let at = probe(compressed, hi);
+  while (!settled(at) && hi < limit) { lo = hi; hi = Math.min(hi * 2, limit); at = probe(compressed, hi); }
+  if (!settled(at)) {
+    if (limit < compressed.length) throw new GitReadError('limit', `${what}: no header within the first ${limit} compressed bytes`);
+    return (at as { out: Buffer }).out;
   }
-  return out;
+  while (hi - lo > 1) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    const p = probe(compressed, mid);
+    if (settled(p)) { hi = mid; at = p; } else lo = mid;
+  }
+  if (at.kind === 'invalid') throw new GitReadError('corrupt', `${what} does not inflate`);
+  if (at.kind === 'big') throw new GitReadError('limit', `${what}: the header's prefix decodes past ${HEADER_OUTPUT_CAP} bytes`);
+  return at.out;
 }
 
 /** Whether `buf` begins with `count` complete varints (7 bits per byte, high bit continues; at most 10 bytes each). */

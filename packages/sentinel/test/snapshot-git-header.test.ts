@@ -7,9 +7,9 @@ import { createHash } from 'node:crypto';
 import { chmodSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { constants as Z, deflateSync, inflateSync } from 'node:zlib';
-import { GitReadError, GitRepository, HEADER_PREFIX_STEPS, inflateHeader } from '../dist/snapshot/git.js';
+import { GitReadError, GitRepository, HEADER_COMPRESSED_BUDGET, inflateHeader } from '../dist/snapshot/git.js';
 import { captureSnapshot } from '../dist/snapshot/index.js';
-import { commitRepo, git, needsStore, openCaptureStore, scratch } from './snapshot-helpers.ts';
+import { commitRepo, git, gitBytes, needsStore, openCaptureStore, scratch } from './snapshot-helpers.ts';
 
 const corrupt = (e: unknown) => e instanceof GitReadError && e.code === 'corrupt';
 const looseFile = (root: string, oid: string) => join(root, '.git/objects', oid.slice(0, 2), oid.slice(2));
@@ -101,7 +101,7 @@ test('the reproducer: a committed loose blob whose header is past the first 64 c
   assert.equal(entry.disposition, 'included', JSON.stringify(entry));
 });
 
-test('a long Huffman-table header is found within the bounded prefix steps, with its exact type and size', t => {
+test('a long Huffman-table header is found within the bounded search, with its exact type and size', t => {
   const root = join(scratch(t), 'repo');
   commitRepo(root, { 'seed.txt': 'seed\n' });
   for (const length of [2_000, 20_000, 300_000]) {
@@ -176,5 +176,88 @@ test('corrupt, truncated, garbage, over-long and bomb streams are refused within
   assert.throws(() => repo.readObject(bomb, 1 << 20), corrupt);
   repo.close();
   chmodSync(looseFile(root, good), 0o444);
-  assert.deepEqual(HEADER_PREFIX_STEPS, [64, 256, 1024, 4096]);
+});
+
+// ---- empty DEFLATE blocks: a legal stream may pad any amount before its first output byte ----
+
+const EMPTY_STORED = Buffer.from([0x00, 0x00, 0x00, 0xff, 0xff]); // a non-final stored block of length 0
+/** A valid zlib stream for `raw` with `blocks` empty stored blocks after the zlib header (the adler32 still holds). */
+function padded(raw: Buffer, blocks: number): Buffer {
+  const z = deflateSync(raw);
+  return Buffer.concat([z.subarray(0, 2), Buffer.alloc(blocks * 5).fill(EMPTY_STORED), z.subarray(2)]);
+}
+const sha1 = (b: Buffer) => createHash('sha1').update(b).digest();
+const blobId = (data: Buffer) => sha1(Buffer.concat([Buffer.from(`blob ${data.length}\0`), data]));
+
+test('padded loose objects and ref-deltas read exactly as git reads them', t => {
+  const root = join(scratch(t), 'repo');
+  commitRepo(root, { 'seed.txt': 'seed\n' });
+  for (const blocks of [1_000, 50_000]) {
+    const data = Buffer.from(`intact blob behind ${blocks} empty blocks\n`);
+    const raw = Buffer.concat([Buffer.from(`blob ${data.length}\0`), data]);
+    const stream = padded(raw, blocks);
+    assert.ok(inflateSync(stream).equals(raw), 'a legal stream');
+    const oid = writeLoose(root, data, stream);
+    assert.equal(git(root, ['cat-file', '-s', oid]).trim(), String(data.length), 'git reads it');
+    const repo = GitRepository.open(root);
+    assert.deepEqual(repo.objectHeader(oid), { type: 'blob', size: data.length }, `${blocks} blocks`);
+    assert.ok(repo.readObject(oid, 1024)!.data.equals(data));
+    repo.close();
+  }
+  // A pack holding a base and a ref-delta whose delta data is padded: the delta's size varints follow the padding.
+  const base = Buffer.from('abc');
+  const target = Buffer.from('abcd');
+  const delta = Buffer.from([3, 4, 0x90, 3, 1, 0x64]); // base size 3, result size 4, copy 3 bytes, insert "d"
+  const head = Buffer.alloc(12);
+  head.write('PACK'); head.writeUInt32BE(2, 4); head.writeUInt32BE(2, 8);
+  const body = Buffer.concat([head, Buffer.from([0x33]), deflateSync(base), Buffer.from([0x76]), blobId(base), padded(delta, 1_000)]);
+  gitBytes(root, ['index-pack', '--stdin'], Buffer.concat([body, sha1(body)]));
+  const targetId = blobId(target).toString('hex');
+  assert.equal(git(root, ['cat-file', 'blob', targetId]), 'abcd', 'git reads the padded delta');
+  const repo = GitRepository.open(root);
+  assert.deepEqual(repo.objectHeader(targetId), { type: 'blob', size: 4 });
+  assert.ok(repo.readObject(targetId, 1024)!.data.equals(target));
+  repo.close();
+});
+
+test('padding past the compressed budget is a typed limit, never corrupt; padding cut short or damaged is corrupt', needsStore, async t => {
+  const dir = scratch(t);
+  const root = join(dir, 'repo');
+  commitRepo(root, { 'seed.txt': 'seed\n' });
+  const data = Buffer.from('intact, but behind more padding than the reader searches\n');
+  const raw = Buffer.concat([Buffer.from(`blob ${data.length}\0`), data]);
+  const blocks = Math.ceil(HEADER_COMPRESSED_BUDGET / 5) + 10;
+  const far = padded(raw, blocks);
+  assert.ok(inflateSync(far).equals(raw), 'still a legal stream');
+  const farOid = writeLoose(root, data, far);
+  const repo = GitRepository.open(root);
+  assert.throws(() => repo.objectHeader(farOid), (e: unknown) => e instanceof GitReadError && e.code === 'limit');
+  // Cut inside the padding: no header can ever decode.
+  const cut = Buffer.from(padded(raw, 1_000).subarray(0, 2 + 600 * 5));
+  const cutOid = createHash('sha1').update('cut').digest('hex');
+  mkdirSync(join(root, '.git/objects', cutOid.slice(0, 2)), { recursive: true });
+  writeFileSync(looseFile(root, cutOid), cut);
+  assert.throws(() => repo.objectHeader(cutOid), corrupt);
+  // An invalid block type inside the padding: the stream stops decoding before any header.
+  const damaged = Buffer.from(padded(raw, 1_000));
+  damaged[2 + 500 * 5] = 0x07; // BTYPE 11: reserved, invalid
+  const badOid = createHash('sha1').update('damaged').digest('hex');
+  mkdirSync(join(root, '.git/objects', badOid.slice(0, 2)), { recursive: true });
+  writeFileSync(looseFile(root, badOid), damaged);
+  assert.throws(() => repo.objectHeader(badOid), corrupt);
+  repo.close();
+  // In capture, the limit is recorded as its own reason, not as damage.
+  commitRepo(join(dir, 'capture'), { 'kept.txt': 'kept\n' });
+  const capRoot = join(dir, 'capture');
+  const oid = git(capRoot, ['hash-object', '-w', '--stdin'], data.toString()).trim();
+  assert.equal(oid, farOid);
+  chmodSync(looseFile(capRoot, oid), 0o644);
+  writeFileSync(looseFile(capRoot, oid), far);
+  const tree = git(capRoot, ['mktree'], `100644 blob ${oid}\tpadded.txt\n100644 blob ${git(capRoot, ['rev-parse', 'HEAD:kept.txt']).trim()}\tkept.txt\n`).trim();
+  const commit = git(capRoot, ['commit-tree', tree, '-m', 'padded']).trim();
+  const fx = await openCaptureStore(t, dir);
+  const { snapshot } = await captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{ sourceId: 'app', repositoryId: 'example/app', root: capRoot, revision: commit }] });
+  const entry: any = snapshot.entries.find((e: any) => e.relativePath === 'padded.txt');
+  assert.deepEqual([entry.disposition, entry.reasonCode], ['unreadable', 'sentinel.capture.gitReadLimit']);
+  assert.equal(snapshot.entries.find((e: any) => e.relativePath === 'kept.txt')?.disposition, 'included');
 });
