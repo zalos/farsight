@@ -27,3 +27,11 @@ test('selection failure cannot skip the native gate, and selected tests cannot s
  assert.ok(workflow.includes('node scripts/test-sentinel-scanner-consumer.mjs | tee scanner-consumer.log'));
  assert.doesNotMatch(workflow,/continue-on-error|docker (?:system prune|rm)|pkill|killall/);
 });
+
+test('full-report native acceptance builds its context-ingestion dependency and retains every opted-in evidence suite',()=>{
+ assert.match(workflow,/pnpm --filter '@farsight\/sentinel\.\.\.' --filter '@farsight\/parsers\.\.\.' build/);
+ assert.ok(workflow.includes('test/cli-full-report-e2e.test.ts'));
+ for(const name of ['review','redaction-neighbors','short-production','exemptions'])
+  assert.ok(workflow.includes(`test/sol-report-${name}.test.ts`),name);
+ assert.ok(workflow.includes('test/report-redaction.test.ts'),'pure projection controls remain in the native union too');
+});

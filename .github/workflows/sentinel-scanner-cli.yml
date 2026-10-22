@@ -85,8 +85,8 @@ jobs:
           containers=$(docker ps -aq --filter label=org.farsight.sentinel.store)
           test -z "$containers"
       - run: pnpm install --frozen-lockfile
-      - name: Build the exact package closure
-        run: pnpm --filter '@farsight/sentinel...' build
+      - name: Build the package and context-ingestion closures
+        run: pnpm --filter '@farsight/sentinel...' --filter '@farsight/parsers...' build
       - name: Bind workflow pins to the built adapters
         run: |
           node --input-type=module <<'JS'
