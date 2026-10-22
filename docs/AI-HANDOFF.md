@@ -6,6 +6,21 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Delayed OOM canary correction — 2026-10-22
+
+Branch `codex/sentinel-oom-settling-investigation` corrects the test-only Docker visibility adapter: it hides the
+first two terminal exit-137 observations, including naturally false flags, instead of hiding the first two true
+OOM flags. The old adapter compounds natural daemon delay and can exhaust the actual backend's four-read bound;
+a deterministic backend regression fails with the old adapter and passes with the correction. Production
+classification, the 500 ms bound, cancellation and exact ownership/cleanup are unchanged. Exit 137 with no
+affirmative OOM evidence remains `workerExited`. Required native positives still require genuine daemon evidence.
+
+Validation: Sentinel dependency-closure build; four pure state controls plus all 20 native isolation checks pass
+with zero skips on Docker Desktop Engine 29.2.1 / Linux arm64. Ten additional focused native OOM/plain-SIGKILL
+trials pass. Native inspect diagnostics retain at most 16 bounded state/timing rows, without paths or source.
+The original Linux CI failure lacked raw inspect observations, so its exact daemon sequence remains unproven;
+required native CI on the corrected head must pass before integration.
+
 ## Start here
 
 Read `AGENTS.md` for project rules and architecture. Codex loads it as project instructions; `CLAUDE.md` imports it and this handoff. Keep durable facts in those repository files so both providers receive updates. This is project memory, not ChatGPT account memory or a synchronization of private conversation histories.

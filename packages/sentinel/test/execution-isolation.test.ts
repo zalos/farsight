@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { ContainerBackend, createArgs, validateContainer, LABELS, ISOLATION_POLICY, isolationQualification } from '../dist/execution/isolation.js';
 import { createAdapterRegistry, DEFAULT_ADAPTER_LIMITS } from '../dist/execution/registry.js';
 import { createExecutionService } from '../dist/execution/service.js';
+import { delayedOomInspects } from './container-state-fixtures.ts';
 import { isExecutionError } from '../dist/execution/errors.js';
 import { inputs, removeScratch, runAttempt, scratch, storeIn, work, WORKER } from './execution-helpers.ts';
 
@@ -189,24 +190,17 @@ test('resource canaries: memory, processes and temporary storage are bounded', {
 });
 
 test('a real OOM whose first inspect flags are delayed settles before owned cleanup; plain SIGKILL stays unidentified', { skip }, async t => {
-  let masked = 0;
+  let delayed!: ReturnType<typeof delayedOomInspects>;
+  t.after(() => t.diagnostic(`delayed-OOM raw inspect trace ${JSON.stringify({ terminalReads: delayed?.terminalReads(), observations: delayed?.observations })}`));
   const service = await createExecutionService(store, { scratchRoot: s.work, registry: registryFor('memory', { memoryBytes: 64 * 1024 * 1024 }), containers: true,
-    wrapRunner: real => ({ ...real, run: async (args, signal) => {
-      const answer = await real.run(args, signal);
-      if (args[0] === 'inspect' && args.includes('--format') && answer.exitCode === 0) {
-        const container = JSON.parse(answer.stdout.toString('utf8'));
-        if (container.State?.Status === 'exited' && container.State?.ExitCode === 137 && container.State?.OOMKilled === true && ++masked <= 2) {
-          return { ...answer, stdout: Buffer.from(JSON.stringify({ ...container, State: { ...container.State, OOMKilled: false } })) };
-        }
-      }
-      return answer;
-    } }),
+    wrapRunner: real => (delayed = delayedOomInspects(real)).runner,
   });
   const memory = await service.run({ adapterId: 'canary-memory', attemptId: `delayed-oom-${++n}`, work, inputs: captured });
   memoryEvidence(t, memory);
   assert.equal(memory.code, 'sentinel.execution.resourceExceeded', JSON.stringify(memory.container?.state));
   assert.equal(memory.container?.state?.oomKilled, true);
-  assert.ok(masked >= 3, 'the final classification required a real affirmative daemon observation after the delayed flags');
+  assert.equal(delayed.observations.filter(o => o.masked).length, 2, 'exactly the first two terminal observations were hidden');
+  assert.ok(delayed.observations.some(o => !o.masked && o.rawOomKilled), 'the final classification required a real affirmative daemon observation after the delayed flags');
   assert.equal(memory.cleanup, 'removed-owned-container');
   const killed = await run('self-sigkill');
   assert.equal(killed.container?.state?.exitCode, 137);
