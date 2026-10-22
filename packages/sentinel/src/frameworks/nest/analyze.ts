@@ -18,7 +18,7 @@ import { validateEnvelope } from '../../validate.js';
 import { NEST_PACK } from './support.js';
 import { NestPackError, type NestReason, type NestReasonCode } from './errors.js';
 import {
-  bindsName, classesOf, decoratorCall, isFunction, loadParser, parseFile, refName, resolveAt, resolveRef, SyntaxFailure, walk, walkWithAncestors,
+  bindsName, classesOf, decoratorCall, isFunction, loadParser, parseFile, patternNames, refName, resolveAt, resolveRef, SyntaxFailure, walk, walkWithAncestors,
   type AstNode, type ParsedFile, type Span,
 } from './syntax.js';
 
@@ -236,7 +236,7 @@ function invokedAtTopLevel(file: ParsedFile, fn: AstNode): boolean {
 /** True when the member expression at `anc[i]` (or a member chain built on it) is assigned, updated or deleted. */
 function isWriteTarget(anc: readonly AstNode[], i: number): boolean {
   let k = i;
-  while (k > 0 && (anc[k - 1]!.type === 'MemberExpression' || anc[k - 1]!.type === 'StaticMemberExpression') && anc[k - 1]!.object === anc[k]) k--;
+  while (k > 0 && (anc[k - 1]!.type === 'MemberExpression' || anc[k - 1]!.type === 'StaticMemberExpression' || anc[k - 1]!.type === 'ComputedMemberExpression') && anc[k - 1]!.object === anc[k]) k--;
   const node = anc[k]!, up = anc[k - 1];
   if (!up) return false;
   if (up.type === 'AssignmentExpression' && up.left === node) return true;
@@ -248,8 +248,56 @@ function isWriteTarget(anc: readonly AstNode[], i: number): boolean {
 /** The identifier a member chain starts from (`a` in `a.b.c`), if any. */
 function chainRoot(n: AstNode): string | null {
   let e = n;
-  while (e && (e.type === 'MemberExpression' || e.type === 'StaticMemberExpression' || e.type === 'ComputedMemberExpression')) e = e.object;
+  while (e) {
+    if (['MemberExpression', 'StaticMemberExpression', 'ComputedMemberExpression'].includes(e.type)) e = e.object;
+    else if (['TSAsExpression', 'TSTypeAssertion', 'TSNonNullExpression', 'TSSatisfiesExpression', 'ParenthesizedExpression'].includes(e.type)) e = e.expression;
+    else break;
+  }
   return e?.type === 'Identifier' ? String(e.name) : null;
+}
+
+const FRAMEWORK = /^(@nestjs\/|class-validator$|class-transformer$|reflect-metadata$)/;
+
+/** The enclosing binding of this name, retaining lexical shadowing when following local aliases. */
+function bindingScopeAt(file: ParsedFile, name: string, at: number): AstNode {
+  let scope = file.program;
+  walk(file.program, n => {
+    if (at < n.start || at >= n.end) return false;
+    if (bindsName(n, name)) scope = n;
+    return undefined;
+  });
+  return scope;
+}
+
+/**
+ * A mutation target may reach an imported framework object through local aliases, including member aliases and
+ * reassignment. Follow every value of the same lexical binding conservatively: a conditional assignment can still
+ * change the framework. Cycles terminate, and exceeding the alias bound leaves the mutation uncertain, never safe.
+ */
+function mayReferenceFramework(file: ParsedFile, target: AstNode, seen = new Set<AstNode>()): boolean {
+  if (seen.has(target)) return false;
+  if (seen.size >= 64) return true;
+  seen.add(target);
+  if (['TSAsExpression', 'TSTypeAssertion', 'TSNonNullExpression', 'TSSatisfiesExpression', 'ParenthesizedExpression'].includes(target.type)) return mayReferenceFramework(file, target.expression, seen);
+  if (target.type === 'ConditionalExpression') return mayReferenceFramework(file, target.consequent, seen) || mayReferenceFramework(file, target.alternate, seen);
+  if (target.type === 'LogicalExpression') return mayReferenceFramework(file, target.left, seen) || mayReferenceFramework(file, target.right, seen);
+  const name = chainRoot(target);
+  if (!name) return false;
+  const imported = resolveAt(file, { local: name }, target.start);
+  if (imported.module && FRAMEWORK.test(imported.module)) return true;
+  const scope = bindingScopeAt(file, name, target.start);
+  // A parameter is another object; its caller's values are not inferred from its spelling.
+  if ((isFunction(scope) && (scope.params ?? []).some((p: AstNode) => patternNames(p).includes(name)))
+    || (scope.type === 'CatchClause' && patternNames(scope.param).includes(name))) return false;
+  const values: AstNode[] = [];
+  walk(file.program, n => {
+    if (n.type === 'VariableDeclarator' && n.init && patternNames(n.id).includes(name)
+      && bindingScopeAt(file, name, n.id.start) === scope) values.push(n.init);
+    if (n.type === 'AssignmentExpression' && n.left?.type === 'Identifier' && n.left.name === name
+      && bindingScopeAt(file, name, n.left.start) === scope) values.push(n.right);
+    return undefined;
+  });
+  return values.some(value => mayReferenceFramework(file, value, seen));
 }
 
 /** True when a statement can leave its function: a return or throw outside any nested function. */
@@ -403,8 +451,8 @@ function evidenceForText(ctx: Ctx, path: string, text: string, start: number, en
 /** Where a dependency resolves from a file: its version, the installed location, and the file that says so. */
 type Resolved = { version: string; location: string; source: string; kind: 'lock' | 'pin' } | null;
 type Versions = NestScopeReport['framework'] & {
-  /** class-validator as the ValidationPipe of this controller and this DTO's decorators each load it; null unless the same supported copy. */
-  classValidatorFor(controller: string, dto: string): string | null;
+  /** class-validator as the registered ValidationPipe and this DTO's decorators each load it; null unless the same supported copy. */
+  classValidatorFor(registration: string, dto: string): string | null;
 };
 
 /**
@@ -464,11 +512,11 @@ async function versions(ctx: Ctx, nestFiles: readonly string[], dtoPairs: readon
     commons.push(common);
   }
   const cvCache = new Map<string, string | null>();
-  const classValidatorFor = async (controller: string, dto: string): Promise<string | null> => {
-    const key = `${controller}\u0000${dto}`;
+  const classValidatorFor = async (registration: string, dto: string): Promise<string | null> => {
+    const key = `${registration}\u0000${dto}`;
     if (cvCache.has(key)) return cvCache.get(key)!;
-    const common = await resolveFor(controller, '@nestjs/common');
-    const fromPipe = common?.kind === 'lock' ? await resolveFor(`${common.location}/index.js`, 'class-validator') : await resolveFor(controller, 'class-validator');
+    const common = await resolveFor(registration, '@nestjs/common');
+    const fromPipe = common?.kind === 'lock' ? await resolveFor(`${common.location}/index.js`, 'class-validator') : await resolveFor(registration, 'class-validator');
     const fromDto = await resolveFor(dto, 'class-validator');
     const v = fromPipe && fromDto && fromPipe.location === fromDto.location && fromPipe.version === fromDto.version && fromDto.version === NEST_PACK.versions['class-validator'] ? fromDto.version : null;
     cvCache.set(key, v);
@@ -482,7 +530,7 @@ async function versions(ctx: Ctx, nestFiles: readonly string[], dtoPairs: readon
     version: ok ? NEST_PACK.versions['@nestjs/common'] : null,
     provenance: ok ? sources.join(', ') : null,
     classValidator: all.size === 1 ? [...all][0]! : null,
-    classValidatorFor: (controller: string, dto: string) => pairs.get(`${controller}\u0000${dto}`) ?? null,
+    classValidatorFor: (registration: string, dto: string) => pairs.get(`${registration}\u0000${dto}`) ?? null,
   };
 }
 
@@ -597,20 +645,15 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
   }
   // Code that rewrites the framework, class-validator, class-transformer or reflected metadata can change what any
   // registration, pipe or rule does: nothing it could change is established.
-  const FRAMEWORK = /^(@nestjs\/|class-validator$|class-transformer$|reflect-metadata$)/;
   for (const file of ctx.files.values()) {
     walkWithAncestors(file.program, (n, anc) => {
-      if (n.type === 'Identifier' && (anc.at(-1)?.type === 'MemberExpression' || anc.at(-1)?.type === 'StaticMemberExpression') && anc.at(-1)!.object === n) {
-        const r = file.imports.has(String(n.name)) ? resolveAt(file, { local: String(n.name) }, n.start) : null;
-        if (r?.module && FRAMEWORK.test(r.module) && isWriteTarget(anc, anc.length - 1)) frontier(ctx, file.path, 'frameworkMutated');
-      }
+      if (['MemberExpression', 'StaticMemberExpression', 'ComputedMemberExpression'].includes(n.type)
+        && isWriteTarget([...anc, n], anc.length) && mayReferenceFramework(file, n)) frontier(ctx, file.path, 'frameworkMutated');
       if (n.type === 'CallExpression') {
         const r = refName(n.callee);
         const target = n.arguments?.[0];
-        const root = target ? chainRoot(target) : null;
-        const imported = root ? resolveAt(file, { local: root }, target.start) : null;
         if (r && ['Object', 'Reflect'].includes(r.local) && !resolveAt(file, { local: r.local }, n.start).shadowed
-          && ['defineProperty', 'defineProperties', 'assign', 'setPrototypeOf', 'set', 'deleteProperty'].includes(r.member ?? '') && imported?.module && FRAMEWORK.test(imported.module)) {
+          && ['defineProperty', 'defineProperties', 'assign', 'setPrototypeOf', 'set', 'deleteProperty'].includes(r.member ?? '') && target && mayReferenceFramework(file, target)) {
           frontier(ctx, file.path, 'frameworkMutated');
         }
         if (r?.local === 'Reflect' && ['defineMetadata', 'deleteMetadata', 'metadata'].includes(r.member ?? '')) frontier(ctx, file.path, 'frameworkMutated');
@@ -741,8 +784,15 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
   for (const [key, c] of controllers) if (!resolved.includes(key)) frontier(ctx, c.file.path, 'controllerWithoutRoutes');
 
   // 5. Facts, under the versions of the projects that own the bootstrap, the controllers and their inputs.
-  const owned = [...(boot ? [boot.file.path] : []), ...surfaces.map(x => x.relativePath)];
-  const framework = await versions(ctx, owned, surfaces.flatMap(x => x.inputs.flatMap(i => (i.dto ? [[x.relativePath, i.dto.relativePath] as const] : []))));
+  const owned = [...(boot ? [boot.file.path] : []), ...surfaces.map(x => x.relativePath),
+    ...surfaces.flatMap(s => s.chain.filter(b => b.origin.startsWith('@nestjs/')).map(b => b.evidence.relativePath))];
+  // The constructor's import belongs to its registration file (a bootstrap/module for a global pipe), not to each
+  // controller it later reaches. Every validator on an input must share the DTO's supported class-validator copy.
+  const validatorPairs = surfaces.flatMap(s => s.inputs.flatMap(i => i.dto
+    ? s.chain.filter(b => b.stage === 'pipe' && b.effect === 'validation' && (b.scope !== 'parameter' || b.parameter === i.index))
+      .map(b => [b.evidence.relativePath, i.dto!.relativePath] as const)
+    : []));
+  const framework = await versions(ctx, owned, validatorPairs);
   const versionKnown = framework.version !== null;
   const globalFrontiers = ctx.frontiers.filter(f => ([
     'versionUnresolved', 'versionUnsupported', 'bootstrapNotFound', 'bootstrapAmbiguous', 'rootModuleUnresolved', 'applicationUnresolved',
@@ -790,7 +840,7 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
       if (validated.some(i => i.dto?.conditional)) reasons.push(R('dtoConditional'));
       if (validated.some(i => i.dto && i.dto.rules === 0)) reasons.push(R('dtoWithoutRules'));
       if (validated.some(i => i.dto?.inherited)) reasons.push(R('dtoInherited'));
-      if (validated.some(i => i.dto && framework.classValidatorFor(s.relativePath, i.dto.relativePath) !== NEST_PACK.versions['class-validator'])) reasons.push(R('classValidatorUnsupported'));
+      if (validated.some(i => i.dto && validators(i).some(v => framework.classValidatorFor(v.evidence.relativePath, i.dto!.relativePath) !== NEST_PACK.versions['class-validator']))) reasons.push(R('classValidatorUnsupported'));
       const metadata = await decoratorMetadata(ctx, s.relativePath, metadataCache);
       if (metadata.state === 'off') reasons.push(R('decoratorMetadataOff'));
       if (metadata.state === 'unknown') reasons.push(R('decoratorMetadataUnknown'));

@@ -554,3 +554,53 @@ test('SOL: replacing the application’s methods, or the framework’s, invalida
   const reads = await run(t, { 'main.ts': mainWith('  const port = app.getHttpServer;\n  app.useGlobalPipes(new ValidationPipe());') });
   assert.equal(validation(reads.analysis).verdict, 'applies', 'the near neighbour: reading a member changes nothing');
 });
+
+test('framework mutations through local aliases leave validation unknown', needsStore, async t => {
+  for (const mutation of [
+    'const Alias = ValidationPipe; Alias.prototype.transform = async (v: unknown) => v;',
+    'const Alias = ValidationPipe; Object.assign(Alias.prototype, { transform: async (v: unknown) => v });',
+    'const Alias = ValidationPipe; const Other = Alias; Other["prototype"]["transform"] = async (v: unknown) => v;',
+    'const Alias = ValidationPipe as typeof ValidationPipe; (Alias as any).prototype.transform = async (v: unknown) => v;',
+    'const Alias = process.env.FAKE ? class {} : ValidationPipe; Object.assign(Alias.prototype, { transform: (v: unknown) => v });',
+    'let Alias; Alias = ValidationPipe; Reflect.defineProperty(Alias.prototype, "transform", { value: (v: unknown) => v });',
+  ]) {
+    const r = await run(t, { 'main.ts': mainWith(`  ${mutation}\n  app.useGlobalPipes(new ValidationPipe());`) });
+    assert.equal(validation(r.analysis).verdict, 'unknown', mutation);
+    assert.ok(reasons(r.analysis).includes('sentinel.nest.frameworkMutated'), mutation);
+  }
+  const local = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());', `
+const Alias = ValidationPipe;
+function unrelated(Alias: { prototype: { transform: unknown } }) {
+  Alias.prototype.transform = (v: unknown) => v;
+}`) });
+  assert.equal(validation(local.analysis).verdict, 'applies', 'a parameter shadowing the alias is another object');
+});
+
+test('global ValidationPipe dependencies resolve from the registration file and actual installed copy', needsStore, async t => {
+  const nested = Object.fromEntries(Object.entries(tree(APP)).filter(([p]) => p !== 'package.json' && p !== 'main.ts').map(([p, text]) => [`nested/${p}`, text]));
+  const pkg = readFileSync(join(APP, 'package.json.fixture'), 'utf8');
+  const files = {
+    'app.module.ts': null, 'orders.controller.ts': null, 'create-order.dto.ts': null, ...nested,
+    'package.json': pkg.replaceAll('0.14.1', '0.13.2'), 'nested/package.json': pkg,
+    'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());').replace("from './app.module'", "from './nested/app.module'"),
+  };
+  const unpinned = await run(t, files);
+  assert.equal(validation(unpinned.analysis).verdict, 'unknown');
+  assert.equal(validation(unpinned.analysis).reasonCode, 'sentinel.nest.classValidatorUnsupported');
+  const installs: Record<string, { version: string }> = {};
+  for (const prefix of ['', 'nested/']) for (const name of ['@nestjs/common', '@nestjs/core', 'class-validator']) {
+    installs[`${prefix}node_modules/${name}`] = { version: name === 'class-validator' ? (prefix ? '0.14.1' : '0.13.2') : '10.4.15' };
+  }
+  const locked = await run(t, { ...files, 'package-lock.json': JSON.stringify({ lockfileVersion: 3, packages: installs }) });
+  assert.equal(validation(locked.analysis).verdict, 'unknown');
+  assert.equal(validation(locked.analysis).reasonCode, 'sentinel.nest.classValidatorUnsupported');
+  // Supported versions in separate installs still register decorator metadata in different copies.
+  installs['node_modules/class-validator'] = { version: '0.14.1' };
+  const copies = await run(t, { ...files, 'package.json': pkg, 'package-lock.json': JSON.stringify({ lockfileVersion: 3, packages: installs }) });
+  assert.equal(validation(copies.analysis).verdict, 'unknown');
+  assert.equal(validation(copies.analysis).reasonCode, 'sentinel.nest.classValidatorUnsupported');
+  // Hoisting both the pipe dependency and DTO decorators to one supported copy restores the positive control.
+  delete installs['nested/node_modules/class-validator'];
+  const shared = await run(t, { ...files, 'package.json': pkg, 'package-lock.json': JSON.stringify({ lockfileVersion: 3, packages: installs }) });
+  assert.equal(validation(shared.analysis).verdict, 'applies');
+});
