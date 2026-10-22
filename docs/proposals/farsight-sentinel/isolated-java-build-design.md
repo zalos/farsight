@@ -1,10 +1,11 @@
 # Sentinel isolated Java build — design for review (PR 29)
 
-**Status: design for the review [PR 29](implementation-prs.md#pr-29--optional-isolated-java-builds) requires
-before implementation, revision 2.** It addresses the first SOL review's five blocking findings and adopts the
-integration lead's accepted defaults (§2). It is not an implementation, admits no build, and does not move PR 29
-in the [progress ledger](execution-progress.md). Nothing here has been executed. What remains open is in
-[§12](#12-measurements-and-resolved-choices).
+**Status: bounded design reviewed by SOL on 2026-10-22 for
+[PR 29](implementation-prs.md#pr-29--optional-isolated-java-builds).** The review resolved authorization,
+writable layout, invocation policy, artifact limits and accepted-publication provenance. Implementation and
+empirical qualification remain pending; design review does not move PR 29 to done in the
+[progress ledger](execution-progress.md). Nothing here has been executed. Remaining measurements and the
+integration lead's resolved choices are in [§12](#12-measurements-and-resolved-choices).
 
 It builds on the reviewed PR 03 store (ledger, staging, verified objects, retained roots, the 16 MiB object cap,
 4096 staged artifacts per stage) and on the PR 02/07 contracts:
