@@ -1,19 +1,16 @@
 // Only the coordinator creates retained evidence, from its exact admitted plan and the ledger's accepted
 // bootstrap. Artifact JSON, a caller's ids or a copied context cannot grant access to retained auxiliary bytes.
-import { createHash } from 'node:crypto';
 import type { ArtifactId, WorkRef } from '../contracts/common.js';
 import type { PlanWork } from '../contracts/plan.js';
 import { deepFreeze } from '../policy/immutable.js';
 import type { AnalysisArtifact, ParserIndex, ParserResult } from '../snapshot/parser.js';
 import type { SentinelStore } from '../store/index.js';
-import { MAX_ARTIFACT_BYTES } from '../store/store-types.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import type { RetainedAnalysis } from './check-drivers.js';
 import { ExecutionError } from './errors.js';
 import { isValidatedPlan, type ValidatedPlan } from './plan.js';
-import { loadPlan } from './plans.js';
 import type { ExecutionProfileRecord } from './profile.js';
-import { storePlanLoader, verifyRetainedSource } from './retained-source.js';
+import { RetainedBudget, verifyRetainedSource } from './retained-source.js';
 
 export type AnalysisRole = 'analysis-result' | 'analysis-index' | 'analysis-artifact' | 'snapshot-manifest';
 const retained = new WeakMap<object, Readonly<Record<AnalysisRole, Buffer>>>();
@@ -51,33 +48,31 @@ export function verifyRetainedAuxiliary(value: RetainedAnalysis | null, auxiliar
 
 export async function retainedAnalysisFor(store: SentinelStore, plan: ValidatedPlan, unit: Readonly<PlanWork>,
   profile: Readonly<ExecutionProfileRecord>, signal: AbortSignal, stillWithin: () => void = () => {}): Promise<RetainedAnalysis> {
+  // Before the genuine store is proven, the original boundary; after, the counted budget with its own deadline.
+  let budget: RetainedBudget | undefined;
   const boundary = () => {
+    if (budget) return budget.boundary();
     store.assertHeld();
     if (signal.aborted) throw new ExecutionError('sentinel.execution.canceled');
     stillWithin();
   };
-  const read = async (id: ArtifactId) => {
-    boundary();
-    const bytes = await store.readArtifact(id);
-    boundary();
-    if (bytes.length > MAX_ARTIFACT_BYTES || `sha256:${createHash('sha256').update(bytes).digest('hex')}` !== id) return fail('retained bytes differ from their identity');
-    return Buffer.from(bytes);
-  };
-  const json = (bytes: Buffer): any => JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   try {
     boundary();
+    budget = new RetainedBudget(store, { signals: [signal], stillWithin: [stillWithin] });
+    const read = (id: ArtifactId) => budget!.read(id, 'metadata');
+    const load = budget.planLoader();
     if (!isValidatedPlan(store, plan) || unit.stage !== 'check' || !unit.sourceId || plan.unitOf(unit).unit !== unit) return fail('not an exact validated check unit');
     const checks = plan.unitOf(unit).checks;
     if (unit.scopes.length !== 1 || unit.scopes[0] !== unit.sourceId || !checks.length || checks.length !== unit.checks.length
       || checks.some(c => c.state !== 'planned' || c.scopeKind !== 'repository' || c.scopeId !== unit.sourceId || c.sourceId !== unit.sourceId)) return fail('retained whole-source analysis requires repository-scoped checks');
-    const admitted = await loadPlan(store, plan.run.id, plan.admitted.plan.revision);
+    const admitted = await load(plan.run.id, plan.admitted.plan.revision);
     boundary();
     if (!same(admitted.record, plan.admitted.record) || !same(admitted.plan, plan.admitted.plan) || !same(profile, admitted.profile)) return fail('not the admitted plan and parse profile');
     if (unit.dependencies.length !== 1) return fail('a retained-analysis check depends on exactly one bootstrap inventory');
     const inventory = unit.dependencies[0]!;
     if (!plan.reusedProven(inventory) || !admitted.plan.reused.some(r => refSame(r, inventory))) return fail('the dependency is not a proven reused bootstrap');
 
-    const verified = await verifyRetainedSource(store, { read, boundary, loadPlan: storePlanLoader(store) },
+    const verified = await verifyRetainedSource(store, { read, boundary, loadPlan: load },
       { admitted, inventory, sourceId: unit.sourceId, profile });
     const { record, source, opened, result, index, artifact } = verified;
     const { result: resultBytes, index: indexBytes, artifact: artifactBytes } = verified.bytes;
@@ -88,6 +83,9 @@ export async function retainedAnalysisFor(store: SentinelStore, plan: ValidatedP
       inventory: { ...inventory }, result: { id: source.result, value: result as ParserResult }, index: { id: source.index, value: index as ParserIndex },
       artifact: { id: source.artifact, value: artifact as AnalysisArtifact }, manifest: record.manifest,
       entries: opened.snapshot.entries.filter(e => e.sourceId === unit.sourceId) });
+    budget.retain(resultBytes.length + indexBytes.length + artifactBytes.length + manifestBytes.length);
+    // After the value is built: the deadline, cancellation and the genuine owner and epoch, then mint and return.
+    boundary();
     retained.set(value, { 'analysis-result': resultBytes, 'analysis-index': indexBytes, 'analysis-artifact': artifactBytes, 'snapshot-manifest': manifestBytes });
     return value;
   } catch (error) {
