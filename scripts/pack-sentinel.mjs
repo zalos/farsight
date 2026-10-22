@@ -230,6 +230,8 @@ try {
     files.push('schemas');
     exportsMap['./schemas/*'] = './schemas/*';
   }
+  // The rule packs Sentinel ships (data only: a manifest, detector descriptions, fixtures), promoted by the owner.
+  if (existsSync(join(dir, 'rules'))) { cpSync(join(dir, 'rules'), join(out, 'rules'), { recursive: true }); files.push('rules'); }
   for (const doc of ['README.md']) if (existsSync(join(dir, doc))) { cpSync(join(dir, doc), join(out, doc)); files.push(doc); }
   writeFileSync(join(out, 'package.json'), JSON.stringify({
     name: 'farsight-sentinel', version,

@@ -11,6 +11,7 @@ import {
 } from './service/local.js';
 import { connectService, serveWorkspace } from './service/owner-service.js';
 import { launchService } from './service/launch.js';
+import { builtinPackDir } from './service/preview-plan.js';
 import { openStore } from './store/index.js';
 import type { ServiceClient } from './transport/ipc.js';
 import type { PreviewReport } from './reports/preview.js';
@@ -259,7 +260,13 @@ async function owner(p: ParsedCommand): Promise<number> {
         errOut(word('sentinel.args.unexpectedArgument', { detail: String(p.args.action) }));
         return finish(result('rules', 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
       }
-      const r = promoteRulePack(ws, { packDir: realpathSync.native(p.args.packDir), confirm, now });
+      // `builtin:<name>` is a pack this package ships; anything else is a folder the owner names.
+      const named = p.args.packDir.startsWith('builtin:') ? builtinPackDir(p.args.packDir.slice('builtin:'.length)) : p.args.packDir;
+      if (named === undefined) {
+        errOut(word('sentinel.args.unexpectedArgument', { detail: p.args.packDir }));
+        return finish(result('rules', 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
+      }
+      const r = promoteRulePack(ws, { packDir: realpathSync.native(named), confirm, now });
       return serviceOut(r, [`pack ${String(r.facts.packId)} ${String(r.facts.version)} · candidate ${String(r.facts.candidate)} · replaces lock ${String(r.facts.previousLock)}${r.facts.lock ? ` · now lock ${String(r.facts.lock)}` : ''}`]);
     }
     if (p.command === 'plan') {

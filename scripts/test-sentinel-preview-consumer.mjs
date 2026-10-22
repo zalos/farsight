@@ -49,6 +49,10 @@ try {
   assert.deepEqual(readFileSync(join(ws, '.farsight', 'sentinel', 'settings.json')), settings);
   assert.equal((await sentinel('settings', 'adopt')).status, 4, 'adoption waits for the owner');
   assert.equal((await sentinel('settings', 'adopt', '--confirm')).status, 0);
+  // The rule pack the package ships, promoted by the owner from the installed tarball alone.
+  assert.equal((await sentinel('rules', 'promote', 'builtin:foundation-preview')).status, 4, 'promotion waits for the owner');
+  const promoted = await sentinel('rules', 'promote', 'builtin:foundation-preview', '--confirm');
+  assert.deepEqual([promoted.status, promoted.body.facts.rules], [0, ['sentinel.preview.sql-string-concat']], JSON.stringify(promoted.body));
   const plan = await sentinel('plan');
   assert.equal(plan.status, 0, JSON.stringify(plan.body));
   const planId = plan.body.facts.planId;
@@ -78,7 +82,7 @@ try {
     process.kill(pid, 'SIGTERM');
     for (let i = 0; i < 200; i++) { try { process.kill(pid, 0); } catch { break; } await new Promise(r => setTimeout(r, 50)); }
   }
-  console.log(`sentinel preview consumer ok: npm-only install, init twice, adopt, plan ${planId}, run (exit 2, preview), report; background run ${second} (detach, join, wait, report)`);
+  console.log(`sentinel preview consumer ok: npm-only install, init twice, adopt, promote the built-in pack, plan ${planId}, run (exit 2, preview), report; background run ${second} (detach, join, wait, report)`);
 } finally {
   consumer.cleanup();
 }

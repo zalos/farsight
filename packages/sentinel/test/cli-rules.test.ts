@@ -113,3 +113,38 @@ test('the current pointer moves only from the revision it was read at', t => {
   assert.equal(book.current()?.digest, db);
   assert.throws(() => book.select(`sha256:${'0'.repeat(64)}`, db), (e: any) => e.code === 'sentinel.service.recordUnsafe', 'only a filed revision can be selected');
 });
+
+test('the built-in foundation-preview pack validates, its detector flags exactly its positive fixtures, and the owner promotes it', async t => {
+  const { builtinPackDir } = await import('../dist/service/preview-plan.js');
+  const { readPackDirectory, validatePack } = await import('../dist/rules/index.js');
+  const { detect, PREVIEW_RULE } = await import('../dist/adapters/preview-detector.js');
+  const packDir = realpathSync.native(builtinPackDir('foundation-preview')!);
+  assert.equal(builtinPackDir('anything-else'), undefined);
+  const files = readPackDirectory(packDir);
+  const pack = validatePack(files);
+  assert.equal(pack.entry.packId, 'sentinel-foundation-preview');
+  const [definition] = JSON.parse(files.get('sentinel-pack.json')!.toString('utf8')).rules;
+  assert.equal(definition.familyId, PREVIEW_RULE, 'the detector implements the rule the pack declares');
+  assert.equal(definition.implementation.adapterId, 'sentinel.preview.detector');
+  for (const f of definition.fixtures.positive) {
+    const text = files.get(f)!.toString('utf8');
+    const hits = detect(f, text, 'sha256:x');
+    assert.ok(hits.length > 0 && hits.every(h => h.rule === PREVIEW_RULE), `${f} is flagged`);
+    assert.equal(hits.length, text.split('\n').filter(l => /SELECT|DELETE/.test(l)).length, `${f}: every positive line`);
+  }
+  for (const f of definition.fixtures.negative) assert.deepEqual(detect(f, files.get(f)!.toString('utf8'), 'sha256:x'), [], `${f} is not flagged`);
+
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-builtin-')));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const ws = join(dir, 'ws');
+  mkdirSync(ws);
+  const env = { PATH: process.env.PATH ?? '', HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
+  mkdirSync(env.HOME);
+  const run = (...args: string[]) => JSON.parse(spawnSync(process.execPath, [CLI, ...args, '--json'], { cwd: ws, env, encoding: 'utf8', timeout: 60_000 }).stdout);
+  run('init');
+  run('settings', 'adopt', '--confirm');
+  assert.equal(run('rules', 'promote', 'builtin:unknown').reasonCode, 'sentinel.args.unexpectedArgument');
+  const promoted = run('rules', 'promote', 'builtin:foundation-preview', '--confirm');
+  assert.deepEqual([promoted.outcome, promoted.facts.rules], ['prepared', [PREVIEW_RULE]]);
+  assert.deepEqual(run('rules', 'show').facts.packs, [{ packId: 'sentinel-foundation-preview', version: '0.1.0', rules: [PREVIEW_RULE] }]);
+});

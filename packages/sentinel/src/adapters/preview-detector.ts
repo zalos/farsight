@@ -9,7 +9,8 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 
 export const PREVIEW_DETECTOR_ID = 'sentinel.preview.detector';
-export const PREVIEW_RULE = 'sentinel.preview.sqlStringConcat';
+/** The rule family this detector implements, as the built-in foundation-preview pack declares it. */
+export const PREVIEW_RULE = 'sentinel.preview.sql-string-concat';
 export const PREVIEW_INPUTS_SCHEMA = 'sentinel-preview-inputs/draft-1';
 export const PREVIEW_FINDINGS_SCHEMA = 'sentinel-preview-findings/draft-1';
 

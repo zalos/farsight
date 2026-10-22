@@ -1,0 +1,7 @@
+{
+  "schema": "sentinel-preview-detector/draft-1",
+  "familyId": "sentinel.preview.sql-string-concat",
+  "check": "one line holds SQL text quoted and joined with + to something that is not a literal, or a template literal with SQL text and an interpolation",
+  "languages": ["typescript", "javascript", "java"],
+  "note": "Data for the built-in foundation-preview detector. It names the check; it is not code and is never executed."
+}

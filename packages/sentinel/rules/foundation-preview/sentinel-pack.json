@@ -1,0 +1,25 @@
+{
+  "schema": "sentinel-rulepack/draft-1",
+  "packId": "sentinel-foundation-preview",
+  "version": "0.1.0",
+  "rights": { "spdx": "MIT", "origin": "sentinel-original" },
+  "rules": [
+    {
+      "familyId": "sentinel.preview.sql-string-concat",
+      "revision": 1,
+      "titleKey": "sentinel.rule.previewSqlConcat",
+      "applicability": { "languages": ["typescript", "javascript", "java"], "scopeKind": "source-file" },
+      "requires": ["source-bytes", "pattern-match"],
+      "implementation": { "adapterId": "sentinel.preview.detector", "rulePath": "detectors/sql-string-concat.json" },
+      "meaning": "candidate",
+      "severity": "medium",
+      "evidenceRequired": ["source-span"],
+      "limitationKeys": ["sentinel.rule.previewLimitation"],
+      "mappings": { "cwe": ["CWE-89"] },
+      "fixtures": {
+        "positive": ["fixtures/concat-positive.ts", "fixtures/Concat.java"],
+        "negative": ["fixtures/concat-negative.ts", "fixtures/Bound.java"]
+      }
+    }
+  ]
+}
