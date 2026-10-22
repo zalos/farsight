@@ -16,11 +16,11 @@ import type { ArtifactId, CoverageEnvelope, ObservationEnvelope, PlanCheck, Plan
 import { validateEnvelope } from '../validate.js';
 import type { SentinelStore } from '../store/index.js';
 import { loadPlan } from '../execution/plans.js';
-import { loadBootstrap } from '../execution/bootstrap.js';
+import { retainedBootstrapForReport, type RetainedAncestorRevision } from '../execution/retained-bootstrap.js';
 import type { ParserIndex, ParserResult } from '../snapshot/parser.js';
 import { PREVIEW_DETECTOR_ID, PREVIEW_FINDINGS_SCHEMA, PREVIEW_RULE } from '../adapters/preview-detector.js';
-import { NAME_LIMITATIONS, NAME_MESSAGE, OBSERVATION_LIMITATIONS, OBSERVATION_MESSAGE } from '../adapters/gitleaks/normalize.js';
-import { GITLEAKS_RULE_IDS } from '../adapters/gitleaks/rules.js';
+import { secretObservation } from '../reports/accepted-secrets.js';
+import { selectedSecretPrivacy } from '../reports/selected-privacy.js';
 import { resolveWithheldLocation } from '../snapshot/locations.js';
 import type { WithheldLocationEvidence } from '../contracts/index.js';
 import { compareAssessments, type CheckAssessment, type Comparison } from '../findings/compare.js';
@@ -87,6 +87,8 @@ export interface RunAssessment {
    * text instead (withholdSecretRun).
    */
   readonly secretTokens: ReadonlySet<string>;
+  /** Same-snapshot selected ancestors, proven through their exact admitted selection edges; privacy only. */
+  readonly selectedAncestors: readonly RetainedAncestorRevision[];
 }
 
 function lastSequence(store: SentinelStore, runId: string): number {
@@ -135,10 +137,7 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
   const admitted = await loadPlan(store, runId, run.planRevision);
   const plan = admitted.plan;
   if (plan.kind !== 'analysis' || !plan.pins.snapshotId) throw new FullReportError('sentinel.report.runNotReportable', { runId, reason: 'not an analysis' });
-  const boot = (await loadPlan(store, runId, 1)).plan;
-  const inventoryUnit = boot.units.find(u => u.stage === 'inventory');
-  if (!inventoryUnit) throw new FullReportError('sentinel.report.runNotReportable', { runId, reason: 'no inventory' });
-  const evidence = await loadBootstrap(store, runId, { id: inventoryUnit.id, revision: inventoryUnit.revision });
+  const evidence = await retainedBootstrapForReport(store, runId, admitted).catch(() => unbound('the retained bootstrap lineage or its accepted evidence is unbound'));
   const snapshot = evidence.snapshot;
   if (snapshot.id !== plan.pins.snapshotId) unbound('the bootstrap snapshot is not the plan\'s');
   const captured = new Map<string, { content: string; bytes: number }>();
@@ -232,7 +231,7 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
         // A secret-scan record is read only as one, from a unit the secret scanner ran; nothing else is read as one.
         if ((unit.adapterId === SECRETS_ADAPTER) !== (value.kind === 'secret')) unbound('an accepted finding has another adapter kind');
         if (unit.adapterId === SECRETS_ADAPTER) {
-          const secret = await secretObservation(value, { unit, attemptId: pub.attemptId, runId, snapshot, assignedCheck, adapterDigest: adapterDigest(SECRETS_ADAPTER), bytesOf, severityOf });
+          const secret = await secretObservation(value, { unit, attemptId: pub.attemptId, runId, snapshot, assignedCheck, adapterDigest: adapterDigest(SECRETS_ADAPTER), bytesOf, severityOf, refuse: unbound, observation, tokensOf });
           observations.push(secret.observation);
           for (const path of secret.names) nameWithheld.add(path);
           for (const token of secret.tokens) secretTokens.add(token);
@@ -325,7 +324,7 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
   return {
     runId, planRevision: run.planRevision, snapshot, checks: plan.checks, units: plan.units, observations, coverage, plannedChecks, inventory,
     analyses: evidence.analyses, conditions, ledgerSequence: lastSequence(store, runId), ruleLock: admitted.ruleLock,
-    withheldKey: e => locationKeyOf(e), withheldFiles: nameWithheld, secretTokens,
+    withheldKey: e => locationKeyOf(e), withheldFiles: nameWithheld, secretTokens, selectedAncestors: evidence.selectedAncestors,
   };
 }
 
@@ -471,58 +470,6 @@ function withheldKeyFor(key: () => Buffer, snapshot: SnapshotEnvelope): (e: With
  * file this unit was assigned, with a span inside those bytes (a name match cites no span). Its rule family is the
  * admitted check's. Anything else refuses the report: a malformed or foreign record is never read as zero findings.
  */
-async function secretObservation(v: any, ctx: {
-  unit: PlanWork; attemptId: string; runId: string; snapshot: SnapshotEnvelope; adapterDigest: string | undefined;
-  assignedCheck: (id: string) => { check: PlanCheck; pin: { familyId: string; definitionDigest: string } };
-  bytesOf: (id: string) => Promise<Buffer>; severityOf: ReadonlyMap<string, string>;
-}): Promise<{ observation: ObservationEnvelope; names: string[]; tokens: string[] }> {
-  const { unit, snapshot } = ctx;
-  if (v.adapter !== SECRETS_ADAPTER || v.runId !== ctx.runId || v.snapshotId !== snapshot.id || v.work?.id !== unit.id || v.work?.revision !== unit.revision
-    || v.attemptId !== ctx.attemptId || v.schema !== 'sentinel-observation/draft-1') unbound('an accepted secret finding is bound to another run, unit or attempt');
-  if (!Array.isArray(v.assignedChecks) || canonicalJson(v.assignedChecks.map((c: any) => c?.id).sort()) !== canonicalJson([...unit.checks].sort())) unbound('a secret finding is not assigned exactly its unit\'s checks');
-  const pins = v.assignedChecks.map((claim: any) => {
-    const { check, pin } = ctx.assignedCheck(claim.id);
-    if (claim.familyId !== check.familyId || claim.revision !== check.ruleRevision || check.scopeKind !== 'repository' || check.scopeId !== unit.sourceId) unbound('a secret finding changes its admitted check tuple');
-    return pin;
-  });
-  const pin = pins[0]!;
-  if (pins.some((p: any) => p.familyId !== pin.familyId || p.definitionDigest !== pin.definitionDigest)) unbound('a secret finding spans rule families');
-  if (v.rule !== undefined && (v.rule?.familyId !== pin.familyId || v.rule?.revisionDigest !== pin.definitionDigest)) unbound('a secret finding claims another rule');
-  const p = v.producer;
-  if (!isRecord(p) || p.kind !== 'scanner' || p.adapterId !== SECRETS_ADAPTER || p.attemptId !== ctx.attemptId || !ctx.adapterDigest || p.adapterDigest !== ctx.adapterDigest) unbound('a secret finding names another producer');
-  if (typeof v.producerRuleId !== 'string' || !GITLEAKS_RULE_IDS.has(v.producerRuleId)) unbound('a secret finding names an unknown detector');
-  const name = v.message === NAME_MESSAGE && canonicalJson(v.limitationKeys) === canonicalJson([...NAME_LIMITATIONS]);
-  const content = v.message === OBSERVATION_MESSAGE && canonicalJson(v.limitationKeys) === canonicalJson([...OBSERVATION_LIMITATIONS]);
-  if (!name && !content) unbound('a secret finding carries text other than the redacted message');
-  if (!Array.isArray(v.evidence) || !v.evidence.length || v.evidence.length > 256) unbound('a secret finding cites nothing');
-  const names: string[] = [];
-  const tokens: string[] = [];
-  const assigned = new Set(unit.inputs.map(i => `${i.sourceId}\u0000${i.relativePath}\u0000${i.content}`));
-  for (const e of v.evidence) {
-    if (!isRecord(e) || e.location !== 'withheld' || 'relativePath' in e || 'nodeId' in e || e.snapshotId !== snapshot.id || e.sourceId !== unit.sourceId) unbound('a secret finding cites a location it may not');
-    const found = resolveWithheldLocation(snapshot, e as WithheldLocationEvidence);
-    if (!found.ok) return unbound('a secret finding cites a file its unit was not assigned');
-    const resolved = found;
-    if (!assigned.has(`${resolved.entry.sourceId}\u0000${resolved.entry.relativePath}\u0000${resolved.entry.content}`)) unbound('a secret finding cites a file its unit was not assigned');
-    const bytes = await ctx.bytesOf(resolved.entry.content);
-    if (sha(bytes) !== resolved.entry.content) unbound('a captured artifact is not its bytes');
-    const span = e.span;
-    if (!isRecord(span) || !Number.isSafeInteger(span.startByte) || !Number.isSafeInteger(span.endByte) || span.startByte < 0 || span.endByte < span.startByte || span.endByte > bytes.length
-      || (name && (span.startByte !== 0 || span.endByte !== 0)) || (content && span.endByte === span.startByte)) unbound('a secret finding cites a span outside its captured file');
-    if (name) { names.push(fileScope(resolved.entry.sourceId, resolved.entry.relativePath)); tokens.push(...tokensOf(resolved.entry.relativePath)); }
-    // The matched lines hold the value somewhere; every long token on them is treated as secret.
-    else tokens.push(...tokensOf(bytes.subarray(span.startByte, span.endByte).toString('utf8')));
-  }
-  const original = String(v.originalSeverity ?? '');
-  const o = observation({
-    schema: 'sentinel-observation/draft-1', id: v.id, snapshotId: snapshot.id, producer: { kind: 'scanner', adapterId: SECRETS_ADAPTER, adapterDigest: p.adapterDigest, attemptId: ctx.attemptId },
-    producerRuleId: v.producerRuleId, rule: { familyId: pin.familyId, revisionDigest: pin.definitionDigest as never },
-    originalSeverity: (original === 'unrated' ? ctx.severityOf.get(pin.familyId) ?? original : original).slice(0, 200),
-    message: v.message, evidence: v.evidence.map((e: any) => ({ location: 'withheld', snapshotId: e.snapshotId, sourceId: e.sourceId, entry: e.entry, content: e.content, span: { startByte: e.span.startByte, endByte: e.span.endByte } })),
-    limitationKeys: [...v.limitationKeys], observedAt: v.observedAt,
-  } as ObservationEnvelope);
-  return { observation: o, names, tokens };
-}
 
 function observation(o: ObservationEnvelope): ObservationEnvelope {
   const valid = validateEnvelope('observation', o);
@@ -739,8 +686,20 @@ export interface FullReport {
   readonly sarif: unknown;
   readonly comparison?: Comparison;
   readonly context: { readonly binding: PinnedContext['binding']; readonly reasons: readonly string[] } | null;
-  /** The run or its baseline has accepted secret matches, so source and context text is withheld (withholdSecretRun). */
+  /** The run, its baseline or a proven same-capture selected ancestor has accepted secret matches. */
   readonly withheldForSecrets: boolean;
+}
+
+/**
+ * Privacy knowledge survives holding Gitleaks in a selected child. Ancestors come only from reportBootstrap's proven
+ * same-capture selection chain, never an arbitrary parent id or a store-wide search. Their observations are checked
+ * by the existing reader and used only as a withholding flag, never as the child's findings, coverage or comparison.
+ */
+async function knownSecretMatches(store: SentinelStore, assessment: RunAssessment): Promise<boolean> {
+  if (assessment.observations.some(o => o.producer.kind === 'scanner' && o.producer.adapterId === SECRETS_ADAPTER)) return true;
+  const admitted = await loadPlan(store, assessment.runId, assessment.planRevision);
+  try { return (await selectedSecretPrivacy(store, assessment.runId, admitted)).hasMatches; }
+  catch { return unbound('accepted selected-ancestor privacy evidence is unavailable, malformed or unbound'); }
 }
 
 /** Builds the full report of a completed run, optionally placed and compared, from accepted evidence alone. */
@@ -762,7 +721,7 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
   let baselineSecret: boolean | undefined;
   if (req.baselineRunId) {
     const baseline = await assessRun(store, req.baselineRunId, { trustDir: req.trustDir });
-    baselineSecret = baseline.observations.some(o => o.producer.kind === 'scanner' && o.producer.adapterId === SECRETS_ADAPTER);
+    baselineSecret = await knownSecretMatches(store, baseline);
     const b = await sideOf(store, baseline);
     const c = await sideOf(store, current);
     currentFindings = c.findings;
@@ -790,10 +749,9 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
     inventory: current.inventory, readContent, withheldFiles: current.withheldFiles, ...(contexts ? { contexts } : {}), rules: ruleWords(req.trustDir, current.ruleLock),
     ...(comparison ? { comparison } : {}),
   }, currentFindings ?? await findingsOf(current.observations, readContent, { withheldKey: current.withheldKey }));
-  // With accepted secret matches in either run, no source or context text can be proved free of a matched value (the
-  // scanner reports whole lines), so all of it is withheld (withholdSecretRun). Without any, the report is as built.
-  const isSecret = (o: ObservationEnvelope) => o.producer.kind === 'scanner' && o.producer.adapterId === SECRETS_ADAPTER;
-  const secretRun = current.observations.some(isSecret) || (baselineSecret ?? false);
+  // Accepted secret matches in either run or its proven same-capture selected ancestry make every source/context
+  // string unproved (the scanner reports whole lines), so all of it is withheld. Clean ancestry keeps normal detail.
+  const secretRun = (baselineSecret ?? false) || await knownSecretMatches(store, current);
   const doc = secretRun ? withholdSecretRun(build.document, ruleWords(req.trustDir, current.ruleLock)) : build.document;
   const valid = validateEnvelope('report', doc);
   if (!valid.ok) throw new FullReportError('sentinel.report.evidenceUnbound', { reason: 'the withheld report does not fit its contract' });

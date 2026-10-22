@@ -32,7 +32,7 @@ import {
   adoptedPolicy, isFinalRunState, runWriteBinding, printed, receiptBook, removeScratch, reportIn,
   runStateIn, scratchUnder, statusIn, type Workspace,
 } from './local.js';
-import { assertSupportedRules, canonicalResult, currentPlan } from './canonical.js';
+import { assertSupportedRules, canonicalResult, currentPlan, rerunEnvelopeOf } from './canonical.js';
 import { loadPlan } from '../execution/plans.js';
 import { publicRegistry, scannerExecution } from './scanner-profile.js';
 import { recordRunFailure, runFailureCode } from './run-failure.js';
@@ -249,7 +249,7 @@ export class OwnerService {
         const scratch = join(work, 'attempts');
         mkdirSync(scratch, { mode: 0o700 });
         // The coordinator executes the run's current admitted revision, under this service's trusted registry.
-        const first = this.#store.ledger.getRun(planId) ? undefined : this.#runEnvelope(planId);
+        const first = this.#store.ledger.getRun(planId) ? undefined : (this.#runEnvelope(planId) ?? await rerunEnvelopeOf(this.#store, planId));
         const admitted = await currentPlan(this.#store, planId);
         if (admitted) assertSupportedRules((await loadPlan(this.#store, planId, admitted.revision)).plan);
         const assets = this.#drivers ? { drivers: this.#drivers } : await scannerExecution(this.#store, planId, this.#ws.trustDir, scratch, this.#registry);

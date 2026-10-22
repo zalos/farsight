@@ -398,12 +398,19 @@ CREATE TRIGGER runs_plan_advance BEFORE UPDATE OF plan_revision ON runs
   BEGIN SELECT RAISE(ABORT, 'sentinel.store.appendOnly: a run advances one admitted plan revision at a time'); END;
 `;
 
+// Selected reruns (PR 25 backend): an analysis revision may be admitted with a selection record naming exactly the
+// units it runs; the record is pinned beside the plan, a root through the plan's links like its other pins.
+const V5 = `
+ALTER TABLE plans ADD COLUMN selection_id TEXT REFERENCES artifacts(id);
+`;
+
 /** The shipped migrations, in order. Never edit a released step: add the next number. */
 export const LEDGER_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: 'foundation', sql: V1 },
   { version: 2, name: 'snapshot-admission', sql: V2 },
   { version: 3, name: 'durable-execution', sql: V3 },
   { version: 4, name: 'plan-admission', sql: V4 },
+  { version: 5, name: 'plan-selection', sql: V5 },
 ]);
 
 export const migrationChecksum = (m: Migration): string =>

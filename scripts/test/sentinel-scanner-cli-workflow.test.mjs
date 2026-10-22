@@ -34,4 +34,5 @@ test('full-report native acceptance builds its context-ingestion dependency and 
  for(const name of ['review','redaction-neighbors','short-production','exemptions'])
   assert.ok(workflow.includes(`test/sol-report-${name}.test.ts`),name);
  assert.ok(workflow.includes('test/report-redaction.test.ts'),'pure projection controls remain in the native union too');
+ for(const name of ['selected-rerun-containers','selected-rerun-secrets']) assert.ok(workflow.includes(`test/${name}.test.ts`),name);
 });

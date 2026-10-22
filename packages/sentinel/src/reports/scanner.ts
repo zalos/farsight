@@ -8,6 +8,7 @@ import {openSnapshot} from '../snapshot/materialize.js';
 import {evaluateRequiredCoverage,type RequiredCoverage} from '../planner/coverage.js';
 import {countedProblems} from '@farsight/core/dist/counts.js';
 import {STRINGS} from '@farsight/core/dist/strings.js';
+import {selectedSecretNames} from './selected-privacy.js';
 export interface ScannerReport{
  schema:'sentinel-scanner-report/draft-1';label:'deterministic';runId:string;snapshotId:string;planDigest:string;ledgerSequence:number;generatedAt:string;
  counts:ReportCount[];coverage:RequiredCoverage;observations:Array<{artifact:string;attemptId:string;value:unknown}>;
@@ -37,7 +38,8 @@ export async function scannerReportOf(store:SentinelStore,runId:string,now:Date)
  let sequence=0;for(let after=0;;){const page=store.ledger.readEvents({runId,after,limit:500});for(const event of page.events)sequence=event.sequence;if(!page.more)break;after=page.cursor;}
  const doc:ScannerReport={schema:'sentinel-scanner-report/draft-1',label:'deterministic',runId,snapshotId:plan.pins.snapshotId!,planDigest:plan.digest,ledgerSequence:sequence,generatedAt:now.toISOString(),counts,coverage,observations,reports,
   pins:{rules:plan.pins.rules,tools:plan.pins.tools,databases:plan.pins.databases},limitations:['sentinel.service.policyNotEvaluated','sentinel.report.scannerSlice']};
- return withholdMatchedNames(doc,await matchedNames(store,plan.pins.snapshotId!,observations));
+ const names=[...await matchedNames(store,plan.pins.snapshotId!,observations),...await selectedSecretNames(store,runId,admitted)];
+ return withholdMatchedNames(doc,[...new Set(names)].sort((a,b)=>b.length-a.length));
 }
 /** A captured file whose name the secret scan matched: its path and name, resolved only over the private snapshot. */
 async function matchedNames(store:SentinelStore,snapshotId:string,observations:ScannerReport['observations']):Promise<string[]>{

@@ -640,9 +640,8 @@ are read from the ledger: the recorded outcome and the coverage records. A run r
 policy only with the full report). `rerun <run> [--stage <unit,…>]` and `retry <run>` (the units that did not
 publish) plan a new run naming an ended one as its parent, over its retained snapshot with nothing captured again,
 after previewing the consequences from the parent's admitted plan: the selected units and everything downstream run
-again, prerequisites and the bootstrap are reused as published. Only a whole-analysis rerun executes today; a strict
-subset is previewed and refused, because planning just those units and reusing another run's published work are not
-built yet. Changed source is a new `plan`. The report is rendered from the ledger and stored artifacts, pinned to the run's last
+again, prerequisites and the bootstrap are reused as published. A strict subset is a selected rerun (ADR 43).
+Changed source is a new `plan`. The report is rendered from the ledger and stored artifacts, pinned to the run's last
 event. The published bundle ships the modules the code names by file URL (the launch gate, the bootstrap operations'
 implementations) as entries of their own, references rewritten and digests recorded in its manifest.
 
@@ -669,6 +668,68 @@ the revision the promotion was confirmed against (a create-once link per revisio
 temporary name), and the pack's exact files are kept so a plan resolves the lock against them. A repository supplies
 no lock. **Not in this decision:** the full report and finding policy (PR 19); per-input paths in the worker
 protocol, which would let a unit cover several files. Same-account code is outside this boundary, as for the store.
+
+43. **A selected rerun is a linked run over the parent's retained snapshot that runs exactly its selection and holds
+the rest (2026-10-22).**
+
+`rerun <run> --stage <unit,…>` naming a strict subset of an ended run's analysis units plans a new run whose parent
+is that run, over the parent's snapshot, under the rule lock, adopted policy and execution profile in effect now. It
+reuses the parent's published bootstrap through the parent chain (the same snapshot, published in a run of that
+lineage), never capturing or parsing again, even when the source is gone. The analysis is planned afresh from that
+evidence; a parent unit maps to the new unit with the same stage, adapter, implementation digest, source, checks,
+input-set digest, input fingerprint and scopes. A selected unit with no such match is refused as
+`sentinel.service.selectionStale` naming it (another detector build, changed rule bytes, other inputs), never widened.
+A unit the revision would have to reuse from the parent is refused as `sentinel.service.prerequisiteNotReusable`, and
+a parent with no published bootstrap in its lineage as `sentinel.service.bootstrapUnavailable`. The selected units and
+everything downstream run; every other unit is held `disabled-by-policy` with reason
+`sentinel.execution.notSelected`, given no inputs and never started.
+
+**The selection is admitted with the plan.** The record `sentinel-rerun-selection/draft-1` (`execution/selection.ts`)
+names the parent run, revision, plan digest and snapshot; the selected parent → unit pairs; the downstream units; the
+held units with their parent counterparts; and the reused bootstrap. Admission checks it against the revision:
+every unit runs or is held exactly once, what runs is closed downstream, nothing that runs depends on a held unit,
+and the reused set is the plan's. It is stored as an immutable artifact, linked from the plan and pinned in the
+ledger's `plans.selection_id` (migration 5, `plan-selection`), so the coordinator, a resume after a crash and the
+service all hold the same units back. The preview `rerun` prints is that same admitted plan. The run is created on
+the first `run`, foreground or detached, from an envelope derived from the admitted plan and selection. `retry` of a
+selected run reruns only the selected units that did not publish.
+
+**One request is one run; asking again after it ended is a new one.** A rerun's id is its request (parent, selection,
+lock, policy, profile) and a generation: the first generation not yet admitted, or admitted and not ended. Repeating
+the request while its run waits or runs joins it (`kept`), and a crash resumes it; once it has completed or been
+canceled, the same `rerun` is a fresh run with its own id, and the ended one is never handed back as new. A
+whole-analysis rerun follows the same rule; a plain `plan` of the same content stays the same run (ADR 37).
+
+**Coverage stays honest.** A held unit's results stay the parent's and are not copied as the child's coverage, so a
+selected rerun whose held units carry required checks ends incomplete, and the preview counts them (`requiredHeld`).
+The parent's runs, results and report are unchanged.
+
+**A retained full report proves the bootstrap lineage again.** A selected child's completed analysis has no new
+inventory stage. The report reader resolves exactly the inventory its admitted plan reuses, following at most 64
+runs and refusing cycles. Every selected edge must match the durable parent id and that parent's exact admitted
+revision, digest, snapshot and reused inventory. The producer's own admitted bootstrap must name that inventory
+work revision; its accepted attempt must be the pinned coordinator inventory operation, with a retained invocation
+bound to that plan, snapshot and work. The existing bootstrap reader then verifies the retained inventory and parser
+artifacts. A genuine accepted publication from a sibling over the same snapshot is still refused, as is a parse/check
+publication or a missing invocation. No live registry, current scanner image or source checkout is needed for this
+read. Strict-subset preview and admission use this same retained proof before planning or staging any child work; whole-analysis reruns retain their fresh bootstrap path. Held units remain gaps; no parent observation or coverage record becomes the child's.
+
+Privacy knowledge also survives a selection. An ancestor proven by those same selection bindings may have an accepted
+Gitleaks match while the child holds Gitleaks and reruns Pattern. The minimal scanner report inherits matched-name withholding through the same verified lineage and shared accepted-secret validator, without importing any parent records into its observations or counts. The reader assesses that ancestor's accepted secret
+publication through the existing record-binding checks and applies the conservative projection to the child (and to a
+comparison whose selected baseline inherits that knowledge). It contributes only a withholding flag; no ancestor
+finding, coverage or comparison result becomes the child's. A clean accepted ancestor scan preserves ordinary excerpts
+and confirmed context labels. Missing/corrupt evidence refuses; a canceled ancestor with an accepted secret-scan
+publication conservatively refuses because the completed-run assessment cannot authenticate it. This does not widen
+completed-run eligibility or reuse analysis results as prerequisites.
+
+**Open gate: dependency-bearing selections are refused.** A selection where something that runs needs an analysis
+unit that does not run is refused (`prerequisiteNotReusable`), even when the parent published that unit under exactly
+the same terms; only the bootstrap is reused. The shipped planner's check units depend only on the bootstrap, so no
+shipped plan reaches this today. Consuming genuine, eligible parent publications as prerequisites and counting held
+results as coverage belong to differential selection (PR 27); until both exist, the selective-stage rerun completion
+gate stays open, and a selected rerun never claims complete coverage on its own. **Not in this decision:** selecting
+by stage name rather than unit id.
 
 
 26. **The pattern engine runs behind an original protocol shim inside its pinned image, and coverage is per file per
@@ -1366,7 +1427,7 @@ Existing report files remain unchanged; a store copy or bundle cannot restore th
 with the earlier identities. A report and a bundle together, with the store id, confirm no guessed path.
 The pinned worker reports only the rule, the lines and a file reference (template `RuleID`, `StartLine`, `EndLine`,
 `File`, with `--redact=100`), so a report sees whole matched lines, never the value's position, and cannot prove that any
-text a captured file or a confirmed graph supplied is free of a matched value. A report whose run or baseline has
+text a captured file or a confirmed graph supplied is free of a matched value. A report whose run, baseline or proven same-capture selected ancestor has
 accepted secret matches therefore fails closed (`withholdSecretRun`): every finding's title and explanation are rebuilt
 from the rule pack's catalog words only; every evidence item is withheld with no excerpt and no location; every other
 source- or context-controlled string (context ids, labels and references, node ids, count part labels) becomes one
@@ -1375,7 +1436,7 @@ opaque word per distinct original, so references still match and placement keeps
 position in the report contract, never by a key's name or a value's spelling: only positions whose value Sentinel
 generates (schema, enums, catalog keys, digests, content and artifact ids, generated run, check, finding, evidence and
 report ids, counts' words, a decision's and a definition's exact generated fields, a gap's catalog explanation) are
-kept. A run without secret matches reports as before, excerpts and labels included. The cost is availability: in a run
+kept. Without matches in those proven inputs, a report retains ordinary excerpts and labels. The cost is availability: in a run
 with any secret match no report shows source excerpts, locations or context names. The precise replacement is an exact
 value range: the pinned template would emit, as numbers only, the match's start column and the secret's offset and
 length within it (computed inside the container from the unredacted match; Gitleaks fills its match fields with the
