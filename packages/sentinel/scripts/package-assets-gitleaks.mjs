@@ -22,7 +22,7 @@ export async function stageAssets(pkgDir, outDir) {
     config: { digest: g.GITLEAKS_CONFIG_DIGEST, defaultRules: g.GITLEAKS_DEFAULT_CONFIG_SHA256, ruleCount: g.GITLEAKS_RULE_IDS.size },
     support: JSON.parse(JSON.stringify(g.GITLEAKS_SUPPORT)),
     image: 'installed separately by the owner, by digest; never bundled or pulled at scan time',
-    registered: false,
+    registered: true,
   };
   writeFileSync(join(outDir, 'assets', 'gitleaks', 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   return { files: ['assets'], exports: { './assets/*': './assets/*' } };

@@ -105,7 +105,7 @@ export async function adoptScannerAsset(ws:Workspace,options:{kind:'tool'|'datab
   const parent=folder(ws.trustDir,'inspect');const scratch=mkdtempSync(join(parent,'inspect-'));
   let image;try{image=await(await ContainerBackend.connect({privateDir:scratch})).inspectImage(def.image);}finally{rmSync(scratch,{recursive:true,force:true});}
   metadata={schema:'sentinel-installed-image/draft-1',image:def.image,id:image.id,os:image.os,architecture:image.architecture};
-  candidate={kind:'tool',tool:{adapterId:options.id,version:def.version,artifactDigest:def.image.split('@')[1]!,platform:`linux-${image.architecture}`,rights:{spdx:options.id==='pattern-semgrep'?'LGPL-2.1-only':options.id==='ci-zizmor'?'MIT':'Apache-2.0',origin:'third-party',upstream:{name:options.id,revision:def.version}}}};
+  candidate={kind:'tool',tool:{adapterId:options.id,version:def.version,artifactDigest:def.image.split('@')[1]!,platform:`linux-${image.architecture}`,rights:{spdx:options.id==='pattern-semgrep'?'LGPL-2.1-only':['ci-zizmor','secrets-gitleaks'].includes(options.id)?'MIT':'Apache-2.0',origin:'third-party',upstream:{name:options.id,revision:def.version}}}};
  }else{
   if(!options.manifest||!options.archive)bad();let m:unknown;try{m=JSON.parse(readAsset(options.manifest!,65536).toString('utf8'));}catch{return bad();}
   bytes=readAsset(options.archive!,MAX_ARCHIVE);({candidate,metadata}=metadataOf(options.id,m,bytes,options.now,options.license));

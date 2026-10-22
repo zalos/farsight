@@ -1958,3 +1958,13 @@ archives, then still requires final exact candidate/provenance receipt admission
 checks-bundle rights sentence now names MIT. Focused coverage includes restricted grants refusing before scanner
 attempts, a sufficient grant running the real pinned scanner, rerun refusal, direct service/receipt denial, no daemon
 contact on asset-policy denial, and preview/lifecycle/receipt regressions.
+
+## Gitleaks integration checkpoint — 2026-10-22 (unfinished)
+
+Branch `codex/sol-gitleaks-cli` combines the reviewed secrets library context with the reviewed scanner CLI and
+admission corrections. The separate repository-input binding seam has four passing focused cases. The in-progress
+canonical Gitleaks driver, repository-scoped pack, secrets preset and private job classification compile, but the
+first real public CLI regression currently ends with `sentinel.execution.workerExited` (exit 3), before normalized
+findings. This checkpoint is not ready to integrate or an installed-command qualification. Resume with that exact
+synthetic regression; installed npm lifecycle, redacted-export acceptance and final compatibility checks remain.
+The reviewed worker and normalizer are unchanged. No source target was executed or engine downloaded.

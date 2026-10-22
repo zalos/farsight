@@ -526,7 +526,7 @@ try {
     assert.equal(`sha256:${createHash('sha256').update(worker).digest('hex')}`, gitleaks.worker.digest, 'the Gitleaks worker matches its digest');
     assert.equal(gitleaks.adapter.command.at(-1), `/input/${gitleaks.worker.digest.slice(7)}`, 'the fixed command names the shipped worker');
     assert.match(gitleaks.adapter.image, /^ghcr\.io\/gitleaks\/gitleaks@sha256:[0-9a-f]{64}$/);
-    assert.equal(gitleaks.registered, false);
+    assert.equal(gitleaks.registered, true);
     assert.deepEqual(readdirSync(join(installed, 'assets', 'gitleaks')).sort(), ['manifest.json', 'worker.sh'], 'only the worker and its manifest ship');
     assert.ok(!readdirSync(installed, { recursive: true }).map(String).some((f) => /\.tar$|secrets-helpers|secrets-conformance|report\.txt$/.test(f)), 'no image, report or test helper ships');
     gitleaksDemo = `gitleaks assets (worker ${gitleaks.worker.digest.slice(7, 19)}, no image), `;
