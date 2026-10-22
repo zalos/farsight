@@ -531,7 +531,10 @@ index, gives `candidate` results under an explicit qualification run and is othe
 line job (`F <index> <content> <path>`) and each captured content once. Files over 8 MiB, names with a line break or
 another control character, and paths the release's own global allowlist skips — the file or any folder above it,
 since the engine prunes a matching folder whole (measured: `images.png/`, `package-lock.json/`, `node_modules/`) —
-are not sent; each is a skipped scope with its reason, never a silent omission. **No repository control:** the shim rebuilds the tree one folder below the
+are not sent; each is a skipped scope with its reason, never a silent omission. The allowlist patterns are matched in
+JavaScript's Unicode mode (`u`; RE2's `(?i)` as `iu`), because RE2 folds case by Unicode simple case folding (`ſ` with
+`s`, the Kelvin sign with `k`) and ASCII-only folding missed paths the engine skips; a real-engine test holds the host's
+skips equal to the engine's over a case-folding corpus. **No repository control:** the shim rebuilds the tree one folder below the
 scan root, so a captured root `.gitleaksignore` is an ordinary scanned file; Gitleaks gets the pinned configuration
 (the release's built-in rules, nothing allowed), an empty ignore folder, `--ignore-gitleaks-allow` and no baseline.
 Measured by a direct probe of the pinned image (2026-10-22): the same root ignore file suppresses a finding when the tree is the scan root, and

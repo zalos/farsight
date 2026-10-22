@@ -8,10 +8,10 @@ import { join } from 'node:path';
 import { createAdapterRegistry } from '../dist/execution/registry.js';
 import { createExecutionService } from '../dist/execution/service.js';
 import {
-  GITLEAKS_ADAPTER, GITLEAKS_PRODUCTION_BUILD, GITLEAKS_ENGINE, buildGitleaksAdapter, runSecretsAttempt, normalizeSecretsRun, buildSecretsJob,
+  GITLEAKS_ADAPTER, GITLEAKS_PRODUCTION_BUILD, GITLEAKS_ENGINE, buildGitleaksAdapter, runSecretsAttempt, normalizeSecretsRun, buildSecretsJob, toolAllowlisted,
 } from '../dist/adapters/gitleaks/index.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
-import { VALUE, absent, captured, sha, treeFiles } from './secrets-helpers.ts';
+import { VALUE, absent, allowlistCorpus, captured, sha, treeFiles } from './secrets-helpers.ts';
 
 const enabled = process.env.SENTINEL_ISOLATION === '1';
 const skip = !enabled && 'real pinned engine: set SENTINEL_ISOLATION=1 with a qualified local Docker and the pinned Gitleaks image installed';
@@ -183,4 +183,27 @@ test('a file name shaped like a secret is found by the engine, withheld from eve
   assert.ok(inside, 'the content finding in the withheld file cites its reference');
   assert.ok(r.scanned.includes('src-synthetic:keys/plain.txt'));
   assert.ok(r.skipped.some((s: any) => withheld.has(s.scopeId.slice('src-synthetic:'.length)) && s.reasonCode === 'sentinel.secrets.toolAllowlisted'));
+});
+
+test('host and engine agree on every allowlisted path of a case-folding corpus (ſ, Kelvin K, upper case, folders)', { skip }, async t => {
+  const i = n++;
+  const paths = allowlistCorpus();
+  const files = Object.fromEntries(paths.map(p => [p, `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`]));
+  const targets = captured(join(root.root, `tree-${i}`), files);
+  const dir = join(root.root, `job-${i}`); mkdirSync(dir);
+  const built = buildSecretsJob({ snapshotId: 'snap-synthetic', sourceId: 'src-synthetic', targets: targets.slice(0, 1) }, dir);
+  // Every path is sent, whatever the host thinks, so the engine's own skips are what is measured.
+  const job = `${['sentinel-gitleaks-job/1', ...targets.map((x, k) => `F ${k} ${x.artifact.slice(7)} ${x.relativePath}`)].join('\n')}\n`;
+  const jobPath = join(dir, 'job-all.txt'); writeFileSync(jobPath, job);
+  const outcome = await service.run({ adapterId: GITLEAKS_ADAPTER.id, attemptId: `att-secrets-${i}`, work: { id: 'work-secrets', revision: 1 },
+    inputs: [built.inputs[0], { id: sha(job), path: jobPath }, { id: targets[0]!.artifact, path: targets[0]!.path }] });
+  assert.equal(outcome.state, 'succeeded', outcome.code);
+  const report = readFileSync(outcome.outputs.find((o: any) => o.mediaType === 'application/vnd.sentinel.gitleaks-report').path, 'utf8');
+  absent(report, 'the engine report');
+  const reported = new Set(report.trim().split('\n').filter(l => l.startsWith('F\t')).map(l => targets[Number(l.split('\t')[4])]!.relativePath));
+  const engineSkips = paths.filter(p => !reported.has(p));
+  const hostSkips = paths.filter(p => toolAllowlisted(p));
+  assert.deepEqual(hostSkips, engineSkips, 'the host skips exactly what the engine skips');
+  assert.ok(engineSkips.some(p => p.includes('\u017F')) && engineSkips.some(p => p.includes('\u212A')), 'the corpus exercises both foldings');
+  t.diagnostic(`${paths.length} paths, ${engineSkips.length} skipped by the engine, host agrees`);
 });

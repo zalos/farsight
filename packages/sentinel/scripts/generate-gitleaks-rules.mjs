@@ -27,7 +27,9 @@ const regexes = paths.map((p) => {
   const src = ci ? p.slice(4) : p;
   if (/\(\?[a-zA-Z]|\\[pPQEzA]|\[\[:/.test(src)) throw new Error(`not a plain RE2/JavaScript subset: ${p}`);
   new RegExp(src, ci ? 'i' : '');
-  return { src, flags: ci ? 'i' : '' };
+  // `u` always: RE2 matches code points, and its (?i) folds by Unicode simple case folding (s ~ U+017F, k ~ U+212A),
+  // which JavaScript does only in Unicode mode; without it `i` folds ASCII only and misses paths the engine skips.
+  return { src, flags: ci ? 'iu' : 'u' };
 });
 const out = `// Generated from Gitleaks ${tag}'s own default configuration (config/gitleaks.toml at tag ${tag}, commit
 // ${commit}; the file the binary embeds as its default rules) by scripts/generate-gitleaks-rules.mjs.
@@ -37,8 +39,9 @@ const out = `// Generated from Gitleaks ${tag}'s own default configuration (conf
 //   refused, so no field of a report can carry text other than a known detector name.
 // - GITLEAKS_GLOBAL_ALLOWLIST_PATHS: the default configuration's global path allowlist. Gitleaks skips a matching
 //   file silently; Sentinel lists each one as a skipped scope instead (\`sentinel.secrets.toolAllowlisted\`). The
-//   patterns are RE2 in the original; each is a plain subset that JavaScript reads the same way (a leading \`(?i)\`
-//   becomes the \`i\` flag), matched against the path as Gitleaks sees it (\`scan/tree/<path>\`).
+//   patterns are RE2 in the original; each is a plain subset that JavaScript reads the same way in Unicode mode (\`u\`
+//   on every pattern; a leading \`(?i)\` becomes \`iu\`, Unicode simple case folding as RE2 does, so \`ſ\` matches \`s\` and
+//   the Kelvin sign \`k\`), matched against each path the engine walks (\`scan/tree/<folder>…\`, \`scan/tree/<path>\`).
 
 /** SHA-256 of the configuration file these lists were read from. */
 export const GITLEAKS_DEFAULT_CONFIG_SHA256 = 'sha256:${sha}';
