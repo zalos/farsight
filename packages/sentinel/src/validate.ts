@@ -67,14 +67,37 @@ export function schemaOf(kind: EnvelopeKind): object {
   return (schemas as Record<EnvelopeKind, object>)[kind];
 }
 
-/** A real UTC calendar instant: the schema pattern bounds each field, this refuses 2026-02-30 and friends. */
+const TIMESTAMP = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]{1,9}))?Z$/;
+
+/**
+ * A real UTC calendar instant: the schema pattern bounds each field, this refuses a day the month does not have.
+ * Years are proleptic Gregorian ISO 8601 years 0000–9999 (0000 is a leap year), computed by rule rather than
+ * through `Date.UTC`, which would read years 0–99 as 1900–1999. Leap seconds are refused.
+ */
 export function isCalendarTimestamp(value: string): boolean {
-  const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]{1,9})?Z$/.exec(value);
+  const m = TIMESTAMP.exec(value);
   if (!m) return false;
-  const [y, mo, d, h, mi, se] = m.slice(1).map(Number) as [number, number, number, number, number, number];
-  const t = new Date(Date.UTC(y, mo - 1, d, h, mi, se));
-  return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d
-    && t.getUTCHours() === h && t.getUTCMinutes() === mi && t.getUTCSeconds() === se;
+  const [y, mo, d, h, mi, se] = m.slice(1, 7).map(Number) as [number, number, number, number, number, number];
+  if (mo < 1 || mo > 12 || d < 1 || h > 23 || mi > 59 || se > 59) return false;
+  const leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mo - 1]!;
+  return d <= days;
+}
+
+/**
+ * Orders two schema-valid timestamps at their full nanosecond precision: -1, 0 or 1. Every field is fixed width,
+ * so padding the fraction to nine digits makes the strings compare in time order. `Date.parse` is never used:
+ * it truncates to milliseconds.
+ */
+export function compareTimestamps(a: string, b: string): -1 | 0 | 1 {
+  const key = (t: string) => {
+    const m = TIMESTAMP.exec(t);
+    if (!m) throw new Error('sentinel.contract.invalid: not a Sentinel timestamp');
+    return `${t.slice(0, 19)}.${(m[7] ?? '').padEnd(9, '0')}`;
+  };
+  const x = key(a);
+  const y = key(b);
+  return x < y ? -1 : x > y ? 1 : 0;
 }
 
 /**
@@ -168,7 +191,7 @@ export function parseEnvelope<K extends EnvelopeKind>(kind: K, text: string): Va
 
 type Check<T> = (value: T, out: Bounded) => void;
 const err = (path: string, message: string): ContractError => ({ code: 'sentinel.contract.invariant', path, message });
-const after = (a: string, b: string) => Date.parse(a) >= Date.parse(b);
+const after = (a: string, b: string) => compareTimestamps(a, b) >= 0;
 
 function duplicates<T>(items: readonly T[], key: (item: T) => string): number[] {
   const seen = new Set<string>();
@@ -290,7 +313,7 @@ const coverage: Check<CoverageEnvelope> = (v, out) => {
 
 const disposition: Check<DispositionEnvelope> = (v, out) => {
   if (v.supersedes === v.id) out.add(err('/supersedes', 'a decision cannot supersede itself'));
-  if (v.expiresAt !== null && !(Date.parse(v.expiresAt) > Date.parse(v.createdAt))) out.add(err('/expiresAt', 'expires at or before creation'));
+  if (v.expiresAt !== null && compareTimestamps(v.expiresAt, v.createdAt) <= 0) out.add(err('/expiresAt', 'expires at or before creation'));
   if (v.decision === 'mitigated' && v.state === 'approved' && v.evidence.length === 0) {
     out.add(err('/evidence', 'an approved mitigation names the evidence it rests on; an assertion alone is not verification'));
   }
@@ -328,11 +351,10 @@ const report: Check<ReportEnvelope> = (v, out) => {
     for (const j of duplicates(f.evidence, e => e.id)) out.add(err(`/findings/${i}/evidence/${j}`, 'duplicate evidence'));
   });
   v.gaps.forEach((g, i) => placeErrors(out, `/gaps/${i}/place`, g.place));
-  const at = Date.parse(v.evaluatedAt);
   v.decisions.forEach((d, i) => {
     if (!findings.has(d.findingId)) out.add(err(`/decisions/${i}/findingId`, 'decision about a finding the report does not contain'));
     // Validity is as of the report's pinned clock. Invalidation is the service's own finding and stays as recorded.
-    const expired = d.expiresAt !== null && Date.parse(d.expiresAt) <= at;
+    const expired = d.expiresAt !== null && compareTimestamps(d.expiresAt, v.evaluatedAt) <= 0;
     if (d.validity === 'valid' && expired) out.add(err(`/decisions/${i}/validity`, 'the decision had expired at the report time'));
     if (d.validity === 'expired' && !expired) out.add(err(`/decisions/${i}/validity`, 'the decision had not expired at the report time'));
   });

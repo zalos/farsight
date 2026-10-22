@@ -14,7 +14,7 @@ import type { EnvelopeKind, HelloMessage } from '../dist/index.js';
 import { MAX_REPORTED_ERRORS } from '../dist/index.js';
 import { counted, countedProblems } from '@farsight/core/dist/counts.js';
 import { Ajv } from 'ajv';
-import { isCalendarTimestamp, isSafeRelativePath } from '../dist/index.js';
+import { isCalendarTimestamp, isSafeRelativePath, compareTimestamps } from '../dist/index.js';
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const VALID = here('./contracts/valid/');
@@ -337,6 +337,62 @@ test('placement uses canonical graph identities, not ledger ids', () => {
   const run = load('run-active');
   run.id = 'api::src/run';
   assert.equal(validateEnvelope('run', run).ok, false);
+});
+
+test('timestamps compare at full nanosecond precision, never through millisecond Date.parse', () => {
+  assert.equal(compareTimestamps('2026-10-21T12:05:00.250000001Z', '2026-10-21T12:05:00.250000002Z'), -1);
+  assert.equal(compareTimestamps('2026-10-21T12:05:00.250000002Z', '2026-10-21T12:05:00.250000001Z'), 1);
+  assert.equal(compareTimestamps('2026-10-21T12:05:00.25Z', '2026-10-21T12:05:00.250000000Z'), 0);
+  assert.equal(compareTimestamps('2026-10-21T12:05:00Z', '2026-10-21T12:05:00.000000001Z'), -1);
+  assert.equal(compareTimestamps('0001-01-01T00:00:00Z', '2026-01-01T00:00:00Z'), -1);
+
+  // Report decisions against the pinned clock, one nanosecond apart.
+  const report = load('report');
+  report.evaluatedAt = '2026-10-21T12:05:00.250000001Z';
+  report.decisions[0].expiresAt = '2026-10-21T12:05:00.250000002Z';
+  assert.ok(validateEnvelope('report', report).ok, 'expires one nanosecond after the report time: still valid');
+  report.decisions[0].expiresAt = '2026-10-21T12:05:00.250000001Z';
+  assert.equal(validateEnvelope('report', report).ok, false, 'expires exactly at the report time: expired');
+  report.decisions[0].expiresAt = '2026-10-21T12:05:00.2500000Z';
+  assert.equal(validateEnvelope('report', report).ok, false, 'one nanosecond before, written with fewer digits');
+
+  // Run and attempt ordering one nanosecond apart; equal instants are allowed.
+  const run = load('run-completed');
+  run.createdAt = '2026-10-21T12:00:00.000000002Z';
+  run.completedAt = '2026-10-21T12:00:00.000000001Z';
+  assert.equal(validateEnvelope('run', run).ok, false, 'completed one nanosecond before creation');
+  run.completedAt = '2026-10-21T12:00:00.000000002Z';
+  assert.ok(validateEnvelope('run', run).ok, 'completed at the same instant');
+  const attempt = load('attempt-ended');
+  attempt.startedAt = '2026-10-21T12:00:00.123456789Z';
+  attempt.endedAt = '2026-10-21T12:00:00.123456788Z';
+  assert.equal(validateEnvelope('attempt', attempt).ok, false, 'ended one nanosecond before it started');
+  attempt.startedAt = '2026-10-21T12:00:00.1Z';
+  attempt.endedAt = '2026-10-21T12:00:00.100000000Z';
+  assert.ok(validateEnvelope('attempt', attempt).ok, 'ended at the same instant, written with more digits');
+
+  // A disposition must expire strictly after creation.
+  const disp = load('disposition-proposed');
+  disp.createdAt = '2026-10-21T12:00:00.000000001Z';
+  disp.expiresAt = '2026-10-21T12:00:00.000000002Z';
+  assert.ok(validateEnvelope('disposition', disp).ok);
+  disp.expiresAt = '2026-10-21T12:00:00.000000001Z';
+  assert.equal(validateEnvelope('disposition', disp).ok, false);
+});
+
+test('calendar years are real proleptic ISO years from 0000 to 9999', () => {
+  assert.equal(isCalendarTimestamp('0000-02-29T00:00:00Z'), true, 'year 0000 is a leap year (Date.UTC would read it as 1900)');
+  assert.equal(isCalendarTimestamp('0004-02-29T00:00:00Z'), true);
+  assert.equal(isCalendarTimestamp('0100-02-29T00:00:00Z'), false, 'a century year not divisible by 400');
+  assert.equal(isCalendarTimestamp('0099-02-29T00:00:00Z'), false);
+  assert.equal(isCalendarTimestamp('2000-02-29T00:00:00Z'), true);
+  assert.equal(isCalendarTimestamp('1900-02-29T00:00:00Z'), false);
+  assert.equal(isCalendarTimestamp('9999-12-31T23:59:59.999999999Z'), true);
+  const snap = load('snapshot');
+  snap.createdAt = '0000-02-29T00:00:00Z';
+  assert.ok(validateEnvelope('snapshot', snap).ok, 'schema and validator agree on the accepted years');
+  snap.createdAt = '0100-02-29T00:00:00Z';
+  assert.equal(validateEnvelope('snapshot', snap).ok, false);
 });
 
 test('a report decision is judged against the report\'s own clock; invalidation stays the service\'s word', () => {
