@@ -46,6 +46,10 @@
       "types": "./dist/planner/index.d.ts",
       "import": "./dist/planner/index.js"
     },
+    "./review": {
+      "types": "./dist/review/index.d.ts",
+      "import": "./dist/review/index.js"
+    },
     "./review/providers": {
       "types": "./dist/review/providers/index.d.ts",
       "import": "./dist/review/providers/index.js"

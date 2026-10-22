@@ -58,6 +58,7 @@ import { SENTINEL_STORAGE_ERROR_STRINGS } from './strings-sentinel-storage-error
 import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
 import { SENTINEL_PROVIDER_STRINGS } from './strings-sentinel-providers.js';
+import { SENTINEL_REVIEW_STRINGS } from './strings-sentinel-review.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
 import { TOUR_STRINGS } from './strings-tour.js';
@@ -190,6 +191,7 @@ export const STRINGS: Record<string, StringEntry> = {
   // Sentinel rule packs, the rule lock, trusted policy, adoption, receipts and admission (strings-sentinel-policy.ts)
   ...SENTINEL_POLICY_STRINGS,
   ...SENTINEL_PROVIDER_STRINGS,
+  ...SENTINEL_REVIEW_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
   // who may do what — the role × action table's words live in strings-roles.ts (roles.*, gate.roles.*, its counts)

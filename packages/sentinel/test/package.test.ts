@@ -58,6 +58,11 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/processes.js': ['node:child_process'],
   'execution/registry.js': ['node:crypto', 'node:fs', 'node:path'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
+  // Model review (PR 22): partitions, the evidence broker, sessions and checkpoints; no network of its own.
+  'review/evaluation.js': ['node:crypto'],
+  'review/errors.js': ['@farsight/core/dist/strings-sentinel-review.js'],
+  'review/evidence.js': ['node:crypto'],
+  'review/session.js': ['node:fs', 'node:path'],
   // Model providers (PR 21): the only network client in the package, and the keychain read through core's reader.
   'review/providers/broker.js': ['node:crypto'],
   'review/providers/budget.js': ['node:path'],
