@@ -10,7 +10,8 @@ function traceLocations(value, locations = [], depth = 0) {
   return locations;
 }
 export function assess(record, { index, mode, stage }) {
-  const expectedFiles = index.files.filter(f => f.stage === stage).map(f => f.path);
+  const inputStage = stage === 'missing-rules' ? 'valid' : stage;
+  const expectedFiles = index.files.filter(f => f.stage === inputStage).map(f => f.path);
   const assessment = { stage, mode, requestedFiles: expectedFiles, requested: expectedFiles.length, scanned: null, omitted: null, skipped: null, diagnostics: [], labels: [], findings: [], gaps: [] };
   let output;
   try { output = JSON.parse(record.execution?.stdout ?? ''); }

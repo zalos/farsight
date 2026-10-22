@@ -112,3 +112,21 @@ test('out of rule language zero findings remain scoped omission, never clean cov
   assert.ok(observation.gaps.includes('out-of-rule-language-input-is-not-a-clean-check'));
   assert.ok(!controls({ scenario: 'valid-pattern', assessment: observation }).passed);
 });
+
+test('missing rule retains all nine requested files as unscanned instead of shrinking denominator', () => {
+  const observation = assessed(result([], [], [{ type: 'SemgrepError', message: 'not-present.yaml unavailable' }]), 'pattern', 'missing-rules');
+  assert.equal(observation.requested, 9);
+  assert.equal(observation.scannedCount, 0);
+  assert.equal(observation.omittedCount, 9);
+  assert.equal(observation.labels.length, 0);
+});
+test('invalid output never turns missing evidence into zero omissions or successful capability', () => {
+  for (const stdout of ['not-json', JSON.stringify({ results: 'bad', errors: [] })]) {
+    const observation = assessed({ execution: { stdout } });
+    assert.equal(observation.scanned, null);
+    assert.equal(observation.omitted, null);
+    assert.equal(observation.requested, 9);
+    assert.equal(observation.scores, undefined);
+    assert.ok(observation.gaps.length > 0);
+  }
+});
