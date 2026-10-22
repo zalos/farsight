@@ -131,26 +131,23 @@ test('evaluateCaseOutcome fails on any missing observation, and never passes an 
   assert.match(allNullOutcome.reason, /missing observation/);
 
   const oneMissing = [
-    { scenario: 'a', observed: { x: 1 }, matchesExpected: true },
+    { scenario: 'a', expectedRuntime: { status: 200 }, observed: { status: 200 }, matchesExpected: true },
     { scenario: 'b', observed: null, matchesExpected: null },
   ];
   assert.equal(evaluateCaseOutcome(oneMissing).state, 'failed');
 
   const allPresentOneMismatch = [
-    { scenario: 'a', observed: { x: 1 }, matchesExpected: true },
-    { scenario: 'b', observed: { x: 2 }, matchesExpected: false },
+    { scenario: 'a', expectedRuntime: { status: 200 }, observed: { status: 200 }, matchesExpected: true },
+    { scenario: 'b', expectedRuntime: { status: 200 }, observed: { status: 403 }, matchesExpected: false },
   ];
   assert.equal(evaluateCaseOutcome(allPresentOneMismatch).state, 'measured-with-mismatch');
 
-  // evaluateCaseOutcome's contract: a scenario with no fixed expectation (matchesExpected: null) is
-  // exempt from the match requirement but never from being observed at all. No corpus scenario
-  // currently uses matchesExpected: null — every one has a frozen expectedRuntime — so this is a
-  // generic contract test, not tied to a real case.
+  // An observed response without a fixed, reviewed expectation cannot count as a passed case.
   const noExpectationButObserved = [
-    { scenario: 'a', observed: { x: 1 }, matchesExpected: true },
-    { scenario: 'b', observed: { x: 200 }, matchesExpected: null },
+    { scenario: 'a', expectedRuntime: { status: 200 }, observed: { status: 200 }, matchesExpected: true },
+    { scenario: 'b', observed: { status: 200 }, matchesExpected: null },
   ];
-  assert.equal(evaluateCaseOutcome(noExpectationButObserved).state, 'measured');
+  assert.equal(evaluateCaseOutcome(noExpectationButObserved).state, 'failed');
 });
 
 test('express assess agrees when runtime matches the static expectation, and flags a real mismatch', async () => {

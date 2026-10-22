@@ -55,6 +55,42 @@
       "bytes": 11640818,
       "sha256": "22f48801d02be27ea3c448bebb1b1d7ccfef731b8160a413504e700261b8aa3a",
       "note": "Exact original input/output/progress bytes for all three runtime runs, content-addressed; manifest maps original run-relative paths to objects."
+    },
+    {
+      "path": "framework-owner-failure.json",
+      "bytes": 48984,
+      "sha256": "5be33e6f5fee190eb02671beeddfa4b58a7262e1a7c25ada5644a9ebe50a31b1",
+      "note": "Historical failure: owner-label mismatch; cleanup refused. Retained original output is not final acceptance evidence."
+    },
+    {
+      "path": "framework-vacuous-pass.json",
+      "bytes": 81620,
+      "sha256": "51df480bed6d98b58578cc441d128a0ff41d3223157565ea5ca0e5c133c71e82",
+      "note": "Historical defect: state says measured despite null observations. Explicitly invalid, retained to document the found-and-fixed false pass."
+    },
+    {
+      "path": "framework-initial.json",
+      "bytes": 195494,
+      "sha256": "646f4be0674facbf367ba094ddffd58271fb7c35f7bbabced4143f62f6f54854",
+      "note": "Historical dirty-tree combined run before acquisition/run separation and strict lifecycle fixes."
+    },
+    {
+      "path": "framework-acquisition-intermediate.json",
+      "bytes": 231353,
+      "sha256": "1e22742370dd9a1ffd3fd030856f436cc7ccd39e330f5135483e4041bc365c8d",
+      "note": "Historical acquisition at 536e6b1, before corpus and final SOL hardening."
+    },
+    {
+      "path": "framework-run-intermediate.json",
+      "bytes": 106435,
+      "sha256": "3988498a08fb7c25ba2542a459bb8e864ef562c439a90c42d1e75f3bd0269efe",
+      "note": "Historical runtime at 536e6b1; not acceptance evidence for corrected corpus or final controls."
+    },
+    {
+      "path": "framework-acquisition-corpus-corrected.json",
+      "bytes": 231440,
+      "sha256": "ebc637bf2cd7c43b2514b7dd582214294b041f0893cbfede2f6df100686a12c5",
+      "note": "Corpus corrected at 0cb1a3c; dependencies acquired but no run was executed. Predates final SOL acquisition/lifecycle hardening."
     }
   ]
 }

@@ -41,6 +41,27 @@ unchanged inputs, bounded completed commands and verified cleanup are common pre
 micro-corpus criteria; they are not general application precision/recall or the plan's provisional deep-engine
 benchmark targets. Out-of-rule-language, malformed/partial and oversized controls are outside those denominators.
 
+## Framework criteria and independent label review
+
+An independent SOL reviewer checked the corrected corpus at `ec7cf5f` before the lead's final measurement.
+All 19 source-file hashes match, with no missing or unlisted fixture sources. The four cases contain 11
+scenarios and 14 frozen HTTP-status expectations, each aligned with its generated request driver. The
+reviewed index SHA-256 is `3fd763363d2f1168b9fe61e1c651ed522a286cc8fae6ca086bcf5bccf86aac36`.
+This companion review preserves the original index's author-review field rather than rewriting provenance.
+
+The scope is the original configured applications: Express middleware registration order and a fixed
+startup environment branch; a Nest route pipe versus the same declared DTO without a pipe; Next matcher
+inclusion, body exemption and exclusion; and two ordered Spring chains plus an unmatched route. Spring
+Security is checked against exact version 6.4.3, managed by Boot 3.4.3. The unmatched GET's expectation is
+now fixed at 200 before the confirming run; earlier exploratory results remain historical. Each scenario
+must provide every declared HTTP field as an integer status and agree with its fixed expectation. Missing,
+malformed or partial observations fail. An unknown static label remains unknown regardless of response.
+
+Framework qualification here requires all four exact acquired images and dependency records, reviewed
+inputs, complete observations, native Linux ARM64 execution, inspected isolation and verified owned cleanup.
+It establishes neither framework-version support in a production adapter nor a vulnerability verdict.
+An HTTP status alone is not evidence that every security filter did or did not execute.
+
 ## Installation and terms boundary
 
 Tools are installed separately and verified before a run. A scan never downloads a missing scanner or uses a
