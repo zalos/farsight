@@ -24,8 +24,6 @@ export interface CommittedSource {
   readonly commit: string;
   readonly lfsObjects: string | undefined;
   readonly submodules: readonly SubmoduleRequest[];
-  /** The Sentinel store's folder relative to the source root, when it lies inside it. */
-  readonly storeRel: string | undefined;
 }
 
 /** A submodule found at a gitlink whose permitted local clone should be captured as its own source. */
@@ -82,7 +80,8 @@ function walkTree(inv: Inventory, src: CommittedSource, rel: string, treeOid: st
       continue;
     }
     if (isTree) {
-      const excluded = folderExclusion(inv.policy, src.sourceId, path, src.storeRel);
+      // Committed blobs are never the live store: a tree at the store's path is ordinary committed source.
+      const excluded = folderExclusion(inv.policy, src.sourceId, path);
       if (excluded) { inv.boundary(src.sourceId, path, 'excluded', excluded); continue; }
       walkTree(inv, src, path, e.oid, found);
       continue;
@@ -104,7 +103,7 @@ function walkTree(inv: Inventory, src: CommittedSource, rel: string, treeOid: st
       continue;
     }
     if (!isBlob) { inv.recorded(src.sourceId, path, 'refused', 'sentinel.capture.specialFile'); continue; }
-    if (folderExclusion(inv.policy, src.sourceId, path, undefined) === 'sentinel.capture.excludedByPolicy') {
+    if (folderExclusion(inv.policy, src.sourceId, path) === 'sentinel.capture.excludedByPolicy') {
       inv.recorded(src.sourceId, path, 'excluded', 'sentinel.capture.excludedByPolicy');
       continue;
     }

@@ -8,12 +8,14 @@ import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readSync, r
 import { CaptureChanged, Inventory, lfsPointer, resolveLfs } from './inventory.js';
 import { beyondPathBounds, checkName, folderExclusion, joinPath, symlinkVerdict } from './policy.js';
 import { SnapshotError, type CaptureReasonCode } from './errors.js';
+import type { HeldStoreRoot } from '../store/owner-binding.js';
+import { identityOf } from '../store/paths.js';
 
 export interface WorktreeSource {
   readonly sourceId: string;
   readonly root: string;
-  /** The Sentinel store's folder relative to this root, when the store lies inside it. */
-  readonly storeRel: string | undefined;
+  /** The held store this capture writes to: excluded only at its exact folder with its acquired identity. */
+  readonly store: HeldStoreRoot | undefined;
   /** An explicitly permitted local Git LFS object folder. */
   readonly lfsObjects: string | undefined;
 }
@@ -64,6 +66,21 @@ function readThrough(chain: Chain, abs: Buffer, seen: Stats): Buffer | undefined
 
 function lstatOrUndefined(p: Buffer | string): Stats | undefined {
   try { return lstatSync(p); } catch { return undefined; }
+}
+
+/**
+ * Whether a folder is the held store. Only the exact canonical folder with the identity the owner acquired is; the
+ * hold is checked again there (a replaced, renamed or released store refuses). The store's identity reached under
+ * any other name is refused, never exempted and never listed. Every other folder is ordinary source.
+ */
+function isHeldStore(store: HeldStoreRoot, abs: Buffer): boolean {
+  let id: string;
+  try { id = identityOf(lstatSync(abs, { bigint: true })); } catch { throw new CaptureChanged('a folder disappeared during capture'); }
+  const atPath = abs.equals(Buffer.from(store.path));
+  if (!atPath && id !== store.identity) return false;
+  store.assertHeld();
+  if (!atPath || id !== store.identity) throw new SnapshotError('sentinel.capture.storeAliased', 'the store is reachable under another name');
+  return true;
 }
 
 export function enumerateWorktree(inv: Inventory, src: WorktreeSource): void {
@@ -126,13 +143,14 @@ function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dir
       continue;
     }
     if (st.isDirectory()) {
-      const excluded = folderExclusion(inv.policy, src.sourceId, path, src.storeRel);
+      if (src.store && isHeldStore(src.store, child.abs)) { inv.boundary(src.sourceId, path, 'excluded', 'sentinel.capture.excludedStore'); continue; }
+      const excluded = folderExclusion(inv.policy, src.sourceId, path);
       if (excluded) { inv.boundary(src.sourceId, path, 'excluded', excluded); continue; }
       walk(inv, src, path, child.abs, st, [...chain, { abs: child.abs, st }]);
       continue;
     }
     if (!st.isFile()) { inv.recorded(src.sourceId, path, 'refused', 'sentinel.capture.specialFile'); continue; }
-    if (folderExclusion(inv.policy, src.sourceId, path, undefined) === 'sentinel.capture.excludedByPolicy') {
+    if (folderExclusion(inv.policy, src.sourceId, path) === 'sentinel.capture.excludedByPolicy') {
       inv.recorded(src.sourceId, path, 'excluded', 'sentinel.capture.excludedByPolicy', st.size);
       continue;
     }
