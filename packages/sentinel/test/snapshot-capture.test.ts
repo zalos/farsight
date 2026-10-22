@@ -438,7 +438,7 @@ test('source capture is listed as a draft capability; every scan capability stay
   const capture = CAPABILITIES.find((c: any) => c.id === 'source-capture');
   assert.deepEqual([capture?.state, capture?.reasonCode], ['available-draft', 'sentinel.capability.draftCapture']);
   assert.ok(STRINGS['sentinel.capability.draftCapture']?.define);
-  assert.deepEqual(CAPABILITIES.filter((c: any) => c.state !== 'unavailable').map((c: any) => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli', 'framework-spring']);
+  assert.deepEqual(CAPABILITIES.filter((c: any) => c.state !== 'unavailable').map((c: any) => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli', 'framework-express', 'framework-spring']);
 });
 
 test('restore recreates empty folders and never an execute bit; the materialization keeps the original as provenance', needsStore, async t => {

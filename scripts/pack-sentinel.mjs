@@ -240,11 +240,11 @@ try {
     const emitted = join(out, 'dist', `${asset}.mjs`);
     if (existsSync(emitted)) assets[asset] = { path: `dist/${asset}.mjs`, sha256: createHash('sha256').update(readFileSync(emitted)).digest('hex') };
   }
-  // Non-code assets the package owns (rule packs, in-container workers and their digest manifests), staged by its own hook.
-  const assetHook = join(dir, 'scripts', 'package-assets.mjs');
-  if (existsSync(assetHook)) {
-    const staged = await (await import(pathToFileURL(assetHook).href)).stageAssets(dir, out);
-    files.push(...staged.files);
+  // Non-code assets the package owns (in-container workers and their digest manifests), each staged by its own hook,
+  // scripts/package-assets*.mjs, in name order.
+  for (const hook of (existsSync(join(dir, 'scripts')) ? readdirSync(join(dir, 'scripts')) : []).filter((f) => /^package-assets.*\.mjs$/.test(f)).sort()) {
+    const staged = await (await import(pathToFileURL(join(dir, 'scripts', hook)).href)).stageAssets(dir, out);
+    for (const f of staged.files) if (!files.includes(f)) files.push(f);
     Object.assign(exportsMap, staged.exports);
   }
   for (const doc of ['README.md']) if (existsSync(join(dir, doc))) { cpSync(join(dir, doc), join(out, doc)); files.push(doc); }

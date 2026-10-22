@@ -207,3 +207,19 @@ real-engine conformance suite (original corpus, timeouts, output bounds, omissio
 tarball's shipped pattern assets; any skipped, failed or cancelled test fails it, and so does a container left behind or a
 daemon that cannot be asked. A green run is the evidence for marking
 linux/amd64 measured in `src/adapters/pattern/adapter.ts`; the workflow changes nothing itself.
+
+## Qualification: OSV advisory adapter on Linux/amd64
+
+`.github/workflows/sentinel-osv-qualification.yml` runs on a pull request that changes the OSV adapter, its fixtures, the
+execution service, the packing scripts or the workflow itself, and by hand once it is on the default branch, on a native
+`ubuntu-24.04` amd64 runner. It is not a required check. Its one network step provisions the pinned OSV-Scanner index and
+checks the linux/amd64 manifest the adapter records; scans run through PR 07's isolation with `--pull never`, no network
+and synthetic advisory snapshots built from the original fixtures. It runs the OSV unit and real-engine conformance
+suites with `SENTINEL_OSV_QUALIFY=linux/amd64` (results accepted as candidate, not refused) and the packed tarball's
+shipped worker; any skipped, failed or cancelled test, a container left behind or a daemon that cannot be asked fails it.
+A green run is the evidence for marking linux/amd64 measured in `src/adapters/osv/adapter.ts` (ADR 29).
+
+The individual Pattern and OSV qualification jobs select their own installed worker with
+`SENTINEL_PACKAGE_ENGINE`; both asset manifests and their exact bytes are still checked. A local package smoke
+with `SENTINEL_ISOLATION=1` and no selector executes both workers. Each native job must observe its own worker
+success marker, so a missing or failed selected engine cannot pass as an asset-only check.

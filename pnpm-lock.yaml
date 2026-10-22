@@ -168,6 +168,9 @@ importers:
       ajv:
         specifier: 8.20.0
         version: 8.20.0
+      oxc-parser:
+        specifier: 0.138.0
+        version: 0.138.0
 
   packages/server:
     dependencies:

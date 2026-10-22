@@ -50,6 +50,10 @@
       "types": "./dist/planner/index.d.ts",
       "import": "./dist/planner/index.js"
     },
+    "./frameworks/express": {
+      "types": "./dist/frameworks/express/index.d.ts",
+      "import": "./dist/frameworks/express/index.js"
+    },
     "./schemas/*": "./schemas/*",
     "./package.json": "./package.json"
   },
@@ -72,6 +76,7 @@
     "@farsight/graph": "workspace:*",
     "@types/node": "26.1.0",
     "@vscode/tree-sitter-wasm": "0.3.1",
-    "ajv": "8.20.0"
+    "ajv": "8.20.0",
+    "oxc-parser": "0.138.0"
   }
 }

@@ -201,8 +201,7 @@ admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR
 ## Spring Security servlet pack (draft, PR 17)
 
 `src/frameworks/spring/` turns one source's parser evidence into `sentinel-controls/draft-1` control facts for its
-Spring routes, for exactly **Spring Boot 3.4.3 with Spring Security 6.4.3**, servlet stack. It is not exported yet: the
-scan CLI (PR 09) integrates it. Inputs are the captured snapshot, the PR 05 parser evidence for the source, a reader
+Spring routes, for exactly **Spring Boot 3.4.3 with Spring Security 6.4.3**, servlet stack. The library export is `farsight-sentinel/frameworks/spring`; canonical scan CLI integration remains open. Inputs are the captured snapshot, the PR 05 parser evidence for the source, a reader
 for captured bytes and the selected environment (`activeProfiles`, or `null` when none was selected). Nothing is
 built, resolved or run. The public graph supplies route identities. The pack reads every route mapping, security
 chain, matcher, rule and method-security annotation again from the captured Java syntax (tree-sitter's Java grammar),
@@ -221,6 +220,23 @@ source cannot exclude a chain a dependency contributes. Anything outside the sup
 matchers, partial matches, equal orders, profiles not selected, conditional beans, filters, customizers,
 interceptors, servlet paths, other versions and WebFlux. `src/frameworks/spring/support.ts` states the subset and is
 part of the pack digest. The environment and the configuration bytes read key the facts.
+
+### Express control facts (draft)
+
+```ts
+import { analyzeExpress } from 'farsight-sentinel/frameworks/express';
+
+const facts = await analyzeExpress({ snapshot, sourceId: 'app', analysis: analysis.sources[0], readContent: id => store.readArtifact(id) });
+facts.facts;      // per route and property: applies / does-not-apply / unknown at a position before the handler
+facts.frontiers;  // registrations the pack met and could not follow
+```
+
+For exactly Express 4.21.2 (an exact pin, or a range the npm lockfile resolves to it), the pack reads each route's
+registration and every layer registered before it on the application and the routers on its path, in order, from
+captured source only. No layer is credited with authentication or authorization: a body that refuses with 401 or 403
+on a request value is cited as evidence with both properties unknown there, because the client may control that value;
+a name never establishes anything, and a layer registered after a route never clears it. Conditional or dynamic registration, third-party middleware, unreadable paths and error
+handlers that may resume routing are unknown with their reasons. The envelope is `sentinel-controls/draft-1`; ADR 31.
 
 ## Versions and evolution
 
@@ -288,3 +304,29 @@ only as a fixed category and its exit code; no engine text is forwarded. The tar
 `rules/pattern/` and the worker with a digest/rights manifest under `assets/pattern/`; nothing exported invokes the
 adapter, so the package gate is partial until the PR 09 command (ADR 26). Integration still open:
 registering the adapter, the planner supplying the shim, job, rules and targets as inputs, and the scan command (PR 09).
+
+## Dependency advisories (draft, not registered)
+
+`src/adapters/osv/` matches dependency files against pinned OSV advisory snapshots with OSV-Scanner 2.7.0, fully offline,
+through the PR 07 execution service. Inputs: `package-lock.json`, `pnpm-lock.yaml` (resolved, transitive as locked),
+`pom.xml` (declared directs only; ranges and managed versions unknown; transitives never resolved offline) and
+`*.cdx.json` (as the SBOM lists). Each component keeps its file, artifact, identity, version certainty and transitive
+limit; findings are once per component and advisory group, keyed by the snapshot; coverage is per file (complete,
+partial, database-absent, database-stale, error, empty, not applicable).
+
+**Acquisition is a separate, owner-confirmed step** (the proposed PR 09 command):
+
+```sh
+farsight-sentinel advisories acquire --ecosystem npm --ecosystem Maven --max-bytes 536870912   # preview, then --confirm
+```
+
+It fetches only `https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`, within the bound, checks the
+origin's MD5 and stores the archive by SHA-256 with its provenance. Until that command exists,
+`scripts/qualify-osv-database.mjs --acquire --dir <private folder>` is the owner-run qualification (real archives,
+synthetic fixtures and runtime-only positive controls). Measured on 2026-10-22 (darwin-arm64, Docker Desktop): npm
+218,843,332 bytes and Maven 10,427,762 bytes acquired in about 12.5 s; on the real databases the synthetic fixtures gave
+no finding, `lodash@4.17.11` (lockfile) 7 advisory groups and `jackson-databind@2.9.8` (POM, exact) 60; a scan with the
+npm archive took about 7–10 s. The adapter is not registered and nothing exported runs it: the package gate is partial
+until the planner and command integrate it.
+
+The offline advisory adapter is measured on Linux arm64 and native Linux amd64. The [amd64 qualification](https://github.com/zalos/farsight/actions/runs/39788785215) passed 21 tests with zero skips and ran the installed worker against its original fixtures. Full installed CLI registration remains a separate integration gate.
