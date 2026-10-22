@@ -1358,9 +1358,13 @@ command line uses an HMAC of source and path under the store's own secret), so i
 findings and a secret finding continues across captures of one store. The store id is public (container labels, owner
 records, a bundle's provenance, a failed run's facts) and is never the key: the secret is 32 random bytes per store id
 in the owner's private trust folder (`report-keys/`), outside the store directory so no store copy or bundle carries
-it, created once by no-overwrite publication, read only as a private single-link file of exactly 32 bytes (anything
-else refuses rather than minting a new key, which would change identities), and never written to a receipt, result,
-report, log or the service socket. A report and a bundle together, with the store id, confirm no guessed path. Every candidate the secret scan's matched text yields is replaced in every source- or context-controlled string of the
+it, created once by no-overwrite publication, read only as a private single-link file of exactly 32 bytes (an existing
+unsafe key refuses rather than being replaced), and never written to a receipt, result, report, log or the service
+socket. Withheld-location identity continuity requires that same private key: if the owner loses it or opens a store
+under a different private trust folder, the next report creates a new key and its withheld-location identities change.
+Existing report files remain unchanged; a store copy or bundle cannot restore the missing key or prove continuity
+with the earlier identities. A report and a bundle together, with the store id, confirm no guessed path.
+Every candidate the secret scan's matched text yields is replaced in every source- or context-controlled string of the
 report document in every profile (context labels and ids, paths, symbols, titles, sentences, excerpts), one fixed word
 per candidate so references still match. The detector reports whole lines, so a matched line yields the whole trimmed
 line, each quoted string, the right-hand side of its first assignment (unquoted values with `:` or padding included),

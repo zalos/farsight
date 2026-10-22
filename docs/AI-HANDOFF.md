@@ -6,6 +6,20 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Owner-private record FIFO refusal — 2026-10-22
+
+Branch `codex/sentinel-published-record-fifo`, based on the private report-key correction, opens published records
+with `O_NONBLOCK` before inspecting their descriptor. A FIFO substituted for a report key, rule-lock record or
+adopted-asset record is refused as a nonregular file without waiting for a writer. Existing regular-file, ownership,
+mode, link-count and byte-limit checks are unchanged. Report-key continuity still depends on retaining the same
+owner-private key; a missing key starts a new identity domain, as the architecture now explicitly records.
+
+Both actual-FIFO regressions timed out on the frozen base while the regular-file positive passed. The correction
+passes all four new controls and the existing receipt/rule-lock/adopted-asset caller controls: 30 focused checks,
+zero skips. The genuine pinned local Gitleaks publication-to-full-report private-key check passes separately
+(1 check, zero skips). Sentinel dependency-closure build, typecheck and commit-title lint pass. No other report
+privacy implementation was changed; final report integration and independent review remain separately owned.
+
 ## Nest with provider and paths libraries — 2026-10-22
 
 Branch `codex/sentinel-nest-integration` merges reviewed provider/path integration `2ab52485` into Nest
