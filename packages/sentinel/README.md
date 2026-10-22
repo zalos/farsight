@@ -1,8 +1,9 @@
 # @farsight/sentinel (draft)
 
 The optional Sentinel security-analysis package. It captures immutable source, admits canonical plans, runs the
-four pinned scanners through isolated Linux containers, and regenerates observations and coverage from accepted
-publications. `static` keeps the original foundation preview; `scanners` selects Pattern, OSV, Trivy and zizmor.
+pinned Pattern, OSV, Trivy, zizmor and Gitleaks scanners through isolated Linux containers, and regenerates
+observations and coverage from accepted publications. `static` keeps the original foundation preview; `scanners`
+selects all shipped scanner rules, and `secrets` selects current-tree secret scanning only.
 Importing the library starts nothing. Scans acquire no assets and execute no project scripts or package managers.
 Farsight's application packages neither depend on nor import this optional package.
 
@@ -199,7 +200,7 @@ admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR
 ## Explicit pinned scanner commands (draft)
 
 Install the standalone tarball with npm and use the installed executable. The scanner preset is separate from the
-preview and makes its seven shipped rule families mandatory. Initialization never overwrites existing settings;
+preview and makes its selected shipped rule families mandatory. Initialization never overwrites existing settings;
 a second initialization keeps the existing preset until the owner edits and adopts those settings.
 
 ```sh
@@ -209,10 +210,12 @@ farsight-sentinel rules promote builtin:pattern --confirm
 farsight-sentinel rules promote builtin:advisories --confirm
 farsight-sentinel rules promote builtin:infrastructure --confirm
 farsight-sentinel rules promote builtin:ci --confirm
+farsight-sentinel rules promote builtin:secrets --confirm
 farsight-sentinel assets adopt-tool pattern-semgrep --confirm
 farsight-sentinel assets adopt-tool advisories-osv --confirm
 farsight-sentinel assets adopt-tool iac-trivy --confirm
 farsight-sentinel assets adopt-tool ci-zizmor --confirm
+farsight-sentinel assets adopt-tool secrets-gitleaks --confirm
 farsight-sentinel assets adopt-database osv:npm --manifest <snapshot.json> --archive <snapshot.zip> --license <published-SPDX-expression> --confirm
 farsight-sentinel assets adopt-database trivy-checks --manifest <checks.json> --archive <checks.tar.gz> --confirm
 farsight-sentinel plan --json
@@ -255,6 +258,22 @@ four existing pinned images, original inert positive/negative files, a tiny synt
 checks. `SENTINEL_ISOLATION=1` and `SENTINEL_TRIVY_CHECKS_DIR` select the explicit local prerequisites; no test pulls
 an image or downloads a database. Public CLI, profile and asset commands remain internal modules of the executable,
 not new JavaScript exports.
+
+## Current-tree secrets in the public command (draft)
+
+For a new secrets-only workspace, use `init --profile secrets`, adopt its settings, promote `builtin:secrets` and
+adopt the already installed `secrets-gitleaks` image. The same `plan`, `run`, `wait` and `report` commands above apply.
+The Gitleaks 8.30.1 default detectors read captured included files; Git history is outside this scope. Files omitted
+by detector rules or limits remain coverage gaps. A completed scan does not establish that no secret exists.
+
+Public findings and scanned/skipped scopes withhold captured file names as well as matched values. A private
+captured snapshot resolves each opaque source/entry reference to its original location. Identical bytes in two
+files keep distinct entry identities. Exact private source and source-derived job provenance remain retained;
+they are not claimed safe for public export merely because scanner findings withhold values.
+
+`scripts/test-sentinel-secrets-consumer.mjs` runs the actual installed command with synthetic values, an explicit
+omission and a secret-shaped filename, then regenerates the retained report after source removal. The separate
+four-engine installed consumer above remains in place. Both use only existing pinned local container assets.
 
 ## Infrastructure configuration checks (draft)
 
