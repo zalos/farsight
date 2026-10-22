@@ -838,6 +838,28 @@
     "expect": "sentinel.contract.invalid"
   },
   {
+    "name": "reused coverage cannot cite its own work revision",
+    "base": "coverage-complete-reused",
+    "ops": [
+      {
+        "set": "/basis/publication/revision",
+        "value": 2
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/basis/publication"
+  },
+  {
+    "name": "a reused publication names its work revision",
+    "base": "coverage-complete-reused",
+    "ops": [
+      {
+        "delete": "/basis/publication/revision"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
     "name": "an MCP channel cannot approve",
     "base": "disposition-approved",
     "ops": [

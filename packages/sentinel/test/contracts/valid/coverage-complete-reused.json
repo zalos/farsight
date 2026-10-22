@@ -12,7 +12,10 @@
   "status": "complete",
   "basis": {
     "kind": "reused",
-    "publicationAttemptId": "att-1",
+    "publication": {
+      "id": "work-pattern-api",
+      "revision": 1
+    },
     "derivationArtifact": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
   },
   "skipped": []

@@ -29,6 +29,14 @@ tests run that check too. Validation (`validateEnvelope`, `parseEnvelope`) works
 version check, then the JSON schema (unknown fields are refused, not dropped), then cross-field invariants
 a schema cannot express. Each error carries a stable `sentinel.contract.*` code.
 
+The newer implementation plan governs where it differs from the earlier `contracts.md` sketch. A snapshot holds
+immutable capture facts only; stage coverage, parse outcomes and findings are separate, append-only records.
+Every reference that names work carries `(id, revision)`: dependencies, attempts, coverage, reuse publications and
+the worker protocol's binding. A test walks the generated schemas to enforce both rules.
+
+There are no retention fields here. v1 never deletes anything automatically. The age and count values PR 01
+proposed are only thresholds that make a record eligible for an explicit prune (PR 03/26).
+
 Spans are zero-based, half-open UTF-8 byte offsets. Paths are source-relative POSIX paths with no `.`/`..`
 segment. Money is a decimal string. Resource ceilings are the PR 01 proposed defaults (2 GiB, 2 CPUs,
 128 PIDs, 120 s, 4 MiB output); a profile can only lower them.
@@ -45,6 +53,13 @@ segment. Money is a decimal string. Resource ceilings are the PR 01 proposed def
   draft or `v1` revision, with the pin tests updated in the same change. A removal, a rename or a narrowed
   meaning needs a new major version (`/v2`) read side by side with the old one. Every enum set is pinned
   against an explicit literal list and the generated schema (`test/contracts.test.ts`).
+
+## Words
+
+Everything the executable prints comes from the shared two-register catalog in core
+(`packages/core/src/strings-sentinel-cli.ts`, keys `sentinel.cli.*`, `sentinel.capability.*`,
+`sentinel.contract.*` and `sentinel.protocol.*`). There is no catalog of Sentinel's own. The `message` beside each
+validation error is the validator's diagnostic detail; the words for its error code come from the catalog.
 
 ## Exit codes
 

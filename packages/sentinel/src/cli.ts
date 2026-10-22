@@ -5,6 +5,8 @@ import { readFileSync, statSync } from 'node:fs';
 import { CAPABILITIES } from './capabilities.js';
 import { ENVELOPES, ENVELOPE_KINDS, MAX_ENVELOPE_BYTES, type EnvelopeKind } from './contracts/index.js';
 import { parseEnvelope } from './validate.js';
+// Every printed word comes from the shared catalog (packages/core/src/strings-sentinel-cli.ts).
+import { sentinelWord as word } from '@farsight/core/dist/strings-sentinel-cli.js';
 
 // Sentinel's own exit codes (they are not Work's: there, 2 means awaiting confirmation).
 const EXIT = { ok: 0, configuration: 3 } as const;
@@ -19,36 +21,40 @@ function version(): string {
   return pkg.version;
 }
 
-const HELP = `farsight-sentinel — optional security-analysis companion to Farsight (draft; no scanner yet)
-
-This build only defines and validates draft contracts. It cannot capture source, plan or run a scan,
-and it never downloads a tool, starts a container or contacts a model provider.
-
-usage:
-  farsight-sentinel --help | --version
-  farsight-sentinel capabilities [--json]      what this build can and cannot do, with reasons
-  farsight-sentinel validate <kind> <file> [--json]
-                                                check one JSON envelope against its draft schema
-      kinds: ${ENVELOPE_KINDS.join(', ')}
-
-planned, not available: ${Object.keys(PLANNED).join(', ')}
-
-exit codes: 0 ok · 1 finding policy failed · 2 required coverage incomplete ·
-            3 configuration or input error (also every unavailable command) · 4 awaiting owner confirmation
-`;
+function help(): string {
+  return [
+    word('sentinel.cli.title'),
+    '',
+    word('sentinel.cli.scope'),
+    '',
+    word('sentinel.cli.usageHeading'),
+    `  ${word('sentinel.cli.usageHelp')}`,
+    `  ${word('sentinel.cli.usageCapabilities')}`,
+    `  ${word('sentinel.cli.usageValidate')}`,
+    `      ${word('sentinel.cli.kinds', { kinds: ENVELOPE_KINDS.join(', ') })}`,
+    '',
+    word('sentinel.cli.planned', { commands: Object.keys(PLANNED).join(', ') }),
+    '',
+    word('sentinel.cli.exitCodes'),
+  ].join('\n');
+}
 
 function out(text: string) { process.stdout.write(text.endsWith('\n') ? text : `${text}\n`); }
 function errOut(text: string) { process.stderr.write(text.endsWith('\n') ? text : `${text}\n`); }
 
 function capabilities(json: boolean): number {
   if (json) { out(JSON.stringify({ version: version(), capabilities: CAPABILITIES }, null, 2)); return EXIT.ok; }
-  for (const c of CAPABILITIES) out(`${c.state === 'unavailable' ? 'unavailable' : 'draft      '}  ${c.id.padEnd(26)} ${c.reasonCode} · ${c.plannedIn}`);
+  const state = (c: (typeof CAPABILITIES)[number]) => word(c.state === 'unavailable' ? 'sentinel.cli.stateUnavailable' : 'sentinel.cli.stateDraft');
+  const width = Math.max(...CAPABILITIES.map(c => state(c).length));
+  for (const c of CAPABILITIES) {
+    out(`${state(c).padEnd(width)}  ${c.id.padEnd(26)} ${word(c.reasonCode)} · ${word('sentinel.cli.plannedIn', { change: c.plannedIn })}`);
+  }
   return EXIT.ok;
 }
 
 function validate(kind: string | undefined, file: string | undefined, json: boolean): number {
   if (!kind || !file || !(ENVELOPE_KINDS as string[]).includes(kind)) {
-    errOut(`usage: farsight-sentinel validate <${ENVELOPE_KINDS.join('|')}> <file>`);
+    errOut(word('sentinel.cli.validateUsage', { kinds: ENVELOPE_KINDS.join('|') }));
     return EXIT.configuration;
   }
   let text: string;
@@ -56,22 +62,23 @@ function validate(kind: string | undefined, file: string | undefined, json: bool
     const st = statSync(file);
     if (!st.isFile()) throw new Error('not a file');
     if (st.size > MAX_ENVELOPE_BYTES) {
-      errOut(`refused: larger than ${MAX_ENVELOPE_BYTES} bytes`);
+      errOut(word('sentinel.cli.refusedTooLarge', { bytes: MAX_ENVELOPE_BYTES }));
       return EXIT.configuration;
     }
     text = readFileSync(file, 'utf8');
   } catch {
-    errOut('refused: cannot read that file');
+    errOut(word('sentinel.cli.refusedUnreadable'));
     return EXIT.configuration;
   }
   const result = parseEnvelope(kind as EnvelopeKind, text);
   const schema = ENVELOPES[kind as EnvelopeKind].schema;
   if (json) out(JSON.stringify(result.ok ? { ok: true, schema } : { ok: false, schema, errors: result.errors }, null, 2));
-  else if (result.ok) out(`valid ${schema}`);
+  else if (result.ok) out(word('sentinel.cli.valid', { schema }));
   else {
-    errOut(`invalid ${schema}`);
-    for (const e of result.errors.slice(0, 50)) errOut(`  ${e.code} ${e.path || '/'} ${e.message}`);
-    if (result.errors.length > 50) errOut(`  … ${result.errors.length - 50} more`);
+    errOut(word('sentinel.cli.invalid', { schema }));
+    // The code's words come from the catalog; the message is the validator's safe diagnostic detail.
+    for (const e of result.errors.slice(0, 50)) errOut(`  ${e.code} ${e.path || '/'} ${word(e.code)}: ${e.message}`);
+    if (result.errors.length > 50) errOut(`  ${word('sentinel.cli.more', { count: result.errors.length - 50 })}`);
   }
   return result.ok ? EXIT.ok : EXIT.configuration;
 }
@@ -80,15 +87,15 @@ export function main(argv: string[]): number {
   const json = argv.includes('--json');
   const args = argv.filter(a => a !== '--json');
   const [command, ...rest] = args;
-  if (!command || command === '--help' || command === '-h' || command === 'help') { out(HELP); return EXIT.ok; }
-  if (command === '--version' || command === '-v') { out(`farsight-sentinel ${version()} · contracts ${ENVELOPES.run.schema.split('/')[1]}`); return EXIT.ok; }
+  if (!command || command === '--help' || command === '-h' || command === 'help') { out(help()); return EXIT.ok; }
+  if (command === '--version' || command === '-v') { out(word('sentinel.cli.version', { version: version(), draft: ENVELOPES.run.schema.split('/')[1]! })); return EXIT.ok; }
   if (command === 'capabilities') return capabilities(json);
   if (command === 'validate') return validate(rest[0], rest[1], json);
   if (Object.hasOwn(PLANNED, command)) {
-    errOut(`unavailable: '${command}' is not implemented in this draft build (planned in ${PLANNED[command]}). Nothing was started.`);
+    errOut(word('sentinel.cli.unavailable', { command, change: PLANNED[command]! }));
     return EXIT.configuration;
   }
-  errOut(`unknown command; run farsight-sentinel --help`);
+  errOut(word('sentinel.cli.unknownCommand'));
   return EXIT.configuration;
 }
 

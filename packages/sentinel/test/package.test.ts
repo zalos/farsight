@@ -20,7 +20,8 @@ test('the package is optional, private and exports only files that exist', () =>
   assert.equal(manifest.name, '@farsight/sentinel');
   assert.equal(manifest.private, true);
   assert.match(manifest.version, /-draft\./);
-  assert.deepEqual(Object.keys(manifest.dependencies ?? {}), ['ajv'], 'no @farsight/* or scanner/model SDK dependency');
+  // core supplies the shared catalog (and later counts/placement/grants); no scanner or model SDK dependency.
+  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/core', 'ajv']);
   assert.equal(manifest.bin['farsight-sentinel'], './dist/cli.js');
   for (const [key, target] of Object.entries(manifest.exports as Record<string, any>)) {
     if (key.includes('*')) continue;
@@ -49,8 +50,14 @@ test('no Farsight package depends on or imports Sentinel', () => {
 test('the library imports nothing that could start work', () => {
   const forbidden = /from ['"](node:)?(child_process|net|http|https|dgram|worker_threads|cluster|sqlite)['"]|from ['"]@farsight\//;
   for (const file of filesUnder(`${pkgDir}dist`).filter(f => f.endsWith('.js'))) {
-    if (file.endsWith('cli.js')) continue;
-    assert.doesNotMatch(readFileSync(file, 'utf8'), forbidden, file);
+    const text = readFileSync(file, 'utf8');
+    if (file.endsWith('cli.js')) {
+      // The executable reads its words from the catalog, and nothing else from Farsight.
+      const farsight = [...text.matchAll(/from ['"](@farsight\/[^'"]+)['"]/g)].map(m => m[1]);
+      assert.deepEqual(farsight, ['@farsight/core/dist/strings-sentinel-cli.js']);
+      continue;
+    }
+    assert.doesNotMatch(text, forbidden, file);
   }
   // Importing the facade leaves no handle open and prints nothing.
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(`${pkgDir}dist/index.js`)});`], { encoding: 'utf8', timeout: 10_000 });
@@ -66,7 +73,7 @@ test('help and version say plainly that no scanner exists', () => {
   assert.match(help.stdout, /4 awaiting owner confirmation/);
   const version = cli('--version');
   assert.equal(version.status, 0);
-  assert.equal(version.stdout.trim(), `farsight-sentinel ${manifest.version} · contracts draft-1`);
+  assert.equal(version.stdout.trim(), `farsight-sentinel ${manifest.version}, contracts draft-1`);
 });
 
 test('every analysis capability is explicitly unavailable', () => {
@@ -83,7 +90,7 @@ test('planned commands refuse with exit 3 and start nothing', () => {
   for (const command of ['plan', 'run', 'status', 'serve', 'report', 'bundle', 'rules']) {
     const r = cli(command, '--json');
     assert.equal(r.status, 3, command);
-    assert.match(r.stderr, /not implemented in this draft build \(planned in PR \d+\)\. Nothing was started\./);
+    assert.match(r.stderr, new RegExp(`^unavailable: ${command} is not implemented in this draft build \\(planned in PR \\d+\\)\\. Nothing was started\\.`));
     assert.equal(r.stdout, '');
   }
   assert.equal(cli('scan-everything').status, 3);
@@ -109,6 +116,21 @@ test('validate checks a file against its draft schema', () => {
     assert.equal(cli('validate', 'ledger', bad).status, 3, 'an unknown kind is refused');
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('every printed word is a registered catalog entry with a definition', async () => {
+  const { STRINGS } = await import('@farsight/core/dist/strings.js');
+  const cliText = readFileSync(`${pkgDir}src/cli.ts`, 'utf8');
+  const used = new Set([...cliText.matchAll(/word\('(sentinel\.[^']+)'/g)].map(m => m[1]!));
+  for (const c of CAPABILITIES) used.add(c.reasonCode);
+  for (const code of ['unknownKind', 'tooLarge', 'malformedJson', 'missingVersion', 'wrongKind', 'unsupportedVersion', 'invalid', 'invariant']) used.add(`sentinel.contract.${code}`);
+  used.add('sentinel.protocol.noSharedVersion');
+  assert.ok(used.size > 30);
+  for (const key of used) {
+    const entry = STRINGS[key];
+    assert.ok(entry, `${key} is not in the catalog`);
+    assert.ok(entry.define && entry.hud && entry.professional, `${key} needs both registers and a define`);
   }
 });
 

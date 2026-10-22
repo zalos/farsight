@@ -1,4 +1,4 @@
-import type { ArtifactId, CatalogKey, Id, Ordinal, ScopedReason, Timestamp } from './common.js';
+import type { ArtifactId, CatalogKey, Id, Ordinal, ScopedReason, Timestamp, WorkRef } from './common.js';
 
 /** Coverage is separate from findings: "complete" says the check ran over its scope, not that nothing was found. */
 export type CoverageStatus = 'complete' | 'partial' | 'unsupported' | 'not-run' | 'error';
@@ -9,7 +9,8 @@ export type CoverageGranularity = 'per-file-per-rule' | 'per-file' | 'aggregate'
 /** @discriminator kind */
 export type CoverageBasis =
   | { kind: 'executed'; attemptId: Id }
-  | { kind: 'reused'; publicationAttemptId: Id; derivationArtifact: ArtifactId }
+  // A publication is keyed by its work revision, never by a bare work ID or an attempt alone.
+  | { kind: 'reused'; publication: WorkRef; derivationArtifact: ArtifactId }
   | { kind: 'imported'; provenanceArtifact: ArtifactId }
   | { kind: 'unavailable'; reasonCode: CatalogKey };
 

@@ -38,6 +38,7 @@
     "schemas:check": "node scripts/generate-schemas.mjs --check"
   },
   "dependencies": {
+    "@farsight/core": "workspace:*",
     "ajv": "8.20.0"
   }
 }

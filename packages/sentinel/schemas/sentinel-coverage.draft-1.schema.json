@@ -169,8 +169,8 @@
                 "type": "string",
                 "const": "reused"
               },
-              "publicationAttemptId": {
-                "$ref": "#/definitions/Id"
+              "publication": {
+                "$ref": "#/definitions/WorkRef"
               },
               "derivationArtifact": {
                 "$ref": "#/definitions/ArtifactId"
@@ -178,7 +178,7 @@
             },
             "required": [
               "kind",
-              "publicationAttemptId",
+              "publication",
               "derivationArtifact"
             ],
             "additionalProperties": false
@@ -239,6 +239,23 @@
           }
         }
       ]
+    },
+    "WorkRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false,
+      "description": "A logical work unit at one immutable revision; every reference to work names both."
     },
     "CatalogKey": {
       "type": "string",

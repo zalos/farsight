@@ -229,6 +229,9 @@ const coverage: Check<CoverageEnvelope> = v => {
   if (v.basis.kind === 'unavailable' && !['unsupported', 'not-run', 'error'].includes(v.status)) {
     out.push(err('/status', 'unavailable work is unsupported, not-run or error'));
   }
+  if (v.basis.kind === 'reused' && v.basis.publication.id === v.workId && v.basis.publication.revision === v.workRevision) {
+    out.push(err('/basis/publication', 'reuse points at an earlier publication, not this work revision'));
+  }
   return out;
 };
 

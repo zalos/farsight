@@ -186,6 +186,57 @@ test('the published schemas are generated from the types and carry their version
   }
 });
 
+// Every JSON object node in a schema, with its definition name (properties, nested objects, array items, branches).
+function objectNodes(kind: EnvelopeKind): Array<{ def: string; node: any }> {
+  const out: Array<{ def: string; node: any }> = [];
+  const visit = (def: string, node: any) => {
+    if (!node || typeof node !== 'object') return;
+    if (node.properties) out.push({ def, node });
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) value.forEach(v => visit(def, v));
+      else if (value && typeof value === 'object') visit(def, value);
+    }
+  };
+  for (const [def, node] of Object.entries((schemaOf(kind) as any).definitions)) visit(def, node);
+  return out;
+}
+const refName = (s: any): string | undefined => s?.$ref?.split('/').pop() ?? s?.items?.$ref?.split('/').pop();
+
+test('every reference that names work carries its revision (the plan, not the legacy StageResult)', () => {
+  let workRefs = 0;
+  for (const kind of ENVELOPE_KINDS) {
+    for (const { def, node } of objectNodes(kind)) {
+      const props = node.properties as Record<string, any>;
+      if ('workId' in props) {
+        assert.ok('workRevision' in props && node.required?.includes('workRevision'), `${kind} ${def}: workId without a required workRevision`);
+      }
+      for (const [name, schema] of Object.entries(props)) {
+        if (['work', 'publication', 'dependencies'].includes(name)) {
+          assert.equal(refName(schema), 'WorkRef', `${kind} ${def}.${name} must be a WorkRef`);
+          workRefs++;
+        }
+      }
+    }
+  }
+  const workRef = (schemaOf('work') as any).definitions.WorkRef;
+  assert.deepEqual(workRef.required, ['id', 'revision']);
+  assert.ok(workRefs >= 6, `found ${workRefs} work references`);
+  // The worker result binds the work revision too: the legacy StageResult's bare workId is not accepted.
+  const result = load('protocol-result');
+  delete result.work.revision;
+  assert.equal(validateEnvelope('protocol', result).ok, false);
+});
+
+test('a snapshot holds capture facts only; analysis outcomes live in their own envelopes', () => {
+  const props = new Set(objectNodes('snapshot').flatMap(({ node }) => Object.keys(node.properties)));
+  for (const analysis of ['coverage', 'stageCoverage', 'status', 'outcome', 'parsed', 'observations', 'findings', 'seenByNoStage', 'workId', 'attemptId']) {
+    assert.ok(!props.has(analysis), `snapshot carries ${analysis}`);
+  }
+  const snapshot = load('snapshot');
+  snapshot.entries[0].coverage = 'complete';
+  assert.equal(validateEnvelope('snapshot', snapshot).ok, false, 'stage coverage cannot be written into a capture entry');
+});
+
 test('policy results fold with fixed precedence and exit codes', () => {
   const f = { configurationFailure: false, awaitingConfirmation: false, requiredCoverageIncomplete: false, findingPolicyFailed: false };
   assert.equal(policyResultOf(f), 'satisfied');
