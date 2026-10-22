@@ -6,8 +6,9 @@
 //   refused, so no field of a report can carry text other than a known detector name.
 // - GITLEAKS_GLOBAL_ALLOWLIST_PATHS: the default configuration's global path allowlist. Gitleaks skips a matching
 //   file silently; Sentinel lists each one as a skipped scope instead (`sentinel.secrets.toolAllowlisted`). The
-//   patterns are RE2 in the original; each is a plain subset that JavaScript reads the same way (a leading `(?i)`
-//   becomes the `i` flag), matched against the path as Gitleaks sees it (`scan/tree/<path>`).
+//   patterns are RE2 in the original; each is a plain subset that JavaScript reads the same way in Unicode mode (`u`
+//   on every pattern; a leading `(?i)` becomes `iu`, Unicode simple case folding as RE2 does, so `ſ` matches `s` and
+//   the Kelvin sign `k`), matched against each path the engine walks (`scan/tree/<folder>…`, `scan/tree/<path>`).
 
 /** SHA-256 of the configuration file these lists were read from. */
 export const GITLEAKS_DEFAULT_CONFIG_SHA256 = 'sha256:e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf';
@@ -238,29 +239,29 @@ export const GITLEAKS_RULE_IDS: ReadonlySet<string> = new Set([
 ]);
 
 export const GITLEAKS_GLOBAL_ALLOWLIST_PATHS: readonly RegExp[] = Object.freeze([
-  new RegExp("gitleaks\\.toml", ''),
-  new RegExp("\\.(?:bmp|gif|jpe?g|png|svg|tiff?)$", 'i'),
-  new RegExp("\\.(?:eot|[ot]tf|woff2?)$", 'i'),
-  new RegExp("\\.(?:docx?|xlsx?|pdf|bin|socket|vsidx|v2|suo|wsuo|.dll|pdb|exe|gltf)$", 'i'),
-  new RegExp("go\\.(?:mod|sum|work(?:\\.sum)?)$", ''),
-  new RegExp("(?:^|/)vendor/modules\\.txt$", ''),
-  new RegExp("(?:^|/)vendor/(?:github\\.com|golang\\.org/x|google\\.golang\\.org|gopkg\\.in|istio\\.io|k8s\\.io|sigs\\.k8s\\.io)(?:/.*)?$", ''),
-  new RegExp("(?:^|/)gradlew(?:\\.bat)?$", ''),
-  new RegExp("(?:^|/)gradle\\.lockfile$", ''),
-  new RegExp("(?:^|/)mvnw(?:\\.cmd)?$", ''),
-  new RegExp("(?:^|/)\\.mvn/wrapper/MavenWrapperDownloader\\.java$", ''),
-  new RegExp("(?:^|/)node_modules(?:/.*)?$", ''),
-  new RegExp("(?:^|/)(?:deno\\.lock|npm-shrinkwrap\\.json|package-lock\\.json|pnpm-lock\\.yaml|yarn\\.lock)$", ''),
-  new RegExp("(?:^|/)bower_components(?:/.*)?$", ''),
-  new RegExp("(?:^|/)(?:angular|bootstrap|jquery(?:-?ui)?|plotly|swagger-?ui)[a-zA-Z0-9.-]*(?:\\.min)?\\.js(?:\\.map)?$", ''),
-  new RegExp("(?:^|/)javascript\\.json$", ''),
-  new RegExp("(?:^|/)(?:Pipfile|poetry)\\.lock$", ''),
-  new RegExp("(?:^|/)(?:v?env|virtualenv)/lib(?:64)?(?:/.*)?$", 'i'),
-  new RegExp("(?:^|/)(?:lib(?:64)?/python[23](?:\\.\\d{1,2})+|python/[23](?:\\.\\d{1,2})+/lib(?:64)?)(?:/.*)?$", 'i'),
-  new RegExp("(?:^|/)[a-z0-9_.]+-[0-9.]+\\.dist-info(?:/.+)?$", 'i'),
-  new RegExp("(?:^|/)vendor/(?:bundle|ruby)(?:/.*?)?$", ''),
-  new RegExp("\\.gem$", ''),
-  new RegExp("verification-metadata\\.xml", ''),
-  new RegExp("Database.refactorlog", ''),
-  new RegExp("(?:^|/)\\.git$", ''),
+  new RegExp("gitleaks\\.toml", 'u'),
+  new RegExp("\\.(?:bmp|gif|jpe?g|png|svg|tiff?)$", 'iu'),
+  new RegExp("\\.(?:eot|[ot]tf|woff2?)$", 'iu'),
+  new RegExp("\\.(?:docx?|xlsx?|pdf|bin|socket|vsidx|v2|suo|wsuo|.dll|pdb|exe|gltf)$", 'iu'),
+  new RegExp("go\\.(?:mod|sum|work(?:\\.sum)?)$", 'u'),
+  new RegExp("(?:^|/)vendor/modules\\.txt$", 'u'),
+  new RegExp("(?:^|/)vendor/(?:github\\.com|golang\\.org/x|google\\.golang\\.org|gopkg\\.in|istio\\.io|k8s\\.io|sigs\\.k8s\\.io)(?:/.*)?$", 'u'),
+  new RegExp("(?:^|/)gradlew(?:\\.bat)?$", 'u'),
+  new RegExp("(?:^|/)gradle\\.lockfile$", 'u'),
+  new RegExp("(?:^|/)mvnw(?:\\.cmd)?$", 'u'),
+  new RegExp("(?:^|/)\\.mvn/wrapper/MavenWrapperDownloader\\.java$", 'u'),
+  new RegExp("(?:^|/)node_modules(?:/.*)?$", 'u'),
+  new RegExp("(?:^|/)(?:deno\\.lock|npm-shrinkwrap\\.json|package-lock\\.json|pnpm-lock\\.yaml|yarn\\.lock)$", 'u'),
+  new RegExp("(?:^|/)bower_components(?:/.*)?$", 'u'),
+  new RegExp("(?:^|/)(?:angular|bootstrap|jquery(?:-?ui)?|plotly|swagger-?ui)[a-zA-Z0-9.-]*(?:\\.min)?\\.js(?:\\.map)?$", 'u'),
+  new RegExp("(?:^|/)javascript\\.json$", 'u'),
+  new RegExp("(?:^|/)(?:Pipfile|poetry)\\.lock$", 'u'),
+  new RegExp("(?:^|/)(?:v?env|virtualenv)/lib(?:64)?(?:/.*)?$", 'iu'),
+  new RegExp("(?:^|/)(?:lib(?:64)?/python[23](?:\\.\\d{1,2})+|python/[23](?:\\.\\d{1,2})+/lib(?:64)?)(?:/.*)?$", 'iu'),
+  new RegExp("(?:^|/)[a-z0-9_.]+-[0-9.]+\\.dist-info(?:/.+)?$", 'iu'),
+  new RegExp("(?:^|/)vendor/(?:bundle|ruby)(?:/.*?)?$", 'u'),
+  new RegExp("\\.gem$", 'u'),
+  new RegExp("verification-metadata\\.xml", 'u'),
+  new RegExp("Database.refactorlog", 'u'),
+  new RegExp("(?:^|/)\\.git$", 'u'),
 ]);

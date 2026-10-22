@@ -41,3 +41,20 @@ export function captured(dir: string, files: Record<string, string | Buffer>) {
     return { relativePath, artifact, path };
   });
 }
+
+/**
+ * Paths that probe the engine's allowlist matching, especially Unicode case folding: RE2's (?i) folds `ſ` (U+017F)
+ * with `s` and the Kelvin sign (U+212A) with `k`. Each extension and folder pattern of the default allowlist appears
+ * as written, upper-cased, and with every s → ſ and k → K (Kelvin); near misses that must not match are included.
+ */
+export function allowlistCorpus(): string[] {
+  const fold = (w: string) => [...new Set([w, w.toUpperCase(), w.replaceAll('s', 'ſ'), w.replaceAll('k', 'K'), w.replaceAll('S', 'ſ')])];
+  const exts = ['png', 'gif', 'jpeg', 'svg', 'tiff', 'ttf', 'woff2', 'docx', 'xlsx', 'pdf', 'bin', 'socket', 'vsidx', 'suo', 'wsuo', 'dll', 'pdb', 'exe', 'gltf'];
+  const out = new Set<string>();
+  for (const ext of exts) for (const v of fold(ext)) { out.add(`data/config.${v}`); out.add(`dir.${v}/token.env`); }
+  for (const v of fold('dist-info')) out.add(`site/pkg-1.0.${v}/token.env`);
+  for (const v of fold('virtualenv')) out.add(`${v}/lib/token.env`);
+  for (const v of fold('python')) out.add(`x/lib/${v}3.11/token.env`);
+  for (const near of ['data/config.sockets', 'data/configsocket', 'images/token.env', 'data/config.ſockets', 'png/token.env', 'data/config.ṕng']) out.add(near);
+  return [...out].sort();
+}

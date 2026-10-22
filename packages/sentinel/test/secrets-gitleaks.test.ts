@@ -64,6 +64,9 @@ test('the pinned global allowlist reads the way Gitleaks reads it', () => {
   // A folder the allowlist matches is pruned whole by the engine: everything below it is skipped too.
   for (const p of ['images.png/token.env', 'package-lock.json/token.env', 'a/images.png/b/token.env', 'docs/report.pdf/notes.txt']) assert.ok(toolAllowlisted(p), p);
   for (const p of ['src/index.ts', 'config/.env', 'package.json', 'docs/readme.md', 'lockfile.json', 'images/token.env', 'png/x.env']) assert.ok(!toolAllowlisted(p), p);
+  // RE2's (?i) folds by Unicode simple case folding: the engine skips these, so the host must too.
+  for (const p of ['data/config.\u017Focket', 'data/config.soc\u212Aet', 'IMG/A.\u017FVG', 'dir.\u017Fuo/x.env', 'site/pkg-1.0.di\u017Ft-info/x.env']) assert.ok(toolAllowlisted(p), p);
+  for (const p of ['data/config.\u017Fockets', 'data/config.p\u0301ng']) assert.ok(!toolAllowlisted(p), p);
 });
 
 test('a report line carries a pinned rule, whole lines and an index, never a path', () => {
