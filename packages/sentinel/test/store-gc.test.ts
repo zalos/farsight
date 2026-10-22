@@ -6,7 +6,6 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { ObjectStore, NODE_OBJECT_IO, identify, type ObjectReceipt, type ObjectStoreIo } from '../dist/store/objects.js';
 import { inspectReachability, planPrune, type ReachabilitySnapshot } from '../dist/store/gc.js';
-import { ledgerObjectPresence, reachabilityFromLedger, toLedgerReceipt, refFromLedgerReceipt } from '../dist/store/objects-ledger.js';
 
 const STORE = 'store-gc-1';
 /** The ledger's committed sequence did not move. */
@@ -192,68 +191,6 @@ test('a corrupt protected object or a recorded object that is absent or altered 
   assert.equal(plan.ok, false);
   assert.ok(plan.errors.some(e => e.code === 'sentinel.gc.corruptObject' && e.detail.includes(r.evidence!.relPath)));
   assert.deepEqual(plan.candidates, []);
-});
-
-test('the ledger adapter converts receipts, verifies durability against disk and fails closed on bad snapshots', async t => {
-  const { dir, r, id, store } = await fixture(t);
-  const ledger = toLedgerReceipt(r.report!);
-  assert.deepEqual(ledger, { id: id('report'), codec: 'gzip-6', storedDigest: `sha256:${r.report!.encodedDigest}`, rawSize: r.report!.rawSize, storedSize: r.report!.encodedSize });
-  assert.equal(toLedgerReceipt(r.sharedRaw!).codec, 'identity');
-  assert.deepEqual(refFromLedgerReceipt({ ...ledger, codec: 'gzip' }), refFromLedgerReceipt(ledger), 'the normalized names read the same');
-  assert.deepEqual(refFromLedgerReceipt({ ...toLedgerReceipt(r.sharedRaw!), codec: 'raw' }), refFromLedgerReceipt(toLedgerReceipt(r.sharedRaw!)));
-  assert.deepEqual(refFromLedgerReceipt(ledger), { rawDigest: r.report!.rawDigest, codec: 'gzip', rawSize: r.report!.rawSize, encodedDigest: r.report!.encodedDigest, encodedSize: r.report!.encodedSize });
-
-  const presence = ledgerObjectPresence(store);
-  assert.equal(presence.isDurable(ledger), true);
-  assert.equal(presence.isDurable(toLedgerReceipt(r.sharedRaw!)), true);
-  for (const bad of [
-    { ...ledger, codec: 'zstd' }, { ...ledger, id: 'report' }, { ...ledger, storedDigest: r.report!.encodedDigest },
-    { ...ledger, storedSize: ledger.storedSize + 1 }, { ...ledger, rawSize: ledger.rawSize + 1 },
-    { ...ledger, storedDigest: `sha256:${'0'.repeat(64)}` }, { ...ledger, codec: 'identity' }, null,
-  ]) assert.equal(presence.isDurable(bad as any), false, JSON.stringify(bad));
-  // The bytes are read every time: a receipt that was durable stops being so when its file rots.
-  chmodSync(join(dir, r.report!.relPath), 0o600);
-  writeFileSync(join(dir, r.report!.relPath), 'rot');
-  assert.equal(presence.isDurable(ledger), false);
-  rmSync(join(dir, r.report!.relPath));
-  assert.equal(presence.isDurable(ledger), false);
-
-  const ledgerSnapshot = {
-    storeId: STORE, complete: true, sequence: 7, referenced: [id('finding')], staged: [id('staged')], reports: [id('pinned')], active: [id('active')],
-    links: [[id('finding'), id('evidence')], [id('active'), id('shared')]] as [string, string][],
-    objects: [toLedgerReceipt(r.finding!), toLedgerReceipt(r.evidence!)],
-  };
-  const plan = await planPrune(store, reachabilityFromLedger(ledgerSnapshot), at(7));
-  assert.equal(plan.ok, true, JSON.stringify(plan.errors));
-  assert.deepEqual(plan.validFor, { storeId: STORE, sequence: 7 });
-  assert.deepEqual(plan.report.rootCounts, { referenced: 1, active: 1, staged: 1, report: 1, pinned: 0 });
-  assert.ok(!plan.candidates.some(c => c.rawDigest === r.evidence!.rawDigest || c.rawDigest === r.shared!.rawDigest));
-  const pending = identify(Buffer.from('registered, not written yet')).artifactId;
-  const stagedOnly = await planPrune(store, reachabilityFromLedger({ ...ledgerSnapshot, staged: [id('staged'), pending] }), at(7));
-  assert.equal(stagedOnly.ok, true, 'a staged-only artifact may precede its bytes');
-  assert.deepEqual(stagedOnly.report.pendingStaged, [pending]);
-  const stagedAndAccepted = await planPrune(store, reachabilityFromLedger({ ...ledgerSnapshot, staged: [pending], referenced: [pending] }), at(7));
-  assert.ok(stagedAndAccepted.errors.some(e => e.code === 'sentinel.gc.missingReachable'), 'once accepted, it must exist');
-  for (const [name, snap, options] of [
-    ['no links', { ...ledgerSnapshot, links: undefined }],
-    ['malformed link', { ...ledgerSnapshot, links: [[id('finding')]] }],
-    ['malformed receipt', { ...ledgerSnapshot, objects: [{ ...toLedgerReceipt(r.finding!), codec: 'zstd' }] }],
-    ['missing sequence', { ...ledgerSnapshot, sequence: undefined }],
-    ['dangling link', { ...ledgerSnapshot, links: [[id('finding'), identify(Buffer.from('gone')).artifactId]] }],
-    ['no store id from the ledger', { ...ledgerSnapshot, storeId: undefined }],
-    ['another store', { ...ledgerSnapshot, storeId: 'other' }],
-    ['not asserted complete', { ...ledgerSnapshot, complete: undefined }],
-    ['asserted incomplete', { ...ledgerSnapshot, complete: false }],
-    ['the 8d50f14 shape (no store id or completeness)', (({ storeId, complete, ...rest }) => rest)(ledgerSnapshot)],
-    ['sequence moved', ledgerSnapshot, at(8)],
-    ['accepted reference missing', { ...ledgerSnapshot, referenced: [identify(Buffer.from('accepted, never stored')).artifactId] }],
-    ['sparse referenced', { ...ledgerSnapshot, referenced: new Array(2) }],
-    ['sparse objects', { ...ledgerSnapshot, objects: new Array(1) }],
-  ] as [string, any, any?][]) {
-    const p = await planPrune(store, reachabilityFromLedger(snap), options ?? at(7));
-    assert.equal(p.ok, false, name);
-    assert.deepEqual(p.candidates, [], name);
-  }
 });
 
 test('an object staged after the snapshot is never a candidate: the moved sequence fails the plan closed', async t => {

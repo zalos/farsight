@@ -93,6 +93,15 @@ export interface ObjectRef {
   readonly storeId?: string;
 }
 
+/** A fresh measurement of one stored representation. */
+export interface ObjectMeasurement {
+  readonly rawDigest: string;
+  readonly codec: ObjectCodec;
+  readonly rawSize: number;
+  readonly encodedDigest: string;
+  readonly encodedSize: number;
+}
+
 export type ObjectCheck =
   | { readonly status: 'ok' }
   | { readonly status: 'missing' | 'corrupt' | 'unsafe'; readonly code: ObjectStoreErrorCode; readonly detail: string };
@@ -646,6 +655,21 @@ export class ObjectStore {
       if (e.code === 'sentinel.object.unsafePath') return { status: 'unsafe', code: e.code, detail: e.message };
       throw e;
     }
+  }
+
+  /**
+   * What is actually stored for (raw digest, codec), measured by reading and decoding it now: the stored digest
+   * and size and the decoded size. Null when it is absent, corrupt or unsafe. Nothing is taken from a receipt.
+   */
+  measureSync(rawDigest: string, codec: ObjectCodec): ObjectMeasurement | null {
+    let v: Verified;
+    try {
+      v = this.#readVerifiedSync({ rawDigest, codec });
+    } catch (e) {
+      if (e instanceof ObjectStoreError) return null;
+      throw e;
+    }
+    return Object.freeze({ rawDigest, codec, rawSize: v.decoded.length, encodedDigest: v.encodedDigest, encodedSize: v.encodedSize });
   }
 
   async check(ref: ObjectRef): Promise<ObjectCheck> {
