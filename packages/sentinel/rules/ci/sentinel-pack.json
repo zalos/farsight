@@ -1,0 +1,36 @@
+{
+  "schema": "sentinel-rulepack/draft-1",
+  "packId": "sentinel-ci",
+  "version": "0.1.0",
+  "rights": {
+    "spdx": "MIT",
+    "origin": "sentinel-original"
+  },
+  "rules": [
+    {
+      "familyId": "sentinel.ci.workflow-audit",
+      "revision": 1,
+      "titleKey": "sentinel.drivers.rule.workflowAudit",
+      "applicability": {
+        "languages": ["typescript", "javascript", "java"],
+        "scopeKind": "ci-config"
+      },
+      "requires": ["source-bytes", "source-span"],
+      "implementation": {
+        "adapterId": "ci-zizmor",
+        "rulePath": "detectors/zizmor-offline.json"
+      },
+      "meaning": "candidate",
+      "severity": "medium",
+      "evidenceRequired": ["source-span"],
+      "limitationKeys": ["sentinel.drivers.limitation.onlineAudits"],
+      "mappings": {
+        "cwe": []
+      },
+      "fixtures": {
+        "positive": ["fixtures/injection-workflow-yml.fixture"],
+        "negative": ["fixtures/hardened-workflow-yml.fixture"]
+      }
+    }
+  ]
+}

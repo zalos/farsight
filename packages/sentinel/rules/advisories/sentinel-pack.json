@@ -1,0 +1,36 @@
+{
+  "schema": "sentinel-rulepack/draft-1",
+  "packId": "sentinel-advisories",
+  "version": "0.1.0",
+  "rights": {
+    "spdx": "MIT",
+    "origin": "sentinel-original"
+  },
+  "rules": [
+    {
+      "familyId": "sentinel.deps.known-advisory",
+      "revision": 1,
+      "titleKey": "sentinel.drivers.rule.knownAdvisory",
+      "applicability": {
+        "languages": ["typescript", "javascript", "java"],
+        "scopeKind": "dependency-manifest"
+      },
+      "requires": ["dependency-manifest", "advisory-database"],
+      "implementation": {
+        "adapterId": "advisories-osv",
+        "rulePath": "detectors/osv-offline.json"
+      },
+      "meaning": "finding",
+      "severity": "high",
+      "evidenceRequired": ["dependency-version", "advisory-id"],
+      "limitationKeys": ["sentinel.drivers.limitation.advisorySnapshot"],
+      "mappings": {
+        "cwe": ["CWE-1395"]
+      },
+      "fixtures": {
+        "positive": ["fixtures/vulnerable-package-lock-json.fixture"],
+        "negative": ["fixtures/clean-package-lock-json.fixture"]
+      }
+    }
+  ]
+}

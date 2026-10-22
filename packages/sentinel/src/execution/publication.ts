@@ -40,7 +40,7 @@ export interface PublishRequest {
   endedAt: string;
   hooks?: PublicationHooks;
   /** Coordinator records published with the result (the influence manifest, the coverage evaluation), in order. */
-  records?: ReadonlyArray<{ value: unknown; schema: string }>;
+  records?: ReadonlyArray<{ value: unknown; schema: string; privacy?: 'metadata' | 'source-derived' | 'source' }>;
   /** Checks the budget before staging, after every object write, and immediately before acceptance; throws to refuse. */
   beforeAccept?: () => void;
 }
@@ -60,7 +60,7 @@ export async function publishOutcome(request: PublishRequest): Promise<Publicati
   const staged: StagedArtifact[] = [
     { id: resultIdentity.id, schema: RESULT_SCHEMA, privacy: 'source-derived', links: [...new Set(artifactIds)].filter(id => id !== resultIdentity.id) },
     ...records.filter((r, i) => r.identity.id !== resultIdentity.id && recordIds.indexOf(r.identity.id) === i && !artifactIds.includes(r.identity.id))
-      .map(r => ({ id: r.identity.id, schema: r.schema, privacy: 'metadata' as const })),
+      .map(r => ({ id: r.identity.id, schema: r.schema, privacy: r.privacy ?? 'metadata' })),
     ...request.outputs.filter(o => o.id !== resultIdentity.id)
       .map(o => ({ id: o.id, schema: o.mediaType.slice(0, 128) || 'application/octet-stream', privacy: 'source-derived' as const })),
   ];

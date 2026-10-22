@@ -343,6 +343,33 @@ try {
     }
   }
 
+  // Production rule packs are data, with no scanner activation, engine, database or permission bundled.
+  if (existsSync(join(sourceDir, 'scripts', 'package-assets-drivers.mjs'))) {
+    const manifest = JSON.parse(readFileSync(join(installed, 'assets', 'drivers', 'manifest.json'), 'utf8'));
+    assert.equal(manifest.schema, 'sentinel-driver-assets/draft-1');
+    assert.equal(manifest.registered, false);
+    assert.deepEqual(manifest.packs.map(p => p.path).sort(), ['rules/advisories', 'rules/ci', 'rules/infrastructure']);
+    for (const pack of manifest.packs) {
+      assert.deepEqual(pack.rights, { spdx: 'MIT', origin: 'sentinel-original' });
+      for (const file of pack.files) {
+        const bytes = readFileSync(join(installed, pack.path, file.path));
+        assert.equal(bytes.length, file.size);
+        assert.equal(`sha256:${createHash('sha256').update(bytes).digest('hex')}`, file.digest);
+        assert.equal(digest(join(installed, pack.path, file.path)), digest(join(sourceDir, pack.path, file.path)));
+      }
+      const validated = JSON.parse(await evalModule(`
+        import { createRequire } from 'node:module';
+        import { dirname } from 'node:path';
+        import { readPackDirectory, validatePack } from 'farsight-sentinel/rules';
+        const r = createRequire(process.cwd() + '/');
+        const dir = dirname(r.resolve(${JSON.stringify('farsight-sentinel/' + pack.path + '/sentinel-pack.json')}));
+        const p = validatePack(readPackDirectory(dir));
+        console.log(JSON.stringify({packId: p.entry.packId, packDigest: p.entry.packDigest, rules: p.entry.rules}));
+      `));
+      assert.deepEqual(validated, {packId: pack.packId, packDigest: pack.packDigest, rules: pack.rules});
+    }
+  }
+
   // OSV assets: the in-container worker ships with its exact digest and rights; no advisory database ships.
   let osvDemo = '';
   if (existsSync(join(sourceDir, 'scripts', 'package-assets-osv.mjs'))) {

@@ -1932,3 +1932,16 @@ before touching prior build artifacts. The regression test uses a disposable unb
 show a pinned GitHub tarball install for CI and distinguish a release commit from subsequent `main` changes.
 MCP already reports its running build in `graph_overview`; `refresh_graph` already re-ingests and reloads,
 so upgrading the process still requires reconnecting it.
+
+
+### Canonical scanner drivers (2026-10-22)
+
+The internal Pattern, OSV, Trivy and zizmor drivers now use the coordinator's existing trusted driver registry.
+They require exact shipped rule definitions, engine pins, captured input scopes and explicitly held database/checks
+provenance. No driver acquires assets or starts an engine directly. Missing assets refuse preparation and cannot
+produce clean coverage; the public CLI and capability manager remain integration work. Normalized findings/reports
+are source-derived and publish with per-check coverage in the accepted worker attempt. The small seam delta exposes
+the exact supervisor outcome frozen in place, permits validated actual-read refinement within sealed captured scopes,
+and preserves per-record privacy. Original rule assets are packaged with a digest manifest. Focused checks include
+real canonical plan/bootstrap/container/publication for all four engines, negative read-boundary tests, package import
+checks, typecheck, catalog and schema checks; detailed final evidence is kept privately with the implementation review.
