@@ -57,7 +57,7 @@ export function buildManifest(tag, versions) {
 }
 
 /** Checks a manifest's shape; returns it. Every field is checked, unknown fields are refused. */
-export function checkManifest(value, { assets = false } = {}) {
+export function checkManifest(value, { assets = false, loopback = false } = {}) {
   const keys = (o, want, where) => {
     const got = Object.keys(o ?? {}).sort().join(',');
     if (got !== [...want].sort().join(',')) fail(`${where}: expected fields ${[...want].sort().join(', ')}, got ${got || 'none'}`);
@@ -66,7 +66,9 @@ export function checkManifest(value, { assets = false } = {}) {
   keys(value, assets ? ['schema', 'tag', 'commit', 'repoUrl', 'packages'] : ['schema', 'tag', 'packages'], 'manifest');
   if (value.schema !== MANIFEST_SCHEMA) fail(`manifest schema is ${value.schema}, not ${MANIFEST_SCHEMA}`);
   if (!TAG.test(value.tag)) fail(`manifest tag ${value.tag} is not a release tag`);
-  if (assets && (!COMMIT.test(value.commit ?? '') || !/^https:\/\/[^\s]+$/.test(value.repoUrl ?? ''))) fail('asset manifest: commit or repoUrl is malformed');
+  // A release is served over HTTPS; only a test of the verifier may name a loopback origin.
+  const origin = loopback ? /^(?:https:\/\/[^\s]+|http:\/\/127\.0\.0\.1:\d+(?:\/[^\s]*)?)$/ : /^https:\/\/[^\s]+$/;
+  if (assets && (!COMMIT.test(value.commit ?? '') || !origin.test(value.repoUrl ?? ''))) fail('asset manifest: commit or repoUrl is malformed');
   const known = new Map(PACKAGES.map((p) => [p.key, p]));
   if (!value.packages || typeof value.packages !== 'object' || !value.packages.farsight) fail('manifest: packages must include farsight');
   for (const [key, entry] of Object.entries(value.packages)) {

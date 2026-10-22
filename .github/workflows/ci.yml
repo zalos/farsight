@@ -142,6 +142,16 @@ jobs:
         run: |
           test -f packages/sentinel/package.json || { echo "::error::packages/sentinel/package.json is missing"; exit 1; }
           pnpm test:sentinel:package
+      # The release acceptance on these two tarballs: each package alone and both, global and project-local, from
+      # URLs, with only node, npm and npx. Gates for Sentinel features not built yet are listed as pending.
+      - name: Accept both tarballs in clean npm-only consumers
+        run: |
+          fv="$(node -p "require('./package.json').version")"
+          sv="$(node -p "require('./packages/sentinel/package.json').version")"
+          commit="$(node -e "import('./packages/core/dist/version.js').then((m) => console.log(m.gitIdentity('.').commit))")"
+          node scripts/npm-acceptance.mjs --farsight "build/farsight-cli-$fv.tgz" --expect-farsight "$fv" \
+            --sentinel "build/sentinel/farsight-sentinel-$sv.tgz" --expect-sentinel "$sv" --expect-commit "$commit" \
+            --report "$RUNNER_TEMP/acceptance.json"
 
   # Sentinel's real-container isolation canaries (PR 07). The pinned canary image is installed here, by digest,
   # before the tests; the code under test never pulls and refuses a missing image. SENTINEL_ISOLATION=1 makes a

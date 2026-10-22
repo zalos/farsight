@@ -50,6 +50,10 @@ export function selectChecks(paths, { packageInputs, isolationInputs } = {}) {
     if (['docs/ECHO.md', 'packages/echo/README.md', 'scripts/pack-echo.mjs',
       'scripts/test-echo-package.mjs', '.echo/settings.example.json', '.echo/connection.example.json'].includes(path)) {
       checks.echo = true;
+    } else if (path === 'scripts/npm-acceptance.mjs') {
+      // The clean npm acceptance both packages' tarballs run through in sentinel-package, and its script tests.
+      // (npm-consumer.mjs, which it builds on, is shared packaging and selects everything below.)
+      checks.validate = checks.sentinel = true;
     } else if (['packages/sentinel/README.md', 'scripts/pack-sentinel.mjs', 'scripts/test-sentinel-package.mjs'].includes(path)) {
       // Sentinel's tarball and its packaging; Farsight's package does not include it.
       checks.sentinel = true;
@@ -64,7 +68,7 @@ export function selectChecks(paths, { packageInputs, isolationInputs } = {}) {
     } else if (path.startsWith('packages/sentinel/test/')) {
       checks.validate = checks.isolation = true;
     } else if (/^packages\/[^/]+\/test\//.test(path) || path.startsWith('scripts/test/') ||
-      /^scripts\/(?:changelog|release|install-hooks|lint-commits)\.mjs$/.test(path)) {
+      /^scripts\/(?:changelog|release|release-manifest|verify-release|install-hooks|lint-commits)\.mjs$/.test(path)) {
       checks.validate = true;
     } else if (/^(?:packages|examples|schemas)\//.test(path)) {
       checks.validate = checks.e2e = true;
