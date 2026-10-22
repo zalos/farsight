@@ -11,7 +11,7 @@
 //   pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs
 //   → build/sentinel/farsight-sentinel-<sentinel version>.tgz
 import { build } from 'esbuild';
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { dirname, isAbsolute, join, relative } from 'node:path';
@@ -84,37 +84,24 @@ for (const member of buildClosure(root, sentinel.name).closure) {
   }
 }
 
-const base = join(root, 'build', 'sentinel');
-const out = join(base, 'package');
-rmSync(base, { recursive: true, force: true });
-mkdirSync(join(out, 'dist'), { recursive: true });
-await build({
-  entryPoints: Object.fromEntries([...entries].map(([name, source]) => [name, source])),
-  bundle: true, platform: 'node', format: 'esm', target: 'node24',
-  outdir: join(out, 'dist'), outExtension: { '.js': '.mjs' },
-  external: Object.keys(dependencies).flatMap((name) => [name, `${name}/*`]),
-  // inlined CommonJS dependencies call require() for builtins; an ESM bundle has none
-  banner: { js: "import { createRequire as __sentinelCreateRequire } from 'node:module';\nconst require = __sentinelCreateRequire(import.meta.url);" },
-});
-// esbuild keeps an entry's own shebang; a bin without one still has to run from npm's .bin link.
-for (const target of new Set(Object.values(bins))) {
-  const path = join(out, target);
-  const text = readFileSync(path, 'utf8');
-  if (!text.startsWith('#!')) writeFileSync(path, '#!/usr/bin/env node\n' + text);
-}
-
-// tsc's declarations, in their own layout: `./x.js` specifiers inside them resolve to `./x.d.ts`.
+// tsc's declarations, read and checked before anything is staged. They ship in their own layout:
+// `./x.js` specifiers inside them resolve to `./x.d.ts`, so each relative target must exist too.
+const declarations = new Map();
 const specifiers = new Set();
 const dist = join(dir, 'dist');
+const brokenRelative = [];
 for (const file of readdirSync(dist, { recursive: true }).map(String).filter((f) => f.endsWith('.d.ts'))) {
   const text = readFileSync(join(dist, file), 'utf8').replace(/^\/\/# sourceMappingURL=\S+$/m, '').trimEnd() + '\n';
-  for (const m of text.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+|\/\/\/\s*<reference\s+types=)["']([^"']+)["']/gm)) specifiers.add(m[1]);
-  mkdirSync(dirname(join(out, 'dist', file)), { recursive: true });
-  writeFileSync(join(out, 'dist', file), text);
+  for (const m of text.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+|\/\/\/\s*<reference\s+types=)["']([^"']+)["']/gm)) {
+    if (!m[1].startsWith('.')) { specifiers.add(m[1]); continue; }
+    const target = join(dirname(join(dist, file)), m[1]).replace(/\.js$/, '.d.ts');
+    if (!existsSync(target) && !existsSync(join(target.replace(/\.d\.ts$/, ''), 'index.d.ts'))) brokenRelative.push(`${file}: ${m[1]}`);
+  }
+  declarations.set(file, text);
 }
-const bare = [...specifiers].filter((s) => !s.startsWith('.'));
+if (brokenRelative.length) fail('a declaration imports a sibling declaration that is not built. Run `pnpm --filter @farsight/sentinel... build`.', brokenRelative.map((s) => `missing: ${s}`));
 const packageOf = (s) => (s.startsWith('@') ? s.split('/').slice(0, 2).join('/') : s.split('/')[0]);
-const unresolvable = bare.filter((s) => {
+const unresolvable = [...specifiers].filter((s) => {
   const name = packageOf(s);
   if (s.startsWith('node:') || builtinModules.includes(name)) return !dependencies['@types/node'];
   return name.startsWith('@farsight/') || !dependencies[name];
@@ -123,21 +110,58 @@ if (unresolvable.length) {
   fail('a declaration imports a module a consumer could not resolve (a workspace package, or one the tarball does not declare; node: builtins need @types/node).', unresolvable.map((s) => `import: ${s}`));
 }
 
-const files = ['dist'];
-if (schemaFiles.length) {
-  cpSync(schemaDir, join(out, 'schemas'), { recursive: true });
-  files.push('schemas');
-  exportsMap['./schemas/*'] = './schemas/*';
+// Everything is built in a staging directory; build/sentinel is replaced only after the bundle and
+// the tarball succeed, and other packages' outputs in build/ are never touched.
+const version = sentinel.version ?? pkg.version;
+const buildDir = join(root, 'build');
+mkdirSync(buildDir, { recursive: true });
+const stage = mkdtempSync(join(buildDir, '.stage-sentinel-'));
+const out = join(stage, 'package');
+try {
+  mkdirSync(join(out, 'dist'), { recursive: true });
+  await build({
+    logLevel: 'silent',
+    entryPoints: Object.fromEntries([...entries].map(([name, source]) => [name, source])),
+    bundle: true, platform: 'node', format: 'esm', target: 'node24',
+    outdir: join(out, 'dist'), outExtension: { '.js': '.mjs' },
+    external: Object.keys(dependencies).flatMap((name) => [name, `${name}/*`]),
+    // inlined CommonJS dependencies call require() for builtins; an ESM bundle has none
+    banner: { js: "import { createRequire as __sentinelCreateRequire } from 'node:module';\nconst require = __sentinelCreateRequire(import.meta.url);" },
+  });
+  // esbuild keeps an entry's own shebang; a bin without one still has to run from npm's .bin link.
+  for (const target of new Set(Object.values(bins))) {
+    const path = join(out, target);
+    const text = readFileSync(path, 'utf8');
+    if (!text.startsWith('#!')) writeFileSync(path, '#!/usr/bin/env node\n' + text);
+  }
+  for (const [file, text] of declarations) {
+    mkdirSync(dirname(join(out, 'dist', file)), { recursive: true });
+    writeFileSync(join(out, 'dist', file), text);
+  }
+
+  const files = ['dist'];
+  if (schemaFiles.length) {
+    cpSync(schemaDir, join(out, 'schemas'), { recursive: true });
+    files.push('schemas');
+    exportsMap['./schemas/*'] = './schemas/*';
+  }
+  for (const doc of ['README.md']) if (existsSync(join(dir, doc))) { cpSync(join(dir, doc), join(out, doc)); files.push(doc); }
+  writeFileSync(join(out, 'package.json'), JSON.stringify({
+    name: 'farsight-sentinel', version,
+    ...(sentinel.private ? { private: true } : {}),
+    description: sentinel.description ?? 'Optional Sentinel package for Farsight, installed and run separately from farsight-cli.',
+    license: 'MIT', ...(pkg.repository ? { repository: pkg.repository } : {}), type: 'module',
+    bin: bins, types: exportsMap['.'].types, exports: exportsMap, files,
+    ...(Object.keys(dependencies).length ? { dependencies } : {}),
+    engines: { node: sentinel.engines?.node ?? pkg.engines?.node ?? '>=24' },
+  }, null, 2) + '\n');
+  execFileSync('npm', ['pack', '--pack-destination', '..'], { cwd: out, stdio: 'inherit' });
+} catch (error) {
+  rmSync(stage, { recursive: true, force: true });
+  const detail = error?.errors?.length ? error.errors.map((e) => `${e.location?.file ?? ''} ${e.text}`.trim()) : [error?.message];
+  fail('the bundle or the tarball failed; prior artifacts in build/ are unchanged.', detail);
 }
-for (const doc of ['README.md']) if (existsSync(join(dir, doc))) { cpSync(join(dir, doc), join(out, doc)); files.push(doc); }
-writeFileSync(join(out, 'package.json'), JSON.stringify({
-  name: 'farsight-sentinel', version: sentinel.version ?? pkg.version,
-  ...(sentinel.private ? { private: true } : {}),
-  description: sentinel.description ?? 'Optional Sentinel package for Farsight, installed and run separately from farsight-cli.',
-  license: 'MIT', ...(pkg.repository ? { repository: pkg.repository } : {}), type: 'module',
-  bin: bins, types: exportsMap['.'].types, exports: exportsMap, files,
-  ...(Object.keys(dependencies).length ? { dependencies } : {}),
-  engines: { node: sentinel.engines?.node ?? pkg.engines?.node ?? '>=24' },
-}, null, 2) + '\n');
-execFileSync('npm', ['pack', '--pack-destination', '..'], { cwd: out, stdio: 'inherit' });
-console.log(`\npackaged: build/sentinel/farsight-sentinel-${sentinel.version ?? pkg.version}.tgz`);
+const published = join(buildDir, 'sentinel');
+rmSync(published, { recursive: true, force: true });
+renameSync(stage, published);
+console.log(`\npackaged: build/sentinel/farsight-sentinel-${version}.tgz`);

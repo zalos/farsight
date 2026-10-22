@@ -96,7 +96,10 @@ exports map (zero schemas fails); the package's valid fixtures validate through 
 version is refused; `engines.node` is a floor this Node meets and no `workspace:` specifier leaks; and neither `farsight-cli` nor
 any `@farsight/*` package is installed with it. The job fails, rather than skips, when the Sentinel manifest is
 missing. No scanner, container, model or provider is started; npm fetches only declared third-party
-dependencies. Order matters locally too: `scripts/pack.mjs` replaces `build/` wholesale.
+dependencies. Both packers build in a staging directory under `build/` and replace only their own outputs
+(`build/farsight-cli*`, `build/sentinel/`) after the bundle and the tarball succeed: a missing compiled module
+anywhere in the closure fails the pack with every prior artifact, and other packages' outputs, left in place.
+`node scripts/pack.mjs --check` runs the preflight and the full staged bundle and replaces nothing.
 Sentinel's fast schema tests are its package `test` script, so they run in `validate` with every other package;
 container and kill-matrix suites are explicit opt-ins with named skip reasons. `sentinel-package` becomes a required
 check once it has passed on `main` (an owner branch-protection change); until then it is reported but not required.

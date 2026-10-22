@@ -198,7 +198,9 @@ may depend on `@farsight/graph`, `@farsight/code-parser` and `@farsight/core`; n
 depends on it, and core never imports it. `farsight-cli` does not bundle, import or initialize Sentinel, scanners,
 containers or model SDKs: its pack preflight (`scripts/pack-preflight.mjs`) requires only the compiled outputs
 of the CLI's own `workspace:` dependency closure, so an absent or unbuilt Sentinel cannot block a Farsight
-release, and that check still runs before any prior artifact is removed. Sentinel ships separately as the
+release. Both packers then bundle into a staging directory and replace only their own outputs once the bundle
+and the tarball succeed, so an incomplete build (a compiled module re-exporting one that was never built) fails
+with every prior artifact intact. Sentinel ships separately as the
 `farsight-sentinel` tarball (`scripts/pack-sentinel.mjs`): its bins and root export are bundled with Sentinel's
 workspace closure inlined, its third-party dependencies stay declared, tsc's declarations ship as its public types
 (every JavaScript export needs a `types` condition, and a declaration that imports a workspace package is refused),

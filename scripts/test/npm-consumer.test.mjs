@@ -40,6 +40,18 @@ test('npm sees only the task-local config files', () => {
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 });
 
+test("the caller's .npmrc settings (save-exact through an inherited userconfig) do not apply", () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'npm-env-'));
+  try {
+    const caller = join(scratch, 'caller.npmrc');
+    writeFileSync(caller, 'save-exact=true\n');
+    const inherited = { ...process.env, npm_config_userconfig: caller, NPM_CONFIG_SAVE_EXACT: 'true' };
+    assert.equal(execFileSync('npm', ['config', 'get', 'save-exact'], { env: inherited, encoding: 'utf8' }).trim(), 'true', 'the repro applies it');
+    const local = mkdtempSync(join(scratch, 'consumer-'));
+    assert.equal(execFileSync('npm', ['config', 'get', 'save-exact'], { env: cleanNpmEnv(local, inherited), encoding: 'utf8' }).trim(), 'false');
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
+});
+
 test('a failed install removes the scratch consumer and names the npm step', async () => {
   const prefix = `npm-consumer-fail-${process.pid}-`;
   const before = readdirSync(tmpdir()).filter((name) => name.startsWith(prefix));

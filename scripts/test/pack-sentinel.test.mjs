@@ -3,7 +3,7 @@
 // compiled by tsc). The real package's contracts are its own; CI smokes the real tarball.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -174,5 +174,45 @@ test("third-party dependencies of Sentinel's closure stay external and are decla
     const conflict = node(root, 'pack-sentinel.mjs');
     assert.equal(conflict.status, 1);
     assert.match(conflict.stderr, /ajv is required as both/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a missing transitive compiled module or sibling declaration fails before build/sentinel is replaced', () => {
+  const root = workspace();
+  try {
+    write(root, 'build/sentinel/farsight-sentinel-prior.tgz', 'prior');
+    // core's main exists, but re-exports a module that was never compiled: only a real bundle sees it
+    write(root, 'packages/core/dist/index.js', "export * from './counts.js';\n");
+    write(root, 'packages/sentinel/src/index.ts', readFileSync(join(root, 'packages/sentinel/src/index.ts'), 'utf8') +
+      "export * as core from '../../core/dist/index.js';\n");
+    const bundle = node(root, 'pack-sentinel.mjs');
+    assert.equal(bundle.status, 1);
+    assert.match(bundle.stderr, /prior artifacts in build\/ are unchanged[\s\S]*counts\.js/);
+    assert.equal(existsSync(join(root, 'build/sentinel/farsight-sentinel-prior.tgz')), true);
+    assert.equal(existsSync(join(root, 'build/sentinel/keep.txt')), true);
+
+    write(root, 'packages/core/dist/index.js', '');
+    write(root, 'packages/sentinel/dist/index.d.ts', readFileSync(join(root, 'packages/sentinel/dist/index.d.ts'), 'utf8') +
+      "\nexport type { Gone } from './gone.js';\n");
+    const decl = node(root, 'pack-sentinel.mjs');
+    assert.equal(decl.status, 1);
+    assert.match(decl.stderr, /sibling declaration that is not built[\s\S]*index\.d\.ts: \.\/gone\.js/);
+    assert.equal(existsSync(join(root, 'build/sentinel/farsight-sentinel-prior.tgz')), true);
+    assert.deepEqual(readdirSync(join(root, 'build')).filter((n) => n.startsWith('.stage-')), []);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a successful Sentinel pack replaces build/sentinel only', () => {
+  const root = workspace();
+  try {
+    write(root, 'build/farsight-cli-0.0.0.tgz', 'cli');
+    write(root, 'build/echo/farsight-echo-0.0.0.tgz', 'echo');
+    const run = node(root, 'pack-sentinel.mjs');
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(existsSync(tarball(root)), true);
+    assert.equal(existsSync(join(root, 'build/sentinel/keep.txt')), false, 'its own prior output is replaced');
+    assert.equal(existsSync(join(root, 'build/farsight-cli-0.0.0.tgz')), true);
+    assert.equal(existsSync(join(root, 'build/echo/farsight-echo-0.0.0.tgz')), true);
+    assert.deepEqual(readdirSync(join(root, 'build')).filter((n) => n.startsWith('.stage-')), []);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

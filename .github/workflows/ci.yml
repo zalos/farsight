@@ -114,7 +114,7 @@ jobs:
   # Sentinel is a separate optional package (ADR 18). Farsight's tarball is packed with only the
   # CLI's build closure, so Sentinel is unbuilt, and must install and start from a clean npm
   # consumer; then Sentinel's own tarball installs, imports and answers --help on its own.
-  # Order matters: scripts/pack.mjs replaces build/ wholesale.
+  # Each packer stages its build and replaces only its own outputs in build/.
   sentinel-package:
     name: sentinel-package
     needs: changes
