@@ -37,7 +37,7 @@ export function preview() {
     denominator: { validFiles: 9, positiveSymbols: 9, safeSymbols: 9, inputControlsOutsideCapability: 3 },
     scenarios: ['version', 'valid-pattern', 'valid-taint', 'partial', 'out-of-rule-language', 'oversize', 'missing-rules'],
     effects: { writes: false, containerExecution: false, network: false, providerCalls: false },
-    limits: { commandMs: 120000, outputBytes: 4194304, engineJobs: 1, ruleTimeoutSeconds: 20, maxTargetBytes: 4096, memoryBytes: 2147483648, cpus: 2, pids: 128 },
+    limits: { commandMs: 120000, outputBytes: 4194304, engineJobs: 1, ruleTimeoutSeconds: 20, maxTargetBytes: 4096, memoryBytes: 2147483648, memorySwapBytes: 2147483648, cpus: 2, pids: 128 },
     decision: 'Only proposed micro-corpus criteria are evaluated; capability acceptance and pattern-default selection belong to the lead/owner.' };
 }
 async function provenance(runner, corpus) {

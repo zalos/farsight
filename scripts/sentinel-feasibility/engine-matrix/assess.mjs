@@ -1,3 +1,4 @@
+import { CANDIDATES } from '../../sentinel-feasibility-scanners.mjs';
 const pathOf = value => String(value ?? '').replace(/^\/input\//, '').replace(/^\.\//, '');
 const ruleOf = value => String(value ?? '').split('.').at(-1);
 const inSpan = (finding, label) => pathOf(finding.path) === label.path && Number.isInteger(finding.start?.line) && Number.isInteger(finding.end?.line) && finding.start.line >= label.startLine && finding.end.line >= finding.start.line && finding.end.line <= label.endLine;
@@ -65,27 +66,34 @@ export function completed(record) {
 }
 export function controls(record) {
   const isolation = record.isolation;
+  const candidate = CANDIDATES.find(pin => pin.id === record.candidate);
+  const exactTokens = (actual, expected) => typeof actual === 'string' && typeof expected === 'string' && JSON.stringify(actual.split(',').sort()) === JSON.stringify(expected.split(',').sort());
+  const expectedMounts = candidate?.id === 'opengrep' ? ['/input', '/rules', '/tool/opengrep'] : ['/input', '/rules'];
+  const missingRuleDiagnostic = Array.isArray(record.assessment?.diagnostics) && record.assessment.diagnostics.some(error => error?.level === 'error' && typeof error.message === 'string' &&
+    /(?:^|[\s`'"(])\/rules\/not-present\.yaml(?=$|[\s`'")\]])/.test(error.message) &&
+    /\b(?:unable to find a config|does not exist|not found|no such file|invalid config(?:uration)?(?: file)?|cannot (?:read|find)|failed to (?:read|load))\b/i.test(error.message));
   const checks = {
     completed: completed(record),
     cleanup: record.cleanup?.state === 'removed-owned-container',
-    pinnedImage: isolation?.image === record.expectedImage,
+    pinnedImage: !!candidate && isolation?.image === candidate.image && record.expectedImage === candidate.image,
     networkNone: isolation?.networkMode === 'none',
     readOnlyRoot: isolation?.readOnlyRootfs === true,
     unprivileged: isolation?.user === '65534:65534',
-    readOnlyMounts: Array.isArray(isolation?.mounts) && isolation.mounts.length >= 2 && isolation.mounts.every(m => m.readWrite === false),
-    capDrop: isolation?.capDrop?.includes('ALL') === true,
-    noNewPrivileges: isolation?.securityOpt?.some(x => x.startsWith('no-new-privileges')) === true,
-    tmpfsPolicy: isolation?.tmpfs?.['/tmp']?.split(',').includes(record.candidate === 'semgrep' ? 'noexec' : 'exec') === true && isolation?.tmpfs?.['/tmp']?.split(',').includes('nosuid') === true,
-    resourceLimits: isolation?.memory === 2147483648 && isolation?.nanoCpus === 2000000000 && isolation?.pidsLimit === 128,
+    readOnlyMounts: Array.isArray(isolation?.mounts) && isolation.mounts.length === expectedMounts.length && isolation.mounts.every(m => m.readWrite === false && m.type === 'bind') && JSON.stringify(isolation.mounts.map(m => m.destination).sort()) === JSON.stringify(expectedMounts),
+    capDrop: Array.isArray(isolation?.capDrop) && isolation.capDrop.length === 1 && isolation.capDrop[0] === 'ALL',
+    noNewPrivileges: Array.isArray(isolation?.securityOpt) && isolation.securityOpt.length === 1 && isolation.securityOpt[0] === 'no-new-privileges:true',
+    tmpfsPolicy: !!candidate && Object.keys(isolation?.tmpfs ?? {}).length === 1 && exactTokens(isolation?.tmpfs?.['/tmp'], candidate.tmpfs.slice('/tmp:'.length)),
+    resourceLimits: isolation?.memory === 2147483648 && isolation?.memorySwap === 2147483648 && isolation?.nanoCpus === 2000000000 && isolation?.pidsLimit === 128,
   };
   if (record.scenario === 'version') checks.version = record.versionMatches === true && record.execution?.exitCode === 0;
-  else if (record.scenario === 'missing-rules') checks.expectedFailure = record.execution?.exitCode !== 0 && record.assessment?.parseableJson === true && /not-present\.yaml/.test(record.execution?.stdout ?? '') && /(?:unable to find|not found|does not exist|no such file|invalid config)/i.test(record.execution?.stdout ?? '');
+  else if (record.scenario === 'missing-rules') checks.expectedFailure = record.execution?.exitCode === 7 && record.assessment?.parseableJson === true && missingRuleDiagnostic === true;
   else {
     checks.validJson = record.assessment?.parseableJson === true;
     if (record.scenario.startsWith('valid-')) {
       checks.exitZero = record.execution?.exitCode === 0;
       checks.noEngineErrors = record.assessment?.diagnostics.length === 0;
       checks.allEligibleFilesScanned = record.assessment?.scannedCount === 9 && record.assessment?.omittedCount === 0 && record.assessment?.unexpectedScanned.length === 0;
+      checks.noEligibleInputSkipped = Array.isArray(record.assessment?.skipped) && record.assessment.skipped.every(skip => skip && typeof skip.path === 'string' && typeof skip.reason === 'string' && skip.reason.length > 0 && !record.assessment.requestedFiles.includes(pathOf(skip.path)));
       checks.attribution = record.assessment?.unattributedFindings === 0 && record.assessment?.unknownRuleFindings === 0;
     }
   }

@@ -113,3 +113,21 @@ For version-specific source-term references, the tagged root licenses for
 [Opengrep v1.31.0](https://github.com/opengrep/opengrep/blob/v1.31.0/LICENSE) contain LGPL 2.1 text.
 Those references alone do not establish terms for every bundled component, image, hosted service
 or future redistribution. This experiment makes no legal approval or redistribution decision.
+
+
+## Control review follow-up
+
+The subsequent independent control review tightened the engine-matrix validator. Missing-rule
+success now requires completed exit 7 and an error diagnostic that names the exact absent
+`/rules/not-present.yaml`; unrelated errors or result prose cannot satisfy it. Valid-file trials
+must have a usable skip inventory and cannot pass if an eligible input is both scanned and
+skipped. The inspected tmpfs tokens, mounts and no-new-privileges policy must match the fixed
+candidate policy exactly. Both candidates now require an explicitly inspected 2 GiB combined
+memory/swap ceiling, in addition to the 2 GiB memory limit.
+
+The historical runs above remain unchanged. They do not contain the newly required memory-swap
+observation and cannot satisfy the tightened validator. The integration lead owns a fresh run
+with the shared helper's explicit swap limit and retained swap inspection; its resulting evidence
+must accompany final acceptance. Frozen input, rule and index hashes and threshold proposals
+are unchanged. The focused follow-up passes 13 engine-matrix tests; all 26 existing scanner tests
+also pass. No additional scanner trial was started by this lane after the control review.

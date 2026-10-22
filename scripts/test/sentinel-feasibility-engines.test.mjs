@@ -130,3 +130,71 @@ test('invalid output never turns missing evidence into zero omissions or success
     assert.ok(observation.gaps.length > 0);
   }
 });
+
+function controlledRecord(scenario = 'valid-pattern', candidate = CANDIDATES[0]) {
+  const record = result();
+  return { ...record, scenario, candidate: candidate.id, expectedImage: candidate.image,
+    containerCompleted: true, containerExitMatchesClient: true, cleanup: { state: 'removed-owned-container' },
+    isolation: { image: candidate.image, networkMode: 'none', readOnlyRootfs: true, user: '65534:65534',
+      capDrop: ['ALL'], securityOpt: ['no-new-privileges:true'], tmpfs: { '/tmp': candidate.tmpfs.slice(5) },
+      memory: 2147483648, memorySwap: 2147483648, nanoCpus: 2000000000, pidsLimit: 128,
+      mounts: ['/input', '/rules', ...(candidate.id === 'opengrep' ? ['/tool/opengrep'] : [])].map(destination => ({ destination, type: 'bind', readWrite: false })) },
+    assessment: assessed(record) };
+}
+const missingDiagnostic = () => ({ level: 'error', type: 'SemgrepError', message: 'unable to find a config; path `/rules/not-present.yaml` does not exist' });
+test('missing-rule control requires exit seven and a matching error diagnostic, never result prose or unrelated failures', () => {
+  const record = controlledRecord('missing-rules');
+  record.execution.exitCode = 7;
+  record.assessment.diagnostics = [missingDiagnostic()];
+  assert.equal(controls(record).passed, true);
+  for (const change of [
+    value => value.execution.exitCode = 2,
+    value => value.execution.timedOut = true,
+    value => value.execution.cancelled = true,
+    value => value.execution.outputExceeded = true,
+    value => value.execution.spawnError = 'ENOENT',
+    value => value.assessment.diagnostics = [],
+    value => value.assessment.diagnostics = [{ ...missingDiagnostic(), level: 'warn' }],
+    value => value.assessment.diagnostics = [{ ...missingDiagnostic(), message: 'unable to find a config /rules/other.yaml' }],
+    value => value.assessment.diagnostics = [{ ...missingDiagnostic(), message: 'unable to find a config /other/rules/not-present.yaml' }],
+    value => value.assessment.diagnostics = [{ ...missingDiagnostic(), message: 'unable to find a config /rules/not-present.yaml.backup' }],
+    value => value.assessment.diagnostics = [{ ...missingDiagnostic(), message: 'analysis failed for /rules/not-present.yaml for an unrelated reason' }],
+    value => { value.assessment.diagnostics = []; value.execution.stdout = JSON.stringify({ results: [{ extra: { message: missingDiagnostic().message } }], errors: [] }); },
+  ]) {
+    const invalid = structuredClone(record); change(invalid);
+    assert.equal(controls(invalid).passed, false);
+  }
+});
+test('valid-file controls require usable skip inventory and reject files reported both scanned and skipped', () => {
+  const record = controlledRecord();
+  assert.equal(controls(record).passed, true);
+  for (const skips of [null, [{ path: '/input/typescript/Main.ts', reason: 'analysis_failed_parser_or_internal_error' }], [{ reason: 'unknown_path' }], [{ path: '/input/other.ts' }], [null]]) {
+    const invalid = structuredClone(record); invalid.assessment.skipped = skips;
+    assert.equal(controls(invalid).passed, false);
+  }
+  const partial = controlledRecord('partial');
+  partial.assessment = assessed(result([], ['/input/controls/partial.ts'], [{ type: 'PartialParsing' }]), 'pattern', 'partial');
+  partial.assessment.skipped = [{ path: '/input/controls/partial.ts', reason: 'analysis_failed_parser_or_internal_error' }];
+  assert.equal(controls(partial).passed, true);
+});
+test('inspected isolation must match exact tmpfs, swap, mounts and privilege policy for each pinned candidate', () => {
+  for (const candidate of CANDIDATES) {
+    const record = controlledRecord('valid-pattern', candidate);
+    assert.equal(controls(record).passed, true);
+    for (const change of [
+      value => value.isolation.memorySwap = undefined,
+      value => value.isolation.memorySwap = 4294967296,
+      value => value.isolation.tmpfs['/tmp'] = value.isolation.tmpfs['/tmp'].replace('size=256m', 'size=2g'),
+      value => value.isolation.tmpfs['/tmp'] += ',dev',
+      value => value.isolation.tmpfs['/tmp'] += ',exec',
+      value => value.isolation.tmpfs['/another'] = 'rw,noexec,size=1m',
+      value => value.isolation.securityOpt = ['no-new-privileges:false'],
+      value => value.isolation.securityOpt = ['no-new-privileges-other:true'],
+      value => value.isolation.securityOpt.push('seccomp=unconfined'),
+      value => value.isolation.mounts.push({ destination: '/other', type: 'bind', readWrite: false }),
+    ]) {
+      const invalid = structuredClone(record); change(invalid);
+      assert.equal(controls(invalid).passed, false);
+    }
+  }
+});
