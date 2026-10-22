@@ -75,6 +75,15 @@ retention: `result.json` SHA-256
 Its artifact inventory names 61 files totaling 99,118,381 bytes, including six exact JSON inputs,
 54 encoded outputs and the incremental progress record. Each artifact has its own full SHA-256.
 
+This retained run predates the cross-review hardening of parent-side input/output identity binding and
+exact missing-image failure classification. Its numbers remain historical observations from the named
+revision; they are not evidence for the corrected final runner. The corrected runner independently compares
+each metric's input hash/byte count to its generated original, verifies retained input/output hashes and
+byte counts per trial, and rechecks every input after all trials. Missing/changed artifacts fail the run.
+Missing-image controls now require a completed nonzero inspection and the exact immutable reference in the
+absence diagnostic. Integration must remeasure the final committed source; this lane did not rewrite or
+rerun historical evidence after those corrections.
+
 The host was macOS 27.0 (Darwin 27.0.0), native ARM64 Apple M4, 10 logical CPUs, 17,179,869,184 bytes RAM,
 Node 24.19.0. Docker client and Engine were 29.2.1. A separate read-only installation identity supplement
 verified Docker Desktop 4.65.0 build 221669 from its installed app metadata; the `docker desktop version`

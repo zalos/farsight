@@ -5,8 +5,8 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parseArgs, preview, resourcePreflight } from '../sentinel-feasibility-runtime.mjs';
 import { execute } from '../sentinel-feasibility-scanners.mjs';
-import { classifyFailure, missingContainerExecutable, validateIsolation, containerTrial, IMAGE } from '../sentinel-feasibility/runtime-matrix/containers.mjs';
-import { admission, payload, sha, LIMITS } from '../sentinel-feasibility/runtime-matrix/resources.mjs';
+import { classifyFailure, missingContainerExecutable, missingImage, validateIsolation, containerTrial, IMAGE } from '../sentinel-feasibility/runtime-matrix/containers.mjs';
+import { admission, payload, sha, LIMITS, verifyTrialIdentity, verifyInputIdentity } from '../sentinel-feasibility/runtime-matrix/resources.mjs';
 
 test('preview has no execution side effects and run requires explicit output', () => {
   assert.equal(parseArgs([]).run, false);
@@ -39,6 +39,16 @@ test('missing container executable requires completed exact-path failure, never 
   for (const changed of [{ exitCode: 0 }, { exitCode: null }, { timedOut: true }, { cancelled: true }, { outputExceeded: true }, { spawnError: 'ENOENT' }, { exitSignal: 'SIGKILL' }, { stderr: 'stat /unrelated: no such file or directory' }, { stderr: '/sentinel-executable-intentionally-absent: permission denied' }]) {
     assert.equal(missingContainerExecutable({ ...result, ...changed }), false);
   }
+});
+test('missing immutable image requires completed exact-reference absence, never interruptions or unrelated images', () => {
+  const reference = 'farsight-sentinel-intentionally-absent@sha256:' + '0'.repeat(64);
+  const result = { exitCode: 1, stderr: `Error response from daemon: No such image: ${reference}\n` };
+  assert.equal(missingImage(result, reference), true);
+  for (const changed of [{ exitCode: 0 }, { exitCode: null }, { timedOut: true }, { cancelled: true }, { outputExceeded: true }, { spawnError: 'ENOENT' }, { exitSignal: 'SIGKILL' },
+    { stderr: 'Error response from daemon: No such image: unrelated@sha256:' + '1'.repeat(64) }, { stderr: result.stderr + 'unexpected trailing diagnostic' }]) {
+    assert.equal(missingImage({ ...result, ...changed }, reference), false);
+  }
+  assert.equal(missingImage(result, 'farsight-sentinel-intentionally-absent:latest'), false);
 });
 test('quota admission refuses unavailable controllers, impossible requests and unknown measurements', () => {
   const vm = { MemTotal: 8 * 1024 ** 3, NCPU: 8, MemoryLimit: true, SwapLimit: true, CpuCfsQuota: true, PidsLimit: true };
@@ -76,6 +86,34 @@ test('fresh codec child measures bytes and roundtrips retained JSON without deco
       assert.ok(metric.childLifetimeMaxRssKiB > 0);
       assert.match(metric.memoryProvenance, /not codec-only/);
     }
+  } finally { await rm(out, { recursive: true, force: true }); }
+});
+test('parent rejects wrong or missing claimed input/output identities and changed/missing retained artifacts', async () => {
+  const out = await mkdtemp(join(tmpdir(), 'sentinel-runtime-identities-'));
+  try {
+    const original = Buffer.from('original synthetic JSON bytes'), encoded = Buffer.from('trusted encoded output');
+    const inputPath = join(out, 'input'), artifactPath = join(out, 'encoded');
+    await writeFile(inputPath, original); await writeFile(artifactPath, encoded);
+    const expectedInput = { bytes: original.length, sha256: sha(original) };
+    const metric = { state: 'measured', codec: 'gzip', rawBytes: original.length, rawSha256: sha(original), encodedBytes: encoded.length, encodedSha256: sha(encoded) };
+    const options = { inputPath, artifactPath, expectedInput, metric, codec: 'gzip' };
+    assert.equal((await verifyTrialIdentity(options)).verified, true);
+    for (const changed of [{ rawBytes: 1 }, { rawSha256: '0'.repeat(64) }, { rawSha256: undefined }, { encodedBytes: undefined }, { encodedSha256: undefined }, { codec: 'raw' }]) {
+      await assert.rejects(verifyTrialIdentity({ ...options, metric: { ...metric, ...changed } }), /TRIAL_METRIC_IDENTITY_MISMATCH/);
+    }
+    await assert.rejects(verifyTrialIdentity({ ...options, metric: { ...metric, encodedBytes: 1 } }), /ENCODED_ARTIFACT_IDENTITY_MISMATCH/);
+    await assert.rejects(verifyTrialIdentity({ ...options, metric: { ...metric, encodedSha256: '0'.repeat(64) } }), /ENCODED_ARTIFACT_IDENTITY_MISMATCH/);
+    await writeFile(artifactPath, Buffer.from('X'.repeat(encoded.length)));
+    await assert.rejects(verifyTrialIdentity(options), /ENCODED_ARTIFACT_IDENTITY_MISMATCH/);
+    await rm(artifactPath);
+    await assert.rejects(verifyTrialIdentity(options), /ENCODED_ARTIFACT_MISSING/);
+    await writeFile(artifactPath, encoded);
+    await writeFile(inputPath, Buffer.from('X'.repeat(original.length)));
+    await assert.rejects(verifyTrialIdentity(options), /INPUT_ARTIFACT_IDENTITY_MISMATCH/);
+    await assert.rejects(verifyInputIdentity(inputPath, expectedInput), /INPUT_ARTIFACT_IDENTITY_MISMATCH/);
+    await rm(inputPath);
+    await assert.rejects(verifyTrialIdentity(options), /INPUT_ARTIFACT_MISSING/);
+    await assert.rejects(verifyInputIdentity(inputPath, expectedInput), /INPUT_ARTIFACT_MISSING/);
   } finally { await rm(out, { recursive: true, force: true }); }
 });
 function container(owner = 'mine') {

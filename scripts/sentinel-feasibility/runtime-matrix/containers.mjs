@@ -11,8 +11,14 @@ export function classifyFailure(value) {
   if (value?.outputExceeded) return 'output-budget-exhausted';
   return ok(value) ? 'completed' : 'failed';
 }
+const completedFailure = value => Number.isInteger(value?.exitCode) && value.exitCode !== 0 && !value.spawnError && !value.timedOut && !value.cancelled && !value.outputExceeded && !value.exitSignal;
+export function missingImage(value, reference) {
+  if (!completedFailure(value) || !/^[a-z0-9][a-z0-9./_-]*@sha256:[a-f0-9]{64}$/.test(reference)) return false;
+  const match = /^(?:Error response from daemon:\s*)?No such image:\s*(\S+)$/.exec((value.stderr ?? '').trim());
+  return match?.[1] === reference;
+}
 export function missingContainerExecutable(value) {
-  return Number.isInteger(value?.exitCode) && value.exitCode !== 0 && !value.spawnError && !value.timedOut && !value.cancelled && !value.outputExceeded && !value.exitSignal &&
+  return completedFailure(value) &&
     typeof value.stderr === 'string' && value.stderr.includes('/sentinel-executable-intentionally-absent') && /(?:no such file or directory|executable file not found)/i.test(value.stderr);
 }
 export function validateIsolation(container, owner) {

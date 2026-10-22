@@ -5,7 +5,7 @@ import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cpus, totalmem, release, platform, arch } from 'node:os';
 import { execute, scrub, validateHost, validateDockerPlatform } from './sentinel-feasibility-scanners.mjs';
-import { IMAGE, containerTrial, classifyFailure, ok } from './sentinel-feasibility/runtime-matrix/containers.mjs';
+import { IMAGE, containerTrial, classifyFailure, missingImage, ok } from './sentinel-feasibility/runtime-matrix/containers.mjs';
 import { resourceTrials, sha } from './sentinel-feasibility/runtime-matrix/resources.mjs';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const FILES = ['scripts/sentinel-feasibility-runtime.mjs', 'scripts/sentinel-feasibility/runtime-matrix/containers.mjs', 'scripts/sentinel-feasibility/runtime-matrix/resources.mjs', 'scripts/sentinel-feasibility/runtime-matrix/codec-worker.mjs', 'scripts/sentinel-feasibility-scanners.mjs'];
@@ -93,8 +93,9 @@ export async function runProbe({ out }, { runner = execute, signal } = {}) {
     const excessive = resourcePreflight(info, { memoryBytes: info.MemTotal + 1, cpus: 1 });
     control('actual-vm-quota-admission-exhaustion', excessive.reason === 'VM_RESOURCE_BUDGET_EXHAUSTED', excessive);
     control('synthetic-unavailable-controller-preflight', resourcePreflight({ ...info, MemoryLimit: false }, request).reason === 'REQUIRED_RESOURCE_CONTROLLER_UNAVAILABLE', { state: 'gap', reason: 'Synthetic missing-controller prerequisite; no cgroup disabled on host' });
-    const absentImage = await runner('docker', ['image', 'inspect', 'farsight-sentinel-intentionally-absent@sha256:' + '0'.repeat(64)], { timeout: 10_000, signal });
-    control('actual-missing-image-preflight-no-pull', !ok(absentImage) && /No such image/i.test(absentImage.stderr), absentImage);
+    const absentReference = 'farsight-sentinel-intentionally-absent@sha256:' + '0'.repeat(64);
+    const absentImage = await runner('docker', ['image', 'inspect', absentReference], { timeout: 10_000, signal });
+    control('actual-missing-image-preflight-no-pull', missingImage(absentImage, absentReference), absentImage);
     const version = await runner('docker', ['version', '--format', '{{json .}}'], { timeout: 10_000, signal });
     const image = await runner('docker', ['image', 'inspect', IMAGE], { timeout: 10_000, signal });
     if (!ok(version) || !ok(image)) { result.imageFailure = { version, image }; throw new Error('PINNED_IMAGE_OR_DOCKER_VERSION_UNAVAILABLE_NO_ACQUISITION'); }
@@ -110,7 +111,7 @@ export async function runProbe({ out }, { runner = execute, signal } = {}) {
       if (!trial.passed) throw new Error('CONTAINER_CONTROL_FAILED');
     }
     result.resources = await resourceTrials(out, runner, signal);
-    control('codec-resource-trials', result.resources.trials.length === 54 && result.resources.trials.every(t => t.metric?.state === 'measured'), { expectedTrials: 54, completedTrials: result.resources.trials.length });
+    control('codec-resource-trials', result.resources.trials.length === 54 && result.resources.trials.every(t => t.metric?.state === 'measured' && t.identity?.verified === true) && result.resources.inputs.every(input => input.finalIdentity?.sha256 === input.sha256 && input.finalIdentity?.bytes === input.bytes), { expectedTrials: 54, completedTrials: result.resources.trials.length });
     result.state = result.controls.every(value => value.passed) ? 'measured-with-explicit-gaps' : 'failed';
   } catch (error) { result.reason = scrub(error.message); }
   finally { result.endedAt = new Date().toISOString(); result.artifacts = await inventory(out); await persist(); }

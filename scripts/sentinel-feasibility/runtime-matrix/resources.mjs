@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { open, writeFile, mkdir } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execute, scrub } from '../../sentinel-feasibility-scanners.mjs';
@@ -10,6 +11,34 @@ export function admission({ inputBytes, totalBytes, trials, measurementAvailable
   if (!measurementAvailable) return { admitted: false, state: 'gap', reason: 'MEASUREMENT_UNAVAILABLE' };
   if (inputBytes > LIMITS.maxInputBytes || totalBytes > LIMITS.totalInputBytes || trials > LIMITS.maxTrials) return { admitted: false, state: 'gap', reason: 'RESOURCE_BUDGET_EXHAUSTED' };
   return { admitted: true, state: 'admitted' };
+}
+async function artifactIdentity(path, prefix) {
+  let file;
+  try {
+    file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const info = await file.stat();
+    if (!info.isFile() || info.size > LIMITS.maxInputBytes + 1_048_576) throw new Error(`${prefix}_ARTIFACT_INVALID`);
+    const bytes = await file.readFile();
+    if (bytes.length !== info.size) throw new Error(`${prefix}_ARTIFACT_CHANGED`);
+    return { bytes: bytes.length, sha256: sha(bytes) };
+  } catch (error) {
+    if (error.code === 'ENOENT') throw new Error(`${prefix}_ARTIFACT_MISSING`);
+    throw error;
+  } finally { await file?.close(); }
+}
+export async function verifyInputIdentity(path, expected) {
+  const identity = await artifactIdentity(path, 'INPUT');
+  if (identity.bytes !== expected.bytes || identity.sha256 !== expected.sha256) throw new Error('INPUT_ARTIFACT_IDENTITY_MISMATCH');
+  return identity;
+}
+// Parent independently binds trusted child metrics to generated input and the bytes actually retained.
+export async function verifyTrialIdentity({ inputPath, artifactPath, expectedInput, metric, codec }) {
+  if (metric?.state !== 'measured' || metric.codec !== codec || metric.rawBytes !== expectedInput.bytes || metric.rawSha256 !== expectedInput.sha256 ||
+      !Number.isSafeInteger(metric.encodedBytes) || metric.encodedBytes < 1 || !/^[a-f0-9]{64}$/.test(metric.encodedSha256 ?? '')) throw new Error('TRIAL_METRIC_IDENTITY_MISMATCH');
+  const input = await verifyInputIdentity(inputPath, expectedInput);
+  const encoded = await artifactIdentity(artifactPath, 'ENCODED');
+  if (encoded.bytes !== metric.encodedBytes || encoded.sha256 !== metric.encodedSha256) throw new Error('ENCODED_ARTIFACT_IDENTITY_MISMATCH');
+  return { input, encoded, verified: true };
 }
 // Original synthetic JSON represents artifact structure, not a distribution sampled from real applications.
 export function payload(kind, minimumBytes) {
@@ -33,18 +62,28 @@ export async function resourceTrials(out, runner = execute, signal) {
     const gate = admission({ inputBytes: bytes.length, totalBytes, trials: 54 });
     if (!gate.admitted) throw new Error('RESOURCE_ADMISSION_FAILED');
     await writeFile(path, bytes, { flag: 'wx', mode: 0o600 });
-    inputs.push({ kind, requestedMinimumBytes: size, bytes: bytes.length, sha256: sha(bytes), path: `resources/${kind}-${size}.json` });
+    const expectedInput = { kind, requestedMinimumBytes: size, bytes: bytes.length, sha256: sha(bytes), path: `resources/${kind}-${size}.json` };
+    inputs.push(expectedInput);
     for (let repetition = 1; repetition <= 3; repetition++) for (const codec of ['raw', 'gzip', 'zstd']) {
       if (signal?.aborted) throw new Error('RESOURCE_TRIAL_CANCELLED');
       const artifact = `${kind}-${size}-${codec}-${repetition}.bin`;
       const command = [process.execPath, join(dirname(fileURLToPath(import.meta.url)), 'codec-worker.mjs'), path, join(directory, artifact), codec];
       const execution = await runner(command[0], command.slice(1), { timeout: 15_000, maxOutput: 16_384, signal });
       let metric = null; try { metric = JSON.parse(execution.stdout); } catch { /* Retain failed child evidence. */ }
-      trials.push({ kind, requestedMinimumBytes: size, repetition, codec, command: command.map(scrub), execution, metric, artifact: `resources/${artifact}` });
+      const trial = { kind, requestedMinimumBytes: size, repetition, codec, command: command.map(scrub), execution, metric, artifact: `resources/${artifact}` };
+      trials.push(trial);
+      try {
+        if (execution.exitCode !== 0 || execution.timedOut || execution.outputExceeded || execution.cancelled || execution.spawnError || execution.exitSignal) throw new Error('RESOURCE_CHILD_FAILED');
+        trial.identity = await verifyTrialIdentity({ inputPath: path, artifactPath: join(directory, artifact), expectedInput, metric, codec });
+      } catch (error) { trial.identityFailure = scrub(error.message); }
       await writeFile(join(directory, 'progress.json'), JSON.stringify({ inputs, trials }, null, 2) + '\n', { mode: 0o600 });
-      if (execution.exitCode !== 0 || execution.timedOut || execution.outputExceeded || execution.cancelled || metric?.state === 'failed') throw new Error('RESOURCE_CHILD_FAILED');
+      if (trial.identityFailure) throw new Error(trial.identityFailure);
     }
   }
+  for (const input of inputs) {
+    input.finalIdentity = await verifyInputIdentity(join(out, input.path), input);
+  }
+  await writeFile(join(directory, 'progress.json'), JSON.stringify({ inputs, trials }, null, 2) + '\n', { mode: 0o600 });
   return { inputs, trials, controls: [
     { id: 'synthetic-input-admission-exhaustion', ...admission({ inputBytes: LIMITS.maxInputBytes + 1, totalBytes: 0, trials: 1 }) },
     { id: 'synthetic-total-admission-exhaustion', ...admission({ inputBytes: 1, totalBytes: LIMITS.totalInputBytes + 1, trials: 1 }) },
