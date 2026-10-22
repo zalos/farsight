@@ -2,10 +2,11 @@
 
 **Status:** PR 00 merged on 2026-10-19: [#118](https://github.com/zalos/farsight/pull/118), `0c8c747`.
 Execution preparation checked against main `46018cb` on 2026-10-21; container-only external scanning is confirmed.
-Execution preparation [#131](https://github.com/zalos/farsight/pull/131) and the first PR 01 feasibility slice
-[#132](https://github.com/zalos/farsight/pull/132), `2bd38f6`, are merged. PR 01's remaining measured decisions
-are in progress; its [acceptance record](feasibility-acceptance.md) separates experiment evidence from support
-acceptance. PR 02 and later implementation rows remain **planned** until their dependencies and gates clear.
+Execution preparation [#131](https://github.com/zalos/farsight/pull/131) and PR 01's two slices,
+[#132](https://github.com/zalos/farsight/pull/132) `2bd38f6` and [#133](https://github.com/zalos/farsight/pull/133)
+`ef5c525`, are merged. On 2026-10-21 the owner accepted PR 01's bounded matrix and resource defaults **for
+implementation** only (see the [acceptance record](feasibility-acceptance.md)); PR 02 is in progress. Package
+status lives in the [execution progress ledger](execution-progress.md), not in this backlog.
 Read the [architecture](implementation-plan.md) and [code examples](implementation-examples.md) with this backlog.
 Numbers below are local planning identifiers, not existing GitHub PR numbers.
 
@@ -764,7 +765,7 @@ choice recorded; it does not authorize a scanner installation, paid experiment o
 | Ollama and configurable hosted endpoint | Owner | Confirmed; disclosure/budgets remain configured per run | Settled provider scope; actual calls at 01/21/22 need configured grants |
 | Standalone report delivery plus Farsight integration | Owner | Confirmed; one report document with offline delivery and optional integrated navigation/actions | Contracts in 02; standalone acceptance in 19, parity in 25, clean-recipient gate in 26 |
 | Required container runtime for external scanners | Owner | Confirmed 2026-10-21: Linux containers required; no host fallback. Exact backend/version support remains unmeasured | Policy settled; acquisition, runtime and isolation evidence before corresponding probes/support claims |
-| Exact host/runtime/framework/engine pins | Feasibility lead | Not measured; candidate matrix only | 01 exit, before advertising support or dispatching corresponding adapter lane |
+| Exact host/runtime/framework/engine pins | Feasibility lead | Accepted 2026-10-21 for implementation within the measured bounds ([decision manifest](feasibility-decisions.json)); anything unmeasured stays unsupported | Before advertising wider support or dispatching a lane that needs an unmeasured pin |
 | E3 thresholds and deterministic labeled corpus | Feasibility lead + owner | Proposed gates in architecture; no results claimed | 01 decision record, then production gate at 18 |
 | E5 thresholds, model trials and resource choices | Feasibility lead + owner | May be explicitly deferred in 01; no deterministic release dependency | Set thresholds before live evaluation/required-review enablement; production gate at 22 |
 | Plan revisions and review fixes | Owner/reviewer | PR 00 merged at `0c8c747`; current preparation incorporates recent-code review | Implementation dispatch remains a separate task; PR 02 still requires full PR 01 acceptance |

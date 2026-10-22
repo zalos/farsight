@@ -41,13 +41,27 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel execution continues — 2026-10-21
+
+PR #133 merged at `ef5c525`. The owner continued execution and accepted PR 01's bounded matrix and resource
+defaults **for implementation** only; nothing measured as a prototype becomes general engine, framework,
+platform or deep-analysis support. PR 00/01 are done, PR 02 is in progress, PRs 03–30 (with 23a/23b/25b) are
+pending. Remaining deferred items are implementation/release acceptance gates, not new permission gates for
+authorized reversible work. The durable status table, owner-directed roles (Opus implements, SOL reviews,
+a final Claude Fable 5.1 touch-up review fixed by Opus and verified by SOL), the captured stage
+configuration/I-O/rerun/model-choice/visual requirements and the end gates (Java + Spring sample app,
+npm-only consumer install → help → init → scan → report, release) are in the
+[execution progress ledger](proposals/farsight-sentinel/execution-progress.md). Open owner choices there:
+registry vs release-tarball distribution, where `init` lives, and the Java sample's source. This change is
+Markdown/JSON documentation only (no runtime checks selected); the two original Claude reviews are unchanged.
+
 ## Sentinel PR01 measured decisions — 2026-10-22
 
 [PR #133](https://github.com/zalos/farsight/pull/133), branch `codex/sentinel-decisions`, continues merged #132 (`2bd38f6`) with original engine, framework and
 runtime/resource experiments. Claude CLI implemented framework apps/drivers; SOL lanes implemented and
 cross-reviewed engine/runtime/acquisition/lifecycle controls; the lead integrated, reviewed and ran final
 measurements. [The acceptance record](proposals/farsight-sentinel/feasibility-acceptance.md) links the proposed
-matrix/resource defaults, immutable evidence and remaining gates. Owner acceptance is pending before PR02.
+matrix/resource defaults, immutable evidence and remaining gates. Owner acceptance followed on 2026-10-21 (above).
 
 Both evaluated engine profiles pass the bounded direct/local criteria but fail cross-file qualification.
 Semgrep is the proposed scoped pattern default. Four original framework apps pass 11 scenarios/14 expected

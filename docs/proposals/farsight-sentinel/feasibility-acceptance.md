@@ -5,14 +5,23 @@ It evaluates the remaining early feasibility choices before the optional product
 The original records in [feasibility results](feasibility-results.md) remain historical evidence.
 No production Sentinel contract, framework pack, scanner adapter or UI is introduced here.
 
-## Proposed decisions and completion boundary
+## Owner acceptance — 2026-10-21
 
-The [machine-readable decision draft](feasibility-decisions.json) is ready for owner acceptance. The lead
-verified the final evidence and addressed Claude/SOL review findings. This completes the measured proposal;
-PR01 acceptance and PR02 dispatch remain separate until the owner accepts or revises its scoped matrix and
-resource defaults. The owner's container-only/no-host-fallback decision remains binding.
+This continuation merged as [PR #133](https://github.com/zalos/farsight/pull/133), `ef5c525`. The owner then
+continued execution and **accepted the bounded matrix and proposed resource defaults below for
+implementation** (`ownerAcceptance` in the [decision manifest](feasibility-decisions.json)). PR 01 is done
+within those bounds and PR 02 may proceed. The acceptance does not widen any row: general engine accuracy,
+cross-file/deep analysis, production framework packs and other versions, other hosts/backends/architectures and
+capacity guarantees remain unsupported until their own gates measure them. The deferred gates below stay
+implementation and release acceptance gates, not new permission gates for already authorized work. The
+container-only/no-host-fallback decision remains binding. Progress is tracked in the
+[execution progress ledger](execution-progress.md).
 
-| Capability | Proposed disposition | Evidence boundary |
+## Decisions and completion boundary
+
+The lead verified the final evidence and addressed Claude/SOL review findings before acceptance.
+
+| Capability | Accepted disposition (bounded) | Evidence boundary |
 |---|---|---|
 | Pattern default | Semgrep 1.181.0 | Three direct positives and nine safe symbols under two original rules; equal cases to Opengrep, with noexec temporary storage |
 | Local taint | Qualified only for six original direct/local positives | Both candidates find six; no general application accuracy claim |

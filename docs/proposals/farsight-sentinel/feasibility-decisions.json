@@ -1,14 +1,28 @@
 {
   "format": "sentinel-feasibility-decisions/draft-1",
-  "status": "proposed-for-owner-acceptance",
+  "status": "accepted-for-implementation-bounded",
   "base": {
     "pr": 132,
     "commit": "2bd38f600c0714d74d17104d882de0e1a4201ac7"
   },
+  "mergedAs": {
+    "pr": 133,
+    "commit": "ef5c5254ed0fad401f5aedff40637d05d4e82cdd",
+    "date": "2026-10-21"
+  },
   "scope": "Bounded original feasibility experiments; no production Sentinel adapter, package, security verdict or framework support contract.",
   "ownerAcceptance": {
-    "state": "pending",
-    "requiredBefore": "PR02 production contracts",
+    "state": "accepted-for-implementation",
+    "date": "2026-10-21",
+    "scope": "The bounded matrix and proposed resource defaults in this manifest are accepted as the starting point for implementing PR02 onward.",
+    "doesNotAccept": [
+      "General engine accuracy, cross-file/deep analysis or a general engine ranking.",
+      "Production framework packs or any framework version support beyond the reviewed synthetic scenarios.",
+      "Host, backend or architecture support beyond the measured macOS ARM64 / Docker Desktop combination.",
+      "Resource quotas as measured capacity guarantees.",
+      "Completion of any deferred gate listed below."
+    ],
+    "gatesRemain": "Deferred gates stay implementation and release acceptance gates; they are not new permission gates for already authorized reversible implementation work.",
     "alreadyConfirmed": [
       "External scanners require Linux containers; no automatic host-execution fallback."
     ]
