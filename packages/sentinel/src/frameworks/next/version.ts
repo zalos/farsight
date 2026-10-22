@@ -224,11 +224,24 @@ function spanOf(text: string, key: string, version: string): { span?: { startByt
 function fromPnpmLock(text: string, rel: string, pkg: PackageName): Found {
   const lines = text.split('\n');
   const unq = (s: string) => s.trim().replace(/^'(.*)'$/, '$1').replace(/^"(.*)"$/, '$1');
-  const lv = lines.find(l => l.startsWith('lockfileVersion:'));
-  const version = lv ? unq(lv.slice('lockfileVersion:'.length)) : '';
-  if (version !== '6.0' && version !== '9.0') return { state: 'unknown', reason: 'lockfile-unsupported', detail: 'only pnpm lockfileVersion 6.0 or 9.0 is read' };
-  if (lines.some(l => /^"[^"]*\\/.test(l))) return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm-lock.yaml has escaped top-level keys outside the supported shape' };
   if (lines.some(l => l.includes('\t'))) return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm-lock.yaml holds tabs' };
+  // Validate every meaningful root key before reading individual sections. Ignoring a tagged, anchored, escaped
+  // or complex key could hide modification evidence while ordinary importers and packages still look supported.
+  const roots: { key: string; l: string; i: number }[] = [];
+  const rootNames = new Set<string>();
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i]!;
+    if (!l.trim() || l.trimStart().startsWith('#') || /^\s/.test(l)) continue;
+    const key = /^(?:'([A-Za-z_][A-Za-z0-9_-]*)'|"([A-Za-z_][A-Za-z0-9_-]*)"|([A-Za-z_][A-Za-z0-9_-]*))\s*:/.exec(l);
+    if (!key) return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm-lock.yaml has unsupported root keys or document syntax' };
+    const name = (key[1] ?? key[2] ?? key[3])!;
+    if (rootNames.has(name)) return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm-lock.yaml repeats a root key' };
+    rootNames.add(name);
+    roots.push({ key: name, l, i });
+  }
+  const lv = roots.find(r => r.key === 'lockfileVersion');
+  const version = lv ? unq(lv.l.slice(lv.l.indexOf(':') + 1)) : '';
+  if (version !== '6.0' && version !== '9.0') return { state: 'unknown', reason: 'lockfile-unsupported', detail: 'only pnpm lockfileVersion 6.0 or 9.0 is read' };
   const indent = (l: string) => l.length - l.trimStart().length;
   const blockOf = (from: number, depth: number): [number, number] => {
     let end = from + 1;
@@ -249,7 +262,7 @@ function fromPnpmLock(text: string, rel: string, pkg: PackageName): Found {
   const top: [number, number] = [0, lines.length];
   // The supported block-style patch map may be present even when a stale importer omits its patch suffix.
   // Refuse unfamiliar/flow patch maps rather than silently ignoring package modification evidence.
-  const patchHeads = lines.map((l, i) => ({ l, i })).filter(({ l }) => /^(?:patchedDependencies|'patchedDependencies'|"patchedDependencies")\s*:/.test(l));
+  const patchHeads = roots.filter(r => r.key === 'patchedDependencies');
   if (patchHeads.length > 1) return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm-lock.yaml repeats patchedDependencies' };
   if (patchHeads.length) {
     const { l, i } = patchHeads[0]!;

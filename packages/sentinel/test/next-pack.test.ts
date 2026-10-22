@@ -417,3 +417,25 @@ test('captured pnpm ordinary quoted metadata retains the measured package identi
   assert.equal(result.projects[0]!.supported, true);
   assert.deepEqual(verdicts(result, SURFACE.info), ['does-not-apply']);
 });
+
+
+test('captured pnpm tagged root patch key cannot hide modifications', needsStore, async t => {
+  const patch = '!!str patchedDependencies:\n  next@14.2.25:\n    path: patches/next.patch\n    hash: fixture\n\n';
+  const files = { ...APP, 'pnpm-lock.yaml': pnpmLock({ '.': '14.2.25' }).replace('importers:', patch + 'importers:'),
+    'patches/next.patch': '# Original inert tagged-key patch\n' };
+  delete (files as Record<string, string>)['package-lock.json'];
+  const { result } = await analyzed(t, files);
+  assert.deepEqual({ supported: result.projects[0]!.supported, verdicts: verdicts(result, SURFACE.info) },
+    { supported: false, verdicts: ['unknown'] });
+});
+
+test('captured pnpm ordinary safe root config and unrelated patches retain peer identity', needsStore, async t => {
+  const extras = ['safeConfig: {}', "'safeQuotedConfig': {}", '"safeDoubleConfig": []',
+    'patchedDependencies:', '  unrelated@1.0.0:', '    path: patches/other.patch', '    hash: fixture', ''].join('\n');
+  const files = { ...APP, 'pnpm-lock.yaml': pnpmLock({ '.': '14.2.25' }).replace('importers:', extras + 'importers:'),
+    'patches/other.patch': '# Original inert unrelated patch\n' };
+  delete (files as Record<string, string>)['package-lock.json'];
+  const { result } = await analyzed(t, files);
+  assert.equal(result.projects[0]!.supported, true);
+  assert.deepEqual(verdicts(result, SURFACE.info), ['does-not-apply']);
+});

@@ -272,3 +272,17 @@ test('pnpm patches do not inherit the measured registry package identity', async
     read: async () => bytes(nested['pnpm-lock.yaml']) });
   assert.equal(unavailable.next.state, 'unknown', 'recorded root declaration without bytes cannot qualify');
 });
+
+
+test('pnpm root-key preflight rejects unsupported YAML key and document forms', async () => {
+  const base = pnpmLock({ '.': '14.2.25' });
+  const escaped = '"patched' + String.fromCharCode(92) + 'u0044ependencies": {}\n';
+  for (const prefix of ['!!str patchedDependencies: {}\n', '&fixture patchedDependencies: {}\n',
+    '? patchedDependencies\n: {}\n', '*fixture: {}\n', escaped, '---\n', '%YAML 1.2\n---\n',
+    'settings: {}\n']) {
+    assert.ok(Object.values(await versions({ 'pnpm-lock.yaml': prefix + base })).every(v => v.state === 'unknown'), prefix);
+  }
+  // Ordinary plain/quoted identifiers, including known section names, remain supported.
+  const quoted = base.replace(/^(lockfileVersion|settings|importers|packages):/gm, '"$1":');
+  assert.ok(Object.values(await versions({ 'pnpm-lock.yaml': quoted })).every(v => v.state === 'resolved'));
+});

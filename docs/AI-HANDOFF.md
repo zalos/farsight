@@ -54,6 +54,19 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Next pnpm root-shape preflight — 2026-10-22
+
+The follow-up on `codex/sentinel-next-patch-indent` preserves `c8c3f160` and validates every meaningful lockfile root
+key before reading individual sections. Supported keys are plain, single-quoted or double-quoted simple identifiers;
+unknown ordinary identifiers may remain inert configuration. Tagged, anchored, complex, escaped or duplicate root
+keys and document directives are refused conservatively. Patch-head detection consumes those normalized roots,
+rather than a separate spelling-specific search. No YAML dependency is added; the pack revision advances to 7.
+
+A captured tagged `patchedDependencies` key reproduced the identity bypass on frozen `c8c3f160`; the existing YAML
+parser confirms it names the same map as an ordinary key. An original ordinary-config/unrelated-patch fixture keeps
+its measured peer identity. Focused checks also cover quoted known sections and unsupported root/document forms.
+No target code is executed. Independent review remains required before integration or publication.
+
 ## Next pnpm modification-metadata key follow-up — 2026-10-22
 
 The follow-up on `codex/sentinel-next-patch-indent` preserves `464c6734` and reads package metadata field names as
