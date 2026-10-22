@@ -11,8 +11,11 @@
 // stable evidence ids, which are the only citations a reply may use. A request outside the scope, over budget, for a
 // withheld span (an opaque secret-location ref) or for an unknown tool is refused as data, and recorded.
 import { createHash } from 'node:crypto';
-import type { ArtifactId, CaptureEntry, Digest, ScopedReason, SnapshotEnvelope, SourceEvidence } from '../contracts/index.js';
+import type { ArtifactId, CaptureEntry, Digest, ReviewPartition, ReviewPartitionMember, ReviewPartitionsEnvelope, ScopedReason, ServedCitation, SnapshotEnvelope, SourceEvidence } from '../contracts/index.js';
+import { digestOf } from '../store/ledger-json.js';
+import { validateEnvelope } from '../validate.js';
 import { canonicalDigest } from '../policy/digest.js';
+import { snapshot as snapshotFreeze } from '../policy/immutable.js';
 import { reviewFail, type ReviewFrontierCode, type ToolRefusalCode } from './errors.js';
 
 const sha = (b: Uint8Array | string) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
@@ -23,32 +26,55 @@ export interface PartitionBounds {
   readonly maxBytes: number;
 }
 
-export interface PartitionMember { readonly relativePath: string; readonly content: ArtifactId; readonly bytes: number }
-
-export interface Partition {
-  /** Digest-derived: the same members (paths and bytes) give the same id. */
-  readonly id: string;
-  readonly members: readonly PartitionMember[];
-  readonly bytes: number;
-}
-
-/** sentinel-review-partitions/draft-1 — the general review's scope, decided before and without any finding. */
-export interface PartitionPlan {
-  readonly schema: 'sentinel-review-partitions/draft-1';
-  readonly snapshotId: string;
-  readonly sourceId: string;
-  readonly bounds: PartitionBounds;
-  readonly partitions: readonly Partition[];
-  /** Entries no partition covers, each with why. */
-  readonly gaps: readonly ScopedReason[];
-  readonly digest: Digest;
-}
+export type PartitionMember = ReviewPartitionMember;
+export type Partition = ReviewPartition;
+/** The general review's scope: the registered `sentinel-review-partitions/draft-1` envelope. */
+export type PartitionPlan = ReviewPartitionsEnvelope;
 
 const scopeOf = (sourceId: string, path: string) =>
   /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(path) ? `${sourceId}:#${sha(path).slice(7, 31)}` : `${sourceId}:${path}`;
 
-/** Partitions one source's captured inventory. Deterministic: inputs are the snapshot entries and the bounds. */
-export function partitionInventory(snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>, sourceId: string, bounds: PartitionBounds): PartitionPlan {
+/**
+ * The fields of a withheld-location citation (`location: 'withheld'`, PR 11's secret-scan contract) the review reads,
+ * typed structurally until that contract is integrated. It names a capture entry by index, never by path.
+ */
+export interface WithheldLocationView {
+  readonly location: 'withheld';
+  readonly snapshotId: string;
+  readonly sourceId: string;
+  readonly entry: number;
+  readonly content: string;
+  readonly span: { readonly startByte: number; readonly endByte: number };
+}
+
+/**
+ * The capture entries withheld citations name, checked against the snapshot: the same snapshot and source, an included
+ * file, the same content. Anything that does not resolve refuses the review (fail closed), because a citation that
+ * cannot be placed could be any file.
+ */
+export function withheldEntries(snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>, sourceId: string, withheld: readonly WithheldLocationView[]): ReadonlySet<number> {
+  const out = new Set<number>();
+  for (const w of withheld) {
+    const e = Number.isSafeInteger(w.entry) && w.entry >= 0 ? snapshot.entries[w.entry] : undefined;
+    if (w.location !== 'withheld' || w.snapshotId !== snapshot.id || w.sourceId !== sourceId || !e || e.sourceId !== sourceId
+      || e.kind !== 'file' || e.disposition !== 'included' || e.content !== w.content) {
+      reviewFail('sentinel.review.invalidInput', 'a withheld citation does not resolve to an included file of this snapshot and source');
+    }
+    out.add(w.entry);
+  }
+  return out;
+}
+
+/** The withheld scope for a gap: the entry's index, never its path. */
+const withheldScope = (sourceId: string, entry: number) => `${sourceId}#entry:${entry}`;
+
+/**
+ * Partitions one source's captured inventory. Deterministic: inputs are the snapshot entries, the bounds and the
+ * withheld citations. A file a withheld citation names leaves the scope whole (its path is not sent either) and is a
+ * `withheld` gap named by its entry index.
+ */
+export function partitionInventory(snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>, sourceId: string, bounds: PartitionBounds,
+  options: { readonly withheld?: readonly WithheldLocationView[] } = {}): PartitionPlan {
   if (!Number.isSafeInteger(bounds.maxFiles) || bounds.maxFiles < 1 || bounds.maxFiles > 1000
     || !Number.isSafeInteger(bounds.maxBytes) || bounds.maxBytes < 1 || bounds.maxBytes > 16 * 1024 * 1024) {
     reviewFail('sentinel.review.invalidInput', 'partition bounds are 1–1000 files and 1 byte–16 MiB');
@@ -56,7 +82,9 @@ export function partitionInventory(snapshot: Pick<SnapshotEnvelope, 'id' | 'entr
   const gaps: ScopedReason[] = [];
   const gap = (path: string, reasonCode: ReviewFrontierCode) => gaps.push({ scopeId: scopeOf(sourceId, path), reasonCode });
   const files: PartitionMember[] = [];
-  const entries = snapshot.entries.filter(e => e.sourceId === sourceId)
+  const hidden = withheldEntries(snapshot, sourceId, options.withheld ?? []);
+  for (const i of [...hidden].sort((a, b) => a - b)) gaps.push({ scopeId: withheldScope(sourceId, i), reasonCode: 'sentinel.review.frontier.withheld' });
+  const entries = snapshot.entries.filter((e, i) => e.sourceId === sourceId && !hidden.has(i))
     .sort((a, b) => (a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0));
   for (const e of entries as CaptureEntry[]) {
     if (e.kind === 'directory-boundary') { gap(e.relativePath, 'sentinel.review.frontier.unknownScope'); continue; }
@@ -65,23 +93,28 @@ export function partitionInventory(snapshot: Pick<SnapshotEnvelope, 'id' | 'entr
     if (e.bytes > bounds.maxBytes) { gap(e.relativePath, 'sentinel.review.frontier.tooLarge'); continue; }
     files.push({ relativePath: e.relativePath, content: e.content, bytes: e.bytes });
   }
-  const partitions: Partition[] = [];
+  const partitions: { id: string; members: PartitionMember[]; bytes: number }[] = [];
   let cur: PartitionMember[] = [];
   let bytes = 0;
   const close = () => {
     if (!cur.length) return;
-    const id = `part-${canonicalDigest({ sourceId, members: cur.map(m => [m.relativePath, m.content]) }).slice(7, 31)}`;
-    partitions.push(Object.freeze({ id, members: Object.freeze(cur), bytes }));
+    const id = `part-${digestOf({ sourceId, members: cur.map(m => [m.relativePath, m.content]) }).slice(7, 31)}`;
+    partitions.push({ id, members: cur, bytes });
     cur = []; bytes = 0;
   };
   for (const f of files) {
     if (cur.length >= bounds.maxFiles || bytes + f.bytes > bounds.maxBytes) close();
-    cur.push(Object.freeze(f));
+    cur.push(f);
     bytes += f.bytes;
   }
   close();
-  const body = { schema: 'sentinel-review-partitions/draft-1' as const, snapshotId: snapshot.id, sourceId, bounds: { ...bounds }, partitions, gaps };
-  return Object.freeze({ ...body, gaps: Object.freeze(gaps), partitions: Object.freeze(partitions), digest: canonicalDigest(body) as Digest });
+  if (partitions.length > 20000 || gaps.length > 20000) reviewFail('sentinel.review.invalidInput', 'the source has more partitions or gaps than one plan holds; partition a narrower scope');
+  const body = { schema: 'sentinel-review-partitions/draft-1' as const, snapshotId: snapshot.id, sourceId, bounds: { maxFiles: bounds.maxFiles, maxBytes: bounds.maxBytes },
+    partitions: partitions.map(p => ({ id: p.id, members: p.members.map(m => ({ relativePath: m.relativePath, content: m.content, bytes: m.bytes })), bytes: p.bytes })), gaps };
+  const plan: PartitionPlan = { ...body, digest: digestOf(body) as Digest };
+  const checked = validateEnvelope('partitions', plan);
+  if (!checked.ok) reviewFail('sentinel.review.integrity', `the partition plan does not validate: ${checked.errors[0]?.path} ${checked.errors[0]?.message}`);
+  return snapshotFreeze(plan);
 }
 
 // ---- the evidence broker ----
@@ -227,10 +260,10 @@ export class EvidenceBroker {
   /** The item a citation names, if this broker served it. */
   served(id: string): EvidenceItem | undefined { return this.#served.get(id); }
 
-  /** Restores items served before a checkpoint, re-reading and re-verifying their bytes. */
-  async restore(items: readonly EvidenceItem[], toolCalls: number): Promise<void> {
+  /** Restores slices served before a checkpoint, re-reading and re-verifying their bytes. */
+  async restore(items: readonly ServedCitation[], toolCalls: number): Promise<void> {
     for (const item of items) {
-      const f = this.#files.get(item.relativePath);
+      const f = this.#files.get(item.citation.relativePath);
       if (!f || f.content !== item.citation.content) reviewFail('sentinel.review.checkpoint', 'a checkpointed slice is outside this scope');
       const again = await this.#slice(f!, item.startLine, item.endLine);
       if (again.id !== item.id || again.citation.quoteDigest !== item.citation.quoteDigest) reviewFail('sentinel.review.checkpoint', 'a checkpointed slice no longer matches the captured bytes');
@@ -309,3 +342,16 @@ export class EvidenceBroker {
 }
 
 export const isIdText = (v: unknown): v is string => typeof v === 'string' && ID_TEXT.test(v);
+
+/**
+ * A guided check's files without those withheld citations name: the remaining files, and one `withheld` gap per removed
+ * entry, by index. Use it before `guidedSpec`, so a withheld file's path never reaches a model.
+ */
+export function withoutWithheld(snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>, sourceId: string, files: readonly PartitionMember[],
+  withheld: readonly WithheldLocationView[]): { files: PartitionMember[]; gaps: ScopedReason[] } {
+  const hidden = withheldEntries(snapshot, sourceId, withheld);
+  const byPath = new Map<string, number>();
+  snapshot.entries.forEach((e, i) => { if (hidden.has(i)) byPath.set(e.relativePath, i); });
+  return { files: files.filter(f => !byPath.has(f.relativePath)),
+    gaps: files.filter(f => byPath.has(f.relativePath)).map(f => ({ scopeId: withheldScope(sourceId, byPath.get(f.relativePath)!), reasonCode: 'sentinel.review.frontier.withheld' })) };
+}

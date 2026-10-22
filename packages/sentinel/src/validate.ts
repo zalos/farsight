@@ -8,7 +8,7 @@ import type {
   ReportCount, ReportEnvelope, RunEnvelope, SnapshotEnvelope, WorkEnvelope, FindingPlace, HelloMessage,
   WelcomeMessage, RefuseMessage, RulePackManifest, RuleLockEnvelope, SettingsEnvelope, RepoConfigEnvelope,
   EffectivePolicyEnvelope, AdoptionEnvelope, ReceiptEnvelope, AdmissionEnvelope, ControlFactsEnvelope, Rights, Budget,
-  PlanEnvelope,
+  PlanEnvelope, ReviewPartitionsEnvelope, ReviewCheckpointEnvelope, ReviewRecordEnvelope,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
 import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf } from './planner/identity.js';
@@ -34,6 +34,9 @@ export interface EnvelopeTypes {
   admission: AdmissionEnvelope;
   controls: ControlFactsEnvelope;
   plan: PlanEnvelope;
+  partitions: ReviewPartitionsEnvelope;
+  checkpoint: ReviewCheckpointEnvelope;
+  review: ReviewRecordEnvelope;
 }
 
 /** Stable error codes; message text is safe context, never raw input. */
@@ -432,6 +435,17 @@ const settings: Check<SettingsEnvelope> = (v, out) => {
   v.providers.forEach((p, i) => {
     if (p.endpoint.startsWith('http:') && !LOOPBACK.test(p.endpoint)) out.add(err(`/providers/${i}/endpoint`, 'plain http is accepted only on the loopback interface'));
     budgetErrors(out, `/providers/${i}/budget`, p.budget);
+    const models = p.models ?? [];
+    for (const j of duplicates(models, m => m.id)) out.add(err(`/providers/${i}/models/${j}/id`, 'duplicate model'));
+    models.forEach((m, j) => {
+      const at = `/providers/${i}/models/${j}`;
+      if (m.limits.maxOutputTokens >= m.limits.contextTokens) out.add(err(`${at}/limits/maxOutputTokens`, 'the output allowance must leave room for input in the context'));
+      if (m.pricing.kind === 'no-fee' && p.disclosure !== 'local-only') out.add(err(`${at}/pricing`, 'only a local-only provider may declare no fee'));
+      if (m.pricing.kind === 'rates' && m.pricing.currency !== p.budget.currency) out.add(err(`${at}/pricing/currency`, 'the rate currency must be the provider budget\u2019s'));
+      if (p.disclosure === 'hosted' && m.terms === null) out.add(err(`${at}/terms`, 'a hosted provider\u2019s model needs its recorded terms'));
+      const c = m.capability;
+      if (c && (c.kind !== p.kind || c.origin !== p.endpoint || c.model !== m.model)) out.add(err(`${at}/capability`, 'the capability record is for another kind, origin or model'));
+    });
   });
   v.grants.forEach((g, i) => {
     if ((g.principals ?? ['human']).includes('agent') && g.actions.some(a => OWNER.has(a))) {
@@ -645,9 +659,89 @@ const plan: Check<PlanEnvelope> = (v, out) => {
   if (digest !== digestOf(rest)) out.add(err('/digest', 'the digest is not the canonical digest of the revision'));
 };
 
+const partitions: Check<ReviewPartitionsEnvelope> = (v, out) => {
+  const seen = new Set<string>();
+  let previous = '';
+  v.partitions.forEach((p, i) => {
+    let bytes = 0;
+    p.members.forEach((m, j) => {
+      pathError(out, `/partitions/${i}/members/${j}/relativePath`, m.relativePath);
+      if (seen.has(m.relativePath)) out.add(err(`/partitions/${i}/members/${j}`, 'a file is in two partitions'));
+      if (m.relativePath <= previous) out.add(err(`/partitions/${i}/members/${j}`, 'members are in path order'));
+      seen.add(m.relativePath);
+      previous = m.relativePath;
+      bytes += m.bytes;
+    });
+    if (p.members.length > v.bounds.maxFiles || bytes > v.bounds.maxBytes) out.add(err(`/partitions/${i}`, 'the partition is over its bounds'));
+    if (bytes !== p.bytes) out.add(err(`/partitions/${i}/bytes`, 'the bytes do not sum its members'));
+    if (p.id !== `part-${digestOf({ sourceId: v.sourceId, members: p.members.map(m => [m.relativePath, m.content]) }).slice(7, 31)}`) {
+      out.add(err(`/partitions/${i}/id`, 'the id is not the digest of the partition\u2019s source and members'));
+    }
+  });
+  for (const i of duplicates(v.gaps, g => g.scopeId)) out.add(err(`/gaps/${i}`, 'duplicate gap'));
+  const { digest, ...rest } = v;
+  if (digest !== digestOf(rest)) out.add(err('/digest', 'the digest is not the canonical digest of the plan'));
+};
+
+const assessmentErrors = (out: Bounded, at: string, a: { verdict: string; claims: { citations: string[] }[]; inspected: string[] }, served: ReadonlySet<string>, read: ReadonlySet<string>) => {
+  if (a.verdict === 'finding' && a.claims.length === 0) out.add(err(`${at}/claims`, 'a finding needs a cited claim'));
+  a.claims.forEach((c, i) => c.citations.forEach((id, j) => { if (!served.has(id)) out.add(err(`${at}/claims/${i}/citations/${j}`, 'cites evidence the session never served')); }));
+  a.inspected.forEach((p, i) => { pathError(out, `${at}/inspected/${i}`, p); if (!read.has(p)) out.add(err(`${at}/inspected/${i}`, 'names a file the session never served')); });
+};
+
+const checkpoint: Check<ReviewCheckpointEnvelope> = (v, out) => {
+  if (v.messages[0]!.role !== 'system') out.add(err('/messages/0/role', 'a session starts with its fixed prompt'));
+  for (const i of duplicates(v.served, x => x.id)) out.add(err(`/served/${i}/id`, 'duplicate evidence id'));
+  const snapshots = new Set(v.served.map(x => x.citation.snapshotId));
+  if (snapshots.size > 1) out.add(err('/served', 'served evidence cites more than one snapshot'));
+  v.served.forEach((x, i) => {
+    pathError(out, `/served/${i}/citation/relativePath`, x.citation.relativePath);
+    if (x.endLine < x.startLine) out.add(err(`/served/${i}/endLine`, 'the range ends before it starts'));
+    if (x.citation.span.endByte < x.citation.span.startByte) out.add(err(`/served/${i}/citation/span`, 'span ends before it starts'));
+    if (!x.citation.quoteDigest) out.add(err(`/served/${i}/citation/quoteDigest`, 'a served slice carries its quote digest'));
+  });
+  v.operations.forEach((o, i) => {
+    if (o.operationId !== `${v.sessionId}.op${i + 1}`) out.add(err(`/operations/${i}/operationId`, 'operations are numbered in order under the session'));
+    if ((o.state === 'settled') !== (o.usage !== undefined)) out.add(err(`/operations/${i}`, 'exactly the settled operations carry usage'));
+  });
+  if (v.final && v.stopped) out.add(err('/stopped', 'a session either concluded or stopped'));
+  if (v.final) {
+    const last = v.operations[v.operations.length - 1];
+    if (!last || last.outcome !== 'final') out.add(err('/final', 'the last operation is the final assessment'));
+    assessmentErrors(out, '/final', v.final, new Set(v.served.map(x => x.id)), new Set(v.served.map(x => x.citation.relativePath)));
+  }
+  if (v.operations.some(o => o.state === 'unsettled') && !v.stopped) out.add(err('/stopped', 'an unsettled call stops the session'));
+};
+
+const review: Check<ReviewRecordEnvelope> = (v, out) => {
+  if ((v.outcome === 'completed') !== (v.verdict !== null)) out.add(err('/verdict', 'exactly a completed review has a verdict'));
+  if (v.observations.length && v.verdict !== 'finding') out.add(err('/observations', 'only a finding yields observations'));
+  const inspected = new Set<string>();
+  v.inspected.forEach((x, i) => {
+    pathError(out, `/inspected/${i}/relativePath`, x.relativePath);
+    if (inspected.has(x.relativePath)) out.add(err(`/inspected/${i}`, 'duplicate inspected file'));
+    inspected.add(x.relativePath);
+    x.ranges.forEach(([a, b], j) => { if (b < a) out.add(err(`/inspected/${i}/ranges/${j}`, 'the range ends before it starts')); });
+  });
+  v.notInspected.forEach((p, i) => { pathError(out, `/notInspected/${i}`, p); if (inspected.has(p)) out.add(err(`/notInspected/${i}`, 'a file is both inspected and not')); });
+  for (const p of v.notInspected) {
+    if (!v.frontiers.some(f => f.scopeId === `${v.sourceId}:${p}` && f.reasonCode === 'sentinel.review.frontier.notInspected')) {
+      out.add(err('/frontiers', 'every file not inspected is a frontier'));
+      break;
+    }
+  }
+  const unsettled = v.operations.some(o => o.state === 'unsettled');
+  if ((v.totals.usage === 'unknown') !== unsettled) out.add(err('/totals/usage', 'usage is unknown exactly when a call is unsettled'));
+  if (v.totals.steps !== v.operations.length) out.add(err('/totals/steps', 'steps count the operations'));
+  if (v.model === null && v.operations.some(o => o.state === 'settled')) out.add(err('/model', 'a settled reply names its model'));
+  const { digest, ...rest } = v;
+  if (digest !== digestOf(rest)) out.add(err('/digest', 'the digest is not the canonical digest of the record'));
+};
+
 const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   snapshot, run, work, attempt, observation, coverage, disposition, report, protocol,
   rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan,
+  partitions, checkpoint, review,
 };
 
 /**

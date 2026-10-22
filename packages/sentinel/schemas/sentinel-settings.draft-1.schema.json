@@ -250,6 +250,14 @@
         "budget": {
           "$ref": "#/definitions/Budget",
           "description": "The most one admitted action may reserve."
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ModelSettings"
+          },
+          "description": "The models the owner configured for this provider (PR 21). A model is usable only from adopted settings; a caller or repository cannot supply one.",
+          "maxItems": 16
         }
       },
       "required": [
@@ -330,6 +338,321 @@
       "type": "string",
       "description": "An ISO 4217 currency code.",
       "pattern": "^[A-Z]{3}$"
+    },
+    "ModelSettings": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "model": {
+          "$ref": "#/definitions/ModelName"
+        },
+        "limits": {
+          "$ref": "#/definitions/ModelLimits"
+        },
+        "pricing": {
+          "$ref": "#/definitions/ModelPricing"
+        },
+        "terms": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ProviderTerms"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Required when the provider's disclosure is `hosted`."
+        },
+        "capability": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ModelCapability"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null until the owner probes and adopts it: an untested model cannot be bound."
+        }
+      },
+      "required": [
+        "id",
+        "model",
+        "limits",
+        "pricing",
+        "terms",
+        "capability"
+      ],
+      "additionalProperties": false,
+      "description": "One configured model of a provider."
+    },
+    "ModelName": {
+      "type": "string",
+      "description": "A model name as the provider spells it.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$"
+    },
+    "ModelLimits": {
+      "type": "object",
+      "properties": {
+        "maxRequestBytes": {
+          "$ref": "#/definitions/ModelBytes"
+        },
+        "maxResponseBytes": {
+          "$ref": "#/definitions/ModelBytes"
+        },
+        "timeoutMs": {
+          "$ref": "#/definitions/ModelTimeoutMs"
+        },
+        "maxOutputTokens": {
+          "$ref": "#/definitions/ModelOutputTokens"
+        },
+        "contextTokens": {
+          "$ref": "#/definitions/ModelContextTokens",
+          "description": "Worst-case input plus output must fit, so a provider never cuts input silently."
+        },
+        "maxMessages": {
+          "$ref": "#/definitions/ModelMessages"
+        },
+        "templateTokensPerMessage": {
+          "$ref": "#/definitions/ModelTemplateTokens",
+          "description": "Tokens a chat template may add per message beyond the bytes sent; part of the worst-case bound."
+        }
+      },
+      "required": [
+        "maxRequestBytes",
+        "maxResponseBytes",
+        "timeoutMs",
+        "maxOutputTokens",
+        "contextTokens",
+        "maxMessages",
+        "templateTokensPerMessage"
+      ],
+      "additionalProperties": false,
+      "description": "Hard limits on one model call."
+    },
+    "ModelBytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4194304
+    },
+    "ModelTimeoutMs": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 600000
+    },
+    "ModelOutputTokens": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 131072
+    },
+    "ModelContextTokens": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2000000
+    },
+    "ModelMessages": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 256
+    },
+    "ModelTemplateTokens": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1024
+    },
+    "ModelPricing": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "rates",
+            "no-fee"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "rates"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "rates"
+              },
+              "currency": {
+                "$ref": "#/definitions/CurrencyCode"
+              },
+              "inputPerMillion": {
+                "$ref": "#/definitions/DecimalAmount"
+              },
+              "outputPerMillion": {
+                "$ref": "#/definitions/DecimalAmount"
+              },
+              "source": {
+                "$ref": "#/definitions/ShortText",
+                "description": "Where the owner read the rate schedule."
+              },
+              "asOf": {
+                "$ref": "#/definitions/CalendarDate"
+              }
+            },
+            "required": [
+              "kind",
+              "currency",
+              "inputPerMillion",
+              "outputPerMillion",
+              "source",
+              "asOf"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "no-fee"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "no-fee"
+              },
+              "basis": {
+                "type": "string",
+                "const": "local-runtime"
+              }
+            },
+            "required": [
+              "kind",
+              "basis"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ],
+      "description": "How a model's spend is priced. There is no unpriced form: an unpriced call cannot be bounded."
+    },
+    "ShortText": {
+      "type": "string",
+      "description": "A short label (a severity as supplied, a framework name).",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "CalendarDate": {
+      "type": "string",
+      "description": "A calendar date, `YYYY-MM-DD`.",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
+    },
+    "ProviderTerms": {
+      "type": "object",
+      "properties": {
+        "retention": {
+          "$ref": "#/definitions/ShortText"
+        },
+        "training": {
+          "type": "string",
+          "enum": [
+            "not-used",
+            "used",
+            "unknown"
+          ]
+        },
+        "source": {
+          "$ref": "#/definitions/ShortText"
+        },
+        "recordedAt": {
+          "$ref": "#/definitions/CalendarDate"
+        }
+      },
+      "required": [
+        "retention",
+        "training",
+        "source",
+        "recordedAt"
+      ],
+      "additionalProperties": false,
+      "description": "A hosted provider's terms as the owner recorded them: endpoint-specific facts, never a protocol promise."
+    },
+    "ModelCapability": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-model-capability/draft-1"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "ollama",
+            "openai-compatible"
+          ]
+        },
+        "origin": {
+          "$ref": "#/definitions/EndpointOrigin"
+        },
+        "model": {
+          "$ref": "#/definitions/ModelName"
+        },
+        "listed": {
+          "type": "boolean",
+          "const": true
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "An immutable revision the provider listed (Ollama's weight digest), else null."
+        },
+        "probedAt": {
+          "$ref": "#/definitions/Timestamp"
+        }
+      },
+      "required": [
+        "schema",
+        "kind",
+        "origin",
+        "model",
+        "listed",
+        "revision",
+        "probedAt"
+      ],
+      "additionalProperties": false,
+      "description": "What a probe of one origin found for one model. The owner adopts it with the settings; it is never assumed."
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "A UTC RFC 3339 timestamp with an explicit Z offset and a real calendar date (no leap second), years 0000–9999 proleptic Gregorian, up to nine fractional digits. The pattern bounds each field; the `date-time` format check refuses a day the month does not have. Comparisons keep all nine digits.",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$",
+      "format": "date-time"
     }
   },
   "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-settings.draft-1.schema.json",

@@ -72,6 +72,123 @@ export interface ProviderSettings {
   disclosure: 'local-only' | 'hosted';
   /** The most one admitted action may reserve. */
   budget: Budget;
+  /**
+   * The models the owner configured for this provider (PR 21). A model is usable only from adopted settings; a caller
+   * or repository cannot supply one.
+   * @maxItems 16
+   */
+  models?: ModelSettings[];
+}
+
+/**
+ * A model name as the provider spells it.
+ * @pattern ^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$
+ */
+export type ModelName = string;
+
+/**
+ * A calendar date, `YYYY-MM-DD`.
+ * @pattern ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$
+ */
+export type CalendarDate = string;
+
+/**
+ * @asType integer
+ * @minimum 1
+ * @maximum 4194304
+ */
+export type ModelBytes = number;
+/**
+ * @asType integer
+ * @minimum 1
+ * @maximum 600000
+ */
+export type ModelTimeoutMs = number;
+/**
+ * @asType integer
+ * @minimum 1
+ * @maximum 131072
+ */
+export type ModelOutputTokens = number;
+/**
+ * @asType integer
+ * @minimum 1
+ * @maximum 2000000
+ */
+export type ModelContextTokens = number;
+/**
+ * @asType integer
+ * @minimum 1
+ * @maximum 256
+ */
+export type ModelMessages = number;
+/**
+ * @asType integer
+ * @minimum 0
+ * @maximum 1024
+ */
+export type ModelTemplateTokens = number;
+
+/** Hard limits on one model call. */
+export interface ModelLimits {
+  maxRequestBytes: ModelBytes;
+  maxResponseBytes: ModelBytes;
+  timeoutMs: ModelTimeoutMs;
+  maxOutputTokens: ModelOutputTokens;
+  /** Worst-case input plus output must fit, so a provider never cuts input silently. */
+  contextTokens: ModelContextTokens;
+  maxMessages: ModelMessages;
+  /** Tokens a chat template may add per message beyond the bytes sent; part of the worst-case bound. */
+  templateTokensPerMessage: ModelTemplateTokens;
+}
+
+/**
+ * How a model's spend is priced. There is no unpriced form: an unpriced call cannot be bounded.
+ * @discriminator kind
+ */
+export type ModelPricing =
+  | {
+      kind: 'rates';
+      currency: CurrencyCode;
+      inputPerMillion: DecimalAmount;
+      outputPerMillion: DecimalAmount;
+      /** Where the owner read the rate schedule. */
+      source: ShortText;
+      asOf: CalendarDate;
+    }
+  /** A local runtime: no provider fee. Compute is not claimed free; tokens are still reserved. */
+  | { kind: 'no-fee'; basis: 'local-runtime' };
+
+/** A hosted provider's terms as the owner recorded them: endpoint-specific facts, never a protocol promise. */
+export interface ProviderTerms {
+  retention: ShortText;
+  training: 'not-used' | 'used' | 'unknown';
+  source: ShortText;
+  recordedAt: CalendarDate;
+}
+
+/** What a probe of one origin found for one model. The owner adopts it with the settings; it is never assumed. */
+export interface ModelCapability {
+  schema: 'sentinel-model-capability/draft-1';
+  kind: 'ollama' | 'openai-compatible';
+  origin: EndpointOrigin;
+  model: ModelName;
+  listed: true;
+  /** An immutable revision the provider listed (Ollama's weight digest), else null. */
+  revision: Digest | null;
+  probedAt: Timestamp;
+}
+
+/** One configured model of a provider. */
+export interface ModelSettings {
+  id: Id;
+  model: ModelName;
+  limits: ModelLimits;
+  pricing: ModelPricing;
+  /** Required when the provider's disclosure is `hosted`. */
+  terms: ProviderTerms | null;
+  /** null until the owner probes and adopts it: an untested model cannot be bound. */
+  capability: ModelCapability | null;
 }
 
 export interface PolicyThresholds {

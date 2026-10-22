@@ -4,22 +4,14 @@
 // field is a shape error. A final assessment's citations must be evidence ids this session served, each re-checked
 // against the snapshot's bytes; "inspected" must name only files the session actually served. Valid citations make
 // a claim well-formed, not correct: semantic correctness is the evaluation's question (evaluation.ts), not this one.
+import type { ReviewAssessment, ReviewClaim, ReviewVerdict } from '../contracts/index.js';
+import { snapshot } from '../policy/immutable.js';
 import type { EvidenceBroker, ToolRequest } from './evidence.js';
 import type { ReplyRejectionCode } from './errors.js';
 
-export type Verdict = 'finding' | 'no-finding' | 'inconclusive';
-
-export interface Claim {
-  readonly statement: string;
-  readonly citations: readonly string[];
-  readonly cwe?: string;
-}
-
-export interface FinalAssessment {
-  readonly verdict: Verdict;
-  readonly claims: readonly Claim[];
-  readonly inspected: readonly string[];
-}
+export type Verdict = ReviewVerdict;
+export type Claim = ReviewClaim;
+export type FinalAssessment = ReviewAssessment;
 
 export type ValidatedReply =
   | { readonly ok: true; readonly kind: 'tool'; readonly request: ToolRequest }
@@ -67,13 +59,13 @@ export function validateReply(raw: string, broker: EvidenceBroker, tools: Readon
           return no('sentinel.review.reply.citationChanged', `${id.slice(0, 64)} no longer matches its captured bytes`);
         }
       }
-      claims.push(Object.freeze({ statement: c.statement as string, citations: Object.freeze([...new Set(c.citations as string[])]), ...(c.cwe ? { cwe: c.cwe as string } : {}) }));
+      claims.push({ statement: c.statement as string, citations: [...new Set(c.citations as string[])], ...(c.cwe ? { cwe: c.cwe as string } : {}) });
     }
     if (v.verdict === 'finding' && claims.length === 0) return no('sentinel.review.reply.missingCitation', 'a finding needs at least one cited claim');
     const read = new Set(broker.state().served.map(s => s.relativePath));
     const unread = (v.inspected as string[]).filter(p => !read.has(p));
     if (unread.length) return no('sentinel.review.reply.inspectedUnread', `${unread.length} claimed path(s) were never read`);
-    return { ok: true, kind: 'final', assessment: Object.freeze({ verdict: v.verdict, claims: Object.freeze(claims), inspected: Object.freeze([...new Set(v.inspected as string[])].sort()) }) };
+    return { ok: true, kind: 'final', assessment: snapshot({ verdict: v.verdict as Verdict, claims, inspected: [...new Set(v.inspected as string[])].sort() }) };
   }
   if (!tools.has(action as ToolRequest['action'])) return no('sentinel.review.reply.shape', 'not a tool of this session');
   switch (action) {

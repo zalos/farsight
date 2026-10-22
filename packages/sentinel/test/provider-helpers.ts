@@ -55,11 +55,37 @@ export function scratchDir(t: { after(fn: () => void): void }, prefix = 'sentine
 
 export const LIMITS = { maxRequestBytes: 64 * 1024, maxResponseBytes: 16 * 1024, timeoutMs: 2000, maxOutputTokens: 256, contextTokens: 8192, maxMessages: 16, templateTokensPerMessage: 8 };
 
+export const capability = (kind: 'ollama' | 'openai-compatible', origin: string, model: string, revision: string | null = null) =>
+  ({ schema: 'sentinel-model-capability/draft-1' as const, kind, origin, model, listed: true as const, revision, probedAt: '2026-10-22T11:00:00.000000000Z' });
+
+export const TERMS = { retention: 'synthetic: 30 days', training: 'not-used' as const, source: 'synthetic terms page', recordedAt: '2026-10-22' };
+
+/** A configured model as the adopted settings hold it (`providers[].models[]`), plus the provider it belongs to. */
+export const ollamaProfile = (origin: string, over: Record<string, unknown> = {}) => ({
+  providerId: 'local-review', id: 'review', model: 'review-model:1', limits: LIMITS,
+  pricing: { kind: 'no-fee' as const, basis: 'local-runtime' as const }, terms: null,
+  capability: capability('ollama', origin, 'review-model:1', `sha256:${'a'.repeat(64)}`), ...over,
+});
+
+export const openaiProfile = (origin: string, over: Record<string, unknown> = {}) => ({
+  providerId: 'local-openai', id: 'review', model: 'review-model', limits: LIMITS,
+  pricing: { kind: 'rates' as const, currency: 'USD', inputPerMillion: '2.50', outputPerMillion: '10', source: 'synthetic test schedule', asOf: '2026-10-22' },
+  terms: null, capability: capability('openai-compatible', origin, 'review-model'), ...over,
+});
+
+const HOSTED = 'https://models.example.com';
+const modelOf = (p: Record<string, unknown>) => { const { providerId: _p, ...m } = p; void _p; return m; };
+
+export interface TrustedOptions { ollama?: string; openai?: string; grants?: unknown[]; models?: Record<string, unknown[]> }
+
 /**
- * Adopted settings naming the mock endpoints: a local Ollama, a local OpenAI-compatible server with a keychain
- * reference, and a hosted provider that is never contacted (its rules are checked without a network).
+ * Adopted settings naming the mock endpoints, each provider with its configured models: a local Ollama, a local
+ * OpenAI-compatible server with a keychain reference, and a hosted provider that is never contacted.
  */
-export function trustedPolicy(o: { ollama?: string; openai?: string; grants?: unknown[] } = {}) {
+export function trustedPolicy(o: TrustedOptions = {}) {
+  const ollama = o.ollama ?? 'http://127.0.0.1:9';
+  const openai = o.openai ?? 'http://127.0.0.1:9';
+  const models = (id: string, dflt: unknown[]) => o.models?.[id] ?? dflt;
   const settings = {
     ...structuredClone(DEFAULT_SETTINGS),
     grants: o.grants ?? [
@@ -67,34 +93,26 @@ export function trustedPolicy(o: { ollama?: string; openai?: string; grants?: un
       { actions: ['paid.admit'], principals: ['human', 'agent'], confirm: 'always', scope: { providers: ['hosted-review'] } },
     ],
     providers: [
-      { id: 'local-review', kind: 'ollama', endpoint: o.ollama ?? 'http://127.0.0.1:9', credential: null, disclosure: 'local-only',
-        budget: { maxTokens: 100000, maxCost: '0', currency: 'USD' } },
-      { id: 'local-openai', kind: 'openai-compatible', endpoint: o.openai ?? 'http://127.0.0.1:9', credential: 'keychain:farsight/sentinel-review',
-        disclosure: 'local-only', budget: { maxTokens: 100000, maxCost: '1.00', currency: 'USD' } },
-      { id: 'hosted-review', kind: 'openai-compatible', endpoint: 'https://models.example.com', credential: 'keychain:farsight/sentinel-review',
-        disclosure: 'hosted', budget: { maxTokens: 100000, maxCost: '5.00', currency: 'USD' } },
+      { id: 'local-review', kind: 'ollama', endpoint: ollama, credential: null, disclosure: 'local-only',
+        budget: { maxTokens: 100000, maxCost: '0', currency: 'USD' }, models: models('local-review', [modelOf(ollamaProfile(ollama))]) },
+      { id: 'local-openai', kind: 'openai-compatible', endpoint: openai, credential: 'keychain:farsight/sentinel-review',
+        disclosure: 'local-only', budget: { maxTokens: 100000, maxCost: '1.00', currency: 'USD' }, models: models('local-openai', [modelOf(openaiProfile(openai))]) },
+      { id: 'hosted-review', kind: 'openai-compatible', endpoint: HOSTED, credential: 'keychain:farsight/sentinel-review',
+        disclosure: 'hosted', budget: { maxTokens: 100000, maxCost: '5.00', currency: 'USD' },
+        models: models('hosted-review', [modelOf(openaiProfile(HOSTED, { terms: TERMS }))]) },
       { id: 'named-local', kind: 'ollama', endpoint: 'http://localhost:11434', credential: null, disclosure: 'local-only',
-        budget: { maxTokens: 1000, maxCost: '0', currency: 'USD' } },
+        budget: { maxTokens: 1000, maxCost: '0', currency: 'USD' }, models: models('named-local', []) },
       { id: 'plain-hosted', kind: 'openai-compatible', endpoint: 'http://models.example.com', credential: null, disclosure: 'hosted',
-        budget: { maxTokens: 1000, maxCost: '1.00', currency: 'USD' } },
+        budget: { maxTokens: 1000, maxCost: '1.00', currency: 'USD' }, models: models('plain-hosted', []) },
     ],
   };
   return effectivePolicy({ trust: 'adopted', settings: settings as any, settingsDigest: D('settings'), repoConfig: null, repoConfigDigest: null });
 }
 
-export const capability = (kind: 'ollama' | 'openai-compatible', origin: string, model: string, revision: string | null = null) =>
-  ({ schema: 'sentinel-model-capability/draft-1' as const, kind, origin, model, listed: true as const, revision, probedAt: '2026-10-22T11:00:00.000000000Z' });
-
-export const ollamaProfile = (origin: string, over: Record<string, unknown> = {}) => ({
-  providerId: 'local-review', kind: 'ollama' as const, model: 'review-model:1', limits: LIMITS,
-  pricing: { kind: 'no-fee' as const, basis: 'local-runtime' as const }, terms: null,
-  capability: capability('ollama', origin, 'review-model:1', `sha256:${'a'.repeat(64)}`), ...over,
-});
-
-export const openaiProfile = (origin: string, over: Record<string, unknown> = {}) => ({
-  providerId: 'local-openai', kind: 'openai-compatible' as const, model: 'review-model', limits: LIMITS,
-  pricing: { kind: 'rates' as const, currency: 'USD', inputPerMillion: '2.50', outputPerMillion: '10', source: 'synthetic test schedule', asOf: '2026-10-22' },
-  terms: null, capability: capability('openai-compatible', origin, 'review-model'), ...over,
-});
-
-export const TERMS = { retention: 'synthetic: 30 days', training: 'not-used' as const, source: 'synthetic terms page', recordedAt: '2026-10-22' };
+/** A policy whose provider `profile.providerId` holds exactly `profile` as its only model, bound by id. */
+export async function withModel(o: TrustedOptions, profile: Record<string, unknown>) {
+  const { bindProvider } = await import('../dist/review/providers/index.js');
+  const providerId = profile.providerId as string;
+  const policy = trustedPolicy({ ...o, models: { ...(o.models ?? {}), [providerId]: [modelOf(profile)] } });
+  return { policy, bind: () => bindProvider(policy, providerId, profile.id as string) };
+}

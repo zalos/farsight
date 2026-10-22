@@ -10,10 +10,12 @@
 // claims become observations a person may later dispose of. Nothing here approves, suppresses or promotes.
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Digest, ModelIdentity, ObservationEnvelope, ScopedReason } from '../contracts/index.js';
+import type { Digest, ModelIdentity, ObservationEnvelope, ReviewCheckpointEnvelope, ReviewOperation, ReviewRecordEnvelope, ScopedReason, ServedCitation } from '../contracts/index.js';
+import { MAX_ENVELOPE_BYTES } from '../contracts/index.js';
+import { digestOf } from '../store/ledger-json.js';
 import { canonicalDigest } from '../policy/digest.js';
 import { snapshot } from '../policy/immutable.js';
-import { validateEnvelope } from '../validate.js';
+import { parseEnvelope, validateEnvelope } from '../validate.js';
 import type { ChatMessage } from './providers/kinds.js';
 import { EvidenceBroker, type DisclosureFilter, type EvidenceItem, type EvidenceLimits, type EvidenceScope, type ToolRequest, type ToolResult } from './evidence.js';
 import { reviewFail, type ReplyRejectionCode, type ReviewFrontierCode } from './errors.js';
@@ -70,31 +72,9 @@ export interface SessionSpec {
   readonly tools: readonly ToolRequest['action'][];
 }
 
-export interface OperationRecord {
-  readonly operationId: string;
-  readonly state: 'settled' | 'unsettled';
-  readonly inputBytes: number;
-  readonly usage?: { readonly inputTokens: number; readonly outputTokens: number };
-  /** What the reply was taken as. */
-  readonly outcome: 'tool' | 'final' | ReplyRejectionCode | 'failed';
-}
-
-/** sentinel-review-checkpoint/draft-1 — everything a session needs to resume after its last settled operation. */
-export interface ReviewCheckpoint {
-  readonly schema: 'sentinel-review-checkpoint/draft-1';
-  readonly sessionId: string;
-  readonly specDigest: Digest;
-  readonly startedAt: number;
-  readonly messages: readonly ChatMessage[];
-  readonly served: readonly EvidenceItem[];
-  readonly toolCalls: number;
-  readonly invalid: number;
-  readonly inputBytes: number;
-  readonly operations: readonly OperationRecord[];
-  readonly identity: ModelIdentity | null;
-  readonly final: FinalAssessment | null;
-  readonly stopped: ReviewFrontierCode | null;
-}
+export type OperationRecord = ReviewOperation;
+/** The registered `sentinel-review-checkpoint/draft-1` envelope. */
+export type ReviewCheckpoint = ReviewCheckpointEnvelope;
 
 /** Durable checkpoints. The coordinator's store can stand behind this seam; `FileCheckpointStore` is the default. */
 export interface CheckpointStore {
@@ -102,36 +82,8 @@ export interface CheckpointStore {
   save(cp: ReviewCheckpoint): Promise<void>;
 }
 
-/** sentinel-review-record/draft-1 — what one session inspected and concluded. Model inspection, not coverage. */
-export interface ReviewRecord {
-  readonly schema: 'sentinel-review-record/draft-1';
-  readonly sessionId: string;
-  readonly kind: 'guided' | 'general';
-  readonly runId: string;
-  readonly attemptId: string;
-  readonly snapshotId: string;
-  readonly sourceId: string;
-  readonly specDigest: Digest;
-  readonly promptDigest: Digest;
-  readonly model: ModelIdentity | null;
-  readonly callerKind: 'mock' | 'provider';
-  readonly outcome: 'completed' | 'unfinished';
-  readonly verdict: Verdict | null;
-  /** Files served to the model, with the line ranges served: the session's own ledger, not the model's claim. */
-  readonly inspected: readonly { readonly relativePath: string; readonly content: string; readonly ranges: readonly (readonly [number, number])[] }[];
-  /** Scope files never served; each is also a `notInspected` frontier. */
-  readonly notInspected: readonly string[];
-  readonly frontiers: readonly ScopedReason[];
-  readonly operations: readonly OperationRecord[];
-  readonly totals: { readonly steps: number; readonly toolCalls: number; readonly inputBytes: number; readonly inputTokens: number; readonly outputTokens: number;
-    readonly usage: 'confirmed' | 'unknown' };
-  readonly refusals: number;
-  readonly rejectedReplies: number;
-  readonly observations: readonly string[];
-  readonly establishes: 'model-review-inspection';
-  readonly deterministicCoverage: false;
-  readonly digest: Digest;
-}
+/** The registered `sentinel-review-record/draft-1` envelope. */
+export type ReviewRecord = ReviewRecordEnvelope;
 
 export interface SessionResult {
   readonly record: ReviewRecord;
@@ -141,6 +93,7 @@ export interface SessionResult {
 const CHECKPOINT_SCHEMA = 'sentinel-review-checkpoint/draft-1';
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/;
 const stamp = (ms: number) => new Date(ms).toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z');
+const served = (items: readonly EvidenceItem[]): ServedCitation[] => items.map(e => ({ id: e.id, startLine: e.startLine, endLine: e.endLine, citation: { ...e.citation } }));
 
 /** Checkpoints as private JSON files, written whole and renamed into place. */
 export class FileCheckpointStore implements CheckpointStore {
@@ -156,12 +109,10 @@ export class FileCheckpointStore implements CheckpointStore {
   async load(sessionId: string): Promise<ReviewCheckpoint | null> {
     let text: string;
     try { text = readFileSync(this.#path(sessionId), 'utf8'); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null; throw e; }
-    let v: unknown;
-    try { v = JSON.parse(text); } catch { return reviewFail('sentinel.review.checkpoint', 'the checkpoint is not JSON'); }
-    if (!v || typeof v !== 'object' || (v as ReviewCheckpoint).schema !== CHECKPOINT_SCHEMA || (v as ReviewCheckpoint).sessionId !== sessionId) {
-      reviewFail('sentinel.review.checkpoint', 'the checkpoint is not this session’s');
-    }
-    return v as ReviewCheckpoint;
+    const v = parseEnvelope('checkpoint', text);
+    if (!v.ok) return reviewFail('sentinel.review.checkpoint', `the checkpoint does not validate: ${v.errors[0]?.code} ${v.errors[0]?.path}`);
+    if (v.value.sessionId !== sessionId) reviewFail('sentinel.review.checkpoint', 'the checkpoint is not this session\u2019s');
+    return v.value;
   }
   async save(cp: ReviewCheckpoint): Promise<void> {
     const path = this.#path(cp.sessionId);
@@ -225,21 +176,34 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
   const tools = new Set(spec.tools);
   let cp = await opts.checkpoints.load(spec.sessionId);
   if (cp) {
-    if (cp.specDigest !== digest) reviewFail('sentinel.review.checkpoint', 'the checkpoint is for another scope, prompt, budget or tool set');
+    // Whatever store stood behind the seam, a checkpoint is a validated envelope for exactly this spec.
+    const checked = validateEnvelope('checkpoint', cp);
+    if (!checked.ok) reviewFail('sentinel.review.checkpoint', `the checkpoint does not validate: ${checked.errors[0]?.path} ${checked.errors[0]?.message}`);
+    if (cp.sessionId !== spec.sessionId || cp.specDigest !== digest) reviewFail('sentinel.review.checkpoint', 'the checkpoint is for another scope, prompt, budget or tool set');
+    if (cp.messages[0]!.content !== spec.prompt.text) reviewFail('sentinel.review.checkpoint', 'the checkpoint does not start with this session\u2019s prompt');
     await broker.restore(cp.served, cp.toolCalls);
   } else {
-    cp = { schema: CHECKPOINT_SCHEMA, sessionId: spec.sessionId, specDigest: digest, startedAt: now(),
+    cp = { schema: CHECKPOINT_SCHEMA, sessionId: spec.sessionId, specDigest: digest, startedAt: stamp(now()),
       messages: [{ role: 'system', content: spec.prompt.text }, taskMessage(spec)], served: [], toolCalls: 0, invalid: 0, inputBytes: 0,
       operations: [], identity: null, final: null, stopped: null };
     await opts.checkpoints.save(cp);
   }
-  const save = async (next: ReviewCheckpoint) => { cp = next; await opts.checkpoints.save(next); };
+  const startedAt = Date.parse(cp.startedAt);
+  const fits = (next: ReviewCheckpoint) => Buffer.byteLength(JSON.stringify(next)) <= MAX_ENVELOPE_BYTES;
+  const save = async (next: ReviewCheckpoint) => {
+    // A checkpoint that would not fit one envelope is never written: the session stops at its last one that did.
+    if (!fits(next)) next = { ...cp!, stopped: 'sentinel.review.frontier.budget' };
+    const checked = validateEnvelope('checkpoint', next);
+    if (!checked.ok) reviewFail('sentinel.review.integrity', `a checkpoint does not validate: ${checked.errors[0]?.path} ${checked.errors[0]?.message}`);
+    cp = next;
+    await opts.checkpoints.save(next);
+  };
   const stop = (code: ReviewFrontierCode) => save({ ...cp!, stopped: code });
 
   while (!cp.final && !cp.stopped) {
     const step = cp.operations.length;
     if (step >= spec.budget.maxSteps) { await stop('sentinel.review.frontier.steps'); break; }
-    if (now() - cp.startedAt > spec.budget.deadlineMs) { await stop('sentinel.review.frontier.deadline'); break; }
+    if (now() - startedAt > spec.budget.deadlineMs) { await stop('sentinel.review.frontier.deadline'); break; }
     if (opts.signal?.aborted) { await stop('sentinel.review.frontier.canceled'); break; }
     const bytes = Buffer.byteLength(JSON.stringify(cp.messages));
     if (cp.inputBytes + bytes > spec.budget.maxInputBytes) { await stop('sentinel.review.frontier.budget'); break; }
@@ -275,7 +239,7 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
     const result = await broker.run(v.request);
     messages.push(resultMessage(result));
     const st = broker.state();
-    await save({ ...cp, messages, served: st.served, toolCalls: st.toolCalls, inputBytes: cp.inputBytes + bytes, identity: reply.identity,
+    await save({ ...cp, messages, served: served(st.served), toolCalls: st.toolCalls, inputBytes: cp.inputBytes + bytes, identity: reply.identity,
       operations: [...cp.operations, { ...op, outcome: 'tool' }] });
   }
   return finish(spec, cp, broker, opts.caller.kind, now());
@@ -334,5 +298,9 @@ function finish(spec: SessionSpec, cp: ReviewCheckpoint, broker: EvidenceBroker,
     refusals: served.refusals.length, rejectedReplies: cp.invalid, observations: observations.map(o => o.id),
     establishes: 'model-review-inspection' as const, deterministicCoverage: false as const,
   };
-  return Object.freeze({ record: snapshot({ ...body, digest: canonicalDigest(body) as Digest }), observations: Object.freeze(observations) });
+  const record: ReviewRecord = { ...body, inspected: body.inspected.map(i => ({ ...i, ranges: i.ranges.map(r => [r[0], r[1]] as [number, number]) })),
+    digest: digestOf({ ...body, inspected: body.inspected.map(i => ({ ...i, ranges: i.ranges.map(r => [r[0], r[1]]) })) }) as Digest };
+  const checked = validateEnvelope('review', record);
+  if (!checked.ok) reviewFail('sentinel.review.integrity', `the review record does not validate: ${checked.errors[0]?.path} ${checked.errors[0]?.message}`);
+  return Object.freeze({ record: snapshot(record), observations: Object.freeze(observations) });
 }

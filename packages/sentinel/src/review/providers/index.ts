@@ -6,7 +6,7 @@ export { BudgetLedger, RESERVATION_STATE_KEYS } from './budget.js';
 export type { EnvelopeInput, Reservation, ReservationState, EnvelopeTotals, Usage } from './budget.js';
 export { bindProvider, isProviderBinding, checkOrigin, LIMIT_CEILINGS } from './profile.js';
 export type { ModelProfile, ModelLimits, ModelPricing, ProviderTerms, CapabilityRecord, ProviderBinding, ProviderKind } from './profile.js';
-export { probeCapability, chatBody, parseReply } from './kinds.js';
+export { probeCapability, probeConfigured, chatBody, parseReply } from './kinds.js';
 export type { ChatMessage, ReplyIdentity, ReportedUsage, FinishReason, ParsedReply, ProbeRequest, IdentityStrength } from './kinds.js';
 export { Secret, keychainSource, resolveCredential } from './credentials.js';
 export type { CredentialSource } from './credentials.js';

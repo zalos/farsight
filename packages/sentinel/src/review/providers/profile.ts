@@ -4,7 +4,10 @@
 // a probe of this exact origin produced. `bindProvider` checks them together and returns a frozen binding whose
 // digest is the `input` an owner receipt confirms, so a changed origin, credential, disclosure, model, limit, price,
 // term or capability needs a new confirmation. Nothing here contacts a provider or reads a credential.
-import type { EndpointOrigin, Id, KeychainRef, ProviderSettings } from '../../contracts/index.js';
+import type {
+  EndpointOrigin, Id, KeychainRef, ModelCapability, ModelLimits as ContractModelLimits, ModelPricing as ContractModelPricing, ModelSettings,
+  ProviderSettings, ProviderTerms as ContractProviderTerms,
+} from '../../contracts/index.js';
 import { canonicalDigest } from '../../policy/digest.js';
 import { snapshot } from '../../policy/immutable.js';
 import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.js';
@@ -13,75 +16,18 @@ import { fail } from './errors.js';
 
 export type ProviderKind = ProviderSettings['kind'];
 
-export interface ModelLimits {
-  /** The serialized request, every message included. */
-  readonly maxRequestBytes: number;
-  /** The response body as read; reading stops past it. */
-  readonly maxResponseBytes: number;
-  /** One call, connect to last byte. */
-  readonly timeoutMs: number;
-  readonly maxOutputTokens: number;
-  /** The context the model is run with: worst-case input plus output must fit, so nothing is cut silently. */
-  readonly contextTokens: number;
-  readonly maxMessages: number;
-  /**
-   * Tokens a provider's chat template may add per message, beyond the bytes sent. Part of the worst-case input
-   * bound; a provider that reports more than the reservation is an overrun, recorded, never absorbed.
-   */
-  readonly templateTokensPerMessage: number;
-}
+/** Contract types (`contracts/policy.ts`): the model configuration lives in the adopted settings. */
+export type ModelLimits = ContractModelLimits;
+export type ModelPricing = ContractModelPricing;
+export type ProviderTerms = ContractProviderTerms;
+export type CapabilityRecord = ModelCapability;
+export type ModelProfile = ModelSettings;
 
-/** How spend is priced. `null` (no price) is refused: an unpriced call cannot be bounded. */
-export type ModelPricing =
-  | {
-      readonly kind: 'rates';
-      /** ISO 4217; must equal the provider budget's currency. */
-      readonly currency: string;
-      /** DecimalAmount per million input / output tokens. */
-      readonly inputPerMillion: string;
-      readonly outputPerMillion: string;
-      /** Where the owner read the rate schedule, and when. */
-      readonly source: string;
-      readonly asOf: string;
-    }
-  /** Local runtimes only: no provider fee. Compute is not claimed free; tokens are still reserved. */
-  | { readonly kind: 'no-fee'; readonly basis: 'local-runtime' };
-
-/** A hosted provider's recorded terms. Endpoint-specific facts the owner read, never a promise of the protocol. */
-export interface ProviderTerms {
-  readonly retention: string;
-  readonly training: 'not-used' | 'used' | 'unknown';
-  readonly source: string;
-  readonly recordedAt: string;
-}
-
-/** What a probe of this origin found for this model. Produced by `probeCapability`, stored by the trusted caller. */
-export interface CapabilityRecord {
-  readonly schema: 'sentinel-model-capability/draft-1';
-  readonly kind: ProviderKind;
-  readonly origin: EndpointOrigin;
-  readonly model: string;
-  /** The model was listed by the provider at `probedAt`. */
-  readonly listed: true;
-  /** An immutable revision the provider listed for it (Ollama's weight digest), else null. */
-  readonly revision: string | null;
-  readonly probedAt: string;
-}
-
-export interface ModelProfile {
-  readonly providerId: Id;
-  readonly kind: ProviderKind;
-  readonly model: string;
-  readonly limits: ModelLimits;
-  readonly pricing: ModelPricing | null;
-  /** Required when the provider's disclosure is `hosted`. */
-  readonly terms: ProviderTerms | null;
-  readonly capability: CapabilityRecord | null;
-}
-
-/** The checked, frozen union of the adopted provider settings and the profile. Only `bindProvider` makes one. */
+/** The checked, frozen union of the adopted provider and one of its models. Only `bindProvider` makes one. */
 export interface ProviderBinding {
   readonly providerId: Id;
+  /** The model's id in the adopted settings. */
+  readonly modelId: Id;
   readonly kind: ProviderKind;
   readonly origin: EndpointOrigin;
   readonly credential: KeychainRef | null;
@@ -141,28 +87,28 @@ function checkLimits(l: unknown): ModelLimits {
 }
 
 /**
- * Checks the profile against the adopted provider and returns the binding. Refuses a provider the adopted settings
- * do not define, a kind or origin that disagrees, an unpriced profile, a no-fee profile that is not local, a hosted
- * provider without recorded terms, and a capability record for another kind, origin or model.
+ * Binds one model the owner configured in the adopted settings (`providers[].models[]`). Refuses a provider or model
+ * the adopted settings do not define, an origin that breaks the disclosure rule, a no-fee model that is not local, a
+ * hosted model without recorded terms, and a model whose capability record is missing or for another kind, origin or
+ * model. The caller names ids only; every term comes from the adopted settings.
  */
-export function bindProvider(policy: EffectivePolicy, given: ModelProfile): ProviderBinding {
-  if (!isEffectivePolicy(policy)) fail('sentinel.provider.notTrusted', 'a binding is made only under effectivePolicy’s own result');
-  const profile = snapshot(given);
-  if (!profile || typeof profile !== 'object') return fail('sentinel.provider.invalidProfile', 'a profile is required');
-  const settings = policy.settings.providers.find(p => p.id === profile.providerId);
-  if (!settings) return fail('sentinel.provider.notTrusted', `no provider "${String(profile.providerId).slice(0, 64)}"`);
-  if (settings.kind !== profile.kind) fail('sentinel.provider.notTrusted', 'the profile names another provider kind than the settings');
+export function bindProvider(policy: EffectivePolicy, providerId: string, modelId: string): ProviderBinding {
+  if (!isEffectivePolicy(policy)) fail('sentinel.provider.notTrusted', 'a binding is made only under effectivePolicy\u2019s own result');
+  const settings = policy.settings.providers.find(p => p.id === providerId);
+  if (!settings) return fail('sentinel.provider.notTrusted', 'the adopted settings define no such provider');
+  const profile = (settings.models ?? []).find(m => m.id === modelId);
+  if (!profile) return fail('sentinel.provider.notTrusted', 'the adopted settings define no such model for this provider');
   if (typeof profile.model !== 'string' || !MODEL.test(profile.model)) fail('sentinel.provider.invalidProfile', 'the model name is missing or outside the allowed characters');
   const limits = checkLimits(profile.limits);
   checkOrigin(settings.endpoint, settings.disclosure);
 
   const pricing = profile.pricing;
-  if (pricing === null || pricing === undefined) return fail('sentinel.provider.unpriced', 'the profile gives no rate schedule and no local no-fee basis');
+  if (pricing === null || pricing === undefined) return fail('sentinel.provider.unpriced', 'the model gives no rate schedule and no local no-fee basis');
   if (pricing.kind === 'no-fee') {
     if (pricing.basis !== 'local-runtime' || settings.disclosure !== 'local-only') fail('sentinel.provider.unpriced', 'only a local-only provider may declare no fee');
   } else if (pricing.kind === 'rates') {
     if (toNanos(pricing.inputPerMillion) === null || toNanos(pricing.outputPerMillion) === null) fail('sentinel.provider.invalidProfile', 'rates are decimal amounts');
-    if (!/^[A-Z]{3}$/.test(pricing.currency) || pricing.currency !== settings.budget.currency) fail('sentinel.provider.invalidProfile', 'the rate currency must be the provider budget’s');
+    if (!/^[A-Z]{3}$/.test(pricing.currency) || pricing.currency !== settings.budget.currency) fail('sentinel.provider.invalidProfile', 'the rate currency must be the provider budget\u2019s');
     if (!text(pricing.source) || !DATE.test(String(pricing.asOf))) fail('sentinel.provider.invalidProfile', 'a rate schedule names its source and date');
   } else {
     fail('sentinel.provider.invalidProfile', 'unknown pricing kind');
@@ -176,13 +122,13 @@ export function bindProvider(policy: EffectivePolicy, given: ModelProfile): Prov
   }
 
   const cap = profile.capability;
-  if (!cap) return fail('sentinel.provider.capabilityUntested', 'no capability record');
+  if (!cap) return fail('sentinel.provider.capabilityUntested', 'no capability record in the adopted settings');
   if (cap.schema !== 'sentinel-model-capability/draft-1' || cap.kind !== settings.kind || cap.origin !== settings.endpoint || cap.model !== profile.model || cap.listed !== true) {
     fail('sentinel.provider.capabilityUntested', 'the capability record is for another kind, origin or model');
   }
 
   const body = {
-    providerId: settings.id, kind: settings.kind, origin: settings.endpoint, credential: settings.credential,
+    providerId: settings.id, modelId: profile.id, kind: settings.kind, origin: settings.endpoint, credential: settings.credential,
     disclosure: settings.disclosure, model: profile.model, limits, pricing, terms, capability: cap, settingsBudget: settings.budget,
   };
   const binding: ProviderBinding = snapshot({ ...body, digest: canonicalDigest(body), policyRevision: policy.revision });

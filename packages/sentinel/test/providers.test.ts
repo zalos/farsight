@@ -7,11 +7,11 @@ import { join } from 'node:path';
 import { ReceiptBook } from '../dist/policy/index.js';
 import { issueReceipt } from '../dist/policy/owner-receipts.js';
 import {
-  BudgetLedger, ModelBroker, ModelCallError, ProviderError, Secret, bindProvider, envelopeIntent, probeCapability, resolveCredential,
+  BudgetLedger, ModelBroker, ModelCallError, ProviderError, Secret, bindProvider, envelopeIntent, probeCapability, probeConfigured, resolveCredential,
   PROVIDER_ERROR_CODES, RESERVATION_STATE_KEYS, toNanos, fromNanos, costOf,
 } from '../dist/review/providers/index.js';
 import { needsStore } from './snapshot-helpers.ts';
-import { D, NOW, TERMS, json, mockEndpoint, ollamaProfile, ollamaReply, openaiProfile, openaiReply, scratchDir, trustedPolicy, capability } from './provider-helpers.ts';
+import { D, NOW, TERMS, json, mockEndpoint, ollamaProfile, ollamaReply, openaiProfile, openaiReply, scratchDir, trustedPolicy, capability, withModel } from './provider-helpers.ts';
 
 const SECRET = 'synthetic-test-value-7f3a';
 const code = (c: string) => (e: unknown) => e instanceof ProviderError && e.code === c;
@@ -31,7 +31,7 @@ async function setup(t: any, opts: { epoch?: string; credentials?: (ref: string)
 async function ollamaEnvelope(t: any, handle: Parameters<typeof mockEndpoint>[1], budget = BUDGET) {
   const ep = await mockEndpoint(t, handle);
   const policy = trustedPolicy({ ollama: ep.origin });
-  const binding = bindProvider(policy, ollamaProfile(ep.origin));
+  const binding = bindProvider(policy, 'local-review', 'review');
   const s = await setup(t);
   const env = await s.broker.openEnvelope({ binding, policy, runId: 'run-1', budget, requestedBy: HUMAN, stateDigest: D('plan') });
   return { ...s, ep, policy, binding, env };
@@ -39,26 +39,29 @@ async function ollamaEnvelope(t: any, handle: Parameters<typeof mockEndpoint>[1]
 
 const ask = (operationId = 'op-1', over: Record<string, unknown> = {}) => ({ operationId, messages: [{ role: 'user' as const, content: 'Review this synthetic span.' }], maxOutputTokens: 64, ...over });
 
-test('a binding is refused for an untrusted provider, a wrong kind, a non-loopback local origin, plain-HTTP hosting, missing terms, no price and another capability', () => {
-  const policy = trustedPolicy({ ollama: 'http://127.0.0.1:11434' });
+test('a binding comes only from the adopted settings, and is refused for an untrusted provider or model, a non-loopback local origin, plain-HTTP hosting, missing terms, no price and another capability', async () => {
   const o = 'http://127.0.0.1:11434';
-  assert.throws(() => bindProvider(policy, ollamaProfile(o, { providerId: 'unknown' })), code('sentinel.provider.notTrusted'));
-  assert.throws(() => bindProvider(policy, ollamaProfile(o, { kind: 'openai-compatible' })), code('sentinel.provider.notTrusted'));
-  assert.throws(() => bindProvider(policy, ollamaProfile('http://localhost:11434', { providerId: 'named-local', capability: capability('ollama', 'http://localhost:11434', 'review-model:1') })),
-    code('sentinel.provider.originRefused'), 'a name could resolve off this machine');
+  const refused = async (profile: Record<string, unknown>, c: string, opts: Record<string, unknown> = { ollama: o }) =>
+    assert.throws((await withModel(opts as any, profile)).bind, code(c));
+  const policy = trustedPolicy({ ollama: o });
+  assert.throws(() => bindProvider(policy, 'unknown', 'review'), code('sentinel.provider.notTrusted'));
+  assert.throws(() => bindProvider(policy, 'local-review', 'unknown'), code('sentinel.provider.notTrusted'), 'a caller cannot name a model the owner did not configure');
+  assert.throws(() => bindProvider(policy as any, 'local-review', { model: 'x' } as any), code('sentinel.provider.notTrusted'), 'nor hand one in');
+  await refused(ollamaProfile('http://localhost:11434', { providerId: 'named-local', capability: capability('ollama', 'http://localhost:11434', 'review-model:1') }), 'sentinel.provider.originRefused');
   const hosted = (over: Record<string, unknown>) => openaiProfile('https://models.example.com', { providerId: 'hosted-review', capability: capability('openai-compatible', 'https://models.example.com', 'review-model'), ...over });
-  assert.throws(() => bindProvider(policy, { ...hosted({}), providerId: 'plain-hosted', capability: capability('openai-compatible', 'http://models.example.com', 'review-model') }), code('sentinel.provider.originRefused'));
-  assert.throws(() => bindProvider(policy, hosted({ terms: null })), code('sentinel.provider.termsRequired'));
-  assert.ok(bindProvider(policy, hosted({ terms: TERMS })));
-  assert.throws(() => bindProvider(policy, ollamaProfile(o, { pricing: null })), code('sentinel.provider.unpriced'));
-  assert.throws(() => bindProvider(policy, hosted({ terms: TERMS, pricing: { kind: 'no-fee', basis: 'local-runtime' } })), code('sentinel.provider.unpriced'), 'only a local runtime declares no fee');
-  assert.throws(() => bindProvider(policy, ollamaProfile(o, { capability: null })), code('sentinel.provider.capabilityUntested'));
-  assert.throws(() => bindProvider(policy, ollamaProfile(o, { capability: capability('ollama', 'http://127.0.0.1:1', 'review-model:1') })), code('sentinel.provider.capabilityUntested'));
-  assert.throws(() => bindProvider(policy, ollamaProfile(o, { limits: { ...ollamaProfile(o).limits, timeoutMs: 10_000_000 } })), code('sentinel.provider.invalidProfile'));
+  await refused(hosted({ providerId: 'plain-hosted', terms: TERMS, capability: capability('openai-compatible', 'http://models.example.com', 'review-model') }), 'sentinel.provider.originRefused');
+  await refused(hosted({ terms: null }), 'sentinel.provider.termsRequired');
+  assert.ok((await withModel({}, hosted({ terms: TERMS }))).bind());
+  await refused(ollamaProfile(o, { pricing: null }), 'sentinel.provider.unpriced');
+  await refused(hosted({ terms: TERMS, pricing: { kind: 'no-fee', basis: 'local-runtime' } }), 'sentinel.provider.unpriced');
+  await refused(ollamaProfile(o, { capability: null }), 'sentinel.provider.capabilityUntested');
+  await refused(ollamaProfile(o, { capability: capability('ollama', 'http://127.0.0.1:1', 'review-model:1') }), 'sentinel.provider.capabilityUntested');
+  await refused(ollamaProfile(o, { limits: { ...ollamaProfile(o).limits, timeoutMs: 10_000_000 } }), 'sentinel.provider.invalidProfile');
   // Every term is in the digest an owner confirms.
-  const a = bindProvider(policy, ollamaProfile(o));
-  const b = bindProvider(policy, ollamaProfile(o, { limits: { ...ollamaProfile(o).limits, maxOutputTokens: 128 } }));
+  const a = bindProvider(policy, 'local-review', 'review');
+  const b = (await withModel({ ollama: o }, ollamaProfile(o, { limits: { ...ollamaProfile(o).limits, maxOutputTokens: 128 } }))).bind();
   assert.notEqual(a.digest, b.digest);
+  assert.equal(a.modelId, 'review');
   assert.ok(Object.isFrozen(a) && Object.isFrozen(a.limits));
 });
 
@@ -115,8 +118,9 @@ test('an oversized answer is discarded at the byte cap, streamed or declared; th
 
 test('a deadline and a cancellation after sending leave the call uncertain; before sending, or unreachable, it is released', needsStore, async t => {
   const hang = await ollamaEnvelope(t, () => { /* never answers */ });
-  const slow = bindProvider(hang.policy, ollamaProfile(hang.ep.origin, { limits: { ...ollamaProfile(hang.ep.origin).limits, timeoutMs: 150 } }));
-  const env2 = await hang.broker.openEnvelope({ binding: slow, policy: hang.policy, runId: 'run-2', budget: BUDGET, requestedBy: HUMAN, stateDigest: D('plan') });
+  const slowPolicy = await withModel({ ollama: hang.ep.origin }, ollamaProfile(hang.ep.origin, { limits: { ...ollamaProfile(hang.ep.origin).limits, timeoutMs: 150 } }));
+  const slow = slowPolicy.bind();
+  const env2 = await hang.broker.openEnvelope({ binding: slow, policy: slowPolicy.policy, runId: 'run-2', budget: BUDGET, requestedBy: HUMAN, stateDigest: D('plan') });
   await assert.rejects(hang.broker.generate(env2, slow, ask('op-t')), (e: any) => e.code === 'sentinel.provider.timeout' && e.reservation.state === 'uncertain');
 
   const ac = new AbortController();
@@ -133,7 +137,7 @@ test('a deadline and a cancellation after sending leave the call uncertain; befo
   const origin = closed.origin;
   await new Promise<void>(r => { closed.server.closeAllConnections(); closed.server.close(() => r()); });
   const policy = trustedPolicy({ ollama: origin });
-  const binding = bindProvider(policy, ollamaProfile(origin));
+  const binding = bindProvider(policy, 'local-review', 'review');
   const s = await setup(t);
   const env = await s.broker.openEnvelope({ binding, policy, runId: 'run-1', budget: BUDGET, requestedBy: HUMAN, stateDigest: D('plan') });
   await assert.rejects(s.broker.generate(env, binding, ask()), (e: any) => e.code === 'sentinel.provider.unreachable' && e.spend === 'none' && e.reservation.state === 'released');
@@ -190,7 +194,7 @@ test('usage above the reservation is charged in full and overdraws the envelope;
 test('a priced provider: the owner receipt binds the binding, the credential is sent only to it and never printed', needsStore, async t => {
   const ep = await mockEndpoint(t, (req, res) => json(res, 200, openaiReply()));
   const policy = trustedPolicy({ openai: ep.origin });
-  const binding = bindProvider(policy, openaiProfile(ep.origin));
+  const binding = bindProvider(policy, 'local-openai', 'review');
   const s = await setup(t);
   const budget = { maxTokens: 20000, maxCost: '0.50', currency: 'USD' };
   const base = { binding, policy, runId: 'run-1', budget, requestedBy: HUMAN, stateDigest: D('plan') };
@@ -213,11 +217,11 @@ test('a priced provider: the owner receipt binds the binding, the credential is 
   const text = (v: unknown) => JSON.stringify(v, (_k, x) => (typeof x === 'bigint' ? String(x) : x));
   assert.ok(!text(env).includes(SECRET) && !inspect(env, { depth: 9 }).includes(SECRET) && !text(reply).includes(SECRET));
   // A changed binding (another model) needs a new approval; the old envelope will not carry it.
-  const changed = bindProvider(policy, openaiProfile(ep.origin, { model: 'review-model', limits: { ...openaiProfile(ep.origin).limits, maxOutputTokens: 100 } }));
+  const changed = (await withModel({ openai: ep.origin }, openaiProfile(ep.origin, { limits: { ...openaiProfile(ep.origin).limits, maxOutputTokens: 100 } }))).bind();
   await assert.rejects(s.broker.generate(env, changed, ask('op-2')), code('sentinel.provider.bindingChanged'));
   // A changed policy (here: the grants) stops the envelope, even for the same provider and profile.
   const revoked = trustedPolicy({ openai: ep.origin, grants: [] });
-  await assert.rejects(s.broker.generate(env, bindProvider(revoked, openaiProfile(ep.origin)), ask('op-3')), code('sentinel.provider.bindingChanged'));
+  await assert.rejects(s.broker.generate(env, bindProvider(revoked, 'local-openai', 'review'), ask('op-3')), code('sentinel.provider.bindingChanged'));
   assert.equal(ep.seen.length, 1);
   // The receipt is spent once.
   await assert.rejects(s.broker.openEnvelope({ ...base, receipt: { book, id: r.id } }), (e: any) => /already used/.test(e.message));
@@ -227,13 +231,13 @@ test('policy denies before any credential is read or provider contacted; an unre
   const ep = await mockEndpoint(t, (req, res) => json(res, 200, openaiReply()));
   const denied = trustedPolicy({ openai: ep.origin, grants: [] });
   const s = await setup(t);
-  const binding = bindProvider(denied, openaiProfile(ep.origin));
+  const binding = bindProvider(denied, 'local-openai', 'review');
   await assert.rejects(s.broker.openEnvelope({ binding, policy: denied, runId: 'run-1', budget: { maxTokens: 100, maxCost: '0.10', currency: 'USD' }, requestedBy: HUMAN, stateDigest: D('plan') }),
     code('sentinel.provider.notAdmitted'));
   assert.deepEqual(s.reads, [], 'no keychain read');
   const allowed = trustedPolicy({ openai: ep.origin });
   const failing = await setup(t, { credentials: async () => { throw new Error(`keychain said ${SECRET}`); } });
-  const b2 = bindProvider(allowed, openaiProfile(ep.origin));
+  const b2 = bindProvider(allowed, 'local-openai', 'review');
   const small = { maxTokens: 100, maxCost: '0.10', currency: 'USD' };
   const book = new ReceiptBook(join(failing.dir, 'receipts'));
   const r = issueReceipt(book, { channel: 'owner-cli', principal: 'owner' }, { intent: envelopeIntent(b2, 'run-1', small), stateDigest: D('plan'), policyRevision: allowed.revision }, { now: NOW, ttlMs: 600_000 });
@@ -248,7 +252,7 @@ test('policy denies before any credential is read or provider contacted; an unre
 test('hosted disclosure needs the owner receipt; no envelope opens without it, and opening one contacts nothing', needsStore, async t => {
   const policy = trustedPolicy();
   const origin = 'https://models.example.com';
-  const binding = bindProvider(policy, openaiProfile(origin, { providerId: 'hosted-review', terms: TERMS, capability: capability('openai-compatible', origin, 'review-model') }));
+  const binding = bindProvider(policy, 'hosted-review', 'review');
   const s = await setup(t);
   const budget = { maxTokens: 1000, maxCost: '1.00', currency: 'USD' };
   const req = { binding, policy, runId: 'run-1', budget, requestedBy: { principal: 'agent' as const, channel: 'mcp' as const }, stateDigest: D('plan') };
@@ -353,8 +357,8 @@ test('every code and reservation state is a catalog entry with both registers an
 
 test('worst-case input plus output that does not fit the context is never sent', needsStore, async t => {
   const ep = await mockEndpoint(t, (req, res) => json(res, 200, ollamaReply()));
-  const policy = trustedPolicy({ ollama: ep.origin });
-  const binding = bindProvider(policy, ollamaProfile(ep.origin, { limits: { ...ollamaProfile(ep.origin).limits, contextTokens: 300 } }));
+  const { policy, bind } = await withModel({ ollama: ep.origin }, ollamaProfile(ep.origin, { limits: { ...ollamaProfile(ep.origin).limits, contextTokens: 300 } }));
+  const binding = bind();
   const s = await setup(t);
   const env = await s.broker.openEnvelope({ binding, policy, runId: 'run-1', budget: BUDGET, requestedBy: HUMAN, stateDigest: D('plan') });
   await assert.rejects(s.broker.generate(env, binding, ask('op-1', { messages: [{ role: 'user', content: 'y'.repeat(400) }] })), code('sentinel.provider.contextExceeded'));
@@ -409,7 +413,7 @@ test('importing the providers loads no SQLite, starts no process and opens no co
 test('the budget, run and state confirmed are the ones recorded, even if the caller changes them during the keychain read', needsStore, async t => {
   const ep = await mockEndpoint(t, (req, res) => json(res, 200, openaiReply()));
   const policy = trustedPolicy({ openai: ep.origin });
-  const binding = bindProvider(policy, openaiProfile(ep.origin));
+  const binding = bindProvider(policy, 'local-openai', 'review');
   let release!: () => void; const gate = new Promise<void>(r => { release = r; });
   let started!: () => void; const lookup = new Promise<void>(r => { started = r; });
   const s = await setup(t, { credentials: async () => { started(); await gate; return SECRET; } });
@@ -431,7 +435,7 @@ test('the budget, run and state confirmed are the ones recorded, even if the cal
 test('a model name the provider returns never reaches a public error', needsStore, async t => {
   const ep = await mockEndpoint(t, (req, res) => json(res, 200, openaiReply({ model: SECRET })));
   const policy = trustedPolicy({ openai: ep.origin });
-  const binding = bindProvider(policy, openaiProfile(ep.origin));
+  const binding = bindProvider(policy, 'local-openai', 'review');
   const s = await setup(t);
   const budget = { maxTokens: 1000, maxCost: '0.01', currency: 'USD' };
   const book = new ReceiptBook(join(s.dir, 'receipts'));
@@ -463,4 +467,14 @@ test('long operation ids never collide: each distinct id has its own reservation
   assert.equal(new Set(ids).size, 4);
   assert.equal(ledger.totals('env').byState.held, 4);
   assert.throws(() => ledger.reserve({ envelopeId: 'env', operationId: 'o'.repeat(129), tokens: 1, costNanos: 0n, epoch: 'epoch-a', at }), code('sentinel.provider.ledgerInvalid'));
+});
+
+test('the owner probe reads the origin and model from the adopted settings, never the caller', async t => {
+  const ep = await mockEndpoint(t, (req, res) => json(res, 200, { models: [{ name: 'review-model:1', model: 'review-model:1', digest: 'c'.repeat(64) }] }));
+  const policy = trustedPolicy({ ollama: ep.origin });
+  const rec = await probeConfigured(policy, 'local-review', 'review', { timeoutMs: 1000, maxResponseBytes: 4096, now: NOW });
+  assert.deepEqual([rec.origin, rec.model, rec.revision], [ep.origin, 'review-model:1', `sha256:${'c'.repeat(64)}`]);
+  await assert.rejects(probeConfigured(policy, 'local-review', 'nope', { timeoutMs: 1000, maxResponseBytes: 4096, now: NOW }), code('sentinel.provider.notTrusted'));
+  await assert.rejects(probeConfigured({ settings: policy.settings } as any, 'local-review', 'review', { timeoutMs: 1000, maxResponseBytes: 4096, now: NOW }), code('sentinel.provider.notTrusted'));
+  assert.equal(ep.seen.length, 1);
 });

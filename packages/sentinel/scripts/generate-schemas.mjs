@@ -25,6 +25,9 @@ const ENVELOPES = {
   admission: ['sentinel-admission/draft-1', 'AdmissionEnvelope'],
   controls: ['sentinel-controls/draft-1', 'ControlFactsEnvelope'],
   plan: ['sentinel-plan/draft-1', 'PlanEnvelope'],
+  partitions: ['sentinel-review-partitions/draft-1', 'ReviewPartitionsEnvelope'],
+  checkpoint: ['sentinel-review-checkpoint/draft-1', 'ReviewCheckpointEnvelope'],
+  review: ['sentinel-review-record/draft-1', 'ReviewRecordEnvelope'],
 };
 
 const generator = createGenerator({

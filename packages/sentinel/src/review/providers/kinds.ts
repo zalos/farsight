@@ -3,6 +3,7 @@
 // usage and finish reason are read as reported, at their actual strength; nothing is inferred from response text.
 // Compatibility is per endpoint: `probeCapability` lists what this origin offers, it does not assume a vendor.
 import type { EndpointOrigin } from '../../contracts/index.js';
+import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.js';
 import type { Secret } from './credentials.js';
 import { ProviderError, fail } from './errors.js';
 import type { CapabilityRecord, ProviderKind } from './profile.js';
@@ -125,4 +126,17 @@ export async function probeCapability(p: ProbeRequest): Promise<CapabilityRecord
   if (!listed) throw new ProviderError('sentinel.provider.capabilityMissing', p.model.slice(0, 64));
   return Object.freeze({ schema: 'sentinel-model-capability/draft-1', kind: p.kind, origin: p.origin, model: p.model, listed: true, revision,
     probedAt: p.now.toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z') });
+}
+
+/**
+ * The owner's probe of one configured model: origin and kind come from the adopted settings, never the caller. The
+ * returned record is adopted only by the owner re-adopting settings that contain it.
+ */
+export async function probeConfigured(policy: EffectivePolicy,
+  providerId: string, modelId: string, options: { credential?: Secret | null; timeoutMs: number; maxResponseBytes: number; signal?: AbortSignal; now: Date }): Promise<CapabilityRecord> {
+  if (!isEffectivePolicy(policy)) fail('sentinel.provider.notTrusted', 'a probe is made only under effectivePolicy\u2019s own result');
+  const p = policy.settings.providers.find(x => x.id === providerId);
+  const m = p?.models?.find(x => x.id === modelId);
+  if (!p || !m) return fail('sentinel.provider.notTrusted', 'the adopted settings define no such provider or model');
+  return probeCapability({ kind: p.kind, origin: p.endpoint, model: m.model, ...options });
 }
