@@ -56,8 +56,13 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   install, persistence, isolated profiles and sharing through hooks in temporary workspaces. Its network check
   runs in the optional, path-filtered CI job, while Echo unit tests remain in required validation.
 
-- `packages/sentinel` — optional security review package (ADR 18). Draft contracts and generated schemas first;
-  no scanner, container or model runtime yet. Depends only on graph, code-parser and core; nothing in the
+- `packages/sentinel` — optional security review package (ADR 18). Draft contracts and generated schemas, and a
+  draft local store (ADR 19); no scanner, container or model runtime yet. `src/store/index.ts` is the store's
+  public facade (`openStore`, also re-exported from the root and as `./store`); behind it `runtime.ts` (the SQLite
+  release gate), `paths.ts` (canonical, local, owner-only folders), `owner.ts` (the lifetime owner lock and epoch),
+  `ledger.ts` + `migrations.ts` + `store-types.ts` (the fenced WAL ledger), `objects.ts` (content-addressed objects),
+  `objects-ledger.ts` (the ledger seam and verifier) and `gc.ts` (read-only reachability and the dry-run prune plan).
+  `test/store-integration.test.ts` drives the facade end to end across processes. Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the
   manifest's `bin` and root export; `scripts/test-sentinel-package.mjs` installs it into a clean npm consumer and

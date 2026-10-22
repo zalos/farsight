@@ -217,3 +217,40 @@ unchanged. The placeholder bin reports that no scanner is available; it claims n
 (`packages/cli/src/sentinel.ts`, PR 24) reaches Sentinel as a separately installed executable over IPC and
 updates this record. Rollback removes the package registration and leaves user data in place. See the
 [Sentinel implementation plan](proposals/farsight-sentinel/implementation-plan.md).
+
+19. **Sentinel's local store is one facade over an owner lock, a fenced ledger and verified objects (2026-10-22).**
+
+`@farsight/sentinel` gains a public `./store` export (also re-exported from the root) whose one entry point is
+`openStore(storePath)`. It is the only supported way to open a store, and the order is fixed: the SQLite runtime
+gate and the store-path checks, then the lifetime owner lock, then the content-addressed object store under that
+owner, then the ledger (created or migrated, with a verified backup before any upgrade) bound to the object
+store's own verifier. The ledger registers with the owner, so `close()` closes it while the lock is still held; a
+failure at any step releases what was taken and reports the step's own error. The facade returns domain
+operations only. The SQLite module and connection, the lock database, migration lists, failpoints and the
+object store's filesystem seam stay internal test seams; nothing public publishes without byte verification or
+under a stand-in owner. Importing the package opens no file and loads no SQLite module.
+
+A publication is accepted only in one ledger transaction, after every object it names was re-read and hashed in
+this store, and only for the exact work revision, its active attempt and the current owner epoch. Identities are
+registered as staging before a byte is written, so collection can never race a write. Each acquisition has its own
+epoch (`epoch-<uuid>`); a run, work or attempt from an earlier epoch is refused. Reachability inspection and the
+prune plan are read-only: v1 never deletes an object, and a plan names only candidates for a later, explicit,
+separately reviewed prune. Retained provenance is protected: every artifact a retained work or attempt record names
+(its influence manifest, invocation, outputs and diagnostics) is a root, so completed work is never a candidate
+while its records are kept.
+
+Qualification is bounded, and anything outside it is refused rather than assumed. The runtime's release policy lists
+exact host and SQLite pairs (`qualificationFor`); a store opens only for a listed pair, in a canonical owner-only
+folder on a file system the path checks identify as local. Measured: darwin-arm64 with SQLite 3.53.3 (Node 24.19.0)
+and 3.53.4 (Node 24.22.0), on APFS; linux-x64 with SQLite 3.53.4 (Node 24.21.0), on ext4
+([PR 03 CI evidence](https://github.com/zalos/farsight/actions/runs/39723522049/job/119642215934): 134 passed, four explicit platform/permission skips,
+including every applicable real-owner, migration and object-publication test). The other local types the path checks accept (hfs on macOS; xfs, btrfs,
+tmpfs, zfs and f2fs by Linux statfs) are allowlisted, not measured. Any other pair is refused before a store file
+exists. Network, FUSE, overlay and unrecognised
+file systems are refused. Durability is claimed for **process death**: SQLite runs WAL with `synchronous=FULL`,
+objects are written, fsynced, verified and linked with their folders fsynced before a receipt exists, and the owner
+lock is an OS file lock the kernel releases when the holder dies. It is **not** claimed for physical power loss:
+`fsync` does not force a drive's volatile cache on macOS (no `F_FULLFSYNC` is issued), and no power-cut trial was
+run. The store's reason codes are catalog keys
+(`strings-sentinel-store.ts`, `strings-sentinel-storage-errors.ts`). The `ledger` capability is `available-draft`;
+no scan capability changes, and the store's draft formats can still change before the contract review.

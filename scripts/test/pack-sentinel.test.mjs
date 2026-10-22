@@ -20,6 +20,7 @@ const MANIFEST = {
   exports: {
     '.': { types: './dist/index.d.ts', import: './dist/index.js' },
     './contracts': { types: './dist/contracts/index.d.ts', import: './dist/contracts/index.js' },
+    './store': { types: './dist/store/index.d.ts', import: './dist/store/index.js' },
     './schemas/*': './schemas/*', './package.json': './package.json',
   },
   dependencies: { '@farsight/core': 'workspace:*' },
@@ -39,15 +40,161 @@ function workspace({ build = true } = {}) {
     target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, declaration: true,
     sourceMap: true, declarationMap: true, rootDir: 'src', outDir: 'dist', types: [],
   }, include: ['src'] }));
+  const KINDS = { report: 'ReportEnvelope', run: 'RunEnvelope', work: 'WorkEnvelope', attempt: 'AttemptEnvelope' };
   write(root, 'packages/sentinel/src/contracts/index.ts', [
-    "export interface ReportEnvelope { schema: 'sentinel-report/draft-1'; id: string }",
-    "export const ENVELOPES = { report: { schema: 'sentinel-report/draft-1', type: 'ReportEnvelope' } } as const;",
+    ...Object.entries(KINDS).map(([kind, type]) => `export interface ${type} { schema: 'sentinel-${kind}/draft-1'; id: string }`),
+    'export const ENVELOPES = {',
+    ...Object.entries(KINDS).map(([kind, type]) => `  ${kind}: { schema: 'sentinel-${kind}/draft-1', type: '${type}' },`),
+    '} as const;',
     'export type EnvelopeKind = keyof typeof ENVELOPES;', '',
   ].join('\n'));
+  // A stand-in for the draft store with the real facade's public surface, just enough for the package smoke:
+  // a JSON file in a private store folder, a new epoch per open, staged and verified receipts, stale-epoch
+  // refusal and reads from a second process. It has no SQLite and no lock; the real store is smoked by CI.
+  // It reaches node: builtins at run time only, so the stand-in needs no @types/node to compile.
+  write(root, 'packages/sentinel/src/store/index.ts', `
+declare global { interface Buffer extends Uint8Array { toString(encoding?: string): string } }
+type Fs = { existsSync(p: string): boolean; mkdirSync(p: string, o?: object): void; readFileSync(p: string, e: string): string;
+  writeFileSync(p: string, d: string, o?: object): void; statSync(p: string): { mode: number } };
+type Crypto = { createHash(a: string): { update(b: Uint8Array): { digest(e: string): string } } };
+type BufferCtor = { from(text: string, encoding: string): Buffer };
+const builtin = <T>(name: string): T => (globalThis as any).process.getBuiltinModule(name) as T;
+// A synthetic, test-only qualification admitting exactly the host and SQLite running this test; it is a fixture,
+// not product policy. The real policy lives in packages/sentinel/src/store/runtime.ts.
+export const SQLITE_RELEASE_POLICY = Object.freeze({
+  qualified: Object.freeze([Object.freeze({ host: ${JSON.stringify(process.platform + '-' + process.arch)},
+    sqlite: ${JSON.stringify(process.versions.sqlite)}, status: 'candidate' as const,
+    evidence: 'synthetic packer-test fixture: admits only the host and SQLite running this test' })]),
+});
+export function qualificationFor(policy: typeof SQLITE_RELEASE_POLICY, host: string, sqlite: string) {
+  return policy.qualified.find(q => q.host === host && q.sqlite === sqlite);
+}
+export const STORAGE_ERROR_CODES = {
+  ledger: ['sentinel.store.staleEpoch', 'sentinel.store.notFound', 'sentinel.store.objectMissing'],
+  store: ['sentinel.store.pathNotAbsolute', 'sentinel.store.permissions', 'sentinel.store.platformUnqualified',
+    'sentinel.store.runtimeUnqualified'],
+  objects: ['sentinel.store.objectMissing'],
+} as const;
+export class StoreError extends Error {
+  readonly code: string;
+  constructor(code: string) { super(code); this.name = 'StoreError'; this.code = code; }
+}
+export class LedgerError extends Error {
+  readonly code: string;
+  constructor(code: string) { super(code); this.name = 'LedgerError'; this.code = code; }
+}
+export class ObjectStoreError extends Error {
+  readonly code: string;
+  constructor(code: string) { super(code); this.name = 'ObjectStoreError'; this.code = code; }
+}
+export interface WorkRef { id: string; revision: number }
+export interface StoredObject { id: string; codec: 'identity'; storedDigest: string; rawSize: number; storedSize: number }
+export interface PublicationReceipt { work: WorkRef; attemptId: string; sequence: number }
+export interface ReachabilityReport { ok: boolean; missing: string[] }
+interface Recorded { id: string; coordinatorEpoch: string; influenceManifest?: string; invocation?: string }
+interface State { opens: number; runs: string[]; staged: Record<string, string[]>; objects: Record<string, string>;
+  publications: Record<string, { attemptId: string; outputs: { id: string }[] }> }
+export interface SentinelStore {
+  readonly epoch: string;
+  readonly ledger: {
+    createRun(run: Recorded): void;
+    createWork(work: Recorded): void;
+    startAttempt(attempt: Recorded): void;
+    registerStaging(stageId: string, artifacts: { id: string; schema: string; privacy: string }[], forAttempt?: { work: WorkRef; attemptId: string }): void;
+    publish(input: { work: WorkRef; attemptId: string; stageId: string; receipts: StoredObject[]; outputs: string[]; endedAt: string }): PublicationReceipt;
+    getPublication(work: WorkRef): { attemptId: string; outputs: { id: string }[] } | null;
+  };
+  readonly objects: {
+    identify(bytes: Uint8Array): { id: string };
+    put(bytes: Uint8Array, options: { expect: { id: string } }): Promise<StoredObject>;
+    identifyCanonicalJson(value: unknown): { id: string };
+    putCanonicalJson(value: unknown, options: { expect: { id: string } }): Promise<StoredObject>;
+  };
+  readArtifact(id: string): Promise<Buffer>;
+  inspect(): Promise<ReachabilityReport>;
+  checkIntegrity(): { integrity: string };
+  close(): void;
+}
+export async function openStore(path: string, options: { waitMs?: number } = {}): Promise<SentinelStore> {
+  void options;
+  const fs = builtin<Fs>('node:fs');
+  if (!path.startsWith('/') || path.split('/').some((s) => s === '.' || s === '..')) throw new StoreError('sentinel.store.pathNotAbsolute');
+  const proc = (globalThis as any).process as { platform: string; arch: string; versions: { sqlite?: string } };
+  const host = proc.platform + '-' + proc.arch;
+  if (!SQLITE_RELEASE_POLICY.qualified.some((q) => q.host === host)) throw new StoreError('sentinel.store.platformUnqualified');
+  if (!SQLITE_RELEASE_POLICY.qualified.some((q) => q.host === host && q.sqlite === proc.versions.sqlite)) {
+    throw new StoreError('sentinel.store.runtimeUnqualified');
+  }
+  if (!fs.existsSync(path)) fs.mkdirSync(path, { mode: 0o700 });
+  if ((fs.statSync(path).mode & 0o077) !== 0) throw new StoreError('sentinel.store.permissions');
+  const file = path + '/store.json';
+  const state: State = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8'))
+    : { opens: 0, runs: [], staged: {}, objects: {}, publications: {} };
+  state.opens += 1;
+  const epoch = 'epoch-' + state.opens;
+  const save = () => fs.writeFileSync(file, JSON.stringify(state), { mode: 0o600 });
+  save();
+  const sha = (bytes: Uint8Array) => 'sha256:' + builtin<Crypto>('node:crypto').createHash('sha256').update(bytes).digest('hex');
+  const bytesOf = (id: string): Buffer => {
+    const text = state.objects[id];
+    if (text === undefined) throw new ObjectStoreError('sentinel.store.objectMissing');
+    return builtin<{ Buffer: BufferCtor }>('node:buffer').Buffer.from(text, 'base64');
+  };
+  const current = (r: Recorded) => { if (r.coordinatorEpoch !== epoch) throw new LedgerError('sentinel.store.staleEpoch'); };
+  // A manifest or invocation the work or attempt names must be stored bytes, as the real ledger roots them.
+  const stored = (id: string | undefined) => { if (id !== undefined && !(id in state.objects)) throw new LedgerError('sentinel.store.objectMissing'); };
+  const canonical = (v: unknown): string => Array.isArray(v) ? '[' + v.map(canonical).join(',') + ']'
+    : v !== null && typeof v === 'object' ? '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonical((v as Record<string, unknown>)[k])).join(',') + '}'
+    : JSON.stringify(v);
+  const utf8 = (v: unknown) => new TextEncoder().encode(canonical(v));
+  const key = (w: WorkRef) => w.id + '@' + w.revision;
+  return {
+    epoch,
+    ledger: {
+      createRun(run) { current(run); state.runs.push(run.id); save(); },
+      createWork(work) { current(work); stored(work.influenceManifest); },
+      startAttempt(attempt) { current(attempt); stored(attempt.invocation); },
+      registerStaging(stageId, artifacts) { state.staged[stageId] = artifacts.map((a) => a.id); save(); },
+      publish(input) {
+        const staged = state.staged[input.stageId];
+        if (!staged) throw new LedgerError('sentinel.store.notFound');
+        for (const r of input.receipts) if (!staged.includes(r.id) || sha(bytesOf(r.id)) !== r.id) throw new LedgerError('sentinel.store.objectMissing');
+        state.publications[key(input.work)] = { attemptId: input.attemptId, outputs: input.outputs.map((id) => ({ id })) };
+        delete state.staged[input.stageId];
+        save();
+        return { work: input.work, attemptId: input.attemptId, sequence: Object.keys(state.publications).length };
+      },
+      getPublication(work) { return state.publications[key(work)] ?? null; },
+    },
+    objects: {
+      identify(bytes) { return { id: sha(bytes) }; },
+      async put(bytes, options) {
+        const id = sha(bytes);
+        if (id !== options.expect.id) throw new ObjectStoreError('sentinel.store.objectMissing');
+        let binary = '';
+        for (const b of bytes) binary += String.fromCharCode(b);
+        state.objects[id] = (globalThis as any).btoa(binary);
+        save();
+        return { id, codec: 'identity', storedDigest: id, rawSize: bytes.length, storedSize: bytes.length };
+      },
+      identifyCanonicalJson(value) { return this.identify(utf8(value)); },
+      putCanonicalJson(value, options) { return this.put(utf8(value), options); },
+    },
+    async readArtifact(id) { return bytesOf(id); },
+    async inspect() {
+      const missing = Object.values(state.publications).flatMap((p) => p.outputs.map((o) => o.id)).filter((id) => !(id in state.objects));
+      return { ok: missing.length === 0, missing };
+    },
+    checkIntegrity() { return { integrity: 'ok' }; },
+    close() { save(); },
+  };
+}
+`);
   write(root, 'packages/sentinel/src/index.ts', [
-    "import { ENVELOPES, type EnvelopeKind, type ReportEnvelope } from './contracts/index.js';",
+    "export { StoreError, LedgerError, ObjectStoreError, openStore, SQLITE_RELEASE_POLICY, qualificationFor } from './store/index.js';",
+    "import { ENVELOPES, type EnvelopeKind, type ReportEnvelope, type RunEnvelope, type WorkEnvelope, type AttemptEnvelope } from './contracts/index.js';",
     "export * from './contracts/index.js';",
-    'export interface EnvelopeTypes { report: ReportEnvelope }',
+    'export interface EnvelopeTypes { report: ReportEnvelope; run: RunEnvelope; work: WorkEnvelope; attempt: AttemptEnvelope }',
     'export type ValidationResult<T> = { ok: true; value: T } | { ok: false; errors: { code: string; path: string }[] };',
     'export function validateEnvelope<K extends EnvelopeKind>(kind: K, value: unknown): ValidationResult<EnvelopeTypes[K]> {',
     '  const v = value as { schema?: unknown; id?: unknown };',
@@ -57,8 +204,13 @@ function workspace({ build = true } = {}) {
     '}', '',
   ].join('\n'));
   write(root, 'packages/sentinel/src/cli.ts', "console.log('farsight-sentinel (draft): no scanner is available yet');\nexport {};\n");
-  write(root, 'packages/sentinel/schemas/sentinel-report.draft-1.schema.json', JSON.stringify({ $id: 'sentinel-report/draft-1', type: 'object' }));
-  write(root, 'packages/sentinel/test/contracts/valid/report.json', JSON.stringify({ schema: 'sentinel-report/draft-1', id: 'r1' }));
+  for (const kind of Object.keys(KINDS)) {
+    write(root, `packages/sentinel/schemas/sentinel-${kind}.draft-1.schema.json`, JSON.stringify({ $id: `sentinel-${kind}/draft-1`, type: 'object' }));
+  }
+  // The store smoke reads run-active, work-idle and attempt-running; every fixture is named <kind>[-case].json.
+  for (const [file, kind, id] of [['report', 'report', 'r1'], ['run-active', 'run', 'run-1'], ['work-idle', 'work', 'work-capture'], ['attempt-running', 'attempt', 'att-1']]) {
+    write(root, `packages/sentinel/test/contracts/valid/${file}.json`, JSON.stringify({ schema: `sentinel-${kind}/draft-1`, id }));
+  }
   write(root, 'build/sentinel/keep.txt', 'prior artifact');
   if (build) { const built = tsc(root); assert.equal(built.status, 0, built.stdout); }
   return root;
@@ -91,6 +243,7 @@ test('the tarball carries typed exports, declarations, its own metadata and the 
     assert.deepEqual(manifest.exports, {
       '.': { types: './dist/index.d.ts', import: './dist/index.mjs' },
       './contracts': { types: './dist/contracts/index.d.ts', import: './dist/contracts/index.mjs' },
+      './store': { types: './dist/store/index.d.ts', import: './dist/store/index.mjs' },
       './package.json': './package.json', './schemas/*': './schemas/*',
     });
     assert.equal(manifest.types, './dist/index.d.ts');
@@ -114,7 +267,7 @@ test('a clean npm consumer imports, type-checks and validates through the instal
     assert.equal(node(root, 'pack-sentinel.mjs').status, 0);
     const smoke = node(root, 'test-sentinel-package.mjs');
     assert.equal(smoke.status, 0, smoke.stderr + smoke.stdout);
-    assert.match(smoke.stdout, /sentinel package ok: farsight-sentinel --help, 2 typed exports \(1 contract types compiled\), 1 schemas, 1 fixtures, npm consumer/);
+    assert.match(smoke.stdout, /sentinel package ok: farsight-sentinel --help, 3 typed exports \(4 contract types compiled\), 4 schemas, 4 fixtures, store reopened across processes \([a-z0-9-]+ SQLite [0-9.]+, candidate\), npm consumer/);
     // the installed schema set must be the source set
     write(root, 'packages/sentinel/schemas/sentinel-extra.draft-1.schema.json', '{}');
     const stale = node(root, 'test-sentinel-package.mjs');
@@ -236,4 +389,32 @@ test('npm pack exiting 0 without a tarball keeps build/sentinel; an inherited dr
     assert.ok(existsSync(tarball(root)));
     assert.equal(existsSync(join(root, 'build/sentinel/farsight-sentinel-prior.tgz')), false, 'replaced by the real output');
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('the root export and a subpath share one module instance in the installed tarball', () => {
+  const root = workspace();
+  const consumer = mkdtempSync(join(tmpdir(), 'farsight-sentinel-identity-'));
+  try {
+    const packed = node(root, 'pack-sentinel.mjs');
+    assert.equal(packed.status, 0, packed.stderr);
+    assert.ok(readdirSync(join(root, 'build/sentinel/package/dist/chunks')).length > 0, 'shared modules are emitted once, as chunks');
+    write(consumer, 'package.json', JSON.stringify({ name: 'consumer', private: true, type: 'module' }));
+    const installed = spawnSync('npm', ['install', '--offline', '--no-audit', '--no-fund', tarball(root)],
+      { cwd: consumer, encoding: 'utf8', timeout: 180_000 });
+    assert.equal(installed.status, 0, installed.stderr);
+    write(consumer, 'check.mjs', [
+      "import * as root from 'farsight-sentinel';",
+      "import * as store from 'farsight-sentinel/store';",
+      'let thrown;',
+      "try { await store.openStore('relative/path'); } catch (e) { thrown = e; }",
+      'console.log(JSON.stringify({ open: root.openStore === store.openStore, error: root.StoreError === store.StoreError,',
+      '  instanceofRoot: thrown instanceof root.StoreError, instanceofStore: thrown instanceof store.StoreError }));', '',
+    ].join('\n'));
+    const ran = spawnSync(process.execPath, ['check.mjs'], { cwd: consumer, encoding: 'utf8' });
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.deepEqual(JSON.parse(ran.stdout), { open: true, error: true, instanceofRoot: true, instanceofStore: true });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(consumer, { recursive: true, force: true });
+  }
 });

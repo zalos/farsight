@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Sentinel is a separate installable artifact (ADR 18); farsight-cli never bundles or imports it.
 // Reads packages/sentinel/package.json: each `bin` and each JavaScript export, `dist/<x>.js`, is
-// bundled from `src/<x>.ts` with Sentinel's workspace dependencies inlined. Third-party
+// bundled from `src/<x>.ts` with Sentinel's workspace dependencies inlined, in one build whose shared
+// modules land in `dist/chunks/` so every export subpath sees the same module instances. Third-party
 // dependencies of that closure stay external and become the tarball's dependencies. The
 // tarball carries Sentinel's own version, runtime floor and `private` flag, not the app's.
 // Public types are required: every JavaScript export needs a `types` condition, and tsc's
@@ -123,6 +124,9 @@ try {
     logLevel: 'silent',
     entryPoints: Object.fromEntries([...entries].map(([name, source]) => [name, source])),
     bundle: true, platform: 'node', format: 'esm', target: 'node24',
+    // One build with shared chunks: a module two entries import (the store, its error class) exists once, so
+    // `root.X === subpath.X` and `instanceof` hold across subpaths. Separate bundles would each carry a copy.
+    splitting: true, chunkNames: 'chunks/[name]-[hash]',
     outdir: join(out, 'dist'), outExtension: { '.js': '.mjs' },
     external: Object.keys(dependencies).flatMap((name) => [name, `${name}/*`]),
     // inlined CommonJS dependencies call require() for builtins; an ESM bundle has none

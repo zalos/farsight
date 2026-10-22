@@ -20,8 +20,9 @@ test('the package is optional, private and exports only files that exist', () =>
   assert.equal(manifest.name, '@farsight/sentinel');
   assert.equal(manifest.private, true);
   assert.match(manifest.version, /-draft\./);
-  // core supplies the shared catalog (and later counts/placement/grants); no scanner or model SDK dependency.
-  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/core', 'ajv']);
+  // core supplies the shared catalog (and later counts/placement/grants); @types/node because the public store
+  // declarations name Node built-ins. No scanner, container client or model SDK dependency.
+  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/core', '@types/node', 'ajv']);
   assert.equal(manifest.bin['farsight-sentinel'], './dist/cli.js');
   for (const [key, target] of Object.entries(manifest.exports as Record<string, any>)) {
     if (key.includes('*')) continue;
@@ -47,22 +48,92 @@ test('no Farsight package depends on or imports Sentinel', () => {
   }
 });
 
-test('the library imports nothing that could start work', () => {
-  const forbidden = /from ['"](node:)?(child_process|net|http|https|dgram|worker_threads|cluster|sqlite)['"]|from ['"]@farsight\//;
-  for (const file of filesUnder(`${pkgDir}dist`).filter(f => f.endsWith('.js'))) {
+// Every module import outside the package, per built file. A new import fails here until it is reviewed and
+// added; nothing networked, no worker or cluster, and no static node:sqlite import anywhere.
+const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
+  'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', 'node:fs'],
+  'validate.js': ['ajv'],
+  // The store's reason codes are catalog words; core's catalog is the only Farsight module the library reads.
+  'store/errors.js': ['@farsight/core/dist/strings-sentinel-store.js'],
+  'store/ledger-json.js': ['node:crypto'],
+  'store/ledger.js': ['node:fs', 'node:path'],
+  'store/migrations.js': ['node:crypto', 'node:fs', 'node:path'],
+  'store/objects.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:path', 'node:util', 'node:zlib'],
+  'store/owner.js': ['node:crypto', 'node:fs'],
+  // One fixed spawn: the macOS mount table, read while a store is opened (asserted below).
+  'store/paths.js': ['node:child_process', 'node:fs', 'node:path'],
+  // node:sqlite is imported lazily, by the first store open, never at module load.
+  'store/runtime.js': ['dynamic:node:sqlite'],
+};
+
+test('the library imports only its reviewed modules, and nothing that could start work at import', () => {
+  const dist = `${pkgDir}dist/`;
+  const found: Record<string, string[]> = {};
+  for (const file of filesUnder(dist).filter(f => f.endsWith('.js'))) {
     const text = readFileSync(file, 'utf8');
-    if (file.endsWith('cli.js')) {
-      // The executable reads its words from the catalog, and nothing else from Farsight.
-      const farsight = [...text.matchAll(/from ['"](@farsight\/[^'"]+)['"]/g)].map(m => m[1]);
-      assert.deepEqual(farsight, ['@farsight/core/dist/strings-sentinel-cli.js']);
-      continue;
+    const specs = new Set<string>();
+    for (const m of text.matchAll(/(?:^|[\s;])(?:import|export)\s[^;'"]*?from\s*['"]([^'"]+)['"]|^\s*import\s*['"]([^'"]+)['"]/gm)) {
+      const spec = m[1] ?? m[2]!;
+      if (!spec.startsWith('.')) specs.add(spec);
     }
-    assert.doesNotMatch(text, forbidden, file);
+    for (const m of text.matchAll(/\bimport\s*\(\s*([^)]*)\)/g)) {
+      const literal = /^['"]([^'"]+)['"]$/.exec(m[1]!.trim());
+      assert.ok(literal, `${file}: a dynamic import must name a literal module`);
+      if (!literal[1]!.startsWith('.')) specs.add(`dynamic:${literal[1]}`);
+    }
+    assert.doesNotMatch(text, /\brequire\s*\(/, `${file} uses require()`);
+    if (specs.size) found[file.slice(dist.length)] = [...specs].sort();
   }
-  // Importing the facade leaves no handle open and prints nothing.
-  const r = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(`${pkgDir}dist/index.js`)});`], { encoding: 'utf8', timeout: 10_000 });
-  assert.equal(r.status, 0, r.stderr);
-  assert.equal(r.stdout + r.stderr, '');
+  assert.deepEqual(found, ALLOWED_IMPORTS);
+  const paths = readFileSync(`${dist}store/paths.js`, 'utf8');
+  const spawns = [...paths.matchAll(/(?<![.\w])(spawnSync|spawn|execFileSync|execFile|execSync|exec|fork)\s*\(([^,)]*)/g)].map(m => `${m[1]}(${m[2]!.trim()}`);
+  assert.deepEqual(spawns, ["spawnSync('/sbin/mount'"], 'the only process the store may start is the macOS mount table');
+});
+
+/** Runs `code` in a fresh process that records every child spawn, then reports spawns, SQLite and new files. */
+function probe(code: string): { spawns: string[]; sqlite: boolean; files: string[]; stdout: string; stderr: string } {
+  const dir = mkdtempSync(join(tmpdir(), 'sentinel-probe-'));
+  try {
+    const script = `
+      import cp from 'node:child_process';
+      import { syncBuiltinESMExports } from 'node:module';
+      const spawns = [];
+      for (const name of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']) {
+        const original = cp[name];
+        cp[name] = (...args) => { spawns.push(name + ' ' + String(args[0])); return original(...args); };
+      }
+      syncBuiltinESMExports();
+      ${code}
+      const sqlite = process.moduleLoadList.some(m => /\\bsqlite\\b/.test(m));
+      process.stderr.write('\\n@@' + JSON.stringify({ spawns, sqlite }) + '\\n');
+    `;
+    writeFileSync(join(dir, 'probe.mjs'), script);
+    const r = spawnSync(process.execPath, ['probe.mjs'], { cwd: dir, encoding: 'utf8', timeout: 20_000,
+      env: { ...process.env, HOME: dir, TMPDIR: dir } });
+    assert.equal(r.status, 0, r.stderr);
+    const marker = r.stderr.lastIndexOf('\n@@');
+    const facts = JSON.parse(r.stderr.slice(marker + 3));
+    return { ...facts, files: readdirSync(dir).filter(f => f !== 'probe.mjs'), stdout: r.stdout, stderr: r.stderr.slice(0, marker) };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test('importing the root and the store, and asking the CLI for help, start nothing', () => {
+  const lib = probe(`await import(${JSON.stringify(`${pkgDir}dist/index.js`)}); await import(${JSON.stringify(`${pkgDir}dist/store/index.js`)});`);
+  assert.deepEqual(lib.spawns, [], 'no child process at import');
+  assert.equal(lib.sqlite, false, 'node:sqlite is not loaded until a store is opened');
+  assert.deepEqual(lib.files, [], 'no file is created at import');
+  assert.equal(lib.stdout + lib.stderr, '', 'importing prints nothing');
+  const help = probe(`process.argv.push('--help'); await import(${JSON.stringify(`${pkgDir}dist/cli.js`)});`);
+  assert.deepEqual(help.spawns, []);
+  assert.equal(help.sqlite, false);
+  assert.deepEqual(help.files, []);
+  assert.match(help.stdout, /no scanner yet/);
+  // Positive controls: the probe sees SQLite once loaded, and a spawn made through a named import.
+  assert.equal(probe(`await import('node:sqlite');`).sqlite, true);
+  assert.deepEqual(probe(`const { spawnSync } = await import('node:child_process'); spawnSync(process.execPath, ['-e', '0']);`).spawns,
+    [`spawnSync ${process.execPath}`]);
 });
 
 test('help and version say plainly that no scanner exists', () => {
@@ -76,12 +147,13 @@ test('help and version say plainly that no scanner exists', () => {
   assert.equal(version.stdout.trim(), `farsight-sentinel ${manifest.version}, contracts draft-1`);
 });
 
-test('every analysis capability is explicitly unavailable', () => {
+test('every analysis capability is explicitly unavailable; only contracts and the draft store are available', () => {
   const r = cli('capabilities', '--json');
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger']);
+  assert.ok(listed.filter(c => c.state !== 'unavailable').every(c => c.state === 'available-draft'));
   for (const c of listed) assert.match(c.reasonCode, /^sentinel\.capability\./);
   assert.equal(listed.find(c => c.id === 'interprocedural-flow')?.reasonCode, 'sentinel.capability.noQualifiedEngine');
 });

@@ -25,6 +25,9 @@ packages/work-fixture/fixtures/**/applied.jsonl
 
 # local settings and machine state — see .farsight/settings.example.json
 .farsight/settings.json
+# Sentinel runtime state is private; only the scrubbed settings twin may be tracked.
+.farsight/sentinel/*
+!.farsight/sentinel/settings.example.json
 .echo/*
 !.echo/settings.example.json
 !.echo/connection.example.json

@@ -153,6 +153,9 @@ importers:
       '@farsight/core':
         specifier: workspace:*
         version: link:../core
+      '@types/node':
+        specifier: 26.1.0
+        version: 26.1.0
       ajv:
         specifier: 8.20.0
         version: 8.20.0
