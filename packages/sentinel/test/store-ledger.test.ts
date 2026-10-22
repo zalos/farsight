@@ -290,6 +290,13 @@ test('the GC snapshot reports accepted, staged, report and active roots at one s
     'a running attempt pins its invocation');
   assert.deepEqual(snap.links, [[sha('parent'), sha('child')]]);
   assert.equal(snap.objects.length, 2);
+  assert.equal(snap.storeId, 'store-1');
+  assert.equal(snap.complete, true);
+  ledger.assertSnapshotCurrent(snap);
+  assert.throws(() => ledger.assertSnapshotCurrent({ ...snap, storeId: 'store-other' }), code('sentinel.store.snapshotStale'));
+  ledger.abortStaging('stage-open');
+  assert.throws(() => ledger.assertSnapshotCurrent(snap), code('sentinel.store.snapshotStale'),
+    'a root change after the snapshot invalidates it');
 });
 
 test('an artifact privacy floor rises with a stronger reference and never falls', async t => {

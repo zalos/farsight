@@ -43,6 +43,7 @@ export const LEDGER_ERROR_CODES = [
   'sentinel.store.objectMissing',
   'sentinel.store.objectVerifierUnavailable',
   'sentinel.store.asyncTransaction',
+  'sentinel.store.snapshotStale',
 ] as const;
 export type LedgerErrorCode = (typeof LEDGER_ERROR_CODES)[number];
 
@@ -59,7 +60,8 @@ export class LedgerError extends Error {
 // ---- The ledger ↔ object-store seam (draft; frozen early so both sides can build against it) ----
 
 /** How an object's bytes are stored. The artifact ID always hashes the raw (decoded) bytes. */
-export const ARTIFACT_CODECS = ['identity', 'gzip-6'] as const;
+/** `gzip` is any verified gzip member, whatever level wrote it; the writer's level is the object store's choice. */
+export const ARTIFACT_CODECS = ['identity', 'gzip'] as const;
 export type ArtifactCodec = (typeof ARTIFACT_CODECS)[number];
 
 /**
@@ -183,6 +185,11 @@ export const MAX_EVENT_PAGE = 500;
  * collector computes reachability from these roots through `links`; the ledger never deletes bytes.
  */
 export interface GcSnapshot {
+  /** The ledger's own store identity, never a caller's. */
+  storeId: Id;
+  /** Always true: the snapshot is the full committed state, read in one transaction. */
+  complete: true;
+  /** The last event sequence; every change to a root appends an event, so an unchanged sequence means unchanged roots. */
   sequence: Count;
   /** Artifacts with an accepted reference (publication outputs and their links' owners). */
   referenced: ArtifactId[];

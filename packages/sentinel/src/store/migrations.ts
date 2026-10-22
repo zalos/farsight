@@ -115,7 +115,7 @@ CREATE TABLE artifacts (
 
 CREATE TABLE artifact_objects (
   artifact_id TEXT NOT NULL REFERENCES artifacts(id),
-  codec TEXT NOT NULL CHECK (codec IN ('identity','gzip-6')),
+  codec TEXT NOT NULL CHECK (codec IN ('identity','gzip')),
   stored_digest TEXT NOT NULL CHECK (${DIGEST('stored_digest')}),
   stored_size INTEGER NOT NULL CHECK (stored_size >= 0),
   PRIMARY KEY (artifact_id, codec),

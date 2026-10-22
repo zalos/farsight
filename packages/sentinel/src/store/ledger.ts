@@ -710,6 +710,8 @@ export class Ledger {
           .filter((v): v is string => typeof v === 'string'),
       ]);
       return {
+        storeId: this.storeId,
+        complete: true as const,
         sequence,
         referenced: col('SELECT DISTINCT artifact_id FROM artifact_refs ORDER BY artifact_id'),
         staged: col('SELECT DISTINCT artifact_id FROM staging_artifacts ORDER BY artifact_id'),
@@ -721,6 +723,24 @@ export class Ledger {
           FROM artifact_objects o JOIN artifacts a ON a.id = o.artifact_id ORDER BY o.artifact_id, o.codec`).map(toReceipt),
       };
     });
+  }
+
+  /** The last committed event sequence. */
+  currentSequence(): number {
+    return this.#read(() => Number(this.#get('SELECT coalesce(max(sequence), 0) AS s FROM events')?.s ?? 0));
+  }
+
+  /**
+   * Throws unless a snapshot was taken from this ledger and nothing has been committed since. A collector calls it
+   * after computing candidates and before reporting or acting on them.
+   */
+  assertSnapshotCurrent(snapshot: GcSnapshot): void {
+    if (snapshot?.complete !== true || snapshot.storeId !== this.storeId) {
+      throw new LedgerError('sentinel.store.snapshotStale', 'the snapshot is not a complete snapshot of this ledger');
+    }
+    if (this.currentSequence() !== snapshot.sequence) {
+      throw new LedgerError('sentinel.store.snapshotStale', 'the ledger changed after the snapshot was taken');
+    }
   }
 
   /** SQLite's own integrity and foreign-key checks. Object bytes are the object store's to verify. */
