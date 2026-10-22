@@ -1,0 +1,40 @@
+# Sentinel's full crash-recovery matrix (PR 08, E4): 20 real SIGKILLs at every coordinator boundary plus 20
+# orphaned-worker cases, each recovered by a fresh process with zero lost and zero duplicate accepted outputs.
+# A release gate: run by hand, and on every push to a release branch. SENTINEL_RECOVERY_FULL=1 fails on a missing
+# prerequisite, and the job fails if any test was skipped.
+name: sentinel-recovery-full
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['release/**']
+
+permissions:
+  contents: read
+
+jobs:
+  sentinel-recovery-full:
+    name: sentinel-recovery-full
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build Sentinel and its workspace closure
+        run: pnpm --filter '@farsight/sentinel...' build
+      - name: The 20-repetition kill matrix, nothing skipped
+        working-directory: packages/sentinel
+        env:
+          SENTINEL_RECOVERY_FULL: '1'
+        run: |
+          set -o pipefail
+          node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=2400000 \
+            --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=recovery-full.tap \
+            test/execution-recovery-kill.test.ts
+          grep -qx '# skipped 0' recovery-full.tap || { echo "::error::a recovery test was skipped"; exit 1; }
+          grep -qx '# fail 0' recovery-full.tap && grep -qx '# cancelled 0' recovery-full.tap

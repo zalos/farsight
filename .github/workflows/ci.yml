@@ -28,6 +28,7 @@ jobs:
       echo: ${{ steps.select.outputs.echo }}
       sentinel: ${{ steps.select.outputs.sentinel }}
       isolation: ${{ steps.select.outputs.isolation }}
+      recovery: ${{ steps.select.outputs.recovery }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -175,6 +176,37 @@ jobs:
             test/execution-isolation.test.ts test/execution-protocol.test.ts test/execution-container-faults.test.ts test/execution-framing-budget.test.ts
           grep -qx '# skipped 0' isolation.tap || { echo "::error::an isolation test was skipped"; exit 1; }
           grep -qx '# fail 0' isolation.tap && grep -qx '# cancelled 0' isolation.tap
+
+  # Sentinel's crash recovery smoke (PR 08): one real SIGKILL at each coordinator boundary, then a fresh process
+  # recovers and finishes the run. SENTINEL_RECOVERY_SMOKE=1 fails on a missing prerequisite, and the job fails if
+  # any test was skipped. The 20-repetition matrix is the dedicated sentinel-recovery-full workflow.
+  sentinel-recovery:
+    name: sentinel-recovery
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.recovery != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build Sentinel and its workspace closure
+        run: pnpm --filter '@farsight/sentinel...' build
+      - name: Kill at every boundary once, recover, nothing skipped
+        working-directory: packages/sentinel
+        env:
+          SENTINEL_RECOVERY_SMOKE: '1'
+        run: |
+          set -o pipefail
+          node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=600000 \
+            --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=recovery.tap \
+            test/execution-recovery-kill.test.ts test/execution-coordinator.test.ts
+          grep -qx '# skipped 0' recovery.tap || { echo "::error::a recovery test was skipped"; exit 1; }
+          grep -qx '# fail 0' recovery.tap && grep -qx '# cancelled 0' recovery.tap
 
   e2e:
     name: e2e
