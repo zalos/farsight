@@ -41,7 +41,7 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
-## Sentinel PR 03 storage validation — 2026-10-22
+## Sentinel PR 03 merged; capture and isolation continue — 2026-10-22
 
 PR [#134](https://github.com/zalos/farsight/pull/134) merged at `269c3bc` with all nine CI checks passing.
 The integration branch `codex/sentinel-store` adds the optional store facade, separate lifetime owner lock,
@@ -59,14 +59,21 @@ and served with Sentinel entirely absent. Exact macOS ARM64/SQLite pairs 3.53.3 
 Linux x64/SQLite 3.53.4 was measured on Node 24.21.0/ext4 in
 [CI](https://github.com/zalos/farsight/actions/runs/39723522049/job/119642215934): 134 passed, four explicit skips. Linux exposed two test-fixture portability
 issues (argument length and immediate inode reuse); Opus reproduced and fixed both, and SOL verified the fixes.
-Final CI is rerun after recording this qualification; no merge is claimed yet.
+The final qualification commit passed all nine CI checks; [#135](https://github.com/zalos/farsight/pull/135)
+merged at `97ff419`. PR 04 and PR 07 implementation and independent reviews continue; PR 06's pure matcher
+extraction is being prepared. The later Java-build and owned-sample runtime designs are reviewed, but their
+implementation and empirical gates remain pending.
 
 The same frozen source against main and feature builds produced identical 7,175 nodes, 15,066 edges and source
 digest, with unchanged database size; the PR body records byte counts. Fresh front-door, Map and grouped code-map
 pages had zero page errors. No primary-checkout build, graph refresh or global install was performed.
 Reachability remains inspection/dry-run only; no scanner or automatic deletion is enabled. PR 04 capture and
-PR 07 isolation are starting in independent Opus worktrees against the reviewed store API. See the execution
+PR 07 isolation run in independent Opus worktrees against the reviewed store API. See the execution
 ledger for remaining acceptance and release gates.
+
+The PR 03 squash message accidentally omitted the assistant co-author trailers although its branch commits
+retain them. Its PR description has been corrected; protected history was preserved. The trailer-only agent
+count does not recognize that squash commit. Future PR bodies and explicit squash messages carry the trailers.
 
 ## Sentinel PR 02 foundation validated — 2026-10-22
 
