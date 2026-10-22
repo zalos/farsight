@@ -429,12 +429,15 @@ scanners' citations of it and the minimal `report <runId>` output. A missing, ex
 refuses the report. When the secret scan matched anything in a run (or its baseline), the scanner reports whole lines, not the value, so
 the report cannot prove other text is free of it: it withholds every excerpt, location and context name or label in
 that report, in both profiles, keeps findings' rule words, counts and placement shape, and says so
-(`sentinel.report.withheld.secretRun`). A run with no secret match reports as before (ADR 38). Names and
-values the scan did not match are not detected or withheld. A secret finding's identity is keyed by a per-store random secret kept in the owner's
+(`sentinel.report.withheld.secretRun`). A run with no secret match reports as before (ADR 38). In a secret-bearing
+full report even ordinary source and context names are opaque; the minimal report's other names remain unchanged.
+A secret finding's identity is keyed by a per-store random secret kept in the owner's
 trust folder (never the public store id, and never in the store, a bundle or a report), so the same file keeps its
 identity across captures without anyone being able to confirm a guessed name from a report. Keep the owner's trust
-folder to keep those identities: if its `report-keys/` key is lost, a new one is created, every secret finding gets a
-new identity, and comparisons with reports made before the loss no longer continue them.
+folder to keep those identities: if its `report-keys/` key is lost, a new one is created and future withheld-location
+identities change. Existing delivered reports keep their old identities; a store or bundle copy cannot restore the
+missing key or establish continuity with those earlier identities. Comparisons reconstruct both sides from retained
+runs under the current key; a delivered report file is not accepted as a baseline.
 
 ### Express control facts (draft)
 
