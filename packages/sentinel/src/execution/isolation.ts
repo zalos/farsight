@@ -305,10 +305,33 @@ export class ContainerBackend {
   }
 
   async state(id: string, owner: Partial<OwnershipLabels>, signal?: AbortSignal): Promise<ContainerState | null> {
-    const c = await this.#owned(id, owner, signal);
-    if (!c) return null;
-    const s = (c.State ?? {}) as { Status?: string; ExitCode?: number; OOMKilled?: boolean };
-    return { status: String(s.Status ?? ''), exitCode: typeof s.ExitCode === 'number' ? s.ExitCode : null, oomKilled: s.OOMKilled === true };
+    const until = performance.now() + 500;
+    const controller = new AbortController();
+    let stop!: () => void;
+    const stopped = new Promise<null>(resolve => { stop = () => { controller.abort(); resolve(null); }; });
+    const timer = setTimeout(stop, 500);
+    signal?.addEventListener('abort', stop, { once: true });
+    try {
+      if (signal?.aborted) { stop(); return null; }
+      // Attach completion and the daemon's TaskOOM notification are separate observations. Give only an exited
+      // SIGKILL-shaped result a short settling window; exit 137 itself never establishes a memory-limit failure.
+      // Every reread checks exact ownership. A missing container or abort ends observation immediately; neither
+      // a late inspect reply nor a stuck client may extend the 500 ms window or resurrect a result.
+      return await Promise.race([stopped, (async () => {
+        for (let pass = 0; pass < 4; pass++) {
+          if (controller.signal.aborted || performance.now() >= until) return null;
+          const c = await this.#owned(id, owner, controller.signal);
+          if (!c || controller.signal.aborted || performance.now() >= until) return null;
+          const s = (c.State ?? {}) as { Status?: string; ExitCode?: number; OOMKilled?: boolean };
+          const state = { status: String(s.Status ?? ''), exitCode: typeof s.ExitCode === 'number' ? s.ExitCode : null, oomKilled: s.OOMKilled === true };
+          if (pass === 3 || s.Status !== 'exited' || s.ExitCode !== 137 || state.oomKilled) return state;
+          await Promise.race([stopped, new Promise(resolve => setTimeout(resolve, 50))]);
+        }
+        return null;
+      })()]);
+    } finally {
+      clearTimeout(timer); signal?.removeEventListener('abort', stop); controller.abort();
+    }
   }
 
   /**
