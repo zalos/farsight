@@ -11,7 +11,7 @@ import { createAdapterRegistry } from '../dist/execution/registry.js';
 import {
   PATTERN_ADAPTER, PATTERN_ENGINE, PATTERN_SUPPORT, ENGINE_ARGS, PATTERN_WORKER_DIGEST, buildPatternJob, patternRuleOf,
   normalizePatternRun, languageOf, PatternError, PATTERN_COVERAGE_REASONS, PATTERN_REFUSAL_REASONS, PATTERN_ERROR_CODES,
-  patternRulesFromResolved, PATTERN_UNSUPPORTED_REASONS, buildPatternAdapter, MAX_PATTERN_TARGETS,
+  patternRulesFromResolved, PATTERN_UNSUPPORTED_REASONS, buildPatternAdapter, MAX_PATTERN_TARGETS, PATTERN_ENGINE_FAILURES,
 } from '../dist/adapters/pattern/index.js';
 import { PATTERN_WORKER_BYTES } from '../dist/adapters/pattern/adapter.js';
 
@@ -47,6 +47,7 @@ test('the adapter is pinned: image digest, telemetry off, suppression and ignore
   const shim = PATTERN_WORKER_BYTES.toString('utf8');
   assert.match(shim, /SEMGREP_SEND_METRICS': 'off'/);
   assert.match(shim, /SEMGREP_ENABLE_VERSION_CHECK': '0'/);
+  assert.doesNotMatch(shim, /stderr\.(buffer\.)?write\(result|stderr\.(buffer\.)?write\(scrub/, 'engine stderr is never forwarded');
   assert.doesNotMatch(shim, /APP_TOKEN|urllib|socket|http/, 'the shim has no network or token path');
   assert.match(shim, new RegExp(JSON.stringify(ENGINE_ARGS).replace(/[[\]]/g, '\\$&')));
   const adapter = createAdapterRegistry([PATTERN_ADAPTER]).get('pattern-semgrep');
@@ -180,6 +181,11 @@ test('skips, parse errors and per-rule timeouts are gaps; engine, attempt and ou
     const x = run(t, { paths: { scanned: all, skipped: [] } }, record);
     assert.ok(x.coverage.every((c: any) => c.status === 'error' && c.reasonCode.endsWith(reason)), reason);
   }
+  // A failed engine is reported by a fixed category; anything unrecognized, or a raw message, is `unknown`.
+  assert.equal(run(t, { paths: { scanned: all, skipped: [] } }, { exitCode: 4, failure: { category: 'invalidPattern', exitCode: 4 } }).engineFailure, 'sentinel.pattern.engine.invalidPattern');
+  assert.equal(run(t, { paths: { scanned: all, skipped: [] } }, { exitCode: 2, failure: { category: 'hunterpassword leaked text', exitCode: 2 } }).engineFailure, 'sentinel.pattern.engine.unknown');
+  assert.equal(run(t, { paths: { scanned: all, skipped: [] } }, { exitCode: 3 }).engineFailure, 'sentinel.pattern.engine.unknown');
+  assert.equal(run(t, { paths: { scanned: all, skipped: [] } }).engineFailure, null);
   for (const [state, reason] of [['timed-out', 'attemptTimedOut'], ['failed', 'attemptFailed'], ['canceled', 'attemptCanceled']] as const) {
     const x = run(t, {}, {}, state);
     assert.ok(x.coverage.every((c: any) => c.status === 'error' && c.reasonCode.endsWith(reason)) && x.findings.length === 0, state);
@@ -294,8 +300,8 @@ test('resolved rules become adapter rules only when this adapter can run them, w
 
 test('every pattern reason code is a catalog entry with both registers and a definition', async () => {
   const { STRINGS } = await import('@farsight/core/dist/strings.js');
-  const shimCodes = [...PATTERN_WORKER_BYTES.toString('utf8').matchAll(/'(sentinel\.pattern\.[A-Za-z.]+)'/g)].map(m => m[1]!);
-  const keys = [...PATTERN_ERROR_CODES, ...PATTERN_COVERAGE_REASONS, ...PATTERN_REFUSAL_REASONS, ...PATTERN_UNSUPPORTED_REASONS, ...PATTERN_SUPPORT.limitations,
+  const shimCodes = [...PATTERN_WORKER_BYTES.toString('utf8').matchAll(/'(sentinel\.pattern\.[A-Za-z.]*[A-Za-z])'/g)].map(m => m[1]!);
+  const keys = [...PATTERN_ERROR_CODES, ...PATTERN_ENGINE_FAILURES, ...PATTERN_COVERAGE_REASONS, ...PATTERN_REFUSAL_REASONS, ...PATTERN_UNSUPPORTED_REASONS, ...PATTERN_SUPPORT.limitations,
     ...manifest.rules.map((r: any) => r.titleKey), ...manifest.rules.flatMap((r: any) => r.limitationKeys), ...shimCodes];
   assert.ok(shimCodes.length >= 4);
   for (const key of keys) {
