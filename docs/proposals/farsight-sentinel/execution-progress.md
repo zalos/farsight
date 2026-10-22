@@ -52,6 +52,12 @@ identifiers, not GitHub PR numbers.
   consumer passes with official SARIF. These canonical/report corrections leave parser/core/store/library source intact;
   the graph/browser metrics above remain attributed to `35302206`. Opus approved `62de9d6c` in its one final source
   review; independent SOL delta review, candidate CI and merge remain open.
+  Subsequent runtime `bfb60d65` repairs the independently reproduced bootstrap-admission crash window only after exact
+  immediate-successor and accepted-operation proof; it never promotes a merely admitted future analysis. Actual
+  source-removed/reopened CLI continuation, mismatched-successor and missing-invocation controls cover the boundary.
+  Final named service (64), selected (25) and package (10) controls pass with zero skips, as does a fresh five-engine
+  npm-only retained-report/comparison/selected-child consumer with official SARIF. Independent review of this
+  correction and final candidate CI/merge remain required.
   The full owner report slice merged as [#155](https://github.com/zalos/farsight/pull/155), `63ecf4f0`, after independent
   review and all required and selected CI checks. Its installed five-engine two-capture comparison, official SARIF
   and offline-browser acceptance passed locally; the native scanner CLI job also passed on Linux amd64. If either run has an accepted secret match, both report disclosure profiles

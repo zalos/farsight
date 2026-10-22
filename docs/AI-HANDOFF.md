@@ -6,6 +6,28 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Selected-rerun crash-window recovery — 2026-10-22
+
+Runtime checkpoint `bfb60d65` corrects independent review's genuine legacy admit-before-advance crash window on
+`a9469623`. Only an active recorded bootstrap revision 1 can continue to its exact immediate analysis revision 2:
+the reader authenticates the accepted retained operation, snapshot and previous digest, requires the current immutable
+profile, and rebuilds the canonical analysis under the exact lock and policy before comparing its digest. A different
+valid analysis or missing invocation refuses before any new records; a merely admitted future revision never replaces
+an already current analysis. The same analysis constructor serves normal planning and reconciliation. Source removal
+and store reopening do not prevent the proven continuation, and the actual public CLI executes the recovered analysis
+with the existing honest foundation-preview coverage result.
+
+The final Node 24 closure build and typecheck pass, with 64 named service controls, 25 selected authority/privacy/
+upgrade controls and ten package controls passing with zero skips. A fresh npm-only five-engine/two-capture consumer
+again passes retained full reporting/comparison and selected-child joins, generations and parent immutability after
+source removal and service shutdown, including official SARIF validation; only existing pinned assets were used.
+The four new crash-window controls include an exact continuation,
+a different schema-valid successor, a missing accepted invocation and current revision 2 with admitted revision 3.
+The preceding baseline failed the positive continuation and both refusal checks. These corrections change only
+canonical planning and its tests; the reviewed report projection, key reader, scanner adapters, library implementations,
+core, parser, store and package boundaries remain intact. Independent SOL delta review and final CI/merge remain
+required. The real-ingest/browser measurements below remain attributed to `35302206`.
+
 ## Selected-rerun final review corrections — 2026-10-22
 
 Runtime checkpoint `a9469623` follows independently reviewed `35302206` and the final source-only Opus approval
