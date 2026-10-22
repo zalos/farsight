@@ -534,7 +534,8 @@ must be a literal loopback address; a hosted one must use https and needs record
 An unpriced profile is refused, and only a local runtime may declare no fee. The binding's canonical digest is the
 `input` of the `paid.admit` intent (`envelopeIntent`), so the owner's receipt confirms the origin, credential
 reference, disclosure, model, limits, price, terms and capability together. Any change needs a new receipt
-(`bindingChanged`). The profile is a Sentinel-owned type, not a settings field yet; moving it into the settings
+(`bindingChanged`); so does any change of the policy revision, since each call re-makes the binding under the policy
+in force, and a revoked grant therefore stops the envelope. The profile is a Sentinel-owned type, not a settings field yet; moving it into the settings
 contract is a follow-up for the policy owner.
 
 **Admission.** `openEnvelope` admits one run budget under one binding through the shared gate (ADR 23).

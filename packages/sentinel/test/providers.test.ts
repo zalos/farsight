@@ -215,6 +215,10 @@ test('a priced provider: the owner receipt binds the binding, the credential is 
   // A changed binding (another model) needs a new approval; the old envelope will not carry it.
   const changed = bindProvider(policy, openaiProfile(ep.origin, { model: 'review-model', limits: { ...openaiProfile(ep.origin).limits, maxOutputTokens: 100 } }));
   await assert.rejects(s.broker.generate(env, changed, ask('op-2')), code('sentinel.provider.bindingChanged'));
+  // A changed policy (here: the grants) stops the envelope, even for the same provider and profile.
+  const revoked = trustedPolicy({ openai: ep.origin, grants: [] });
+  await assert.rejects(s.broker.generate(env, bindProvider(revoked, openaiProfile(ep.origin)), ask('op-3')), code('sentinel.provider.bindingChanged'));
+  assert.equal(ep.seen.length, 1);
   // The receipt is spent once.
   await assert.rejects(s.broker.openEnvelope({ ...base, receipt: { book, id: r.id } }), (e: any) => /already used/.test(e.message));
 });
