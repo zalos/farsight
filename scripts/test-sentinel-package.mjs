@@ -59,6 +59,10 @@ try {
     assert.ok(runtimeKeys[subpath].length > 0, `${specifierOf(subpath)} exposes named exports`);
   }
   assert.ok(subpaths.includes('.') && subpaths.includes('./contracts') && subpaths.includes('./store'), 'the root, ./contracts and ./store exports');
+  // Parser evidence (ADR 22): required whenever the source package exports it.
+  const sourceExports = JSON.parse(readFileSync(join(sourceDir, 'package.json'), 'utf8')).exports ?? {};
+  const parserExported = Object.hasOwn(sourceExports, './parser');
+  assert.equal(subpaths.includes('./parser'), parserExported, 'the installed ./parser export matches the source package');
 
   // The envelope registry, as the installed package reports it.
   const registry = JSON.parse(await evalModule("const { ENVELOPES } = await import('farsight-sentinel'); console.log(JSON.stringify(ENVELOPES));"));
@@ -115,6 +119,22 @@ try {
     '  } finally { store.close(); }',
     '}',
     'const codes: readonly string[] = STORAGE_ERROR_CODES.ledger; void codes; void rootOpenStore;',
+    // The parser's own portable types arrive whole (vendored declarations), with Sentinel's result and index around them.
+    ...(parserExported ? [
+      "import { parseSnapshot, retainSnapshotAnalysis, PARSER_LIMIT_CEILINGS, type AnalysisArtifact, type InputFingerprint, type ParserLimits, type ParserIndex, type ParserResult, type SpanUnavailableReason } from 'farsight-sentinel/parser';",
+      'export function parserFields(a: AnalysisArtifact, r: ParserResult, i: ParserIndex): unknown[] {',
+      '  const node = a.graph.nodes[0]!;',
+      '  const edge = a.graph.edges[0]!;',
+      '  const site = edge.occurrences?.[0];',
+      '  const input: InputFingerprint | undefined = a.analysis.inputs[0];',
+      '  const limits: Required<ParserLimits> = PARSER_LIMIT_CEILINGS;',
+      '  const reason: SpanUnavailableReason | undefined = i.nodes[0]?.spanUnavailable;',
+      '  return [node.loc?.path, node.loc?.endLine, edge.resolution?.status, site?.conditions, site?.span?.start, a.graph.meta?.files,',
+      '    a.analysis.complete, input?.kind, limits.maxDurationMs, r.parserComplete, r.clearsChecks, r.counts.parsed,',
+      '    r.counts.unknownScopeDescendants, r.inputs[0]?.outcome, r.entries[0]?.class, r.tree.before, i.occurrences[0]?.byteSpan?.startByte,',
+      '    i.spanUnavailable.invalidUtf8, i.unplaced.count, i.omitted, reason, typeof parseSnapshot, typeof retainSnapshotAnalysis];',
+      '}',
+    ] : []),
   ];
   writeFileSync(join(consumer.dir, 'consumer.mts'), lines.join('\n') + '\n');
   await consumer.exec(process.execPath, [join(root, 'node_modules', 'typescript', 'bin', 'tsc'), '--noEmit', '--strict',
@@ -240,7 +260,7 @@ try {
   assert.ok(!modules.includes('farsight-cli'), 'farsight-cli is not installed with Sentinel');
   assert.ok(!modules.includes('@farsight'), 'no workspace package is resolved from a registry');
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}, npm consumer`);
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}, npm consumer`);
 } finally {
   consumer.cleanup();
 }
