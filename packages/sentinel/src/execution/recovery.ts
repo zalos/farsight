@@ -335,6 +335,11 @@ export interface RecoveryReport {
   /** Attempts the ledger interrupted under this epoch's fence. */
   interrupted: Array<{ attemptId: Id; work: WorkRef; epoch: Id; workState: 'ready' | 'failed' }>;
   stoppedWorkers: number[];
+  /**
+   * Attempts whose worker recovery settled: a built-in worker proven stopped or gone (or, pid-less, unable to act),
+   * or a container whose removal was confirmed.
+   */
+  settledWorkers: Id[];
   /** Workers whose obligation is kept: their identity could not be established, or the stop not confirmed. */
   obligations: Array<{ attempt: Id; pid: number; reason: string }>;
   removedContainers: string[];
@@ -352,7 +357,7 @@ export async function recoverStore(store: SentinelStore, options: { intents: Int
   store.assertHeld();
   const epoch = store.epoch;
   const report: RecoveryReport = {
-    interrupted: [], stoppedWorkers: [], obligations: [], removedContainers: [], abortedStages: [], settledIntents: [], pendingIntents: [],
+    interrupted: [], stoppedWorkers: [], settledWorkers: [], obligations: [], removedContainers: [], abortedStages: [], settledIntents: [], pendingIntents: [],
     unresolved: [], uncertain: [], clean: false,
   };
   // 1. The ledger ends every earlier epoch's running attempt under this epoch's fence.
@@ -386,15 +391,15 @@ export async function recoverStore(store: SentinelStore, options: { intents: Int
       if (pids === undefined) { report.obligations.push({ attempt: w.attempt, pid: 0, reason: 'process table could not be read' }); continue; }
       for (const pid of pids) { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
       const left = pids.length ? await waitAbsent(w.token) : true;
-      if (left) { report.stoppedWorkers.push(...pids); options.workers.settle(w); }
+      if (left) { report.stoppedWorkers.push(...pids); options.workers.settle(w); report.settledWorkers.push(w.attempt); }
       else report.obligations.push({ attempt: w.attempt, pid: 0, reason: 'stop not confirmed' });
       continue;
     }
     const verdict = verifyWorker(w);
-    if (verdict === 'gone' || verdict === 'someone-else') { options.workers.settle(w); continue; }
+    if (verdict === 'gone' || verdict === 'someone-else') { options.workers.settle(w); report.settledWorkers.push(w.attempt); continue; }
     if (verdict === 'unverifiable') { report.obligations.push({ attempt: w.attempt, pid: w.pid, reason: 'identity could not be read' }); continue; }
     try { process.kill(w.pid, 'SIGKILL'); } catch { /* exited in between: confirmed below */ }
-    if (await confirmGone(w)) { report.stoppedWorkers.push(w.pid); options.workers.settle(w); }
+    if (await confirmGone(w)) { report.stoppedWorkers.push(w.pid); options.workers.settle(w); report.settledWorkers.push(w.attempt); }
     else report.obligations.push({ attempt: w.attempt, pid: w.pid, reason: 'stop not confirmed' });
   }
   // 3. Containers labelled with this store under an earlier epoch.
@@ -403,7 +408,7 @@ export async function recoverStore(store: SentinelStore, options: { intents: Int
     for (const c of await options.backend.listStoreContainers(store.storeId)) {
       if (c.epoch === epoch) continue;
       const state = await options.backend.remove(c.id, { owner: c.owner, store: store.storeId, attempt: c.attempt, epoch: c.epoch }).catch(() => 'cleanup-failed' as const);
-      if (state === 'cleanup-failed') report.uncertain.push(c.id); else { report.removedContainers.push(c.id); removedOwners.add(c.owner); }
+      if (state === 'cleanup-failed') report.uncertain.push(c.id); else { report.removedContainers.push(c.id); removedOwners.add(c.owner); report.settledWorkers.push(c.attempt); }
     }
   }
   // 4. Journaled container intents from earlier epochs.
@@ -415,7 +420,7 @@ export async function recoverStore(store: SentinelStore, options: { intents: Int
     if (removedOwners.has(intent.owner)) { options.intents.settle(intent); report.settledIntents.push(intent.name); continue; }
     if (!options.backend) { report.pendingIntents.push(intent); continue; }
     const r = await options.backend.settleIntent(intent).catch(() => 'uncertain' as const);
-    if (r === 'removed') { options.intents.settle(intent); report.settledIntents.push(intent.name); }
+    if (r === 'removed') { options.intents.settle(intent); report.settledIntents.push(intent.name); report.settledWorkers.push(intent.attempt); }
     else report.pendingIntents.push(intent);
   }
   // 5. Stages left open by earlier epochs.

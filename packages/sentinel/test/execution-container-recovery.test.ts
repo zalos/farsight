@@ -9,6 +9,8 @@ import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { IntentFiles } from '../dist/execution/recovery.js';
 import { LABELS } from '../dist/execution/isolation.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
@@ -56,6 +58,7 @@ test('a create whose reply is lost to a crash: recovery removes the container by
     assert.equal(summary.recovery.settledIntents.length, 1, 'its journaled intent was settled');
     assert.equal(summary.recovery.clean, true);
     assert.deepEqual(storeContainers(id), []);
+    assert.deepEqual(readdirSync(join(s.root, 'work')).filter(n => n.startsWith('att-') || n.startsWith('inputs.')), [], 'scratch reconciled');
     const store = await storeIn(s.root);
     try { assert.ok([...publications(store, 'run-e4').values()].every(n => n === 1)); } finally { store.close(); }
     unrelatedIntact();
