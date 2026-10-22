@@ -829,7 +829,7 @@ preview jobs retain one scope. Skips and omitted files remain explicit coverage 
 owner names both archive and provenance; metadata never gains trust because it is beside a file. The spent receipt
 state digest binds provenance in addition to the candidate and previous lock. Private immutable records are keyed
 by that receipt and verified against the admitted lock entry, while archives are held by content digest. OSV imports
-require an explicitly stated published SPDX expression; Trivy checks retain their fixed Apache-2.0 provenance.
+require an explicitly stated published SPDX expression; Trivy checks retain their pinned MIT provenance, independently of the engine's Apache-2.0 license.
 Separate `assets acquire-database` actions call the existing bounded allowlisted brokers under a one-use receipt,
 with a deadline; acquisition never silently promotes or runs an asset. Plans and scanners never autoacquire.
 

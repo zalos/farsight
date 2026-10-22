@@ -1947,3 +1947,14 @@ The public scanner integration now takes the checks bundle's rights directly fro
 (MIT), independently of the Trivy engine's Apache-2.0 license. An explicit conflicting override is refused. Public
 and installed CLI tests assert the disclosed candidate rights before the exact candidate is receipt-bound and
 promoted. No scanner input, worker or coverage behavior changes.
+
+## Sentinel scanner admission corrections — 2026-10-22
+
+The public CLI derives `tool-execution` from the admitted executable check units, apart from the exact shipped
+local preview detector. Disclosure, foreground admission, detached owner receipts, direct agent service admission
+and rerun previews use the same effect derivation; pause/cancel remain local control actions. Default and repository
+grants are unchanged. Asset adoption now asks shared admission policy before inspecting Docker or reading caller
+archives, then still requires final exact candidate/provenance receipt admission before promotion. The stale ADR
+checks-bundle rights sentence now names MIT. Focused coverage includes restricted grants refusing before scanner
+attempts, a sufficient grant running the real pinned scanner, rerun refusal, direct service/receipt denial, no daemon
+contact on asset-policy denial, and preview/lifecycle/receipt regressions.

@@ -12,6 +12,7 @@
 // that rests on the foundation-preview rule is required coverage incomplete whatever it records, and this build
 // never prints a satisfied result (findings are not judged against the policy until the full report exists).
 import { createHash } from 'node:crypto';
+import type { ActionEffect } from '../contracts/policy.js';
 import type { RunEnvelope } from '../contracts/run.js';
 import type { PlanRevision } from '../planner/types.js';
 import { Coordinator, type RunSummary } from '../execution/coordinator.js';
@@ -47,7 +48,7 @@ export interface CanonicalDisclosure {
   readonly revision: number;
   readonly planDigest: string;
   readonly snapshotId: string;
-  readonly effects: readonly ['local-artifacts'];
+  readonly effects: readonly ActionEffect[];
   readonly checks: Readonly<Record<string, number>>;
   readonly units: number;
   /** The analysis units, by id: what `rerun --stage` selects from. */
@@ -64,6 +65,7 @@ export interface CurrentPlan {
   readonly planDigest: string;
   readonly policyRevision: string;
   readonly kind: 'bootstrap' | 'analysis';
+  readonly effects: readonly ActionEffect[];
 }
 
 /** A plan resting on the foundation-preview detector, whatever its rules are called. */
@@ -75,10 +77,17 @@ export function assertSupportedRules(plan: Pick<PlanRevision, 'pins'>): void {
   if (unsupported.length) throw new ServiceError('sentinel.service.ruleUnsupported', { unsupported });
 }
 
+/** Effects follow executable admitted units; only the exact package preview is a local artifact operation. */
+export function planEffects(plan: Pick<PlanRevision, 'units'>): readonly ActionEffect[] {
+  const preview = publicRegistry().get(PREVIEW_DETECTOR_ID).digest;
+  const tool = plan.units.some(unit => unit.stage === 'check' && (unit.adapterId !== PREVIEW_DETECTOR_ID || unit.implementationDigest !== preview));
+  return Object.freeze(tool ? ['local-artifacts', 'tool-execution'] as const : ['local-artifacts'] as const);
+}
+
 function disclose(plan: PlanRevision): CanonicalDisclosure {
   return Object.freeze({
     planId: plan.runId, runId: plan.runId, revision: plan.revision, planDigest: plan.digest, snapshotId: plan.pins.snapshotId!,
-    effects: Object.freeze(['local-artifacts'] as const), checks: Object.freeze({ ...plan.tallies.checks }), units: plan.units.length,
+    effects: planEffects(plan), checks: Object.freeze({ ...plan.tallies.checks }), units: plan.units.length,
     unitIds: Object.freeze(plan.units.map(u => u.id).sort()),
     ruleGaps: plan.ruleGaps.length, requiredCoverageAchievable: plan.requiredCoverageAchievable,
     label: isPreview(plan) ? 'foundation-preview' as const : 'deterministic' as const,
@@ -91,7 +100,7 @@ export async function currentPlan(store: SentinelStore, runId: string): Promise<
   const revision = store.ledger.getRun(runId)?.planRevision ?? store.ledger.latestPlan(runId)?.revision;
   if (revision === undefined) return undefined;
   const admitted = await loadPlan(store, runId, revision);
-  return Object.freeze({ runId, revision, planDigest: admitted.plan.digest, policyRevision: admitted.plan.pins.policyDigest ?? '', kind: admitted.plan.kind });
+  return Object.freeze({ runId, revision, planDigest: admitted.plan.digest, policyRevision: admitted.plan.pins.policyDigest ?? '', kind: admitted.plan.kind, effects: planEffects(admitted.plan) });
 }
 
 /**
@@ -270,7 +279,7 @@ export interface RerunPreview {
   readonly checks: number;
   /** The whole analysis is selected: the rerun re-plans every unit over the retained snapshot. */
   readonly all: boolean;
-  readonly effects: readonly ['local-artifacts'];
+  readonly effects: readonly ActionEffect[];
 }
 
 /**
@@ -304,7 +313,7 @@ export async function previewRerun(store: SentinelStore, parentId: string, selec
   return Object.freeze({
     parentId, snapshotId: parent.envelope.snapshotId, selected: sorted(chosen), downstream: sorted(downstream), prerequisites: sorted(prerequisites),
     checks: [...rerun].reduce((n, id) => n + (units.get(id)?.checks.length ?? 0), 0), all: rerun.size === units.size,
-    effects: Object.freeze(['local-artifacts'] as const),
+    effects: planEffects({ units: revision.units.filter(unit => rerun.has(unit.id)) }),
   });
 }
 

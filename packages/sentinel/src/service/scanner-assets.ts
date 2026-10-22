@@ -90,6 +90,13 @@ function metadataOf(id:string,metadata:unknown,bytes:Buffer,now:Date,license?:st
 export async function adoptScannerAsset(ws:Workspace,options:{kind:'tool'|'database';id:string;archive?:string;manifest?:string;license?:string;confirm:boolean;now:Date}):Promise<CommandResult>{
  const adopted=adoptedPolicy(ws);if('refusal'in adopted)return adopted.refusal;const policy=adopted.policy;
  const book=new RuleLockBook(ws.trustDir);const selected=book.current();const previous=selected?.lock??emptyLock(options.now);const previousDigest=lockDigest(previous);
+ // Decide the policy before inspecting a daemon or reading caller archives. This preflight grants no promotion:
+ // the exact verified candidate and metadata still require the separate, receipt-bound admission below.
+ const preflight=admit({intent:{action:'tool.acquire',input:canonicalDigest({kind:options.kind,id:options.id,phase:'local-asset-preflight'}),
+  effects:['local-artifacts'],budget:{maxTokens:null,maxCost:null,currency:null},scope:{profile:null,provider:null,targets:[previousDigest]}},
+  requestedBy:OWNER,policy,stateDigest:previousDigest,now:options.now,
+  capability:()=>({available:true,detail:'policy preflight only; no external capability queried'}),credential:()=>({basis:'local-only',detail:'no provider contacted'})});
+ if(!preflight.record.verdicts.policy.allowed)return result('assets','configuration-failure',{verdicts:printed(preflight.record),reasonCode:preflight.record.verdicts.policy.reasonCode,facts:{kind:options.kind,id:options.id,network:false}});
  let candidate:PromotionCandidate,metadata:unknown,bytes:Buffer|undefined;
  if(options.kind==='tool'){
   if(options.archive||options.manifest||options.license)bad();
