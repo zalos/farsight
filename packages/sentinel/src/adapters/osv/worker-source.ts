@@ -29,8 +29,10 @@ WREV=$(printf '%s' "$start" | sed -n 's/.*"work":{"id":"[A-Za-z0-9._:-]*","revis
 [ -n "$ATT" ] && [ -n "$EPOCH" ] && [ -n "$FP" ] && [ -n "$WID" ] && [ -n "$WREV" ] || exit 2
 INPUTS=$(printf '%s' "$start" | sed -n 's/.*"inputs":\\[\\([^]]*\\)\\].*/\\1/p' | tr ',' '\\n' | sed -n 's/^"sha256:\\([0-9a-f]\\{64\\}\\)"$/\\1/p')
 SEQ=0
-bound() { printf '"attemptId":"%s","work":{"id":"%s","revision":%s},"coordinatorEpoch":"%s","seq":%s' "$ATT" "$WID" "$WREV" "$EPOCH" "$SEQ"; SEQ=$((SEQ + 1)); }
-diag() { say "{\\"protocol\\":\\"$P\\",\\"type\\":\\"diagnostic\\",$(bound),\\"code\\":\\"$1\\"}"; }
+# The frame's binding, with the next sequence number. Set in this shell, never in a command substitution (a subshell
+# would not advance SEQ, and a repeated sequence number is a protocol violation).
+bound() { BOUND=$(printf '"attemptId":"%s","work":{"id":"%s","revision":%s},"coordinatorEpoch":"%s","seq":%s' "$ATT" "$WID" "$WREV" "$EPOCH" "$SEQ"); SEQ=$((SEQ + 1)); }
+diag() { bound; say "{\\"protocol\\":\\"$P\\",\\"type\\":\\"diagnostic\\",$BOUND,\\"code\\":\\"$1\\"}"; }
 fail() { diag "$1"; exit 3; }
 
 JOB=''
@@ -108,6 +110,7 @@ printf '{"schema":"sentinel-osv-run/draft-1","job":"sha256:%s","exitCode":%s,"ti
 REC=$(sha256sum "$W/record.json" | cut -c1-64)
 RSIZE=$(wc -c < "$W/record.json" | tr -d ' ')
 cp "$W/out.json" "/output/$OUT" && cp "$W/record.json" "/output/$REC" || exit 2
-say "{\\"protocol\\":\\"$P\\",\\"type\\":\\"result\\",$(bound),\\"inputFingerprint\\":\\"$FP\\",\\"granularity\\":\\"per-file\\",\\"artifacts\\":[{\\"id\\":\\"sha256:$OUT\\",\\"mediaType\\":\\"application/vnd.osv.scan+json\\",\\"bytes\\":$SIZE},{\\"id\\":\\"sha256:$REC\\",\\"mediaType\\":\\"application/vnd.sentinel.osv-run+json\\",\\"bytes\\":$RSIZE}],\\"observations\\":[],\\"coveredChecks\\":[],\\"scannedSet\\":[],\\"skipped\\":[],\\"actualReadSet\\":[],\\"unresolvedFrontiers\\":[],\\"diagnostics\\":[]}"
+bound
+say "{\\"protocol\\":\\"$P\\",\\"type\\":\\"result\\",$BOUND,\\"inputFingerprint\\":\\"$FP\\",\\"granularity\\":\\"per-file\\",\\"artifacts\\":[{\\"id\\":\\"sha256:$OUT\\",\\"mediaType\\":\\"application/vnd.osv.scan+json\\",\\"bytes\\":$SIZE},{\\"id\\":\\"sha256:$REC\\",\\"mediaType\\":\\"application/vnd.sentinel.osv-run+json\\",\\"bytes\\":$RSIZE}],\\"observations\\":[],\\"coveredChecks\\":[],\\"scannedSet\\":[],\\"skipped\\":[],\\"actualReadSet\\":[],\\"unresolvedFrontiers\\":[],\\"diagnostics\\":[]}"
 exit 0
 `;
