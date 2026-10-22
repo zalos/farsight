@@ -1354,13 +1354,23 @@ assigned, with a span inside those bytes (a name match cites none). Its rule fam
 record's. Every scanner unit's own report states how many findings it accepted, and the publication must hold exactly
 that many finding records, so a dropped or added record refuses the report instead of reading as fewer findings. A
 withheld citation's identity is an opaque key for its file (`findings` `withheldKey`, the capture entry by default; the
-command line uses an HMAC of source and path keyed by the store id), so identical bytes in two files are two findings
-and a secret finding continues across captures of one store. A report carries neither the key nor the store id, but the
-store id is not secret (container labels, owner records, a failed run's facts): its holder can confirm an exact guess
-of a path against a report's fingerprints, so this keeps a path from being read off a report, not a low-entropy path
-from that holder. Every long token the secret scan matched (a matched name, or anything on a matched line) is replaced
-in every string of the report document in every profile, context labels, ids and excerpts included, with one fixed word
-per token so cross-references still match; catalog definitions are left as they are. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
+command line uses an HMAC of source and path under the store's own secret), so identical bytes in two files are two
+findings and a secret finding continues across captures of one store. The store id is public (container labels, owner
+records, a bundle's provenance, a failed run's facts) and is never the key: the secret is 32 random bytes per store id
+in the owner's private trust folder (`report-keys/`), outside the store directory so no store copy or bundle carries
+it, created once by no-overwrite publication, read only as a private single-link file of exactly 32 bytes (anything
+else refuses rather than minting a new key, which would change identities), and never written to a receipt, result,
+report, log or the service socket. A report and a bundle together, with the store id, confirm no guessed path. Every candidate the secret scan's matched text yields is replaced in every source- or context-controlled string of the
+report document in every profile (context labels and ids, paths, symbols, titles, sentences, excerpts), one fixed word
+per candidate so references still match. The detector reports whole lines, so a matched line yields the whole trimmed
+line, each quoted string, the right-hand side of its first assignment (unquoted values with `:` or padding included),
+its pieces split at whitespace and quotes, at assignment, separator and bracket characters, and at path separators (with
+and without a final extension), and its runs of letters and digits; a value of short pieces joined by punctuation is
+withheld whole. Candidates are 8 or more characters and are held in memory only. Fields Sentinel generates and the
+contract constrains (schema, enums, catalog keys, digests, content and artifact ids, generated finding, evidence and
+report ids, counts' words, catalog definitions) are left as they are, so a matched line holding ordinary structural words
+still yields a valid report; the redacted document is checked against the contract again and refused if it does not
+fit. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
 its entry, without a symbol, never used to place a gap), and the minimal scanner report replaces such a name wherever it
 appears. Refusal reasons never name a path. Names the scan did not match are not withheld; the context-graph
 attestation limitation above is unchanged.

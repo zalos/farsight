@@ -32,6 +32,7 @@ import {
 import { canonicalJson } from '@farsight/graph';
 import { STRINGS } from '@farsight/core/dist/strings.js';
 import { RuleLockBook } from './rule-locks.js';
+import { ReportKeyError, withheldLocationKey } from './report-key.js';
 
 /** The scanner adapters whose accepted records this report reads, and the preview detector's own findings. */
 const SECRETS_ADAPTER = 'secrets-gitleaks';
@@ -75,7 +76,7 @@ export interface RunAssessment {
   readonly ruleLock: unknown;
   /**
    * The opaque, store-keyed identity of a withheld citation's file: stable across this store's captures, never its path.
-   * Identical bytes in two files are two keys. The store id it is keyed by is not secret (withheldKeyFor).
+   * Identical bytes in two files are two keys. Keyed by the store's own secret, never the public store id.
    */
   readonly withheldKey: (e: WithheldLocationEvidence) => string;
   /** Files (`sourceId:relativePath`) whose name the secret scan matched: never printed or used to place anything. */
@@ -156,7 +157,18 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
   const secretTokens = new Set<string>();
   const entryIndex = new Map<string, number>();
   snapshot.entries.forEach((e, i) => { if (e.kind === 'file' && e.disposition === 'included') entryIndex.set(fileScope(e.sourceId, e.relativePath), i); });
-  const locationKeyOf = withheldKeyFor(store.storeId, snapshot);
+  // The key is the store's own secret, read only when a withheld citation needs one: a run with no secret evidence
+  // reports without the owner's trust folder.
+  let key: Buffer | undefined;
+  const keyOf = () => {
+    if (key) return key;
+    if (!options.trustDir) return unbound('a withheld citation needs the owner\'s report key');
+    try { return (key = withheldLocationKey(options.trustDir, store.storeId)); } catch (e) {
+      if (e instanceof ReportKeyError) return unbound(e.reason);
+      throw e;
+    }
+  };
+  const locationKeyOf = withheldKeyFor(keyOf, snapshot);
 
   const coverage: CoverageEnvelope[] = [];
   const observations: ObservationEnvelope[] = [];
@@ -316,23 +328,58 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
   };
 }
 
-/**
- * The opaque key of a withheld citation's file: an HMAC of its source and path keyed by this store's id. It is the same
- * for the same file in any capture of this store (so a comparison can continue a secret finding), and a report alone
- * neither carries the key nor the store id. The store id is not a secret, though: it labels the store's containers and
- * appears in its owner records and in a failed run's facts, so someone who has it and guesses a path exactly can
- * confirm the guess against a report's fingerprints. This keeps a path from being read off a report; it does not hide
- * a low-entropy path from a holder of the store id. A reference that does not resolve in this snapshot refuses.
- */
-/** The tokens a value or a name can hide in: runs of 8 or more letters, digits, `_` or `-`. */
-const tokensOf = (text: string) => text.match(/[A-Za-z0-9_-]{8,}/g) ?? [];
+/** The shortest candidate a match is withheld by: shorter fragments are too common to stand for a value alone. */
+const MIN_TOKEN = 8;
 
 /**
- * Replaces every secret token in every string of a report document, except the catalog's own definitions, which
- * carry no evidence or context text. Context labels, ids, metadata, sentences, titles and excerpts are all covered,
- * from whichever file or graph they came, in every disclosure profile. Each token becomes one fixed word, the same
- * everywhere in the document, so the ids that reference each other still match. The result is checked against the
- * report contract again.
+ * Every candidate a matched value or name can appear as, taken from the matched text itself (a matched line or a matched
+ * path) and held in memory only. The detector reports whole lines, not the value's bytes, so the value is withheld at
+ * every boundary a supported detector's value can have: the whole trimmed text, each quoted string, the text split at
+ * whitespace and quotes (a value with `.`, `/`, `+`, `=`, `:` inside), split also at assignment, separator and bracket
+ * characters, the whole right-hand side of the first `key = value` or `key: value` (unquoted values with `:` or
+ * padding included), and its runs of letters and digits. A value made
+ * of short pieces joined by punctuation is therefore withheld whole, and each long piece of it on its own.
+ */
+export function tokensOf(text: string): string[] {
+  const out = new Set<string>();
+  const add = (t: string) => { const v = t.trim(); if (v.length >= MIN_TOKEN) out.add(v); };
+  add(text);
+  for (const m of text.matchAll(/"([^"\n]*)"|'([^'\n]*)'|`([^`\n]*)`/g)) add(m[1] ?? m[2] ?? m[3] ?? '');
+  // The right-hand side of the first assignment, unquoted values included (`key=a:b:c`, `key=base64==`), up to a
+  // trailing comment, without a trailing comma or surrounding quotes.
+  const rhs = /^[^=:]*[=:]\s*(.*)$/.exec(text.trim())?.[1];
+  if (rhs !== undefined) {
+    const value = rhs.replace(/\s+#.*$/, '').replace(/[,;]\s*$/, '').trim();
+    add(value); add(value.replace(/^["'`](.*)["'`]$/, '$1')); add(value.split(/\s+/)[0] ?? '');
+  }
+  for (const t of text.split(/[\s"'`]+/)) add(t);
+  // A path's segments, with and without a final extension: a matched name is withheld wherever it appears alone.
+  for (const t of text.split(/[\s"'`/\\]+/)) { add(t); add(t.replace(/\.[A-Za-z0-9]{1,8}$/, '')); }
+  for (const t of text.split(/[\s"'`=:,;#(){}\[\]<>]+/)) add(t);
+  for (const t of text.split(/[^A-Za-z0-9]+/)) add(t);
+  return [...out];
+}
+
+/**
+ * Report fields Sentinel itself generates and the contract constrains: schema names, enums, catalog keys, digests,
+ * content and artifact ids, generated finding/evidence/report ids and counts' words. They never carry source or context
+ * text, and redacting a word inside one would break the contract, so they are left as they are. Every other string,
+ * which source or a confirmed context can supply (titles, explanations, excerpts, paths, context ids and labels,
+ * symbols, sentences), is screened.
+ */
+const STRUCTURAL = new Set(['schema', 'profile', 'profileDigest', 'completeness', 'unit', 'bizUnit', 'scope', 'source', 'key',
+  'severity', 'comparison', 'comparisonReason', 'kind', 'state', 'reasonCode', 'binding', 'via', 'status', 'limitationKeys',
+  'projectionVersion', 'artifact', 'sourceBindingReceipt', 'content', 'catalogVersion', 'evaluatedAt', 'ruleFamilyId',
+  'checkId', 'observationIds', 'baselineFindingId', 'baselineFindingIds', 'findingId', 'artifactClosure', 'exact', 'probable', 'version', 'reportId', 'snapshotId', 'evidenceArtifact', 'cli', 'mcp']);
+const GENERATED_ID = /^(?:finding|ev|report|obs|run|snap|plan)[.-][0-9a-f]{8,}$|^sha256:[0-9a-f]{64}$/;
+
+/**
+ * Replaces every secret candidate in every source- or context-controlled string of a report document, in every
+ * disclosure profile: context labels, ids, metadata, sentences, titles, paths and excerpts, from whichever file or
+ * graph they came. Generated structure (STRUCTURAL, generated ids, the catalog's own definitions) is left as it is, so
+ * the document keeps its contract. Each candidate becomes one fixed word, the same everywhere, so the context ids that
+ * reference each other still match. The result is checked against the report contract again by the caller, which
+ * refuses rather than delivers a document that does not fit.
  */
 export function redactSecretTokens<T>(doc: T, tokens: ReadonlySet<string>): T {
   if (!tokens.size) return doc;
@@ -341,19 +388,25 @@ export function redactSecretTokens<T>(doc: T, tokens: ReadonlySet<string>): T {
   const scrub = (v: string) => ordered.reduce((s, t) => (s.includes(t) ? s.split(t).join(word.get(t)!) : s), v);
   const walk = (v: unknown, key?: string): unknown => {
     if (key === 'definitions') return v;
-    if (typeof v === 'string') return scrub(v);
-    if (Array.isArray(v)) return v.map(x => walk(x));
-    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [scrub(k), walk(x, k)]));
+    if (typeof v === 'string') return (key && STRUCTURAL.has(key)) || (key === 'id' && GENERATED_ID.test(v)) ? v : scrub(v);
+    if (Array.isArray(v)) return v.map(x => walk(x, key));
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, k)]));
     return v;
   };
   return walk(doc) as T;
 }
 
-function withheldKeyFor(storeId: string, snapshot: SnapshotEnvelope): (e: WithheldLocationEvidence) => string {
+/**
+ * The opaque key of a withheld citation's file: an HMAC of its source and path under the store's own secret key
+ * (report-key.ts), never the public store id. The same file in any capture of this store has the same key, so a
+ * comparison can continue a secret finding; without the secret, neither a report nor a bundle, nor both together
+ * with the store id, lets anyone confirm a guessed path. A reference that does not resolve in this snapshot refuses.
+ */
+function withheldKeyFor(key: () => Buffer, snapshot: SnapshotEnvelope): (e: WithheldLocationEvidence) => string {
   return e => {
     const resolved = resolveWithheldLocation(snapshot, e);
     if (!resolved.ok) return unbound('a withheld citation does not resolve in the captured snapshot');
-    return `loc.${createHmac('sha256', `sentinel-withheld-location/1\u0000${storeId}`).update(`${resolved.entry.sourceId}\u0000${resolved.entry.relativePath}`).digest('hex').slice(0, 32)}`;
+    return `loc.${createHmac('sha256', key()).update('sentinel-withheld-location/2\u0000').update(`${resolved.entry.sourceId}\u0000${resolved.entry.relativePath}`).digest('hex').slice(0, 32)}`;
   };
 }
 

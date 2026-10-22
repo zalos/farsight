@@ -136,6 +136,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'rules/pack.js': ['node:fs', 'node:path'],
   'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:fs', 'node:path'],
   // The full report: reads the store's accepted evidence, an owner-supplied graph file, and writes one new file.
+  // The per-store report key: random bytes kept once in the owner's trust folder.
+  'service/report-key.js': ['node:crypto', 'node:path'],
   'service/full-report.js': ['@farsight/core/dist/strings.js', '@farsight/graph', 'node:crypto', 'node:fs', 'node:path'],
   'cli/init.js': ['node:crypto', 'node:fs', 'node:path'],
   // The foundation-preview detector, a built-in worker: it reads its copied inputs and writes one artifact.
