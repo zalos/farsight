@@ -295,3 +295,178 @@ test('a configured servlet path leaves chain selection unknown', needsStore, asy
   assert.deepEqual(verdicts(env, 'GET /api/secure/data'), ['unknown:sentinel.spring.sourceIncomplete', 'unknown:sentinel.spring.sourceIncomplete']);
   assert.ok(env.frontiers.some((f: any) => f.reasonCode === 'sentinel.spring.servletPathConfigured'));
 });
+
+// ---- review probes (SOL, 3468dd7): each is an original fixture reproducing the reported miss ----
+
+const ROUTE_X = controller(`
+  @GetMapping("/x")
+  public Map<String, Object> x() { return Map.of(); }`);
+
+test('probe 1: a qualified or unrecognized chain type is never omitted', needsStore, async t => {
+  const qualified = (await pack(t, app({ security: security(`
+  @Bean
+  @Order(0)
+  public org.springframework.security.web.SecurityFilterChain open(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+    return http.build();
+  }
+
+  @Bean
+  @Order(1)
+  public SecurityFilterChain secure(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated());
+    return http.build();
+  }`), routes: ROUTE_X }))).envelope;
+  assert.deepEqual(verdicts(qualified, 'GET /x'), ['does-not-apply', 'does-not-apply'], 'the earlier, qualified, open chain is the one Spring runs');
+  const unrecognized = (await pack(t, app({ security: security(`
+  @Bean
+  @Order(0)
+  public CustomFilterChain custom(HttpSecurity http) throws Exception { return new CustomFilterChain(); }
+
+  @Bean
+  @Order(1)
+  public SecurityFilterChain secure(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated());
+    return http.build();
+  }`), routes: ROUTE_X }))).envelope;
+  assert.deepEqual(verdicts(unrecognized, 'GET /x'), ['unknown:sentinel.spring.chainCandidateUnrecognized', 'unknown:sentinel.spring.chainCandidateUnrecognized']);
+});
+
+test('probe 2: @EnableMethodSecurity on a class Spring does not register enables nothing', needsStore, async t => {
+  const env = (await pack(t, app({ security: `package app;
+
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+
+@EnableMethodSecurity
+public class SecurityConfig {}
+`, routes: controller(`
+  @PreAuthorize("hasRole('ADMIN')")
+  @GetMapping("/reports")
+  public Map<String, Object> reports() { return Map.of(); }`) }))).envelope;
+  assert.deepEqual(verdicts(env, 'GET /reports', SPRING_ORDER.methodSecurity),
+    ['unknown:sentinel.spring.methodSecurityNotEnabled', 'unknown:sentinel.spring.methodSecurityNotEnabled']);
+});
+
+test('probe 3: configuration outside Boot\'s component scan does not decide; any other scan or import leaves it unknown', needsStore, async t => {
+  const outside = { 'src/main/java/other/Outside.java': `package other;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+public class Outside {
+  @Bean
+  @Order(0)
+  public SecurityFilterChain everything(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated());
+    return http.build();
+  }
+}
+` };
+  const openApp = security(`
+  @Bean
+  @Order(5)
+  public SecurityFilterChain open(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+    return http.build();
+  }`);
+  const notScanned = (await pack(t, app({ security: openApp, routes: ROUTE_X, extra: outside }))).envelope;
+  assert.deepEqual(verdicts(notScanned, 'GET /x'), ['does-not-apply', 'does-not-apply'], 'the unscanned protecting chain is not registered');
+  const imported = (await pack(t, app({ security: openApp.replace('@Configuration\npublic class SecurityConfig', '@Configuration\n@org.springframework.context.annotation.Import(other.Outside.class)\npublic class SecurityConfig'),
+    routes: ROUTE_X, extra: outside }))).envelope;
+  assert.deepEqual(verdicts(imported, 'GET /x'), ['unknown:sentinel.spring.chainRegistrationUnknown', 'unknown:sentinel.spring.chainRegistrationUnknown']);
+  assert.ok(imported.frontiers.some((f: any) => f.reasonCode === 'sentinel.spring.componentScanUnresolved'));
+});
+
+test('probe 4: a configurer argument that reaches the HttpSecurity makes the chain unknown', needsStore, async t => {
+  const env = (await pack(t, app({ security: security(`
+  @Bean
+  public SecurityFilterChain c(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+        .csrf(csrf -> http.removeConfigurer(org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer.class));
+    return http.build();
+  }`), routes: ROUTE_X }))).envelope;
+  assert.deepEqual(verdicts(env, 'GET /x'), ['unknown:sentinel.spring.configurerArgumentUnsupported', 'unknown:sentinel.spring.configurerArgumentUnsupported']);
+  const inert = (await pack(t, app({ security: security(`
+  @Bean
+  public SecurityFilterChain c(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+        .csrf(csrf -> csrf.ignoringRequestMatchers("/hooks/**"))
+        .headers(h -> h.frameOptions(f -> f.sameOrigin()))
+        .httpBasic(org.springframework.security.config.Customizer.withDefaults());
+    return http.build();
+  }`), routes: ROUTE_X }))).envelope;
+  assert.deepEqual(verdicts(inert, 'GET /x'), ['unknown:sentinel.spring.configurerArgumentUnsupported', 'unknown:sentinel.spring.configurerArgumentUnsupported'],
+    'a qualified Customizer.withDefaults() is not the short form, so it is not proven inert');
+  const short = (await pack(t, app({ security: security(`
+  @Bean
+  public SecurityFilterChain c(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+        .csrf(csrf -> csrf.ignoringRequestMatchers("/hooks/**"))
+        .headers(h -> h.frameOptions(f -> f.sameOrigin()));
+    return http.build();
+  }`), routes: ROUTE_X }))).envelope;
+  assert.deepEqual(verdicts(short, 'GET /x'), ['applies', 'does-not-apply'], 'lambdas that only configure their own parameter are inert');
+});
+
+test('probe 5: a role check is not authentication when the anonymous principal can hold the role', needsStore, async t => {
+  const chain = (rules: string, extra = '') => app({ security: security(`
+  @Bean
+  public SecurityFilterChain c(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.${rules})${extra};
+    return http.build();
+  }`), routes: ROUTE_X });
+  const anonymousRole = (await pack(t, chain('anyRequest().hasRole("ANONYMOUS")'))).envelope;
+  assert.deepEqual(verdicts(anonymousRole, 'GET /x'), ['does-not-apply', 'applies'], 'the default anonymous principal holds ROLE_ANONYMOUS');
+  const anonymousAuthority = (await pack(t, chain('anyRequest().hasAnyAuthority("ROLE_ANONYMOUS", "ROLE_USER")'))).envelope;
+  assert.deepEqual(verdicts(anonymousAuthority, 'GET /x'), ['does-not-apply', 'applies']);
+  const disabled = (await pack(t, chain('anyRequest().hasRole("ANONYMOUS")', '\n        .anonymous(a -> a.disable())'))).envelope;
+  assert.deepEqual(verdicts(disabled, 'GET /x'), ['applies', 'applies'], 'with no anonymous principal, the role needs an authenticated one');
+  const custom = (await pack(t, chain('anyRequest().hasRole("ADMIN")', '\n        .anonymous(a -> a.authorities("ROLE_ADMIN"))'))).envelope;
+  assert.deepEqual(verdicts(custom, 'GET /x'), ['unknown:sentinel.spring.anonymousConfigured', 'applies']);
+  const user = (await pack(t, chain('anyRequest().hasRole("USER")'))).envelope;
+  assert.deepEqual(verdicts(user, 'GET /x'), ['applies', 'applies']);
+  const prefixed = (await pack(t, { ...chain('anyRequest().hasRole("USER")'), 'src/main/java/app/Roles.java': `package app;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.core.GrantedAuthorityDefaults;
+
+@Configuration
+public class Roles {
+  @Bean
+  public GrantedAuthorityDefaults grantedAuthorityDefaults() { return new GrantedAuthorityDefaults(""); }
+}
+` })).envelope;
+  assert.deepEqual(verdicts(prefixed, 'GET /x'), ['unknown:sentinel.spring.rolePrefixCustomized', 'unknown:sentinel.spring.rolePrefixCustomized']);
+});
+
+test('probe 6: the POM is read as structure, so element order cannot hide a version', needsStore, async t => {
+  const reordered = POM({ extraDeps: `
+    <dependency>
+      <version>6.3.0</version>
+      <artifactId>spring-security-web</artifactId>
+      <groupId>org.springframework.security</groupId>
+    </dependency>` });
+  const env = (await pack(t, { ...ORDERED_CHAINS, 'pom.xml': reordered })).envelope;
+  assert.equal(env.framework.version, null);
+  assert.ok(env.facts.every((f: any) => f.verdict === 'unknown' && f.reasonCode === 'sentinel.spring.versionUnsupported'));
+  // Order independence also holds for a valid POM: the parent's children in another order still resolve.
+  const parentReordered = POM().replace(
+    '<groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-parent</artifactId>\n    <version>3.4.3</version>',
+    '<version>3.4.3</version>\n    <artifactId>spring-boot-starter-parent</artifactId>\n    <groupId>org.springframework.boot</groupId>');
+  assert.notEqual(parentReordered, POM());
+  const ok = (await pack(t, { ...ORDERED_CHAINS, 'pom.xml': parentReordered })).envelope;
+  assert.equal(ok.framework.version, SPRING_PACK.version);
+  for (const [name, pom] of [
+    ['a version property', POM({ properties: '\n    <spring-boot.version>3.4.4</spring-boot.version>' })],
+    ['a managed dependency', POM().replace('<dependencies>', '<dependencyManagement><dependencies><dependency><groupId>x</groupId><artifactId>y</artifactId><version>1</version><type>pom</type><scope>import</scope></dependency></dependencies></dependencyManagement>\n  <dependencies>')],
+    ['a profile', POM().replace('</project>', '<profiles><profile><id>p</id></profile></profiles>\n</project>')],
+  ] as const) {
+    const e = (await pack(t, { ...ORDERED_CHAINS, 'pom.xml': pom })).envelope;
+    assert.equal(e.framework.version, null, name);
+  }
+});

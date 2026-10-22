@@ -12,11 +12,12 @@ import type {
 } from '../../contracts/index.js';
 import { validateEnvelope } from '../../validate.js';
 import {
-  readConfiguration, type Activity, type At, type Chain, type MethodSecurityEnablement, type Rule, type RuleAction,
+  readConfiguration, type Activity, type Anonymous, type At, type Chain, type MethodSecurityEnablement, type Rule, type RuleAction,
   type SpringConfiguration, type SpringReason,
 } from './config.js';
 import { matchTemplate, type MatchResult } from './patterns.js';
 import { SPRING_SUPPORT } from './support.js';
+import { pomScope } from './pom.js';
 import { annotationsOf, modifierWords, named, stringValues, walk, parseJava, literalString, type JavaFile, type JavaNode } from './syntax.js';
 
 /** The exact versions this pack models. Any other version leaves every fact unknown. */
@@ -53,30 +54,16 @@ const MAX_EVIDENCE = 64;
 
 type Version = { ok: true; evidence: SourceEvidence[] } | { ok: false; reason: SpringReason; evidence: SourceEvidence[] };
 
-/** XML text with comments blanked (same length), so a commented-out element never counts. */
-const maskXmlComments = (s: string) => s.replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
-
 function resolveVersion(input: SpringPackInput, pom: { raw: Buffer; content: ArtifactId } | undefined, gradle: boolean): Version {
   if (gradle || !pom) return { ok: false, reason: 'sentinel.spring.versionUnresolved', evidence: [] };
   const text = pom.raw.toString('utf8');
   if (!Buffer.from(text, 'utf8').equals(pom.raw)) return { ok: false, reason: 'sentinel.spring.sourceNotUtf8', evidence: [] };
-  const xml = maskXmlComments(text);
-  const ev = (start: number, end: number): SourceEvidence => ({ snapshotId: input.snapshot.id, sourceId: input.sourceId, relativePath: 'pom.xml',
-    content: pom.content, span: { startByte: Buffer.byteLength(xml.slice(0, start)), endByte: Buffer.byteLength(xml.slice(0, end)) } });
-  const parent = /<parent>\s*<groupId>\s*org\.springframework\.boot\s*<\/groupId>\s*<artifactId>\s*spring-boot-starter-parent\s*<\/artifactId>\s*<version>\s*([^<\s]+)\s*<\/version>[\s\S]*?<\/parent>/.exec(xml);
-  if (!parent) return { ok: false, reason: 'sentinel.spring.versionUnresolved', evidence: [] };
-  const evidence = [ev(parent.index, parent.index + parent[0].length)];
-  if (parent[1] !== SPRING_PACK.boot) return { ok: false, reason: 'sentinel.spring.versionUnsupported', evidence };
-  // The Boot 3.4.3 BOM pins Spring Security 6.4.3; any override, other BOM or reactive stack leaves that unproven.
-  if (/<spring-security\.version>|<artifactId>\s*spring-security-bom\s*<\/artifactId>|<artifactId>\s*spring-security-[a-z-]+\s*<\/artifactId>\s*<version>/.test(xml)) {
-    return { ok: false, reason: 'sentinel.spring.versionUnsupported', evidence };
-  }
-  if (/<artifactId>\s*spring-boot-starter-webflux\s*<\/artifactId>/.test(xml)) return { ok: false, reason: 'sentinel.spring.reactiveUnsupported', evidence };
-  const web = /<artifactId>\s*spring-boot-starter-web\s*<\/artifactId>/.exec(xml);
-  const security = /<artifactId>\s*spring-boot-starter-security\s*<\/artifactId>/.exec(xml);
-  if (!web || !security) return { ok: false, reason: 'sentinel.spring.versionUnresolved', evidence };
-  evidence.push(ev(web.index, web.index + web[0].length), ev(security.index, security.index + security[0].length));
-  return { ok: true, evidence };
+  // Structure, not text order: the POM is read as XML elements, so child order and comments cannot mislead it.
+  const verdict = pomScope(text, SPRING_PACK.boot);
+  const evidence = verdict.evidence.map((el): SourceEvidence => ({ snapshotId: input.snapshot.id, sourceId: input.sourceId,
+    relativePath: 'pom.xml', content: pom.content,
+    span: { startByte: Buffer.byteLength(text.slice(0, el.start)), endByte: Buffer.byteLength(text.slice(0, el.end)) } }));
+  return verdict.ok ? { ok: true, evidence } : { ok: false, reason: verdict.reason, evidence };
 }
 
 // ---- route mappings, from syntax ----
@@ -200,27 +187,60 @@ function evaluate(cfg: SpringConfiguration, profiles: readonly string[] | null, 
   return { kind: 'unknown', reason: 'sentinel.spring.noChainMatches', at: explain };
 }
 
-const VERDICTS: Record<RuleAction | 'none', Record<'authentication' | 'authorization', ControlVerdict>> = {
-  permitAll: { authentication: 'does-not-apply', authorization: 'does-not-apply' },
-  none: { authentication: 'does-not-apply', authorization: 'does-not-apply' },
-  authenticated: { authentication: 'applies', authorization: 'does-not-apply' },
-  restricted: { authentication: 'applies', authorization: 'applies' },
-  denyAll: { authentication: 'applies', authorization: 'applies' },
-  unsupported: { authentication: 'unknown', authorization: 'unknown' },
-};
+type Verdicts = { readonly verdicts: Record<'authentication' | 'authorization', ControlVerdict>; readonly reason?: SpringReason };
+
+/**
+ * What a decision means for each property. A role or authority check restricts who may proceed (authorization); it
+ * requires an authenticated principal only when the anonymous principal Spring gives unauthenticated requests cannot
+ * hold any authority it admits. By default that principal holds `ROLE_ANONYMOUS`; a disabled anonymous filter gives
+ * none; a customised one gives authorities this pack does not follow.
+ */
+function verdictsFor(action: RuleAction | 'none', grant: { authorities?: readonly string[]; usesRolePrefix?: boolean },
+  anonymous: Anonymous | 'unknown', cfg: SpringConfiguration): Verdicts {
+  switch (action) {
+    case 'permitAll': case 'none': return { verdicts: { authentication: 'does-not-apply', authorization: 'does-not-apply' } };
+    // authenticated() excludes the anonymous principal whatever its authorities.
+    case 'authenticated': return { verdicts: { authentication: 'applies', authorization: 'does-not-apply' } };
+    case 'denyAll': return { verdicts: { authentication: 'applies', authorization: 'applies' } };
+    case 'unsupported': return { verdicts: { authentication: 'unknown', authorization: 'unknown' }, reason: 'sentinel.spring.ruleActionUnsupported' };
+    case 'restricted': {
+      if (grant.usesRolePrefix && cfg.rolePrefixCustomized.length) {
+        return { verdicts: { authentication: 'unknown', authorization: 'unknown' }, reason: 'sentinel.spring.rolePrefixCustomized' };
+      }
+      const admitsAnonymous = (grant.authorities ?? []).includes('ROLE_ANONYMOUS');
+      // A chain the pack could not read may customise the anonymous principal too.
+      const anyCustom = cfg.chains.some(c => c.anonymous === 'custom');
+      let authentication: ControlVerdict;
+      let reason: SpringReason | undefined;
+      if (anonymous === 'disabled') authentication = 'applies';
+      else if (anonymous === 'custom') { authentication = 'unknown'; reason = 'sentinel.spring.anonymousConfigured'; }
+      else if (admitsAnonymous) {
+        if (anonymous === 'default') authentication = 'does-not-apply';
+        else { authentication = 'unknown'; reason = 'sentinel.spring.anonymousRole'; }
+      } else if (anonymous === 'unknown' && anyCustom) { authentication = 'unknown'; reason = 'sentinel.spring.anonymousConfigured'; }
+      else authentication = 'applies';
+      return { verdicts: { authentication, authorization: 'applies' }, ...(reason ? { reason } : {}) };
+    }
+  }
+}
 
 // ---- method security ----
 
 const METHOD_SECURITY_ANNS = new Set(['PreAuthorize', 'Secured', 'RolesAllowed', 'PostAuthorize']);
-type Method = { kind: 'none' } | { kind: 'resolved'; action: RuleAction; at: At[] } | { kind: 'unknown'; reason: SpringReason; at: At[] };
+type Grant = { authorities?: readonly string[]; usesRolePrefix?: boolean };
+type Method = { kind: 'none' } | { kind: 'resolved'; action: RuleAction; grant: Grant; at: At[] } | { kind: 'unknown'; reason: SpringReason; at: At[] };
 
-function preAuthorizeAction(expr: string): RuleAction {
+function preAuthorizeAction(expr: string): { action: RuleAction; grant: Grant } {
   const e = expr.replace(/\s+/g, '');
-  if (e === 'permitAll()' || e === 'permitAll') return 'permitAll';
-  if (e === 'denyAll()' || e === 'denyAll') return 'denyAll';
-  if (e === 'isAuthenticated()' || e === 'isFullyAuthenticated()') return 'authenticated';
-  if (/^has(Any)?(Role|Authority)\('[A-Za-z0-9_]+'(,'[A-Za-z0-9_]+')*\)$/.test(e)) return 'restricted';
-  return 'unsupported';
+  if (e === 'permitAll()' || e === 'permitAll') return { action: 'permitAll', grant: {} };
+  if (e === 'denyAll()' || e === 'denyAll') return { action: 'denyAll', grant: {} };
+  if (e === 'isAuthenticated()' || e === 'isFullyAuthenticated()') return { action: 'authenticated', grant: {} };
+  const m = /^has(Any)?(Role|Authority)\(('[A-Za-z0-9_]+'(?:,'[A-Za-z0-9_]+')*)\)$/.exec(e);
+  if (!m) return { action: 'unsupported', grant: {} };
+  const values = m[3]!.split(',').map(v => v.slice(1, -1));
+  const role = m[2] === 'Role';
+  if (role && values.some(v => v.startsWith('ROLE_'))) return { action: 'unsupported', grant: {} };
+  return { action: 'restricted', grant: { authorities: values.map(v => (role ? `ROLE_${v}` : v)), usesRolePrefix: role } };
 }
 
 function methodSecurity(file: JavaFile, handler: JavaNode, cfg: SpringConfiguration, profiles: readonly string[] | null): Method {
@@ -242,16 +262,19 @@ function methodSecurity(file: JavaFile, handler: JavaNode, cfg: SpringConfigurat
     return { kind: 'unknown', reason: 'sentinel.spring.methodSecurityProxyPrerequisite', at: [...at, { file, node: handler }] };
   }
   if (a.name === 'PostAuthorize') return { kind: 'unknown', reason: 'sentinel.spring.methodSecurityExpressionUnsupported', at };
-  let action: RuleAction;
+  let decided: { action: RuleAction; grant: Grant };
   if (a.name === 'PreAuthorize') {
     const v = literalString(a.positional[0] ?? a.pairs.get('value'));
-    action = v === undefined ? 'unsupported' : preAuthorizeAction(v);
+    decided = v === undefined ? { action: 'unsupported', grant: {} } : preAuthorizeAction(v);
   } else {
-    const roles = stringValues(a.positional[0] ?? a.pairs.get('value'));
-    action = roles && roles.length ? 'restricted' : 'unsupported';
+    const values = stringValues(a.positional[0] ?? a.pairs.get('value'));
+    // @Secured names authorities as written; @RolesAllowed names roles that gain the ROLE_ prefix.
+    decided = !values || !values.length || (a.name === 'RolesAllowed' && values.some(v => v.startsWith('ROLE_')))
+      ? { action: 'unsupported', grant: {} }
+      : { action: 'restricted', grant: { authorities: a.name === 'RolesAllowed' ? values.map(v => `ROLE_${v}`) : values, usesRolePrefix: a.name === 'RolesAllowed' } };
   }
-  if (action === 'unsupported') return { kind: 'unknown', reason: 'sentinel.spring.methodSecurityExpressionUnsupported', at };
-  return { kind: 'resolved', action, at: [...at, enabling.at] };
+  if (decided.action === 'unsupported') return { kind: 'unknown', reason: 'sentinel.spring.methodSecurityExpressionUnsupported', at };
+  return { kind: 'resolved', action: decided.action, grant: decided.grant, at: [...at, enabling.at] };
 }
 
 // ---- the pack ----
@@ -304,7 +327,7 @@ export async function analyzeSpring(input: SpringPackInput): Promise<ControlFact
       if (!parsed) { incomplete = true; frontier(e.relativePath, 'sentinel.spring.syntaxError'); continue; }
       files.set(e.relativePath, parsed);
     }
-    const cfg = readConfiguration([...files.values()]);
+    const cfg = readConfiguration([...files.values()], included.map(e => e.relativePath));
     for (const f of cfg.frontiers) frontier(f.at.file.path, f.reason);
     for (const c of cfg.chains) if (c.unsupported) frontier(c.at.file.path, c.unsupported.reason);
     for (const [path, f] of files) {
@@ -352,6 +375,8 @@ export async function analyzeSpring(input: SpringPackInput): Promise<ControlFact
       // Order 0: servlet filters and filters a chain adds run before authorization and can decide on their own.
       if (filterReasons.length) both(route.id, SPRING_ORDER.filters, unknownBoth, [...surfaceEvidence, ...filterReasons.map(f => toEvidence(f.at)).filter((e): e is SourceEvidence => !!e)], filterReasons[0]!.reason);
       // Order 1: the selected chain and its first matching rule.
+      // The anonymous principal method security sees comes from the chain that handled the request, when that is known.
+      let chainAnonymous: Anonymous | 'unknown' = 'unknown';
       if (!mapping) both(route.id, SPRING_ORDER.chain, unknownBoth, surfaceEvidence, 'sentinel.spring.routeMappingUnsupported');
       else if (incomplete) both(route.id, SPRING_ORDER.chain, unknownBoth, surfaceEvidence, 'sentinel.spring.sourceIncomplete');
       else {
@@ -365,7 +390,11 @@ export async function analyzeSpring(input: SpringPackInput): Promise<ControlFact
         if (!same) both(route.id, SPRING_ORDER.chain, unknownBoth, evidence, 'sentinel.spring.routeMappingsDisagree');
         else if (first.kind === 'unknown') both(route.id, SPRING_ORDER.chain, unknownBoth, evidence, first.reason);
         else {
-          both(route.id, SPRING_ORDER.chain, VERDICTS[first.action], evidence, 'sentinel.spring.ruleActionUnsupported');
+          const v = verdictsFor(first.action, first.rule ?? {}, first.chain.anonymous, cfg);
+          const extra = [first.chain.anonymousAt, ...(v.reason === 'sentinel.spring.rolePrefixCustomized' ? cfg.rolePrefixCustomized : [])]
+            .filter((x): x is At => !!x).map(toEvidence).filter((e): e is SourceEvidence => !!e);
+          both(route.id, SPRING_ORDER.chain, v.verdicts, dedupe([...evidence, ...extra]), v.reason);
+          chainAnonymous = first.chain.anonymous;
           if (!filterReasons.length && first.chain.customFilters.length) {
             both(route.id, SPRING_ORDER.filters, unknownBoth, [...surfaceEvidence, ...first.chain.customFilters.map(toEvidence).filter((e): e is SourceEvidence => !!e)], 'sentinel.spring.customFilter');
           }
@@ -378,7 +407,10 @@ export async function analyzeSpring(input: SpringPackInput): Promise<ControlFact
       // Legacy @EnableGlobalMethodSecurity changes which annotations are honoured; this pack does not model it.
       if (ms.kind !== 'none' && legacy.length) ms = { kind: 'unknown', reason: 'sentinel.spring.methodSecurityLegacy', at: [...ms.at, ...legacy.map(l => l.at)] };
       const msEvidence = ms.kind === 'none' ? [] : dedupe([...surfaceEvidence, ...ms.at.map(toEvidence).filter((e): e is SourceEvidence => !!e)]);
-      if (ms.kind === 'resolved') both(route.id, SPRING_ORDER.methodSecurity, VERDICTS[ms.action], msEvidence);
+      if (ms.kind === 'resolved') {
+        const v = verdictsFor(ms.action, ms.grant, chainAnonymous, cfg);
+        both(route.id, SPRING_ORDER.methodSecurity, v.verdicts, msEvidence, v.reason);
+      }
       else if (ms.kind === 'unknown') both(route.id, SPRING_ORDER.methodSecurity, unknownBoth, msEvidence, ms.reason);
     }
     const envelope: ControlFactsEnvelope = {

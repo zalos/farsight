@@ -25,7 +25,20 @@ export type RuleMatcher = { readonly kind: 'any'; readonly at: At }
 
 export type RuleAction = 'permitAll' | 'authenticated' | 'restricted' | 'denyAll' | 'unsupported';
 
-export interface Rule { readonly matcher: RuleMatcher; readonly action: RuleAction; readonly at: At }
+export interface Rule {
+  readonly matcher: RuleMatcher;
+  readonly action: RuleAction;
+  readonly at: At;
+  /** For `restricted`: the authorities it admits (`hasRole('X')` admits `ROLE_X`), and whether a role check is involved. */
+  readonly authorities?: readonly string[];
+  readonly usesRolePrefix?: boolean;
+}
+
+/** How the chain configures the anonymous principal Spring gives unauthenticated requests (default: `ROLE_ANONYMOUS`). */
+export type Anonymous = 'default' | 'disabled' | 'custom';
+
+/** Whether Spring registers a class's beans, as far as the captured source shows. */
+export type Registration = 'registered' | 'not-registered' | 'unknown';
 
 export interface Chain {
   /** `<path>#<method name>`, stable within the snapshot. */
@@ -40,6 +53,8 @@ export interface Chain {
   readonly rules: readonly Rule[] | null | { readonly unsupported: At };
   readonly rulesAt?: At;
   readonly customFilters: readonly At[];
+  readonly anonymous: Anonymous;
+  readonly anonymousAt?: At;
   /** Set when the bean's body is outside the supported shape: the chain's matching and rules are unknown. */
   readonly unsupported?: { readonly reason: SpringReason; readonly at: At };
 }
@@ -57,6 +72,8 @@ export interface MethodSecurityEnablement {
 
 export interface SpringConfiguration {
   readonly chains: readonly Chain[];
+  /** Whether any GrantedAuthorityDefaults bean may change the `ROLE_` prefix role checks use. */
+  readonly rolePrefixCustomized: readonly At[];
   readonly methodSecurity: readonly MethodSecurityEnablement[];
   /** Registrations that make the corresponding facts unknown, each with its reason. */
   readonly frontiers: readonly { readonly reason: SpringReason; readonly at: At }[];
@@ -75,7 +92,9 @@ export const SPRING_REASON_CODES = Object.freeze([
   'sentinel.spring.servletPathConfigured', 'sentinel.spring.routeMappingUnsupported', 'sentinel.spring.routeNotIndexed',
   'sentinel.spring.routeMappingsDisagree', 'sentinel.spring.methodSecurityNotEnabled',
   'sentinel.spring.methodSecurityExpressionUnsupported', 'sentinel.spring.methodSecurityProxyPrerequisite',
-  'sentinel.spring.methodSecurityLegacy',
+  'sentinel.spring.methodSecurityLegacy', 'sentinel.spring.componentScanUnresolved', 'sentinel.spring.chainCandidateUnrecognized',
+  'sentinel.spring.configurerArgumentUnsupported', 'sentinel.spring.anonymousConfigured', 'sentinel.spring.anonymousRole',
+  'sentinel.spring.rolePrefixCustomized',
 ] as const);
 export type SpringReason = typeof SPRING_REASON_CODES[number];
 
@@ -96,6 +115,9 @@ const classesOf = (file: JavaFile): JavaNode[] => {
 const methodsOf = (cls: JavaNode): JavaNode[] => named(cls.childForFieldName('body')).filter(n => n.type === 'method_declaration');
 const has = (anns: Annotation[], name: string) => anns.find(a => a.name === name);
 const returnType = (m: JavaNode) => m.childForFieldName('type')?.text ?? '';
+/** A type's simple name: the last segment of a qualified name, without type arguments or array brackets. */
+export const simpleType = (text: string) => text.replace(/<[\s\S]*>/g, '').replace(/\[\s*\]/g, '').trim().split('.').pop()!.trim();
+const CHAIN_TYPES = new Set(['SecurityFilterChain', 'DefaultSecurityFilterChain']);
 
 function activityOf(file: JavaFile, ...annLists: Annotation[][]): Activity {
   const conditions: ProfileCondition[] = [];
@@ -164,17 +186,24 @@ function rulesOf(file: JavaFile, lambda: JavaNode): Rule[] | undefined {
     const name = callName(act);
     const nargs = callArgs(act);
     let action: RuleAction = 'unsupported';
+    let authorities: string[] | undefined;
+    const role = name === 'hasRole' || name === 'hasAnyRole';
     if ((name === 'permitAll' || name === 'authenticated' || name === 'fullyAuthenticated' || name === 'denyAll') && nargs.length === 0) {
       action = name === 'fullyAuthenticated' ? 'authenticated' : name;
-    } else if (['hasRole', 'hasAnyRole', 'hasAuthority', 'hasAnyAuthority'].includes(name) && nargs.length > 0 && stringArgs(nargs)) {
-      action = 'restricted';
+    } else if (['hasRole', 'hasAnyRole', 'hasAuthority', 'hasAnyAuthority'].includes(name) && nargs.length > 0) {
+      const values = stringArgs(nargs);
+      // Spring refuses hasRole("ROLE_X") at startup; the pack does not guess what that application does.
+      if (values && values.every(v => v.length > 0 && !(role && v.startsWith('ROLE_')))) {
+        action = 'restricted';
+        authorities = values.map(v => (role ? `ROLE_${v}` : v));
+      }
     }
-    rules.push({ matcher, action, at: { file, node: act } });
+    rules.push({ matcher, action, at: { file, node: act }, ...(authorities ? { authorities, usesRolePrefix: role } : {}) });
   }
   return rules;
 }
 
-function chainOf(file: JavaFile, cls: JavaNode, m: JavaNode, classAnns: Annotation[]): Chain {
+function chainOf(file: JavaFile, cls: JavaNode, m: JavaNode, classAnns: Annotation[], registration: Registration): Chain {
   const anns = annotationsOf(m);
   const id = `${file.path}#${m.childForFieldName('name')?.text ?? '?'}`;
   const at = { file, node: m };
@@ -183,11 +212,12 @@ function chainOf(file: JavaFile, cls: JavaNode, m: JavaNode, classAnns: Annotati
     id, at, order: ord.order, ...(ord.at ? { orderAt: ord.at } : {}), activity: activityOf(file, classAnns, anns),
   };
   const unsupported = (reason: SpringReason, node: JavaNode): Chain =>
-    ({ ...base, matcher: { kind: 'unsupported', at: { file, node } }, rules: { unsupported: { file, node } }, customFilters: [], unsupported: { reason, at: { file, node } } });
+    ({ ...base, matcher: { kind: 'unsupported', at: { file, node } }, rules: { unsupported: { file, node } }, customFilters: [], anonymous: 'custom', unsupported: { reason, at: { file, node } } });
   if (ord.unsupported) return unsupported('sentinel.spring.chainOrderUnsupported', ord.unsupported.node);
-  if (!has(classAnns, 'Configuration')) return unsupported('sentinel.spring.chainRegistrationUnknown', cls);
+  if (registration === 'unknown') return unsupported('sentinel.spring.chainRegistrationUnknown', cls);
+  if (!CHAIN_TYPES.has(simpleType(returnType(m)))) return unsupported('sentinel.spring.chainCandidateUnrecognized', m);
   const params = named(m.childForFieldName('parameters')).filter(p => p.type === 'formal_parameter');
-  const httpParam = params.find(p => p.childForFieldName('type')?.text === 'HttpSecurity');
+  const httpParam = params.find(p => simpleType(p.childForFieldName('type')?.text ?? '') === 'HttpSecurity');
   const http = httpParam?.childForFieldName('name')?.text;
   const body = m.childForFieldName('body');
   if (!http || !body || body.hasError) return unsupported('sentinel.spring.chainBodyUnsupported', m);
@@ -196,6 +226,8 @@ function chainOf(file: JavaFile, cls: JavaNode, m: JavaNode, classAnns: Annotati
   let rules: Chain['rules'] = null;
   let rulesAt: At | undefined;
   const customFilters: At[] = [];
+  let anonymous: Anonymous = 'default';
+  let anonymousAt: At | undefined;
   const stmts = named(body);
   for (let i = 0; i < stmts.length; i++) {
     const s = stmts[i]!;
@@ -225,13 +257,120 @@ function chainOf(file: JavaFile, cls: JavaNode, m: JavaNode, classAnns: Annotati
         else rules = parsed ?? { unsupported: { file, node: call } };
         rulesAt = { file, node: call };
       } else if (FILTER_CALLS.has(name)) customFilters.push({ file, node: call });
-      else if (!NEUTRAL_CALLS.has(name)) return unsupported('sentinel.spring.chainBodyUnsupported', call);
+      else if (NEUTRAL_CALLS.has(name)) {
+        // A configurer's arguments must be provably inert: a lambda that only calls its own parameter fluently, a
+        // method reference, withDefaults() or literals. Anything that reaches the HttpSecurity again could remove or
+        // replace configurers, so the chain is not modelled.
+        if (!callArgs(call).every(a => inertArgument(a, http))) return unsupported('sentinel.spring.configurerArgumentUnsupported', call);
+        if (name === 'anonymous') {
+          anonymousAt = { file, node: call };
+          anonymous = isDisable(callArgs(call)) ? 'disabled' : 'custom';
+        }
+      } else return unsupported('sentinel.spring.chainBodyUnsupported', call);
     }
     if (s.type === 'return_statement' && callName(calls[calls.length - 1]!) !== 'build') return unsupported('sentinel.spring.chainBodyUnsupported', s);
   }
   const lastStmt = stmts[stmts.length - 1];
   if (lastStmt?.type !== 'return_statement') return unsupported('sentinel.spring.chainBodyUnsupported', m);
-  return { ...base, matcher, rules, ...(rulesAt ? { rulesAt } : {}), customFilters };
+  return { ...base, matcher, rules, ...(rulesAt ? { rulesAt } : {}), customFilters, anonymous, ...(anonymousAt ? { anonymousAt } : {}) };
+}
+
+/** `AbstractHttpConfigurer::disable` or `c -> c.disable()`. */
+function isDisable(args: JavaNode[]): boolean {
+  if (args.length !== 1) return false;
+  const a = args[0]!;
+  if (a.type === 'method_reference') return /::\s*disable$/.test(a.text);
+  if (a.type !== 'lambda_expression') return false;
+  const body = a.childForFieldName('body');
+  const { calls } = body ? fluentChain(body) : { calls: [] };
+  return calls.length === 1 && callName(calls[0]!) === 'disable' && callArgs(calls[0]!).length === 0;
+}
+
+/** An argument that cannot reach the HttpSecurity or run arbitrary statements. */
+function inertArgument(a: JavaNode, http: string): boolean {
+  let reachesHttp = false;
+  walk(a, n => { if (n.type === 'identifier' && n.text === http) reachesHttp = true; });
+  if (reachesHttp) return false;
+  switch (a.type) {
+    case 'string_literal': case 'decimal_integer_literal': case 'true': case 'false': case 'null_literal':
+    case 'method_reference': case 'class_literal': case 'field_access':
+      return true;
+    case 'method_invocation': {
+      const { root, calls } = fluentChain(a);
+      // withDefaults() and Customizer.withDefaults()
+      return calls.length === 1 && callName(calls[0]!) === 'withDefaults' && callArgs(calls[0]!).length === 0
+        && (root === null || root.text === 'Customizer');
+    }
+    case 'lambda_expression': {
+      const params = named(a).filter(n => n !== a.childForFieldName('body'));
+      const p = params[0];
+      const pname = p?.type === 'identifier' ? p.text : p?.type === 'inferred_parameters' ? named(p)[0]?.text : undefined;
+      let body = a.childForFieldName('body');
+      if (body?.type === 'block') {
+        const stmts = named(body);
+        if (stmts.length === 0) return true;
+        if (stmts.length !== 1 || stmts[0]!.type !== 'expression_statement') return false;
+        body = named(stmts[0]!)[0] ?? null;
+      }
+      if (!body || !pname) return false;
+      const { root, calls } = fluentChain(body);
+      if (root?.type !== 'identifier' || root.text !== pname || calls.length === 0) return false;
+      return calls.every(c => callArgs(c).every(x => inertArgument(x, http)));
+    }
+    default:
+      return false;
+  }
+}
+
+/**
+ * Which classes Spring Boot registers, from the captured source: the single @SpringBootApplication's package and every
+ * package below it are scanned. Anything that could register classes some other way (explicit scan or import
+ * annotations, scan attributes, auto-configuration registrations) leaves registration unknown for classes outside it.
+ */
+export function registrationResolver(files: readonly JavaFile[], resourcePaths: readonly string[]):
+  { of: (file: JavaFile, cls: JavaNode) => Registration; unresolved: At[] } {
+  const apps: { pkg: string; at: At }[] = [];
+  const unresolved: At[] = [];
+  for (const file of files) {
+    for (const cls of classesOf(file)) {
+      for (const a of annotationsOf(cls)) {
+        if (a.name === 'SpringBootApplication') {
+          if (a.pairs.size || a.positional.length) unresolved.push({ file, node: a.node });
+          apps.push({ pkg: packageOf(file), at: { file, node: a.node } });
+        }
+        if (['ComponentScan', 'ComponentScans', 'Import', 'ImportResource', 'ImportAutoConfiguration', 'EnableAutoConfiguration', 'AutoConfiguration'].includes(a.name)) {
+          unresolved.push({ file, node: a.node });
+        }
+      }
+    }
+  }
+  const autoConfig = resourcePaths.some(p => /(^|\/)META-INF\/(spring\.factories|spring\/[^/]+\.imports)$/.test(p));
+  const known = apps.length === 1 && unresolved.length === 0 && !autoConfig;
+  if (apps.length !== 1 && files.length) unresolved.push(...apps.map(a => a.at));
+  const base = apps[0]?.pkg;
+  return {
+    unresolved,
+    of(file, cls) {
+      const anns = annotationsOf(cls);
+      const component = anns.some(a => STEREOTYPES.has(a.name) || a.name === 'SpringBootApplication');
+      const pkg = packageOf(file);
+      const scanned = base !== undefined && (pkg === base || base === '' || pkg.startsWith(`${base}.`));
+      if (known && component && scanned && isTopLevelOrStatic(cls)) return 'registered';
+      if (known && !(component && scanned)) return 'not-registered';
+      return 'unknown';
+    },
+  };
+}
+
+function packageOf(file: JavaFile): string {
+  const decl = named(file.root).find(n => n.type === 'package_declaration');
+  return decl ? decl.text.replace(/^package\s+/, '').replace(/;\s*$/, '').replace(/\s+/g, '') : '';
+}
+
+function isTopLevelOrStatic(cls: JavaNode): boolean {
+  let p = cls.parent;
+  while (p && p.type !== 'class_declaration') p = p.parent;
+  return !p || modifierWords(cls).has('static');
 }
 
 const boolAttr = (a: Annotation, key: string, dflt: boolean): boolean | null => {
@@ -241,44 +380,53 @@ const boolAttr = (a: Annotation, key: string, dflt: boolean): boolean | null => 
 };
 
 /** Everything this pack reads from the configuration classes of a set of parsed files. */
-export function readConfiguration(files: readonly JavaFile[]): SpringConfiguration {
+export function readConfiguration(files: readonly JavaFile[], resourcePaths: readonly string[] = []): SpringConfiguration {
   const chains: Chain[] = [];
+  const rolePrefixCustomized: At[] = [];
+  const registration = registrationResolver(files, resourcePaths);
   const methodSecurity: MethodSecurityEnablement[] = [];
   const frontiers: { reason: SpringReason; at: At }[] = [];
   for (const file of files) {
     for (const cls of classesOf(file)) {
       const classAnns = annotationsOf(cls);
+      const registered = registration.of(file, cls);
       const ems = has(classAnns, 'EnableMethodSecurity');
-      if (ems) {
+      // Method security is enabled only by a registered configuration class; any other placement proves nothing.
+      if (ems && registered === 'registered' && (has(classAnns, 'Configuration') || has(classAnns, 'SpringBootApplication'))) {
         methodSecurity.push({ at: { file, node: ems.node }, activity: activityOf(file, classAnns),
           prePost: boolAttr(ems, 'prePostEnabled', true), secured: boolAttr(ems, 'securedEnabled', false),
           jsr250: boolAttr(ems, 'jsr250Enabled', false), proxyMode: !ems.pairs.has('mode') });
       }
+      if (ems && registered === 'unknown') frontiers.push({ reason: 'sentinel.spring.componentScanUnresolved', at: { file, node: ems.node } });
       const legacy = has(classAnns, 'EnableGlobalMethodSecurity');
-      if (legacy) frontiers.push({ reason: 'sentinel.spring.methodSecurityLegacy', at: { file, node: legacy.node } });
+      if (legacy && registered !== 'not-registered') frontiers.push({ reason: 'sentinel.spring.methodSecurityLegacy', at: { file, node: legacy.node } });
       const header = `${cls.childForFieldName('superclass')?.text ?? ''} ${cls.childForFieldName('interfaces')?.text ?? ''}`;
-      const stereotyped = classAnns.some(a => STEREOTYPES.has(a.name));
-      if (/\b(OncePerRequestFilter|GenericFilterBean|Filter)\b/.test(header) && (stereotyped || classAnns.some(a => a.name === 'WebFilter'))) {
+      if (/\b(OncePerRequestFilter|GenericFilterBean|Filter)\b/.test(header) && (registered !== 'not-registered' || classAnns.some(a => a.name === 'WebFilter'))) {
         frontiers.push({ reason: 'sentinel.spring.filterBean', at: { file, node: cls } });
       }
       const mvcConfigurer = /\bWebMvcConfigurer\b/.test(header);
       for (const m of methodsOf(cls)) {
         const anns = annotationsOf(m);
         const bean = has(anns, 'Bean');
-        const type = returnType(m);
-        if (mvcConfigurer && m.childForFieldName('name')?.text === 'addInterceptors') {
+        const type = simpleType(returnType(m));
+        if (mvcConfigurer && registered !== 'not-registered' && m.childForFieldName('name')?.text === 'addInterceptors') {
           frontiers.push({ reason: 'sentinel.spring.interceptor', at: { file, node: m } });
         }
-        if (!bean) continue;
-        if (type === 'SecurityFilterChain') chains.push(chainOf(file, cls, m, classAnns));
+        if (!bean || registered === 'not-registered') continue;
+        // Every bean that could be a chain is a candidate: a known chain type is read, any other chain-like type is
+        // an unknown candidate, never silently omitted.
+        if (CHAIN_TYPES.has(type) || /FilterChain$/.test(type)) chains.push(chainOf(file, cls, m, classAnns, registered));
         else if (type === 'WebSecurityCustomizer') frontiers.push({ reason: 'sentinel.spring.webSecurityCustomizer', at: { file, node: m } });
-        else if (/Filter(RegistrationBean)?\b/.test(type) || /^FilterRegistrationBean</.test(type)) {
+        else if (type === 'GrantedAuthorityDefaults') rolePrefixCustomized.push({ file, node: m });
+        else if (/Filter$/.test(type) || type === 'FilterRegistrationBean' || type === 'DelegatingFilterProxyRegistrationBean') {
           frontiers.push({ reason: 'sentinel.spring.filterBean', at: { file, node: m } });
         }
       }
     }
   }
-  return { chains, methodSecurity, frontiers };
+  for (const at of registration.unresolved) frontiers.push({ reason: 'sentinel.spring.componentScanUnresolved', at });
+  for (const at of rolePrefixCustomized) frontiers.push({ reason: 'sentinel.spring.rolePrefixCustomized', at });
+  return { chains, rolePrefixCustomized, methodSecurity, frontiers };
 }
 
 export { modifierWords };

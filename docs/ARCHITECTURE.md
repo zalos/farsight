@@ -699,9 +699,31 @@ CLI (PR 09) integrates it, so PR 17's full acceptance depends on that work. The 
 `available-draft` with reason `sentinel.capability.draftSpring`: source only, exactly the stated versions.
 
 **Scope.** Exactly Spring Boot 3.4.3 with the Spring Security 6.4.3 its dependency list pins, servlet stack. These are
-read from the captured `pom.xml` parent and starters, with comments masked. A security-version override, another
-security BOM, WebFlux, a Gradle build or an unreadable build leaves the envelope's version `null`, and every fact is
-`unknown`. Documentation for other versions is not evidence for these.
+read from the captured `pom.xml` as XML structure (elements by name and nesting, never by child order).
+The envelope's version is `null`, and every fact `unknown`, for any of:
+- an explicit Spring Security version anywhere;
+- a Spring version property;
+- managed or imported dependencies;
+- profiles or modules;
+- WebFlux, a Gradle build, or a build that does not parse.
+
+Documentation for other versions is not evidence for these.
+
+**Registration.** A configuration class counts only when Spring Boot's default component scan registers it: the single
+`@SpringBootApplication`'s package and below, for a component class. Any explicit scan or import annotation, scan
+attribute or auto-configuration registration makes classes outside that scan `unknown`
+(`sentinel.spring.componentScanUnresolved`). A class Spring does not register enables nothing, so
+`@EnableMethodSecurity` must sit on a registered `@Configuration` or `@SpringBootApplication` class. Every `@Bean`
+whose type is a `SecurityFilterChain`, in any qualified spelling, is a chain. Any other `…FilterChain` bean is an
+unknown candidate, never omitted. A chain's configurer arguments must be provably inert: a lambda that only configures
+its own parameter, a method reference, `withDefaults()` or literals. Anything that could reach the `HttpSecurity`
+again (for example `removeConfigurer`) makes the chain unknown.
+
+**Roles and the anonymous principal.** A role or authority check is always authorization. It is authentication only
+when the anonymous principal Spring gives unauthenticated requests cannot hold any authority it admits. By default that
+principal holds `ROLE_ANONYMOUS`, so `hasRole("ANONYMOUS")` does not require authentication. `anonymous(disable)`
+removes it, and a customised anonymous principal leaves authentication unknown. A `GrantedAuthorityDefaults` bean,
+which can change the `ROLE_` prefix, leaves role checks unknown.
 
 **Inputs and evidence.** The input is the captured snapshot, the PR 05 parser evidence for the source, a reader for
 captured bytes by content id, and the selected environment (`activeProfiles`, `null` when none was selected). The
