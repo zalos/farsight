@@ -137,12 +137,9 @@ export class TypeIndex {
       const ifaces = node.childForFieldName('interfaces') ?? named(node).find(n => n.type === 'extends_interfaces' || n.type === 'super_interfaces');
       for (const list of named(ifaces)) for (const t of named(list)) supers.push(t.text);
       for (const t of supers) {
-        const simple = t.replace(/<[\s\S]*>/g, '').trim();
-        // Resolve the supertype by its own scope, without consulting shadowing (a supertype name cannot be shadowed
-        // by its own members), and only through captured declarations.
-        const decls = simple.includes('.') ? this.byFqn.get(simple) ?? [] :
-          [this.imports.get(f)?.single.get(simple), [packageOf(f), simple].filter(Boolean).join('.')]
-            .flatMap(q => (q ? this.byFqn.get(q) ?? [] : [])).concat((this.bySimple.get(simple) ?? []).filter(d => d.file === f));
+        // Every captured declaration the supertype name could denote: an over-approximation, so a member type that
+        // might be inherited is never missed.
+        const decls = this.supertypeCandidates(f, t);
         for (const d of new Set(decls)) {
           if (seen.has(d.node)) continue;
           seen.add(d.node);
@@ -157,6 +154,33 @@ export class TypeIndex {
     };
     walk(file.root, n => { if (DECL_KINDS[n.type]) visitSupers(file, n); });
     return [...out];
+  }
+
+  /**
+   * Every captured declaration a supertype name written in `file` could denote, by every lookup Java could use: a
+   * single-type import, a type declared in the file, the file's package, each wildcard import, and for a qualified
+   * name (`Outer.Inner`, relative or package-qualified) the member types of every candidate for its head. A name
+   * that matches no candidate but is declared somewhere in the captured source is taken as any of those
+   * declarations: the answer may be too wide, never too narrow.
+   */
+  private supertypeCandidates(file: JavaFile, written: string): Declared[] {
+    const text = written.replace(/<[\s\S]*>/g, '').replace(/\s+/g, '');
+    const parts = text.split('.');
+    const simple = (name: string): Declared[] => {
+      const imp = this.imports.get(file);
+      const out = new Set<Declared>();
+      const single = imp?.single.get(name);
+      for (const q of [single, [packageOf(file), name].filter(Boolean).join('.'), ...(imp?.wildcards ?? []).map(w => `${w}.${name}`)]) {
+        for (const d of q ? this.byFqn.get(q) ?? [] : []) out.add(d);
+      }
+      for (const d of this.bySimple.get(name) ?? []) if (d.file === file) out.add(d);
+      if (!out.size && !single) for (const d of this.bySimple.get(name) ?? []) out.add(d);
+      return [...out];
+    };
+    let current = simple(parts[0]!);
+    for (const seg of parts.slice(1)) current = current.flatMap(h => this.byFqn.get(`${h.fqn}.${seg}`) ?? []);
+    // A package-qualified name.
+    return [...new Set([...current, ...this.byFqn.get(text) ?? []])];
   }
 
   private capturedPackage(pkg: string): boolean {

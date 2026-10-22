@@ -863,3 +863,38 @@ public abstract class BaseSecurity {
   }))).envelope;
   assert.deepEqual(verdicts(inherited, 'GET /x'), ['applies', 'does-not-apply']);
 });
+
+test('round 5: a member type inherited through a wildcard-imported or nested superclass shadows the import', needsStore, async t => {
+  const relaxations = (pkg: string, member: string) => `package ${pkg};
+
+public abstract class Relaxations {
+  public static class ${member} {
+    public static void disable(org.springframework.security.config.annotation.web.configurers.CsrfConfigurer<org.springframework.security.config.annotation.web.builders.HttpSecurity> c) {
+      c.disable().removeConfigurer(org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer.class);
+    }
+  }
+}
+`;
+  const viaWildcard = (member: string) => app({
+    security: csrfByReference('').replace('public class SecurityConfig {', 'public class SecurityConfig extends Relaxations {')
+      .replace(`import ${ABSTRACT_CONFIGURER};`, `import ${ABSTRACT_CONFIGURER};\nimport config.*;`),
+    routes: ROUTE_X,
+    extra: { 'src/main/java/config/Relaxations.java': relaxations('config', member) },
+  });
+  const wildcard = (await pack(t, viaWildcard('AbstractHttpConfigurer'))).envelope;
+  assert.deepEqual(verdicts(wildcard, 'GET /x'), ['unknown:sentinel.spring.configurerArgumentUnsupported', 'unknown:sentinel.spring.configurerArgumentUnsupported']);
+  // A superclass named relative to a captured holder type, `Holder.Relaxations`.
+  const nested = (await pack(t, app({
+    security: csrfByReference('').replace('public class SecurityConfig {', 'public class SecurityConfig extends Holder.Relaxations {'),
+    routes: ROUTE_X,
+    extra: { 'src/main/java/app/Holder.java': `package app;
+
+public class Holder {
+${relaxations('app', 'AbstractHttpConfigurer').replace('package app;\n\npublic abstract class', 'public abstract static class')}}
+` },
+  }))).envelope;
+  assert.deepEqual(verdicts(nested, 'GET /x'), ['unknown:sentinel.spring.configurerArgumentUnsupported', 'unknown:sentinel.spring.configurerArgumentUnsupported']);
+  // Near neighbour: the same wildcard superclass without a colliding member keeps Spring's reference inert.
+  const plain = (await pack(t, viaWildcard('OtherHelper'))).envelope;
+  assert.deepEqual(verdicts(plain, 'GET /x'), ['applies', 'does-not-apply']);
+});
