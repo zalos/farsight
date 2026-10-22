@@ -19,7 +19,7 @@ export const EXPRESS_REASON_CODES = Object.freeze([
   'sentinel.express.middlewareEffectUnknown', 'sentinel.express.nextSkip', 'sentinel.express.routeNotMounted',
   'sentinel.express.routeObjectUnresolved', 'sentinel.express.surfaceAmbiguous', 'sentinel.express.mountsDisagree',
   'sentinel.express.routeNotIndexed', 'sentinel.express.mountCycle', 'sentinel.express.errorPathResumes',
-  'sentinel.express.refusalUnproven',
+  'sentinel.express.refusalUnproven', 'sentinel.express.routeNotInGraph',
 ] as const);
 export type ExpressReason = typeof EXPRESS_REASON_CODES[number];
 

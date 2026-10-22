@@ -696,7 +696,10 @@ before its handler and whether anything there can refuse the request, for exactl
 source with Oxc; it installs, builds and runs nothing, and leaves the structural graph unchanged (its surfaces are the
 parser's route nodes, its registrations are re-derived from syntax). The version must be pinned exactly in the root
 manifest, or be a range the npm lockfile written for it resolves to exactly 4.21.2; overrides, another lockfile with a
-range, a path alias for `express` or a nested manifest leave every fact unknown and `framework.version` null.
+range or a path alias for `express` leave every fact unknown and `framework.version` null, and so does any registration
+on a route's path that sits under a nested package manifest. Every route the pack discovers is reconciled with the
+parser's surfaces: a `route()` chain, an `all()` route or a route on an object the parser does not index is a frontier
+(`registrationUnsupported` or `routeNotInGraph`), never a silent omission.
 Applications and routers are top-level `express()` / `Router()` constants; their layers are the top-level
 `use`, method, `all`, `route` and `param` statements of their own module, in order. Any other use of the object — a
 registration inside a function, branch or loop, the object handed to other code or registered on from another module —

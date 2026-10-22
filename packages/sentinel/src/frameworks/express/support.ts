@@ -3,7 +3,7 @@
 export const EXPRESS_SUPPORT = Object.freeze({
   versions: Object.freeze({
     express: '4.21.2',
-    source: 'the root package.json depends on express exactly 4.21.2, or on a range the npm lockfile (v2 or later, written for that declaration) resolves to exactly 4.21.2; overrides or resolutions naming express, a range with only another lockfile, a TypeScript path alias for express, or a file under a nested package manifest is unknown',
+    source: 'the root package.json depends on express exactly 4.21.2, or on a range the npm lockfile (v2 or later, written for that declaration) resolves to exactly 4.21.2; overrides or resolutions naming express, a range with only another lockfile, a TypeScript path alias for express, or any registration on a route\'s path (an application, router, layer or middleware) in a file under a nested package manifest, is unknown',
   }),
   modules: 'ES imports and exports, top-level require of a literal specifier, module.exports and exports.x assigned at the top level; relative specifiers resolve to one captured file (TypeScript\'s .js-for-.ts convention included); star re-exports, mixed module systems and anything else are unresolved',
   objects: 'applications from express() and routers from express.Router() or Router(), each a top-level const; router options other than mergeParams, and the case sensitive or strict routing settings, leave path matching unknown',
@@ -19,5 +19,6 @@ export const EXPRESS_SUPPORT = Object.freeze({
     unknown: 'third-party or unresolved middleware, async functions, next(\'route\') or next(\'router\'), any other body, and param callbacks before a route with a parameter',
   }),
   facts: 'per route and property: never applies; unknown at the position of each refusal (refusalUnproven, citing it) and of each layer that cannot be read; does-not-apply at the handler\'s position (the number of layers before it) when every layer before it was read and none can refuse; names, status codes and request values never establish a principal or permission',
+  gaps: 'every route this pack discovers is reconciled with the parser\'s route surfaces; a route() chain, an all() route or a route on an object the parser does not index gets no fact and is a frontier (registrationUnsupported or routeNotInGraph), never omitted silently',
   notSupported: Object.freeze(['Express 5', 'sub-applications', 'routes in test sources', 'what populates the request values a refusal reads', 'router.route() stacks', 'runtime configuration and environment branches']),
 });

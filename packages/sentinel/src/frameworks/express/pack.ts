@@ -55,15 +55,16 @@ type Entry =
   /** An error handler that may resume normal routing: not a position on the normal path, but a way past earlier layers. */
   | { readonly kind: 'resume'; readonly at: At[] };
 
-type PathResult = { readonly ok: true; readonly entries: Entry[]; readonly mounts: At[] } | { readonly ok: false; readonly reason: ExpressReason; readonly at: At[] };
+type PathResult = { readonly ok: true; readonly entries: Entry[]; readonly mounts: At[]; /** Every registration that contributed: objects, layers and the route. */ readonly contributors: At[] } | { readonly ok: false; readonly reason: ExpressReason; readonly at: At[] };
 
 // ---- dispatch, simulated over the registration model ----
 
-function simulateLayers(model: ExpressModel, obj: ExpressObject, template: string, upTo: number, method: string, out: Entry[], depth: number): void {
+function simulateLayers(model: ExpressModel, obj: ExpressObject, template: string, upTo: number, method: string, out: Entry[], depth: number, objects: Set<ExpressObject>): void {
+  objects.add(obj);
   if (obj.matching) { out.push({ kind: 'unknown', properties: PROPERTIES, reason: 'sentinel.express.routingSettingUnsupported', at: [obj.matching], mayHandleErrors: true }); return; }
   for (let i = 0; i < upTo && i < obj.layers.length; i++) {
     const layer = obj.layers[i]!;
-    layerEntries(model, layer, template, method, out, depth);
+    layerEntries(model, layer, template, method, out, depth, objects);
   }
 }
 
@@ -80,7 +81,7 @@ function pushEffect(model: ExpressModel, file: JsFile, fn: JsNode, match: 'match
   else out.push({ kind: 'unknown', properties: PROPERTIES, reason: e.reason, at: e.at, mayHandleErrors: e.mayHandleErrors });
 }
 
-function layerEntries(model: ExpressModel, layer: Layer, template: string, method: string, out: Entry[], depth: number): void {
+function layerEntries(model: ExpressModel, layer: Layer, template: string, method: string, out: Entry[], depth: number, objects: Set<ExpressObject>): void {
   switch (layer.kind) {
     case 'unknown':
       out.push({ kind: 'unknown', properties: PROPERTIES, reason: layer.reason, at: [layer.at], mayHandleErrors: true });
@@ -102,7 +103,7 @@ function layerEntries(model: ExpressModel, layer: Layer, template: string, metho
       if (m === 'unknown') { out.push({ kind: 'unknown', properties: PROPERTIES, reason: 'sentinel.express.layerMatchUnknown', at: [layer.at], mayHandleErrors: true }); return; }
       if (depth > 32) { out.push({ kind: 'unknown', properties: PROPERTIES, reason: 'sentinel.express.mountCycle', at: [layer.at] }); return; }
       // An earlier router whose prefix matches runs its own matching layers for this request, then falls through.
-      simulateLayers(model, t, stripPrefix(template, layer.path)!, t.layers.length, method, out, depth + 1);
+      simulateLayers(model, t, stripPrefix(template, layer.path)!, t.layers.length, method, out, depth + 1, objects);
       return;
     }
     case 'route': {
@@ -162,17 +163,19 @@ function evaluateChain(model: ExpressModel, chain: Step[], route: { obj: Express
   full = full === undefined ? undefined : joinPaths(full, route.layer.path);
   if (full === undefined || !segments(full)) return { ok: false, reason: 'sentinel.express.pathUnsupported', at: [...mountLayers.map(m => m.at), route.layer.at] };
   const entries: Entry[] = [];
+  const objects = new Set<ExpressObject>();
   let template = full;
   for (let i = 0; i < chain.length; i++) {
     const s = chain[i]!;
     const last = i === chain.length - 1;
-    simulateLayers(model, s.obj, template, last ? route.index : s.mountIndex!, method, entries, 0);
+    simulateLayers(model, s.obj, template, last ? route.index : s.mountIndex!, method, entries, 0, objects);
     if (!last) template = stripPrefix(template, mountLayers[i]!.path)!;
   }
   // The route's own handlers before the last run first, in order.
   const own = route.layer.handlers;
   for (const h of own.slice(0, -1)) pushEffect(model, route.layer.file, h, 'match', entries);
-  return { ok: true, entries: resolveErrorPaths(entries), mounts: mountLayers.map(m => m.at) };
+  const contributors = [...[...objects].map(o => o.at), ...mountLayers.map(m => m.at), route.layer.at, ...entries.flatMap(e => e.at)];
+  return { ok: true, entries: resolveErrorPaths(entries), mounts: mountLayers.map(m => m.at), contributors };
 }
 
 const signature = (r: PathResult) => r.ok
@@ -319,6 +322,10 @@ export async function analyzeExpress(input: ExpressPackInput): Promise<ControlFa
       continue;
     }
     if (!first.ok) { unknownBoth(node.id, [...regEvidence, ...evidenceOf(first.at)], first.reason); continue; }
+    // Every registration on the path is version-scoped: one under a nested package manifest resolves Express (or its
+    // own code) from that package, whose version this pack has not read.
+    const nested = results.flatMap(r => (r.ok ? r.contributors : [])).filter(a => underNested(a.file.path));
+    if (nested.length) { unknownBoth(node.id, [...regEvidence, ...evidenceOf(nested)], 'sentinel.express.versionUnresolved'); continue; }
     const mountEvidence = evidenceOf(results.flatMap(r => (r.ok ? r.mounts : [])));
     const base = [...regEvidence, ...mountEvidence];
     first.entries.forEach((e, order) => {
@@ -331,6 +338,21 @@ export async function analyzeExpress(input: ExpressPackInput): Promise<ControlFa
     for (const p of PROPERTIES) {
       const touched = first.entries.some(e => e.kind === 'refusal' || (e.kind === 'unknown' && e.properties.includes(p)));
       if (!touched) add(node.id, p, first.entries.length, 'does-not-apply', [...base, ...evidenceOf(first.entries.flatMap(e => e.at)), ...versionEvidence]);
+    }
+  }
+
+  // Every route this pack discovered must be a graph surface; one the parser did not index (a route() chain, all(), an
+  // object not named app or router) gets no fact, so it is an explicit gap, never a silent omission.
+  const surfaces = new Map(routes.map(n => [n.id, n]));
+  for (const o of model.objects) {
+    for (const l of o.layers) {
+      if (l.kind !== 'route') continue;
+      const line = lineOf(l.file, l.at.node);
+      const indexed = l.methods !== 'all' && !l.chained && l.methods.length > 0 && l.methods.every(m => {
+        const n = surfaces.get(`${prefix}${m.toUpperCase()} ${l.path}`);
+        return !!n && n.loc?.path === l.file.path && n.loc.line === line;
+      });
+      if (!indexed) frontier(`${l.file.path}#L${line}`, l.chained ? 'sentinel.express.registrationUnsupported' : 'sentinel.express.routeNotInGraph');
     }
   }
 
@@ -364,6 +386,12 @@ function registrationCall(file: JsFile, line: number, method: string, path: stri
     found = { node: n, object: callee.object as JsNode };
   });
   return found;
+}
+
+function lineOf(file: JsFile, node: JsNode): number {
+  let line = 1;
+  for (let i = 0; i < node.start; i++) if (file.text.charCodeAt(i) === 10) line++;
+  return line;
 }
 
 function dedupe(evidence: SourceEvidence[]): SourceEvidence[] {

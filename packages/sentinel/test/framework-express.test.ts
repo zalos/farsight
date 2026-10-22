@@ -436,3 +436,51 @@ helpers.createServer(app).listen(3000);
     assert.deepEqual(both(env, 'GET /admin/item'), { authentication: ['0:unknown:refusalUnproven'], authorization: ['0:unknown:refusalUnproven'] }, server);
   }
 });
+
+// ---- final review (SOL, 0a2bab4): nested package versions on the path; discovered routes with no surface ----
+
+test('final review, probe 4: a router from a nested package on the route\'s path leaves the version unresolved', needsStore, async t => {
+  const legacyRouter = `import express from 'express';
+
+const router = express.Router();
+router.use((req, res, next) => { if (!req.get('x-token')) return res.sendStatus(401); next(); });
+
+export default router;
+`;
+  const app = (from: string) => `import express from 'express';
+import guard from '${from}';
+
+const app = express();
+app.use(guard);
+app.get('/root', (req, res) => { res.json({}); });
+
+export default app;
+`;
+  const nested = (await pack(t, expressApp(app('../packages/legacy/guard.js'), {
+    'packages/legacy/package.json': MANIFEST('5.1.0'),
+    'packages/legacy/guard.ts': legacyRouter,
+  }))).envelope;
+  assert.deepEqual(both(nested, 'GET /root'), { authentication: ['0:unknown:versionUnresolved'], authorization: ['0:unknown:versionUnresolved'] });
+  // Near neighbour: the same router in the root package is read.
+  const root = (await pack(t, expressApp(app('./guard.js'), { 'src/guard.ts': legacyRouter }))).envelope;
+  assert.deepEqual(both(root, 'GET /root'), { authentication: ['0:unknown:refusalUnproven'], authorization: ['0:unknown:refusalUnproven'] });
+});
+
+test('final review, probe 5: an Express route the parser did not index is an explicit gap', needsStore, async t => {
+  const env = (await pack(t, expressApp(`import express from 'express';
+
+const app = express();
+app.route('/chained').get((req, res) => { res.json({}); }).post((req, res) => { res.sendStatus(204); });
+app.all('/everything', (req, res) => { res.json({}); });
+const api = express.Router();
+api.get('/named-otherwise', (req, res) => { res.json({}); });
+app.use('/api', api);
+app.get('/indexed', (req, res) => { res.json({}); });
+
+export default app;
+`))).envelope;
+  const gaps = env.frontiers.filter((f: any) => f.scopeId.startsWith('app:src/app.ts#L')).map((f: any) => `${f.scopeId.slice('app:src/app.ts#'.length)} ${f.reasonCode.replace('sentinel.express.', '')}`);
+  assert.deepEqual(gaps.sort(), ['L4 registrationUnsupported', 'L5 routeNotInGraph', 'L7 routeNotInGraph']);
+  // The indexed route still gets its facts, and nothing is silently claimed for the others.
+  assert.deepEqual(both(env, 'GET /indexed'), { authentication: ['0:does-not-apply'], authorization: ['0:does-not-apply'] });
+});
