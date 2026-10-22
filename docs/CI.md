@@ -108,7 +108,8 @@ Sentinel's fast schema tests are its package `test` script, so they run in `vali
 container and kill-matrix suites are explicit opt-ins with named skip reasons: without `SENTINEL_ISOLATION=1` only the
 real-container cases skip, and the fake-worker protocol tests still run. The isolation qualification is exact host,
 runtime and server triples (`ISOLATION_POLICY` in `packages/sentinel/src/execution/isolation.ts`): darwin-arm64 with
-Docker Desktop is measured, linux-x64 with Docker Engine is a candidate that `sentinel-isolation` qualifies. `sentinel-package` becomes a required
+Docker Desktop and linux-x64 with Docker Engine are measured. The Linux qualification ran on Node 24.21.0,
+Engine 28.0.4, Ubuntu 24.04.5 LTS and cgroup v2: [82 tests passed with zero skips](https://github.com/zalos/farsight/actions/runs/39728679640/job/119658477459). `sentinel-package` becomes a required
 check once it has passed on `main` (an owner branch-protection change); until then it is reported but not required.
 
 The **secrets** job runs gitleaks over the pushed or PR commits with `.gitleaks.toml`. A finding fails the job and uploads a SARIF artifact; it posts no PR comment. What it checks, and

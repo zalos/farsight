@@ -41,6 +41,24 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel isolation qualified; capture integration — 2026-10-22
+
+PR [#139](https://github.com/zalos/farsight/pull/139), branch `codex/sentinel-isolation-integration`, passed SOL
+review and real-container qualification: 92 local Docker Desktop tests and 82 Linux CI tests, zero skips in
+those dedicated runs. Linux used Node 24.21.0, Docker Engine 28.0.4, Ubuntu 24.04.5 LTS and cgroup v2;
+[the run](https://github.com/zalos/farsight/actions/runs/39728679640/job/119658477459) measured CPU throttling and
+file-size enforcement as well as cancellation, networking, ownership and cleanup faults. The final qualification
+commit still needs its CI and merge. Full local build/typecheck, core 404 and Sentinel 203 passed (17 explicit
+opt-in skips in the ordinary suite); catalog and CI-selector checks passed. A fixed-source ingest against main
+`65d925e` was identical: 7,397 nodes, 15,495 edges, source digest `c5aaf4d32a8f`, 20,502,192 graph bytes and
+27,947,008 database bytes. Three fresh browser views had zero page errors and inspected screenshots.
+
+Capture's final shared memory budget passed independent SOL review and 37 focused tests, including zero retained
+reservations after capture failure and retry. Integration validation continues. Parser span and declaration fixes,
+rules/policy review, deterministic planning and scheduler implementation proceed in separate Opus worktrees.
+No primary-checkout build, dogfood refresh, or global installation was performed. Production adapters remain
+unregistered; uncertain container cleanup remains explicit for scheduler recovery.
+
 ## Sentinel shared matcher merged; npm consumer requirements — 2026-10-22
 
 PR [#137](https://github.com/zalos/farsight/pull/137) merged at `2df3dc2` after Opus implementation, SOL review

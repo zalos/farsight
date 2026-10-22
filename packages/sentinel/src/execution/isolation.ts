@@ -37,8 +37,8 @@ export interface IsolationPolicy { readonly qualified: readonly QualifiedIsolati
 
 /**
  * darwin-arm64 with Docker Desktop (linux-arm64 VM): PR 01's runtime matrix and the PR 07 isolation canaries.
- * linux-x64 with Docker Engine (linux-amd64): a candidate, listed so GitHub's ubuntu runners run the canaries
- * before merge; its evidence is replaced with that run's facts. Nothing else is qualified (feasibility-decisions
+ * linux-x64 with Docker Engine (linux-amd64): measured by PR 07's GitHub ubuntu canaries.
+ * Nothing else is qualified (feasibility-decisions
  * defers independent Linux hosts, Colima, AMD64 Desktop, Windows and emulation). This is separate from the store's
  * SQLite qualification: a host qualified for the store is not thereby qualified to isolate scanners.
  */
@@ -46,8 +46,8 @@ export const ISOLATION_POLICY: IsolationPolicy = Object.freeze({
   qualified: Object.freeze([
     Object.freeze({ host: 'darwin-arm64', backend: 'docker-desktop' as const, server: 'linux-arm64', status: 'measured' as const,
       evidence: 'PR 01 runtime matrix (Docker Desktop 4.65.0, Engine 29.2.1) and PR 07 isolation canaries' }),
-    Object.freeze({ host: 'linux-x64', backend: 'docker-engine' as const, server: 'linux-amd64', status: 'candidate' as const,
-      evidence: 'pending the PR 07 isolation canaries on GitHub ubuntu CI' }),
+    Object.freeze({ host: 'linux-x64', backend: 'docker-engine' as const, server: 'linux-amd64', status: 'measured' as const,
+      evidence: 'PR 07 CI 39728679640/119658477459: Node 24.21.0, Engine 28.0.4, Ubuntu 24.04.5 LTS, cgroup v2; 82 passed, zero skips' }),
   ]),
 });
 
