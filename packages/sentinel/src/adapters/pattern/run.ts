@@ -21,6 +21,8 @@ export interface PatternAttempt {
   /** Test seam: another registered adapter (a lowered deadline or a variant built by buildPatternAdapter). */
   adapterId?: Id;
   adapter?: PatternAdapterBuild;
+  /** Qualification only: see NormalizeInput.qualifyingArchitecture. */
+  qualifyingArchitecture?: string;
 }
 
 export async function runPatternAttempt(service: ExecutionService, attempt: PatternAttempt): Promise<PatternRunResult> {
@@ -40,6 +42,7 @@ export async function runPatternAttempt(service: ExecutionService, attempt: Patt
         job: built.job, jobDigest: built.jobDigest, rules: attempt.rules, outcome,
         outputBytes: id => readFileSync(byId.get(id)!),
         targetBytes: artifact => readSealed(sealed, artifact),
+        ...(attempt.qualifyingArchitecture ? { qualifyingArchitecture: attempt.qualifyingArchitecture } : {}),
       });
     } finally {
       releaseWorkDir(outcome.workDir);

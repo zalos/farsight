@@ -1,0 +1,77 @@
+# Opt-in qualification of the pattern adapter on a native Linux/amd64 runner (PR 10). Run it by hand on a branch:
+#   gh workflow run sentinel-pattern-qualification.yml --ref <branch>
+# It never runs on its own. Provisioning (the only network step) installs the pinned Semgrep index and checks that its
+# linux/amd64 manifest is the one the adapter lists; the scans themselves never pull (`--pull never` in PR 07) and run
+# with no network. Every test must run: a skipped, failed or cancelled test fails the job. A green run is evidence for
+# moving linux/amd64 from unmeasured to measured in src/adapters/pattern/adapter.ts; it does not change it.
+name: sentinel-pattern-qualification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sentinel-pattern-qualification-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  pattern-linux-amd64:
+    name: pattern-linux-amd64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      IMAGE_INDEX: semgrep/semgrep@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b
+      AMD64_MANIFEST: sha256:c47e426f7f0cfa19af6d7877560d0a7135f683b8090ad0efc97c4ec7810dc435
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Native amd64 host
+        run: |
+          test "$(uname -m)" = x86_64 || { echo "::error::not a native amd64 host"; exit 1; }
+          docker version --format '{{.Server.Version}} {{.Server.Os}}/{{.Server.Arch}}'
+      - name: Provision the pinned image (provenance; the only network step)
+        run: |
+          set -euo pipefail
+          docker manifest inspect "$IMAGE_INDEX" > index.json
+          # shellcheck disable=SC2016 # the JavaScript is single-quoted on purpose
+          node -e '
+            const i = JSON.parse(require("fs").readFileSync("index.json", "utf8"));
+            const m = (i.manifests ?? []).find(x => x.platform?.os === "linux" && x.platform?.architecture === "amd64");
+            if (!m || m.digest !== process.env.AMD64_MANIFEST) { console.error("::error::the index does not list the expected linux/amd64 manifest"); process.exit(1); }
+            console.log(`linux/amd64 manifest ${m.digest} (${m.size} bytes)`);'
+          docker pull --platform linux/amd64 "$IMAGE_INDEX"
+          docker image inspect "$IMAGE_INDEX" --format 'installed {{.Architecture}} {{.Os}} id {{.Id}}'
+          test "$(docker image inspect "$IMAGE_INDEX" --format '{{.Architecture}}')" = amd64
+      - run: pnpm install --frozen-lockfile
+      - name: Build Sentinel and its workspace closure
+        run: pnpm --filter '@farsight/sentinel...' build
+      - name: Pattern unit and real-engine conformance on linux/amd64, nothing skipped
+        working-directory: packages/sentinel
+        env:
+          SENTINEL_ISOLATION: '1'
+          SENTINEL_PATTERN_QUALIFY: linux/amd64
+        run: |
+          set -o pipefail
+          node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=600000 \
+            --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=pattern.tap \
+            test/pattern-adapter.test.ts test/pattern-conformance.test.ts
+          grep -qx '# skipped 0' pattern.tap || { echo "::error::a pattern test was skipped"; exit 1; }
+          grep -qx '# fail 0' pattern.tap && grep -qx '# cancelled 0' pattern.tap
+      - name: Install the packed tarball and run its shipped pattern assets
+        env:
+          SENTINEL_ISOLATION: '1'
+          SENTINEL_PATTERN_QUALIFY: linux/amd64
+        run: |
+          set -o pipefail
+          pnpm pack:sentinel
+          node scripts/test-sentinel-package.mjs | tee package.log
+          grep -q 'installed assets run by the workspace service: 6 findings (amd64 candidate' package.log
+      - name: No container left behind
+        if: always()
+        run: test "$(docker ps -aq --filter label=org.farsight.sentinel.store | wc -l)" -eq 0

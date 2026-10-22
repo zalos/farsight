@@ -222,6 +222,9 @@ finds its three direct positives (TS, JS, Java) as structural locators and its t
 none of its six negatives, and no cross-file flow; an engine-reported one-second rule timeout marks exactly the rules
 that timed out (host-dependent, so it pins the reporting path, not a threshold). Semgrep 1.181.0's open-source engine
 reported no dataflow trace for those taint results, so local-taint evidence names its sink and records the trace as not
-reported. Platforms: linux/arm64 measured; linux/amd64 is in the pinned index but unmeasured. The tarball ships the pack
-under `rules/pattern/` and the worker with a digest/rights manifest under `assets/pattern/`. Integration still open:
+reported. Platforms: linux/arm64 measured; linux/amd64 is in the pinned index but unmeasured (the opt-in
+`sentinel-pattern-qualification` workflow measures it as a candidate on a native runner). A failed engine run reaches
+diagnostics only scrubbed of quoted text, paths and value-like tokens. The tarball ships the pack under
+`rules/pattern/` and the worker with a digest/rights manifest under `assets/pattern/`; nothing exported invokes the
+adapter, so the package gate is partial until the PR 09 command (ADR 26). Integration still open:
 registering the adapter, the planner supplying the shim, job, rules and targets as inputs, and the scan command (PR 09).

@@ -15,7 +15,7 @@
 import { createHash } from 'node:crypto';
 import type { ArtifactId } from '../../contracts/common.js';
 import type { WorkerOutcome } from '../../execution/supervisor.js';
-import { MEASURED_ARCHITECTURES, PATTERN_ENGINE } from './adapter.js';
+import { MEASURED_ARCHITECTURES, PATTERN_ENGINE, PATTERN_IMAGE_PLATFORMS } from './adapter.js';
 import { patternFail } from './errors.js';
 import { languageOf, type PatternEvidenceKind, type PatternJob, type PatternLanguage, type PatternRule } from './job.js';
 
@@ -72,6 +72,11 @@ export interface PatternRunResult {
   readonly engine: string;
   readonly granularity: 'per-file-per-rule';
   readonly attempt: WorkerOutcome['state'];
+  /**
+   * The image platform the engine ran on. `candidate` only in a qualification run that named it explicitly; nothing
+   * downstream may treat a candidate platform's results as measured support.
+   */
+  readonly platform: { readonly architecture: string | null; readonly state: 'measured' | 'candidate' | 'refused' };
   readonly engineExit: number | null;
   readonly findings: readonly PatternFinding[];
   readonly coverage: readonly PatternCoverage[];
@@ -90,6 +95,11 @@ export interface NormalizeInput {
    * Each is re-hashed here against the job; a missing or different file earns no coverage and keeps no result.
    */
   targetBytes: (artifact: ArtifactId) => Uint8Array | undefined;
+  /**
+   * Qualification only (the opt-in platform CI job): an unmeasured platform of the pinned index whose results are
+   * accepted and marked `candidate`. Production callers never set it.
+   */
+  qualifyingArchitecture?: string;
 }
 
 const TREE = '/tmp/sentinel-pattern/tree/';
@@ -152,14 +162,18 @@ export function normalizePatternRun(input: NormalizeInput): PatternRunResult {
   if (outcome.state !== 'succeeded') {
     const reason: PatternCoverageReason = outcome.state === 'timed-out' ? 'sentinel.pattern.coverage.attemptTimedOut'
       : outcome.state === 'canceled' ? 'sentinel.pattern.coverage.attemptCanceled' : 'sentinel.pattern.coverage.attemptFailed';
-    return deepFreeze({ ...base, engineExit: null, findings: [], coverage: everyTarget('error', reason), refused: [] });
+    return deepFreeze({ ...base, platform: { architecture: outcome.container?.image?.architecture ?? null, state: 'refused' as const }, engineExit: null, findings: [], coverage: everyTarget('error', reason), refused: [] });
   }
 
-  // Results from an image platform no conformance run has measured are not trusted, whatever they say.
-  const architecture = outcome.container?.image?.architecture;
-  if (!architecture || !MEASURED_ARCHITECTURES.has(architecture)) {
-    return deepFreeze({ ...base, engineExit: null, findings: [], coverage: everyTarget('error', 'sentinel.pattern.coverage.platformUnmeasured'), refused: [] });
+  // Results from an image platform no conformance run has measured are not trusted, whatever they say; a
+  // qualification run may name one listed, unmeasured platform, and its results are marked candidate.
+  const architecture = outcome.container?.image?.architecture ?? null;
+  const candidate = architecture !== null && architecture === input.qualifyingArchitecture
+    && PATTERN_IMAGE_PLATFORMS.some(p => p.architecture === architecture && p.state === 'unmeasured');
+  if (!architecture || (!MEASURED_ARCHITECTURES.has(architecture) && !candidate)) {
+    return deepFreeze({ ...base, platform: { architecture, state: 'refused' as const }, engineExit: null, findings: [], coverage: everyTarget('error', 'sentinel.pattern.coverage.platformUnmeasured'), refused: [] });
   }
+  const platform = { architecture, state: candidate ? 'candidate' as const : 'measured' as const };
   const recordOut = outcome.outputs.find(o => o.mediaType === 'application/vnd.sentinel.pattern-run+json');
   if (!recordOut) return patternFail('sentinel.pattern.outputInvalid', 'no run record');
   const record = parseJson(input.outputBytes(recordOut.id), MAX_RUN_RECORD, 'the run record');
@@ -168,8 +182,8 @@ export function normalizePatternRun(input: NormalizeInput): PatternRunResult {
   if (!engineOut || engineOut.id !== record.engineOutput) return patternFail('sentinel.pattern.outputInvalid', 'the engine output is not the one the run record names');
   const exit = int(record.exitCode) ? record.exitCode : null;
   const excluded = new Set<string>(Array.isArray(record.excluded) ? record.excluded.filter((p: unknown) => typeof p === 'string') : []);
-  if (record.timedOut === true) return deepFreeze({ ...base, engineExit: exit, findings: [], coverage: everyTarget('error', 'sentinel.pattern.coverage.engineTimedOut'), refused: [] });
-  if (record.stdoutTruncated === true) return deepFreeze({ ...base, engineExit: exit, findings: [], coverage: everyTarget('error', 'sentinel.pattern.coverage.outputTruncated'), refused: [] });
+  if (record.timedOut === true) return deepFreeze({ ...base, platform, engineExit: exit, findings: [], coverage: everyTarget('error', 'sentinel.pattern.coverage.engineTimedOut'), refused: [] });
+  if (record.stdoutTruncated === true) return deepFreeze({ ...base, platform, engineExit: exit, findings: [], coverage: everyTarget('error', 'sentinel.pattern.coverage.outputTruncated'), refused: [] });
 
   const engine = parseJson(input.outputBytes(engineOut.id), MAX_ENGINE_JSON, 'the engine output');
   if (engine?.version !== PATTERN_ENGINE.version) patternFail('sentinel.pattern.outputInvalid', 'the engine output is from another engine version');
@@ -271,7 +285,7 @@ export function normalizePatternRun(input: NormalizeInput): PatternRunResult {
     if (!findings.has(id)) findings.set(id, { id, familyId: familyId!, revision: rule.revision, relativePath: path, artifact: target.artifact, span, evidence });
   }
   const sorted = [...findings.values()].sort((a, b) => (a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : a.span.startByte - b.span.startByte || (a.familyId < b.familyId ? -1 : 1)));
-  return deepFreeze({ ...base, engineExit: exit, findings: sorted, coverage, refused });
+  return deepFreeze({ ...base, platform, engineExit: exit, findings: sorted, coverage, refused });
 }
 
 export type { PatternEvidenceKind };

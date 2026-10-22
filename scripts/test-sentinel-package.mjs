@@ -7,8 +7,8 @@
 // verified evidence in one process and reads it back in another; and no Farsight application package
 // arrives; the pattern rule pack and worker ship with exact digests and rights. No scanner, container, model or
 // network service is started, except that with SENTINEL_ISOLATION=1 the shipped pattern worker and pack run once in
-// the pinned engine image through the isolated execution service (never pulled); npm may fetch Sentinel's declared
-// third-party dependencies.
+// the pinned engine image through the workspace's isolated execution service (never pulled; this checks the installed
+// assets, not an installed runtime); npm may fetch Sentinel's declared third-party dependencies.
 //
 //   pnpm test:sentinel:package        # builds Sentinel's closure, packs, then runs this
 //   node scripts/test-sentinel-package.mjs [build/sentinel/farsight-sentinel-<v>.tgz]
@@ -285,8 +285,10 @@ try {
     const sourceFiles = readdirSync(join(sourceDir, 'rules', 'pattern'), { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).length;
     assert.equal(assets.pack.files.length, sourceFiles, 'every pack file is listed');
     patternDemo = `pattern assets (${assets.pack.files.length} pack files, worker ${assets.worker.digest.slice(7, 19)})`;
-    // With SENTINEL_ISOLATION=1 and the pinned image installed, the shipped worker and pack run in the real engine
-    // through the workspace's isolated execution service (the service is internal by design; no host fallback).
+    // With SENTINEL_ISOLATION=1 and the pinned image installed, the shipped worker and pack bytes run in the real engine
+    // through the WORKSPACE's isolated execution service (internal by design; no host fallback). This proves the
+    // installed assets, not the installed runtime: the package exposes no public way to invoke the adapter until the
+    // PR 09 command, so installed-runtime acceptance remains open.
     if (process.env.SENTINEL_ISOLATION === '1') {
       const dist = join(sourceDir, 'dist');
       const imp = (p) => import(new URL(`file://${join(dist, p)}`).href);
@@ -310,11 +312,12 @@ try {
       const store = await openStore(join(scratch, 'pattern-store'));
       try {
         const service = await createExecutionService(store, { scratchRoot: work, registry: createAdapterRegistry([PATTERN_ADAPTER]), containers: true });
-        const result = await runPatternAttempt(service, { attemptId: 'att-package-pattern', work: { id: 'work-package', revision: 1 }, rules, targets, scratch });
+        const qualify = process.env.SENTINEL_PATTERN_QUALIFY?.replace(/^linux\//, '');
+        const result = await runPatternAttempt(service, { attemptId: 'att-package-pattern', work: { id: 'work-package', revision: 1 }, rules, targets, scratch, ...(qualify ? { qualifyingArchitecture: qualify } : {}) });
         assert.equal(result.attempt, 'succeeded');
         const positives = new Set(pack.rules.flatMap((r) => r.fixtures.positive.map((p) => `${r.familyId} ${p.replace(/^fixtures\//, '').replace(/\.fixture$/, '')}`)));
         assert.deepEqual(new Set(result.findings.map((f) => `${f.familyId} ${f.relativePath}`)), positives, 'the shipped pack finds its positives and none of its negatives');
-        patternDemo += `, engine run ${result.findings.length} findings`;
+        patternDemo += `, installed assets run by the workspace service: ${result.findings.length} findings (${result.platform.architecture} ${result.platform.state}; installed-runtime acceptance open)`;
       } finally {
         await store.close();
       }
