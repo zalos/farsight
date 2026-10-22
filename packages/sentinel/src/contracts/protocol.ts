@@ -66,6 +66,16 @@ export interface StartMessage extends AttemptBinding {
   checks?: Id[];
   /** @maxItems 256 */
   scopes?: ScopeId[];
+  /**
+   * Which plan scopes each input is (`<source>:<path>` for each captured file with those bytes), so one attempt can
+   * cover several files and still say which is which.
+   * @maxItems 1024
+   */
+  inputScopes?: Array<{
+    input: ArtifactId;
+    /** @maxItems 256 */
+    scopes: ScopeId[];
+  }>;
 }
 
 export interface CancelMessage extends AttemptBinding {

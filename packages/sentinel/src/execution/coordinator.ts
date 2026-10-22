@@ -449,7 +449,7 @@ export class Coordinator {
       let invocation: { digest: string; record: InvocationRecord } | undefined;
       outcome = await this.#service.run({
         adapterId: executable.adapter!.id, attemptId: id, work: ref, inputs: executable.inputs,
-        assignment: { checks: executable.checks.map(c => c.id), scopes: [...executable.unit.scopes] },
+        assignment: { checks: executable.checks.map(c => c.id), scopes: [...executable.unit.scopes], inputScopes: executable.inputScopes.map(x => ({ input: x.input, scopes: [...x.scopes] })) },
         signal: AbortSignal.any([this.#cancel.signal, this.#deadline.signal]), intents: this.#intents, workers: this.#workers, resources,
         ...(this.#hooks ? { hooks: { at: (b: 'before-spawn' | 'after-spawn') => this.#hooks!.at?.(b, { work: ref, attemptId: id }) } } : {}),
         onWorker: async (worker, inv) => {

@@ -71,8 +71,8 @@ export interface AttemptRequest {
    * Throwing stops and removes the worker; the error is rethrown.
    */
   onWorker?: (worker: AttemptWorker, invocation: { digest: Digest; record: InvocationRecord }) => void | Promise<void>;
-  /** The plan's checks and scopes this attempt covers; carried by the start and recorded in the invocation. */
-  assignment?: { checks: Id[]; scopes: ScopeId[] };
+  /** The plan's checks and scopes this attempt covers, and which scopes each input is; carried by the start and recorded. */
+  assignment?: { checks: Id[]; scopes: ScopeId[]; inputScopes?: Array<{ input: ArtifactId; scopes: ScopeId[] }> };
   /** A durable journal of container intents (recovery, PR 08): recorded before a create, settled once removed. */
   intents?: IntentJournal;
   /** A durable journal of built-in worker identities: recorded after spawn and before the worker acts. */
@@ -144,7 +144,7 @@ export interface InvocationRecord {
   inputFingerprint: Digest;
   inputs: ArtifactId[];
   deadlineAt: string;
-  assignment?: { checks: Id[]; scopes: ScopeId[] };
+  assignment?: { checks: Id[]; scopes: ScopeId[]; inputScopes?: Array<{ input: ArtifactId; scopes: ScopeId[] }> };
 }
 
 const sha256 = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
@@ -197,7 +197,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     coordinatorEpoch: owner.epoch, adapter: { id: adapter.id, version: adapter.version, digest: adapter.digest },
     isolation: adapter.isolation, ...(image ? { image: { reference: image.reference, id: image.id, architecture: image.architecture } } : {}),
     argv, environmentNames, limits, inputFingerprint, inputs: [...inputs].sort(), deadlineAt,
-    ...(request.assignment ? { assignment: { checks: [...request.assignment.checks], scopes: [...request.assignment.scopes] } } : {}),
+    ...(request.assignment ? { assignment: { checks: [...request.assignment.checks], scopes: [...request.assignment.scopes],
+      ...(request.assignment.inputScopes ? { inputScopes: request.assignment.inputScopes.map(x => ({ input: x.input, scopes: [...x.scopes] })) } : {}) } } : {}),
   };
   const invocationDigest = sha256(canonicalJsonBytes(record));
   const session = new WorkerSession({

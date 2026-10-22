@@ -59,3 +59,40 @@ test('a result finer than its trusted adapter establishes is recorded at the ada
     assert.ok(summary.coverage!.checks.every(c => c.reasonCode === 'sentinel.plan.coverageTooCoarse'), JSON.stringify(summary.coverage!.checks));
   } finally { store.close(); }
 });
+
+test('a child run reuses its parent\'s published work over the same snapshot; another snapshot or an unrelated run is refused', async () => {
+  const s = scratch('canonical-child');
+  roots.push(s.root);
+  const store = await storeIn(s.root);
+  try {
+    const parent = await syntheticPlan(store, s.root);
+    assert.equal((await (await Coordinator.open({ store, runId: parent.runId, run: parent.run, registry: parent.registry, scratchRoot: s.work })).run()).published, 4);
+    // The rerun: a child run over the parent's snapshot whose A depends on the parent's published A.
+    const reuse = [{ id: parent.ids.A!, revision: 1 }];
+    const child = await syntheticPlan(store, s.root, {}, { runId: 'run-child', parentId: parent.runId, snapshotId: parent.run.snapshotId, reuse });
+    const summary = await (await Coordinator.open({ store, runId: child.runId, run: child.run, registry: child.registry, scratchRoot: s.work })).run();
+    assert.equal(summary.published, 4, JSON.stringify(summary.failures));
+    assert.equal(store.ledger.listAttempts(reuse[0]!).length, 1, 'the reused unit was not run again');
+    // The same reuse without the parent link, or over another snapshot, is refused at open.
+    const orphan = await syntheticPlan(store, s.root, {}, { runId: 'run-orphan', snapshotId: parent.run.snapshotId, reuse });
+    await assert.rejects(Coordinator.open({ store, runId: orphan.runId, run: orphan.run, registry: orphan.registry, scratchRoot: s.work }),
+      (e: any) => /not published in this run or in a parent run/.test(e.detail?.reason ?? ''));
+    const moved = await syntheticPlan(store, s.root, {}, { runId: 'run-moved', parentId: parent.runId, reuse });
+    await assert.rejects(Coordinator.open({ store, runId: moved.runId, run: moved.run, registry: moved.registry, scratchRoot: s.work }),
+      (e: any) => /not published in this run or in a parent run/.test(e.detail?.reason ?? ''));
+  } finally { store.close(); }
+});
+
+test('the start says which scopes each input is', async () => {
+  const s = scratch('canonical-input-scopes');
+  roots.push(s.root);
+  const store = await storeIn(s.root);
+  try {
+    const p = await syntheticPlan(store, s.root);
+    await (await Coordinator.open({ store, runId: p.runId, run: p.run, registry: p.registry, scratchRoot: s.work })).run();
+    const unit = p.plan.units.find((u: any) => u.id === p.ids.A);
+    const [a] = store.ledger.listAttempts({ id: p.ids.A, revision: 1 });
+    const record = JSON.parse((await store.readArtifact(store.ledger.getAttempt(a.id).envelope.invocation)).toString('utf8'));
+    assert.deepEqual(record.assignment.inputScopes, unit.inputs.map((i: any) => ({ input: i.content, scopes: [`${i.sourceId}:${i.relativePath}`] })));
+  } finally { store.close(); }
+});
