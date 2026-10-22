@@ -4,13 +4,14 @@
 //   1. the consumer's policy (settings `permissions`) — evaluated here, locally, before any call;
 //   2. the tracker's own answer — `provider.can()`, plus what the provider declares it can do;
 //   3. the credential's scope — recorded on the session at connect.
-// Default deny; grants are additive; there is no deny grant.
+// Default deny; grants are additive; there is no deny grant (core `decideGrants`, shared with code hosts).
 //
 // Write-back: intent → gate → freshness check → provider.apply() → re-read → replace in cache → audit.
 // A stale revision is a conflict and is never applied.
 import type { WorkItem, WorkAction, Intent, Verdict, Verdicts, IntentState, ApplyResult } from './contract.js';
 import type { Permissions, Grant, SourceConfig, WorkProvider, Session } from './provider.js';
 import type { WorkCache, PreviewFact } from './cache.js';
+import { decideGrants } from '@farsight/core';
 
 export interface PolicyDecision {
   verdict: Verdict;
@@ -53,48 +54,8 @@ function actionMiss(g: Grant, intent: Intent): string | null {
   return null;
 }
 
-/** A policy verdict over any grant shape. */
-export interface GrantDecision<G> { verdict: Verdict; grant?: G; requiresConfirmation: boolean }
-
-/** The fields of a grant the shared policy reads — a tracker's `Grant`, and a code host's (code-host.ts). */
-export interface GrantLike<A extends string = string> {
-  actions: A[];
-  principals?: Grant['principals'];
-  confirm?: Grant['confirm'];
-}
-
-/**
- * Verdict 1, the shared half: of the grants that allow `action` for `who`, the first that needs no
- * confirmation wins over one that does; a grant names its principals, and one that names none is for people
- * only. `miss(g)` says why a grant that allows the action does not cover this target (a tracker item's
- * project, a field…), or null. Default deny. Pure; no call leaves the process. Tracker writes and code-host
- * posts (`farsight affected --post`) both decide here, so the two cannot drift.
- */
-export function decideGrants<A extends string, G extends GrantLike<A>>(
-  grants: readonly G[] | undefined,
-  action: A,
-  who: 'human' | 'agent',
-  opts: { agentWrites?: Permissions['agentWrites']; miss?: (g: G) => string | null } = {},
-): GrantDecision<G> {
-  const allowing = (grants ?? []).filter((g) => g.actions.includes(action));
-  if (!allowing.length) return { verdict: { allowed: false, reason: `no grant allows ${action}` }, requiresConfirmation: false };
-  let closest: string | null = null;
-  let best: GrantDecision<G> | null = null;
-  for (const g of allowing) {
-    const principals = g.principals ?? ['human'];
-    if (!principals.includes(who)) { closest ??= `no grant allows ${action} for ${who === 'agent' ? 'an agent' : 'a person'}`; continue; }
-    const miss = opts.miss ? opts.miss(g) : null;
-    if (miss) { closest = miss; continue; }
-    const confirm = g.confirm;
-    const agentConfirm = who === 'agent' && (opts.agentWrites ?? 'confirm') === 'confirm' && confirm !== 'never';
-    const requiresConfirmation = confirm === 'always' || (confirm === 'agent' && who === 'agent') || agentConfirm;
-    const d = { verdict: { allowed: true, reason: `granted: ${g.actions.join(', ')} for ${principals.join(' and ')}` }, grant: g, requiresConfirmation };
-    if (!requiresConfirmation) return d;
-    best ??= d;
-  }
-  if (best) return best;
-  return { verdict: { allowed: false, reason: closest ?? `no grant allows ${action}` }, requiresConfirmation: false };
-}
+// The shared matcher lives in core (ADR 20); Work re-exports it under the names it always had.
+export { decideGrants, type GrantDecision, type GrantLike } from '@farsight/core';
 
 /** Verdict 1 — the consumer's policy. Pure; no call leaves the process. */
 export function evaluatePolicy(
