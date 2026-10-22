@@ -1,9 +1,9 @@
 // What one import collects as it reads: the tool's claims, the exchanges a report recorded, the cookie facts read
 // from their Set-Cookie lines, and every unknown with its pointer. An attribute observation is a fact about one line
 // of the supplied bytes; it is `stated` (inside the scope the caller said was tested) only when the report itself
-// records a well-formed request whose absolute target gives the origin, whose method agrees with the report, and both
-// are in the caller's stated scope. A response with no such request, an origin-form target, or a request that
-// disagrees with its record stays `unbound`: the manifest's origin is never borrowed to fill the gap.
+// records a well-formed request whose absolute target gives the origin (or ZAP's matching instance URI and Host
+// establish that claimed origin), whose method agrees with the report, and both are in the caller's stated scope.
+// Missing or inconsistent report evidence stays unbound: the manifest's origin is never borrowed to fill the gap.
 import { createHash } from 'node:crypto';
 import { COOKIE_PROPERTIES, ImportBudget, type CookieProperty, type ImportUnknownCode, type Json } from './types.js';
 import type { ImportManifest } from './manifest.js';

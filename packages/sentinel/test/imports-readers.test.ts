@@ -82,7 +82,7 @@ test('limits may be lowered but never raised past the ceilings', () => {
 
 test('strict JSON refuses what JSON.parse would quietly accept or guess', () => {
   assert.throws(() => json('{"a":1,"a":2}'), refusedWith('sentinel.import.jsonDuplicateKey'));
-  assert.throws(() => json('{"a":{"b":1,"b":1}}'), (e: any) => e.code === 'sentinel.import.jsonDuplicateKey' && e.pointer === '/a/b');
+  assert.throws(() => json('{"a":{"b":1,"b":1}}'), (e: any) => e.code === 'sentinel.import.jsonDuplicateKey' && e.pointer === '/0/1');
   assert.throws(() => json('{"a":1} x'), refusedWith('sentinel.import.jsonMalformed'));
   assert.throws(() => json('"\\ud800"'), refusedWith('sentinel.import.jsonMalformed'));
   assert.throws(() => json('"\\udc00\\ud800"'), refusedWith('sentinel.import.jsonMalformed'));

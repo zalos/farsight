@@ -52,14 +52,22 @@ function deepFreeze<T>(v: T, budget: ImportBudget): T {
   return v;
 }
 
-/** Normalizes report bytes under a manifest. Refusals carry a fixed code and at most a pointer, never report content. */
+/** Normalizes report bytes under a manifest. Refusals carry a fixed code and an opaque bounded diagnostic path, never report content. */
 export function normalizeImport(report: Uint8Array, manifest: Uint8Array, options: ImportOptions = {}): ImportResult {
   let budget: ImportBudget;
   try { budget = new ImportBudget(options.limits, options.clock); } catch (e) { return refused(e); }
   if (!(report instanceof Uint8Array) || !(manifest instanceof Uint8Array)) return { status: 'refused', code: 'sentinel.import.fileUnreadable', pointer: null };
-  const raw = Buffer.from(report);
-  const man = Buffer.from(manifest);
-  try { return run(raw, man, budget); } catch (e) { return refused(e); }
+  // Refuse before the defensive copy: the synchronous API must honor lowered byte caps too.
+  if (report.byteLength > budget.limits.rawBytes || manifest.byteLength > budget.limits.manifestBytes) {
+    return { status: 'refused', code: 'sentinel.import.tooLarge', pointer: null };
+  }
+  try {
+    budget.check();
+    const raw = Buffer.from(report);
+    const man = Buffer.from(manifest);
+    budget.check();
+    return run(raw, man, budget);
+  } catch (e) { return refused(e); }
 }
 
 /** Reads both files with the bounded reader, then normalizes them. */

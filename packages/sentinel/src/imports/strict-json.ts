@@ -78,7 +78,9 @@ class Parser {
       this.ws();
       if (this.s.charCodeAt(this.i) !== 0x22) this.fail('sentinel.import.jsonMalformed', ptr);
       const key = this.string(ptr);
-      const child = `${ptr}/${key.replace(/~/g, '~0').replace(/\//g, '~1')}`;
+      // Diagnostic paths carry member ordinals, never the report's private member names. The actual key is still
+      // used verbatim for duplicate detection and output, including __proto__ and U+FEFF string data.
+      const child = `${ptr}/${members}`;
       if (Object.hasOwn(out, key)) this.fail('sentinel.import.jsonDuplicateKey', child);
       if (++members > this.b.limits.objectMembers) throw new ImportRefusal('sentinel.import.budgetExhausted', ptr.slice(0, 256));
       this.ws();
@@ -113,14 +115,21 @@ class Parser {
     const parts: string[] = [];
     let length = 0;
     const add = (part: string) => {
-      length += part.length;
+      const bytes = Buffer.byteLength(part, 'utf8');
+      length += bytes;
       if (length > this.b.limits.stringBytes) throw new ImportRefusal('sentinel.import.budgetExhausted', ptr.slice(0, 256));
-      this.b.count('decodedStringBytes', part.length);
+      this.b.count('decodedStringBytes', bytes);
       parts.push(part);
     };
     for (;;) {
       RUN.lastIndex = this.i;
-      if (RUN.exec(this.s)) { add(this.s.slice(this.i, RUN.lastIndex)); this.i = RUN.lastIndex; continue; }
+      if (RUN.exec(this.s)) {
+        let end = RUN.lastIndex;
+        // Do not charge a raw surrogate pair as two replacement characters when a bounded run divides it.
+        const last = this.s.charCodeAt(end - 1), next = this.s.charCodeAt(end);
+        if (last >= 0xd800 && last <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) end++;
+        add(this.s.slice(this.i, end)); this.i = end; continue;
+      }
       const c = this.s.charCodeAt(this.i);
       if (c === 0x22) { this.i++; return parts.length === 1 ? parts[0]! : parts.join(''); }
       if (c !== 0x5c) this.fail('sentinel.import.jsonMalformed', ptr);

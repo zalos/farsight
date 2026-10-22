@@ -4,9 +4,10 @@
 // source or an owner, places a location in source, or counts as a check Sentinel executed; that is a later, reviewed
 // stage. Every limit is global per import and every exhaustion is a refusal, never a shorter result labelled complete.
 // The limits are cooperative: the work is counted and the clock read inside every long loop, which bounds what this
-// code does; it is not preemptive I/O or memory enforcement.
+// code does; it is not preemptive I/O or memory enforcement. objectMembers is per object; jsonValues, decoded
+// UTF-8 string bytes and work bound the aggregate document.
 
-/** Why a whole import is refused. Fixed codes and a JSON pointer at most: never a value taken from the report. */
+/** Why a whole import is refused. Fixed codes and a bounded opaque diagnostic path: never a member name or value from the report. */
 export const IMPORT_REFUSAL_CODES = Object.freeze([
   'sentinel.import.fileUnreadable', 'sentinel.import.notRegularFile', 'sentinel.import.linkRefused', 'sentinel.import.hardLinkRefused',
   'sentinel.import.fileChanged', 'sentinel.import.tooLarge', 'sentinel.import.archiveUnsupported', 'sentinel.import.invalidUtf8',
@@ -41,7 +42,7 @@ export const IMPORT_FORMATS = Object.freeze(['sarif-2.1.0', 'zap-traditional-jso
 export type ImportFormat = typeof IMPORT_FORMATS[number];
 
 /** The adapter's own identity: a different version may read the same bytes differently, so it is part of the output. */
-export const IMPORT_ADAPTER = Object.freeze({ id: 'sentinel.import.reports', version: '1' });
+export const IMPORT_ADAPTER = Object.freeze({ id: 'sentinel.import.reports', version: '2' });
 
 /** The three attributes a Set-Cookie line can show. Integrity and confidentiality are never derived from a report. */
 export const COOKIE_PROPERTIES = Object.freeze(['cookie-secure', 'cookie-http-only', 'cookie-same-site'] as const);
@@ -72,8 +73,15 @@ export const IMPORT_CEILINGS = Object.freeze({
 export type ImportLimits = { -readonly [K in keyof typeof IMPORT_CEILINGS]: number };
 
 export class ImportRefusal extends Error {
-  constructor(readonly code: ImportRefusalCode, readonly pointer: string | null = null) {
-    super(pointer === null ? code : `${code} at ${pointer.slice(0, 256)}`);
+  readonly pointer: string | null;
+
+  constructor(readonly code: ImportRefusalCode, pointer: string | null = null) {
+    // Diagnostics never echo member names, including names supplied to this constructor directly. Only numeric
+    // positions survive; all member segments are opaque. Bound before splitting as well as on the stored property.
+    const safe = pointer === null ? null : pointer.slice(0, 256).split('/').map((part, i) =>
+      i === 0 && part === '' ? '' : /^[0-9]{1,10}$/.test(part) ? part : '*').join('/').slice(0, 256);
+    super(safe === null ? code : `${code} at ${safe}`);
+    this.pointer = safe;
     this.name = 'ImportRefusal';
   }
 }
@@ -91,7 +99,7 @@ export class ImportBudget {
   constructor(limits: Partial<ImportLimits> = {}, clock: () => bigint = process.hrtime.bigint) {
     const merged = { ...IMPORT_CEILINGS } as ImportLimits;
     for (const [k, v] of Object.entries(limits) as [keyof ImportLimits, number][]) {
-      if (!(k in IMPORT_CEILINGS) || !Number.isSafeInteger(v) || v < 0) throw new ImportRefusal('sentinel.import.budgetExhausted');
+      if (!Object.hasOwn(IMPORT_CEILINGS, k) || !Number.isSafeInteger(v) || v < 0) throw new ImportRefusal('sentinel.import.budgetExhausted');
       merged[k] = Math.min(v, IMPORT_CEILINGS[k]);
     }
     this.limits = Object.freeze(merged);

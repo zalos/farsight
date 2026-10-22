@@ -8,7 +8,7 @@
 // the cached one; no external property file, schema or URL is ever read.
 import { canonicalJson } from '@farsight/graph';
 import { Collector, bounded, type RequestInfo, type ResponseInfo } from './collect.js';
-import { TOKEN, originOf, validFieldValue } from './http.js';
+import { TOKEN, hostAgrees, originOf, validFieldValue } from './http.js';
 import { ImportRefusal, isObject, type ImportUnknownCode, type Json, type JsonObject } from './types.js';
 
 // Property names per object, SARIF 2.1.0 §3 (properties bags anywhere). `I` = interpreted here; the rest are ignored.
@@ -21,13 +21,13 @@ const SPEC: Record<string, { readonly all: readonly string[]; readonly read: rea
       'policies', 'webRequests', 'webResponses', 'specialLocations', 'properties'],
     read: ['tool', 'artifacts', 'results', 'externalPropertyFileReferences', 'webRequests', 'webResponses'],
   },
-  tool: { all: ['driver', 'extensions', 'properties'], read: ['driver'] },
+  tool: { all: ['driver', 'extensions', 'properties'], read: ['driver', 'extensions'] },
   component: {
     all: ['guid', 'name', 'organization', 'product', 'productSuite', 'shortDescription', 'fullDescription', 'fullName', 'version',
       'semanticVersion', 'dottedQuadFileVersion', 'releaseDateUtc', 'downloadUri', 'informationUri', 'globalMessageStrings', 'notifications',
       'rules', 'taxa', 'locations', 'language', 'contents', 'isComprehensive', 'localizedDataSemanticVersion',
       'minimumRequiredLocalizedDataSemanticVersion', 'associatedComponent', 'translationMetadata', 'supportedTaxonomies', 'properties'],
-    read: ['name', 'version', 'semanticVersion', 'rules'],
+    read: ['guid', 'name', 'version', 'semanticVersion', 'rules'],
   },
   rule: {
     all: ['id', 'deprecatedIds', 'guid', 'deprecatedGuids', 'name', 'deprecatedNames', 'shortDescription', 'fullDescription',
@@ -41,7 +41,8 @@ const SPEC: Record<string, { readonly all: readonly string[]; readonly read: rea
       'webRequest', 'webResponse', 'properties'],
     read: ['ruleId', 'ruleIndex', 'rule', 'kind', 'level', 'message', 'locations', 'webRequest', 'webResponse'],
   },
-  ruleRef: { all: ['id', 'index', 'guid', 'toolComponent', 'properties'], read: ['id', 'index'] },
+  ruleRef: { all: ['id', 'index', 'guid', 'toolComponent', 'properties'], read: ['id', 'index', 'toolComponent'] },
+  componentRef: { all: ['name', 'index', 'guid', 'properties'], read: ['name', 'index', 'guid'] },
   message: { all: ['text', 'markdown', 'id', 'arguments', 'properties'], read: ['text'] },
   location: { all: ['id', 'physicalLocation', 'logicalLocations', 'message', 'annotations', 'relationships', 'properties'], read: ['physicalLocation'] },
   physicalLocation: { all: ['address', 'artifactLocation', 'region', 'contextRegion', 'properties'], read: ['artifactLocation', 'region'] },
@@ -56,10 +57,10 @@ const SPEC: Record<string, { readonly all: readonly string[]; readonly read: rea
       'lastModifiedTimeUtc', 'description', 'properties'],
     read: ['location', 'hashes'],
   },
-  webRequest: { all: ['index', 'protocol', 'version', 'target', 'method', 'headers', 'parameters', 'body', 'properties'], read: ['index', 'protocol', 'target', 'method', 'headers'] },
+  webRequest: { all: ['index', 'protocol', 'version', 'target', 'method', 'headers', 'parameters', 'body', 'properties'], read: ['index', 'protocol', 'version', 'target', 'method', 'headers'] },
   webResponse: {
     all: ['index', 'protocol', 'version', 'statusCode', 'reasonPhrase', 'headers', 'body', 'noResponseReceived', 'properties'],
-    read: ['index', 'protocol', 'statusCode', 'headers', 'noResponseReceived'],
+    read: ['index', 'protocol', 'version', 'statusCode', 'headers', 'noResponseReceived'],
   },
 };
 const LEVELS = ['none', 'note', 'warning', 'error'];
@@ -74,7 +75,7 @@ function object(c: Collector, v: Json | undefined, kind: string, pointer: string
   const spec = SPEC[kind]!;
   for (const k of Object.keys(v)) {
     c.budget.work();
-    if (!spec.all.includes(k)) malformed(`${pointer}/${k}`);
+    if (!spec.all.includes(k)) malformed(pointer);
     if (!spec.read.includes(k)) c.ignore(`sarif.${kind}`, k);
   }
   return v;
@@ -98,17 +99,19 @@ export function readSarif(doc: Json, c: Collector): Json {
     const run = object(c, runValue, 'run', rp);
     const tool = object(c, run.tool, 'tool', `${rp}/tool`);
     const driver = object(c, tool.driver, 'component', `${rp}/tool/driver`);
-    const name = optionalString(driver, 'name', `${rp}/tool/driver`, 256);
-    const version = optionalString(driver, 'version', `${rp}/tool/driver`, 256);
-    const semanticVersion = optionalString(driver, 'semanticVersion', `${rp}/tool/driver`, 256);
+    const name = optionalString(driver, 'name', `${rp}/tool/driver`, Number.MAX_SAFE_INTEGER);
+    const version = optionalString(driver, 'version', `${rp}/tool/driver`, Number.MAX_SAFE_INTEGER);
+    const semanticVersion = optionalString(driver, 'semanticVersion', `${rp}/tool/driver`, Number.MAX_SAFE_INTEGER);
     compareProducer(c, `${rp}/tool/driver`, name, version ?? semanticVersion);
-    tools.push({ pointer: `${rp}/tool/driver`, name, version, semanticVersion });
+    tools.push({ pointer: `${rp}/tool/driver`, name: name === null ? null : bounded(name, 256),
+      version: version === null ? null : bounded(version, 256), semanticVersion: semanticVersion === null ? null : bounded(semanticVersion, 256) });
     if (run.externalPropertyFileReferences !== undefined) c.unknown(`${rp}/externalPropertyFileReferences`, 'sentinel.import.externalProperties');
 
-    const ruleIds: (string | null)[] = [];
-    if (driver.rules !== undefined) list(driver.rules, `${rp}/tool/driver/rules`).forEach((r, i) => {
-      const rule = object(c, r, 'rule', `${rp}/tool/driver/rules/${i}`);
-      ruleIds.push(typeof rule.id === 'string' ? rule.id : malformed(`${rp}/tool/driver/rules/${i}/id`));
+    const driverRules = componentRules(c, driver, `${rp}/tool/driver`);
+    const extensions = tool.extensions === undefined ? [] : list(tool.extensions, `${rp}/tool/extensions`).map((v, i) => {
+      const p = `${rp}/tool/extensions/${i}`;
+      const component = object(c, v, 'component', p);
+      return { component, rules: componentRules(c, component, p) };
     });
     const artifacts = run.artifacts === undefined ? [] : list(run.artifacts, `${rp}/artifacts`).map((a, i) => {
       const art = object(c, a, 'artifact', `${rp}/artifacts/${i}`);
@@ -136,7 +139,7 @@ export function readSarif(doc: Json, c: Collector): Json {
       const message = result.message === undefined ? undefined : object(c, result.message, 'message', `${p}/message`);
       const text = message ? optionalString(message, 'text', `${p}/message`, Number.MAX_SAFE_INTEGER) : null;
       c.claim(p, {
-        format: 'sarif-2.1.0', run: ri, ruleId: ruleId(c, result, ruleIds, p), level, kind,
+        format: 'sarif-2.1.0', run: ri, ruleId: ruleId(c, result, driverRules, extensions, p), level, kind,
         messageDigest: text === null ? null : c.digest(text),
         locations: result.locations === undefined ? [] : list(result.locations, `${p}/locations`).map((l, li) => location(c, l, artifacts, `${p}/locations/${li}`)),
       });
@@ -165,23 +168,54 @@ function compareProducer(c: Collector, pointer: string, name: string | null, ver
   }
 }
 
-function ruleId(c: Collector, result: JsonObject, ruleIds: readonly (string | null)[], p: string): string | null {
-  const stated: string[] = [];
-  if (result.ruleId !== undefined) stated.push(typeof result.ruleId === 'string' ? result.ruleId : malformed(`${p}/ruleId`));
+/** Rule metadata is local to its actual component. Unknown components never fall back to driver rules. */
+function componentRules(c: Collector, component: JsonObject, p: string): readonly string[] {
+  for (const k of ['name', 'guid', 'version', 'semanticVersion']) optionalString(component, k, p, Number.MAX_SAFE_INTEGER);
+  return component.rules === undefined ? [] : list(component.rules, `${p}/rules`).map((v, i) => {
+    const rule = object(c, v, 'rule', `${p}/rules/${i}`);
+    return typeof rule.id === 'string' ? rule.id : malformed(`${p}/rules/${i}/id`);
+  });
+}
+
+function ruleId(c: Collector, result: JsonObject, driverRules: readonly string[],
+  extensions: readonly { component: JsonObject; rules: readonly string[] }[], p: string): string | null {
+  const explicit: string[] = [];
+  const descriptors: string[] = [];
+  if (result.ruleId !== undefined) explicit.push(typeof result.ruleId === 'string' ? result.ruleId : malformed(`${p}/ruleId`));
+  const indexId = (index: Json, rules: readonly string[] | undefined, pointer: string) => {
+    const id = nonNegative(index) ? rules?.[index] : undefined;
+    if (id === undefined) c.unknown(pointer, 'sentinel.import.referenceUnresolved'); else descriptors.push(id);
+  };
   if (result.rule !== undefined) {
     const ref = object(c, result.rule, 'ruleRef', `${p}/rule`);
-    if (ref.id !== undefined) stated.push(typeof ref.id === 'string' ? ref.id : malformed(`${p}/rule/id`));
-    if (ref.index !== undefined) {
-      const id = nonNegative(ref.index) ? ruleIds[ref.index] : undefined;
-      if (id === undefined || id === null) c.unknown(`${p}/rule/index`, 'sentinel.import.referenceUnresolved'); else stated.push(id);
+    if (ref.id !== undefined) explicit.push(typeof ref.id === 'string' ? ref.id : malformed(`${p}/rule/id`));
+    let rules: readonly string[] | undefined = driverRules;
+    if (ref.toolComponent !== undefined) {
+      const component = object(c, ref.toolComponent, 'componentRef', `${p}/rule/toolComponent`);
+      const name = optionalString(component, 'name', `${p}/rule/toolComponent`, Number.MAX_SAFE_INTEGER);
+      const guid = optionalString(component, 'guid', `${p}/rule/toolComponent`, Number.MAX_SAFE_INTEGER);
+      // An index in toolComponent addresses tool.extensions, never the driver. Name/guid-only component references
+      // are left unresolved in this bounded adapter; their explicit rule ID remains an imported claim.
+      const selected = nonNegative(component.index) ? extensions[component.index] : undefined;
+      if (!selected) {
+        rules = undefined;
+        c.unknown(`${p}/rule/toolComponent`, 'sentinel.import.referenceUnresolved');
+      } else if ((name !== null && selected.component.name !== name) || (guid !== null && selected.component.guid !== guid)) {
+        rules = undefined;
+        c.unknown(`${p}/rule/toolComponent`, 'sentinel.import.referenceConflict');
+      } else rules = selected.rules;
     }
+    if (ref.index !== undefined) indexId(ref.index, rules, `${p}/rule/index`);
   }
-  if (result.ruleIndex !== undefined) {
-    const id = nonNegative(result.ruleIndex) ? ruleIds[result.ruleIndex] : undefined;
-    if (id === undefined || id === null) c.unknown(`${p}/ruleIndex`, 'sentinel.import.referenceUnresolved'); else stated.push(id);
-  }
-  if (new Set(stated).size > 1) { c.unknown(`${p}/ruleId`, 'sentinel.import.referenceConflict'); return null; }
-  return stated[0] === undefined ? null : bounded(stated[0], 256);
+  if (result.ruleIndex !== undefined) indexId(result.ruleIndex, driverRules, `${p}/ruleIndex`);
+  const id = explicit[0];
+  // ruleId and rule.id must agree. An indexed descriptor may name the parent of a hierarchical result ID.
+  const conflict = new Set(explicit).size > 1 || (id === undefined
+    ? new Set(descriptors).size > 1
+    : descriptors.some(parent => id !== parent && !(id.startsWith(`${parent}/`) && id.slice(parent.length + 1).split('/').every(part => part.length > 0))));
+  if (conflict) { c.unknown(`${p}/ruleId`, 'sentinel.import.referenceConflict'); return null; }
+  const resolved = id ?? descriptors[0];
+  return resolved === undefined ? null : bounded(resolved, 256);
 }
 
 /** A location as the tool stated it, never placed: Stage A has no captured source to place it in. */
@@ -276,11 +310,21 @@ function headers(c: Collector, o: JsonObject, p: string): { name: string; lower:
   });
 }
 
+function headersOk(c: Collector, hs: readonly { name: string; value: string }[]): boolean {
+  return hs.every(h => {
+    c.budget.work(Math.ceil((h.name.length + h.value.length) / 64) + 1);
+    return Buffer.byteLength(h.name, 'utf8') + 2 + Buffer.byteLength(h.value, 'utf8') <= c.budget.limits.headerLineBytes
+      && TOKEN.test(h.name) && validFieldValue(h.value);
+  });
+}
+
 function protocolOk(o: JsonObject, p: string): boolean {
   const v = o.protocol;
-  if (v === undefined) return true;
-  if (typeof v !== 'string') return malformed(`${p}/protocol`);
-  return v.toUpperCase() === 'HTTP' || v.toUpperCase() === 'HTTPS';
+  if (v !== undefined && typeof v !== 'string') return malformed(`${p}/protocol`);
+  const version = o.version;
+  if (version !== undefined && (typeof version !== 'string' || !/^[0-9]+(?:\.[0-9]+)?$/.test(version))) return malformed(`${p}/version`);
+  return (v === undefined || v.toUpperCase() === 'HTTP' || v.toUpperCase() === 'HTTPS')
+    && (version === undefined || version === '1.0' || version === '1.1');
 }
 
 function request(c: Collector, o: JsonObject, p: string): RequestInfo {
@@ -290,7 +334,8 @@ function request(c: Collector, o: JsonObject, p: string): RequestInfo {
   const target = o.target;
   if (typeof method !== 'string' || typeof target !== 'string' || method.length > 32 || !TOKEN.test(method)
     || target.length > 8192 || !/^[\x21-\x7e]+$/.test(target)) return { ok: false, reason: 'sentinel.import.requestMalformed' };
-  if (hs.some(h => !TOKEN.test(h.name) || !validFieldValue(h.value))) return { ok: false, reason: 'sentinel.import.headerMalformed' };
+  if (!headersOk(c, hs)) return { ok: false, reason: 'sentinel.import.headerMalformed' };
+  if (originOf(target) !== undefined && !hostAgrees(hs, target, false)) return { ok: false, reason: 'sentinel.import.requestInconsistent' };
   const cookies = hs.filter(h => h.lower === 'cookie');
   if (cookies.length > 1) return { ok: false, reason: 'sentinel.import.headerAmbiguous' };
   return { ok: true, method, target, origin: originOf(target), cookieHeaders: cookies.map(h => h.value) };
@@ -303,7 +348,7 @@ function response(c: Collector, o: JsonObject, p: string): ResponseInfo {
   if (!protocolOk(o, p)) return { ok: false, reason: 'sentinel.import.versionUnsupported' };
   const status = o.statusCode;
   if (typeof status !== 'number' || !Number.isSafeInteger(status) || status < 100 || status > 599) return { ok: false, reason: 'sentinel.import.statusMalformed' };
-  if (hs.some(h => !TOKEN.test(h.name))) return { ok: false, reason: 'sentinel.import.headerMalformed' };
+  if (!headersOk(c, hs)) return { ok: false, reason: 'sentinel.import.headerMalformed' };
   // A headers object holds one value per name, so several Set-Cookie lines can only appear folded or under names that
   // differ in case: both are ambiguous. One value is one line, and the strict cookie reader decides the comma.
   const set = hs.filter(h => h.lower === 'set-cookie');

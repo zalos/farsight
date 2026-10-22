@@ -103,6 +103,8 @@ test('ZAP plus: a request that disagrees with its instance, or lies outside the 
   assert.deepEqual(Object.values(a).map((o: any) => [o.outcome, o.scope, o.scopeReason]), Array(3).fill(['present', 'unbound', 'sentinel.import.requestInconsistent']));
   const originForm = clone(plus);
   originForm.site[0].alerts[0].instances[0]['request-header'] = 'POST /login HTTP/1.1\r\nHost: app.example.test\r\n\r\n';
+  assert.equal(facts(ok(originForm, plusManifest).document, 'sid')['cookie-secure'].scope, 'stated', 'request target, Host and instance URI agree');
+  originForm.site[0].alerts[0].instances[0]['request-header'] = 'POST /elsewhere HTTP/1.1\r\nHost: app.example.test\r\n\r\n';
   assert.equal(facts(ok(originForm, plusManifest).document, 'sid')['cookie-secure'].scopeReason, 'sentinel.import.requestInconsistent');
   const elsewhere = { ...plusManifest, tested: { ...plusManifest.tested, origins: ['https://other.example.test'] } };
   assert.equal(facts(ok(plus, elsewhere).document, 'sid')['cookie-secure'].scopeReason, 'sentinel.import.outsideStatedScope');
@@ -248,10 +250,10 @@ test('refusals carry a code and pointer, never report content', () => {
   secret.runs[0].results[0].level = 'synthetic-secret-token';
   const r = run(secret, sarifManifest);
   refused(r, 'sentinel.import.formatMalformed');
-  assert.equal(r.pointer, '/runs/0/results/0/level');
+  assert.equal(r.pointer, '/*/0/*/0/*');
   assert.doesNotMatch(JSON.stringify(r), /synthetic-secret-token/);
   const dupe = run('{"version":"2.1.0","runs":[],"runs":[]}', sarifManifest);
-  assert.deepEqual([dupe.code, dupe.pointer], ['sentinel.import.jsonDuplicateKey', '/runs']);
+  assert.deepEqual([dupe.code, dupe.pointer], ['sentinel.import.jsonDuplicateKey', '/2']);
 });
 
 test('the caller’s buffers are copied: changing them afterwards changes nothing already read', () => {

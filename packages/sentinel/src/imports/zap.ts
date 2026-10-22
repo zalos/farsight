@@ -8,7 +8,7 @@
 // producer stays unknown, never assumed. `@generated` and `created` are when the report was made, not when any message
 // was observed. Sequence steps are pass/fail claims of the tool and are never read as exchanges.
 import { Collector, bounded, type RequestInfo, type ResponseInfo } from './collect.js';
-import { originOf, parseHead, parseRequestLine, parseStatusLine, type RequestLine, type StatusLine } from './http.js';
+import { hostAgrees, originOf, parseHead, parseRequestLine, parseStatusLine, type RequestLine, type StatusLine } from './http.js';
 import { ImportRefusal, isObject, type Json, type JsonObject } from './types.js';
 
 const PAYLOAD = ['request-header', 'request-body', 'response-header', 'response-body'];
@@ -36,7 +36,7 @@ function object(c: Collector, v: Json | undefined, kind: string, pointer: string
   for (const k of Object.keys(v)) {
     c.budget.work();
     if (!plus && kind === 'instance' && PAYLOAD.includes(k)) throw new ImportRefusal('sentinel.import.formatMismatch', `${pointer}/${k}`.slice(0, 256));
-    if (!spec.all.includes(k)) malformed(`${pointer}/${k}`);
+    if (!spec.all.includes(k)) malformed(pointer);
     if (!spec.read.includes(k)) c.ignore(`zap.${kind}`, k);
   }
   return v;
@@ -52,8 +52,8 @@ function text(o: JsonObject, k: string, pointer: string, max = 1024): string | n
 export function readZap(doc: Json, c: Collector, plus: boolean): Json {
   if (!isObject(doc) || !Array.isArray(doc.site)) throw new ImportRefusal('sentinel.import.formatMismatch', '/site');
   const report = object(c, doc, 'report', '', plus);
-  const programName = text(report, '@programName', '', 256);
-  const version = text(report, '@version', '', 256);
+  const programName = text(report, '@programName', '', Number.MAX_SAFE_INTEGER);
+  const version = text(report, '@version', '', Number.MAX_SAFE_INTEGER);
   const want = c.manifest.producer;
   if (want.name !== null) {
     if (programName === null) c.unknown('/@programName', 'sentinel.import.producerUnknown');
@@ -109,7 +109,7 @@ export function readZap(doc: Json, c: Collector, plus: boolean): Json {
         if (!isObject(m)) return malformed(`${p}/${side}`);
         for (const k of Object.keys(m)) {
           if (!plus && PAYLOAD.includes(k)) throw new ImportRefusal('sentinel.import.formatMismatch', `${p}/${side}/${k}`);
-          if (!['uri', 'method', ...PAYLOAD].includes(k) || typeof m[k] !== 'string') malformed(`${p}/${side}/${k}`);
+          if (!['uri', 'method', ...PAYLOAD].includes(k) || typeof m[k] !== 'string') malformed(`${p}/${side}`);
         }
       }
       steps++;
@@ -118,7 +118,7 @@ export function readZap(doc: Json, c: Collector, plus: boolean): Json {
   });
 
   return {
-    programName, version,
+    programName: programName === null ? null : bounded(programName, 256), version: version === null ? null : bounded(version, 256),
     generatedClaim: text(report, '@generated', '', 64), createdClaim: text(report, 'created', '', 64),
     sequenceSteps: steps,
   };
@@ -132,9 +132,9 @@ function exchange(c: Collector, inst: JsonObject, ip: string, uri: string | null
   if (typeof rh === 'string') {
     const head = parseHead<RequestLine>(rh, parseRequestLine, c.budget);
     if (!head.ok) request = { ok: false, reason: head.code };
-    else if (head.start.method !== method || head.start.target !== uri) request = { ok: false, reason: 'sentinel.import.requestInconsistent' };
+    else if (head.start.method !== method || !consistentTarget(head.start.target, uri, head.headers)) request = { ok: false, reason: 'sentinel.import.requestInconsistent' };
     else request = {
-      ok: true, method: head.start.method, target: head.start.target, origin: originOf(head.start.target),
+      ok: true, method: head.start.method, target: head.start.target, origin: originOf(uri!),
       cookieHeaders: head.headers.filter(h => h.lower === 'cookie').map(h => h.value),
     };
   } else request = { ok: false, reason: 'sentinel.import.missingHeader' };
@@ -146,4 +146,13 @@ function exchange(c: Collector, inst: JsonObject, ip: string, uri: string | null
       : { ok: false, reason: head.code };
   } else response = { ok: false, reason: 'sentinel.import.missingHeader' };
   c.exchange(ip, 'zap-instance', request, response);
+}
+
+/** An origin-form request is consistent only with the absolute instance URI AND its single recorded Host. */
+function consistentTarget(target: string, uri: string | null, headers: readonly import('./http.js').HeaderLine[]): boolean {
+  if (uri === null || originOf(uri) === undefined || uri.includes('#')) return false;
+  if (target === uri) return hostAgrees(headers, uri, false);
+  if (!target.startsWith('/') || target.startsWith('//') || target.includes('#')) return false;
+  const absolute = new URL(uri);
+  return target === `${absolute.pathname}${absolute.search}` && hostAgrees(headers, uri, true);
 }

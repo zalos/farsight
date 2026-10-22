@@ -47,7 +47,7 @@ export function parseHead<T>(text: string, first: (line: string) => T | ImportUn
   budget.count('headerLines', lines.length);
   for (const line of lines) {
     if (line.includes('\r') || line.includes('\n')) return { ok: false, code: 'sentinel.import.headerMalformed' };
-    if (line.length > budget.limits.headerLineBytes) return { ok: false, code: 'sentinel.import.headerMalformed' };
+    if (Buffer.byteLength(line, 'utf8') > budget.limits.headerLineBytes) return { ok: false, code: 'sentinel.import.headerMalformed' };
   }
   const start = first(lines[0]!);
   if (typeof start === 'string') return { ok: false, code: start as ImportUnknownCode };
@@ -81,4 +81,20 @@ export function originOf(target: string): string | undefined {
 /** A canonical origin as a manifest must state it: `scheme://host[:port]`, exactly as URL serializes it. */
 export function isCanonicalOrigin(origin: string): boolean {
   return typeof origin === 'string' && origin.length <= 512 && originOf(origin) === origin;
+}
+
+/** A supplied Host must agree with the recorded absolute target. Missing Host is allowed for absolute-form claims;
+ * origin-form needs exactly one. Duplicate or contradictory Host is conservative report inconsistency, not an RFC
+ * invalidity judgment. This only compares report fields and never reads an origin from the caller's manifest. */
+export function hostAgrees(headers: readonly HeaderLine[], target: string, required: boolean): boolean {
+  const hosts = headers.filter(h => h.lower === 'host');
+  if (hosts.length === 0) return !required;
+  if (hosts.length !== 1) return false;
+  let absolute: URL;
+  try { absolute = new URL(target); } catch { return false; }
+  const host = hosts[0]!.value;
+  if (!/^[\x21-\x7e]+$/.test(host) || /[/?#@\\]/.test(host)) return false;
+  // Compare canonical authorities (case and default ports), without accepting path/userinfo normalization.
+  const origin = originOf(`${absolute.protocol}//${host}`);
+  return origin !== undefined && origin === absolute.origin;
 }
