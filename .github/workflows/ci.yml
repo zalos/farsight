@@ -208,6 +208,39 @@ jobs:
           grep -qx '# skipped 0' recovery.tap || { echo "::error::a recovery test was skipped"; exit 1; }
           grep -qx '# fail 0' recovery.tap && grep -qx '# cancelled 0' recovery.tap
 
+  # Sentinel's command line, local socket and background service (PR 09) on Linux: native amd64, the runner's
+  # non-root user, Node from .nvmrc. The owner-only socket and private-state checks only mean something as a
+  # non-root user, and the detached service, its kill-and-resume test and the rule lock need a qualified store, so
+  # the job fails if it runs as root or if any test was skipped.
+  sentinel-service:
+    name: sentinel-service
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.sentinel != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build Sentinel and its workspace closure
+        run: pnpm --filter '@farsight/sentinel...' build
+      - name: Socket, CLI, detached service and rule lock as a non-root user, nothing skipped
+        working-directory: packages/sentinel
+        run: |
+          set -o pipefail
+          test "$(id -u)" != 0 || { echo "::error::the service tests must run as a non-root user"; exit 1; }
+          test "$(uname -m)" = x86_64 || { echo "::error::the service tests must run on native amd64"; exit 1; }
+          umask 022
+          node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=300000 \
+            --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=service.tap \
+            test/cli-prework.test.ts test/service-detached.test.ts test/cli-preview-e2e.test.ts test/cli-rules.test.ts
+          grep -qx '# skipped 0' service.tap || { echo "::error::a service test was skipped"; exit 1; }
+          grep -qx '# fail 0' service.tap && grep -qx '# cancelled 0' service.tap
+
   e2e:
     name: e2e
     needs: changes
