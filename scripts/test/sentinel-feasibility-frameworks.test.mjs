@@ -61,11 +61,12 @@ test('every probe container runs as the unprivileged run UID, never root', () =>
   assert.ok(OWNER_LABEL.length > 0 && !OWNER_LABEL.includes(' '));
 });
 
-test('runHasFailures is true only for a failed or mismatched case', () => {
+test('runHasFailures rejects missing, empty, failed or mismatched cases', () => {
   assert.equal(runHasFailures({ cases: [{ state: 'measured' }] }), false);
   assert.equal(runHasFailures({ cases: [{ state: 'measured' }, { state: 'failed' }] }), true);
   assert.equal(runHasFailures({ cases: [{ state: 'measured-with-mismatch' }] }), true);
-  assert.equal(runHasFailures({}), false);
+  assert.equal(runHasFailures({}), true);
+  assert.equal(runHasFailures({ cases: [] }), true);
 });
 
 test('the corpus index loads, and every case file hash matches its fixture bytes', async () => {
