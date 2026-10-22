@@ -27,6 +27,37 @@ export function packageOf(file: JavaFile): string {
   return decl ? decl.text.replace(/^package\s+/, '').replace(/;\s*$/, '').replace(/\s+/g, '') : '';
 }
 
+/** Erase each balanced argument group without erasing member-name segments between groups. Comments and quoted
+ * annotation values are lexical contents, so their angle brackets cannot close an argument group. */
+function eraseTypeArguments(written: string): string | undefined {
+  let depth = 0;
+  let text = '';
+  for (let i = 0; i < written.length; i++) {
+    const c = written[i]!;
+    if (c === '/' && written[i + 1] === '*') {
+      const end = written.indexOf('*/', i + 2);
+      if (end < 0) return undefined;
+      i = end + 1;
+    } else if (c === '/' && written[i + 1] === '/') {
+      const end = written.indexOf('\n', i + 2);
+      i = end < 0 ? written.length : end;
+    } else if (c === '"' || c === "'") {
+      if (depth === 0) return undefined;
+      let closed = false;
+      while (++i < written.length) {
+        if (written[i] === '\\') i++;
+        else if (written[i] === c) { closed = true; break; }
+      }
+      if (!closed) return undefined;
+    } else if (c === '<') depth++;
+    else if (c === '>') {
+      if (depth === 0) return undefined;
+      depth--;
+    } else if (depth === 0) text += c;
+  }
+  return depth === 0 ? text : undefined;
+}
+
 export class TypeIndex {
   private readonly byFqn = new Map<string, Declared[]>();
   private readonly bySimple = new Map<string, Declared[]>();
@@ -70,7 +101,9 @@ export class TypeIndex {
 
   /** Resolves a type or annotation name as written in `file`. */
   resolve(file: JavaFile, written: string): Resolved {
-    const text = written.replace(/<[\s\S]*>/g, '').replace(/\[\s*\]/g, '').replace(/^@/, '').replace(/\s+/g, '');
+    const erased = eraseTypeArguments(written);
+    if (erased === undefined) return { kind: 'unknown' };
+    const text = erased.replace(/\[\s*\]/g, '').replace(/^@/, '').replace(/\s+/g, '');
     const one = (list: Declared[] | undefined): Resolved | undefined =>
       list?.length === 1 ? { kind: 'captured', decl: list[0]! } : list && list.length > 1 ? { kind: 'unknown' } : undefined;
     if (text.includes('.')) {
@@ -164,7 +197,10 @@ export class TypeIndex {
    * declarations: the answer may be too wide, never too narrow.
    */
   private supertypeCandidates(file: JavaFile, written: string): Declared[] {
-    const text = written.replace(/<[\s\S]*>/g, '').replace(/\s+/g, '');
+    const erased = eraseTypeArguments(written);
+    // An unsupported spelling cannot prove the absence of an inherited shadow. Over-approximate captured parents.
+    if (erased === undefined) return [...this.byFqn.values()].flat();
+    const text = erased.replace(/\s+/g, '');
     const parts = text.split('.');
     const simple = (name: string): Declared[] => {
       const imp = this.imports.get(file);

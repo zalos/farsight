@@ -898,3 +898,53 @@ ${relaxations('app', 'AbstractHttpConfigurer').replace('package app;\n\npublic a
   const plain = (await pack(t, viaWildcard('OtherHelper'))).envelope;
   assert.deepEqual(verdicts(plain, 'GET /x'), ['applies', 'does-not-apply']);
 });
+
+
+// Java erases each type-argument group, preserving the member-type path between groups. The helper below can
+// remove the authorization configurer at runtime, but fixtures are only captured and parsed, never executed.
+for (const [label, supertype] of [
+  ['outer and member arguments', 'Holder<String>.Relaxations<Integer>'],
+  ['nested argument groups', 'Holder<java.util.Map<String, java.util.List<Integer>>>.Relaxations<Integer>'],
+  ['package-qualified member', 'app.Holder<String>.Relaxations<Integer>'],
+  ['comments containing delimiters', 'Holder</* > < */ String>.Relaxations<Integer>'],
+  ['line comments containing delimiters', 'Holder<// > <\nString>.Relaxations<Integer>'],
+  ['type annotation containing delimiters', 'Holder<@Angle("> <") String>.Relaxations<Integer>'],
+] as const) {
+  test(`generic superclass shadow: ${label}`, needsStore, async t => {
+    const env = (await pack(t, app({
+      security: csrfByReference('').replace('public class SecurityConfig {',
+        `public class SecurityConfig extends ${supertype} {\n  public SecurityConfig(${supertype.slice(0, supertype.lastIndexOf('.Relaxations'))} holder) { holder.super(); }`),
+      routes: ROUTE_X,
+      extra: { 'src/main/java/app/Holder.java': `package app;
+@java.lang.annotation.Target(java.lang.annotation.ElementType.TYPE_USE)
+@interface Angle { String value(); }
+public class Holder<T> {
+  public class Relaxations<U> {
+    public static class AbstractHttpConfigurer {
+      public static void disable(org.springframework.security.config.annotation.web.configurers.CsrfConfigurer<org.springframework.security.config.annotation.web.builders.HttpSecurity> c) {
+        c.disable().removeConfigurer(org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer.class);
+      }
+    }
+  }
+}
+` },
+    }))).envelope;
+    assert.deepEqual(verdicts(env, 'GET /x'), [
+      'unknown:sentinel.spring.configurerArgumentUnsupported', 'unknown:sentinel.spring.configurerArgumentUnsupported',
+    ]);
+  });
+}
+
+test('generic superclass without a Spring-name shadow preserves the supported method reference', needsStore, async t => {
+  const env = (await pack(t, app({
+    security: csrfByReference('').replace('public class SecurityConfig {',
+      'public class SecurityConfig extends Holder<String>.Relaxations<Integer> {\n  public SecurityConfig(Holder<String> holder) { holder.super(); }'),
+    routes: ROUTE_X,
+    extra: { 'src/main/java/app/Holder.java': `package app;
+public class Holder<T> {
+  public class Relaxations<U> { public static class OtherHelper {} }
+}
+` },
+  }))).envelope;
+  assert.deepEqual(verdicts(env, 'GET /x'), ['applies', 'does-not-apply']);
+});

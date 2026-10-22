@@ -50,6 +50,21 @@ error and absence of a publication; the neighbor checks successful publication. 
 Validation: dependency-closure build and all 10 bootstrap tests passed with no skips. Native platform metadata is
 reviewed separately against the native CI evidence.
 
+## Spring generic superclass shadow correction — 2026-10-22
+
+Branch `codex/sentinel-spring-generic-fix` follows reviewed Spring head `ff13168c`. Its type index now erases each
+balanced generic argument group separately, preserving qualified member types between groups. Comments and quoted
+annotation values cannot alter bracket depth. Both direct type resolution and inherited-shadow discovery share the
+same erasure; unsupported spelling remains conservative. A captured nested helper named `AbstractHttpConfigurer`
+therefore makes the configurer method reference unknown, instead of proving authentication from a helper that could
+remove that configurer.
+
+The original capture/parse regression and three neighbors failed on the frozen baseline; its harmless generic
+inheritance neighbor passed. The corrected suite includes nested and package-qualified type paths, comment and
+annotation delimiters, and retains the harmless positive. Sentinel closure build, typecheck, catalog lint and the
+package-boundary audit passed. All tests capture and parse original Java fixtures; no target code is compiled or run.
+Independent review and integration belong to the coordinating owner. No primary build or graph refresh occurred.
+
 ## Sentinel scheduler merged; CLI integration — 2026-10-22
 
 The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`, and scheduler as
