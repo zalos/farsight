@@ -723,6 +723,8 @@ rather than the import. Spring merges meta-annotations, so `@Bean`, `@Order`, `@
 through captured composed annotations: a composed `@Bean` declares a chain, while a composed order or condition, or an
 annotation from uncaptured code that could carry one, leaves the chain's position or activity unknown
 (`sentinel.spring.chainOrderUnsupported`, `sentinel.spring.conditionComposed`, `sentinel.spring.beanDeclarationUnknown`).
+Spring registers an inherited `@Bean` but invokes the most specific method, so an inherited chain whose method name a
+subclass declares again without `@Bean` is unknown (`sentinel.spring.chainOverridden`), never read from the superclass.
 A chain the pack cannot see or place sorts ahead of every known one.
 A chain's configurer arguments must be provably inert: a lambda that only configures its own parameter and never
 continues past `disable()` (which returns the builder); Spring's own `AbstractHttpConfigurer::disable`; Spring's

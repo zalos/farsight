@@ -96,7 +96,7 @@ export const SPRING_REASON_CODES = Object.freeze([
   'sentinel.spring.methodSecurityLegacy', 'sentinel.spring.componentScanUnresolved', 'sentinel.spring.chainCandidateUnrecognized',
   'sentinel.spring.configurerArgumentUnsupported', 'sentinel.spring.anonymousConfigured', 'sentinel.spring.anonymousRole',
   'sentinel.spring.rolePrefixCustomized', 'sentinel.spring.chainInheritanceUnknown', 'sentinel.spring.conditionComposed',
-  'sentinel.spring.beanDeclarationUnknown',
+  'sentinel.spring.beanDeclarationUnknown', 'sentinel.spring.chainOverridden',
 ] as const);
 export type SpringReason = typeof SPRING_REASON_CODES[number];
 
@@ -255,7 +255,7 @@ function rulesOf(ctx: Ctx, file: JavaFile, lambda: JavaNode): Rule[] | undefined
  * One chain bean. `file` holds the method (a superclass or interface for an inherited bean); `classAnns` are the
  * registered class's own annotations (its @Profile applies to the beans it registers).
  */
-function chainOf(ctx: Ctx, file: JavaFile, cls: JavaNode, m: JavaNode, classFacts: AnnotationFacts, registration: Registration, bean: Tri): Chain {
+function chainOf(ctx: Ctx, file: JavaFile, cls: JavaNode, m: JavaNode, classFacts: AnnotationFacts, registration: Registration, bean: Tri, overriddenBy?: At): Chain {
   const facts = annotationFacts(ctx.index, file, m);
   const id = `${file.path}#${m.childForFieldName('name')?.text ?? '?'}`;
   const at = { file, node: m };
@@ -267,6 +267,10 @@ function chainOf(ctx: Ctx, file: JavaFile, cls: JavaNode, m: JavaNode, classFact
   const unsupported = (reason: SpringReason, node: JavaNode): Chain =>
     ({ ...base, ...(ord.unsupported ? { order: EARLIEST } : {}), matcher: { kind: 'unsupported', at: { file, node } }, rules: { unsupported: { file, node } }, customFilters: [], anonymous: 'custom', unsupported: { reason, at: { file, node } } });
   if (bean === 'unknown') return unsupported('sentinel.spring.beanDeclarationUnknown', facts.opaque?.node ?? m);
+  if (overriddenBy) {
+    return { ...base, order: EARLIEST, matcher: { kind: 'unsupported', at: overriddenBy }, rules: { unsupported: overriddenBy }, customFilters: [],
+      anonymous: 'custom', unsupported: { reason: 'sentinel.spring.chainOverridden', at: overriddenBy } };
+  }
   if (ord.unsupported) return unsupported('sentinel.spring.chainOrderUnsupported', ord.unsupported.node);
   if (registration === 'unknown') return unsupported('sentinel.spring.chainRegistrationUnknown', cls);
   const type = ctx.index.resolve(file, returnType(m));
@@ -462,7 +466,7 @@ const isConfiguration = (ctx: Ctx, file: JavaFile, cls: JavaNode): Tri => {
   return unknown ? 'unknown' : 'no';
 };
 
-interface BeanSource { readonly file: JavaFile; readonly method: JavaNode; readonly bean: Tri }
+interface BeanSource { readonly file: JavaFile; readonly method: JavaNode; readonly bean: Tri; readonly overriddenBy?: At }
 
 /**
  * The @Bean methods a registered class contributes: its own, its captured superclasses' (Spring processes a
@@ -475,17 +479,27 @@ function beanMethodsOf(ctx: Ctx, file: JavaFile, cls: JavaNode): { methods: Bean
   const classes: { file: JavaFile; node: JavaNode }[] = [];
   let unknown: At | undefined;
   const seen = new Set<JavaNode>();
+  /** Every method name declared below the class being visited, with its most specific declaration. */
+  const declared = new Map<string, At>();
   const visit = (f: JavaFile, node: JavaNode, interfaceDefaultsOnly: boolean) => {
     if (seen.has(node)) return;
     seen.add(node);
     classes.push({ file: f, node });
+    const here = new Map<string, At>();
     for (const m of named(node.childForFieldName('body')).filter(n => n.type === 'method_declaration')) {
+      const name = m.childForFieldName('name')?.text ?? '?';
+      if (!here.has(name)) here.set(name, { file: f, node: m });
       const bean = beanStatus(annotationFacts(ctx.index, f, m));
       if (bean === 'no') continue;
       if (interfaceDefaultsOnly && !modifierWords(m).has('default')) continue;
-      const name = m.childForFieldName('name')?.text ?? '?';
-      if (!methods.has(name)) methods.set(name, { file: f, method: m, bean });
+      if (methods.has(name)) continue;
+      // Spring registers the inherited @Bean declaration but invokes the most specific method: a subclass method of the
+      // same name without @Bean (an override, or an overload the source alone cannot tell apart) decides what the bean
+      // is, so the inherited body is never read as the chain.
+      const override = declared.get(name);
+      methods.set(name, { file: f, method: m, bean, ...(override ? { overriddenBy: override } : {}) });
     }
+    for (const [name, at] of here) if (!declared.has(name)) declared.set(name, at);
     const supers: string[] = [];
     const superclass = node.childForFieldName('superclass');
     if (superclass) supers.push(named(superclass)[0]?.text ?? superclass.text.replace(/^extends\s+/, ''));
@@ -556,11 +570,11 @@ export function readConfiguration(files: readonly JavaFile[], resourcePaths: rea
           }
         }
       }
-      for (const { file: mf, method: m, bean } of beans.methods) {
+      for (const { file: mf, method: m, bean, overriddenBy } of beans.methods) {
         const type = simpleType(returnType(m));
         // Every bean that could be a chain is a candidate: a known chain type is read, any other chain-like type is
         // an unknown candidate, never silently omitted.
-        if (CHAIN_TYPES.has(type) || /FilterChain$/.test(type)) chains.push(chainOf(ctx, mf, cls, m, classFacts, registered, bean));
+        if (CHAIN_TYPES.has(type) || /FilterChain$/.test(type)) chains.push(chainOf(ctx, mf, cls, m, classFacts, registered, bean, overriddenBy));
         else if (type === 'WebSecurityCustomizer') frontiers.push({ reason: 'sentinel.spring.webSecurityCustomizer', at: { file: mf, node: m } });
         else if (type === 'GrantedAuthorityDefaults') rolePrefixCustomized.push({ file: mf, node: m });
         else if (/Filter$/.test(type) || type === 'FilterRegistrationBean' || type === 'DelegatingFilterProxyRegistrationBean') {

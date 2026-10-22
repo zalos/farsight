@@ -831,3 +831,35 @@ test('round 4, near neighbour: a library bean annotation or a composed @Order le
   }))).envelope;
   assert.deepEqual(verdicts(ordered, 'GET /x'), ['unknown:sentinel.spring.chainOrderUnsupported', 'unknown:sentinel.spring.chainOrderUnsupported']);
 });
+
+test('round 4, probe 4: an inherited chain bean overridden without @Bean is not read from the superclass', needsStore, async t => {
+  const base = `package app;
+
+${IMPORTS}
+public abstract class BaseSecurity {
+  @Bean
+  public SecurityFilterChain c(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated());
+    return http.build();
+  }
+}
+`;
+  const override = (annotation: string) => security(`
+  ${annotation}
+  @Override
+  public SecurityFilterChain c(HttpSecurity http) throws Exception {
+    ${OPEN_BODY}
+  }`).replace('public class SecurityConfig {', 'public class SecurityConfig extends BaseSecurity {');
+  const env = (await pack(t, app({ security: override(''), routes: ROUTE_X, extra: { 'src/main/java/app/BaseSecurity.java': base } }))).envelope;
+  assert.deepEqual(verdicts(env, 'GET /x'), ['unknown:sentinel.spring.chainOverridden', 'unknown:sentinel.spring.chainOverridden'],
+    'Spring invokes the subclass method, so the superclass\'s protected body is never the answer');
+  // The override declared as a @Bean itself is read, and its open body decides.
+  const bean = (await pack(t, app({ security: override('@Bean'), routes: ROUTE_X, extra: { 'src/main/java/app/BaseSecurity.java': base } }))).envelope;
+  assert.deepEqual(verdicts(bean, 'GET /x'), ['does-not-apply', 'does-not-apply']);
+  // Without an override the inherited protected chain is read.
+  const inherited = (await pack(t, app({
+    security: security('').replace('public class SecurityConfig {', 'public class SecurityConfig extends BaseSecurity {'),
+    routes: ROUTE_X, extra: { 'src/main/java/app/BaseSecurity.java': base },
+  }))).envelope;
+  assert.deepEqual(verdicts(inherited, 'GET /x'), ['applies', 'does-not-apply']);
+});
