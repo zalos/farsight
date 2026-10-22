@@ -1,7 +1,7 @@
 // The coordinator: one plan revision executed against a store opened through openStore(), durably, so that a
 // crash at any point can be finished by a later coordinator with no lost and no duplicate accepted output.
 //
-// Every decision is made from the ledger's typed, committed state (getRun, getWork, listAttempts; scheduler.ts)
+// Every decision is made from the ledger's typed, committed state (getRun, getWork, countAttempts; scheduler.ts)
 // and every effect goes through it: a work revision is created when it becomes ready, or held (blocked by a failed
 // dependency, disabled by policy) with its reason; an attempt is recorded (and so fenced by attempt and epoch)
 // after its worker exists and before it may act; a result is published through staging (publication.ts); a failure
@@ -371,7 +371,7 @@ export class Coordinator {
       const row = this.#store.ledger.getWork(ref);
       if (!row) this.#create(work, 'ready');
       else if (row.state === 'pending') this.#store.ledger.setWorkState(ref, 'ready');
-      const ordinal = this.#store.ledger.listAttempts(ref).length + 1;
+      const ordinal = this.#store.ledger.countAttempts(ref) + 1;
       const id = attemptIdFor(ref, ordinal);
       // The attempt's deadline is the work's, cut to what is left of the run's budget.
       const left = Math.max(1, Math.floor(this.#runDeadline - Date.now()));
@@ -425,7 +425,7 @@ export class Coordinator {
   #end(ref: WorkRef, attemptId: Id, state: 'failed' | 'canceled', code: string, detail?: Readonly<Record<string, unknown>>): void {
     this.#failures.push({ work: ref, attemptId, code, ...(detail ? { detail } : {}) });
     let attempts = 1;
-    try { attempts = this.#store.ledger.listAttempts(ref).length; } catch { /* the store is gone; the end below fails too */ }
+    try { attempts = this.#store.ledger.countAttempts(ref); } catch { /* the store is gone; the end below fails too */ }
     const again = retryable(code, attempts, this.#retry);
     // A canceled attempt leaves its work ready: cancellation is the run's decision, not the work's failure.
     const workState = state === 'canceled' || again ? 'ready' : 'failed';
@@ -475,7 +475,7 @@ export class Coordinator {
     for (const w of this.#plan.works) {
       const ref = { id: w.id, revision: w.revision };
       const row = this.#store.ledger.getWork(ref);
-      const attempts = row ? this.#store.ledger.listAttempts(ref).length : 0;
+      const attempts = row ? this.#store.ledger.countAttempts(ref) : 0;
       const unstarted = this.#failedUnstarted.get(key(ref));
       const planHold = (w.state === 'disabled-by-policy' || w.state === 'blocked') ? w.state : undefined;
       if (unstarted) { m.set(key(ref), { created: !!row, workState: 'failed', attempts, lastFailure: unstarted }); continue; }

@@ -934,11 +934,24 @@ export class Ledger {
       epoch: String(r.coordinator_epoch), envelope: JSON.parse(String(r.envelope)) as RunEnvelope } : null;
   }
 
-  /** Every attempt of one work revision, by ordinal. */
-  listAttempts(ref: WorkRef): Array<{ id: Id; ordinal: number; state: string; epoch: Id }> {
+  /**
+   * One page of a work revision's attempts, by ordinal: those after `afterOrdinal`, at most `limit` (≤ 500, default
+   * 500). Page with the last ordinal returned; countAttempts() gives the exact total.
+   */
+  listAttempts(ref: WorkRef, opts: { afterOrdinal?: number; limit?: number } = {}): Array<{ id: Id; ordinal: number; state: string; epoch: Id }> {
     checkRef(ref);
-    return this.#read(() => this.#all('SELECT id, ordinal, state, coordinator_epoch FROM attempts WHERE work_id = ? AND work_revision = ? ORDER BY ordinal LIMIT 1000',
-      ref.id, ref.revision)).map(r => ({ id: String(r.id), ordinal: Number(r.ordinal), state: String(r.state), epoch: String(r.coordinator_epoch) }));
+    const after = opts.afterOrdinal ?? 0;
+    const limit = opts.limit ?? MAX_EVENT_PAGE;
+    if (!Number.isSafeInteger(after) || after < 0) throw invalid('afterOrdinal');
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_EVENT_PAGE) throw invalid(`limit is 1..${MAX_EVENT_PAGE}`);
+    return this.#read(() => this.#all('SELECT id, ordinal, state, coordinator_epoch FROM attempts WHERE work_id = ? AND work_revision = ? AND ordinal > ? ORDER BY ordinal LIMIT ?',
+      ref.id, ref.revision, after, limit)).map(r => ({ id: String(r.id), ordinal: Number(r.ordinal), state: String(r.state), epoch: String(r.coordinator_epoch) }));
+  }
+
+  /** The exact number of attempts a work revision has had. */
+  countAttempts(ref: WorkRef): number {
+    checkRef(ref);
+    return Number(this.#read(() => this.#get('SELECT count(*) AS n FROM attempts WHERE work_id = ? AND work_revision = ?', ref.id, ref.revision))?.n ?? 0);
   }
 
   /** Stages still open (registered, neither published nor aborted), oldest first, at most `limit` (≤ 500). */

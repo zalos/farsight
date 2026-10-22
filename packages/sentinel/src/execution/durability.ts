@@ -11,12 +11,21 @@ import { ExecutionError } from './errors.js';
 
 const UNSUPPORTED = new Set(['EINVAL', 'ENOTSUP', 'EOPNOTSUPP']);
 
-/** Package-internal fault-injection seam for the tests; production never replaces it. */
-export const durabilityIo = { fsyncSync };
+/**
+ * Package-internal fault-injection seam for the tests; production never replaces it. `trace` sees each folder
+ * path just before its sync, so a test can check the order of syncs.
+ */
+export const durabilityIo: { fsyncSync: typeof fsyncSync; trace?: (path: string) => void } = { fsyncSync };
 
 export type DirectorySync = 'synced' | 'unsupported';
 
-export function syncDirectory(path: string): DirectorySync {
+/**
+ * Sync a folder. By default a durable sync is required, so an "unsupported" answer is a failure too: the qualified
+ * hosts (APFS, ext4) support it, and a degradation must never pass as durable success. A caller that can live
+ * without it passes `allowUnsupported` and gets an explicit 'unsupported' back to report.
+ */
+export function syncDirectory(path: string, options: { allowUnsupported?: boolean } = {}): DirectorySync {
+  durabilityIo.trace?.(path);
   let fd: number;
   try { fd = openSync(path, constants.O_RDONLY | constants.O_DIRECTORY); } catch (e) {
     throw new ExecutionError('sentinel.execution.durabilityFailed', { path, osCode: (e as NodeJS.ErrnoException).code ?? 'unknown', operation: 'open' }, { cause: e });
@@ -26,7 +35,7 @@ export function syncDirectory(path: string): DirectorySync {
     return 'synced';
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code ?? 'unknown';
-    if (UNSUPPORTED.has(code)) return 'unsupported';
+    if (UNSUPPORTED.has(code) && options.allowUnsupported) return 'unsupported';
     throw new ExecutionError('sentinel.execution.durabilityFailed', { path, osCode: code, operation: 'fsync' }, { cause: e });
   } finally {
     closeSync(fd);

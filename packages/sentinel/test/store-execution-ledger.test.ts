@@ -109,3 +109,17 @@ test('a run reads back with its durable outcome, and open stages list in order',
     assert.throws(() => again.ledger.setWorkState({ id: 'work-B', revision: 1 }, 'ready'), code('sentinel.store.wrongState'), 'an ended run moves no work');
   } finally { again.close(); }
 });
+
+test('attempts are listed in bounded pages by ordinal, and counted exactly', async () => {
+  const { store, A } = await seeded();
+  try {
+    for (let i = 1; i <= 3; i++) {
+      attempt(store, A, `att-page-${i}`, i);
+      store.ledger.endAttempt({ work: A, attemptId: `att-page-${i}`, state: 'failed', endedAt: now(), workState: 'ready' });
+    }
+    assert.equal(store.ledger.countAttempts(A), 3);
+    assert.deepEqual(store.ledger.listAttempts(A, { limit: 2 }).map((a: any) => a.ordinal), [1, 2]);
+    assert.deepEqual(store.ledger.listAttempts(A, { afterOrdinal: 2, limit: 2 }).map((a: any) => a.ordinal), [3]);
+    assert.throws(() => store.ledger.listAttempts(A, { limit: 501 }), code('sentinel.store.invalidInput'));
+  } finally { store.close(); }
+});

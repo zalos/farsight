@@ -83,16 +83,55 @@ test('a record naming another store, or with malformed fields, is kept and repor
 test('directory sync: only a documented "unsupported" answer passes; EBADF and I/O errors fail', () => {
   const s = fresh();
   const fail = (code: string) => { durabilityIo.fsyncSync = (() => { throw Object.assign(new Error(code), { code }); }) as any; };
-  fail('EINVAL');
-  assert.equal(syncDirectory(s.work), 'unsupported');
-  fail('ENOTSUP');
-  assert.equal(syncDirectory(s.work), 'unsupported');
+  // On the qualified hosts a durable sync is required: even a documented "unsupported" answer fails by default,
+  // and only a caller that opts in gets an explicit, reportable 'unsupported'.
+  for (const code of ['EINVAL', 'ENOTSUP', 'EOPNOTSUPP']) {
+    fail(code);
+    assert.throws(() => syncDirectory(s.work), (e: any) => e.code === 'sentinel.execution.durabilityFailed' && e.detail.osCode === code, code);
+    assert.equal(syncDirectory(s.work, { allowUnsupported: true }), 'unsupported');
+  }
   for (const code of ['EBADF', 'EIO', 'ENOSPC', 'EROFS', 'EISDIR']) {
     fail(code);
     assert.throws(() => syncDirectory(s.work), (e: any) => e.code === 'sentinel.execution.durabilityFailed' && e.detail.osCode === code, code);
   }
   // And a journal record is not published when its directory sync fails.
+  durabilityIo.fsyncSync = real.fsync;
   const workers = new WorkerFiles(s.root);
   fail('EIO');
   assert.throws(() => workers.record(identity('store-x') as any), (e: any) => e.code === 'sentinel.execution.durabilityFailed');
+});
+
+test('a new journal folder exists durably before its first record: each new folder\'s parent is synced first', () => {
+  const s = fresh();
+  const seen: string[] = [];
+  durabilityIo.trace = p => seen.push(p);
+  const workers = new WorkerFiles(s.root);
+  workers.record(identity('store-x') as any);
+  durabilityIo.trace = undefined;
+  assert.deepEqual(seen, [s.root, join(s.root, 'execution'), workers.dir], 'store root, then execution, then the record\'s own folder');
+  // An existing folder is not re-synced; only the record's folder is.
+  const again: string[] = [];
+  durabilityIo.trace = p => again.push(p);
+  new WorkerFiles(s.root).record(identity('store-x') as any);
+  durabilityIo.trace = undefined;
+  assert.deepEqual(again, [workers.dir]);
+});
+
+test('a failed parent sync stops the journal before any record exists', () => {
+  const s = fresh();
+  durabilityIo.fsyncSync = (() => { throw Object.assign(new Error('EIO'), { code: 'EIO' }); }) as any;
+  assert.throws(() => new IntentFiles(s.root), (e: any) => e.code === 'sentinel.execution.durabilityFailed' && e.detail.path === s.root);
+});
+
+test('a record is bound to its file name and its own fields', async () => {
+  const s = fresh();
+  const workers = new WorkerFiles(s.root);
+  const intents = new IntentFiles(s.root);
+  const rec = identity('store-x');
+  writeFileSync(join(workers.dir, 'att-someone-else.json'), JSON.stringify(rec), { mode: 0o600 });
+  assert.deepEqual(workers.list().unresolved, [{ journal: 'workers', file: 'att-someone-else.json', reason: 'file name does not match its record' }]);
+  writeFileSync(join(intents.dir, 'n2.json'), JSON.stringify({ name: 'sentinel-n3', owner: 'n2', store: 'store-x', attempt: 'att-x', epoch: 'epoch-x', invocation: `sha256:${'1'.repeat(64)}` }), { mode: 0o600 });
+  assert.deepEqual(intents.list().unresolved, [{ journal: 'intents', file: 'n2.json', reason: 'inconsistent fields' }]);
+  assert.throws(() => intents.record({ name: 'sentinel-other', owner: 'n4', store: 'store-x', attempt: 'att-x', epoch: 'epoch-x', invocation: `sha256:${'1'.repeat(64)}` }),
+    (e: any) => e.code === 'sentinel.execution.journalUnreadable', 'an inconsistent record is not written either');
 });
