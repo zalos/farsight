@@ -1,0 +1,156 @@
+{
+  "format": "sentinel-feasibility-decisions/draft-1",
+  "status": "proposed-for-owner-acceptance",
+  "base": {
+    "pr": 132,
+    "commit": "2bd38f600c0714d74d17104d882de0e1a4201ac7"
+  },
+  "scope": "Bounded original feasibility experiments; no production Sentinel adapter, package, security verdict or framework support contract.",
+  "ownerAcceptance": {
+    "state": "pending",
+    "requiredBefore": "PR02 production contracts",
+    "alreadyConfirmed": [
+      "External scanners require Linux containers; no automatic host-execution fallback."
+    ]
+  },
+  "enforcementOracle": {
+    "paths": [
+      "packages/core/src/openapi.ts::guardsOf",
+      "packages/core/src/openapi.ts::matchesGuard"
+    ],
+    "classification": "reconciliation-heuristics-only",
+    "reason": "Declared or reconciled guard names are not runtime enforcement evidence."
+  },
+  "engine": {
+    "recommendedPatternDefault": {
+      "name": "semgrep",
+      "version": "1.181.0",
+      "scope": "Two original syntax-location rules on three direct positive and nine safe SQL-facade symbols",
+      "reason": "Equal measured cases to Opengrep with non-executable temporary storage; not a general engine ranking."
+    },
+    "alternative": {
+      "name": "opengrep",
+      "version": "1.31.0",
+      "state": "not-selected-for-proposed-default",
+      "reason": "Same bounded cases; pinned packaging required executable tmpfs."
+    },
+    "localTaint": {
+      "state": "qualified-only-for-original-six-direct-local-cases",
+      "safeDenominator": 9
+    },
+    "crossFile": {
+      "state": "rejected-for-evaluated-profiles",
+      "reason": "Neither evaluated invocation found any of three cross-file positives or supplied a qualifying source-to-sink trace. No claim that these engines can never support it."
+    },
+    "generalApplicationAccuracy": {
+      "state": "deferred",
+      "reason": "Only original facade micro-corpus scored; external application benchmarks remain unacquired."
+    },
+    "independentLabelReview": {
+      "state": "reviewed-static-scope",
+      "indexSha256": "6548f0d047e8f80c0aca3b2f0a178003169141f30a66f8d117cb5d585fa39715",
+      "record": "feasibility-acceptance.md",
+      "beforeFinalProbeRevision": "210e47a036a28b47e0055f274e726d967b2a51dd"
+    },
+    "evidence": "evidence/2026-10-22-decisions/engine-final.json"
+  },
+  "runtime": {
+    "state": "proposed-bounded-matrix",
+    "host": {
+      "os": "macOS 27.0",
+      "architecture": "arm64",
+      "cpu": "Apple M4",
+      "logicalCpus": 10,
+      "memoryBytes": 17179869184,
+      "node": "24.19.0"
+    },
+    "backend": {
+      "dockerEngine": "29.2.1",
+      "dockerDesktop": "4.65.0 (221669)",
+      "os": "Linux 6.12.76-linuxkit",
+      "architecture": "aarch64",
+      "cgroups": "2",
+      "logicalCpus": 10,
+      "memoryBytes": 8217059328
+    },
+    "deferred": [
+      "Independent Linux hosts",
+      "Docker Engine without Desktop",
+      "Colima",
+      "AMD64",
+      "Windows",
+      "emulation"
+    ],
+    "reason": "Only the observed host/backend has actual probe evidence; architecture eligibility is not portable support.",
+    "evidence": "evidence/2026-10-22-decisions/runtime-final.json"
+  },
+  "resourceDefaults": {
+    "state": "proposed-not-implemented",
+    "codec": "gzip-level-6",
+    "alreadyCompressedCodec": "raw",
+    "maxDecodedObjectBytes": 16777216,
+    "maxCapturedRawBytesPerRun": 536870912,
+    "maxRetainedWorkspaceBytes": 3221225472,
+    "scannerConcurrency": 1,
+    "scannerMemoryAndSwapBytes": 2147483648,
+    "scannerCpus": 2,
+    "scannerPids": 128,
+    "scannerTmpfsBytes": 268435456,
+    "minimumExtraVmMemoryBytes": 536870912,
+    "scannerTimeoutMs": 120000,
+    "scannerProcessOutputBytes": 4194304,
+    "retention": {
+      "completedUnpinnedSnapshots": 10,
+      "completedDays": 30,
+      "failedCancelledDays": 7,
+      "smallIdentityGapMetadataDays": 90,
+      "protected": "Never prune active, referenced or pinned objects; refuse new work when the cap cannot be met safely."
+    },
+    "limitations": [
+      "Synthetic codec input maximum near 8 MiB does not prove 16 MiB worst-case memory.",
+      "Quotas are ceilings, not capacity guarantees or reservations.",
+      "Production free-disk admission, durable ownership and pruning are not implemented."
+    ]
+  },
+  "frameworks": {
+    "state": "review-in-progress",
+    "record": "framework-feasibility.md"
+  },
+  "deferredGates": [
+    {
+      "id": "candidate-advisory-database",
+      "reason": "Missing-file prerequisite is synthetic; actual candidate database freshness/offline semantics remain unmeasured.",
+      "gate": "scanner adapter PR11/12 before support claim"
+    },
+    {
+      "id": "full-coordinator-crash-recovery",
+      "reason": "Normal-process cleanup and SQLite prototype are not crash recovery.",
+      "gate": "PR08/26"
+    },
+    {
+      "id": "models",
+      "reason": "No configured provider/budget/paid trial in this slice.",
+      "gate": "PR22, independent of deterministic release"
+    },
+    {
+      "id": "incremental-equivalence",
+      "reason": "Edits are specified; no incremental implementation exists.",
+      "gate": "PR27/28"
+    },
+    {
+      "id": "production-framework-packs",
+      "reason": "Controlled runtime probes do not implement source-analysis packs.",
+      "gate": "PR14-17"
+    },
+    {
+      "id": "scan-configuration-io-reruns-visuals",
+      "reason": "Planned product surface, not delivered by feasibility probes.",
+      "gate": "PR25"
+    },
+    {
+      "id": "provider-model-selection",
+      "reason": "Optional model configuration UI follows model gates.",
+      "gate": "PR25b"
+    }
+  ]
+}

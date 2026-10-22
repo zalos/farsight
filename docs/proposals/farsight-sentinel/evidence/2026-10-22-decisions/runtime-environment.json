@@ -1,0 +1,79 @@
+{
+  "recordedAt": "2026-10-22T01:36:04.887Z",
+  "scope": "Read-only installation identity supplement after measured window; original result left intact",
+  "backgroundLimitations": "Lead coordinated a quiet measurement window with no other measured engine/framework jobs. Framework dependency preparation and ordinary desktop background activity were not suspended; global host idleness, CPU load and disk contention were not sampled. Fixed codec order and three repetitions do not establish a general performance ranking.",
+  "observations": [
+    {
+      "command": [
+        "/usr/bin/plutil",
+        "-extract",
+        "CFBundleShortVersionString",
+        "raw",
+        "-o",
+        "-",
+        "/Applications/Docker.app/Contents/Info.plist"
+      ],
+      "result": {
+        "exitCode": 0,
+        "exitSignal": null,
+        "timedOut": false,
+        "outputExceeded": false,
+        "cancelled": false,
+        "spawnError": null,
+        "wallMs": 7.047249999999991,
+        "stdout": "4.65.0\n",
+        "stderr": "",
+        "stdoutSha256": "2e14c135bb011b4266deaec9dc8095094fc02caa5bc3733165b7da3109e6b25e",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "outputEncoding": "utf8-scrubbed"
+      }
+    },
+    {
+      "command": [
+        "/usr/bin/plutil",
+        "-extract",
+        "CFBundleVersion",
+        "raw",
+        "-o",
+        "-",
+        "/Applications/Docker.app/Contents/Info.plist"
+      ],
+      "result": {
+        "exitCode": 0,
+        "exitSignal": null,
+        "timedOut": false,
+        "outputExceeded": false,
+        "cancelled": false,
+        "spawnError": null,
+        "wallMs": 2.3503749999999997,
+        "stdout": "221669\n",
+        "stderr": "",
+        "stdoutSha256": "0f369ef46f8cbe6720202f2794d47b98d61c862e0e922886bf0a610e423365ea",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "outputEncoding": "utf8-scrubbed"
+      }
+    },
+    {
+      "command": [
+        "docker",
+        "version",
+        "--format",
+        "{{json .Client}}"
+      ],
+      "result": {
+        "exitCode": 0,
+        "exitSignal": null,
+        "timedOut": false,
+        "outputExceeded": false,
+        "cancelled": false,
+        "spawnError": null,
+        "wallMs": 22.65995799999999,
+        "stdout": "{\"Version\":\"29.2.1\",\"ApiVersion\":\"1.53\",\"DefaultAPIVersion\":\"1.53\",\"GitCommit\":\"a5c7197\",\"GoVersion\":\"go1.25.6\",\"Os\":\"darwin\",\"Arch\":\"arm64\",\"BuildTime\":\"Mon Feb  2 17:16:37 2026\",\"Context\":\"desktop-linux\"}\n",
+        "stderr": "",
+        "stdoutSha256": "cff09e412beb41ab72729b7064863758545f8c197ab0f3480bdc1e1b401baab7",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "outputEncoding": "utf8-scrubbed"
+      }
+    }
+  ]
+}

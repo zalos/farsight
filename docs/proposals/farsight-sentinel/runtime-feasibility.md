@@ -163,3 +163,30 @@ A container reservation needs a production coordinator, durable ownership and cu
 this prototype only demonstrates quota/controller checks and bounded controls. Model budgets, graph payload
 regression, full scanner RSS on representative corpora and retention UX remain separate gates. The owner and
 integration lead accept or revise these defaults using measured output and the broader PR01 decision record.
+
+
+## Integrated retained-file verification
+
+The lead repeated the corrected runtime experiment at clean probe revision
+`4353d4fbf58f430330d8460c508e76d17ab33bc3`. The [final result](evidence/2026-10-22-decisions/runtime-final.json),
+SHA-256 `dcc954e40a13367b6c5d343f071f8cf30c606c2a5798bb8012a28959f3e950b7`, passed all 14 controls,
+all seven exact-owner cleanup checks and all 54 codec trials with independently verified retained input/output
+bytes and hashes. Each of the six original inputs was rechecked after all trials. The earlier measurement
+is retained with its pre-hardening limitation. [The artifact archive](evidence/2026-10-22-decisions/runtime-artifacts.tgz)
+stores each distinct byte sequence once, with a manifest mapping every original path from all three runs to its
+hash; this preserves original progress metadata as well as encoded artifacts without duplicating identical files.
+
+The lead sequenced the final run after package/browser tests, engine trials and the performance suite.
+No competing experiment container was running at the pre-run check. Two pre-existing unrelated service
+containers remained running; the desktop was not a dedicated benchmark machine. Absolute timing is therefore
+observational and cannot support broad throughput or engine-ranking claims. The original artifact byte sizes
+and codec choices are deterministic; the proposed resource ceilings remain policy choices, not guarantees.
+
+
+The [identity-corrected intermediate result](evidence/2026-10-22-decisions/runtime-identity-corrected.json)
+remains unchanged. Claude's subsequent review identified an optional-codec gap: unavailable zstd APIs should
+retain an explicit unavailable attempt while raw/gzip continue. The final runner accepts only that exact
+completed unavailable result, verifies original input identity and absence of an encoded artifact, and accounts
+for every expected attempt. Its injected regression records 36 measured and 18 unavailable attempts; that is
+a synthetic control, not the host measurement. On the measured Node 24.19.0 host all 54 attempts were measured
+and zero were unavailable. Other child failures or unknown unavailable reasons still fail the experiment.

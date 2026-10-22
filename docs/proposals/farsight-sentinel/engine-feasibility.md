@@ -159,3 +159,25 @@ Eighteen engine-matrix tests and all 26 existing scanner tests pass, including n
 unrelated exit-seven/configuration failures, missing/malformed inventories, unexpected paths, spurious
 findings and absent or unrelated partial/size diagnostics. No new scanner measurement was run in this
 lane after these corrections; the final integrated evidence must identify the corrected index and code.
+
+
+## Integrated corrected-label measurement
+
+The lead reran all 14 trials at clean probe revision `210e47a036a28b47e0055f274e726d967b2a51dd`
+after independently reviewing all six caller locations and integrating both rounds of control corrections.
+The [final engine evidence](evidence/2026-10-22-decisions/engine-final.json), SHA-256
+`5d4744aa479edf1d206ae9fa47a0c1e2138708ce9fab273dd2ed527bd5bdbe50`, names corrected index
+`6548f0d047e8f80c0aca3b2f0a178003169141f30a66f8d117cb5d585fa39715`.
+All 14 controls passed with inspected 2 GiB memory-and-swap ceilings, exact temporary-filesystem policy,
+intended input diagnostics and exact missing-rule failures. All input identities stayed unchanged and all
+14 owned containers were removed. The detection counts in the table above are unchanged: direct pattern
+3/3, local taint 6/6, safe hits 0/9 and cross-file 0/3 for each candidate. The three input controls remain
+explicit gaps. The [acceptance record](feasibility-acceptance.md) records the independent label review;
+owner acceptance of the proposed matrix remains separate.
+
+The [control-corrected intermediate run](evidence/2026-10-22-decisions/engine-controls-corrected.json)
+is also retained unchanged. It tested the strict limits/missing-rule checks before the safe-caller label
+and input-scenario corrections. Earlier run records retain their exact hashes; none is presented as
+checking a later revision.
+
+The missing-rule control expects exit 7 for these exact engine versions. Any engine pin change requires a fresh missing-rule experiment and review of its diagnostics and exit semantics before updating that expectation.

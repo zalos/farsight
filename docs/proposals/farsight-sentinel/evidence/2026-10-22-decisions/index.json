@@ -1,0 +1,60 @@
+{
+  "format": "sentinel-feasibility-evidence-index/draft-1",
+  "scope": "Original synthetic experiment evidence. Historical records remain unchanged and are not substituted for final measurements. Framework evidence is pending final integration.",
+  "records": [
+    {
+      "path": "engine-initial.json",
+      "bytes": 550255,
+      "sha256": "898b121c5aa97de388f1a2bb6957752bf8058c0c78f09f8e03ad30834a51603e",
+      "note": "Historical initial run: missing-rule denominator was recorded as zero. Not final acceptance evidence."
+    },
+    {
+      "path": "engine-denominator-corrected.json",
+      "bytes": 551588,
+      "sha256": "4374398798f306fabe03d4478bcffac6424c5867eafa498a1d74c8f3360061e6",
+      "note": "Corrected denominator; before final input-control hardening and safe cross-file caller-span correction."
+    },
+    {
+      "path": "engine-controls-corrected.json",
+      "bytes": 553550,
+      "sha256": "6e9b9308c5460cbf1c5ddd2b4511a5f913fc209fdba5b30d0f9764a9038e7a3e",
+      "note": "Stricter process/isolation/input controls; safe cross-file caller source spans were still wrong."
+    },
+    {
+      "path": "engine-final.json",
+      "bytes": 554871,
+      "sha256": "5d4744aa479edf1d206ae9fa47a0c1e2138708ce9fab273dd2ed527bd5bdbe50",
+      "note": "Final reviewed-label run at 210e47a; both candidates reconcile all valid inputs and expected omission/failure controls."
+    },
+    {
+      "path": "runtime-initial.json",
+      "bytes": 220609,
+      "sha256": "c7bc1c07fe0f5beb1172aa08cf90e4f814dc814930129cd813eecb7bab214821",
+      "note": "Historical resource/runtime run before complete artifact/input identity checks."
+    },
+    {
+      "path": "runtime-environment.json",
+      "bytes": 2871,
+      "sha256": "791c66884082265fdc596d44aabdd4a604281ea8485ca236b64e01ce44169c68",
+      "note": "Environment supplement for the initial run; no replacement of its original output."
+    },
+    {
+      "path": "runtime-identity-corrected.json",
+      "bytes": 241013,
+      "sha256": "720b60632ba0f1326640b4e3e28ecfe1cf144984cedfa20c43a8cfadd11e5f22",
+      "note": "Identity hardening rerun at b8becd2, before explicit optional-zstd-unavailable handling."
+    },
+    {
+      "path": "runtime-final.json",
+      "bytes": 242841,
+      "sha256": "dcc954e40a13367b6c5d343f071f8cf30c606c2a5798bb8012a28959f3e950b7",
+      "note": "Final resource/runtime run at 4353d4f; 54 measured codec trials, all 14 controls passed."
+    },
+    {
+      "path": "runtime-artifacts.tgz",
+      "bytes": 11640818,
+      "sha256": "22f48801d02be27ea3c448bebb1b1d7ccfef731b8160a413504e700261b8aa3a",
+      "note": "Exact original input/output/progress bytes for all three runtime runs, content-addressed; manifest maps original run-relative paths to objects."
+    }
+  ]
+}
