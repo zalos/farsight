@@ -6,6 +6,7 @@ import type { StringEntry } from './strings.js';
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
 
 export const SENTINEL_DRIVERS_STRINGS: Record<string, StringEntry> = {
+  'sentinel.drivers.rule.currentTreeSecrets': same('possible secrets in captured files', 'The pinned current-tree secret detectors inspect captured included files. Matches are candidates, values and names are withheld, skipped files remain gaps, and Git history is not scanned.'),
   'sentinel.drivers.ruleUnsupported': same('the adapter does not run this rule', 'Each adapter runs only the shipped rules it was built and tested against, at their exact definition digests. A custom rule, or a copy with other bytes, is never run by it, so its checks are not run.'),
   'sentinel.drivers.scopeUnsupported': same('the adapter does not check this kind of scope', 'The rule names a scope kind its adapter does not read, so the check is not run.'),
   'sentinel.drivers.inputMissing': same('the file was not among the unit’s inputs', 'The check’s file was not given to the adapter, so the check is not run.'),

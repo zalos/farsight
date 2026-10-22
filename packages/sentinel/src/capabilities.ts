@@ -25,7 +25,7 @@ export const CAPABILITIES: readonly Capability[] = Object.freeze([
   { id: 'coordinator', state: 'available-draft', reasonCode: 'sentinel.capability.localCoordinator', plannedIn: 'PR 08' },
   { id: 'scan-cli', state: 'available-draft', reasonCode: 'sentinel.capability.draftPreviewCli', plannedIn: 'PR 09' },
   { id: 'pattern-scan', state: 'available-draft', reasonCode: 'sentinel.capability.pinnedScanners', plannedIn: 'PR 10' },
-  { id: 'secrets-scan', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 11' },
+  { id: 'secrets-scan', state: 'available-draft', reasonCode: 'sentinel.capability.pinnedScanners', plannedIn: 'PR 11' },
   { id: 'dependency-advisories', state: 'available-draft', reasonCode: 'sentinel.capability.pinnedScanners', plannedIn: 'PR 12' },
   { id: 'infrastructure-ci-checks', state: 'available-draft', reasonCode: 'sentinel.capability.pinnedScanners', plannedIn: 'PR 13' },
   { id: 'framework-next', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 14' },

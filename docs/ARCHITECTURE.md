@@ -1053,6 +1053,66 @@ shared required-coverage evaluator. Normalized observations and per-check covera
 provenance and shared scoped counts. Regeneration needs neither source checkout nor scanner assets. Full finding
 policy, placement, framework/model integration and complete reports remain subsequent work; no command in this
 slice declares policy satisfaction. Actual verified worker outcomes retain architecture qualification authority.
+28. **Sentinel's secret scan keeps the detector and whole lines, never the value, and a failed scan is never clean (2026-10-22).**
+PR 11 scans captured current-tree bytes with Gitleaks 8.30.1 (MIT) through the PR 07 execution service only: an
+external adapter, the official multi-platform image index pinned by digest (`ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0…`),
+installed ahead of time and never pulled at scan time, no host fallback (`src/adapters/gitleaks/`). **Shape:** Gitleaks
+cannot speak the worker protocol, so an original POSIX shell shim does, inside the unmodified image (alpine: busybox
+sh and applets). The shim runs as `/bin/sh /input/<its digest>`; the adapter digest
+pins it, and with it the configuration and report template it writes. Image architecture authority comes from the
+supervisor-verified outcome and the pinned platform manifest. Qualification is bound to the recorded engine evidence;
+the changed canonical command path must also pass its selected native CI gate. **Inputs:** the shim, a
+line job (`F <index> <content> <path>`) and each captured content once, in any order (the canonical coordinator lists
+captured sources first, then its job record and the auxiliary worker and job). The shim takes as its job the one input
+that is neither itself nor a captured source the start's `inputScopes` names, and whose first line is the job header:
+a captured file shaped like a job is scanned as a source, never read as the job, and without `inputScopes` two
+job-shaped inputs are refused (`inputInvalid`), not guessed. The run record names the job digest it read, which the
+coordinator's normalization requires to be the job it sealed. Files over 8 MiB, names with a line break or
+another control character, and paths the release's own global allowlist skips — the file or any folder above it,
+since the engine prunes a matching folder whole (measured: `images.png/`, `package-lock.json/`, `node_modules/`) —
+are not sent; each is a skipped scope with its reason, never a silent omission. The allowlist patterns are matched in
+JavaScript's Unicode mode (`u`; RE2's `(?i)` as `iu`), because RE2 folds case by Unicode simple case folding (`ſ` with
+`s`, the Kelvin sign with `k`) and ASCII-only folding missed paths the engine skips; a real-engine test holds the host's
+skips equal to the engine's over a case-folding corpus. **No repository control:** the shim rebuilds the tree one folder below the
+scan root, so a captured root `.gitleaksignore` is an ordinary scanned file; Gitleaks gets the pinned configuration
+(the release's built-in rules, nothing allowed), an empty ignore folder, `--ignore-gitleaks-allow` and no baseline.
+Measured by a direct probe of the pinned image (2026-10-22): the same root ignore file suppresses a finding when the tree is the scan root, and
+nothing under the shim's layout. **Redaction:** Gitleaks runs with full redaction and renders its findings through the
+pinned template (rule, lines, file); inside the container an awk pass replaces each file with its job index and the
+rendering is deleted, so the report that leaves carries no path. Its stdout is discarded and its stderr stays in the
+tmpfs, only its digest leaving. The coordinator accepts a report line only as `F, rule, start, end, index` or
+`P, rule, line, line`, the rule one of the 222 the pinned default configuration defines (`rules.ts`, generated from
+the release's own `config/gitleaks.toml`), then builds each observation from a closed field list: the rule, a
+captured file, a whole-line byte span read from the sealed input copy, a fixed message and fixed limitation keys.
+**No path is exported (contract, draft):** a name can hold a secret no detector recognises out of context (a value
+assigned in one file and used as another file's name), so the scan withholds every path rather than judging names.
+Observation evidence is a union: ordinary `SourceEvidence` (unchanged, with `relativePath`) or
+`WithheldLocationEvidence` `{ location: 'withheld', snapshotId, sourceId, entry, content, span }`, where `entry` is
+the cited file's index in the snapshot's `entries`. The schema makes the two exclusive (a withheld citation carries no
+path; an ordinary one cannot claim `location`), and the validator checks a path only on an ordinary one. Every
+secret-scan observation uses the withheld form; scanned, skipped and error scopes are `<sourceId>#entry:<n>` (a source
+ID has no `#`). `resolveWithheldLocation(snapshot, evidence)` (`snapshot/locations.ts`) is the one way back to a path:
+one bounded lookup that resolves only when snapshot, source, entry kind (an included file) and content all agree, so
+two files with the same bytes resolve to their own entries; anything else is `sentinel.capture.locationUnresolved`.
+Exact paths stay in the private snapshot and the private job; the scan's targets name entries, and their paths and
+digests are taken from the snapshot, never from the caller. The shim also writes every name to `scan/paths.txt` beside
+the tree so the same engine screens names; a name it matches is itself a finding (`sentinel.secrets.nameMatch`, a
+zero-length span: the value is not in the content). **Failure:** an engine error, a kill, a missing, oversized, malformed or inconsistent report (exit code and findings
+disagree), an unknown rule or file, lines a file does not have, an unmeasured platform, or a refused job makes the scan
+an `error` over every target with a coded reason; the shim itself reports only a catalog code. **Audit:** the result
+names the engine, adapter digest, image reference and id, platform, configuration and default-rules digests, the shim,
+job and invocation digests, the exit code, and the stderr and report digests. **Packaging:** `scripts/package-assets-gitleaks.mjs`
+ships the shim and a digest/rights manifest as `farsight-sentinel/assets/gitleaks/*`; no image, binary or report ships.
+**Canonical command integration:** the owner promotes the original repository-scoped pack and explicitly adopts the
+pinned image. The admitted snapshot supplies every included source entry; identical content is sealed once while
+findings retain distinct entry identities. The driver preserves the verified supervisor outcome, validates sealed
+job/output digests, and publishes normalized findings with canonical per-check coverage in one accepted attempt.
+Omissions stay partial and failed scans cover nothing. `run.start` requires the plan's `tool-execution` effect.
+Captured names and source-derived job/invocation records remain private; public citations and scopes withhold paths.
+**Not decided here:** Git history scanning, finding policy and replay-bundle command acceptance. **Cost:** a location is whole lines, so a long line cites more than the match; the release's per-rule
+allowlists and stop words are detector semantics and part of the pin; a path whose file is also another's folder is
+refused rather than partly scanned.
+
 
 31. **Sentinel's Express pack reads registration order from source and never credits a refusal as authentication or authorization (2026-10-22).**
 `farsight-sentinel/frameworks/express` (PR 15) answers, for each Express route the public parser found, what runs
