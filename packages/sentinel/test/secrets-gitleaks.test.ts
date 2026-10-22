@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { createAdapterRegistry } from '../dist/execution/registry.js';
 import {
   GITLEAKS_ADAPTER, GITLEAKS_CONFIG, GITLEAKS_ENGINE, GITLEAKS_REPORT_TEMPLATE, GITLEAKS_RULE_IDS, GITLEAKS_WORKER_BYTES, GITLEAKS_WORKER_DIGEST,
-  OBSERVATION_MESSAGE, buildGitleaksAdapter, buildSecretsJob, lineSpan, normalizeSecretsRun, readReport, toolAllowlisted, GITLEAKS_MAX_FILE_BYTES,
+  OBSERVATION_MESSAGE, NAME_MESSAGE, WITHHELD_PREFIX, buildGitleaksAdapter, buildSecretsJob, lineSpan, normalizeSecretsRun, readReport, toolAllowlisted, GITLEAKS_MAX_FILE_BYTES,
 } from '../dist/adapters/gitleaks/index.js';
 import { VALUE, absent, captured, sha, treeFiles } from './secrets-helpers.ts';
 
@@ -61,23 +61,30 @@ test('the job: shim, job, contents in order; unsent files are skipped scopes wit
 
 test('the pinned global allowlist reads the way Gitleaks reads it', () => {
   for (const p of ['package-lock.json', 'web/pnpm-lock.yaml', 'node_modules/x/index.js', 'img/a.PNG', 'go.sum', 'vendor/modules.txt', '.gitleaks.toml']) assert.ok(toolAllowlisted(p), p);
-  for (const p of ['src/index.ts', 'config/.env', 'package.json', 'docs/readme.md', 'lockfile.json']) assert.ok(!toolAllowlisted(p), p);
+  // A folder the allowlist matches is pruned whole by the engine: everything below it is skipped too.
+  for (const p of ['images.png/token.env', 'package-lock.json/token.env', 'a/images.png/b/token.env', 'docs/report.pdf/notes.txt']) assert.ok(toolAllowlisted(p), p);
+  for (const p of ['src/index.ts', 'config/.env', 'package.json', 'docs/readme.md', 'lockfile.json', 'images/token.env', 'png/x.env']) assert.ok(!toolAllowlisted(p), p);
 });
 
-test('a report line names a pinned rule, whole lines and a sent file, and nothing else', () => {
-  const sent = new Set(['a.env', 'b c\td.env']);
-  assert.deepEqual(readReport('F\tgithub-pat\t2\t2\tscan/tree/a.env\nF\tgithub-pat\t1\t3\tscan/tree/b c\td.env\n', sent),
-    [{ rule: 'github-pat', start: 2, end: 2, path: 'a.env' }, { rule: 'github-pat', start: 1, end: 3, path: 'b c\td.env' }]);
-  assert.deepEqual(readReport('', sent), []);
-  const refused = (text: string, code: string) => assert.throws(() => readReport(text, sent), (e: any) => e.code === code);
-  refused(`F\t${VALUE}\t2\t2\tscan/tree/a.env\n`, 'sentinel.secrets.reportMalformed');
-  refused('F\tnot-a-pinned-rule\t2\t2\tscan/tree/a.env\n', 'sentinel.secrets.reportMalformed');
-  refused('F\tgithub-pat\t0\t2\tscan/tree/a.env\n', 'sentinel.secrets.reportMalformed');
-  refused('F\tgithub-pat\t3\t2\tscan/tree/a.env\n', 'sentinel.secrets.reportMalformed');
-  refused('F\tgithub-pat\t2\t2\tscan/tree/a.env', 'sentinel.secrets.reportMalformed');
-  refused('X\tgithub-pat\t2\t2\tscan/tree/a.env\n', 'sentinel.secrets.reportMalformed');
-  refused('F\tgithub-pat\t2\t2\tscan/tree/other.env\n', 'sentinel.secrets.unknownFile');
-  refused('F\tgithub-pat\t2\t2\t/etc/passwd\n', 'sentinel.secrets.unknownFile');
+test('a report line carries a pinned rule, whole lines and an index, never a path', () => {
+  assert.deepEqual(readReport('F\tgithub-pat\t2\t2\t0\nF\tgithub-pat\t1\t3\t1\nP\tgithub-pat\t2\t2\n', 2, 3), [
+    { kind: 'content', rule: 'github-pat', start: 2, end: 2, index: 0 },
+    { kind: 'content', rule: 'github-pat', start: 1, end: 3, index: 1 },
+    { kind: 'name', rule: 'github-pat', line: 2 },
+  ]);
+  assert.deepEqual(readReport('', 2, 2), []);
+  const refused = (text: string, code: string) => assert.throws(() => readReport(text, 2, 3), (e: any) => e.code === code);
+  refused(`F\t${VALUE}\t2\t2\t0\n`, 'sentinel.secrets.reportMalformed');
+  refused('F\tnot-a-pinned-rule\t2\t2\t0\n', 'sentinel.secrets.reportMalformed');
+  refused('F\tgithub-pat\t0\t2\t0\n', 'sentinel.secrets.reportMalformed');
+  refused('F\tgithub-pat\t3\t2\t0\n', 'sentinel.secrets.reportMalformed');
+  refused('F\tgithub-pat\t2\t2\t0', 'sentinel.secrets.reportMalformed');
+  refused('F\tgithub-pat\t2\t2\tscan/tree/a.env\n', 'sentinel.secrets.reportMalformed');
+  refused(`F\tgithub-pat\t2\t2\t0\t${VALUE}\n`, 'sentinel.secrets.reportMalformed');
+  refused('F\tgithub-pat\t2\t2\t2\n', 'sentinel.secrets.unknownFile');
+  refused('P\tgithub-pat\t4\t4\n', 'sentinel.secrets.reportMalformed');
+  refused('P\tgithub-pat\t1\t2\n', 'sentinel.secrets.reportMalformed');
+  refused('U\n', 'sentinel.secrets.unknownFile');
 });
 
 test('a location is whole lines, never a part of one', () => {
@@ -91,10 +98,11 @@ test('a location is whole lines, never a part of one', () => {
 
 // --- the normaliser over synthetic outcomes ---
 
-function synthetic(options: { exitCode?: number; failure?: string | null; report?: string | null; architecture?: string; state?: string; stderr?: string; extraOutput?: boolean; qualify?: string } = {}) {
-  const targets = captured(dir(), treeFiles());
+function synthetic(options: { exitCode?: number; failure?: string | null; report?: string | null; architecture?: string; state?: string; stderr?: string; extraOutput?: boolean; qualify?: string; files?: Record<string, string | Buffer | null> } = {}) {
+  const targets = captured(dir(), treeFiles(options.files));
   const built = buildSecretsJob({ snapshotId: 'snap-1', sourceId: 'src-1', targets }, dir());
-  const report = options.report === undefined ? 'F\tgithub-pat\t2\t2\tscan/tree/config/service.env\nF\tgithub-pat\t1\t1\tscan/tree/notes/allowed.md\n' : options.report;
+  // job.files in order: .gitleaksignore, config/service.env, notes/allowed.md, src/clean.ts
+  const report = options.report === undefined ? 'F\tgithub-pat\t2\t2\t1\nF\tgithub-pat\t1\t1\t2\n' : options.report;
   const reportBytes = report === null ? undefined : Buffer.from(report);
   const record = Buffer.from(JSON.stringify({ schema: 'sentinel-gitleaks-run/draft-1', job: built.jobDigest, exitCode: options.exitCode ?? 2,
     failure: options.failure ?? null, report: reportBytes ? sha(reportBytes) : null, reportBytes: reportBytes?.length ?? 0, stderrDigest: sha('') }));
@@ -139,8 +147,9 @@ test('every failure is an error over every target with a coded reason, never zer
     [{ exitCode: 0 }, 'sentinel.secrets.reportInconsistent'],
     [{ exitCode: 2, report: '' }, 'sentinel.secrets.reportInconsistent'],
     [{ exitCode: 3, report: '' }, 'sentinel.secrets.toolFailed'],
-    [{ report: `F\tgithub-pat\t2\t2\tscan/tree/config/service.env\t${VALUE}\n` }, 'sentinel.secrets.unknownFile'],
-    [{ report: 'F\tgithub-pat\t9\t9\tscan/tree/config/service.env\n' }, 'sentinel.secrets.locationOutOfRange'],
+    [{ report: 'U\n' }, 'sentinel.secrets.unknownFile'],
+    [{ report: 'F\tgithub-pat\t2\t2\t9\n' }, 'sentinel.secrets.unknownFile'],
+    [{ report: 'F\tgithub-pat\t9\t9\t1\n' }, 'sentinel.secrets.locationOutOfRange'],
     [{ architecture: 'amd64' }, 'sentinel.secrets.platformUnmeasured'],
     [{ architecture: 's390x' }, 'sentinel.secrets.platformUnmeasured'],
     [{ extraOutput: true }, 'sentinel.secrets.outputRefused'],
@@ -158,4 +167,51 @@ test('every failure is an error over every target with a coded reason, never zer
     assert.equal(r.skipped.length, 4);
     assert.ok(r.skipped.every(s => s.reasonCode === code));
   }
+});
+
+test('a name shaped like a secret is withheld everywhere, reported as a finding, and resolvable by its content digest', () => {
+  const named = `keys/${VALUE}.txt`;
+  // the names file lists job.files then the unsent names: .gitleaksignore, config/service.env, keys/<value>.txt, notes/allowed.md, src/clean.ts
+  const r = synthetic({ files: { [named]: `again ${VALUE}\n` }, report: 'F\tgithub-pat\t2\t2\t1\nF\tgithub-pat\t1\t1\t2\nF\tgithub-pat\t1\t1\t3\nP\tgithub-pat\t3\t3\n' });
+  absent(JSON.stringify(r.observations), 'the observations');
+  absent(JSON.stringify(r), 'the scan result');
+  assert.equal(r.status, 'complete');
+  assert.equal(r.withheld.length, 1);
+  const w = r.withheld[0]!;
+  assert.ok(w.reference.startsWith(WITHHELD_PREFIX));
+  assert.equal(w.reasonCode, 'sentinel.secrets.nameMatch');
+  assert.equal(w.artifact, sha(`again ${VALUE}\n`), 'the content digest the private snapshot resolves');
+  const name = r.observations.find(o => o.message === NAME_MESSAGE)!;
+  assert.deepEqual(name.evidence[0]!.span, { startByte: 0, endByte: 0 });
+  assert.equal(name.evidence[0]!.relativePath, w.reference);
+  assert.ok(name.limitationKeys.includes('sentinel.secrets.pathWithheld'));
+  const inside = r.observations.find(o => o.message === OBSERVATION_MESSAGE && o.evidence[0]!.content === w.artifact)!;
+  assert.equal(inside.evidence[0]!.relativePath, w.reference, 'a content finding in that file cites the reference too');
+  assert.ok(inside.limitationKeys.includes('sentinel.secrets.pathWithheld'));
+  assert.ok(r.scanned.includes(`src-1:${w.reference}`));
+  assert.ok(r.scanned.includes('src-1:config/service.env'), 'other names are shown as captured');
+});
+
+test('names that cannot be screened are withheld; a failed scan withholds every name', () => {
+  const odd = synthetic({ files: { 'odd\nname.env': 'x\n' } });
+  assert.equal(odd.withheld.length, 1);
+  assert.equal(odd.withheld[0]!.reasonCode, 'sentinel.secrets.nameUnscreened');
+  assert.ok(odd.skipped.some(s => s.scopeId === `src-1:${odd.withheld[0]!.reference}` && s.reasonCode === 'sentinel.secrets.pathUnsupported'));
+  assert.ok(!JSON.stringify(odd).includes('odd\\nname'), 'the unscreened name is not printed');
+  const failed = synthetic({ files: { [`k/${VALUE}.txt`]: 'x\n' }, failure: 'engineError', exitCode: 1, report: null });
+  absent(JSON.stringify(failed), 'a failed result');
+  assert.equal(failed.withheld.length, 5);
+  assert.ok(failed.skipped.every(s => s.scopeId.startsWith(`src-1:${WITHHELD_PREFIX}`)));
+});
+
+test('the job lists sent files, then the names of unsent ones, so the engine screens every name', () => {
+  const targets = captured(dir(), treeFiles({ 'images.png/token.env': `T=${VALUE}\n`, 'odd\nname.env': 'x\n' }));
+  const built = buildSecretsJob({ snapshotId: 'snap-1', sourceId: 'src-1', targets }, dir());
+  assert.deepEqual(built.job.unsent.map(u => `${u.relativePath.replace('\n', '\\n')} ${u.reasonCode}`).sort(),
+    ['images.png/token.env sentinel.secrets.toolAllowlisted', 'odd\\nname.env sentinel.secrets.pathUnsupported']);
+  assert.deepEqual(built.job.names.map(n => n.relativePath), ['.gitleaksignore', 'config/service.env', 'notes/allowed.md', 'src/clean.ts', 'images.png/token.env']);
+  assert.equal(built.job.namesScreened, true);
+  const text = readFileSync(built.inputs[1]!.path, 'utf8');
+  assert.match(text, /\nN images\.png\/token\.env\n$/);
+  assert.doesNotMatch(text, /odd/);
 });

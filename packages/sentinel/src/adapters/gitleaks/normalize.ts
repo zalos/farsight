@@ -16,11 +16,13 @@ import type { ObservationEnvelope } from '../../contracts/observation.js';
 import type { WorkerOutcome } from '../../execution/supervisor.js';
 import { validateEnvelope } from '../../validate.js';
 import { GITLEAKS_CONFIG_DIGEST, GITLEAKS_ENGINE, GITLEAKS_IMAGE_PLATFORMS, GITLEAKS_MEASURED_ARCHITECTURES } from './adapter.js';
-import { SCANNER_PATH_PREFIX, type SecretsJob } from './job.js';
+import { lineSafe, type SecretsJob } from './job.js';
 import { GITLEAKS_RULE_IDS } from './rules.js';
 
 export const OBSERVATION_MESSAGE = 'A value shaped like a secret matched this detector. The value is withheld; open the cited lines in the captured source to review it.';
 export const OBSERVATION_LIMITATIONS = Object.freeze(['sentinel.secrets.valueWithheld', 'sentinel.secrets.lineLocation'] as const);
+export const NAME_MESSAGE = 'A file name shaped like a secret matched this detector. The name is withheld; the cited content digest identifies the file in the captured source.';
+export const NAME_LIMITATIONS = Object.freeze(['sentinel.secrets.valueWithheld', 'sentinel.secrets.nameMatch', 'sentinel.secrets.pathWithheld'] as const);
 export const MAX_SECRETS_OBSERVATIONS = 10_000;
 export const RECORD_MEDIA_TYPE = 'application/vnd.sentinel.gitleaks-run+json';
 export const REPORT_MEDIA_TYPE = 'application/vnd.sentinel.gitleaks-report';
@@ -44,6 +46,9 @@ export interface SecretsAudit {
   readonly report: Digest | null;
 }
 
+/** A withheld name: the reference results use, and the captured content it belongs to, for an authorized local lookup. */
+export interface WithheldName { readonly reference: string; readonly artifact: string; readonly reasonCode: CatalogKey }
+
 export interface SecretsScanResult {
   readonly status: SecretsScanStatus;
   /** Why the scan is an error. Absent for complete and partial. */
@@ -53,6 +58,12 @@ export interface SecretsScanResult {
   readonly scanned: readonly string[];
   /** Scopes not scanned, each with its reason. For an error, every target. */
   readonly skipped: readonly ScopedReason[];
+  /**
+   * Names that are not printed: the engine found one shaped like a secret, or names could not be screened (a name
+   * with a control character, too many names, or a scan that failed before screening). Results cite each by its
+   * reference; the captured snapshot, which stays private, resolves the content digest back to the file.
+   */
+  readonly withheld: readonly WithheldName[];
   /** The image platform the engine ran on: measured, or a candidate only under an explicit qualification run. */
   readonly platform: { readonly architecture: string | null; readonly state: 'measured' | 'candidate' | 'refused' };
   readonly audit: SecretsAudit;
@@ -98,22 +109,39 @@ function readRecord(bytes: Uint8Array | undefined): RunRecord {
   return v as unknown as RunRecord;
 }
 
-interface ReportLine { rule: string; start: number; end: number; path: string }
+/** A content finding in sent file `index`, or a name finding on line `start` of the names file. */
+export type ReportLine =
+  | { kind: 'content'; rule: string; start: number; end: number; index: number }
+  | { kind: 'name'; rule: string; line: number };
 
-/** Each line is exactly `F<TAB>rule<TAB>start<TAB>end<TAB>file`, the rule a pinned rule ID, the file a sent path. */
-export function readReport(text: string, sent: ReadonlySet<string>): ReportLine[] {
+/**
+ * Each line is exactly `F<TAB>rule<TAB>start<TAB>end<TAB>index` (a sent file) or `P<TAB>rule<TAB>line<TAB>line` (a
+ * line of the names file); the rule a pinned rule ID. `U` (a path the shim could not map) and anything else is refused.
+ * The report carries no path.
+ */
+export function readReport(text: string, fileCount: number, nameCount: number): ReportLine[] {
   if (text === '') return [];
   if (!text.endsWith('\n')) refuse('sentinel.secrets.reportMalformed');
   const lines = text.slice(0, -1).split('\n');
   if (lines.length > MAX_SECRETS_OBSERVATIONS) refuse('sentinel.secrets.tooManyFindings');
-  return lines.map(line => {
+  const int = (v: string | undefined) => (v !== undefined && /^(0|[1-9][0-9]{0,9})$/.test(v) ? Number(v) : refuse('sentinel.secrets.reportMalformed'));
+  return lines.map((line): ReportLine => {
     const parts = line.split('\t');
-    if (parts.length < 5 || parts[0] !== 'F') refuse('sentinel.secrets.reportMalformed');
-    const [, rule, s, e] = parts as [string, string, string, string];
-    const file = parts.slice(4).join('\t');
-    if (!GITLEAKS_RULE_IDS.has(rule) || !/^[1-9][0-9]{0,9}$/.test(s) || !/^[1-9][0-9]{0,9}$/.test(e) || Number(e) < Number(s)) refuse('sentinel.secrets.reportMalformed');
-    if (!file.startsWith(SCANNER_PATH_PREFIX) || !sent.has(file.slice(SCANNER_PATH_PREFIX.length))) refuse('sentinel.secrets.unknownFile');
-    return { rule, start: Number(s), end: Number(e), path: file.slice(SCANNER_PATH_PREFIX.length) };
+    if (parts[0] === 'U') refuse('sentinel.secrets.unknownFile');
+    const rule = parts[1] ?? '';
+    if (!GITLEAKS_RULE_IDS.has(rule)) refuse('sentinel.secrets.reportMalformed');
+    if (parts[0] === 'F' && parts.length === 5) {
+      const start = int(parts[2]), end = int(parts[3]), index = int(parts[4]);
+      if (start < 1 || end < start) refuse('sentinel.secrets.reportMalformed');
+      if (index >= fileCount) refuse('sentinel.secrets.unknownFile');
+      return { kind: 'content', rule, start, end, index };
+    }
+    if (parts[0] === 'P' && parts.length === 4) {
+      const start = int(parts[2]), end = int(parts[3]);
+      if (start < 1 || end !== start || start > nameCount) refuse('sentinel.secrets.reportMalformed');
+      return { kind: 'name', rule, line: start };
+    }
+    return refuse('sentinel.secrets.reportMalformed');
   });
 }
 
@@ -134,9 +162,15 @@ export function lineSpan(bytes: Uint8Array, startLine: number, endLine: number):
 
 export const scopeOf = (sourceId: string, path: string) => `${sourceId}:${path}`;
 
+/** The folder withheld names are listed under; never a captured path (a captured `.sentinel-withheld-name` is withheld too). */
+export const WITHHELD_PREFIX = '.sentinel-withheld-name/';
+/** A stable, non-reversible reference for a withheld name within one job. */
+export const withheldReference = (jobDigest: string, path: string) => `${WITHHELD_PREFIX}${sha(`${jobDigest}\0${path}`).slice(7, 31)}`;
+
 export function normalizeSecretsRun(input: NormalizeInput): SecretsScanResult {
   const { job, outcome } = input;
-  const targets = [...job.files.map(f => f.relativePath), ...job.unsent.map(u => u.relativePath)].map(p => scopeOf(job.sourceId, p));
+  const all = [...job.files.map(f => ({ relativePath: f.relativePath, artifact: f.artifact })), ...job.unsent.map(u => ({ relativePath: u.relativePath, artifact: u.artifact }))];
+  const ref = (path: string) => withheldReference(input.jobDigest, path);
   let record: RunRecord | undefined;
   const audit = (): SecretsAudit => ({
     engine: `${GITLEAKS_ENGINE.name} ${GITLEAKS_ENGINE.version}`, adapterId: outcome.adapter.id, adapterDigest: outcome.adapter.digest,
@@ -149,9 +183,12 @@ export function normalizeSecretsRun(input: NormalizeInput): SecretsScanResult {
   const listed = GITLEAKS_IMAGE_PLATFORMS.some(p => p.architecture === architecture);
   const platform = Object.freeze({ architecture, state: architecture !== null && GITLEAKS_MEASURED_ARCHITECTURES.has(architecture) ? 'measured' as const
     : listed && architecture === input.qualifyingArchitecture ? 'candidate' as const : 'refused' as const });
+  // A failed scan screened no name, so every name is withheld.
   const error = (reasonCode: CatalogKey): SecretsScanResult => Object.freeze({
     status: 'error' as const, reasonCode, observations: [], scanned: [],
-    skipped: targets.map(scopeId => ({ scopeId, reasonCode })), platform, audit: audit(),
+    skipped: all.map(t => ({ scopeId: scopeOf(job.sourceId, ref(t.relativePath)), reasonCode })),
+    withheld: all.map(t => ({ reference: ref(t.relativePath), artifact: t.artifact, reasonCode: 'sentinel.secrets.nameUnscreened' })),
+    platform, audit: audit(),
   });
   if (outcome.state !== 'succeeded' || !outcome.result) {
     const coded = WORKER_CODE.exec(outcome.diagnostics.text)?.[1];
@@ -171,35 +208,58 @@ export function normalizeSecretsRun(input: NormalizeInput): SecretsScanResult {
     if (!reportBytes || sha(reportBytes) !== record.report) refuse('sentinel.secrets.reportMissing');
     let text: string;
     try { text = new TextDecoder('utf-8', { fatal: true }).decode(reportBytes); } catch { return refuse('sentinel.secrets.reportMalformed'); }
-    const byPath = new Map(job.files.map(f => [f.relativePath, f]));
-    const lines = readReport(text, new Set(byPath.keys()));
+    const lines = readReport(text, job.files.length, job.names.length);
     // The exit code and the report must agree: "leaks found" with no lines, or the reverse, is not trusted.
     if ((record.exitCode === 2) !== (lines.length > 0)) refuse('sentinel.secrets.reportInconsistent');
+    // Which names are withheld: those the engine matched, and every name when they could not all be screened.
+    const withheld = new Map<string, WithheldName>();
+    const withhold = (t: { relativePath: string; artifact: string }, reasonCode: CatalogKey) => {
+      if (!withheld.has(t.relativePath)) withheld.set(t.relativePath, { reference: ref(t.relativePath), artifact: t.artifact, reasonCode });
+    };
+    for (const l of lines) if (l.kind === 'name') withhold(job.names[l.line - 1]!, 'sentinel.secrets.nameMatch');
+    for (const t of all) {
+      if (!job.namesScreened || !lineSafe(t.relativePath) || t.relativePath.startsWith(WITHHELD_PREFIX)) withhold(t, 'sentinel.secrets.nameUnscreened');
+    }
+    const shown = (path: string) => withheld.get(path)?.reference ?? path;
     const producer = { kind: 'scanner' as const, adapterId: outcome.adapter.id, adapterDigest: outcome.adapter.digest, attemptId: outcome.attemptId };
     const observations = new Map<string, ObservationEnvelope>();
-    for (const l of lines) {
-      const file = byPath.get(l.path)!;
-      const bytes = input.targetBytes(file.artifact);
-      if (!bytes || bytes.length !== file.bytes || sha(bytes) !== file.artifact) refuse('sentinel.secrets.inputInvalid');
-      const span = lineSpan(bytes!, l.start, l.end);
-      const key = JSON.stringify([l.rule, l.path, l.start, l.end]);
-      if (observations.has(key)) continue;
-      const body = {
-        schema: 'sentinel-observation/draft-1' as const, snapshotId: job.snapshotId, producer, producerRuleId: l.rule,
-        originalSeverity: 'unrated', message: OBSERVATION_MESSAGE,
-        evidence: [{ snapshotId: job.snapshotId, sourceId: job.sourceId, relativePath: l.path, content: file.artifact, span }],
-        limitationKeys: [...OBSERVATION_LIMITATIONS], observedAt: input.observedAt,
-      };
-      // The ID is derived from what identifies the finding in this attempt, so reading the attempt twice names it the same.
-      const id = `obs-${sha(JSON.stringify([outcome.attemptId, job.snapshotId, job.sourceId, l.rule, l.path, l.start, l.end])).slice(7, 47)}`;
+    const add = (key: string, body: Omit<ObservationEnvelope, 'id'>) => {
+      if (observations.has(key)) return;
+      // The ID is derived from what identifies the finding in this attempt, never from a withheld name.
+      const id = `obs-${sha(JSON.stringify([outcome.attemptId, key])).slice(7, 47)}`;
       const valid = validateEnvelope('observation', { id, ...body });
       if (!valid.ok) refuse('sentinel.secrets.outputRefused');
       observations.set(key, (valid as { value: ObservationEnvelope }).value);
+    };
+    for (const l of lines) {
+      if (l.kind === 'name') {
+        const t = job.names[l.line - 1]!;
+        add(JSON.stringify(['name', l.rule, ref(t.relativePath)]), {
+          schema: 'sentinel-observation/draft-1', snapshotId: job.snapshotId, producer, producerRuleId: l.rule, originalSeverity: 'unrated',
+          message: NAME_MESSAGE,
+          // The name is not in the content, so no span inside it is claimed: a zero-length citation of the file.
+          evidence: [{ snapshotId: job.snapshotId, sourceId: job.sourceId, relativePath: ref(t.relativePath), content: t.artifact, span: { startByte: 0, endByte: 0 } }],
+          limitationKeys: [...NAME_LIMITATIONS], observedAt: input.observedAt,
+        });
+        continue;
+      }
+      const file = job.files[l.index]!;
+      const bytes = input.targetBytes(file.artifact);
+      if (!bytes || bytes.length !== file.bytes || sha(bytes) !== file.artifact) refuse('sentinel.secrets.inputInvalid');
+      const span = lineSpan(bytes!, l.start, l.end);
+      const at = shown(file.relativePath);
+      add(JSON.stringify(['content', l.rule, at, l.start, l.end]), {
+        schema: 'sentinel-observation/draft-1', snapshotId: job.snapshotId, producer, producerRuleId: l.rule, originalSeverity: 'unrated',
+        message: OBSERVATION_MESSAGE,
+        evidence: [{ snapshotId: job.snapshotId, sourceId: job.sourceId, relativePath: at, content: file.artifact, span }],
+        limitationKeys: [...OBSERVATION_LIMITATIONS, ...(withheld.has(file.relativePath) ? ['sentinel.secrets.pathWithheld'] : [])],
+        observedAt: input.observedAt,
+      });
     }
-    const skipped = job.unsent.map(u => ({ scopeId: scopeOf(job.sourceId, u.relativePath), reasonCode: u.reasonCode }));
+    const skipped = job.unsent.map(u => ({ scopeId: scopeOf(job.sourceId, shown(u.relativePath)), reasonCode: u.reasonCode }));
     return Object.freeze({
       status: skipped.length ? 'partial' as const : 'complete' as const, observations: [...observations.values()],
-      scanned: job.files.map(f => scopeOf(job.sourceId, f.relativePath)), skipped, platform, audit: audit(),
+      scanned: job.files.map(f => scopeOf(job.sourceId, shown(f.relativePath))), skipped, withheld: [...withheld.values()], platform, audit: audit(),
     });
   } catch (e) {
     return error(e instanceof Refused ? e.code : 'sentinel.secrets.outputRefused');

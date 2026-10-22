@@ -6,7 +6,7 @@ import { closeSync, constants as FS, fstatSync, mkdtempSync, openSync, readFileS
 import { join } from 'node:path';
 import type { ArtifactId, Id, WorkRef } from '../../contracts/common.js';
 import type { ExecutionService } from '../../execution/service.js';
-import { releaseWorkDir } from '../../execution/supervisor.js';
+import { releaseWorkDir, type WorkerOutcome } from '../../execution/supervisor.js';
 import { GITLEAKS_PRODUCTION_BUILD, type GitleaksAdapterBuild } from './adapter.js';
 import { buildSecretsJob, type SecretsTarget } from './job.js';
 import { normalizeSecretsRun, type SecretsScanResult } from './normalize.js';
@@ -25,6 +25,8 @@ export interface SecretsAttempt {
   adapter?: GitleaksAdapterBuild;
   /** Qualification only: an unmeasured platform of the pinned index whose results are marked candidate. */
   qualifyingArchitecture?: string;
+  /** Test seam: sees the supervised outcome while its verified outputs still exist, before the work folder is released. */
+  inspect?: (outcome: WorkerOutcome) => void;
 }
 
 function readSealed(dir: string, artifact: ArtifactId): Uint8Array | undefined {
@@ -52,6 +54,7 @@ export async function runSecretsAttempt(service: ExecutionService, attempt: Secr
       ...(attempt.signal ? { signal: attempt.signal } : {}),
     });
     try {
+      attempt.inspect?.(outcome);
       const byId = new Map(outcome.outputs.map(o => [o.id, o.path]));
       const sealed = join(outcome.workDir, 'input');
       return normalizeSecretsRun({

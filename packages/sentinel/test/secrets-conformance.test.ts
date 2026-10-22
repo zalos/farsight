@@ -46,10 +46,16 @@ async function run(files: Record<string, string | Buffer>, adapter = GITLEAKS_PR
   const i = n++;
   const targets = captured(join(root.root, `tree-${i}`), files);
   const t0 = Date.now();
+  let outputs = 0;
   const r = await runSecretsAttempt(service, { attemptId: `att-secrets-${i}`, work: { id: 'work-secrets', revision: 1 },
-    snapshotId: 'snap-synthetic', sourceId: 'src-synthetic', targets, scratch: root.root, adapter, ...(QUALIFY ? { qualifyingArchitecture: QUALIFY } : {}) });
+    snapshotId: 'snap-synthetic', sourceId: 'src-synthetic', targets, scratch: root.root, adapter, ...(QUALIFY ? { qualifyingArchitecture: QUALIFY } : {}),
+    // Every artifact that left the container, read while it exists: none may carry the value, a path or a name.
+    inspect: (outcome: any) => {
+      for (const o of outcome.outputs) { const b = readFileSync(o.path); absent(b, 'an output artifact'); assert.ok(!b.includes('scan/tree'), 'no path leaves the container'); outputs++; }
+      absent(JSON.stringify(outcome), 'the worker outcome');
+    } });
   absent(JSON.stringify(r), 'the scan result');
-  return { r, ms: Date.now() - t0 };
+  return { r, ms: Date.now() - t0, outputs };
 }
 const found = (r: any) => r.observations.map((o: any) => `${o.producerRuleId} ${o.evidence[0].relativePath}:${o.evidence[0].span.startByte}`).sort();
 
@@ -96,14 +102,16 @@ test('the allowlist is the engine’s: sent anyway, Gitleaks itself skips the lo
   const reports = outcome.outputs.filter((o: any) => o.mediaType === 'application/vnd.sentinel.gitleaks-report');
   const text = readFileSync(reports[0].path, 'utf8');
   absent(text, 'the engine report');
-  assert.deepEqual(text.trim().split('\n').map(l => l.split('\t').at(-1)), ['scan/tree/web/app.env'], 'only the non-allowlisted file is reported');
+  // The report carries the job index of each file, never its path: web/app.env is index 0, the lockfile 9.
+  assert.doesNotMatch(text, /scan\/tree|package-lock|app\.env/);
+  assert.deepEqual(text.trim().split('\n'), ['F\tgithub-pat\t1\t1\t0'], 'only the non-allowlisted file is reported');
 });
 
 test('engine failures are errors over every target, and nothing the engine said leaves the container', { skip }, async () => {
   for (const [name, adapter, code] of [
     ['engineError', VARIANTS.engineError, 'sentinel.secrets.toolFailed'],
     ['inconsistent', VARIANTS.inconsistent, 'sentinel.secrets.reportInconsistent'],
-    ['malformed', VARIANTS.malformed, 'sentinel.secrets.reportMalformed'],
+    ['malformed', VARIANTS.malformed, 'sentinel.secrets.unknownFile'], // a line the shim cannot map to a sent file is U
     ['tooLarge', VARIANTS.tooLarge, 'sentinel.secrets.reportTooLarge'],
   ] as const) {
     const { r } = await run(treeFiles(), adapter);
@@ -129,4 +137,50 @@ test('a job the shim cannot trust is refused with a code before the engine runs'
   const r = normalizeSecretsRun({ job: built.job, jobDigest: built.jobDigest, outcome, observedAt: new Date().toISOString(), outputBytes: () => undefined, targetBytes: () => undefined, ...(QUALIFY ? { qualifyingArchitecture: QUALIFY } : {}) });
   assert.equal(r.reasonCode, 'sentinel.secrets.inputInvalid');
   assert.deepEqual(readdirSync(join(outcome.workDir, 'output')), []);
+});
+
+test('a folder the engine prunes (images.png/, package-lock.json/, nested) is a skipped scope, never complete with zero findings', { skip }, async () => {
+  const { r } = await run({
+    'images.png/token.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`, 'package-lock.json/token.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`,
+    'a/images.png/b/token.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`, 'src/clean.ts': 'export const x = 1;\n',
+  });
+  assert.equal(r.status, 'partial', r.reasonCode);
+  assert.deepEqual(r.skipped.map((s: any) => s.scopeId).sort(),
+    ['src-synthetic:a/images.png/b/token.env', 'src-synthetic:images.png/token.env', 'src-synthetic:package-lock.json/token.env']);
+  assert.ok(r.skipped.every((s: any) => s.reasonCode === 'sentinel.secrets.toolAllowlisted'));
+  assert.equal(r.observations.length, 0);
+  assert.deepEqual(r.scanned, ['src-synthetic:src/clean.ts']);
+});
+
+test('the engine itself prunes those folders when they are sent anyway, so the skip is the engine\'s, not a guess', { skip }, async () => {
+  const i = n++;
+  const files = { 'images.png/token.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`, 'package-lock.json/token.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`, 'web/app.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n` };
+  const targets = captured(join(root.root, `tree-${i}`), files);
+  const dir = join(root.root, `job-${i}`); mkdirSync(dir);
+  const built = buildSecretsJob({ snapshotId: 'snap-synthetic', sourceId: 'src-synthetic', targets }, dir);
+  const lines = ['sentinel-gitleaks-job/1', ...targets.map((t, k) => `F ${k} ${t.artifact.slice(7)} ${t.relativePath}`)];
+  const job = `${lines.join('\n')}\n`;
+  const jobPath = join(dir, 'job-all.txt'); writeFileSync(jobPath, job);
+  const outcome = await service.run({ adapterId: GITLEAKS_ADAPTER.id, attemptId: `att-secrets-${i}`, work: { id: 'work-secrets', revision: 1 },
+    inputs: [built.inputs[0], { id: sha(job), path: jobPath }, ...targets.filter((t, k, a) => a.findIndex(x => x.artifact === t.artifact) === k).map(t => ({ id: t.artifact, path: t.path }))] });
+  assert.equal(outcome.state, 'succeeded', outcome.code);
+  const report = readFileSync(outcome.outputs.find((o: any) => o.mediaType === 'application/vnd.sentinel.gitleaks-report').path, 'utf8');
+  const sent = targets.map(t => t.relativePath);
+  assert.deepEqual(report.trim().split('\n').map(l => sent[Number(l.split('\t')[4])]), ['web/app.env'], 'nothing under the pruned folders is reported');
+});
+
+test('a file name shaped like a secret is found by the engine, withheld from every result, and leaks nowhere', { skip }, async () => {
+  const named = `keys/${VALUE}.txt`;
+  const { r, outputs } = await run({ [named]: `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`, 'keys/plain.txt': 'nothing\n', [`assets/${VALUE}.png`]: 'x' });
+  assert.equal(outputs, 2, 'the record and the report were checked');
+  assert.equal(r.status, 'partial', r.reasonCode);
+  const name = r.observations.filter((o: any) => o.limitationKeys.includes('sentinel.secrets.nameMatch'));
+  assert.equal(name.length, 2, 'both secret-shaped names, the scanned one and the allowlisted one, are findings');
+  const withheld = new Map(r.withheld.map((w: any) => [w.reference, w]));
+  assert.equal(withheld.size, 2);
+  assert.ok([...withheld.values()].every((w: any) => w.reasonCode === 'sentinel.secrets.nameMatch'));
+  const inside = r.observations.find((o: any) => !o.limitationKeys.includes('sentinel.secrets.nameMatch') && withheld.has(o.evidence[0].relativePath));
+  assert.ok(inside, 'the content finding in the withheld file cites its reference');
+  assert.ok(r.scanned.includes('src-synthetic:keys/plain.txt'));
+  assert.ok(r.skipped.some((s: any) => withheld.has(s.scopeId.slice('src-synthetic:'.length)) && s.reasonCode === 'sentinel.secrets.toolAllowlisted'));
 });

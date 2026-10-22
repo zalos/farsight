@@ -9,9 +9,14 @@
 // the pinned configuration and report template itself, and runs Gitleaks once with fixed arguments: an empty ignore
 // folder, `--ignore-gitleaks-allow`, full redaction, no baseline.
 //
-// What leaves the container: a report rendered through the pinned template, which names only the rule, the lines and
-// the file (never the match, the secret or the line text), and a run record with the exit code, a fixed failure
-// category and digests. Gitleaks' stdout is discarded; its stderr stays in the tmpfs and only its digest is reported,
+// Names: the shim also writes every name the job lists (sent files, then `N` names) to `scan/paths.txt`, beside
+// the tree, so the same engine screens the names themselves.
+//
+// What leaves the container: a report naming only the rule, the lines and a reference — `F … <index>` for a sent
+// file, `P …` for a line of the names file, `U` for anything else — never a path, the match, the secret or the line
+// text (the pinned template renders the engine's findings; an awk pass inside the container maps each path to its
+// job index and the raw rendering is deleted), and a run record with the exit code, a fixed failure category and
+// digests. Gitleaks' stdout is discarded; its stderr stays in the tmpfs and only its digest is reported,
 // because a tool message can quote input. A fatal shim error writes one catalog code to stderr and exits 3.
 export const GITLEAKS_WORKER_SOURCE = `# Sentinel Gitleaks worker (sentinel-gitleaks-worker/1). Original; POSIX sh and busybox applets only.
 set -u
@@ -46,6 +51,7 @@ JOB=$(printf '%s\\n' "$INPUTS" | sed -n 2p)
 
 rm -rf "$W"
 mkdir -p "$W/scan/tree" "$W/no-ignores" || die 'sentinel.secrets.workerError'
+: > "$W/scan/paths.txt" || die 'sentinel.secrets.workerError'
 printf '%s' '[CONFIG]' > "$W/gitleaks.toml" || die 'sentinel.secrets.workerError'
 printf '%s' '[TEMPLATE]' > "$W/report.tmpl" || die 'sentinel.secrets.workerError'
 FIRST=1
@@ -64,6 +70,12 @@ while IFS= read -r line; do
       target="$W/scan/tree/$path"
       [ -e "$target" ] && die 'sentinel.secrets.inputInvalid'
       mkdir -p "$(dirname "$target")" && cp "/input/$hex" "$target" || die 'sentinel.secrets.inputInvalid'
+      printf '%s\n' "$path" >> "$W/scan/paths.txt" || die 'sentinel.secrets.workerError'
+      ;;
+    'N '*)
+      path=\${line#N }
+      [ -n "$path" ] || die 'sentinel.secrets.inputInvalid'
+      printf '%s\n' "$path" >> "$W/scan/paths.txt" || die 'sentinel.secrets.workerError'
       ;;
     *) die 'sentinel.secrets.inputInvalid' ;;
   esac
@@ -72,15 +84,40 @@ done < "/input/$JOB"
 cd "$W" || die 'sentinel.secrets.workerError'
 # shellcheck disable=SC2086 # ENGINE_ARGS are fixed plain tokens
 HOME=/tmp timeout -s KILL "$SECS" gitleaks dir scan --config "$W/gitleaks.toml" --gitleaks-ignore-path "$W/no-ignores" \\
-  --ignore-gitleaks-allow --redact=100 --report-format template --report-template "$W/report.tmpl" --report-path "$W/report.txt" \\
+  --ignore-gitleaks-allow --redact=100 --report-format template --report-template "$W/report.tmpl" --report-path "$W/raw.txt" \\
   --exit-code 2 --max-target-megabytes "$MAX_MB" --no-banner --no-color --log-level error $ENGINE_ARGS > /dev/null 2> "$W/err.txt"
 CODE=$?
 FAILURE=null
 case "$CODE" in
-  0|2) [ -f "$W/report.txt" ] || FAILURE='"reportMissing"' ;;
+  0|2) [ -f "$W/raw.txt" ] || FAILURE='"reportMissing"' ;;
   137) FAILURE='"killed"' ;;
   *) FAILURE='"engineError"' ;;
 esac
+# Paths never leave the container: each reported file becomes its job index (F), the names file becomes P, and
+# anything else U. The raw rendering is removed before any output is written.
+if [ "$FAILURE" = null ]; then
+  cat > "$W/map.awk" <<'AWK'
+BEGIN { FS = "\t"; OFS = "\t" }
+FNR == NR {
+  if (substr($0, 1, 2) == "F ") {
+    rest = substr($0, 3); sp = index(rest, " "); idx = substr(rest, 1, sp - 1); rest = substr(rest, sp + 1)
+    sp = index(rest, " "); byPath[substr(rest, sp + 1)] = idx
+  }
+  next
+}
+{
+  file = $5
+  for (i = 6; i <= NF; i++) file = file "\t" $i
+  if ($1 != "F" || NF < 5) { print "U"; next }
+  if (file == "scan/paths.txt") { print "P", $2, $3, $4; next }
+  rel = substr(file, 11)
+  if (substr(file, 1, 10) == "scan/tree/" && (rel in byPath)) { print "F", $2, $3, $4, byPath[rel]; next }
+  print "U"
+}
+AWK
+  awk -f "$W/map.awk" "/input/$JOB" "$W/raw.txt" > "$W/report.txt" || FAILURE='"engineError"'
+fi
+rm -f "$W/raw.txt"
 SIZE=0
 REPORT=''
 if [ "$FAILURE" = null ]; then
