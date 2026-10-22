@@ -24,11 +24,21 @@ ordinary placement and excerpts. The graph is owner-attested and bound to curren
 independently verify the graph producer or semantics. A missing private key creates new withheld-location identities;
 old delivered files remain unchanged and a store/bundle copy cannot restore that key.
 
-The source integration and independent correction reviews are complete. Final affected/package/native installed
-five-engine two-capture comparison, official SARIF and offline-browser acceptance are being recorded separately;
-selected CI and merge remain pending. No full-plan completion is claimed: canonical framework/path/provider
-commands, model evaluation, dispositions, selected-stage integration, MCP/host/GUI/bundle and release gates remain
-open. No source application, host scanner or hosted model is executed by this report integration.
+The source integration and independent correction reviews are complete. On source checkpoint `1a588f34`, the
+Sentinel dependency build, typecheck, schemas and catalog (4,402 entries) pass. Package/contract/policy controls
+(62), capability controls (2), workflow controls (3), publication/record controls (57, including ten actual Pattern
+opt-ins) and report-library controls (19, including official SARIF and offline printing) pass. A fresh npm-only
+consumer compiles 16 exports and 21 contract types, checks 21 schemas and 56 fixtures, runs the installed library
+hooks and verifies all five asset sets. The installed CLI runs all five existing pinned engines on two genuine
+captures, stops its own service, removes the source and reconstructs full reports and comparison from retained
+accepted evidence. Its actual SARIF validates against the official schema; private/shareable HTML open offline
+with JavaScript disabled, no external request or browser error, and print. The shareable screen was inspected.
+The initial pure pass deliberately excluded ten native controls; all ten then ran and passed separately.
+
+Selected CI, real-ingest/browser comparison against main and merge remain pending. No full-plan completion is
+claimed: canonical framework/path/provider commands, model evaluation, dispositions, selected-stage integration,
+MCP/host/GUI/bundle and release gates remain open. No source application, host scanner or hosted model is executed
+by this report integration. This is local macOS arm64 / Docker Desktop Linux arm64 acceptance, not a new host claim.
 
 ## Owner-private record FIFO refusal — 2026-10-22
 

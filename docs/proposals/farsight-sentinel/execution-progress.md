@@ -35,8 +35,8 @@ identifiers, not GitHub PR numbers.
   four-engine owner adoption/detach/join/wait/replay, and secret omission/privacy. These are scoped foundations:
   canonical framework/path/provider dispatch, model evaluation, selected-stage integration and the GUI remain open.
   The full owner report candidate is separate: its accepted evidence binding and conservative projection are reviewed,
-  but its final installed five-engine, two-capture comparison, SARIF/browser and selected CI acceptance must be
-  recorded before that candidate merges. If either run has an accepted secret match, both report disclosure profiles
+  and its installed five-engine two-capture comparison, official SARIF and offline-browser acceptance passed on the
+  qualified local macOS arm64 / Docker Desktop Linux arm64 host. Selected CI and merge are still pending. If either run has an accepted secret match, both report disclosure profiles
   withhold every source excerpt, location and context-controlled name; a run without matches retains useful placement.
   A Git header capture correction merged as [#143](https://github.com/zalos/farsight/pull/143), `9a0fd21`.
 - PR 02 merged as [#134](https://github.com/zalos/farsight/pull/134), `269c3bc`, after contract/packaging
@@ -123,7 +123,7 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 | 16 | Nest guards, pipes, interceptors | 05, 06, 09 | in progress | Direct providers pass; dynamic/unresolved stay unknown | Reviewed captured-registration library merged [#157](https://github.com/zalos/farsight/pull/157), `09a4f492`; canonical command integration open |
 | 17 | Spring servlet security | 05, 06, 09 | in progress | E2 six review cases plus bypass negatives; no false protected verdict | Library foundation merged [#149](https://github.com/zalos/farsight/pull/149); reviewed package API and installed consumer pass; sample application and canonical framework dispatch remain open |
 | 18 | Bounded paths, optional deep engine | 10, 14–17, E3 | in progress | Cross-file distinguished from a call path; no invented deep backend | Merged analysis library [#153](https://github.com/zalos/farsight/pull/153); reviewed static paths and owner-approved import; command integration open |
-| 19 | Finding identity, comparison, standalone report | 10–18 | in progress | Identity stable under movement; standalone HTML/Markdown/JSON readable offline | Reviewed owner-command candidate binds accepted publications and owner-pinned context; secret-bearing reports use conservative withholding; final installed/browser acceptance and CI remain open |
+| 19 | Finding identity, comparison, standalone report | 10–18 | in progress | Identity stable under movement; standalone HTML/Markdown/JSON readable offline | Reviewed owner-command candidate binds accepted publications and owner-pinned context; secret-bearing reports use conservative withholding; installed five-engine two-capture comparison, official SARIF and offline-browser acceptance passed; selected CI and merge remain open |
 | 20 | Dispositions, assertions, runtime-evidence import | 19 | pending | Decisions bound to scoped evidence and expiry | — |
 | 21 | Ollama and hosted transport | 08, 09 | in progress | Redirects, truncation, cancellation, unpriced endpoints handled | Transport and budget implementation independently reviewed; public command integration open |
 | 22 | Guided and general model review | 18–21 | in progress | E5/E8 under configured budgets and accepted thresholds; live evaluation awaits the second-model configuration | Review implementation and model settings exist; review corrections and live qualification open |
