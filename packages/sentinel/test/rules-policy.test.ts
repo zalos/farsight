@@ -63,7 +63,7 @@ test('policy enum sets are pinned to an explicit list and to the generated schem
     ['evidence', RULE_EVIDENCE, ['source-span', 'matched-pattern', 'control-fact', 'dependency-version', 'advisory-id'], schemaEnum('rulepack', 'RuleEvidence')],
     ['frameworks', FRAMEWORK_IDS, ['next', 'express', 'nest', 'spring'], schemaEnum('controls', 'FrameworkId')],
     ['origins', RULE_ORIGINS, ['sentinel-original', 'third-party'], schemaEnum('rulepack', 'RuleOrigin')],
-    ['actions', SENTINEL_ACTIONS, ['run.start', 'capture.source', 'disposition.propose', 'disposition.approve', 'rule.promote', 'tool.acquire', 'paid.admit', 'disclosure.send', 'settings.adopt'], schemaEnum('settings', 'SentinelAction')],
+    ['actions', SENTINEL_ACTIONS, ['run.start', 'capture.source', 'disposition.propose', 'disposition.approve', 'rule.promote', 'tool.acquire', 'paid.admit', 'disclosure.send', 'settings.adopt', 'run.pause', 'run.cancel'], schemaEnum('settings', 'SentinelAction')],
     ['owner actions', OWNER_ACTIONS, ['disposition.approve', 'rule.promote', 'tool.acquire', 'settings.adopt'], null],
     ['effects', ACTION_EFFECTS, ['local-artifacts', 'source-disclosure', 'paid-inference', 'network', 'tool-execution'], schemaEnum('settings', 'ActionEffect')],
     ['trust', SETTINGS_TRUST, ['adopted', 'not-adopted', 'changed', 'missing', 'invalid'], schemaEnum('policy', 'SettingsTrust')],
@@ -656,7 +656,7 @@ test('a receipt is one-use, short-lived and bound to the exact intent, state and
 test('only the owner CLI channel issues a receipt, and a receipt not issued here is unknown', t => {
   const book = owner(t);
   const bind = { intent: baseIntent, stateDigest: D('1'), policyRevision: D('2') };
-  for (const channel of ['mcp', 'http-bridge', 'model']) {
+  for (const channel of ['mcp', 'http-bridge', 'model', 'local-service']) {
     assert.equal(code(() => issueReceipt(book, { channel, principal: 'owner' }, bind, { now: NOW, ttlMs: 1000 })), 'sentinel.receipt.ownerOnly', channel);
   }
   assert.equal(code(() => issueReceipt(book, { channel: 'owner-cli', principal: 'owner' }, bind, { now: NOW, ttlMs: MAX_RECEIPT_TTL_MS + 1 })), 'sentinel.receipt.ttlInvalid');

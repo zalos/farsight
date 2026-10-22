@@ -439,3 +439,4 @@ test("a publishable workspace library's declarations are vendored; a string lite
     assert.equal(packedManifest(root).dependencies?.['@farsight/lib'], undefined, 'a vendored library is never a dependency');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+

@@ -42,6 +42,10 @@ export interface SyntheticOptions {
   parentId?: string;
   snapshotId?: string;
   reuse?: Array<{ id: string; revision: number }>;
+  /** An effective policy to admit the plan under (an adopted one), instead of one made here for its rules. */
+  policy?: any;
+  /** Where the synthetic repository is committed; `<root>/repo` by default. */
+  repo?: string;
 }
 
 /** The trusted registry for these behaviours: one built-in adapter each, wrapper modules written once under root. */
@@ -71,7 +75,7 @@ export async function syntheticPlan(store: any, root: string, behaviours: Record
   const runId = options.runId ?? 'run-e4';
   const registry = registryFor(root, behaviours, options);
   const prefix = options.adapterPrefix ?? 'test';
-  const repo = join(root, 'repo');
+  const repo = options.repo ?? join(root, 'repo');
   if (!existsSync(repo)) commitRepo(repo, FILES);
   const snapshot = options.snapshotId ? (await openSnapshot(store, options.snapshotId)).snapshot
     : (await captureSnapshot(store, { mode: 'committed-tree', sources: [{ sourceId: SOURCE, repositoryId: 'example/synthetic', root: repo }] })).snapshot;
@@ -83,7 +87,7 @@ export async function syntheticPlan(store: any, root: string, behaviours: Record
   const adapterIds = [...new Set(UNITS.map(adapterOfUnit))].sort();
   const familyOf = (adapterId: string) => `sentinel.test.r${adapterIds.indexOf(adapterId)}`;
   const { lock, pin, view, pack, files: packFiles } = lockedRules(adapterIds.map(a => ({ familyId: familyOf(a), adapterId: a })), []);
-  const { policy } = policyView(view.rules.map((r: any) => r.familyId));
+  const policy = options.policy ?? policyView(view.rules.map((r: any) => r.familyId)).policy;
   // Each unit covers one required check over its own captured file, under the adapter of its behaviour.
   const scopeOf = (u: string) => `${SOURCE}:src/${u.toLowerCase()}.ts`;
   const checkOf = (u: string) => ({ familyId: familyOf(adapterOfUnit(u)), ruleRevision: 1, scopeKind: 'source-file', scopeId: scopeOf(u), sourceId: SOURCE,

@@ -77,7 +77,6 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/zizmor/job.js': ['node:crypto', 'node:fs', 'node:path'],
   'adapters/zizmor/normalize.js': ['node:crypto'],
   'adapters/zizmor/run.js': ['node:fs', 'node:path'],
-  'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', 'node:fs'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/assets.js': ['node:fs', 'node:path', 'node:url'],
   'execution/bootstrap.js': ['node:fs', 'node:path'],
@@ -106,6 +105,30 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'policy/user-state.js': ['node:crypto', 'node:fs', 'node:path'],
   // Rule packs are read as data: listed and opened, never imported, evaluated or spawned.
   'rules/pack.js': ['node:fs', 'node:path'],
+  'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:fs'],
+  'cli/init.js': ['node:crypto', 'node:fs', 'node:path'],
+  // The foundation-preview detector, a built-in worker: it reads its copied inputs and writes one artifact.
+  'adapters/preview-detector.js': ['node:crypto', 'node:fs'],
+  // This package's own executable and shipped rule packs, found from the module's folder upward.
+  'service/package-paths.js': ['node:fs', 'node:path', 'node:url'],
+  // The CLI's canonical path: the planner, admission, bootstrap and coordinator in their order; digests only.
+  'service/canonical.js': ['node:crypto'],
+  'service/local.js': ['node:crypto', 'node:fs', 'node:path'],
+  'service/owner-service.js': ['node:crypto', 'node:fs', 'node:path'],
+  // Fatal-run diagnostics compose a private journal path; filesystem access stays in reviewed journal helpers.
+  'service/run-failure.js': ['node:path'],
+  // The owner's rule locks: content-addressed revisions and one pointer in private state, through policy/user-state.
+  'service/rule-locks.js': ['node:path'],
+  // Owner-private records published whole: a synced temporary name linked to its final one, never replaced.
+  'service/publish-once.js': ['node:crypto', 'node:fs', 'node:path'],
+  // The CLI's trusted profile: its canonical document's digest.
+  'service/trusted-profile.js': ['node:crypto', 'node:fs'],
+  // The owner's background service is the one process the command line starts itself (asserted below).
+  'service/launch.js': ['node:child_process'],
+  // The local service socket: an owner-only Unix socket, used only when a service runs; nothing at import.
+  'transport/ipc.js': ['node:crypto', 'node:fs', 'node:net', 'node:path'],
+  // The report checks every count with core's own countedProblems, over the whole catalog.
+  'reports/preview.js': ['@farsight/core/dist/counts.js', '@farsight/core/dist/strings.js'],
   'validate.js': ['ajv'],
   // The planner's reason codes are catalog words.
   'planner/errors.js': ['@farsight/core/dist/strings-sentinel-plan.js'],
@@ -160,6 +183,12 @@ test('the library imports only its reviewed modules, and nothing that could star
   const processes = readFileSync(`${dist}execution/processes.js`, 'utf8');
   assert.equal([...processes.matchAll(/shell: false/g)].length, 3);
   assert.doesNotMatch(processes, /shell: true|execSync|exec\(/);
+  // Outside it, only the service launcher starts a process: this executable's `serve`, an argument list, no shell.
+  const launch = readFileSync(`${dist}service/launch.js`, 'utf8');
+  assert.deepEqual([...launch.matchAll(/(?<![.\w])(spawnSync|spawn|execFileSync|execFile|execSync|exec|fork)\s*\(([^,)]*)/g)].map(m => `${m[1]}(${m[2]!.trim()}`),
+    ['spawn(process.execPath']);
+  assert.match(launch, /shell: false/);
+  assert.match(launch, /'serve', '--workspace'/);
 });
 
 /** Runs `code` in a fresh process that records every child spawn, then reports spawns, SQLite and new files. */
@@ -222,11 +251,11 @@ test('help and version say plainly that no scanner exists', () => {
 test('draft contracts, store, capture, parser, policy and planner are available; scanners remain unavailable', () => {
   const r = cli('capabilities', '--json');
   assert.equal(r.status, 0);
-  const listed = JSON.parse(r.stdout).capabilities as typeof CAPABILITIES;
+  const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli']);
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
-  for (const id of ['scan-cli', 'pattern-scan', 'coordinator', 'reports']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
+  for (const id of ['pattern-scan', 'coordinator', 'reports']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
   assert.equal(listed.find(c => c.id === 'rules-and-planning')?.state, 'available-draft');
   assert.ok(listed.filter(c => c.state !== 'unavailable').every(c => c.state === 'available-draft'));
   for (const c of listed) assert.match(c.reasonCode, /^sentinel\.capability\./);
@@ -234,11 +263,16 @@ test('draft contracts, store, capture, parser, policy and planner are available;
 });
 
 test('planned commands refuse with exit 3 and start nothing', () => {
-  for (const command of ['plan', 'run', 'status', 'serve', 'report', 'bundle', 'rules']) {
+  for (const command of ['compare', 'bundle']) {
     const r = cli(command, '--json');
     assert.equal(r.status, 3, command);
     assert.match(r.stderr, new RegExp(`^unavailable: ${command} is not implemented in this draft build \\(planned in PR \\d+\\)\\. Nothing was started\\.`));
-    assert.equal(r.stdout, '');
+    // JSON says unavailable, with every verdict not asked: never a scan result.
+    const body = JSON.parse(r.stdout);
+    assert.equal(body.outcome, 'unavailable', command);
+    assert.equal(body.exitCode, 3);
+    for (const v of Object.values(body.verdicts) as Array<{ asked: boolean; allowed: boolean }>) assert.deepEqual([v.asked, v.allowed], [false, false]);
+    assert.equal(cli(command).stdout, '', 'without --json nothing is printed to stdout');
   }
   assert.equal(cli('scan-everything').status, 3);
 });
@@ -255,9 +289,10 @@ test('validate checks a file against its draft schema', () => {
     const r = cli('validate', 'run', bad, '--json');
     assert.equal(r.status, 3);
     const body = JSON.parse(r.stdout);
-    assert.equal(body.ok, false);
-    assert.equal(body.errors[0].code, 'sentinel.contract.unsupportedVersion');
-    assert.deepEqual(body.errors[0].supported, ['sentinel-run/draft-1']);
+    assert.deepEqual([body.outcome, body.exitCode, body.reasonCode], ['refused', 3, 'sentinel.cli.invalid']);
+    assert.equal(body.facts.ok, false);
+    assert.equal(body.facts.errors[0].code, 'sentinel.contract.unsupportedVersion');
+    assert.deepEqual(body.facts.errors[0].supported, ['sentinel-run/draft-1']);
     const human = cli('validate', 'run', bad);
     assert.equal(human.stderr, 'invalid sentinel-run/draft-1\n  sentinel.contract.unsupportedVersion /schema version not supported\n');
     assert.equal(cli('validate', 'run', dir).status, 3, 'a directory is refused');

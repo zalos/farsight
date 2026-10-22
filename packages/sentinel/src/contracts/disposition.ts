@@ -3,8 +3,11 @@ import type { BoundedText, Digest, Id, ShortText, Timestamp } from './common.js'
 /** An accepted risk remains a risk; a mitigation is only as strong as the evidence it names. */
 export type DispositionDecision = 'accepted-risk' | 'false-positive' | 'mitigated' | 'deferred';
 
-/** Where a decision came from. Only a trusted local owner action approves; MCP, HTTP and model output propose. */
-export type DecisionChannel = 'owner-cli' | 'mcp' | 'http-bridge' | 'model';
+/**
+ * Where a decision came from. Only a trusted local owner action approves; MCP, HTTP, model output and any client of
+ * the owner's local service (`local-service`, the owner's own CLI included when it talks to the service) propose.
+ */
+export type DecisionChannel = 'owner-cli' | 'mcp' | 'http-bridge' | 'model' | 'local-service';
 
 /** Assertion provenance, kept apart from graph evidence classes. */
 export type AssertionTrust = 'asserted' | 'imported-config' | 'runtime-observed';

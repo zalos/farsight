@@ -85,7 +85,9 @@
         "tool.acquire",
         "paid.admit",
         "disclosure.send",
-        "settings.adopt"
+        "settings.adopt",
+        "run.pause",
+        "run.cancel"
       ],
       "description": "Every action the Sentinel gate decides."
     },

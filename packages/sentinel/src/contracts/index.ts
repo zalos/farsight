@@ -63,7 +63,7 @@ export const COVERAGE_STATUSES = ['complete', 'partial', 'unsupported', 'not-run
 export const COVERAGE_GRANULARITIES = ['per-file-per-rule', 'per-file', 'aggregate'] as const;
 export const COVERAGE_BASES = ['executed', 'reused', 'imported', 'unavailable'] as const;
 export const DISPOSITION_DECISIONS = ['accepted-risk', 'false-positive', 'mitigated', 'deferred'] as const;
-export const DECISION_CHANNELS = ['owner-cli', 'mcp', 'http-bridge', 'model'] as const;
+export const DECISION_CHANNELS = ['owner-cli', 'mcp', 'http-bridge', 'model', 'local-service'] as const;
 export const ASSERTION_TRUSTS = ['asserted', 'imported-config', 'runtime-observed'] as const;
 export const COMPARISON_LABELS = [
   'new', 'persistent', 'changed-evidence', 'changed-detection', 'reopened', 'reopened-disposition-expired',
@@ -87,7 +87,7 @@ export const FRAMEWORK_IDS = ['next', 'express', 'nest', 'spring'] as const;
 export const RULE_ORIGINS = ['sentinel-original', 'third-party'] as const;
 export const SENTINEL_ACTIONS = [
   'run.start', 'capture.source', 'disposition.propose', 'disposition.approve', 'rule.promote',
-  'tool.acquire', 'paid.admit', 'disclosure.send', 'settings.adopt',
+  'tool.acquire', 'paid.admit', 'disclosure.send', 'settings.adopt', 'run.pause', 'run.cancel',
 ] as const;
 /** Owner actions: an agent can never be granted them, and a person always confirms them with a receipt. */
 export const OWNER_ACTIONS = ['disposition.approve', 'rule.promote', 'tool.acquire', 'settings.adopt'] as const;

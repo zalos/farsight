@@ -23,7 +23,7 @@ export const CAPABILITIES: readonly Capability[] = Object.freeze([
   { id: 'rules-and-planning', state: 'available-draft', reasonCode: 'sentinel.capability.draftPlanning', plannedIn: 'PR 06' },
   { id: 'worker-isolation', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 07' },
   { id: 'coordinator', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 08' },
-  { id: 'scan-cli', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 09' },
+  { id: 'scan-cli', state: 'available-draft', reasonCode: 'sentinel.capability.draftPreviewCli', plannedIn: 'PR 09' },
   { id: 'pattern-scan', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 10' },
   { id: 'secrets-scan', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 11' },
   { id: 'dependency-advisories', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 12' },
