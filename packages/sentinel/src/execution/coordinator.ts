@@ -35,7 +35,7 @@ import { createExecutionService, type ExecutionService } from './service.js';
 import { releaseWorkDir, type InvocationRecord, type WorkerOutcome } from './supervisor.js';
 import { bindingId, bindingMismatch, checkRecordedRun, checkRecordedWork, executablePlan, EXECUTION_BINDING_SCHEMA, type ValidatedPlan } from './plan.js';
 import { loadPlan } from './plans.js';
-import { runOperation } from './bootstrap.js';
+import { publishPrepared, runOperation } from './bootstrap.js';
 import { COVERAGE_SCHEMA, coverageRecords } from './coverage.js';
 import { evaluateRequiredCoverage, type RequiredCoverage } from '../planner/coverage.js';
 
@@ -109,6 +109,8 @@ const attemptIdFor = (ref: WorkRef, ordinal: number): Id =>
   `att-${createHash('sha256').update(`${ref.id}@${ref.revision}#${ordinal}`).digest('hex').slice(0, 40)}`;
 const MAX_DETAIL_BYTES = 3_072;
 const DEPENDENCY_FAILED: CatalogKey = 'sentinel.execution.dependencyFailed';
+/** Allowance for timer and scheduling granularity when an operation's CPU time is compared with its quota. */
+const CPU_SLACK_MS = 100;
 
 export class Coordinator {
   readonly #store: SentinelStore;
@@ -516,7 +518,10 @@ export class Coordinator {
   /**
    * A bootstrap unit: the coordinator's own operation (bootstrap.ts) under a recorded attempt whose worker is this
    * coordinator, naming the operation adapter the plan pinned. Its invocation record (what was asked, with what
-   * settings) is accepted with the start; the operation publishes through the attempt. Returns the attempt id.
+   * settings) is accepted with the start. The operation only prepares its records; they are published through the
+   * attempt only when the unit's grant held: its deadline, the process memory it added (sampled; it runs in this
+   * process, so the bound is on what this process grew by), its CPU time against the quota, and the bytes it would
+   * publish. It starts no process, so its pid grant always holds. Returns the attempt id.
    */
   async #operation(work: Readonly<WorkEnvelope>, ordinal: number, id: Id): Promise<Id> {
     const ref: WorkRef = { id: work.id, revision: work.revision };
@@ -541,9 +546,50 @@ export class Coordinator {
       }, { records });
     } catch (error) { this.#abortStage(records.stageId); throw error; }
     this.#hooks?.at?.('after-attempt-start', { work: ref, attemptId: id });
+    // The unit's grant holds the operation as it holds a worker: its deadline (cut to what is left of the run's),
+    // the process memory it may add, the CPU time it may use and the bytes it may publish. The operation only
+    // prepares; nothing is published unless every bound held and the run was not canceled or expired meanwhile.
+    const grant = work.resources;
+    const deadlineMs = Math.max(1, Math.min(grant.deadlineMs, Math.floor(this.#runDeadline - Date.now())));
+    const own = AbortSignal.timeout(deadlineMs);
+    const memory = new AbortController();
+    const signal = AbortSignal.any([this.#cancel.signal, this.#deadline.signal, own, memory.signal]);
+    const baseline = process.memoryUsage().rss;
+    const cpu0 = process.cpuUsage();
+    const t0 = performance.now();
+    let peak = 0;
+    const sample = () => { peak = Math.max(peak, process.memoryUsage().rss - baseline); if (peak > grant.memoryBytes) memory.abort(); };
+    const sampler = setInterval(sample, 20);
+    let prepared: Awaited<ReturnType<typeof runOperation>> | undefined;
+    let failure: unknown;
     try {
-      await runOperation(adapter.operation, { store: this.#store, run: this.#plan.run, plan: this.#plan.admitted.plan, unit: executable.unit, profile,
-        attemptId: id, scratchRoot: this.#scratchRoot, signal: AbortSignal.any([this.#cancel.signal, this.#deadline.signal]) });
+      prepared = await runOperation(adapter.operation, { store: this.#store, run: this.#plan.run, plan: this.#plan.admitted.plan, unit: executable.unit, profile,
+        attemptId: id, scratchRoot: this.#scratchRoot, signal });
+    } catch (error) { failure = error; } finally { clearInterval(sampler); sample(); }
+    const wallMs = performance.now() - t0;
+    const used = process.cpuUsage(cpu0);
+    const cpuMs = (used.user + used.system) / 1000;
+    // Checked in this order; the first that applies ends the attempt without a publication.
+    const refusal: [string, Record<string, unknown>] | null =
+      this.#cancel.signal.aborted ? ['sentinel.execution.canceled', {}]
+        : this.#deadlinePassed || this.#deadline.signal.aborted ? ['sentinel.execution.runDeadline', {}]
+          : own.aborted || wallMs > deadlineMs ? ['sentinel.execution.deadlineExceeded', { deadlineMs, elapsedMs: Math.round(wallMs) }]
+            : memory.signal.aborted || peak > grant.memoryBytes ? ['sentinel.execution.resourceExceeded', { resource: 'memory', limit: grant.memoryBytes, observed: peak }]
+              // The process's CPU time over the operation (its own GC and I/O threads included), against the quota.
+              : cpuMs > grant.cpuQuota * wallMs + CPU_SLACK_MS ? ['sentinel.execution.resourceExceeded', { resource: 'cpu', quota: grant.cpuQuota, cpuMs: Math.round(cpuMs), wallMs: Math.round(wallMs) }]
+                : failure ? null
+                  : prepared!.bytes > grant.maxOutputBytes ? ['sentinel.execution.outputTooLarge', { bytes: grant.maxOutputBytes, observed: prepared!.bytes }]
+                    : null;
+    if (refusal) {
+      this.#end(ref, id, refusal[0] === 'sentinel.execution.canceled' ? 'canceled' : 'failed', refusal[0], refusal[1]);
+      return id;
+    }
+    if (failure) {
+      this.#end(ref, id, 'failed', codeOf(failure), detailOf(failure));
+      return id;
+    }
+    try {
+      await publishPrepared(this.#store, ref, id, prepared!);
     } catch (error) {
       const canceled = error instanceof LedgerError && error.code === 'sentinel.store.wrongState';
       this.#end(ref, id, canceled ? 'canceled' : 'failed', canceled ? 'sentinel.execution.canceled' : codeOf(error), detailOf(error));

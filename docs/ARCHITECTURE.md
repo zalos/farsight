@@ -563,6 +563,16 @@ invocation record names the plan, the canonical manifest, the snapshot and the p
 - **inventory** gathers exactly the plan's published parse results, each checked to be its own source's analysis
   of this snapshot.
 
+Each operation only reads and prepares its records. The coordinator publishes them only if the unit's grant held:
+- its deadline, cut to what is left of the run's, with the parser's signal aborted at it;
+- the memory this process grew by, sampled while the operation runs;
+- its CPU time against the quota;
+- the bytes it would publish;
+- and the run was neither canceled nor expired meanwhile.
+
+An operation starts no process, so its pid grant always holds. Because operations run in the coordinator's process,
+the memory and CPU bounds are measured on that process, not isolated.
+
 `loadBootstrap` reads that evidence back for `planAnalysis`. A stage with no bound operation stays held, and no
 generic worker runs.
 

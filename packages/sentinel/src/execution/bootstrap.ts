@@ -12,7 +12,8 @@
 // - inventory: the published parse results of exactly the plan's parse units, each verified to be the analysis of
 //   its source of this snapshot, gathered into one inventory record. An analysis revision plans from it
 //   (loadBootstrap), so planning reads only published evidence.
-// Nothing here starts a process, reads the network or accepts a worker's claim.
+// Nothing here starts a process, reads the network or accepts a worker's claim. An operation only reads and
+// prepares its records; the coordinator holds them to the unit's grant before publishPrepared writes anything.
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ArtifactId, Id, WorkRef } from '../contracts/common.js';
@@ -20,9 +21,9 @@ import type { PlanEnvelope, PlanWork } from '../contracts/plan.js';
 import type { RunEnvelope } from '../contracts/run.js';
 import type { SnapshotEnvelope } from '../contracts/snapshot.js';
 import { openSnapshot } from '../snapshot/materialize.js';
-import { PARSER_INDEX_SCHEMA, PARSER_RESULT_SCHEMA, parseSnapshot, retainSnapshotAnalysis, type ParserIndex, type ParserResult } from '../snapshot/parser.js';
+import { PARSER_INDEX_SCHEMA, PARSER_RESULT_SCHEMA, parseSnapshot, type ParserIndex, type ParserResult } from '../snapshot/parser.js';
 import type { SentinelStore } from '../store/index.js';
-import type { PublicationReceipt, StagedArtifact } from '../store/store-types.js';
+import { MAX_ARTIFACT_BYTES, type ArtifactPrivacy, type PublicationReceipt, type StagedArtifact } from '../store/store-types.js';
 import { ExecutionError } from './errors.js';
 import type { ExecutionProfileRecord } from './profile.js';
 import type { BootstrapOperation } from './registry.js';
@@ -74,22 +75,52 @@ async function readJson<T>(store: SentinelStore, id: ArtifactId): Promise<T> {
 /** The plan's source set: one parse unit per source. */
 const planSources = (plan: PlanEnvelope) => plan.units.filter(u => u.stage === 'parse').map(u => u.sourceId!);
 
-/** Publish one canonical record (linking accepted artifacts) as the attempt's single output. */
-async function publishRecord(store: SentinelStore, work: WorkRef, attemptId: Id, value: unknown, schema: string, links: ArtifactId[]): Promise<PublicationReceipt> {
-  const id = store.objects.identifyCanonicalJson(value);
+/**
+ * What an operation prepared: canonical records to store and publish, nothing written yet. The coordinator holds
+ * them to the unit's grant (deadline, output bytes, memory) and the attempt's fence before publishPrepared writes any.
+ */
+export interface PreparedOutputs {
+  records: Array<{ value: unknown; schema: string; privacy: ArtifactPrivacy; links: ArtifactId[] }>;
+  outputs: ArtifactId[];
+  /** Canonical bytes the records hold, as they would be stored. */
+  bytes: number;
+}
+
+function prepare(store: SentinelStore, items: Array<{ value: unknown; schema: string; privacy: ArtifactPrivacy; links?: ArtifactId[]; output?: boolean }>): PreparedOutputs {
+  const records: PreparedOutputs['records'] = [];
+  const seen = new Set<string>();
+  const outputs: ArtifactId[] = [];
+  let bytes = 0;
+  for (const i of items) {
+    const id = store.objects.identifyCanonicalJson(i.value);
+    if (id.rawSize > MAX_ARTIFACT_BYTES) fail(`${i.schema} exceeds the store's object cap`);
+    if (seen.has(id.id)) continue;
+    seen.add(id.id);
+    records.push({ value: i.value, schema: i.schema, privacy: i.privacy, links: i.links ?? [] });
+    bytes += id.rawSize;
+    if (i.output) outputs.push(id.id);
+  }
+  return { records, outputs, bytes };
+}
+
+/** Stage, store and publish prepared outputs through the attempt; the ledger's fence decides acceptance. */
+export async function publishPrepared(store: SentinelStore, work: WorkRef, attemptId: Id, prepared: PreparedOutputs): Promise<PublicationReceipt> {
+  const ids = prepared.records.map(r => store.objects.identifyCanonicalJson(r.value));
   const stageId = `stage.${attemptId}`.slice(0, 128);
-  const staged: StagedArtifact[] = [{ id: id.id, schema, privacy: 'metadata', links }];
+  const staged: StagedArtifact[] = prepared.records.map((r, i) => ({ id: ids[i]!.id, schema: r.schema, privacy: r.privacy, links: r.links }));
   store.ledger.registerStaging(stageId, staged, { work, attemptId });
   try {
-    const receipt = await store.objects.putCanonicalJson(value, { expect: id });
-    return store.ledger.publish({ work, attemptId, stageId, receipts: [receipt], outputs: [id.id], endedAt: now() });
+    const receipts = [];
+    for (let i = 0; i < ids.length; i++) receipts.push(await store.objects.putCanonicalJson(prepared.records[i]!.value, { expect: ids[i]! }));
+    store.assertHeld();
+    return store.ledger.publish({ work, attemptId, stageId, receipts, outputs: prepared.outputs, endedAt: now() });
   } catch (error) {
     try { store.assertHeld(); store.ledger.abortStaging(stageId); } catch { /* recovery aborts a stage left open */ }
     throw error;
   }
 }
 
-async function capture(r: OperationRequest): Promise<PublicationReceipt> {
+async function capture(r: OperationRequest): Promise<PreparedOutputs> {
   let opened;
   try { opened = await openSnapshot(r.store, r.run.snapshotId); } catch (cause) {
     throw new ExecutionError('sentinel.execution.bootstrapEvidence', { reason: 'the run\'s snapshot is not admitted in this store' }, { cause });
@@ -101,10 +132,10 @@ async function capture(r: OperationRequest): Promise<PublicationReceipt> {
     schema: CAPTURE_RECORD_SCHEMA, runId: r.run.id, snapshotId: opened.record.snapshotId, manifest: opened.record.manifest,
     materialization: opened.record.materialization, inventoryDigest: opened.record.inventoryDigest, admittedAt: opened.record.sequence, sourceIds: [...sources].sort(),
   };
-  return publishRecord(r.store, ref(r.unit), r.attemptId, record, CAPTURE_RECORD_SCHEMA, [record.manifest, record.materialization]);
+  return prepare(r.store, [{ value: record, schema: CAPTURE_RECORD_SCHEMA, privacy: 'metadata', links: [record.manifest, record.materialization], output: true }]);
 }
 
-async function parse(r: OperationRequest): Promise<PublicationReceipt> {
+async function parse(r: OperationRequest): Promise<PreparedOutputs> {
   const sourceId = r.unit.sourceId;
   if (!sourceId) return fail('a parse unit names its source');
   const work = mkdtempSync(join(r.scratchRoot, 'parse-'));
@@ -114,8 +145,15 @@ async function parse(r: OperationRequest): Promise<PublicationReceipt> {
     if (analysis.snapshotId !== r.run.snapshotId || analysis.sources.length !== 1 || analysis.sources[0]!.sourceId !== sourceId) {
       fail('the parser analysed another snapshot or source');
     }
-    const { receipt } = await retainSnapshotAnalysis(r.store, { work: ref(r.unit), attemptId: r.attemptId, stageId: `stage.${r.attemptId}`.slice(0, 128), endedAt: now() }, analysis);
-    return receipt;
+    // The records retainSnapshotAnalysis keeps: the complete analysis, its index, and its result naming both.
+    const src = analysis.sources[0]!;
+    const artifact = r.store.objects.identifyCanonicalJson(src.artifact).id;
+    const index = r.store.objects.identifyCanonicalJson(src.index).id;
+    return prepare(r.store, [
+      { value: src.artifact, schema: 'farsight-analysis', privacy: 'source' },
+      { value: src.index, schema: PARSER_INDEX_SCHEMA, privacy: 'source-derived' },
+      { value: { ...src.result, artifact, index }, schema: PARSER_RESULT_SCHEMA, privacy: 'source-derived', links: [artifact, index], output: true },
+    ]);
   } finally { rmSync(work, { recursive: true, force: true }); }
 }
 
@@ -130,7 +168,7 @@ async function parseEvidence(store: SentinelStore, unit: WorkRef, sourceId: Id, 
   return { sourceId, result: outs[0]!.id, index: result.index, artifact: result.artifact, analysisFingerprint: result.analysisFingerprint };
 }
 
-async function inventory(r: OperationRequest): Promise<PublicationReceipt> {
+async function inventory(r: OperationRequest): Promise<PreparedOutputs> {
   const opened = await openSnapshot(r.store, r.run.snapshotId);
   const parses = r.plan.units.filter(u => u.stage === 'parse');
   const deps = new Set(r.unit.dependencies.map(d => `${d.id}@${d.revision}`));
@@ -139,13 +177,13 @@ async function inventory(r: OperationRequest): Promise<PublicationReceipt> {
   for (const p of [...parses].sort((a, b) => (a.sourceId! < b.sourceId! ? -1 : 1))) analyses.push(await parseEvidence(r.store, ref(p), p.sourceId!, r.run.snapshotId));
   const record: InventoryRecord = { schema: INVENTORY_RECORD_SCHEMA, runId: r.run.id, snapshotId: opened.record.snapshotId, manifest: opened.record.manifest,
     inventoryDigest: opened.record.inventoryDigest, analyses };
-  return publishRecord(r.store, ref(r.unit), r.attemptId, record, INVENTORY_RECORD_SCHEMA, [record.manifest, ...analyses.map(a => a.result)]);
+  return prepare(r.store, [{ value: record, schema: INVENTORY_RECORD_SCHEMA, privacy: 'metadata', links: [record.manifest, ...analyses.map(a => a.result)], output: true }]);
 }
 
-const OPERATIONS: Readonly<Record<BootstrapOperation, (r: OperationRequest) => Promise<PublicationReceipt>>> = Object.freeze({ capture, parse, inventory });
+const OPERATIONS: Readonly<Record<BootstrapOperation, (r: OperationRequest) => Promise<PreparedOutputs>>> = Object.freeze({ capture, parse, inventory });
 
-/** Run one bootstrap unit's operation under its recorded attempt; it publishes through that attempt. */
-export function runOperation(operation: BootstrapOperation, request: OperationRequest): Promise<PublicationReceipt> {
+/** Run one bootstrap unit's operation: it reads and prepares, and writes nothing (publishPrepared does, if granted). */
+export function runOperation(operation: BootstrapOperation, request: OperationRequest): Promise<PreparedOutputs> {
   if (request.unit.stage !== operation) return Promise.reject(new ExecutionError('sentinel.execution.planInvalid', { reason: `unit ${request.unit.id} is a ${request.unit.stage} stage, not ${operation}` }));
   return OPERATIONS[operation](request);
 }
