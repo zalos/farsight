@@ -238,12 +238,14 @@ prune plan are read-only: v1 never deletes an object, and a plan names only cand
 separately reviewed prune.
 
 Qualification is bounded, and anything outside it is refused rather than assumed: SQLite 3.53.3 (as linked by
-Node 24.19.0), macOS and Linux only, a canonical owner-only folder on a measured local file system (Linux statfs:
-ext4, xfs, btrfs, tmpfs, zfs, f2fs; macOS: a `local` apfs or hfs mount). Network, FUSE, overlay and unrecognised
+Node 24.19.0) on darwin-arm64 only, the one host where the storage probe and the store tests were measured, in a
+canonical owner-only folder on a measured local file system (a `local` apfs or hfs mount; the path checks also
+recognise Linux ext4, xfs, btrfs, tmpfs, zfs and f2fs, but Linux stays unqualified until its store tests pass on CI,
+and a skipped test is not that evidence). Network, FUSE, overlay and unrecognised
 file systems are refused. Durability is claimed for **process death**: SQLite runs WAL with `synchronous=FULL`,
 objects are written, fsynced, verified and linked with their folders fsynced before a receipt exists, and the owner
 lock is an OS file lock the kernel releases when the holder dies. It is **not** claimed for physical power loss:
-`fsync` does not force a drive's volatile cache on macOS (no `F_FULLFSYNC` is issued) and depends on the device and
-mount honouring flushes on Linux; no power-cut trial was run. The store's reason codes are catalog keys
+`fsync` does not force a drive's volatile cache on macOS (no `F_FULLFSYNC` is issued), and no power-cut trial was
+run. The store's reason codes are catalog keys
 (`strings-sentinel-store.ts`, `strings-sentinel-storage-errors.ts`). The `ledger` capability is `available-draft`;
 no scan capability changes, and the store's draft formats can still change before the contract review.

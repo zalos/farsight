@@ -80,8 +80,8 @@ only after each named object was re-read and hashed in this store. `inspect()` a
 nothing is ever deleted automatically. Every refusal carries a stable reason code (`STORAGE_ERROR_CODES`) whose
 words are in the shared catalog.
 
-Qualified, and refused otherwise: SQLite 3.53.3 (Node 24.19.0), macOS and Linux, a canonical owner-only folder on
-a local file system. Durability holds across process death, not physical power loss (see ADR 19 in
+Qualified, and refused otherwise: SQLite 3.53.3 (Node 24.19.0) on darwin-arm64, a canonical owner-only folder on
+a local file system. Linux is not qualified yet; on any other host `openStore` refuses before creating a file. Durability holds across process death, not physical power loss (see ADR 19 in
 `docs/ARCHITECTURE.md`). A store is a library facility in this draft: the `capabilities` list shows `ledger` as
 `available-draft` and every scan capability as unavailable; there is no store command until the CLI (PR 09).
 

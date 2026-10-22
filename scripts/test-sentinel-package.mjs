@@ -186,19 +186,31 @@ try {
     } finally { store.close(); }
   `);
   const node = (file, args = []) => consumer.exec(process.execPath, ['--disable-warning=ExperimentalWarning', file, ...args]);
-  const written = JSON.parse((await node('store-write.mjs')).stdout.trim());
-  const read = JSON.parse((await node('store-read.mjs', [written.epoch])).stdout.trim());
-  assert.notEqual(read.epoch, written.epoch, 'a new process owns the store under a new epoch');
-  assert.equal(read.text, 'evidence written by the first process', 'the artifact reads back in a new process');
-  assert.equal(read.stale, 'sentinel.store.staleEpoch', 'a record from the earlier epoch is refused');
-  assert.ok(read.ok && read.integrity === 'ok', 'reachability and SQLite integrity hold after the reopen');
+  // Only a qualified host and SQLite release opens a store; elsewhere the installed package must refuse cleanly.
+  const policy = JSON.parse(await evalModule("const { SQLITE_RELEASE_POLICY: p } = await import('farsight-sentinel/store'); console.log(JSON.stringify(p));"));
+  const host = `${process.platform}-${process.arch}`;
+  let storeDemo;
+  if (policy.hosts.includes(host) && policy.qualifiedSqlite.includes(process.versions.sqlite)) {
+    const written = JSON.parse((await node('store-write.mjs')).stdout.trim());
+    const read = JSON.parse((await node('store-read.mjs', [written.epoch])).stdout.trim());
+    assert.notEqual(read.epoch, written.epoch, 'a new process owns the store under a new epoch');
+    assert.equal(read.text, 'evidence written by the first process', 'the artifact reads back in a new process');
+    assert.equal(read.stale, 'sentinel.store.staleEpoch', 'a record from the earlier epoch is refused');
+    assert.ok(read.ok && read.integrity === 'ok', 'reachability and SQLite integrity hold after the reopen');
+    storeDemo = 'store reopened across processes';
+  } else {
+    const refused = await node('store-write.mjs').then(() => null, (error) => `${error.stderr}`);
+    assert.match(refused ?? '', /sentinel\.store\.(platformUnqualified|runtimeUnqualified)/, `an unqualified host (${host}) is refused`);
+    assert.ok(!existsSync(storePath), 'no store folder was created on an unqualified host');
+    storeDemo = `store refused on unqualified ${host} (not qualification evidence)`;
+  }
 
   // Standalone: everything @farsight/* is inlined, and farsight-cli is not pulled in.
   const modules = readdirSync(join(consumer.dir, 'node_modules'));
   assert.ok(!modules.includes('farsight-cli'), 'farsight-cli is not installed with Sentinel');
   assert.ok(!modules.includes('@farsight'), 'no workspace package is resolved from a registry');
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, store reopened across processes, npm consumer`);
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}, npm consumer`);
 } finally {
   consumer.cleanup();
 }

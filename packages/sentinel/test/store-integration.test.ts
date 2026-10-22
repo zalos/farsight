@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openStore, STORAGE_ERROR_CODES, type SentinelStore } from '../dist/store/index.js';
+import { openStore, SQLITE_RELEASE_POLICY, STORAGE_ERROR_CODES, type SentinelStore } from '../dist/store/index.js';
 import * as root from '../dist/index.js';
 
 const DIST = fileURLToPath(new URL('../dist/store/index.js', import.meta.url));
@@ -16,6 +16,12 @@ const load = (name: string) => JSON.parse(readFileSync(`${VALID}${name}.json`, '
 const W1 = { id: 'work-pattern-api', revision: 1 };
 const ENDED = '2026-10-21T12:01:00Z';
 const coded = (code: string) => (e: unknown) => (e as { code?: unknown })?.code === code;
+
+// Only qualified hosts and SQLite releases open a store. Elsewhere the facade must refuse, and the tests that need
+// an open store are skipped with that reason; a skip is never qualification evidence.
+const HOST = `${process.platform}-${process.arch}`;
+const QUALIFIED = SQLITE_RELEASE_POLICY.hosts.includes(HOST) && SQLITE_RELEASE_POLICY.qualifiedSqlite.includes(process.versions.sqlite ?? '');
+const needsStore = QUALIFIED ? {} : { skip: `${HOST} with SQLite ${process.versions.sqlite ?? 'none'} is not a qualified store host` };
 
 /** A canonical, private scratch folder; the store is created inside it. */
 function scratch(t: { after(fn: () => void): void }): string {
@@ -48,7 +54,7 @@ function begin(store: SentinelStore, attemptId = 'att-1') {
   store.ledger.startAttempt(attempt(store.epoch, { id: attemptId, ordinal: 1 }) as never);
 }
 
-test('stage before write, durable put, transactional accept; a new process reads the artifact back', async t => {
+test('stage before write, durable put, transactional accept; a new process reads the artifact back', needsStore, async t => {
   const storePath = scratch(t);
   const store = await openStore(storePath, { build: 'store-integration' });
   let closed = false;
@@ -114,7 +120,7 @@ test('stage before write, durable put, transactional accept; a new process reads
   assert.deepEqual(reopened.integrity, { integrity: 'ok', foreignKeyViolations: 0 });
 });
 
-test('an attempt started under an earlier owner cannot publish after a takeover', async t => {
+test('an attempt started under an earlier owner cannot publish after a takeover', needsStore, async t => {
   const storePath = scratch(t);
   const first = await openStore(storePath);
   begin(first);
@@ -134,7 +140,7 @@ test('an attempt started under an earlier owner cannot publish after a takeover'
   assert.throws(() => first.assertHeld(), coded('sentinel.store.ownerClosed'));
 });
 
-test('a failed or lost write never yields an accepted reference', async t => {
+test('a failed or lost write never yields an accepted reference', needsStore, async t => {
   const storePath = scratch(t);
   const store = await openStore(storePath);
   t.after(() => store.close());
@@ -162,7 +168,7 @@ test('a failed or lost write never yields an accepted reference', async t => {
   assert.deepEqual(store.checkIntegrity(), { integrity: 'ok', foreignKeyViolations: 0 });
 });
 
-test('one owner at a time, and a failed open releases the lock', async t => {
+test('one owner at a time, and a failed open releases the lock', needsStore, async t => {
   const storePath = scratch(t);
   const store = await openStore(storePath);
   await assert.rejects(openStore(storePath), coded('sentinel.store.ownedElsewhere'));
@@ -193,7 +199,7 @@ test('one owner at a time, and a failed open releases the lock', async t => {
   assert.ok(fresh.held);
 });
 
-test('the facade exposes domain operations only', async t => {
+test('the facade exposes domain operations only', needsStore, async t => {
   const store = await openStore(scratch(t));
   t.after(() => store.close());
   assert.ok(Object.isFrozen(store) && Object.isFrozen(store.ledger) && Object.isFrozen(store.objects));
@@ -204,6 +210,13 @@ test('the facade exposes domain operations only', async t => {
   assert.equal(root.CAPABILITIES.find(c => c.id === 'ledger')?.state, 'available-draft');
   assert.ok(root.CAPABILITIES.filter(c => c.id !== 'ledger' && c.id !== 'contract-validation').every(c => c.state === 'unavailable'),
     'no scan capability is claimed');
+});
+
+test('an unqualified host or SQLite release is refused before any store file exists', { skip: QUALIFIED && 'this host is qualified' }, async t => {
+  const storePath = scratch(t);
+  await assert.rejects(openStore(storePath), (e: unknown) =>
+    ['sentinel.store.platformUnqualified', 'sentinel.store.runtimeUnqualified'].includes((e as { code?: string }).code ?? ''));
+  assert.equal(existsSync(storePath), false);
 });
 
 test('every storage reason code is a catalog entry with both registers and a define', async () => {
