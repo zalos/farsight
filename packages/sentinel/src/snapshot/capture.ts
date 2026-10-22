@@ -25,8 +25,8 @@ import { enumerateCommit, trackedBlobs, type SubmoduleRequest } from './committe
 import { SnapshotError } from './errors.js';
 import { GitReadError, GitRepository } from './git.js';
 import { CaptureChanged, Inventory } from './inventory.js';
-import { MATERIALIZATION_SCHEMA, materializationSources, type Materialization, type MaterializedSource } from './materialization.js';
-import { digestOf, resolvePolicy, type CapturePolicy } from './policy.js';
+import { MATERIALIZATION_SCHEMA, inventoryDigestOf, materializationSources, type Materialization, type MaterializedSource } from './materialization.js';
+import { digestOf, isRecordablePath, resolvePolicy, type CapturePolicy } from './policy.js';
 import { enumerateWorktree } from './worktree.js';
 
 export type CaptureModeRequest = 'committed-tree' | 'working-copy';
@@ -103,11 +103,17 @@ function checkRequest(request: CaptureRequest): CapturePolicy {
     if (request.mode === 'working-copy' && (s.revision !== undefined || (s.submodules?.length ?? 0) > 0)) {
       bad(`${s.sourceId}: revision and submodules apply to committed-tree capture only`);
     }
+    const paths = new Set<string>();
     for (const sub of s.submodules ?? []) {
-      if (!sub || typeof sub.path !== 'string' || typeof sub.sourceId !== 'string') bad(`${s.sourceId}: a submodule needs a path and a source id`);
+      // The same checks a primary source gets, all before anything is read.
+      if (!sub || typeof sub.sourceId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(sub.sourceId)) bad(`${s.sourceId}: a submodule source id is not a valid id`);
       if (ids.has(sub.sourceId)) bad(`source ${sub.sourceId} is listed twice`);
       ids.add(sub.sourceId);
-      canonical(sub.root, `${sub.sourceId}`);
+      if (typeof sub.repositoryId !== 'string' || sub.repositoryId.length < 1 || sub.repositoryId.length > 512) bad(`${sub.sourceId}: repositoryId`);
+      if (typeof sub.path !== 'string' || !isRecordablePath(sub.path) || paths.has(sub.path)) bad(`${sub.sourceId}: the submodule path is not a safe, unique path`);
+      paths.add(sub.path);
+      canonical(sub.root, sub.sourceId);
+      if (sub.lfsObjects !== undefined) canonical(sub.lfsObjects, `${sub.sourceId} lfsObjects`);
     }
   }
   if (request.stageSize !== undefined && (!Number.isSafeInteger(request.stageSize) || request.stageSize < 1 || request.stageSize > STAGE_LIMIT)) {
@@ -140,7 +146,8 @@ function gitFailure(e: unknown): never {
   throw e;
 }
 
-interface Enumerated { readonly inv: Inventory; readonly sources: SnapshotSource[] }
+/** `repos` stay open while their read closures may still run; the caller closes them. */
+interface Enumerated { readonly inv: Inventory; readonly sources: SnapshotSource[]; readonly repos: GitRepository[] }
 
 /** What a stability recheck compares: entries, sources (without times) and the sidecar facts. */
 function fingerprint(e: Enumerated): string {
@@ -197,41 +204,52 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
         if (repo) { try { commit = repo.resolveCommit('HEAD'); } catch { commit = null; } }
         const start = inv.entries.length;
         enumerateWorktree(inv, { sourceId: s.sourceId, root, storeRel, lfsObjects: s.lfsObjects });
-        const dirty = commit === null || repo === undefined ? true : differsFromCommit(repo, commit, inv.entries.slice(start), inv);
+        const dirty = commit === null || repo === undefined ? true : differsFromCommit(repo, commit, s.sourceId, inv.entries.slice(start), inv);
         sources.push({ sourceId: s.sourceId, repositoryId: s.repositoryId, commit, dirty, capturedAt: now() });
       }
     }
-  } finally {
+  } catch (e) {
     for (const r of repos) r.close();
+    throw e;
   }
   inv.refuseCaseCollisions();
-  return { inv, sources };
+  return { inv, sources, repos };
 }
 
 /**
- * Whether a working copy is anything but its commit: true unless every tracked file was captured with the same
- * Git blob id and nothing else was captured. A tracked file that was not captured (excluded, too large, unreadable)
- * cannot be compared, so the copy is not claimed clean.
+ * Whether a working copy is anything but its commit: true unless every tracked file was captured with the same Git
+ * blob id and the same executable bit, every tracked link is a link whose target hashes to the committed blob, and
+ * nothing else was captured. Anything that cannot be compared (a tracked file excluded, too large or unreadable; a
+ * link target not recorded) counts as a difference.
  */
-function differsFromCommit(repo: GitRepository, commit: string, entries: readonly CaptureEntry[], inv: Inventory): boolean {
+function differsFromCommit(repo: GitRepository, commit: string, sourceId: string, entries: readonly CaptureEntry[], inv: Inventory): boolean {
   const tracked = trackedBlobs(repo, commit);
   if (!tracked) return true;
   const gitlinks = [...tracked].filter(([, v]) => v.startsWith('160000:')).map(([p]) => p);
   const underGitlink = (p: string) => gitlinks.some(g => p === g || p.startsWith(`${g}/`));
-  const captured = new Map<string, string>();
+  const captured = new Map<string, CaptureEntry>();
   for (const e of entries) {
-    if (e.kind === 'file' && e.disposition === 'included') {
-      if (underGitlink(e.relativePath)) continue;
-      captured.set(e.relativePath, e.content);
-    } else if (e.kind === 'symlink') captured.set(e.relativePath, 'symlink');
+    if ((e.kind === 'file' && e.disposition === 'included') || e.kind === 'symlink') {
+      if (!underGitlink(e.relativePath)) captured.set(e.relativePath, e);
+    }
   }
+  const key = (path: string) => `${sourceId}\u0000${path}`;
   for (const [path, value] of tracked) {
-    if (value.startsWith('160000:')) continue;
+    const [mode, oid] = value.split(':') as [string, string];
+    if (mode === '160000') continue;
     const mine = captured.get(path);
-    if (mine === undefined) return true;
-    if (value.startsWith('120000:')) { if (mine !== 'symlink') return true; }
-    else if (mine === 'symlink' || inv.gitBlobIdOf(mine, repo) !== value.slice(value.indexOf(':') + 1)) return true;
+    if (!mine) return true;
     captured.delete(path);
+    if (mode === '120000') {
+      if (mine.kind !== 'symlink') return true;
+      const target = inv.symlinkTargets.get(key(path));
+      if (target === undefined || repo.hashObject('blob', Buffer.from(target, 'utf8')) !== oid) return true;
+      continue;
+    }
+    if (mine.kind !== 'file' || mine.disposition !== 'included') return true;
+    const facts = inv.facts.get(key(path));
+    if (!facts || facts.executable !== (mode === '100755')) return true;
+    if (inv.gitBlobIdOf(mine.content, repo) !== oid) return true;
   }
   return captured.size > 0;
 }
@@ -243,10 +261,8 @@ function buildEnvelope(mode: CaptureModeRequest, policy: CapturePolicy, e: Enume
   const captureMode = mode === 'committed-tree' ? 'committed-tree' : 'working-copy-stability-checked';
   const policyDigest = digestOf({ mode: captureMode, policy });
   const entries = [...e.inv.entries].sort(compareEntries);
-  const inventoryDigest = digestOf({
-    mode: captureMode, policyDigest, entries,
-    sources: e.sources.map(({ capturedAt: _t, ...rest }) => rest),
-  });
+  const facts = materializationSources(e.inv, e.sources.map(s => s.sourceId), entries);
+  const inventoryDigest = inventoryDigestOf(captureMode, policyDigest, e.sources, entries, facts);
   const id = `snap-${createHash('sha256').update(`${inventoryDigest}|${createdAt}|${attempt}`).digest('hex').slice(0, 32)}`;
   return {
     schema: 'sentinel-snapshot/draft-1', id, inventoryDigest, createdAt,
@@ -275,6 +291,17 @@ export async function captureSnapshot(store: CaptureStore, request: CaptureReque
 async function captureOnce(store: CaptureStore, request: CaptureRequest, policy: CapturePolicy, now: () => string, attempt: number):
   Promise<CaptureResult> {
   const first = enumerate(request, policy, store, now);
+  let second: Enumerated | undefined;
+  try {
+    return await captureEnumerated(store, request, policy, now, attempt, first, e => { second = e; });
+  } finally {
+    // The committed-tree read closures reopen pack files on demand; every handle is closed here, once nothing reads.
+    for (const r of [...first.repos, ...(second?.repos ?? [])]) r.close();
+  }
+}
+
+async function captureEnumerated(store: CaptureStore, request: CaptureRequest, policy: CapturePolicy, now: () => string,
+  attempt: number, first: Enumerated, keep: (e: Enumerated) => void): Promise<CaptureResult> {
   const envelope = buildEnvelope(request.mode, policy, first, now(), attempt);
   const valid = validateEnvelope('snapshot', envelope);
   if (!valid.ok) throw new SnapshotError('sentinel.capture.contractInvalid', valid.errors.slice(0, 3).map(x => `${x.path} ${x.message}`).join('; '));
@@ -319,6 +346,7 @@ async function captureOnce(store: CaptureStore, request: CaptureRequest, policy:
     // 5. A working copy must hold still across the whole capture.
     if (request.mode === 'working-copy') {
       const second = enumerate(request, policy, store, now);
+      keep(second);
       if (fingerprint(first) !== fingerprint(second)) throw new CaptureChanged('the working copy changed during capture');
     }
     // 6. The roots, then one admission that verifies every object again and releases every stage.

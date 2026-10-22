@@ -10,6 +10,7 @@ export const CAPTURE_REASON_CODES = Object.freeze([
   'sentinel.capture.specialFile', 'sentinel.capture.unreadable', 'sentinel.capture.tooLarge',
   'sentinel.capture.quotaExceeded', 'sentinel.capture.entryLimit', 'sentinel.capture.gitObjectMissing',
   'sentinel.capture.gitObjectCorrupt', 'sentinel.capture.lfsObjectMissing', 'sentinel.capture.lfsObjectMismatch',
+  'sentinel.capture.lfsStoreUnsafe',
   'sentinel.capture.submoduleNotCaptured', 'sentinel.capture.submoduleCapturedSeparately',
   'sentinel.capture.submoduleCommitMissing',
 ] as const);

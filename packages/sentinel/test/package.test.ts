@@ -74,7 +74,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'snapshot/capture.js': ['node:crypto', 'node:fs', 'node:path'],
   'snapshot/errors.js': ['@farsight/core/dist/strings-sentinel-capture.js'],
   'snapshot/git.js': ['node:crypto', 'node:fs', 'node:path', 'node:zlib'],
-  'snapshot/inventory.js': ['node:crypto', 'node:fs'],
+  'snapshot/inventory.js': ['node:crypto', 'node:fs', 'node:path'],
   'snapshot/materialize.js': ['node:fs', 'node:path'],
   'snapshot/policy.js': ['node:crypto', 'node:path'],
   'snapshot/worktree.js': ['node:fs'],

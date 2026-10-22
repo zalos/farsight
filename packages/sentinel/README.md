@@ -111,7 +111,8 @@ special files, unsafe or colliding names, unreadable, too-large and over-quota f
 before it is written, and the whole snapshot is admitted in one ledger transaction, without a run. A materialization
 sidecar keeps every listed folder (empty ones too), executable bits, Git and LFS provenance, link targets and
 gitlink commits, so a restore reproduces the tree. Parser artifacts, framework versions and scan coverage are not
-part of a snapshot yet. See ADR 20 in `docs/ARCHITECTURE.md`.
+part of a snapshot yet. A restore is never executable: files are 0400 (0600 when writable), whatever their mode was;
+the original mode stays provenance in the sidecar. A capture stores at most 512 MiB. See ADR 21 in `docs/ARCHITECTURE.md`.
 
 ## Versions and evolution
 

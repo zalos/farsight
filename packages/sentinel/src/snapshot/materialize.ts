@@ -1,7 +1,9 @@
 // Reopen and restore: read an admitted snapshot back through the ledger's record of it, and write its included files
 // and listed folders into a new private folder, byte for byte, from the store alone. The original source roots are
 // never read. After writing, every file is read back and the tree listed again; any extra, missing, linked or
-// changed entry fails the restore. The result is made read-only by default (executables keep their execute bit).
+// changed entry fails the restore. No restored file is executable, whatever it was in the source: its original mode
+// is provenance in the materialization, never applied, so restoring a snapshot cannot make project code runnable.
+// The tree is read-only by default (files 0400, folders 0500); writable restores give files 0600, folders 0700.
 import { chmodSync, closeSync, constants as FS, fstatSync, lstatSync, mkdirSync, openSync, readSync, readdirSync, realpathSync, writeSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import type { ArtifactId, IncludedFileEntry, SnapshotEnvelope } from '../contracts/index.js';
@@ -10,11 +12,11 @@ import { canonicalJsonBytes } from '../store/objects.js';
 import { validateEnvelope } from '../validate.js';
 import { SnapshotError } from './errors.js';
 import { contentId } from './inventory.js';
-import { validateMaterialization, type Materialization } from './materialization.js';
+import { inventoryDigestOf, validateMaterialization, type Materialization } from './materialization.js';
 import { foldPath } from './policy.js';
 
 export interface RestoreOptions {
-  /** Leave files 0400 (0500 when executable) and folders 0500 (default true). */
+  /** Leave files 0400 and folders 0500 (default true); otherwise files 0600 and folders 0700. Never executable. */
   readonly readOnly?: boolean;
 }
 
@@ -86,6 +88,9 @@ export async function openSnapshot(store: RestoreStore, snapshotId: string): Pro
     }
   }
   if (files !== expected.size) throw new SnapshotError('sentinel.capture.notSnapshot', 'the materialization omits an included file');
+  // The recorded inventory identity must be exactly what these bytes and these facts hash to.
+  const recomputed = inventoryDigestOf(snapshot.capture.mode, snapshot.capture.policyDigest, snapshot.sources, snapshot.entries, materialization.sources);
+  if (recomputed !== record.inventoryDigest) throw new SnapshotError('sentinel.capture.notSnapshot', 'the inventory digest does not match its manifest and materialization');
   return Object.freeze({ record, snapshot, materialization });
 }
 
@@ -176,11 +181,9 @@ export async function restoreSnapshot(store: RestoreStore, snapshotId: string, t
       }
     }
     if (options.readOnly !== false) {
-      for (const f of files) chmodSync(join(root, ...f.path.split('/')), f.executable ? 0o500 : 0o400);
+      for (const f of files) chmodSync(join(root, ...f.path.split('/')), 0o400);
       for (const d of [...dirs].sort().reverse()) chmodSync(join(root, ...d.split('/')), 0o500);
       chmodSync(root, 0o500);
-    } else {
-      for (const f of files) if (f.executable) chmodSync(join(root, ...f.path.split('/')), 0o700);
     }
     sources.push(Object.freeze({ sourceId: source.sourceId, root, files: files.length, directories: dirs.size }));
   }

@@ -272,7 +272,7 @@ target check (`miss`), and its own capability and credential verdicts: Work's `c
 Sentinel's settings adoption are not part of this boundary. **Cost:** a public core export that Work, code hosts and
 Sentinel must all keep compatible; a change to its rules is a change to every gate at once, which is the point.
 
-20. **Sentinel captures source with its own Git object reader, stages before it writes, and records what it cannot read (2026-10-22).**
+21. **Sentinel captures source with its own Git object reader, stages before it writes, and records what it cannot read (2026-10-22).**
 
 `@farsight/sentinel` gains a public `./snapshot` export (also re-exported from the root): `captureSnapshot(store,
 request)`, `openSnapshot(store, snapshotId)`, `restoreSnapshot(store, snapshotId, target)`, `readSnapshot` and
@@ -323,7 +323,17 @@ canonical JSON, bound to its snapshot by the ledger row and checked against the 
 a restore and PR 05's reconciliation need beyond it: every listed folder, empty ones included; each included file's
 executable bit and provenance (its Git mode and blob id, or the LFS pointer it was resolved from); each recorded
 link's target; and every gitlink's commit. A sidecar keeps the root-owned contract unchanged while those facts are
-draft. `restoreSnapshot` writes a new read-only tree from the store alone (folders, files, execute bits), reads it
-back and lists files and folders again; any difference fails it. The capture reason codes are catalog keys
+draft. The inventory digest covers those facts too (without the snapshot id derived from it), so equal bytes with a
+different mode, folder set or link target are a different inventory; `openSnapshot` recomputes it. `restoreSnapshot`
+writes a new read-only tree from the store alone (folders and files), reads it back and lists files and folders
+again; any difference fails it. No restored file is executable, whatever its source mode: the original mode is
+provenance only, and no option makes restored project code runnable.
+
+Bounds: a capture stores at most the accepted 512 MiB budget (`maxTotalBytes`, the default) and 16 MiB per file; the
+manifest must fit the 4 MiB envelope limit, checked on its bytes. The schema's 200 000 entries is a bound only; the
+default entry limit is 20 000. Folders that collide by case or Unicode normalisation with a file or another folder are
+recorded as refused boundaries, not dropped. Working-copy reads go through folders whose identities are checked again
+before each listing and before and after each read, and LFS content only through real folders under the permitted
+root: these detect a swap between observations; they are not an OS-level audit of every read. The capture reason codes are catalog keys
 (`strings-sentinel-capture.ts`); the `source-capture` capability is `available-draft`. Not in this decision: parser
 artifacts and file outcomes (PR 05), framework versions from lockfiles (left empty), and any scan coverage.

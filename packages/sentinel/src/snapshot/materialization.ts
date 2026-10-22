@@ -1,12 +1,12 @@
 // The materialization sidecar: what a restore needs beyond the snapshot envelope, captured at the same moment.
 // The envelope records each entry's disposition; this records every listed folder (empty ones too), each included
-// file's executable bit and provenance (its Git mode and blob id, or the LFS pointer it was resolved from), each
+// file's original executable bit (provenance only: a restore never applies it) and provenance (its Git mode and blob id, or the LFS pointer it was resolved from), each
 // recorded link's target and every gitlink's commit. It is a canonical JSON artifact bound to its snapshot by the
 // ledger's snapshot row, and stored as `source` (link targets are repository text).
-import type { ArtifactId, CaptureEntry, Digest } from '../contracts/index.js';
+import type { ArtifactId, CaptureEntry, Digest, SnapshotEnvelope, SnapshotSource } from '../contracts/index.js';
 import { SnapshotError } from './errors.js';
 import type { Inventory } from './inventory.js';
-import { foldPath, isRecordablePath } from './policy.js';
+import { digestOf, isRecordablePath } from './policy.js';
 
 export const MATERIALIZATION_SCHEMA = 'sentinel-capture-materialization/draft-1';
 /** A link target longer than this is not recorded (the link itself still is, in the envelope). */
@@ -36,6 +36,20 @@ export interface Materialization {
   readonly sources: readonly MaterializedSource[];
 }
 
+/**
+ * The snapshot's inventory identity: the capture mode and policy, the sources (without capture times), every entry,
+ * and the materialization's facts (without the snapshot id, which is derived from this digest). Equal bytes with a
+ * different mode, folder set, link target or provenance are a different inventory.
+ */
+export function inventoryDigestOf(captureMode: SnapshotEnvelope['capture']['mode'], policyDigest: Digest,
+  sources: readonly SnapshotSource[], entries: readonly CaptureEntry[], materialization: readonly MaterializedSource[]): Digest {
+  return digestOf({
+    mode: captureMode, policyDigest, entries,
+    sources: sources.map(({ capturedAt: _t, ...rest }) => rest),
+    materialization,
+  });
+}
+
 const byPath = <T extends { path: string }>(a: T, b: T) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 const key = (sourceId: string, path: string) => `${sourceId}\u0000${path}`;
 
@@ -50,15 +64,8 @@ export function materializationSources(inv: Inventory, sourceIds: readonly strin
       files.push({ path: e.relativePath, content: e.content, executable: f?.executable ?? false,
         ...(f?.git ? { git: f.git } : {}), ...(f?.lfs ? { lfs: f.lfs } : {}) });
     }
-    // Folders that restore onto one name under case folding are dropped with everything below them; their files
-    // were already refused as colliding.
-    const listed = [...(inv.directories.get(sourceId) ?? [])];
-    const folds = new Map<string, number>();
-    for (const d of listed) folds.set(foldPath(d), (folds.get(foldPath(d)) ?? 0) + 1);
-    const colliding = listed.filter(d => (folds.get(foldPath(d)) ?? 0) > 1);
-    const directories = listed
-      .filter(d => !colliding.some(c => d === c || d.startsWith(`${c}/`)))
-      .sort();
+    // Folders that collide by case were already taken out (and recorded as refused) by the inventory.
+    const directories = [...(inv.directories.get(sourceId) ?? [])].sort();
     const symlinks = mine.filter(e => e.kind === 'symlink').flatMap(e => {
       const target = inv.symlinkTargets.get(key(sourceId, e.relativePath));
       return target !== undefined && target.length <= MAX_TARGET ? [{ path: e.relativePath, target }] : [];

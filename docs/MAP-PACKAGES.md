@@ -63,7 +63,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `ledger.ts` + `migrations.ts` + `store-types.ts` (the fenced WAL ledger), `objects.ts` (content-addressed objects),
   `objects-ledger.ts` (the ledger seam and verifier) and `gc.ts` (read-only reachability and the dry-run prune plan).
   `test/store-integration.test.ts` drives the facade end to end across processes. `src/snapshot/index.ts` is the
-  capture facade (ADR 20; also `./snapshot` and the root): `git.ts` (a read-only Git object reader, no git process),
+  capture facade (ADR 21; also `./snapshot` and the root): `git.ts` (a read-only Git object reader, no git process),
   `committed.ts` and `worktree.ts` (the two enumerations), `inventory.ts` (entries, budget, quota, case collisions,
   LFS), `policy.ts` (capture policy and path rules), `materialization.ts` (the provenance sidecar), `capture.ts` (stage,
   write, recheck, admit), `materialize.ts` (reopen and restore from the store alone) and `reconcile.ts` (E1). The

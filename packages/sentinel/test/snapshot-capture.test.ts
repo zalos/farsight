@@ -441,7 +441,7 @@ test('source capture is listed as a draft capability; every scan capability stay
   assert.deepEqual(CAPABILITIES.filter((c: any) => c.state !== 'unavailable').map((c: any) => c.id), ['contract-validation', 'ledger', 'source-capture']);
 });
 
-test('restore recreates empty folders and executable bits; the materialization names every listed folder', needsStore, async t => {
+test('restore recreates empty folders and never an execute bit; the materialization keeps the original as provenance', needsStore, async t => {
   const dir = scratch(t);
   const root = join(dir, 'work');
   writeTree(root, { 'bin/run.sh': '#!/bin/sh\necho ok\n', 'src/a.ts': 'a\n' });
@@ -457,9 +457,110 @@ test('restore recreates empty folders and executable bits; the materialization n
   const restored = await restoreSnapshot(fx.store, r.record.snapshotId, target);
   assert.deepEqual(restored.sources.map(s => [s.files, s.directories]), [[2, 4]]);
   assert.deepEqual(readdirSync(join(target, 'app/empty')), ['nested'], 'an empty folder is restored');
-  assert.equal(statSync(join(target, 'app/bin/run.sh')).mode & 0o777, 0o500);
+  assert.equal(statSync(join(target, 'app/bin/run.sh')).mode & 0o777, 0o400, 'an executable source file is restored as data');
   assert.equal(statSync(join(target, 'app/src/a.ts')).mode & 0o777, 0o400);
   const writable = await restoreSnapshot(fx.store, r.record.snapshotId, join(dir, 'writable'), { readOnly: false });
   t.after(() => unlock(writable.root));
-  assert.equal(statSync(join(writable.root, 'app/bin/run.sh')).mode & 0o100, 0o100);
+  assert.equal(statSync(join(writable.root, 'app/bin/run.sh')).mode & 0o777, 0o600, 'no option makes restored code executable');
+});
+
+test('a folder and a file that collide by case are both refused, recorded, and the snapshot still restores', needsStore, async t => {
+  const dir = scratch(t);
+  const root = join(dir, 'repo');
+  commitRepo(root, { 'keep.ts': 'keep\n' });
+  const blob = git(root, ['hash-object', '-w', '--stdin'], 'x\n').trim();
+  git(root, ['update-index', '--add', '--cacheinfo', `100644,${blob},lib/x.ts`]);
+  git(root, ['update-index', '--add', '--cacheinfo', `100644,${blob},LIB`]);
+  git(root, ['commit', '--quiet', '-m', 'collide']);
+  const fx = await openCaptureStore(t, dir);
+  const r = await captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{ sourceId: 'app', repositoryId: 'r', root }] });
+  assert.deepEqual(entryOf(r.snapshot, 'lib'), { sourceId: 'app', relativePath: 'lib', kind: 'directory-boundary', disposition: 'refused',
+    reasonCode: 'sentinel.capture.caseCollision', knownDescendants: 1 }, 'the unrestorable folder is explicit refused scope');
+  assert.equal(entryOf(r.snapshot, 'LIB').reasonCode, 'sentinel.capture.caseCollision');
+  assert.equal(entryOf(r.snapshot, 'lib/x.ts').reasonCode, 'sentinel.capture.caseCollision');
+  assert.ok(!r.materialization.sources[0]!.directories.includes('lib'));
+  const target = join(dir, 'restored');
+  t.after(() => unlock(target));
+  await restoreSnapshot(fx.store, r.record.snapshotId, target);
+  assert.deepEqual(observe(join(target, 'app')), ['keep.ts']);
+  assert.deepEqual(reconcileInventory(r.snapshot, 'app', ['keep.ts', 'LIB', 'lib/x.ts']).unaccounted, []);
+});
+
+test('a changed link target or execute bit makes a working copy dirty; the sidecar facts change the inventory identity', needsStore, async t => {
+  const dir = scratch(t);
+  const root = join(dir, 'work');
+  commitRepo(root, { 'a.ts': 'a\n', 'b.ts': 'b\n', 'run.sh': 'echo\n' });
+  symlinkSync('a.ts', join(root, 'link'));
+  git(root, ['add', 'link']);
+  git(root, ['commit', '--quiet', '-m', 'link']);
+  const fx = await openCaptureStore(t, dir);
+  const capture = async () => (await captureSnapshot(fx.store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'r', root }] })).snapshot;
+  const clean = await capture();
+  assert.equal(clean.sources[0].dirty, false);
+  rmSync(join(root, 'link'));
+  symlinkSync('b.ts', join(root, 'link'));
+  assert.equal((await capture()).sources[0].dirty, true, 'a retargeted link');
+  rmSync(join(root, 'link'));
+  symlinkSync('a.ts', join(root, 'link'));
+  chmodSync(join(root, 'run.sh'), 0o755);
+  const exec = await capture();
+  assert.equal(exec.sources[0].dirty, true, 'a new execute bit');
+  assert.deepEqual(exec.entries, clean.entries, 'the envelope entries are byte-identical');
+  assert.notEqual(exec.inventoryDigest, clean.inventoryDigest, 'but the inventory identity covers the sidecar facts');
+});
+
+test('LFS content reached through a link inside the permitted store is refused', needsStore, async t => {
+  const dir = scratch(t);
+  const content = Buffer.from('lfs payload\n');
+  const oid = createHash('sha256').update(content).digest('hex');
+  const root = join(dir, 'repo');
+  commitRepo(root, { 'asset.bin': `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize ${content.length}\n` });
+  const outside = join(dir, 'outside', oid.slice(2, 4));
+  mkdirSync(outside, { recursive: true });
+  writeFileSync(join(outside, oid), content);
+  const lfs = join(dir, 'lfs');
+  mkdirSync(lfs);
+  symlinkSync(join(dir, 'outside'), join(lfs, oid.slice(0, 2)));
+  const fx = await openCaptureStore(t, dir);
+  const snap = (await captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{ sourceId: 'app', repositoryId: 'r', root, lfsObjects: lfs }] })).snapshot;
+  assert.deepEqual([entryOf(snap, 'asset.bin').disposition, entryOf(snap, 'asset.bin').reasonCode], ['unreadable', 'sentinel.capture.lfsStoreUnsafe']);
+});
+
+test('a working-copy folder swapped for a link between hashing and storing is caught, and nothing is admitted', needsStore, async t => {
+  const dir = scratch(t);
+  const root = join(dir, 'work');
+  writeTree(root, { 'src/a.ts': 'a\n' });
+  writeTree(join(dir, 'decoy'), { 'a.ts': 'a\n' });   // the same bytes, so only identity can tell
+  const fx = await openCaptureStore(t, dir);
+  await assert.rejects(captureSnapshot(fx.store, { mode: 'working-copy', policy: { stabilityAttempts: 1 },
+    sources: [{ sourceId: 'app', repositoryId: 'r', root }],
+    onStaged: () => { renameSync(join(root, 'src'), join(dir, 'moved')); symlinkSync(join(dir, 'decoy'), join(root, 'src')); } }),
+  coded('sentinel.capture.unstable'));
+  assert.ok(!fx.store.ledger.readEvents({ after: 0, limit: 500 }).events.some(e => e.kind === 'snapshot-admitted'));
+});
+
+test('submodule requests and the capture budget are checked before anything is read; Git handles are released', needsStore, async t => {
+  const dir = scratch(t);
+  const root = join(dir, 'repo');
+  commitRepo(root, { 'a.ts': 'a\n' });
+  const fx = await openCaptureStore(t, dir);
+  const bad = async (sub: object) => assert.rejects(captureSnapshot(fx.store, { mode: 'committed-tree',
+    sources: [{ sourceId: 'app', repositoryId: 'r', root, submodules: [{ path: 'vendor/x', sourceId: 'sub', repositoryId: 'r2', root, ...sub } as never] }] }),
+  coded('sentinel.capture.invalidRequest'));
+  await bad({ sourceId: '../escape' });
+  await bad({ repositoryId: '' });
+  await bad({ path: '../outside' });
+  await assert.rejects(captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{ sourceId: 'app', repositoryId: 'r', root,
+    submodules: [{ path: 'vendor/x', sourceId: 'sub', repositoryId: 'r2', root, lfsObjects: 'relative' }] }] }), coded('sentinel.capture.rootNotCanonical'));
+  await assert.rejects(captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{ sourceId: 'app', repositoryId: 'r', root }],
+    policy: { maxTotalBytes: 512 * 1024 * 1024 + 1 } }), coded('sentinel.capture.invalidRequest'));
+  assert.ok(!fx.store.ledger.readEvents({ after: 0, limit: 500 }).events.some(e => e.kind === 'staging-registered'));
+  assert.equal((await import('../dist/snapshot/index.js')).DEFAULT_CAPTURE_POLICY.maxTotalBytes, 512 * 1024 * 1024);
+  // Packed history: every pack handle the capture's reads opened is closed when it returns.
+  for (let i = 0; i < 3; i++) { writeTree(root, { [`f${i}.ts`]: `v${i}\n`.repeat(200) }); git(root, ['add', '--all']); git(root, ['commit', '--quiet', '-m', `c${i}`]); }
+  git(root, ['gc', '--quiet', '--prune=now']);
+  const fds = () => readdirSync('/dev/fd').length;
+  const before = fds();
+  await captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{ sourceId: 'app', repositoryId: 'r', root }] });
+  assert.equal(fds(), before, 'no file handle outlives the capture');
 });

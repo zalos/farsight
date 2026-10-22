@@ -1,6 +1,9 @@
-// Working-copy enumeration: every entry under an authorised root, read without following a link. A folder that
-// changes identity while it is listed, or a file that changes while it is read, raises CaptureChanged so the
-// whole working copy is captured again (see capture.ts); it is never mixed into one snapshot.
+// Working-copy enumeration: every entry under an authorised (canonical) root, read without following a link. Each
+// read goes through the folders the walk has already seen: their identities (device, inode), from the root down, are
+// checked again before a folder is listed and before and after every file is read, so a folder swapped for a link
+// or another folder mid-capture raises CaptureChanged and the whole working copy is captured again (see capture.ts);
+// it is never mixed into one snapshot. These checks detect a swap between observations; they are not an OS-level
+// audit of every read, and a swap restored between two checks is not seen.
 import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readSync, readdirSync, readlinkSync, type Stats } from 'node:fs';
 import { CaptureChanged, Inventory, lfsPointer, resolveLfs } from './inventory.js';
 import { checkName, folderExclusion, joinPath, symlinkVerdict } from './policy.js';
@@ -17,6 +20,17 @@ export interface WorktreeSource {
 
 const OPEN_FLAGS = FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0);
 const sameFile = (a: Stats, b: Stats) => a.dev === b.dev && a.ino === b.ino;
+
+/** The folders from the root to the one being read, each with the identity first seen. */
+type Chain = readonly { readonly abs: Buffer; readonly st: Stats }[];
+
+function verifyChain(chain: Chain): void {
+  for (const link of chain) {
+    let now: Stats;
+    try { now = lstatSync(link.abs); } catch { throw new CaptureChanged('a folder disappeared during capture'); }
+    if (now.isSymbolicLink() || !now.isDirectory() || !sameFile(now, link.st)) throw new CaptureChanged('a folder was replaced during capture');
+  }
+}
 const errno = (e: unknown) => (e as NodeJS.ErrnoException | undefined)?.code;
 
 /** Reads a regular file whose lstat was `seen`, checking it is the same file and size; undefined when unreadable. */
@@ -40,17 +54,27 @@ export function readRegular(abs: Buffer | string, seen: Stats): Buffer | undefin
   } finally { closeSync(fd); }
 }
 
+/** A file read with its folders checked before and after. */
+function readThrough(chain: Chain, abs: Buffer, seen: Stats): Buffer | undefined {
+  verifyChain(chain);
+  const bytes = readRegular(abs, seen);
+  verifyChain(chain);
+  return bytes;
+}
+
 function lstatOrUndefined(p: Buffer | string): Stats | undefined {
   try { return lstatSync(p); } catch { return undefined; }
 }
 
 export function enumerateWorktree(inv: Inventory, src: WorktreeSource): void {
   const rootStat = lstatOrUndefined(src.root);
-  if (!rootStat || !rootStat.isDirectory()) throw new SnapshotError('sentinel.capture.rootUnreadable', src.sourceId);
-  walk(inv, src, '', Buffer.from(src.root), rootStat);
+  if (!rootStat || rootStat.isSymbolicLink() || !rootStat.isDirectory()) throw new SnapshotError('sentinel.capture.rootUnreadable', src.sourceId);
+  const abs = Buffer.from(src.root);
+  walk(inv, src, '', abs, rootStat, [{ abs, st: rootStat }]);
 }
 
-function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dirStat: Stats): void {
+function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dirStat: Stats, chain: Chain): void {
+  verifyChain(chain);
   let names: Buffer[];
   try {
     names = readdirSync(abs, { encoding: 'buffer' }) as unknown as Buffer[];
@@ -60,7 +84,8 @@ function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dir
     return;
   }
   const after = lstatOrUndefined(abs);
-  if (!after || !after.isDirectory() || !sameFile(after, dirStat)) throw new CaptureChanged(`${rel || '.'} was replaced during capture`);
+  if (!after || after.isSymbolicLink() || !after.isDirectory() || !sameFile(after, dirStat)) throw new CaptureChanged(`${rel || '.'} was replaced during capture`);
+  verifyChain(chain);
 
   const children = names
     .map(raw => ({ raw, check: checkName(raw, false), abs: Buffer.concat([abs, Buffer.from('/'), raw]) }))
@@ -99,7 +124,7 @@ function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dir
     if (st.isDirectory()) {
       const excluded = folderExclusion(inv.policy, src.sourceId, path, src.storeRel);
       if (excluded) { inv.boundary(src.sourceId, path, 'excluded', excluded); continue; }
-      walk(inv, src, path, child.abs, st);
+      walk(inv, src, path, child.abs, st, [...chain, { abs: child.abs, st }]);
       continue;
     }
     if (!st.isFile()) { inv.recorded(src.sourceId, path, 'refused', 'sentinel.capture.specialFile'); continue; }
@@ -109,7 +134,7 @@ function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dir
     }
     const tooBig = inv.sizeRefusal(st.size);
     if (tooBig) { inv.recorded(src.sourceId, path, 'too-large', tooBig, st.size); continue; }
-    const bytes = readRegular(child.abs, st);
+    const bytes = readThrough(chain, child.abs, st);
     if (!bytes) { inv.recorded(src.sourceId, path, 'unreadable', 'sentinel.capture.unreadable', st.size); continue; }
     const executable = (st.mode & 0o100) !== 0;
     const pointer = lfsPointer(bytes);
@@ -127,9 +152,10 @@ function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dir
     }
     const abs2 = child.abs;
     inv.included(src.sourceId, path, bytes, () => {
+      verifyChain(chain);
       const now = lstatOrUndefined(abs2);
       if (!now || !now.isFile()) throw new CaptureChanged(`${path} changed during capture`);
-      const again = readRegular(abs2, now);
+      const again = readThrough(chain, abs2, now);
       if (!again) throw new CaptureChanged(`${path} became unreadable during capture`);
       return again;
     }, { executable });
