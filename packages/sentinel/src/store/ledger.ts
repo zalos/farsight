@@ -15,9 +15,9 @@ import { LEDGER_MIGRATIONS, migrateLedger } from './migrations.js';
 import {
   ARTIFACT_CODECS, ARTIFACT_PRIVACY, LedgerError, MAX_ARTIFACT_BYTES, MAX_EVENT_PAGE,
   type ArtifactPrivacy, type EndAttemptInput, type EventPage, type GcSnapshot, type IdempotencyRef, type LedgerEvent,
-  type LedgerEventKind, type LedgerFailpoint, type LedgerOwner, type MigrationReport, type ObjectPresence,
+  type LedgerEventKind, type LedgerFailpoint, type LedgerOwner, type MigrationReport, type ObjectVerifier,
   type ObjectReceipt, type OpenLedgerOptions, type PublicationReceipt, type PublishInput, type StageId,
-  type StagedArtifact,
+  type StagedArtifact, type VerifiedObject,
 } from './store-types.js';
 
 /** STRICT tables and `json_valid` need SQLite 3.38 or later. The runtime release policy is checked by its owner. */
@@ -128,7 +128,7 @@ export async function openLedger(owner: LedgerOwner, options: OpenLedgerOptions 
       failpoint,
     });
     const ledger = new Ledger(db, owner, path, migration, now, failpoint, options.objects);
-    owner.registerResource?.(ledger);
+    owner.registerResource(ledger);
     return ledger;
   } catch (error) {
     if (db.isOpen) db.close();
@@ -141,7 +141,7 @@ export class Ledger {
   readonly #owner: LedgerOwner;
   readonly #now: () => string;
   readonly #failpoint: (p: LedgerFailpoint) => void;
-  readonly #objects: ObjectPresence | undefined;
+  readonly #objects: ObjectVerifier | undefined;
   readonly path: string;
   readonly epoch: Id;
   readonly storeId: Id;
@@ -151,7 +151,7 @@ export class Ledger {
   /** @internal Use openLedger(). */
   constructor(
     db: DatabaseSync, owner: LedgerOwner, path: string, migration: MigrationReport, now: () => string,
-    failpoint: (p: LedgerFailpoint) => void, objects: ObjectPresence | undefined,
+    failpoint: (p: LedgerFailpoint) => void, objects: ObjectVerifier | undefined,
   ) {
     this.#db = db;
     this.#owner = owner;
@@ -522,6 +522,24 @@ export class Ledger {
     const receipts = [...input.receipts].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : a.codec < b.codec ? -1 : 1));
     const request = { work: ref, attemptId: input.attemptId, stageId: input.stageId, outputs: input.outputs,
       receipts: receipts.map(r => ({ ...r })), endedAt: input.endedAt };
+    // Verified before the transaction: each object is read and hashed by the object store, which can be slow, and
+    // the stage registered before any byte was written keeps it pinned against collection until this commit.
+    // The transaction then requires that same stage to still be open, so the verification still holds at commit.
+    const verifier = this.#objects;
+    if (!verifier) {
+      throw new LedgerError('sentinel.store.objectVerifierUnavailable',
+        'publication needs the object store verifier; none was configured');
+    }
+    for (const r of receipts) {
+      let seen: VerifiedObject | null;
+      try { seen = verifier.verify({ id: r.id, codec: r.codec }); } catch (cause) {
+        throw new LedgerError('sentinel.store.objectMissing', 'the object store could not verify a staged object', { cause });
+      }
+      if (!seen || seen.storeId !== this.storeId || seen.id !== r.id || seen.codec !== r.codec
+        || seen.storedDigest !== r.storedDigest || seen.rawSize !== r.rawSize || seen.storedSize !== r.storedSize) {
+        throw new LedgerError('sentinel.store.objectMissing', 'a staged object is absent or differs from its receipt');
+      }
+    }
     return this.#mutate('publish', request, input.idempotency, () => {
       const { runId, runState } = this.#fenceAttempt(ref, input.attemptId);
       if (!PUBLISHING_RUN_STATES.includes(runState)) {
@@ -542,11 +560,6 @@ export class Ledger {
       }
       if (input.outputs.some(id => !staged.has(id))) {
         throw new LedgerError('sentinel.store.stagingMismatch', 'an output was not staged');
-      }
-      for (const r of receipts) {
-        if (this.#objects && !this.#objects.isDurable(r)) {
-          throw new LedgerError('sentinel.store.objectMissing', 'a staged object is not durable in the object store');
-        }
       }
       const sequence = this.#event('work-published', runId, ref, { attemptId: input.attemptId, outputs: input.outputs.length });
       for (const r of receipts) {

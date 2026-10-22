@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import type { LedgerOwner } from '../dist/store/store-types.js';
+import type { LedgerOwner, ObjectReceipt, ObjectVerifier, VerifiedObject } from '../dist/store/store-types.js';
 
 const VALID = fileURLToPath(new URL('./contracts/valid/', import.meta.url));
 const load = (name: string) => JSON.parse(readFileSync(`${VALID}${name}.json`, 'utf8'));
@@ -49,8 +49,36 @@ export function attemptEnvelope(epoch: string, over: Record<string, unknown> = {
     worker: { kind: 'owned-child', pid: 4242, processStartedAt: '2026-10-21T12:00:00Z' }, ...over };
 }
 
-/** A receipt an object store would return for `text` stored uncompressed. */
-export function identityReceipt(text: string) {
+/**
+ * A stand-in object store whose verifier recomputes digests and sizes from the bytes it actually holds, the way the
+ * real store must: it never echoes a caller's receipt.
+ */
+export class FakeObjects implements ObjectVerifier {
+  readonly bytes = new Map<string, Buffer>();
+  readonly storeId: string;
+  constructor(storeId = 'store-1') { this.storeId = storeId; }
+  put(text: string): ObjectReceipt {
+    const b = Buffer.from(text);
+    const id = sha(text);
+    this.bytes.set(`${id}|identity`, b);
+    return { id, codec: 'identity', storedDigest: id, rawSize: b.length, storedSize: b.length };
+  }
+  verify(ref: { id: string; codec: string }): VerifiedObject | null {
+    const b = this.bytes.get(`${ref.id}|${ref.codec}`);
+    if (!b) return null;
+    const d = `sha256:${createHash('sha256').update(b).digest('hex')}`;
+    return { id: d, codec: 'identity', storedDigest: d, rawSize: b.length, storedSize: b.length, storeId: this.storeId };
+  }
+}
+
+/** The shared synthetic object store the suites publish through. */
+export const OBJECTS = new FakeObjects();
+
+/** Stores `text` uncompressed and returns the receipt the object store would give. */
+export const identityReceipt = (text: string): ObjectReceipt => OBJECTS.put(text);
+
+/** A well-formed receipt for bytes that were never stored: what a forged or lost write looks like. */
+export function unstoredReceipt(text: string): ObjectReceipt {
   const id = sha(text);
-  return { id, codec: 'identity' as const, storedDigest: id, rawSize: Buffer.byteLength(text), storedSize: Buffer.byteLength(text) };
+  return { id, codec: 'identity', storedDigest: id, rawSize: Buffer.byteLength(text), storedSize: Buffer.byteLength(text) };
 }

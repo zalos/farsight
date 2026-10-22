@@ -4,7 +4,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { openLedger, type Ledger } from '../dist/store/ledger.js';
 import { LedgerError, MAX_ARTIFACT_BYTES } from '../dist/store/store-types.js';
 import {
-  FakeOwner, attemptEnvelope, identityReceipt, runEnvelope, scratch, sha, workEnvelope,
+  FakeObjects, FakeOwner, OBJECTS, attemptEnvelope, identityReceipt, runEnvelope, scratch, sha, unstoredReceipt,
+  workEnvelope,
 } from './store-helpers.ts';
 
 const code = (c: string) => (e: unknown) => e instanceof LedgerError && e.code === c;
@@ -14,7 +15,7 @@ const W2 = { id: 'work-pattern-api', revision: 2 };
 async function setup(t: { after(fn: () => void): void }, opts: Parameters<typeof openLedger>[1] = {}) {
   const dir = scratch(t);
   const owner = new FakeOwner(dir, 'epoch-1');
-  const ledger = await openLedger(owner, opts);
+  const ledger = await openLedger(owner, { objects: OBJECTS, ...opts });
   t.after(() => ledger.close());
   ledger.createRun(runEnvelope(owner.epoch) as never);
   ledger.createWork(workEnvelope(owner.epoch) as never);
@@ -152,7 +153,7 @@ test('a stale epoch and a released owner are refused inside every mutation', asy
 
   // A successor coordinator opens the same store under a new epoch: the first ledger is fenced off.
   const next = new FakeOwner(dir, 'epoch-2');
-  const successor = await openLedger(next);
+  const successor = await openLedger(next, { objects: OBJECTS });
   t.after(() => successor.close());
   assert.throws(() => ledger.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-1', receipts: [identityReceipt('x')],
     outputs: [sha('x')], endedAt: '2026-10-21T12:01:00Z' }), code('sentinel.store.staleEpoch'));
@@ -220,7 +221,7 @@ test('artifact handoff failures never leave an accepted reference to an absent b
   let missing = false;
   let failCommit = false;
   const { ledger } = await setup(t, {
-    objects: { isDurable: () => !missing },
+    objects: { verify: r => (missing ? null : OBJECTS.verify(r)) },
     failpoint: p => {
       if (p === 'staging:before-commit' && failCommit) throw new Error('disk full writing staging');
       if (p === 'publish:before-commit' && failCommit) throw new Error('disk full at commit');
@@ -332,4 +333,41 @@ test('a revoked run refuses publication, and a restart reads what was committed'
   assert.equal(last.kind, 'epoch-opened');
   assert.deepEqual(last.payload, { previous: 'epoch-1' });
   assert.ok(!('db' in reopened), 'no connection is exposed');
+});
+
+test('publication fails closed without a verifier and refuses forged, tampered or foreign objects', async t => {
+  const dir = scratch(t);
+  const owner = new FakeOwner(dir, 'epoch-1');
+  const bare = await openLedger(owner);
+  bare.createRun(runEnvelope('epoch-1') as never);
+  bare.createWork(workEnvelope('epoch-1') as never);
+  start(bare, 'epoch-1', 'att-1', 1);
+  const forged = unstoredReceipt('never written');
+  bare.registerStaging('stage-1', [{ id: forged.id, schema: 'text/plain', privacy: 'metadata' }], { work: W1, attemptId: 'att-1' });
+  const publish = (l: Ledger, r: typeof forged) => l.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-1',
+    receipts: [r], outputs: [r.id], endedAt: '2026-10-21T12:01:00Z' });
+  assert.throws(() => publish(bare, forged), code('sentinel.store.objectVerifierUnavailable'));
+  owner.release();
+
+  const objects = new FakeObjects();
+  const check = async (epoch: string, store: FakeObjects, receipt: typeof forged) => {
+    const o = new FakeOwner(dir, epoch);
+    const l = await openLedger(o, { objects: store });
+    l.startAttempt(attemptEnvelope(epoch, { id: `att-${epoch}`, ordinal: Number(epoch.slice(6)), work: W1 }) as never,
+      { supersede: true });
+    l.registerStaging(`stage-${epoch}`, [{ id: receipt.id, schema: 'text/plain', privacy: 'metadata' }],
+      { work: W1, attemptId: `att-${epoch}` });
+    assert.throws(() => l.publish({ work: W1, attemptId: `att-${epoch}`, stageId: `stage-${epoch}`, receipts: [receipt],
+      outputs: [receipt.id], endedAt: '2026-10-21T12:01:00Z' }), code('sentinel.store.objectMissing'), epoch);
+    assert.deepEqual(l.gcSnapshot().referenced, [], epoch);
+    o.release();
+  };
+  await check('epoch-2', objects, forged); // never stored
+  const real = objects.put('real bytes');
+  objects.bytes.set(`${real.id}|identity`, Buffer.from('tampered bytes'));
+  await check('epoch-3', objects, real); // stored bytes no longer hash to the receipt
+  const other = new FakeObjects('store-other');
+  await check('epoch-4', other, other.put('elsewhere')); // the bytes live in another store
+  const honest = objects.put('honest');
+  await check('epoch-5', objects, { ...honest, rawSize: honest.rawSize + 1, storedSize: honest.storedSize + 1 }); // the receipt overstates the bytes
 });

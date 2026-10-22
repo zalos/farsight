@@ -12,8 +12,8 @@ export interface LedgerOwner {
   /** A fresh, never-reused identity for this acquisition of the store. */
   readonly epoch: Id;
   assertHeld(): void;
-  /** When present, the ledger registers itself so releasing ownership closes it first. */
-  registerResource?(resource: { close(): void }): unknown;
+  /** The ledger registers itself so releasing ownership closes it first. Required: a ledger never outlives its owner. */
+  registerResource(resource: { close(): void }): unknown;
 }
 
 export const LEDGER_ERROR_CODES = [
@@ -38,6 +38,7 @@ export const LEDGER_ERROR_CODES = [
   'sentinel.store.idempotencyConflict',
   'sentinel.store.stagingMismatch',
   'sentinel.store.objectMissing',
+  'sentinel.store.objectVerifierUnavailable',
   'sentinel.store.asyncTransaction',
 ] as const;
 export type LedgerErrorCode = (typeof LEDGER_ERROR_CODES)[number];
@@ -91,9 +92,20 @@ export interface ObjectReceipt {
   storedSize: Count;
 }
 
-/** Optional synchronous presence check the object store supplies; called inside the publication transaction. */
-export interface ObjectPresence {
-  isDurable(receipt: ObjectReceipt): boolean;
+/** What the object store measured by re-reading a stored representation in this store. Never an echo of a receipt. */
+export interface VerifiedObject extends ObjectReceipt {
+  /** The store whose object directory was read; must equal the ledger's store. */
+  storeId: Id;
+}
+
+/**
+ * The object store's verifier. `verify` re-reads the named representation from this store's own objects, recomputes
+ * the stored digest and size and the decoded raw digest and size, and returns what it measured, or null when the
+ * object is absent, unreadable or corrupt. The ledger accepts a receipt only when every measured field equals it.
+ * Publication fails closed without a verifier; a ledger opened without one can do everything except publish.
+ */
+export interface ObjectVerifier {
+  verify(ref: { id: ArtifactId; codec: ArtifactCodec }): VerifiedObject | null;
 }
 
 // ---- Ledger inputs and outputs ----
@@ -197,7 +209,8 @@ export interface OpenLedgerOptions {
   build?: string;
   /** The clock for ledger-written timestamps; defaults to the system clock. */
   now?: () => Timestamp;
-  objects?: ObjectPresence;
+  /** Required to publish; see ObjectVerifier. */
+  objects?: ObjectVerifier;
   /** Test seam: replaces the shipped migration list. */
   migrations?: readonly Migration[];
   /** Test seam: thrown from inside the named step to prove its failure path. */
