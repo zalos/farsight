@@ -37,7 +37,7 @@ import { PREVIEW_ADAPTERS, previewPlan } from './preview-plan.js';
 export type ServiceErrorCode =
   | 'sentinel.service.unknownOperation' | 'sentinel.service.requestInvalid' | 'sentinel.service.planUnknown'
   | 'sentinel.service.planChanged' | 'sentinel.service.alreadyServing' | 'sentinel.service.startFailed'
-  | 'sentinel.service.recordUnsafe';
+  | 'sentinel.service.recordUnsafe' | 'sentinel.service.lockChanged';
 
 export class ServiceError extends Error {
   constructor(readonly code: ServiceErrorCode) { super(code); this.name = 'ServiceError'; }

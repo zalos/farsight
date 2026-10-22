@@ -180,7 +180,8 @@ farsight-sentinel run <planId>             # foreground; a foundation preview en
 farsight-sentinel status <planId>          # the run's state and a bounded page of its events
 farsight-sentinel report <planId>          # Markdown (or --format json), from stored results only
 farsight-sentinel run <planId> --detach --confirm   # hand it to the background service (started on demand)
-farsight-sentinel wait <planId>            # its result once it ends; pause, cancel, resume <planId> --confirm
+farsight-sentinel wait <planId>            # its result once it ends; pause|resume|cancel <planId> --confirm
+farsight-sentinel rules promote <packDir>  # shows a rule pack and the lock it would replace; --confirm promotes it
 ```
 
 `init` writes the settings file only when it is missing: PR 06's defaults plus one grant letting the owner (a

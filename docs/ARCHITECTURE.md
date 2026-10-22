@@ -621,10 +621,18 @@ state, never the checkout. While it runs it alone opens the store: status, wait 
 foreground run refuse until it stops (after an idle period, or on SIGTERM, pausing work in flight). Starting or
 resuming a run needs either a receipt the owner's own CLI issued after `--confirm`, bound to `run.start`, the plan's
 digest and the policy revision and spent once by the service, or what the adopted grants give the connection's
-agent principal, by admission; the defaults give agents nothing. Pause and cancel only stop work and are answered
-for any client of the socket. One run executes at a time; a second start of the same plan joins it, a start of a
+agent principal, by admission; the defaults give agents nothing. Pause and cancel are writes decided the same way
+under their own actions (`run.pause`, `run.cancel`), so a receipt for one never serves another and being connected
+grants nothing. The launcher captures its own invocation and stops exactly the process it started; the service
+record is removed only by the process that wrote it. One run executes at a time; a second start of the same plan joins it, a start of a
 finished run prints its result again, and a run whose service died reads as interrupted and resumes through the
-coordinator's recovery with each output accepted once. **Not in this decision:** retry and rerun, which need plan
+coordinator's recovery with each output accepted once.
+
+**The owner's rule lock is kept in owner-private state, one immutable revision per digest.** `rules promote <pack>`
+validates the folder with the rules module's `validatePack` and, only after `--confirm`, promotes it with its
+`promote` under a receipt for exactly that candidate against exactly the current revision; each revision is filed once
+under its digest and read back through `verifyPinnedLock`, and the current pointer is replaced atomically, only from
+the revision the promotion was confirmed against. A repository supplies no lock. **Not in this decision:** retry and rerun, which need plan
 revisions from PR 06's planner; a ledger read of a run (until then a private plan record sits beside the settings);
 the full report (PR 19). Same-account code is outside this boundary, as for the store.
 

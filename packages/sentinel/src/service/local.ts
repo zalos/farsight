@@ -22,6 +22,8 @@ import { openStore, type SentinelStore } from '../store/index.js';
 import { requestedByOf, assertMayConfirm } from '../cli/actor.js';
 import { result, type CommandResult, type PrintedVerdicts } from '../cli/outcome.js';
 import { PREVIEW_ADAPTERS, PREVIEW_PROFILE, previewPlan, type PlanDisclosure, type PlanRecord } from './preview-plan.js';
+import { candidateDigest, emptyLock, lockDigest, promote, promotionIntent, readPackDirectory, validatePack } from '../rules/index.js';
+import { RuleLockBook } from './rule-locks.js';
 
 export interface Workspace {
   readonly path: string;
@@ -268,6 +270,65 @@ export function confirmForService(ws: Workspace, options: { command: string; act
   assertMayConfirm(OWNER);
   const receipt = issueReceipt(receiptBook(ws), OWNER, { intent, stateDigest: record.planDigest, policyRevision: policy.revision }, { now: options.now, ttlMs: RECEIPT_TTL_MS });
   return { receiptId: receipt.id, verdicts };
+}
+
+// ---- rule packs: the owner promotes one into a new lock revision ----
+
+/**
+ * Promotes a rule pack (a folder validated by E's validatePack) into a new revision of the owner's rule lock. An
+ * owner action: admitted here as the owner, and only with `confirm` is a receipt issued for exactly this candidate
+ * against exactly the current lock revision (its digest), and spent by the same admission. The new revision names
+ * its predecessor, is filed under its own digest and becomes current only if no other promotion landed meanwhile.
+ * Without `confirm` it shows the candidate and the lock it would replace, and waits (exit 4).
+ */
+export function promoteRulePack(ws: Workspace, options: { packDir: string; confirm: boolean; now: Date }): CommandResult {
+  const adopted = adoptedPolicy(ws);
+  if ('refusal' in adopted) return adopted.refusal;
+  const { policy } = adopted;
+  const pack = validatePack(readPackDirectory(options.packDir));
+  const book = new RuleLockBook(trustFolder(ws));
+  const selected = book.current();
+  const previous = selected?.lock ?? emptyLock(options.now);
+  const previousDigest = lockDigest(previous);
+  const candidate = { kind: 'pack' as const, pack };
+  const intent = promotionIntent(previous, candidate);
+  const facts = {
+    packId: pack.entry.packId, version: pack.entry.version, rules: pack.entry.rules.map(r => r.familyId),
+    candidate: candidateDigest(candidate), previousLock: previousDigest, previousRevision: previous.revision,
+  };
+  const request = {
+    intent, requestedBy: OWNER as { principal: 'human'; channel: 'owner-cli' }, policy, stateDigest: previousDigest, now: options.now,
+    capability: () => ({ available: true, detail: 'a validated pack folder; nothing is executed' }),
+    credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
+  };
+  let decision = admit(request);
+  if (decision.record.outcome === 'denied') {
+    const v = decision.record.verdicts;
+    return result('rules', 'configuration-failure', { verdicts: printed(decision.record), facts,
+      reasonCode: v.policy.allowed ? (v.capability.allowed ? v.credential.reasonCode : v.capability.reasonCode) : v.policy.reasonCode });
+  }
+  if (!options.confirm) return result('rules', 'awaiting-confirmation', { verdicts: printed(decision.record), facts });
+  assertMayConfirm(OWNER);
+  const receipts = receiptBook(ws);
+  const receipt = issueReceipt(receipts, OWNER, { intent, stateDigest: previousDigest, policyRevision: policy.revision }, { now: options.now, ttlMs: RECEIPT_TTL_MS });
+  decision = admit({ ...request, receipt: { book: receipts, id: receipt.id } });
+  if (decision.record.outcome !== 'admitted' || !decision.receipt) {
+    return result('rules', 'configuration-failure', { verdicts: printed(decision.record), facts, reasonCode: decision.record.verdicts.policy.reasonCode });
+  }
+  const next = promote(previous, candidate, decision.receipt, options.now);
+  // The first promotion files the empty revision it was confirmed against, so every revision's predecessor is kept.
+  if (!selected) book.store(previous);
+  const digest = book.store(next);
+  book.select(digest, selected?.digest ?? null);
+  return result('rules', 'prepared', { verdicts: printed(decision.record), facts: { ...facts, lock: digest, revision: next.revision, receipt: decision.record.receipt } });
+}
+
+/** The owner's current rule lock: its digest, revision and packs, read back and verified. */
+export function currentRules(ws: Workspace): CommandResult {
+  const current = new RuleLockBook(trustFolder(ws)).current();
+  if (!current) return result('rules', 'answered', { facts: { lock: null, packs: [] } });
+  return result('rules', 'answered', { facts: { lock: current.digest, revision: current.lock.revision, previous: current.lock.previous,
+    packs: current.lock.packs.map(p => ({ packId: p.packId, version: p.version, rules: p.rules.map(r => r.familyId) })) } });
 }
 
 // ---- status and report ----

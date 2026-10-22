@@ -85,6 +85,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'service/preview-plan.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   'service/local.js': ['node:crypto', 'node:fs', 'node:path'],
   'service/owner-service.js': ['node:crypto', 'node:fs', 'node:path'],
+  // The owner's rule locks: content-addressed revisions and one pointer in private state, through policy/user-state.
+  'service/rule-locks.js': ['node:path'],
   // The owner's background service is the one process the command line starts itself (asserted below).
   'service/launch.js': ['node:child_process'],
   // The local service socket: an owner-only Unix socket, used only when a service runs; nothing at import.
@@ -225,7 +227,7 @@ test('draft contracts, store, capture, parser, policy and planner are available;
 });
 
 test('planned commands refuse with exit 3 and start nothing', () => {
-  for (const command of ['retry', 'rerun', 'compare', 'bundle', 'rules']) {
+  for (const command of ['retry', 'rerun', 'compare', 'bundle']) {
     const r = cli(command, '--json');
     assert.equal(r.status, 3, command);
     assert.match(r.stderr, new RegExp(`^unavailable: ${command} is not implemented in this draft build \\(planned in PR \\d+\\)\\. Nothing was started\\.`));

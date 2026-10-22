@@ -6,7 +6,7 @@
 // (cli/outcome.ts); `--json` prints it whole, with the three verdicts.
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import {
-  adoptWorkspaceSettings, confirmForService, planWorkspace, previewReport, runPlan, runResultIn, runStatus, workspaceOf, PolicyError,
+  adoptWorkspaceSettings, confirmForService, currentRules, promoteRulePack, planWorkspace, previewReport, runPlan, runResultIn, runStatus, workspaceOf, PolicyError,
   type Workspace,
 } from './service/local.js';
 import { connectService, serveWorkspace } from './service/owner-service.js';
@@ -56,6 +56,7 @@ function help(): string {
     `  ${word('sentinel.cli.usageControls')}`,
     `  ${word('sentinel.cli.usageReport')}`,
     `  ${word('sentinel.cli.usageServe')}`,
+    `  ${word('sentinel.cli.usageRules')}`,
     '',
     word('sentinel.cli.planned', { commands: planned.join(', ') }),
     '',
@@ -251,6 +252,16 @@ async function owner(p: ParsedCommand): Promise<number> {
       const r = adoptWorkspaceSettings(ws, { confirm, now });
       return serviceOut(r, [`settings ${String(r.facts.settingsDigest)}`]);
     }
+    if (p.command === 'rules') {
+      // The owner's rule lock lives in the owner's private state, not the store: it works with or without a service.
+      if (p.args.action === 'show' && p.args.packDir === undefined) return serviceOut(currentRules(ws), []);
+      if (p.args.action !== 'promote' || p.args.packDir === undefined) {
+        errOut(word('sentinel.args.unexpectedArgument', { detail: String(p.args.action) }));
+        return finish(result('rules', 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
+      }
+      const r = promoteRulePack(ws, { packDir: realpathSync.native(p.args.packDir), confirm, now });
+      return serviceOut(r, [`pack ${String(r.facts.packId)} ${String(r.facts.version)} · candidate ${String(r.facts.candidate)} · replaces lock ${String(r.facts.previousLock)}${r.facts.lock ? ` · now lock ${String(r.facts.lock)}` : ''}`]);
+    }
     if (p.command === 'plan') {
       const r = await planWorkspace(ws, { confirm, now });
       return serviceOut(r, r.disclosure ? [`plan ${r.disclosure.planId} · ${r.disclosure.planDigest} · effects: ${r.disclosure.effects.join(', ')} · ${word('sentinel.report.previewOnly')}`] : []);
@@ -368,7 +379,7 @@ async function dispatch(p: ParsedCommand): Promise<number> {
     case 'validate': return validate(p);
     case 'init': return init(p);
     case 'settings': case 'plan': case 'run': case 'status': case 'report':
-    case 'serve': case 'wait': case 'pause': case 'resume': case 'cancel': return owner(p);
+    case 'serve': case 'wait': case 'pause': case 'resume': case 'cancel': case 'rules': return owner(p);
     default: {
       const change = plannedIn(p.command)!;
       errOut(word('sentinel.cli.unavailable', { command: p.command, change }));

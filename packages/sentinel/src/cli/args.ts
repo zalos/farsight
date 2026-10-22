@@ -8,7 +8,8 @@ export const COMMANDS = {
   plan: null, run: null, status: null, report: null, wait: null, pause: null, resume: null, cancel: null, serve: null,
   // A new attempt of failed work and a fresh run of a finished plan need plan revisions from PR 06's planner.
   retry: 'PR 09', rerun: 'PR 09',
-  compare: 'PR 19', rules: 'PR 06', bundle: 'PR 26',
+  rules: null,
+  compare: 'PR 19', bundle: 'PR 26',
 } as const satisfies Record<string, string | null>;
 export type CommandName = keyof typeof COMMANDS;
 
@@ -43,7 +44,7 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   report: { flags: { ...COMMON, ...STORE, '--format': 'value' }, positional: ['runId'], min: 1 },
   serve: { flags: { ...COMMON, ...STORE, '--idle-ms': 'value' }, positional: [], min: 0 },
   compare: { flags: COMMON, positional: [], min: 0 },
-  rules: { flags: COMMON, positional: [], min: 0 },
+  rules: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['action', 'packDir'], min: 1 },
   bundle: { flags: COMMON, positional: [], min: 0 },
 };
 
