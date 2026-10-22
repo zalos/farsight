@@ -694,7 +694,7 @@ in the production registry, the planner's batching, the scan command (PR 09), an
 where the engine proves it matched (2026-10-22).**
 
 `src/adapters/osv/` runs OSV-Scanner 2.7.0 (`ghcr.io/google/osv-scanner@sha256:4f3b7e2c…69fcd0`, Apache-2.0, official
-multi-platform index; linux/arm64 measured, linux/amd64 listed and unmeasured) through PR 07's isolated execution
+multi-platform index; linux/arm64 and linux/amd64 measured) through PR 07's isolated execution
 service only. **Acquisition is separate:** the only network step is `acquireAdvisorySnapshots`, an owner action
 (`tool.acquire`) confirmed by a spent receipt for exactly the request (ecosystems, URLs, size bound). It fetches only
 `https://osv-vulnerabilities.storage.googleapis.com/<npm|Maven>/all.zip`, refuses redirects and anything over the stated
@@ -724,5 +724,6 @@ came from the snapshot (same captured bytes) or the source, and reports `unknown
 component (a failed run is never a resolution). A component the adapter refuses (another ecosystem, malformed) keeps its
 file `partial`. Advisory text is not kept. Package matches never claim
 reachability. **Not decided here:** registering the adapter, the planner's scheduling of acquisition and scans, the
-command (PR 09) and shipping no database in the package. linux/amd64 is measured only by the
-`sentinel-osv-qualification` workflow on a native runner; until a green run is recorded it stays a candidate.
+command (PR 09). No database ships in the package. Native linux/amd64 qualification passed
+[21 tests with zero skips and the installed worker](https://github.com/zalos/farsight/actions/runs/39788785215);
+the adapter records that evidence, and the workflow rechecks the pinned image on affected changes.

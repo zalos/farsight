@@ -6,9 +6,11 @@
 // package and a changed version is refused; the draft store (`farsight-sentinel/store`) opens, publishes
 // verified evidence in one process and reads it back in another; and no Farsight application package
 // arrives; the pattern rule pack and worker ship with exact digests and rights. No scanner, container, model or
-// network service is started, except that with SENTINEL_ISOLATION=1 the shipped pattern worker and pack run once in
+// network service is started, except that with SENTINEL_ISOLATION=1 the shipped Pattern and OSV workers run once in
 // the pinned engine image through the workspace's isolated execution service (never pulled; this checks the installed
-// assets, not an installed runtime); npm may fetch Sentinel's declared third-party dependencies.
+// assets, not an installed runtime). SENTINEL_PACKAGE_ENGINE=pattern|osv limits execution to the engine provisioned
+// by an individual native qualification job; asset validation still covers both. With no selector both engines run.
+// npm may fetch Sentinel's declared third-party dependencies.
 //
 //   pnpm test:sentinel:package        # builds Sentinel's closure, packs, then runs this
 //   node scripts/test-sentinel-package.mjs [build/sentinel/farsight-sentinel-<v>.tgz]
@@ -22,6 +24,9 @@ import { npmConsumer } from './npm-consumer.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const sourceDir = join(root, 'packages', 'sentinel');
+const selectedEngine = process.env.SENTINEL_PACKAGE_ENGINE;
+assert.ok(selectedEngine === undefined || ['pattern', 'osv'].includes(selectedEngine), 'SENTINEL_PACKAGE_ENGINE must be pattern or osv');
+const runEngine = (engine) => process.env.SENTINEL_ISOLATION === '1' && (selectedEngine === undefined || selectedEngine === engine);
 const artifact = resolve(process.argv[2] ?? (() => {
   const source = JSON.parse(readFileSync(join(sourceDir, 'package.json'), 'utf8'));
   return join(root, 'build', 'sentinel', `farsight-sentinel-${source.version}.tgz`);
@@ -308,7 +313,7 @@ try {
     // through the WORKSPACE's isolated execution service (internal by design; no host fallback). This proves the
     // installed assets, not the installed runtime: the package exposes no public way to invoke the adapter until the
     // PR 09 command, so installed-runtime acceptance remains open.
-    if (process.env.SENTINEL_ISOLATION === '1') {
+    if (runEngine('pattern')) {
       const dist = join(sourceDir, 'dist');
       const imp = (p) => import(new URL(`file://${join(dist, p)}`).href);
       const { PATTERN_ADAPTER, PATTERN_WORKER_DIGEST } = await imp('adapters/pattern/adapter.js');
@@ -361,7 +366,7 @@ try {
     // With SENTINEL_ISOLATION=1 and the pinned image installed, the shipped worker bytes run in the real engine through
     // the WORKSPACE's isolated execution service, against a synthetic snapshot. This checks the installed asset, not an
     // installed runtime: nothing exported invokes the adapter until the PR 09 command.
-    if (process.env.SENTINEL_ISOLATION === '1') {
+    if (runEngine('osv')) {
       const imp = (p) => import(new URL(`file://${join(sourceDir, 'dist', p)}`).href);
       const { OSV_ADAPTER, OSV_WORKER_DIGEST, runOsvAttempt } = await imp('adapters/osv/index.js');
       assert.deepEqual(osv.adapter.command, [...OSV_ADAPTER.command], 'the shipped adapter is the workspace adapter');

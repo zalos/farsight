@@ -1,4 +1,4 @@
-# Qualification of the OSV advisory adapter on a native Linux/amd64 runner (PR 12, ADR 29). It runs on a pull request
+# Qualification of the OSV advisory adapter on a native Linux/amd64 runner (PR 12, ADR 27). It runs on a pull request
 # only when the OSV adapter, its fixtures, the execution service it uses or this workflow changes, and by hand:
 #   gh workflow run sentinel-osv-qualification.yml --ref <branch>   (once the workflow is on the default branch)
 # It is not a required check. Provisioning (the only network step, an explicit setup step) installs the pinned
@@ -78,6 +78,7 @@ jobs:
       - name: Install the packed tarball and run its shipped OSV worker
         env:
           SENTINEL_ISOLATION: '1'
+          SENTINEL_PACKAGE_ENGINE: osv
         run: |
           set -o pipefail
           pnpm pack:sentinel

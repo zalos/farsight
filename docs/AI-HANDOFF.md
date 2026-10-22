@@ -41,6 +41,25 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel offline advisory foundation rebased — 2026-10-22
+
+Branch `codex/sentinel-osv-integration` rebases the independently reviewed advisory adapter from `30b618f1`
+onto merged PR 145 (`5196dc70`), preserving PR 158's execution repair. Adapter source, sealed input reader, original
+fixtures, tests and asset hook are byte-identical to that reviewed version. Integration retains both Pattern and
+OSV catalogs, security/ADR sections, asset hooks and installed-worker checks; OSV is ADR 27 on this main branch.
+
+Checked on the rebased source: Sentinel dependency-closure build and typecheck; 54 affected OSV, package, Pattern,
+preview and actual detached-CLI tests, zero skips; 181 script tests, zero skips; catalog and exact-title lint.
+The clean npm consumer validated eight typed exports, 19 schemas, 53 fixtures and cross-process storage. Actual
+installed worker checks passed for Pattern (six original findings), OSV (one original finding), and both together.
+The individual native qualification jobs select their own provisioned worker; both asset sets are always validated,
+and the default local smoke still runs both workers. No image was acquired for these checks.
+
+This is a mergeable adapter foundation, not full PR 12 completion: production scanner command/registry admission,
+owner acquisition CLI and installed public-command acceptance remain integration work. Earlier fixed-source ingest
+and browser evidence below belongs to its named head; this rebase does not alter parser/core graph behavior.
+No primary checkout build, graph replacement or server restart occurred.
+
 ## Sentinel sampled-memory test — 2026-10-22
 
 Branch `codex/sol-memory-test` changes only the bootstrap resource regression: the real parse and store now receive
