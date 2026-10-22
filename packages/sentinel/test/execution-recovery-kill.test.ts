@@ -8,7 +8,8 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { accessSync, constants } from 'node:fs';
+import { accessSync, constants, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { COORDINATOR_BOUNDARIES } from '../dist/execution/coordinator.js';
 import { argumentsOf, WorkerFiles } from '../dist/execution/recovery.js';
@@ -61,6 +62,36 @@ for (const boundary of COORDINATOR_BOUNDARIES) {
     }
   });
 }
+
+test(`parent loss before start: the worker exits on its own at end of stdin, having written nothing, ${repetitions || 'no'} repetition(s)`, { skip }, async () => {
+  for (let rep = 0; rep < repetitions; rep++) {
+    const s = scratch('kill-prestart');
+    roots.push(s.root);
+    // after-spawn: the worker exists with its identity journaled; its coordinator dies before recording the attempt,
+    // so no start is ever sent. Nothing stops the worker here: no recovery runs until it is gone.
+    assert.equal(runChild(s.root, 'after-spawn').signal, 'SIGKILL');
+    const store0 = await storeIn(s.root);
+    const [journaled] = new WorkerFiles(store0.storePath).list().records;
+    store0.close();
+    assert.ok(journaled && journaled.pid > 0, 'the worker was started and journaled');
+    let gone = false;
+    for (let i = 0; i < 100 && !gone; i++) {
+      const v = argumentsOf(journaled.pid);
+      gone = v === null || (Array.isArray(v) && !v.includes(`--sentinel-token=${journaled.token}`));
+      if (!gone) await new Promise(r => setTimeout(r, 50));
+    }
+    assert.ok(gone, `rep ${rep}: the worker exited by itself once its coordinator was gone`);
+    const prefix = `${journaled.attempt.replace(/[^A-Za-z0-9._-]/g, '_')}-`;
+    const attemptDirs = readdirSync(join(s.root, 'work')).filter(d => d.startsWith(prefix));
+    assert.equal(attemptDirs.length, 1, `rep ${rep}: the unauthorized worker's attempt folder is there to inspect`);
+    assert.deepEqual(readdirSync(join(s.root, 'work', attemptDirs[0]!, 'output')), [], `rep ${rep}: an unauthorized worker wrote nothing`);
+    const finished = runChild(s.root, 'none');
+    assert.equal(finished.status, 0, finished.stderr.slice(0, 500));
+    const summary = JSON.parse(finished.stdout.trim().split('\n').at(-1)!);
+    assert.deepEqual(summary.recovery.stoppedWorkers, [], `rep ${rep}: recovery had nothing to stop`);
+    assert.equal(summary.published, 4);
+  }
+});
 
 test(`a worker that outlives its dead coordinator is stopped by verified identity, ${repetitions || 'no'} repetition(s)`, { skip }, async () => {
   for (let rep = 0; rep < repetitions; rep++) {

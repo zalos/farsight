@@ -335,13 +335,24 @@ export async function recoverStore(store: SentinelStore, options: { intents: Int
     if (w.store !== store.storeId) { report.unresolved.push({ journal: 'workers', file: `${w.attempt}.json`, reason: 'names another store' }); continue; }
     if (w.epoch === epoch) continue;
     if (!w.pid) {
-      // Journaled before spawn, never given its pid: find it by its token (twice, so a child between fork and
-      // exec when its parent died has carried the token into its argument list by the second look).
-      const first = processesCarrying(w.token);
-      await new Promise(r => setTimeout(r, 200));
-      const second = processesCarrying(w.token);
-      if (first === undefined || second === undefined) { report.obligations.push({ attempt: w.attempt, pid: 0, reason: 'process table could not be read' }); continue; }
-      const pids = [...new Set([...first, ...second])];
+      // Journaled before spawn and never given its pid, so its coordinator died before it recorded the attempt.
+      //
+      // What proves this worker harmless is not its absence but its authorization (supervisor.ts): it never
+      // received a start, because the start answers a hello read only after the attempt is in the ledger, and the
+      // coordinator that would have sent it is dead (we hold its store lock). Its stdin ends, and a conforming worker
+      // exits there; any worker has no attempt to publish under, and our epoch fences the old one.
+      //
+      // What the scan below proves is narrower, and differs by platform:
+      //   macOS: libuv starts a child with posix_spawn, one system call that returns with the child already running
+      //     its own argument list. The dead coordinator can make no further call, so every child it started is
+      //     visible now by its token, and one scan is exact.
+      //   Linux: libuv forks, then the child execs. A child still between the two carries its parent's argument
+      //     list, not the token, and no scan, repeated or delayed, can find it or prove it will never exec. If it
+      //     does exec, the authorization above holds: it reads end of stream and exits.
+      // So the scan stops what it can find; the record is settled because the worker can have no effect, not
+      // because no process could ever appear.
+      const pids = processesCarrying(w.token);
+      if (pids === undefined) { report.obligations.push({ attempt: w.attempt, pid: 0, reason: 'process table could not be read' }); continue; }
       for (const pid of pids) { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
       const left = pids.length ? await waitAbsent(w.token) : true;
       if (left) { report.stoppedWorkers.push(...pids); options.workers.settle(w); }

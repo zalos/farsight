@@ -336,7 +336,8 @@
         "type",
         "work"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "The worker's only authorization. Before its start a worker holds no attempt binding, so nothing it sends can be accepted, and it must not read its inputs or write its outputs. A worker whose stdin ends before its start has lost its coordinator (the start can never arrive: the coordinator's write end was the only one) and must exit."
     },
     "WorkRef": {
       "type": "object",
