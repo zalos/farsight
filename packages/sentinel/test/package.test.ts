@@ -77,7 +77,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'snapshot/inventory.js': ['node:crypto', 'node:fs', 'node:path'],
   'snapshot/materialize.js': ['node:fs', 'node:path'],
   // The public parser, loaded on first parse only (its TS/JS adapter has a native binding); graph is pure JSON helpers.
-  'snapshot/parser.js': ['@farsight/graph', 'dynamic:@farsight/code-parser', 'dynamic:@farsight/code-parser/adapters/java',
+  'snapshot/parser.js': ['@farsight/core/dist/strings-sentinel-parser.js', '@farsight/graph', 'dynamic:@farsight/code-parser', 'dynamic:@farsight/code-parser/adapters/java',
     'dynamic:@farsight/code-parser/adapters/tsjs', 'node:crypto', 'node:fs', 'node:path'],
   'snapshot/policy.js': ['node:crypto', 'node:path'],
   'snapshot/worktree.js': ['node:fs'],

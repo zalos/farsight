@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { captureSnapshot } from '../dist/snapshot/index.js';
 import {
   parseSnapshot, retainSnapshotAnalysis, reconcileAnalysisInputs, joinFileOutcomes, fingerprintTree, treeDigest,
-  assertParserInputSafe, ParserError, PARSER_RESULT_SCHEMA,
+  assertParserInputSafe, ParserError, PARSER_RESULT_SCHEMA, PARSER_ERROR_CODES, FILE_CLASS_KEYS, INPUT_OUTCOME_KEYS,
 } from '../dist/snapshot/parser.js';
 import { commitRepo, needsStore, openCaptureStore, scratch, unlock, writeTree } from './snapshot-helpers.ts';
 import { attemptEnvelope, runEnvelope, workEnvelope } from './store-helpers.ts';
@@ -202,8 +202,23 @@ test('the parser module uses only the public parser, never application ingestion
   const source = readFileSync(new URL('../src/snapshot/parser.ts', import.meta.url), 'utf8');
   const imports = [...source.matchAll(/(?:from|import\()\s*'([^']+)'/g)].map(m => m[1]!).filter(s => !s.startsWith('.'));
   assert.deepEqual([...new Set(imports)].sort(), [
-    '@farsight/code-parser', '@farsight/code-parser/adapters/java', '@farsight/code-parser/adapters/tsjs', '@farsight/graph',
+    '@farsight/code-parser', '@farsight/code-parser/adapters/java', '@farsight/code-parser/adapters/tsjs',
+    '@farsight/core/dist/strings-sentinel-parser.js', '@farsight/graph',
     'node:crypto', 'node:fs', 'node:path',
   ]);
-  assert.doesNotMatch(source, /@farsight\/(core|server|parsers|mcp|cli)/, 'no application ingestion, enrichment or server module');
+  assert.doesNotMatch(source.replace("@farsight/core/dist/strings-sentinel-parser.js", ''), /@farsight\/(core|server|parsers|mcp|cli)/,
+    'no application ingestion, enrichment or server module; only the parser words from core\'s catalog');
+});
+
+test('every parser code, class and input outcome is a catalog entry with both registers and a definition', async () => {
+  const { STRINGS } = await import('@farsight/core/dist/strings.js');
+  const keys = [...PARSER_ERROR_CODES, ...Object.values(FILE_CLASS_KEYS), ...Object.values(INPUT_OUTCOME_KEYS)];
+  for (const key of keys) {
+    const entry = STRINGS[key];
+    assert.ok(entry && entry.define && entry.hud && entry.professional, key);
+  }
+  const catalog = Object.keys(STRINGS).filter(k => /^sentinel\.parse(Class|Input)?\./.test(k)).sort();
+  assert.deepEqual(catalog, [...keys].sort(), 'no unused or unlisted parser words');
+  const e = new ParserError('sentinel.parse.integrity', 'parser inputs', ['a.ts (content): not a captured file']);
+  assert.match(e.message, /^the parser's reads do not match the snapshot: parser inputs \(1: a\.ts/);
 });

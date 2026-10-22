@@ -66,7 +66,10 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   capture facade (ADR 21; also `./snapshot` and the root): `git.ts` (a read-only Git object reader, no git process),
   `committed.ts` and `worktree.ts` (the two enumerations), `inventory.ts` (entries, budget, quota, case collisions,
   LFS), `policy.ts` (capture policy and path rules), `materialization.ts` (the provenance sidecar), `capture.ts` (stage,
-  write, recheck, admit), `materialize.ts` (reopen and restore from the store alone) and `reconcile.ts` (E1). The
+  write, recheck, admit), `materialize.ts` (reopen and restore from the store alone) and `reconcile.ts` (E1).
+  `src/snapshot/parser.ts` is the parser-evidence facade (ADR 22; `./parser` only): the public code parser over a
+  private restore, its reads reconciled by kind, file outcomes joined, an index of captured spans, and one retaining
+  publication; its words are `strings-sentinel-parser.ts`. The
   ledger's `admitSnapshot`/`getSnapshot` and schema step 2 (`snapshots`, the rebuilt event log) admit a snapshot
   without a run. `test/snapshot-*.test.ts` builds real Git
   fixtures with the git CLI; capture itself never runs it. Depends only on graph, code-parser and core; nothing in the

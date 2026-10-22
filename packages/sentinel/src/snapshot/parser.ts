@@ -5,6 +5,7 @@
 // kind against that tree and the captured inventory. File outcomes are joined to the capture separately; the
 // capture is never changed. No application ingestion, configuration enrichment, network or executable input.
 import { canonicalJson } from '@farsight/graph';
+import { sentinelParserWord } from '@farsight/core/dist/strings-sentinel-parser.js';
 import type * as CodeParser from '@farsight/code-parser';
 import { createHash } from 'node:crypto';
 import { chmodSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from 'node:fs';
@@ -37,12 +38,14 @@ export class ParserError extends Error {
   /** Bounded detail: the first problems found (paths and reasons), never file contents. */
   readonly problems: readonly string[];
   readonly problemCount: number;
-  constructor(code: ParserErrorCode, message: string, problems: readonly string[] = []) {
-    super(`${code}: ${message}${problems.length ? ` (${problems.length} shown)` : ''}`);
+  /** `detail` fills the catalog sentence; `problems` are the first paths and reasons found (never file contents). */
+  constructor(code: ParserErrorCode, detail: string, problems: readonly string[] = []) {
+    const shown = problems.slice(0, MAX_PROBLEMS);
+    super(sentinelParserWord(code, { detail: shown.length ? `${detail} (${problems.length}: ${shown.slice(0, 3).join('; ')})` : detail }));
     this.name = 'ParserError';
     this.code = code;
     this.problemCount = problems.length;
-    this.problems = Object.freeze(problems.slice(0, MAX_PROBLEMS));
+    this.problems = Object.freeze(shown);
   }
 }
 
@@ -104,6 +107,21 @@ export type FileClass =
   /** A directory whose descendants capture did not enumerate. */
   | 'unknown-scope';
 
+/** The catalog word for each class (strings-sentinel-parser.ts). */
+export const FILE_CLASS_KEYS: Readonly<Record<FileClass, string>> = Object.freeze({
+  'parsed': 'sentinel.parseClass.parsed', 'parse-failed': 'sentinel.parseClass.parseFailed',
+  'parser-skipped': 'sentinel.parseClass.parserSkipped', 'not-selected': 'sentinel.parseClass.notSelected',
+  'not-captured': 'sentinel.parseClass.notCaptured', 'unknown-scope': 'sentinel.parseClass.unknownScope',
+});
+
+/** The catalog word for each reconciled input outcome (strings-sentinel-parser.ts). */
+export const INPUT_OUTCOME_KEYS: Readonly<Record<InputOutcome, string>> = Object.freeze({
+  'content-captured': 'sentinel.parseInput.contentCaptured', 'directory-listed': 'sentinel.parseInput.directoryListed',
+  'metadata-matched': 'sentinel.parseInput.metadataMatched', 'missing-verified-absent': 'sentinel.parseInput.missingVerifiedAbsent',
+  'missing-recorded-refusal': 'sentinel.parseInput.missingRecordedRefusal', 'missing-under-boundary': 'sentinel.parseInput.missingUnderBoundary',
+  'missing-in-gitlink': 'sentinel.parseInput.missingInGitlink',
+});
+
 export interface JoinedEntry {
   readonly path: string;
   readonly captureKind: CaptureEntry['kind'];
@@ -154,6 +172,12 @@ export interface ParserResult {
   readonly tree: { readonly before: string; readonly after: string; readonly files: number; readonly directories: number };
   readonly inputs: readonly ReconciledInput[];
   readonly entries: readonly JoinedEntry[];
+  /**
+   * Tallies of this source's captured entries by class: each entry counted once, summing to the entries joined.
+   * They count parser outcomes over the snapshot's inventory, never coverage or checks; a surface that prints them
+   * wires them as Counted values with this scope. `unknownScopeDescendants` is null whenever any listed boundary has
+   * an unknown number of descendants.
+   */
   readonly counts: Readonly<Record<FileClass, number>> & { readonly unknownScopeDescendants: null | number };
   /** Facts this artifact alone can never clear: it is syntax evidence, not enforcement or test evidence. */
   readonly clearsChecks: false;
@@ -499,19 +523,6 @@ export function buildIndex(artifact: AnalysisArtifact, snapshotId: string, sourc
 
 // ---- the parse ----
 
-function makeNonExecutable(root: string): void {
-  const walk = (abs: string) => {
-    for (const name of readdirSync(abs)) {
-      const p = join(abs, name);
-      const st = lstatSync(p);
-      if (st.isDirectory()) walk(p);
-      else if (st.isFile()) chmodSync(p, 0o400);
-    }
-    chmodSync(abs, 0o500);
-  };
-  walk(root);
-}
-
 function unlockTree(root: string): void {
   try { chmodSync(root, 0o700); } catch { return; }
   for (const name of readdirSync(root)) {
@@ -531,7 +542,8 @@ export async function parseSnapshot(store: RestoreStore, request: ParseSnapshotR
   const base = mkdtempSync(join(request.workDir, 'parse-'));
   const target = join(base, 'tree');
   try {
-    const restored = await restoreSnapshot(store, request.snapshotId, target, { readOnly: false });
+    // A restore is read-only and never executable (files 0400, folders 0500); the sidecar keeps the original modes.
+    const restored = await restoreSnapshot(store, request.snapshotId, target);
     const wanted = request.sources ?? restored.snapshot.sources.map(s => s.sourceId);
     const known = new Set(restored.snapshot.sources.map(s => s.sourceId));
     const unknown = wanted.filter(s => !known.has(s));
@@ -543,7 +555,6 @@ export async function parseSnapshot(store: RestoreStore, request: ParseSnapshotR
     const parser = createParser({ adapters: [tsJsAdapter, javaAdapter] });
     const out: SourceAnalysis[] = [];
     for (const src of restored.sources.filter(s => wanted.includes(s.sourceId))) {
-      makeNonExecutable(src.root);
       const before = fingerprintTree(src.root);
       assertParserInputSafe(before);
       const { include, exclude, testGlobs, gitignore, testFiles } = request.selection;
