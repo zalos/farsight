@@ -194,7 +194,7 @@ demand, stopping when idle) holds the store, a duplicate start joins the same ru
 service stopping resumes with `resume <planId> --confirm`. Only the owner's `--confirm` hands a run over; another
 client of the service gets what the adopted grants give agents, which by default is nothing. `retry` and `rerun`
 say *unavailable* (exit 3) until plan revisions exist. With `--json`, every result carries its `outcome`, `exitCode`, the three
-admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR 25 in `docs/ARCHITECTURE.md`.
+admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR 37 in `docs/ARCHITECTURE.md`.
 
 ## Versions and evolution
 

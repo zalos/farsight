@@ -583,7 +583,7 @@ executes the analysis, and crashes and resumes in both revisions.
 **Not decided here:** the run's admission receipt (`run.start` on the plan digest) and its CLI, child runs over a
 parent's bootstrap, reuse derivations (PR 27), and planning in the coordinator itself.
 
-25. **Sentinel's command line is the owner's entrypoint; its local service never grants owner authority (2026-10-22).**
+37. **Sentinel's command line is the owner's entrypoint; its local service never grants owner authority (2026-10-22).**
 
 `farsight-sentinel` is where the owner acts: `init` writes the workspace's settings once (PR 06's defaults plus a
 human-only `capture.source`/`run.start` grant for the chosen profile) and never overwrites them; `settings adopt`

@@ -97,7 +97,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `scripts/test-farsight-package-absent.mjs` repeats it in a temporary workspace copy without `packages/sentinel/`. Both run in the
   `sentinel-package` CI job; `scripts/npm-consumer.mjs` is their shared `npm init -y` consumer.
 
-  The command line and local service (ADR 25): `src/cli.ts` (the owner's entrypoint, and the preview worker when the
+  The command line and local service (ADR 37): `src/cli.ts` (the owner's entrypoint, and the preview worker when the
   coordinator starts it), `src/cli/` (`args.ts` typed parsing, `outcome.ts` typed results and exit codes, `actor.ts`
   the entrypoint actor rule, `init.ts`), `src/service/local.ts` (adopt, plan, run, status, report in the owner's
   process), `src/service/owner-service.ts` (the background service: socket, descriptor, receipts, one run at a time,
