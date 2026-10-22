@@ -14,13 +14,15 @@ import { canonicalJson, digestOf } from './ledger-json.js';
 import { LEDGER_MIGRATIONS, migrateLedger, type LedgerGuard } from './migrations.js';
 import {
   ARTIFACT_CODECS, ARTIFACT_PRIVACY, LedgerError, MAX_ARTIFACT_BYTES, MAX_EVENT_PAGE, MAX_SNAPSHOT_ARTIFACTS,
-  type AdmitSnapshotInput, type SnapshotRecord, type ArtifactPrivacy, type EndAttemptInput, type EventPage, type GcSnapshot, type IdempotencyRef, type LedgerEvent,
+  type AdmitSnapshotInput, type SnapshotRecord, type ArtifactPrivacy, type AttemptError, type EndAttemptInput, type WorkTransition, type EventPage, type GcSnapshot, type IdempotencyRef, type LedgerEvent,
   type LedgerEventKind, type LedgerFailpoint, type LedgerOwner, type MigrationReport, type ObjectVerifier,
   type ObjectReceipt, type OpenLedgerOptions, type PublicationReceipt, type PublishInput, type StageId,
   type StagedArtifact, type VerifiedObject,
 } from './store-types.js';
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+const CATALOG_KEY = /^sentinel\.[a-z][A-Za-z0-9]*(\.[a-z][A-Za-z0-9]*)+$/;
+const MAX_ERROR_DETAIL_BYTES = 4096;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const MAX_STAGED = 4096;
 const MAX_PAYLOAD_BYTES = 16384;
@@ -343,7 +345,7 @@ export class Ledger {
       if ((to === 'completed') !== (opts.outcome !== undefined)) throw invalid('an outcome is given exactly when completing');
       this.#run('UPDATE runs SET state = ?, outcome = ?, completed_at = ? WHERE id = ?', to, opts.outcome ?? null,
         to === 'completed' ? this.#now() : null, runId);
-      return { runId, state: to, sequence: this.#event('run-state', runId, null, { from, to }) };
+      return { runId, state: to, sequence: this.#event('run-state', runId, null, { from, to, ...(opts.outcome ? { outcome: opts.outcome } : {}) }) };
     });
   }
 
@@ -421,14 +423,41 @@ export class Ledger {
    * at an instant before the start (clock skew) is recorded at the start.
    */
   #finishAttempt(attemptId: Id, state: AttemptEnvelope['state'], endedAt: string, usage: AttemptUsage | undefined,
-    outputs: string[], clampToStart = false): void {
+    outputs: string[], clampToStart = false, error?: AttemptError): void {
     const row = this.#get("SELECT envelope FROM attempts WHERE id = ? AND state = 'running'", attemptId);
     if (!row) throw new LedgerError('sentinel.store.notActiveAttempt', 'the attempt is not running');
     const start = JSON.parse(String(row.envelope)) as AttemptEnvelope;
     const at = clampToStart && compareTimestamps(endedAt, start.startedAt) < 0 ? start.startedAt : endedAt;
-    const final = contract('attempt', { ...start, state, endedAt: at, outputs, usage: usage ?? start.usage });
-    this.#run('UPDATE attempts SET state = ?, ended_at = ?, final_usage_certainty = ?, final_envelope = ? WHERE id = ?',
-      state, at, final.usage.certainty, JSON.stringify(final), attemptId);
+    const recorded = error ? { error: { code: error.code, retryable: error.retryable, ...(error.diagnostics ? { diagnostics: error.diagnostics } : {}) } } : {};
+    const final = contract('attempt', { ...start, state, endedAt: at, outputs, usage: usage ?? start.usage, ...recorded });
+    // The detail column exists from schema 3; an end without one writes only the foundation columns.
+    if (error?.detail) {
+      this.#run(`UPDATE attempts SET state = ?, ended_at = ?, final_usage_certainty = ?, final_envelope = ?, error_detail = ?
+        WHERE id = ?`, state, at, final.usage.certainty, JSON.stringify(final), canonicalJson(error.detail), attemptId);
+    } else {
+      this.#run('UPDATE attempts SET state = ?, ended_at = ?, final_usage_certainty = ?, final_envelope = ? WHERE id = ?',
+        state, at, final.usage.certainty, JSON.stringify(final), attemptId);
+    }
+  }
+
+  #checkError(error: AttemptError | undefined): AttemptError | undefined {
+    if (error === undefined) return undefined;
+    if (!error || typeof error !== 'object' || !CATALOG_KEY.test(String(error.code)) || typeof error.retryable !== 'boolean') {
+      throw invalid('an attempt error is a catalog code and whether it is retryable');
+    }
+    if (error.diagnostics !== undefined) {
+      checkDigest(error.diagnostics, 'error diagnostics');
+      if (!this.#get('SELECT 1 AS x FROM artifacts WHERE id = ?', error.diagnostics)) {
+        throw new LedgerError('sentinel.store.notFound', 'error diagnostics name an artifact that is not accepted');
+      }
+    }
+    if (error.detail !== undefined) {
+      const text = canonicalJson(error.detail);
+      if (typeof error.detail !== 'object' || Array.isArray(error.detail) || Buffer.byteLength(text, 'utf8') > MAX_ERROR_DETAIL_BYTES) {
+        throw invalid(`an attempt error detail is a JSON object of at most ${MAX_ERROR_DETAIL_BYTES} bytes`);
+      }
+    }
+    return error;
   }
 
   /** The fence every attempt-scoped write passes: exact revision, its active attempt, running, this epoch. */
@@ -461,15 +490,69 @@ export class Ledger {
     if (input.workState !== 'ready' && input.workState !== 'failed') throw invalid('work ends ready or failed');
     checkTime(input.endedAt, 'endedAt');
     const request = { work: ref, attemptId: input.attemptId, state: input.state, endedAt: input.endedAt,
-      workState: input.workState, usage: input.usage ?? null };
+      workState: input.workState, usage: input.usage ?? null, error: input.error ?? null };
     return this.#mutate('endAttempt', request, input.idempotency, () => {
+      const error = this.#checkError(input.error);
       const { runId } = this.#fenceAttempt(ref, input.attemptId);
-      this.#finishAttempt(input.attemptId, input.state, input.endedAt, input.usage, []);
+      this.#finishAttempt(input.attemptId, input.state, input.endedAt, input.usage, [], false, error);
       this.#run('UPDATE work_units SET state = ?, active_attempt_id = NULL WHERE id = ? AND revision = ?',
         input.workState, ref.id, ref.revision);
       return { attemptId: input.attemptId,
-        sequence: this.#event('attempt-ended', runId, ref, { attemptId: input.attemptId, state: input.state }) };
+        sequence: this.#event('attempt-ended', runId, ref, { attemptId: input.attemptId, state: input.state, ...(error ? { code: error.code } : {}) }) };
     });
+  }
+
+  /**
+   * Releases or holds a work revision that has no active attempt: pending or blocked → ready, and pending, ready or
+   * blocked → blocked / disabled-by-policy with a catalog reason. A held revision never starts; a running, leased,
+   * published or failed one is not moved here.
+   */
+  setWorkState(ref: WorkRef, to: WorkTransition, opts: { reasonCode?: string; idempotency?: IdempotencyRef } = {}):
+    { work: WorkRef; state: WorkTransition; sequence: number } {
+    checkRef(ref);
+    if (!['ready', 'blocked', 'disabled-by-policy'].includes(to)) throw invalid('work moves to ready, blocked or disabled-by-policy');
+    const held = to !== 'ready';
+    if (held !== (opts.reasonCode !== undefined)) throw invalid('a reason is given exactly when holding work');
+    if (held && (!CATALOG_KEY.test(String(opts.reasonCode)) || String(opts.reasonCode).length > 128)) throw invalid('the reason is a catalog key');
+    return this.#mutate('setWorkState', { ref, to, reason: opts.reasonCode ?? null }, opts.idempotency, () => {
+      const row = this.#get(`SELECT w.state, w.run_id, r.state AS run_state FROM work_units w JOIN runs r ON r.id = w.run_id
+        WHERE w.id = ? AND w.revision = ?`, ref.id, ref.revision);
+      if (!row) throw new LedgerError('sentinel.store.notFound', 'no such work revision');
+      const from = String(row.state);
+      if (!['pending', 'ready', 'blocked'].includes(from) || from === to) {
+        throw new LedgerError('sentinel.store.wrongState', `work cannot move ${from} → ${to}`);
+      }
+      if (row.run_state === 'completed' || row.run_state === 'canceled') throw new LedgerError('sentinel.store.wrongState', 'the run has ended');
+      this.#run('UPDATE work_units SET state = ?, state_reason = ? WHERE id = ? AND revision = ?', to, opts.reasonCode ?? null, ref.id, ref.revision);
+      return { work: { id: ref.id, revision: ref.revision }, state: to,
+        sequence: this.#event('work-state', String(row.run_id), ref, { from, to, ...(held ? { reason: opts.reasonCode } : {}) }) };
+    });
+  }
+
+  /**
+   * Ends every attempt still running under an earlier epoch as interrupted, under this epoch's fence. Its work
+   * becomes ready while its run can still admit work (planned, running, pausing, paused) and failed once the run
+   * is canceling or has ended, since no attempt could start for it again. Each is recorded with an attempt-ended
+   * event marked stale; nothing from the earlier epoch can publish afterwards.
+   */
+  interruptStaleAttempts(): Array<{ attemptId: Id; work: WorkRef; epoch: Id; workState: 'ready' | 'failed' }> {
+    return this.#transaction(() => {
+      const rows = this.#all(`SELECT a.id, a.work_id, a.work_revision, a.coordinator_epoch, w.run_id, r.state AS run_state
+        FROM attempts a JOIN work_units w ON w.id = a.work_id AND w.revision = a.work_revision JOIN runs r ON r.id = w.run_id
+        WHERE a.state = 'running' AND a.coordinator_epoch <> ? ORDER BY a.started_at, a.id`, this.epoch);
+      const out: Array<{ attemptId: Id; work: WorkRef; epoch: Id; workState: 'ready' | 'failed' }> = [];
+      for (const r of rows) {
+        const ref = { id: String(r.work_id), revision: Number(r.work_revision) };
+        const workState = ['planned', 'running', 'pausing', 'paused'].includes(String(r.run_state)) ? 'ready' as const : 'failed' as const;
+        this.#finishAttempt(String(r.id), 'interrupted', this.#now(), undefined, [], true,
+          { code: 'sentinel.store.staleEpoch', retryable: workState === 'ready' });
+        this.#run(`UPDATE work_units SET state = ?, active_attempt_id = NULL WHERE id = ? AND revision = ? AND active_attempt_id = ?`,
+          workState, ref.id, ref.revision, String(r.id));
+        this.#event('attempt-ended', String(r.run_id), ref, { attemptId: String(r.id), state: 'interrupted', stale: true, epoch: String(r.coordinator_epoch) });
+        out.push({ attemptId: String(r.id), work: ref, epoch: String(r.coordinator_epoch), workState });
+      }
+      return out;
+    }, true);
   }
 
   // ---- staging and publication ----
@@ -833,22 +916,47 @@ export class Ledger {
     return { events, cursor: events.at(-1)?.sequence ?? after, more };
   }
 
-  getWork(ref: WorkRef): { work: WorkRef; runId: Id; state: string; activeAttemptId: Id | null } | null {
+  getWork(ref: WorkRef): { work: WorkRef; runId: Id; state: string; activeAttemptId: Id | null; reason: string | null } | null {
     checkRef(ref);
-    const r = this.#read(() => this.#get('SELECT run_id, state, active_attempt_id FROM work_units WHERE id = ? AND revision = ?',
+    const r = this.#read(() => this.#get('SELECT run_id, state, active_attempt_id, state_reason FROM work_units WHERE id = ? AND revision = ?',
       ref.id, ref.revision));
     return r ? { work: { id: ref.id, revision: ref.revision }, runId: String(r.run_id), state: String(r.state),
-      activeAttemptId: r.active_attempt_id === null ? null : String(r.active_attempt_id) } : null;
+      activeAttemptId: r.active_attempt_id === null ? null : String(r.active_attempt_id), reason: r.state_reason === null ? null : String(r.state_reason) } : null;
+  }
+
+  /** A run as recorded: its state, its outcome once completed, and its envelope. */
+  getRun(id: Id): { id: Id; state: RunState; outcome: RunOutcome | null; completedAt: string | null; epoch: Id; envelope: RunEnvelope } | null {
+    checkId(id, 'run id');
+    const r = this.#read(() => this.#get('SELECT state, outcome, completed_at, coordinator_epoch, envelope FROM runs WHERE id = ?', id));
+    return r ? { id, state: r.state as RunState, outcome: (r.outcome ?? null) as RunOutcome | null, completedAt: r.completed_at === null ? null : String(r.completed_at),
+      epoch: String(r.coordinator_epoch), envelope: JSON.parse(String(r.envelope)) as RunEnvelope } : null;
+  }
+
+  /** Every attempt of one work revision, by ordinal. */
+  listAttempts(ref: WorkRef): Array<{ id: Id; ordinal: number; state: string; epoch: Id }> {
+    checkRef(ref);
+    return this.#read(() => this.#all('SELECT id, ordinal, state, coordinator_epoch FROM attempts WHERE work_id = ? AND work_revision = ? ORDER BY ordinal LIMIT 1000',
+      ref.id, ref.revision)).map(r => ({ id: String(r.id), ordinal: Number(r.ordinal), state: String(r.state), epoch: String(r.coordinator_epoch) }));
+  }
+
+  /** Stages still open (registered, neither published nor aborted), oldest first, at most `limit` (≤ 500). */
+  listOpenStages(limit = 500): Array<{ stageId: Id; epoch: Id; work: WorkRef | null; attemptId: Id | null; createdAt: string }> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_EVENT_PAGE) throw invalid(`limit is 1..${MAX_EVENT_PAGE}`);
+    return this.#read(() => this.#all('SELECT stage_id, coordinator_epoch, work_id, work_revision, attempt_id, created_at FROM staging ORDER BY created_at, stage_id LIMIT ?', limit))
+      .map(r => ({ stageId: String(r.stage_id), epoch: String(r.coordinator_epoch),
+        work: r.work_id === null ? null : { id: String(r.work_id), revision: Number(r.work_revision) },
+        attemptId: r.attempt_id === null ? null : String(r.attempt_id), createdAt: String(r.created_at) }));
   }
 
   /** An attempt as recorded: its final envelope once ended, else its start envelope. */
-  getAttempt(id: Id): { id: Id; work: WorkRef; state: string; epoch: Id; envelope: AttemptEnvelope } | null {
+  getAttempt(id: Id): { id: Id; work: WorkRef; state: string; epoch: Id; envelope: AttemptEnvelope; errorDetail: Record<string, unknown> | null } | null {
     checkId(id, 'attempt id');
     const r = this.#read(() => this.#get(
-      'SELECT work_id, work_revision, state, coordinator_epoch, envelope, final_envelope FROM attempts WHERE id = ?', id));
+      'SELECT work_id, work_revision, state, coordinator_epoch, envelope, final_envelope, error_detail FROM attempts WHERE id = ?', id));
     return r ? { id, work: { id: String(r.work_id), revision: Number(r.work_revision) }, state: String(r.state),
       epoch: String(r.coordinator_epoch),
-      envelope: JSON.parse(String(r.final_envelope ?? r.envelope)) as AttemptEnvelope } : null;
+      envelope: JSON.parse(String(r.final_envelope ?? r.envelope)) as AttemptEnvelope,
+      errorDetail: r.error_detail === null ? null : JSON.parse(String(r.error_detail)) as Record<string, unknown> } : null;
   }
 
   getPublication(ref: WorkRef): (PublicationReceipt & { outputs: Array<{ id: string; schema: string; privacy: ArtifactPrivacy }> }) | null {
