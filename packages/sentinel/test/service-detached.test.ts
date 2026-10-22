@@ -30,7 +30,7 @@ const hex = (n: number, c: string) => c.repeat(n);
 const QUALIFIED = qualificationFor(SQLITE_RELEASE_POLICY, `${process.platform}-${process.arch}`, process.versions.sqlite ?? '') !== undefined;
 const needsStore = QUALIFIED || process.env.CI ? {} : { skip: 'not a qualified store host' };
 
-/** A workspace with adopted settings and two prepared plan records, its trust in a private state folder. */
+/** A workspace with adopted settings and two run ids the service child admits (synthetic, under that policy). */
 function setup(label: string) {
   const root = mkdtempSync(join(realpathSync(tmpdir()), `sentinel-svc-${label}-`));
   roots.push(root);
@@ -40,23 +40,15 @@ function setup(label: string) {
   const ws = workspaceOf(path, env);
   initWorkspace({ workspace: path });
   adoptWorkspaceSettings(ws, { confirm: true, now: new Date() });
-  const policy = adoptedPolicy(ws);
-  assert.ok('policy' in policy);
-  mkdirSync(ws.planDir, { recursive: true, mode: 0o700 });
-  const plans = ['1', '2'].map(c => {
-    const planId = `plan-${hex(32, c)}`;
-    writeFileSync(join(ws.planDir, `${planId}.json`), JSON.stringify({
-      schema: 'sentinel-plan-record/draft-1', planId, planDigest: `sha256:${hex(64, c)}`, snapshotId: 'snap-synthetic', policyRevision: policy.policy.revision,
-    }), { mode: 0o600 });
-    return planId;
-  });
+  assert.ok('policy' in adoptedPolicy(ws));
+  const plans = ['1', '2'].map(c => `run-${hex(32, c)}`);
   return { root, ws, env, plans };
 }
 
 type Setup = ReturnType<typeof setup>;
 
 async function serve(s: Setup, behaviour = 'slow-ok'): Promise<ChildProcess> {
-  const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', '--experimental-strip-types', CHILD, s.ws.path, join(s.root, 'adapters'), behaviour],
+  const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', '--experimental-strip-types', CHILD, s.ws.path, s.root, behaviour, ...s.plans],
     { env: s.env, stdio: ['ignore', 'pipe', 'pipe'] });
   children.add(child);
   child.once('exit', () => children.delete(child));
@@ -76,8 +68,11 @@ const stopped = (child: ChildProcess, signal: NodeJS.Signals = 'SIGTERM') => new
 });
 
 /** The owner's CLI: confirm the run here (a receipt minted in this process), then hand it over on a fresh connection. */
+/** The run's current admitted plan, as the service reports it: what the owner confirms a write against. */
+const describe = (s: Setup, runId: string) => ask(s, 'run.describe', { runId });
+
 async function start(s: Setup, planId: string): Promise<any> {
-  const confirmed = confirmForService(s.ws, { command: 'run', action: 'run.start', planId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
+  const confirmed = confirmForService(s.ws, { command: 'run', action: 'run.start', plan: await describe(s, planId), planId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
   assert.ok('receiptId' in confirmed, JSON.stringify(confirmed));
   const client = (await connectService(s.ws))!;
   try { return await client.request('run.start', { planId, receiptId: confirmed.receiptId }); } finally { client.close(); }
@@ -85,7 +80,7 @@ async function start(s: Setup, planId: string): Promise<any> {
 
 /** The owner's pause or cancel: confirmed here, one receipt for exactly that action on that run. */
 async function control(s: Setup, op: 'run.pause' | 'run.cancel', runId: string): Promise<any> {
-  const confirmed = confirmForService(s.ws, { command: op.slice(4), action: op, planId: runId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
+  const confirmed = confirmForService(s.ws, { command: op.slice(4), action: op, plan: await describe(s, runId), planId: runId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
   assert.ok('receiptId' in confirmed, JSON.stringify(confirmed));
   return ask(s, op, { runId, receiptId: confirmed.receiptId });
 }
@@ -101,6 +96,12 @@ async function waitEnd(s: Setup, runId: string): Promise<any> {
     const r = await ask(s, 'run.wait', { runId, timeoutMs: 20_000 });
     if (r.outcome !== 'submitted') return r;
   }
+}
+
+/** All four units of the synthetic plan were accepted, each exactly once. */
+function assertEachOnce(counts: Record<string, number>) {
+  assert.equal(Object.keys(counts).length, 4, JSON.stringify(counts));
+  assert.ok(Object.values(counts).every(n => n === 1), JSON.stringify(counts));
 }
 
 async function publishedCounts(s: Setup, runId: string) {
@@ -133,18 +134,18 @@ test('a connection without the owner\'s receipt gets only what the grants give a
       } finally { c.close(); }
     }
     // A receipt confirms one plan: spent on another it is refused, and the run it names never started.
-    const other = confirmForService(s.ws, { command: 'run', action: 'run.start', planId: s.plans[1]!, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
+    const other = confirmForService(s.ws, { command: 'run', action: 'run.start', plan: await describe(s, s.plans[1]!), planId: s.plans[1]!, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
     assert.ok('receiptId' in other);
     const mismatch = await ask(s, 'run.start', { planId: s.plans[0], receiptId: other.receiptId });
     // A receipt for one action is never a receipt for another, even on the same plan.
-    const startReceipt = confirmForService(s.ws, { command: 'run', action: 'run.start', planId: s.plans[0]!, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
+    const startReceipt = confirmForService(s.ws, { command: 'run', action: 'run.start', plan: await describe(s, s.plans[0]!), planId: s.plans[0]!, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
     assert.ok('receiptId' in startReceipt);
     assert.equal((await ask(s, 'run.cancel', { runId: s.plans[0], receiptId: startReceipt.receiptId })).reasonCode, 'sentinel.receipt.mismatch');
     assert.equal(mismatch.reasonCode, 'sentinel.receipt.mismatch');
     const status = await ask(s, 'run.status', { runId: s.plans[0] });
     assert.equal(status.reasonCode, 'sentinel.service.runUnknown');
     // Without --confirm the owner's own CLI issues nothing.
-    const unconfirmed = confirmForService(s.ws, { command: 'run', action: 'run.start', planId: s.plans[0]!, confirm: false, now: new Date() });
+    const unconfirmed = confirmForService(s.ws, { command: 'run', action: 'run.start', plan: await describe(s, s.plans[0]!), planId: s.plans[0]!, confirm: false, now: new Date() });
     assert.ok('result' in unconfirmed);
     assert.equal(unconfirmed.result.outcome, 'awaiting-confirmation');
     assert.equal(unconfirmed.result.exitCode, 4);
@@ -157,9 +158,9 @@ test('duplicate starts join one run, a receipt is spent once, and the run surviv
   const child = await serve(s);
   try {
     const planId = s.plans[0]!;
-    const confirmed = confirmForService(s.ws, { command: 'run', action: 'run.start', planId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
+    const confirmed = confirmForService(s.ws, { command: 'run', action: 'run.start', plan: await describe(s, planId), planId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
     assert.ok('receiptId' in confirmed);
-    const second = confirmForService(s.ws, { command: 'run', action: 'run.start', planId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
+    const second = confirmForService(s.ws, { command: 'run', action: 'run.start', plan: await describe(s, planId), planId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
     assert.ok('receiptId' in second);
     const [a, b] = await Promise.all([confirmed.receiptId, second.receiptId].map(async receiptId => {
       const c = (await connectService(s.ws))!;
@@ -181,7 +182,7 @@ test('duplicate starts join one run, a receipt is spent once, and the run surviv
     assert.equal(again.facts.state, 'completed');
     assert.notEqual(again.outcome, 'submitted');
   } finally { await stopped(child); }
-  assert.deepEqual(await publishedCounts(s, s.plans[0]!), { 'work-A-1': 1, 'work-B-1': 1, 'work-C-1': 1, 'work-D-1': 1 });
+  assertEachOnce(await publishedCounts(s, s.plans[0]!));
 });
 
 test('pause lets work in flight finish and resume needs the owner again; cancel stops the run', needsStore, async () => {
@@ -212,7 +213,7 @@ test('pause lets work in flight finish and resume needs the owner again; cancel 
     assert.equal(canceled.reasonCode, 'sentinel.service.runNotCompleted');
     assert.equal((await control(s, 'run.cancel', other)).reasonCode, 'sentinel.service.runNotActive');
   } finally { await stopped(child); }
-  assert.deepEqual(await publishedCounts(s, s.plans[0]!), { 'work-A-1': 1, 'work-B-1': 1, 'work-C-1': 1, 'work-D-1': 1 });
+  assertEachOnce(await publishedCounts(s, s.plans[0]!));
 });
 
 const psWorks = (() => { try { return Array.isArray(argumentsOf(process.pid)); } catch { return false; } })();
@@ -239,7 +240,7 @@ test('a service killed mid-run: its run reads as interrupted, and resumes with e
     assert.equal((await start(s, planId)).outcome, 'submitted');
     assert.equal((await waitEnd(s, planId)).facts.state, 'completed');
   } finally { await stopped(child); }
-  assert.deepEqual(await publishedCounts(s, planId), { 'work-A-1': 1, 'work-B-1': 1, 'work-C-1': 1, 'work-D-1': 1 });
+  assertEachOnce(await publishedCounts(s, planId));
 });
 
 test('an unsafe service record is refused with its own error, never followed', needsStore, async () => {

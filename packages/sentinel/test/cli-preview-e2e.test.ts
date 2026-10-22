@@ -54,15 +54,21 @@ test('init → adopt → plan → run → status → report, twice where it matt
   const preview = run('settings', 'adopt');
   assert.deepEqual([preview.status, preview.body.outcome], [4, 'awaiting-confirmation'], 'adoption waits for the owner');
   assert.deepEqual([run('settings', 'adopt', '--confirm').status], [0]);
+  // Nothing is planned until the owner promotes a rule pack into the rule lock.
+  assert.deepEqual([run('plan').status, run('plan').body.reasonCode], [3, 'sentinel.service.noRuleLock']);
+  assert.equal(run('rules', 'promote', 'builtin:foundation-preview', '--confirm').status, 0);
 
   const plan = run('plan');
   assert.equal(plan.status, 0, plan.stderr);
   assert.equal(plan.body.outcome, 'prepared');
   assert.deepEqual(plan.body.facts.effects, ['local-artifacts']);
   assert.equal(plan.body.facts.label, 'foundation-preview');
+  assert.equal(plan.body.facts.revision, 2, 'the admitted analysis follows the published bootstrap');
+  assert.equal(plan.body.facts.checks.planned, 2, 'one check per TypeScript or Java file, planned from the published parse');
   assert.ok(Object.values(plan.body.verdicts).every((v: any) => v.asked && v.allowed), 'capture was admitted by all three verdicts');
   const planId = plan.body.facts.planId;
-  assert.equal(run('plan').body.facts.planId, planId, 'the same workspace and policy plan to the same id');
+  const replanned = run('plan');
+  assert.deepEqual([replanned.body.outcome, replanned.body.facts.planId], ['kept', planId], 'the same content, lock and policy are the same run');
 
   const first = run('run', planId);
   assert.equal(first.status, 2, first.stderr);
@@ -118,6 +124,7 @@ test('run --detach: the service starts on demand, a duplicate joins, callers lea
   };
   run('init');
   run('settings', 'adopt', '--confirm');
+  run('rules', 'promote', 'builtin:foundation-preview', '--confirm');
   const planId = run('plan').body.facts.planId;
   assert.deepEqual([run('pause', planId).status, run('pause', planId).body.reasonCode], [4, 'sentinel.service.needsOwnerConfirm'], 'pausing is a write: it waits for the owner');
   assert.equal(run('pause', planId, '--confirm').body.reasonCode, 'sentinel.service.notRunning', 'no service, nothing to pause');
@@ -132,7 +139,8 @@ test('run --detach: the service starts on demand, a duplicate joins, callers lea
   const report = spawnSync(process.execPath, [CLI, 'report', planId], { cwd: ws, env, encoding: 'utf8' });
   assert.match(report.stdout, /1 finding in this report/);
   const events = run('status', planId, '--limit', '50').body.facts.events;
-  assert.equal(events.filter((e: { kind: string }) => e.kind === 'attempt-started').length, 1, 'executed once');
+  // Capture, parse and inventory ran once when planning; the one check unit ran once in the background.
+  assert.equal(events.filter((e: { kind: string }) => e.kind === 'attempt-started').length, 4, 'executed once');
 
   stopService(env);
   assert.equal(run('plan').status, 0, 'a stopped service releases the store');

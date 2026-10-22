@@ -1,15 +1,20 @@
-// The foundation-preview path in one process: capture a synthetic workspace, plan the preview detector over it,
-// run it through the real coordinator and supervisor, and read its published findings back from the ledger.
+// The foundation-preview path in one process, canonically: a synthetic workspace adopted and with the built-in pack
+// promoted by its owner; the CLI's canonical plan (capture, the admitted bootstrap published by the coordinator's own
+// operations, the analysis planned from that evidence and admitted); the coordinator runs the preview detector as a
+// real worker; coverage and findings are read back from the ledger. A file the detector cannot read is reported
+// skipped, so its required check stays partial: nothing is covered that was not read.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore, qualificationFor, SQLITE_RELEASE_POLICY } from '../dist/store/index.js';
-import { captureSnapshot } from '../dist/snapshot/index.js';
-import { Coordinator } from '../dist/execution/coordinator.js';
-import { PREVIEW_ADAPTERS, previewPlan } from '../dist/service/preview-plan.js';
-import { detect } from '../dist/adapters/preview-detector.js';
+import { adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, scratchUnder, removeScratch, workspaceOf } from '../dist/service/local.js';
+import { canonicalResult, executeRun, planWorkspaceCanonical, previewFindingsOf } from '../dist/service/canonical.js';
+import { builtinPackDir } from '../dist/service/package-paths.js';
+import { initWorkspace } from '../dist/cli/init.js';
+import { loadPlan } from '../dist/execution/plans.js';
+import { detect, PREVIEW_RULE } from '../dist/adapters/preview-detector.js';
 import { unlock } from './snapshot-helpers.ts';
 
 const QUALIFIED = qualificationFor(SQLITE_RELEASE_POLICY, `${process.platform}-${process.arch}`, process.versions.sqlite ?? '') !== undefined;
@@ -24,27 +29,45 @@ test('the preview detector flags SQL assembled from strings and nothing else', (
   assert.equal(detect('a.py', 'q = "SELECT * FROM t WHERE x = " + y', 'x').length, 0, 'a language it does not check');
 });
 
-test('capture → preview plan → coordinator → published findings', needsStore, async t => {
+test('canonical plan → admitted analysis → coordinator → coverage records and findings; an unreadable file stays partial', needsStore, async t => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-slice-')));
   t.after(() => { unlock(dir); rmSync(dir, { recursive: true, force: true }); });
-  const ws = join(dir, 'ws');
-  mkdirSync(join(ws, 'src'), { recursive: true });
-  writeFileSync(join(ws, 'src/users.ts'), 'export const find = (id: string) => db.query("SELECT * FROM users WHERE id = " + id);\n');
-  writeFileSync(join(ws, 'src/Safe.java'), 'class Safe { String q = "SELECT * FROM t WHERE id = ?"; }\n');
-  const store = await openStore(join(dir, 'store'));
-  t.after(() => store.close());
-  const captured = await captureSnapshot(store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'example/app', root: ws }] });
-  const scratch = join(dir, 'scratch');
-  mkdirSync(scratch, { mode: 0o700 });
-  const plan = await previewPlan(store, { snapshotId: captured.record.snapshotId, policyRevision: `sha256:${'a'.repeat(64)}`, workDir: join(scratch, 'plan'), now: new Date().toISOString() });
-  assert.deepEqual(plan.disclosure.effects, ['local-artifacts']);
-  const coordinator = await Coordinator.open({ store, plan: plan.boundary, scratchRoot: scratch, registry: PREVIEW_ADAPTERS });
-  const summary = await coordinator.run();
-  // No required coverage was evaluated for the preview unit, so its run is never complete coverage (execution/plan.ts).
-  assert.deepEqual([summary.state, summary.outcome, summary.published], ['completed', 'partial-coverage', 1], JSON.stringify(summary.failures));
-  const pub = store.ledger.getPublication({ id: plan.boundary.works[0]!.id, revision: 1 })!;
-  const outputs = await Promise.all(pub.outputs.map(o => store.readArtifact(o.id)));
-  const findings = outputs.map(b => { try { return JSON.parse(b.toString()); } catch { return null; } }).find(d => d?.schema === 'sentinel-preview-findings/draft-1');
-  assert.deepEqual(findings.findings.map((f: any) => [f.path, f.line]), [['app/src/users.ts', 1]]);
-  assert.equal(findings.checkedFiles, 2);
+  const path = join(dir, 'ws');
+  mkdirSync(join(path, 'src'), { recursive: true });
+  writeFileSync(join(path, 'src/users.ts'), 'export const find = (id: string) => db.query("SELECT * FROM users WHERE id = " + id);\n');
+  writeFileSync(join(path, 'src/Orders.java'), 'class Orders { String q = "SELECT * FROM orders WHERE id = ?"; }\n');
+  writeFileSync(join(path, 'src/latin1.ts'), Buffer.from([0x63, 0x6f, 0x6e, 0x73, 0x74, 0x20, 0xe9, 0x3b, 0x0a])); // not UTF-8
+  writeFileSync(join(path, 'README.md'), '# not checked\n');
+  const ws = workspaceOf(path, { ...process.env, XDG_STATE_HOME: join(dir, 'state') });
+  initWorkspace({ workspace: path });
+  adoptWorkspaceSettings(ws, { confirm: true, now: new Date() });
+  assert.equal(promoteRulePack(ws, { packDir: realpathSync.native(builtinPackDir('foundation-preview')!), confirm: true, now: new Date() }).outcome, 'prepared');
+  const adopted = adoptedPolicy(ws);
+  assert.ok('policy' in adopted);
+
+  const store = await openStore(ws.storePath);
+  t.after(() => { try { store.close(); } catch { /* closed */ } });
+  const work = scratchUnder(ws);
+  try {
+    const planned = await planWorkspaceCanonical(store, { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() });
+    assert.equal(planned.outcome, 'prepared');
+    const { plan } = await loadPlan(store, planned.disclosure.runId, planned.disclosure.revision);
+    const scopes = plan.checks.filter(c => c.state === 'planned').map(c => c.scopeId).sort();
+    assert.deepEqual(scopes, ['workspace:src/Orders.java', 'workspace:src/latin1.ts', 'workspace:src/users.ts'], 'TS/JS/Java files only');
+    assert.ok(plan.units.every(u => u.scopes.length <= 1), 'one scope per unit, so every finding names its file');
+    assert.ok(plan.pins.rules.every(r => r.familyId === PREVIEW_RULE));
+
+    const summary = await executeRun(store, planned.disclosure.runId, { scratchRoot: work });
+    assert.equal(summary.state, 'completed', JSON.stringify(summary.failures));
+    assert.equal(summary.kind, 'analysis');
+    // Coverage from the coverage records: the unreadable file's check was named but its scope skipped, so it is partial.
+    assert.equal(summary.coverage!.requiredComplete, 2);
+    assert.equal(summary.outcome, 'partial-coverage', 'never complete while a required scope was not read');
+    const findings = (await previewFindingsOf(store, planned.disclosure.runId))!;
+    assert.deepEqual(findings.findings.map((f: any) => [f.path, f.line]), [['src/users.ts', 1]]);
+    assert.deepEqual([findings.scanned, findings.skipped], [2, 1]);
+    // The CLI's reading of it: required coverage incomplete, the foundation-preview label kept.
+    const read = await canonicalResult(store, 'run', planned.disclosure.runId, { executing: false });
+    assert.deepEqual([read.outcome, read.reasonCode, read.facts.label], ['required-coverage-incomplete', 'sentinel.service.previewNotCoverage', 'foundation-preview']);
+  } finally { removeScratch(work); }
 });

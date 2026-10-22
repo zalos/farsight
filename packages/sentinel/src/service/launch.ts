@@ -5,7 +5,7 @@
 // to find the owner's state, runtime folder and executables), stdio closed, detached. The caller gets back a handle
 // to exactly that process, so a service that never answers is stopped by its own handle, never by a search.
 import { spawn, type ChildProcess } from 'node:child_process';
-import { ownExecutable } from './preview-plan.js';
+import { ownExecutable } from './package-paths.js';
 
 /** The only environment names the service is started with. Nothing else is inherited (no SENTINEL_*, no tokens). */
 export const SERVICE_ENV = ['PATH', 'HOME', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR', 'TMPDIR', 'LANG', 'LC_ALL'] as const;

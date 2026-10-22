@@ -14,27 +14,28 @@ import { emptyLock, lockDigest, promote, promotionIntent, readPackDirectory, val
 import { DEFAULT_SETTINGS, ReceiptBook, effectivePolicy } from '../dist/policy/index.js';
 import { issueReceipt } from '../dist/policy/owner-receipts.js';
 import { planAnalysis, planBootstrap, plannerAnalysisFrom, plannerLockFrom, plannerPolicyFrom, plannerSnapshotFrom, verifyPlanRevision } from '../dist/planner/index.js';
-import { builtinPackDir } from '../dist/service/preview-plan.js';
-import { EXECUTION_PROFILE_SCHEMA, foundationProfile, profileDigest, profileDocument } from '../dist/service/trusted-profile.js';
+import { builtinPackDir } from '../dist/service/package-paths.js';
+import { EXECUTION_PROFILE_SCHEMA, foundationProfile } from '../dist/service/trusted-profile.js';
 import { PREVIEW_DETECTOR_ID, PREVIEW_RULE } from '../dist/adapters/preview-detector.js';
 import { commitRepo, needsStore, openCaptureStore, scratch, unlock } from './snapshot-helpers.ts';
 
 const D = (s: string) => `sha256:${createHash('sha256').update(s).digest('hex')}`;
 const NOW = new Date('2026-10-22T12:00:00.000Z');
 
-test('the profile is a canonical, serializable document of adapter ids, digests, facts and permits; nothing live', () => {
+test('the profile is the coordinator\'s canonical record: adapter ids and digests, facts, permits, operations; nothing live', () => {
   const p = foundationProfile();
-  assert.equal(p.document.schema, EXECUTION_PROFILE_SCHEMA);
-  assert.deepEqual(JSON.parse(JSON.stringify(p.document)), p.document, 'plain data, no functions or live objects');
-  assert.deepEqual(p.document.adapters.map(a => a.id), [PREVIEW_DETECTOR_ID], 'the narrow registry: the preview detector only');
-  assert.deepEqual(p.document.permits, ['pattern-match', 'source-bytes', 'source-span']);
-  assert.ok(p.document.capabilities.every(c => c.adapterId === PREVIEW_DETECTOR_ID && c.adapterDigest === p.document.adapters[0]!.digest));
-  assert.deepEqual(p.document.operations, { capture: null, parse: null, inventory: null }, 'no bootstrap operation is bound until the coordinator provides one');
+  assert.equal(p.record.schema, EXECUTION_PROFILE_SCHEMA);
+  assert.deepEqual(JSON.parse(JSON.stringify(p.record)), p.record, 'plain data, no functions or live objects');
+  assert.deepEqual(p.record.adapters.map(a => a.adapterId), [PREVIEW_DETECTOR_ID, 'sentinel-capture', 'sentinel-inventory', 'sentinel-parse'].sort(),
+    'the narrow registry: the coordinator\'s bootstrap operations and the preview detector only');
+  assert.deepEqual(p.record.permits, ['pattern-match', 'source-bytes', 'source-span']);
+  assert.ok(p.record.capabilities.every(c => c.adapterId === PREVIEW_DETECTOR_ID));
+  assert.deepEqual(Object.keys(p.record.operations).sort(), ['capture', 'inventory', 'parse']);
+  assert.ok(Object.values(p.record.operations).every(o => o !== null), 'every bootstrap stage is bound to its operation');
   assert.equal(foundationProfile().digest, p.digest, 'deterministic');
-  assert.equal(profileDigest(profileDocument(p.planner, p.execution)), p.digest);
+  assert.equal(p.registry.get(PREVIEW_DETECTOR_ID).coverage, 'per-file-per-rule');
   // Any change to what the profile trusts changes its digest.
-  const narrower = profileDocument({ ...p.planner, permits: ['source-bytes'] }, p.execution);
-  assert.notEqual(profileDigest(narrower), p.digest);
+  assert.notEqual(foundationProfile(p.registry, { operations: false }).digest, p.digest);
 });
 
 test('over a real capture, lock and policy the canonical planner plans exactly the preview rule on TS/JS/Java files', needsStore, async t => {

@@ -111,6 +111,17 @@ export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
   'sentinel.rule.previewSqlConcat': same('SQL text assembled from strings (foundation preview)', 'One line holds SQL text joined with + to something that is not a literal, or a template literal with SQL text and an interpolation, in TypeScript, JavaScript or Java. A candidate location to review, found by one original line-level check.'),
   'sentinel.rule.previewLimitation': same('a single-line text check: not taint analysis, not scanner coverage', 'The foundation-preview rule reads one line at a time. It does not follow values between lines, files or calls, and a preview never satisfies required coverage.'),
 
+  'sentinel.preview.skipUnattributed': same('not checked: the unit did not name one file for one scope', 'The preview detector covers a unit only when it can tell which captured file is which scope. Otherwise every scope of the unit is reported skipped, never covered.'),
+  'sentinel.preview.skipLanguage': same('not checked: not a TypeScript, JavaScript or Java file', 'The preview rule reads TypeScript, JavaScript and Java source only.'),
+  'sentinel.preview.skipNotText': same('not checked: the file is not UTF-8 text', 'The preview detector reads only files that decode as UTF-8 text; any other file is reported skipped.'),
+  'sentinel.service.packUnavailable': same('a pack the rule lock names is not kept here; promote it again', 'Planning resolves the owner\'s rule lock against the exact pack files that were promoted. A lock whose pack files are missing from the owner\'s private state cannot be planned from.'),
+  'sentinel.service.noRuleLock': same('no rule pack is promoted yet: run farsight-sentinel rules promote builtin:foundation-preview', 'A plan checks only rules the owner promoted into the rule lock. With none, nothing can be planned.'),
+  'sentinel.service.policyNotEvaluated': same('coverage complete, but the finding policy is not evaluated in this build', 'This build records coverage. Judging findings against the owner\'s policy arrives with the full report, so it never prints a satisfied result.'),
+  'sentinel.service.bootstrapFailed': same('capturing, parsing or inventorying the workspace did not complete', 'A plan is made only from evidence the run published. The bootstrap stages did not all publish, so nothing was planned for analysis.'),
+
+  'sentinel.service.coverageIncomplete': same('required checks did not all complete', 'At least one required check was not planned, could not run or covered only part of its scope, so the run\'s required coverage is incomplete.'),
+  'sentinel.service.runAwaiting': same('planned and admitted; waiting to run', 'The run\'s analysis is admitted and nothing of it has started. Run it with farsight-sentinel run, in the foreground or with --detach --confirm.'),
+
   // ---- the preview report ----
   'sentinel.report.previewTitle': same('Sentinel scan — foundation preview', 'The heading of a preview report: a run\'s counts with their scopes and re-check commands, before full reports exist.'),
   'sentinel.report.previewOnly': same('Foundation preview: these counts show the pipeline works end to end. They are not scanner or framework coverage.', 'A preview report demonstrates planning, running and reporting with one original fixture detector. It makes no claim about what real scanners would find.'),

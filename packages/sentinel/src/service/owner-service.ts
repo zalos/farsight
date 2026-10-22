@@ -17,8 +17,8 @@ import { mkdirSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { Coordinator } from '../execution/coordinator.js';
-import type { PlanBoundary } from '../execution/coordinator.js';
 import type { AdapterRegistry } from '../execution/registry.js';
+import type { RunEnvelope } from '../contracts/run.js';
 import { admit, PolicyError } from '../policy/index.js';
 import { readPrivateFile, writePrivateFileAtomic } from '../policy/user-state.js';
 import { openStore, type SentinelStore } from '../store/index.js';
@@ -29,39 +29,20 @@ import {
   type RuntimeAddress, type ServiceClient,
 } from '../transport/ipc.js';
 import {
-  adoptedPolicy, isFinalRunState, runWriteBinding, printed, readPlanRecord, receiptBook, removeScratch, reportIn,
-  runResultIn, runStateIn, scratchUnder, statusIn, type Workspace,
+  adoptedPolicy, isFinalRunState, runWriteBinding, printed, receiptBook, removeScratch, reportIn,
+  runStateIn, scratchUnder, statusIn, type Workspace,
 } from './local.js';
-import { PREVIEW_ADAPTERS, previewPlan } from './preview-plan.js';
+import { canonicalResult, currentPlan } from './canonical.js';
+import { foundationRegistry } from './trusted-profile.js';
 
 export type ServiceErrorCode =
   | 'sentinel.service.unknownOperation' | 'sentinel.service.requestInvalid' | 'sentinel.service.planUnknown'
   | 'sentinel.service.planChanged' | 'sentinel.service.alreadyServing' | 'sentinel.service.startFailed'
-  | 'sentinel.service.recordUnsafe' | 'sentinel.service.lockChanged';
+  | 'sentinel.service.recordUnsafe' | 'sentinel.service.lockChanged' | 'sentinel.service.packUnavailable'
+  | 'sentinel.service.noRuleLock' | 'sentinel.service.bootstrapFailed';
 
 export class ServiceError extends Error {
   constructor(readonly code: ServiceErrorCode) { super(code); this.name = 'ServiceError'; }
-}
-
-/** The plans the service can run: a plan's identity, and the plan rebuilt for execution. PR 06's planner replaces it. */
-export interface ServicePlans {
-  record(planId: string): { readonly planId: string; readonly planDigest: string; readonly policyRevision: string } | undefined;
-  /** Rebuilds the plan into `workDir` (a new private folder) and checks it against its record. */
-  prepare(store: SentinelStore, planId: string, workDir: string, now: Date): Promise<{ boundary: PlanBoundary; registry: AdapterRegistry }>;
-}
-
-/** The foundation-preview plans this workspace prepared. */
-export function previewPlans(ws: Workspace): ServicePlans {
-  return Object.freeze({
-    record: (planId: string) => readPlanRecord(ws, planId),
-    async prepare(store: SentinelStore, planId: string, workDir: string, now: Date) {
-      const record = readPlanRecord(ws, planId);
-      if (!record) throw new ServiceError('sentinel.service.planUnknown');
-      const plan = await previewPlan(store, { snapshotId: record.snapshotId, policyRevision: record.policyRevision, workDir, now: now.toISOString() });
-      if (plan.disclosure.planDigest !== record.planDigest || plan.disclosure.planId !== record.planId) throw new ServiceError('sentinel.service.planChanged');
-      return { boundary: plan.boundary, registry: PREVIEW_ADAPTERS };
-    },
-  });
 }
 
 interface ActiveRun {
@@ -103,7 +84,10 @@ const RECEIPT_VERDICTS: PrintedVerdicts = Object.freeze({
 });
 
 export interface OwnerServiceOptions {
-  readonly plans?: ServicePlans;
+  /** The trusted registry runs execute under; the shipped one by default. A test passes its own. */
+  readonly registry?: AdapterRegistry;
+  /** A run the ledger does not hold yet, recorded by its first execution (test seam; `plan` records production runs). */
+  readonly runEnvelope?: (runId: string) => RunEnvelope | undefined;
   readonly now?: () => Date;
 }
 
@@ -111,7 +95,8 @@ export interface OwnerServiceOptions {
 export class OwnerService {
   readonly #store: SentinelStore;
   readonly #ws: Workspace;
-  readonly #plans: ServicePlans;
+  readonly #registry: AdapterRegistry;
+  readonly #runEnvelope: (runId: string) => RunEnvelope | undefined;
   readonly #now: () => Date;
   readonly #active = new Map<string, ActiveRun>();
   #idleSince = Date.now();
@@ -120,7 +105,8 @@ export class OwnerService {
   constructor(store: SentinelStore, ws: Workspace, options: OwnerServiceOptions = {}) {
     this.#store = store;
     this.#ws = ws;
-    this.#plans = options.plans ?? previewPlans(ws);
+    this.#registry = options.registry ?? foundationRegistry();
+    this.#runEnvelope = options.runEnvelope ?? (() => undefined);
     this.#now = options.now ?? (() => new Date());
   }
 
@@ -158,6 +144,11 @@ export class OwnerService {
         const f = fields(body, ['runId'], ['receiptId']);
         return this.#cancel(f.runId as string, f.receiptId as string | undefined, by);
       }
+      case 'run.describe': {
+        // The run's current admitted revision, which the owner's CLI confirms a write against. Reads only.
+        const f = fields(body, ['runId']);
+        return (await currentPlan(this.#store, f.runId as string)) ?? null;
+      }
       case 'report': return reportIn(this.#store, this.#ws, { runId: fields(body, ['runId']).runId as string, now: this.#now() });
       default: throw new ServiceError('sentinel.service.unknownOperation');
     }
@@ -168,11 +159,12 @@ export class OwnerService {
    * spent once, or else admission with the connection's own requester under the adopted grants. Being connected
    * grants nothing; there is no service bypass.
    */
-  #authorize(command: string, action: 'run.start' | 'run.pause' | 'run.cancel', planId: string, receiptId: string | undefined, by: RequestedBy):
-    { verdicts: PrintedVerdicts; facts: Record<string, unknown> } | { refusal: CommandResult } {
+  async #authorize(command: string, action: 'run.start' | 'run.pause' | 'run.cancel', planId: string, receiptId: string | undefined, by: RequestedBy):
+    Promise<{ verdicts: PrintedVerdicts; facts: Record<string, unknown> } | { refusal: CommandResult }> {
     const facts: Record<string, unknown> = { planId };
-    const record = this.#plans.record(planId);
-    if (!record) return { refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts }) };
+    // The run's current admitted analysis revision, read back from the ledger and verified: what the write acts on.
+    const record = await currentPlan(this.#store, planId);
+    if (!record || record.kind !== 'analysis') return { refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts }) };
     const adopted = adoptedPolicy(this.#ws);
     if ('refusal' in adopted) return { refusal: adopted.refusal };
     const { policy } = adopted;
@@ -206,13 +198,13 @@ export class OwnerService {
   }
 
   async #start(planId: string, receiptId: string | undefined, by: RequestedBy): Promise<CommandResult> {
-    const decided = this.#authorize('run', 'run.start', planId, receiptId, by);
+    const decided = await this.#authorize('run', 'run.start', planId, receiptId, by);
     if ('refusal' in decided) return decided.refusal;
     const { verdicts, facts } = decided;
     // One run per plan: a second start joins the run already executing.
     if (this.#active.has(planId)) return result('run', 'submitted', { verdicts, facts: { ...facts, runId: planId, joined: true, state: runStateIn(this.#store, planId) } });
     if (this.#stopping || this.#active.size > 0) return result('run', 'configuration-failure', { verdicts, facts, reasonCode: 'sentinel.service.anotherRunActive' });
-    if (isFinalRunState(runStateIn(this.#store, planId))) return runResultIn(this.#store, 'run', planId, { executing: false, verdicts, facts });
+    if (isFinalRunState(runStateIn(this.#store, planId))) return canonicalResult(this.#store, 'run', planId, { executing: false, verdicts, facts });
     this.#launch(planId, { pause: false, cancel: false });
     return result('run', 'submitted', { verdicts, facts: { ...facts, runId: planId, joined: false, state: runStateIn(this.#store, planId) } });
   }
@@ -223,10 +215,11 @@ export class OwnerService {
     run.task = (async () => {
       const work = scratchUnder(this.#ws);
       try {
-        const prepared = await this.#plans.prepare(this.#store, planId, join(work, 'plan'), this.#now());
         const scratch = join(work, 'attempts');
         mkdirSync(scratch, { mode: 0o700 });
-        const coordinator = await Coordinator.open({ store: this.#store, plan: prepared.boundary, scratchRoot: scratch, registry: prepared.registry });
+        // The coordinator executes the run's current admitted revision, under this service's trusted registry.
+        const first = this.#store.ledger.getRun(planId) ? undefined : this.#runEnvelope(planId);
+        const coordinator = await Coordinator.open({ store: this.#store, runId: planId, scratchRoot: scratch, registry: this.#registry, ...(first ? { run: first } : {}) });
         run.coordinator = coordinator;
         if (run.cancel) coordinator.cancel();
         else if (run.pause) coordinator.pause();
@@ -250,12 +243,12 @@ export class OwnerService {
       clearTimeout(timer);
     }
     const executing = this.#active.has(runId);
-    const r = await runResultIn(this.#store, 'wait', runId, { executing, ...(run?.error ? { facts: { error: run.error } } : {}) });
+    const r = await canonicalResult(this.#store, 'wait', runId, { executing, ...(run?.error ? { facts: { error: run.error } } : {}) });
     return executing ? result('wait', 'submitted', { facts: r.facts, reasonCode: 'sentinel.service.waitTimedOut' }) : r;
   }
 
-  #pause(runId: string, receiptId: string | undefined, by: RequestedBy): CommandResult {
-    const decided = this.#authorize('pause', 'run.pause', runId, receiptId, by);
+  async #pause(runId: string, receiptId: string | undefined, by: RequestedBy): Promise<CommandResult> {
+    const decided = await this.#authorize('pause', 'run.pause', runId, receiptId, by);
     if ('refusal' in decided) return decided.refusal;
     const { verdicts, facts } = decided;
     const run = this.#active.get(runId);
@@ -265,8 +258,8 @@ export class OwnerService {
     return result('pause', 'requested', { verdicts, facts: { ...facts, runId, state: runStateIn(this.#store, runId) } });
   }
 
-  #cancel(runId: string, receiptId: string | undefined, by: RequestedBy): CommandResult {
-    const decided = this.#authorize('cancel', 'run.cancel', runId, receiptId, by);
+  async #cancel(runId: string, receiptId: string | undefined, by: RequestedBy): Promise<CommandResult> {
+    const decided = await this.#authorize('cancel', 'run.cancel', runId, receiptId, by);
     if ('refusal' in decided) return decided.refusal;
     const { verdicts } = decided;
     const state = runStateIn(this.#store, runId);

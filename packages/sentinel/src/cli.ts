@@ -6,12 +6,13 @@
 // (cli/outcome.ts); `--json` prints it whole, with the three verdicts.
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import {
-  adoptWorkspaceSettings, confirmForService, currentRules, promoteRulePack, planWorkspace, previewReport, runPlan, runResultIn, runStatus, workspaceOf, PolicyError,
+  adoptWorkspaceSettings, confirmForService, currentRules, promoteRulePack, planWorkspace, previewReport, runPlan, describeRun, runStatus, workspaceOf, PolicyError,
   type Workspace,
 } from './service/local.js';
 import { connectService, serveWorkspace } from './service/owner-service.js';
+import { canonicalResult, type CurrentPlan } from './service/canonical.js';
 import { launchService } from './service/launch.js';
-import { builtinPackDir } from './service/preview-plan.js';
+import { builtinPackDir } from './service/package-paths.js';
 import { openStore } from './store/index.js';
 import type { ServiceClient } from './transport/ipc.js';
 import type { PreviewReport } from './reports/preview.js';
@@ -208,14 +209,21 @@ async function owner(p: ParsedCommand): Promise<number> {
       // run, and spent there once. Pause needs a run the service is executing; start, resume and cancel may start it.
       const runId = (p.args.planId ?? p.args.runId)!;
       const action = p.command === 'pause' ? 'run.pause' as const : p.command === 'cancel' ? 'run.cancel' as const : 'run.start' as const;
-      const shown = confirmForService(ws, { command: p.command, action, planId: runId, confirm: false, now });
+      // The run's current admitted plan: from the service when one holds the store, else read from the store.
+      const describe = async (client?: ServiceClient) => (client
+        ? (await client.request('run.describe', { runId }) as CurrentPlan | null) ?? undefined
+        : describeRun(ws, runId));
+      const before = await connectService(ws);
+      let planNow: CurrentPlan | undefined;
+      try { planNow = await describe(before); } finally { before?.close(); }
+      const shown = confirmForService(ws, { command: p.command, action, plan: planNow, planId: runId, confirm: false, now });
       if (!confirm || ('result' in shown && shown.result.outcome !== 'awaiting-confirmation')) return serviceOut('result' in shown ? shown.result : result(p.command, 'refused'));
       const client = p.command === 'pause' ? await connectService(ws) : await ensureService(ws);
       if (!client) {
         return serviceOut(result(p.command, p.command === 'pause' ? 'refused' : 'configuration-failure',
           { reasonCode: p.command === 'pause' ? 'sentinel.service.notRunning' : 'sentinel.service.startFailed', facts: { runId } }));
       }
-      const confirmed = confirmForService(ws, { command: p.command, action, planId: runId, confirm: true, now, storeId: client.storeId });
+      const confirmed = confirmForService(ws, { command: p.command, action, plan: await describe(client), planId: runId, confirm: true, now, storeId: client.storeId });
       if ('result' in confirmed) { client.close(); return serviceOut(confirmed.result); }
       const r = action === 'run.start'
         ? await ask(client, 'run.start', { planId: runId, receiptId: confirmed.receiptId })
@@ -347,7 +355,7 @@ async function waitFor(p: ParsedCommand, ws: Workspace): Promise<number> {
     if (!client) {
       // Nothing is executing it: the store says whether it finished, stopped or was interrupted.
       const store = await openStore(ws.storePath);
-      try { return serviceOut(await runResultIn(store, 'wait', runId, { executing: false })); } finally { store.close(); }
+      try { return serviceOut(await canonicalResult(store, 'wait', runId, { executing: false })); } finally { store.close(); }
     }
     const slice = Math.max(0, Math.min(end - Date.now(), 20_000));
     const r = await ask(client, 'run.wait', { runId, timeoutMs: slice }, slice + 10_000);

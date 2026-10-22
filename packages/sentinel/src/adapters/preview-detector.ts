@@ -11,7 +11,6 @@ import { readFileSync, writeFileSync } from 'node:fs';
 export const PREVIEW_DETECTOR_ID = 'sentinel.preview.detector';
 /** The rule family this detector implements, as the built-in foundation-preview pack declares it. */
 export const PREVIEW_RULE = 'sentinel.preview.sql-string-concat';
-export const PREVIEW_INPUTS_SCHEMA = 'sentinel-preview-inputs/draft-1';
 export const PREVIEW_FINDINGS_SCHEMA = 'sentinel-preview-findings/draft-1';
 
 const LANGUAGES = /\.(?:[cm]?[jt]sx?|java)$/i;
@@ -40,7 +39,19 @@ export function detect(path: string, text: string, input: string): PreviewFindin
 const P = 'sentinel-worker/draft-1';
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 
-/** Runs the worker protocol on this process's stdin and stdout. Only the package's executable calls it. */
+/** Why a scope was not checked; each a catalog reason, so a skipped scope is never read as covered. */
+export const PREVIEW_SKIP_REASONS = Object.freeze({
+  unattributed: 'sentinel.preview.skipUnattributed',
+  language: 'sentinel.preview.skipLanguage',
+  notText: 'sentinel.preview.skipNotText',
+});
+
+/**
+ * Runs the worker protocol on this process's stdin and stdout. Only the package's executable calls it. The start
+ * names the checks and the scopes this attempt is to cover. The detector covers a unit only when it can attribute
+ * it: exactly one captured input and one source-file scope (`<source>:<path>`), in a language it reads, as UTF-8
+ * text. Anything else is reported skipped with its reason, never covered.
+ */
 export async function runPreviewWorker(): Promise<void> {
   const IN = process.env.SENTINEL_INPUT!;
   const OUT = process.env.SENTINEL_OUTPUT!;
@@ -61,35 +72,35 @@ export async function runPreviewWorker(): Promise<void> {
   const start = await next();
   if (start.type !== 'start') process.exit(9);
 
-  const bytesOf = (id: string) => readFileSync(`${IN}/${id.slice('sha256:'.length)}`);
-  let manifest: { files: { id: string; path: string }[] } | undefined;
-  for (const id of start.inputs as string[]) {
-    try {
-      const v = JSON.parse(bytesOf(id).toString('utf8'));
-      if (v?.schema === PREVIEW_INPUTS_SCHEMA && Array.isArray(v.files)) { manifest = v; break; }
-    } catch { /* source bytes, not the manifest */ }
-  }
+  const inputs = (start.inputs ?? []) as string[];
+  const scopes = (start.scopes ?? []) as string[];
+  const checks = (start.checks ?? []) as string[];
   const findings: PreviewFinding[] = [];
-  const pathOf = new Map((manifest?.files ?? []).map(f => [f.id, f.path]));
-  for (const id of start.inputs as string[]) {
-    const path = pathOf.get(id);
-    if (path === undefined) continue;
-    let text: string;
-    try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytesOf(id)); } catch { continue; } // not UTF-8 text: not checked
-    findings.push(...detect(path, text, id));
+  const scanned: string[] = [];
+  const skipped: { scopeId: string; reasonCode: string }[] = [];
+  if (inputs.length !== 1 || scopes.length !== 1 || scopes[0]!.indexOf(':') < 1) {
+    for (const scopeId of scopes) skipped.push({ scopeId, reasonCode: PREVIEW_SKIP_REASONS.unattributed });
+  } else {
+    const scopeId = scopes[0]!;
+    const path = scopeId.slice(scopeId.indexOf(':') + 1);
+    let text: string | undefined;
+    try { text = new TextDecoder('utf-8', { fatal: true }).decode(readFileSync(`${IN}/${inputs[0]!.slice('sha256:'.length)}`)); } catch { text = undefined; }
+    if (!LANGUAGES.test(path)) skipped.push({ scopeId, reasonCode: PREVIEW_SKIP_REASONS.language });
+    else if (text === undefined) skipped.push({ scopeId, reasonCode: PREVIEW_SKIP_REASONS.notText });
+    else { findings.push(...detect(path, text, inputs[0]!)); scanned.push(scopeId); }
   }
-  findings.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : a.line - b.line));
   const doc = Buffer.from(JSON.stringify({
     schema: PREVIEW_FINDINGS_SCHEMA, detector: PREVIEW_DETECTOR_ID, rule: PREVIEW_RULE, label: 'foundation-preview',
-    checkedFiles: [...pathOf.values()].filter(p => LANGUAGES.test(p)).length, findings,
+    checks: [...checks].sort(), scopes: [...scopes].sort(), scanned, skipped, findings,
   }));
   const hex = sha(doc);
   writeFileSync(`${OUT}/${hex}`, doc);
   const artifact = { id: `sha256:${hex}`, mediaType: 'application/json', bytes: doc.length };
   send({
     protocol: P, type: 'result', attemptId: start.attemptId, work: start.work, coordinatorEpoch: start.coordinatorEpoch, seq: 0,
-    inputFingerprint: start.inputFingerprint, granularity: 'per-file', artifacts: [artifact], observations: [artifact.id],
-    coveredChecks: [], scannedSet: [], skipped: [], actualReadSet: [], unresolvedFrontiers: [], diagnostics: [],
+    inputFingerprint: start.inputFingerprint, granularity: 'per-file-per-rule', artifacts: [artifact], observations: [artifact.id],
+    // A check is reported covered only with its evidence; a skipped scope keeps it partial in the coverage records.
+    coveredChecks: checks.map(checkId => ({ checkId, coverage: artifact.id })), scannedSet: scanned, skipped,
+    actualReadSet: scanned, unresolvedFrontiers: [], diagnostics: [],
   });
 }
-

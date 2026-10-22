@@ -82,7 +82,10 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'cli/init.js': ['node:crypto', 'node:fs', 'node:path'],
   // The foundation-preview detector, a built-in worker: it reads its copied inputs and writes one artifact.
   'adapters/preview-detector.js': ['node:crypto', 'node:fs'],
-  'service/preview-plan.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
+  // This package's own executable and shipped rule packs, found from the module's folder upward.
+  'service/package-paths.js': ['node:fs', 'node:path', 'node:url'],
+  // The CLI's canonical path: the planner, admission, bootstrap and coordinator in their order; digests only.
+  'service/canonical.js': ['node:crypto'],
   'service/local.js': ['node:crypto', 'node:fs', 'node:path'],
   'service/owner-service.js': ['node:crypto', 'node:fs', 'node:path'],
   // The owner's rule locks: content-addressed revisions and one pointer in private state, through policy/user-state.

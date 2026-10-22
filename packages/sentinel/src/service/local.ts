@@ -7,28 +7,25 @@ import { createHash } from 'node:crypto';
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ActionEffect, ActionIntent, AdmissionEnvelope } from '../contracts/index.js';
-import { Coordinator, type RunSummary } from '../execution/coordinator.js';
 import {
   adoptSettings, adoptionIntent, admit, workspaceIdentity, effectivePolicy, loadPolicyInputs, ReceiptBook, trustDirectory, PolicyError,
   type EffectivePolicy,
 } from '../policy/index.js';
 import { issueReceipt } from '../policy/owner-receipts.js';
-import { PREVIEW_FINDINGS_SCHEMA } from '../adapters/preview-detector.js';
 import { checkPreviewReport, PREVIEW_LIMITATIONS, PREVIEW_REPORT_SCHEMA, type PreviewReport } from '../reports/preview.js';
-import { captureSnapshot } from '../snapshot/capture.js';
 import { openSnapshot } from '../snapshot/materialize.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { openStore, type SentinelStore } from '../store/index.js';
 import { requestedByOf, assertMayConfirm } from '../cli/actor.js';
 import { result, type CommandResult, type PrintedVerdicts } from '../cli/outcome.js';
-import { PREVIEW_ADAPTERS, PREVIEW_PROFILE, previewPlan, type PlanDisclosure, type PlanRecord } from './preview-plan.js';
+
 import { candidateDigest, emptyLock, lockDigest, promote, promotionIntent, readPackDirectory, validatePack } from '../rules/index.js';
 import { RuleLockBook } from './rule-locks.js';
+import { canonicalResult, currentPlan, executeRun, planWorkspaceCanonical, previewFindingsOf, type CanonicalDisclosure, type CurrentPlan } from './canonical.js';
 
 export interface Workspace {
   readonly path: string;
   readonly storePath: string;
-  readonly planDir: string;
   readonly trustDir: string;
 }
 
@@ -37,7 +34,6 @@ export function workspaceOf(path: string, env: NodeJS.ProcessEnv = process.env):
   return Object.freeze({
     path,
     storePath: join(path, '.farsight', 'sentinel', 'store'),
-    planDir: join(path, '.farsight', 'sentinel', 'plans'),
     trustDir: trustDirectory(env),
   });
 }
@@ -101,9 +97,12 @@ function decide(ws: Workspace, policy: EffectivePolicy, intent: ActionIntent, st
   };
 }
 
+/** The settings profile a write is scoped to: the one init grants the owner (cli/init.ts PROFILES). */
+export const SCAN_PROFILE = 'static';
+
 export const intentOf = (action: ActionIntent['action'], input: string, effects: ActionEffect[], targets: string[] = []): ActionIntent => ({
   action, input, effects, budget: { maxTokens: null, maxCost: null, currency: null },
-  scope: { profile: PREVIEW_PROFILE, provider: null, targets },
+  scope: { profile: SCAN_PROFILE, provider: null, targets },
 });
 
 /** The exact instance a write on a run acts on: this workspace (path, device and inode), this store, this run. */
@@ -139,16 +138,6 @@ export function adoptWorkspaceSettings(ws: Workspace, options: { confirm: boolea
 
 // ---- plan ----
 
-export function readPlanRecord(ws: Workspace, planId: string): PlanRecord | undefined {
-  if (!/^plan-[0-9a-f]{32}$/.test(planId)) return undefined;
-  try {
-    const st = lstatSync(join(ws.planDir, `${planId}.json`));
-    if (!st.isFile() || st.isSymbolicLink()) return undefined;
-    const v = JSON.parse(readFileSync(join(ws.planDir, `${planId}.json`), 'utf8')) as PlanRecord;
-    return v?.schema === 'sentinel-plan-record/draft-1' && v.planId === planId ? v : undefined;
-  } catch { return undefined; }
-}
-
 export function scratchUnder(ws: Workspace): string {
   const root = join(ws.path, '.farsight', 'sentinel', 'scratch');
   mkdirSync(root, { recursive: true, mode: 0o700 });
@@ -174,87 +163,56 @@ async function withStore<T>(ws: Workspace, body: (store: SentinelStore) => Promi
 }
 
 /**
- * Captures the workspace and prepares the preview plan: admitted as `capture.source`, then a working-copy capture
- * (Sentinel's own folder excluded), the plan built and its run recorded as `planned`. Planning again with the same
- * snapshot, policy and adapter gives the same plan id; nothing runs.
+ * Plans the workspace canonically (canonical.ts): admitted as `capture.source`, then capture, the admitted bootstrap
+ * published by the coordinator's own operations, and the analysis planned from that evidence under the owner's
+ * promoted rule lock and the adopted policy, admitted and made the run's current revision. Nothing is checked yet.
+ * The same content under the same lock, policy and profile is the same run (`kept`).
  */
-export async function planWorkspace(ws: Workspace, options: { confirm: boolean; now: Date }):
-  Promise<CommandResult & { disclosure?: PlanDisclosure }> {
+export async function planWorkspace(ws: Workspace, options: { confirm: boolean; now: Date; parentId?: string | null }):
+  Promise<CommandResult & { disclosure?: CanonicalDisclosure }> {
   const adopted = adoptedPolicy(ws);
   if ('refusal' in adopted) return adopted.refusal;
   const { policy } = adopted;
   const decided = decide(ws, policy, intentOf('capture.source', sha(Buffer.from(ws.path)), ['local-artifacts']), policy.revision, options.confirm, options.now);
   if (!decided.admitted) return decided.result;
   return withStore(ws, async store => {
-    const captured = await captureSnapshot(store, {
-      mode: 'working-copy', sources: [{ sourceId: 'workspace', repositoryId: 'local-workspace', root: ws.path }],
-      policy: { exclude: { '*': ['.farsight'] } },
-    });
     const work = scratchUnder(ws);
     try {
-      const plan = await previewPlan(store, { snapshotId: captured.record.snapshotId, policyRevision: policy.revision, workDir: join(work, 'plan'), now: options.now.toISOString() });
-      // The same content under the same policy is the same plan: planning it again keeps the run and the snapshot
-      // first recorded for it (the coordinator refuses a run re-recorded with another snapshot).
-      const existing = readPlanRecord(ws, plan.disclosure.planId);
-      let recorded = false;
-      try { store.ledger.createRun(plan.boundary.run as never); recorded = true; } catch (e) {
-        if ((e as { code?: string }).code !== 'sentinel.store.conflict') throw e;
-      }
-      if (!recorded && existing && existing.planDigest === plan.disclosure.planDigest) {
-        const disclosure = Object.freeze({ ...plan.disclosure, snapshotId: existing.snapshotId });
-        return { ...result('plan', 'kept', { verdicts: printed(decided.record), facts: { ...disclosure } }), disclosure };
-      }
-      mkdirSync(ws.planDir, { recursive: true, mode: 0o700 });
-      const record: PlanRecord = { schema: 'sentinel-plan-record/draft-1', planId: plan.disclosure.planId, planDigest: plan.disclosure.planDigest,
-        snapshotId: captured.record.snapshotId, policyRevision: policy.revision };
-      writeFileSync(join(ws.planDir, `${record.planId}.json`), `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 });
-      return { ...result('plan', 'prepared', { verdicts: printed(decided.record), facts: { ...plan.disclosure } }), disclosure: plan.disclosure };
+      const planned = await planWorkspaceCanonical(store, { workspace: ws.path, trustDir: trustFolder(ws), policy, scratchRoot: work, now: options.now,
+        ...(options.parentId ? { parentId: options.parentId } : {}) });
+      return { ...result('plan', planned.outcome, { verdicts: printed(decided.record), facts: { ...planned.disclosure } }), disclosure: planned.disclosure };
     } finally { removeScratch(work); }
   });
+}
+
+/** The run's current admitted plan, read from the workspace's store (used when no service holds it). */
+export async function describeRun(ws: Workspace, runId: string): Promise<CurrentPlan | undefined> {
+  return withStore(ws, store => currentPlan(store, runId));
 }
 
 // ---- run (foreground) ----
 
 /**
- * Runs a prepared plan in this process until it completes: admitted as `run.start` against the plan's digest, the
- * plan rebuilt from its snapshot and checked against what `plan` disclosed, then executed by the coordinator. A run
- * that already completed returns its result again without executing anything. A preview never satisfies required
- * coverage: its result is `required-coverage-incomplete` (exit 2) with every fact kept.
+ * Runs the run's current admitted revision in this process: admitted as `run.start` against that revision's digest
+ * (and only under the policy it was admitted with), then executed by the coordinator. A run that already completed
+ * returns its result again without executing anything. The result is read back from the ledger (canonicalResult).
  */
 export async function runPlan(ws: Workspace, options: { planId: string; confirm: boolean; now: Date }): Promise<CommandResult> {
-  const record = readPlanRecord(ws, options.planId);
-  if (!record) return result('run', 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts: { planId: options.planId } });
   const adopted = adoptedPolicy(ws);
   if ('refusal' in adopted) return adopted.refusal;
   const { policy } = adopted;
-  if (policy.revision !== record.policyRevision) {
-    return result('run', 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts: { planId: record.planId } });
-  }
-  const decided = decide(ws, policy, intentOf('run.start', record.planDigest, ['local-artifacts']), record.planDigest, options.confirm, options.now);
-  if (!decided.admitted) return decided.result;
   return withStore(ws, async store => {
-    const work = scratchUnder(ws);
-    let summary: RunSummary;
-    try {
-      const plan = await previewPlan(store, { snapshotId: record.snapshotId, policyRevision: record.policyRevision, workDir: join(work, 'plan'), now: options.now.toISOString() });
-      if (plan.disclosure.planDigest !== record.planDigest || plan.disclosure.planId !== record.planId) {
-        return result('run', 'configuration-failure', { reasonCode: 'sentinel.service.planChanged', facts: { planId: record.planId } });
-      }
-      const scratch = join(work, 'attempts');
-      mkdirSync(scratch, { mode: 0o700 });
-      const coordinator = await Coordinator.open({ store, plan: plan.boundary, scratchRoot: scratch, registry: PREVIEW_ADAPTERS });
-      summary = await coordinator.run();
-    } finally { removeScratch(work); }
-    const findings = await previewFindings(store, record.planId);
-    const facts = { runId: summary.runId, state: summary.state, runOutcome: summary.outcome ?? null, published: summary.published,
-      failures: summary.failures.length, previewFindings: findings?.findings.length ?? null, label: 'foundation-preview' };
+    const plan = await currentPlan(store, options.planId);
+    if (!plan || plan.kind !== 'analysis') return result('run', 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts: { planId: options.planId } });
+    if (policy.revision !== plan.policyRevision) return result('run', 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts: { planId: plan.runId } });
+    const decided = decide(ws, policy, intentOf('run.start', plan.planDigest, ['local-artifacts']), plan.planDigest, options.confirm, options.now);
+    if (!decided.admitted) return decided.result;
     const verdicts = printed(decided.record);
-    if (summary.state !== 'completed') return result('run', 'configuration-failure', { verdicts, facts, reasonCode: 'sentinel.service.runNotCompleted' });
-    // The outcome the ledger recorded at completion. Without evaluated coverage it is never complete coverage, and a
-    // preview never satisfies required coverage whatever it records; only an execution failure says more.
-    const outcome = summary.outcome ?? store.ledger.getRun(record.planId)?.outcome ?? null;
-    if (outcome === 'execution-failure' || !findings) return result('run', 'configuration-failure', { verdicts, facts, reasonCode: 'sentinel.service.executionFailed' });
-    return result('run', 'required-coverage-incomplete', { verdicts, facts, reasonCode: 'sentinel.service.previewNotCoverage' });
+    if (!isFinalRunState(runStateIn(store, plan.runId))) {
+      const work = scratchUnder(ws);
+      try { await executeRun(store, plan.runId, { scratchRoot: work }); } finally { removeScratch(work); }
+    }
+    return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts });
   });
 }
 
@@ -266,30 +224,31 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
  * action, this plan's digest and the adopted policy revision is issued and not spent. The service spends it once; a
  * connection without one is an agent and gets what the adopted grants give agents, nothing implicit.
  */
-export function confirmForService(ws: Workspace, options: { command: string; action: 'run.start' | 'run.pause' | 'run.cancel'; planId: string; confirm: boolean; now: Date;
+export function confirmForService(ws: Workspace, options: { command: string; action: 'run.start' | 'run.pause' | 'run.cancel'; plan: CurrentPlan | undefined;
+  planId: string; confirm: boolean; now: Date;
   /** The store the running service holds, from its verified welcome. Needed to confirm; not to show what would happen. */
   storeId?: string }):
   { receiptId: string; verdicts: PrintedVerdicts } | { result: CommandResult } {
-  const record = readPlanRecord(ws, options.planId);
-  if (!record) return { result: result(options.command, 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts: { planId: options.planId } }) };
+  const record = options.plan;
+  if (!record || record.kind !== 'analysis') return { result: result(options.command, 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts: { planId: options.planId } }) };
   const adopted = adoptedPolicy(ws);
   if ('refusal' in adopted) return { result: adopted.refusal };
   const { policy } = adopted;
   if (policy.revision !== record.policyRevision) {
-    return { result: result(options.command, 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts: { planId: record.planId } }) };
+    return { result: result(options.command, 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts: { planId: record.runId } }) };
   }
   // Bound to this workspace, this run and, once a service answered, its store; without a store yet the decision is
   // shown against the unbound intent and nothing is issued.
   const { intent, stateDigest } = options.storeId === undefined
     ? { intent: intentOf(options.action, record.planDigest, ['local-artifacts']), stateDigest: record.planDigest }
-    : runWriteBinding(ws, options.action, record.planDigest, { storeId: options.storeId, runId: record.planId });
+    : runWriteBinding(ws, options.action, record.planDigest, { storeId: options.storeId, runId: record.runId });
   const decision = admit({
     intent, requestedBy: OWNER as { principal: 'human'; channel: 'owner-cli' }, policy, stateDigest, now: options.now,
     capability: () => ({ available: true, detail: 'built into this installation; runs locally' }),
     credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
   }).record;
   const verdicts = printed(decision);
-  const facts = { planId: record.planId, action: intent.action, intentDigest: decision.intentDigest };
+  const facts = { planId: record.runId, action: intent.action, intentDigest: decision.intentDigest };
   if (decision.outcome === 'denied') {
     const v = decision.verdicts;
     return { result: result(options.command, 'configuration-failure', { verdicts, facts,
@@ -319,7 +278,8 @@ export function promoteRulePack(ws: Workspace, options: { packDir: string; confi
   const adopted = adoptedPolicy(ws);
   if ('refusal' in adopted) return adopted.refusal;
   const { policy } = adopted;
-  const pack = validatePack(readPackDirectory(options.packDir));
+  const files = readPackDirectory(options.packDir);
+  const pack = validatePack(files);
   const book = new RuleLockBook(trustFolder(ws));
   const selected = book.current();
   const previous = selected?.lock ?? emptyLock(options.now);
@@ -355,6 +315,8 @@ export function promoteRulePack(ws: Workspace, options: { packDir: string; confi
     return result('rules', 'configuration-failure', { verdicts: printed(decision.record), facts, reasonCode: decision.record.verdicts.policy.reasonCode });
   }
   const next = promote(previous, candidate, decision.receipt, options.now);
+  // The pack's exact bytes are kept first: a lock revision is never current without the files it was promoted from.
+  book.storePack(files);
   // The first promotion files and selects the empty revision it was confirmed against, so the chain starts where every
   // revision's `previous` leads. If another first promotion got there first, this one raced it and is refused.
   if (!selected) book.select(book.store(previous), null);
@@ -412,42 +374,6 @@ export async function statusIn(store: SentinelStore, options: { runId: string; a
 const FINAL_STATES = new Set(['completed', 'canceled']);
 export const isFinalRunState = (state: string | null) => state !== null && FINAL_STATES.has(state);
 
-/**
- * A run's result from the ledger and its stored artifacts alone, as `wait` and a repeated start print it: a
- * completed preview is required coverage incomplete (exit 2), a completed run without its findings an execution
- * failure, a canceled or paused run not completed. A run still under way is `submitted`; `executing` says whether
- * something is running it, so a run whose service stopped reads as interrupted, never as still running.
- */
-export async function runResultIn(store: SentinelStore, command: string, planId: string, options: { executing: boolean; verdicts?: PrintedVerdicts; facts?: Record<string, unknown> }): Promise<CommandResult> {
-  const state = runStateIn(store, planId);
-  const base = { ...(options.verdicts ? { verdicts: options.verdicts } : {}) };
-  if (state === null) return result(command, 'configuration-failure', { ...base, reasonCode: 'sentinel.service.runUnknown', facts: { runId: planId } });
-  const findings = state === 'completed' ? await previewFindings(store, planId) : undefined;
-  const facts = { ...(options.facts ?? {}), runId: planId, state, previewFindings: findings?.findings.length ?? null, label: 'foundation-preview' };
-  if (state === 'completed') {
-    return findings && store.ledger.getRun(planId)?.outcome !== 'execution-failure'
-      ? result(command, 'required-coverage-incomplete', { ...base, facts, reasonCode: 'sentinel.service.previewNotCoverage' })
-      : result(command, 'configuration-failure', { ...base, facts, reasonCode: 'sentinel.service.executionFailed' });
-  }
-  if (state === 'canceled' || (state === 'paused' && !options.executing)) {
-    return result(command, 'configuration-failure', { ...base, facts, reasonCode: 'sentinel.service.runNotCompleted' });
-  }
-  if (!options.executing) return result(command, 'configuration-failure', { ...base, facts, reasonCode: 'sentinel.service.runInterrupted' });
-  return result(command, 'submitted', { ...base, facts });
-}
-
-export async function previewFindings(store: SentinelStore, planId: string): Promise<{ findings: unknown[]; checkedFiles: number } | undefined> {
-  const pub = store.ledger.getPublication({ id: `work-${planId}`, revision: 1 });
-  if (!pub) return undefined;
-  for (const o of pub.outputs) {
-    try {
-      const v = JSON.parse((await store.readArtifact(o.id)).toString('utf8'));
-      if (v?.schema === PREVIEW_FINDINGS_SCHEMA) return v;
-    } catch { /* another output */ }
-  }
-  return undefined;
-}
-
 function lastRunSequence(store: SentinelStore, runId: string): number {
   let last = 0;
   for (let after = 0; ;) {
@@ -465,26 +391,26 @@ export async function previewReport(ws: Workspace, options: { runId: string; now
 
 /** `previewReport` against a store this process already holds (the background service's). */
 export async function reportIn(store: SentinelStore, ws: Workspace, options: { runId: string; now: Date }): Promise<PreviewReport | CommandResult> {
-  const record = readPlanRecord(ws, options.runId);
-  if (!record) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts: { runId: options.runId } });
-  {
-    const findings = await previewFindings(store, record.planId);
-    if (!findings) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.runNotCompleted', facts: { runId: options.runId } });
-    const opened = await openSnapshot(store, record.snapshotId);
-    const unknown = opened.snapshot.entries.filter(e => e.kind === 'directory-boundary').length;
-    const recheck = { cli: `farsight-sentinel report ${record.planId} --json` };
-    const doc: PreviewReport = {
-      schema: PREVIEW_REPORT_SCHEMA, label: 'foundation-preview', runId: record.planId, snapshotId: record.snapshotId,
-      // Pinned to the run's own last committed event, so regenerating later reads the same facts at the same point.
-      ledgerSequence: lastRunSequence(store, record.planId), generatedAt: options.now.toISOString(),
-      counts: [
-        { n: findings.findings.length, unit: 'sentinel.count.findings', scope: 'sentinel.scope.report', source: 'the foundation-preview detector', recheck },
-        { n: unknown, unit: 'sentinel.count.unknownBoundaries', scope: 'sentinel.scope.inventory', source: 'the snapshot inventory', recheck },
-      ],
-      limitations: [...PREVIEW_LIMITATIONS],
-    };
-    return checkPreviewReport(doc);
-  }
+  void ws;
+  const recorded = store.ledger.getRun(options.runId);
+  if (!recorded) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.runUnknown', facts: { runId: options.runId } });
+  const findings = recorded.state === 'completed' ? await previewFindingsOf(store, options.runId) : undefined;
+  if (!findings) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.runNotCompleted', facts: { runId: options.runId } });
+  const snapshotId = recorded.envelope.snapshotId;
+  const opened = await openSnapshot(store, snapshotId);
+  const unknown = opened.snapshot.entries.filter(e => e.kind === 'directory-boundary').length;
+  const recheck = { cli: `farsight-sentinel report ${options.runId} --json` };
+  const doc: PreviewReport = {
+    schema: PREVIEW_REPORT_SCHEMA, label: 'foundation-preview', runId: options.runId, snapshotId,
+    // Pinned to the run's own last committed event, so regenerating later reads the same facts at the same point.
+    ledgerSequence: lastRunSequence(store, options.runId), generatedAt: options.now.toISOString(),
+    counts: [
+      { n: findings.findings.length, unit: 'sentinel.count.findings', scope: 'sentinel.scope.report', source: 'the foundation-preview detector', recheck },
+      { n: unknown, unit: 'sentinel.count.unknownBoundaries', scope: 'sentinel.scope.inventory', source: 'the snapshot inventory', recheck },
+    ],
+    limitations: [...PREVIEW_LIMITATIONS],
+  };
+  return checkPreviewReport(doc);
 }
 
 export { PolicyError };

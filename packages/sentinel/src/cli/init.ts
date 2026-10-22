@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, writeSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { DEFAULT_SETTINGS, MAX_SETTINGS_BYTES, parseSettings, SETTINGS_PATH } from '../policy/index.js';
+import { PREVIEW_RULE } from '../adapters/preview-detector.js';
 
 /** The settings file's place in a workspace, and its scrubbed defaults: PR 06's own, so init writes what policy reads. */
 export { SETTINGS_PATH, DEFAULT_SETTINGS };
@@ -16,7 +17,9 @@ export { SETTINGS_PATH, DEFAULT_SETTINGS };
  * confirmation every time). No provider, no budget, no agent action; the file grants nothing until it is adopted.
  */
 export function initialSettings(profile: string) {
-  return { ...DEFAULT_SETTINGS, grants: [
+  // The one rule this build can check, the foundation-preview rule, is what the owner's settings ask for; it is
+  // planned only once the owner promotes its pack, and a run resting on it is never required coverage met.
+  return { ...DEFAULT_SETTINGS, mandatoryRules: [PREVIEW_RULE], grants: [
     { actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'], principals: ['human'], scope: { profiles: [profile] } },
     { actions: ['rule.promote'], principals: ['human'] },
   ] };

@@ -1,41 +1,31 @@
-// The command line's trusted execution profile: the narrow adapter registry this build ships (the built-in
-// foundation-preview detector only), what Sentinel's own code says it establishes, and what the profile permits,
-// as the planner's live objects and as one canonical, versioned, serializable document. The document is what a plan
-// admission pins: adapter ids and digests, capability facts and permits, never a live object. It claims nothing a
-// registered adapter does not establish; every scanner, framework or model capability stays unavailable here.
+// The command line's trusted execution profile: the narrow adapter registry this build ships and what Sentinel's own
+// code says it establishes. The registry holds the coordinator's own bootstrap operations (capture, parse, inventory)
+// and one check adapter, the built-in foundation-preview detector, which establishes source bytes, pattern match and
+// source spans on the evidence of the original pack's fixtures, per file and rule. Nothing else: every scanner,
+// framework or model capability stays unavailable, and a rule that needs one is planned unsupported, never run.
 //
-// Bootstrap operations (capture, parse, inventory) are bound by the coordinator's bootstrap operations once they
-// exist; until then they are absent, and the planner keeps those stages blocked rather than running them.
-import { canonicalJsonBytes } from '../store/objects.js';
+// The profile is kept as the coordinator's canonical execution profile record (execution/profile.ts), which a plan
+// admission stores and the coordinator checks against this registry before anything runs.
 import { createHash } from 'node:crypto';
-import type { Digest, Id } from '../contracts/common.js';
+import type { Digest } from '../contracts/common.js';
 import type { PlanStage } from '../contracts/plan.js';
 import type { ResourcePolicy } from '../contracts/work.js';
-import { createCapabilityTable, type CapabilityFact, type ExecutionProfile, type PlannerProfile } from '../planner/index.js';
-import type { AdapterRegistry } from '../execution/registry.js';
+import { createCapabilityTable, type CapabilityFact, type PlannerProfile } from '../planner/index.js';
+import { createAdapterRegistry, type AdapterRegistry } from '../execution/registry.js';
+import { executionProfileRecord, EXECUTION_PROFILE_SCHEMA, type ExecutionProfileRecord } from '../execution/profile.js';
+import { canonicalJsonBytes } from '../store/objects.js';
 import { PREVIEW_DETECTOR_ID } from '../adapters/preview-detector.js';
-import { PREVIEW_ADAPTERS } from './preview-plan.js';
+import { ownExecutable } from './package-paths.js';
 
-export const EXECUTION_PROFILE_SCHEMA = 'sentinel-execution-profile/draft-1';
+export { EXECUTION_PROFILE_SCHEMA };
 export const FOUNDATION_PROFILE_ID = 'foundation-preview';
-
-/** The canonical profile document a plan pins. */
-export interface ExecutionProfileDocument {
-  readonly schema: typeof EXECUTION_PROFILE_SCHEMA;
-  readonly id: Id;
-  readonly adapters: readonly { readonly id: Id; readonly version: string; readonly kind: string; readonly digest: Digest }[];
-  readonly capabilities: readonly { readonly capability: string; readonly adapterId: Id; readonly adapterDigest: Digest; readonly evidence: string; readonly perFileParse: boolean }[];
-  readonly permits: readonly string[];
-  readonly operations: { readonly capture: Id | null; readonly parse: Id | null; readonly inventory: Id | null };
-  readonly resources: Readonly<Record<PlanStage, ResourcePolicy>>;
-}
+export const OPERATIONS = Object.freeze({ capture: 'sentinel-capture', parse: 'sentinel-parse', inventory: 'sentinel-inventory' });
 
 export interface TrustedProfile {
   readonly planner: PlannerProfile;
-  readonly execution: ExecutionProfile;
   readonly registry: AdapterRegistry;
-  readonly document: ExecutionProfileDocument;
-  /** The document's canonical digest. */
+  readonly record: ExecutionProfileRecord;
+  /** The record's canonical digest. */
   readonly digest: Digest;
 }
 
@@ -49,31 +39,34 @@ const FACTS: readonly CapabilityFact[] = Object.freeze([
 ]);
 
 const LIMITS: ResourcePolicy = Object.freeze({ deadlineMs: 120_000, memoryBytes: 2_147_483_648, cpuQuota: 2, maxPids: 128, maxOutputBytes: 4_194_304 });
+export const RESOURCES: Readonly<Record<PlanStage, ResourcePolicy>> = Object.freeze({ capture: LIMITS, parse: LIMITS, inventory: LIMITS, check: LIMITS });
+/** The parse operation's selection and limits: part of the profile, because they decide what parsing publishes. */
+export const PARSE: ExecutionProfileRecord['parse'] = Object.freeze({
+  selection: { gitignore: true, testFiles: 'include' as const },
+  limits: { maxFiles: 20_000, maxFileBytes: 1_048_576, maxTotalBytes: 268_435_456, maxEntries: 200_000, maxDurationMs: 120_000 },
+}) as ExecutionProfileRecord['parse'];
 
-/** The serializable form of a planner profile and its execution limits, in a fixed order. */
-export function profileDocument(profile: PlannerProfile, execution: ExecutionProfile): ExecutionProfileDocument {
-  const adapters = profile.registry.ids.map(id => profile.registry.get(id)).map(a => ({ id: a.id, version: a.version, kind: a.kind, digest: a.digest }))
-    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const capabilities = profile.capabilities.facts.map(f => ({ capability: f.capability, adapterId: f.adapterId, adapterDigest: f.adapterDigest,
-    evidence: f.evidence, perFileParse: f.perFileParse === true }))
-    .sort((a, b) => (a.capability + a.adapterId < b.capability + b.adapterId ? -1 : 1));
-  return {
-    schema: EXECUTION_PROFILE_SCHEMA, id: profile.id, adapters, capabilities, permits: [...profile.permits].sort(),
-    operations: { capture: profile.operations?.capture ?? null, parse: profile.operations?.parse ?? null, inventory: profile.operations?.inventory ?? null },
-    resources: execution.resources,
-  };
+let cached: AdapterRegistry | undefined;
+/** The shipped registry: the bootstrap operations and the preview detector, run as this package's own executable. */
+export function foundationRegistry(): AdapterRegistry {
+  cached ??= createAdapterRegistry([
+    { id: PREVIEW_DETECTOR_ID, version: 'preview-1', kind: 'built-in', isolation: 'child', module: ownExecutable(), coverage: 'per-file-per-rule' },
+    { id: OPERATIONS.capture, version: '1', kind: 'operation', operation: 'capture' },
+    { id: OPERATIONS.parse, version: '1', kind: 'operation', operation: 'parse' },
+    { id: OPERATIONS.inventory, version: '1', kind: 'operation', operation: 'inventory' },
+  ]);
+  return cached;
 }
 
-export const profileDigest = (document: ExecutionProfileDocument): Digest =>
-  `sha256:${createHash('sha256').update(canonicalJsonBytes(document)).digest('hex')}`;
+export const profileDigest = (record: ExecutionProfileRecord): Digest =>
+  `sha256:${createHash('sha256').update(canonicalJsonBytes(record)).digest('hex')}`;
 
-/** The foundation-preview profile: the preview detector's facts over the shipped registry, permitting exactly those. */
-export function foundationProfile(): TrustedProfile {
-  const registry = PREVIEW_ADAPTERS;
+/** The foundation-preview profile over a registry (the shipped one by default; a test passes its own). */
+export function foundationProfile(registry: AdapterRegistry = foundationRegistry(), options: { operations?: boolean } = {}): TrustedProfile {
   const planner: PlannerProfile = Object.freeze({
     id: FOUNDATION_PROFILE_ID, registry, capabilities: createCapabilityTable(registry, FACTS), permits: Object.freeze(FACTS.map(f => f.capability)),
+    ...(options.operations === false ? {} : { operations: OPERATIONS }),
   });
-  const execution: ExecutionProfile = Object.freeze({ resources: Object.freeze({ capture: LIMITS, parse: LIMITS, inventory: LIMITS, check: LIMITS }) });
-  const document = profileDocument(planner, execution);
-  return Object.freeze({ planner, execution, registry, document, digest: profileDigest(document) });
+  const record = executionProfileRecord(planner, structuredClone(RESOURCES) as Record<PlanStage, ResourcePolicy>, structuredClone(PARSE));
+  return Object.freeze({ planner, registry, record, digest: profileDigest(record) });
 }

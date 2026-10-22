@@ -1,29 +1,36 @@
 // A background service process for the detached-run tests: the real serveWorkspace(), socket, descriptor, receipts
-// and coordinator, over the synthetic diamond plan (coordinator-helpers.ts) instead of the preview planner, so a run
-// is slow enough to pause, cancel or kill. Prints `listening` once the descriptor is written; SIGTERM stops it.
+// and coordinator. Before it serves, each named run is admitted (once) through the real plan admission: the synthetic
+// four-unit plan (coordinator-helpers.ts) under the workspace's own adopted policy, run by slow built-in workers so a
+// run can be paused, canceled or killed. Each run is recorded by its first execution; its envelope is kept in a test
+// file so a restarted service can record a run its predecessor never started. Prints `listening`; SIGTERM stops it.
 //
-//   node --experimental-strip-types service-child.ts <workspace> <adapter-root> <behaviour>
-import { readPlanRecord, workspaceOf } from '../../dist/service/local.js';
+//   node --experimental-strip-types service-child.ts <workspace> <root> <behaviour> <runId>...
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { adoptedPolicy, workspaceOf } from '../../dist/service/local.js';
 import { serveWorkspace } from '../../dist/service/owner-service.js';
-import { syntheticPlan } from '../coordinator-helpers.ts';
-import { influenceManifest } from '../../dist/execution/plan.js';
+import { openStore } from '../../dist/store/index.js';
+import { registryFor, syntheticPlan } from '../coordinator-helpers.ts';
 
-const [workspacePath, root, behaviour] = process.argv.slice(2) as [string, string, string];
+const [workspacePath, root, behaviour, ...runIds] = process.argv.slice(2) as [string, string, string, ...string[]];
 const ws = workspaceOf(workspacePath);
-const plans = {
-  record: (planId: string) => readPlanRecord(ws, planId),
-  async prepare(_store: unknown, planId: string) {
-    const s = syntheticPlan(root, { A: behaviour, B: behaviour, C: behaviour, D: behaviour }, { runId: planId });
-    // Work ids are unique across a store, so each plan's units carry its tag: work-A-1, work-A-2, …
-    const tag = (id: string) => `${id}-${planId.charAt(5)}`;
-    const adapter = s.registry.get(`test-${behaviour}`);
-    const works = s.plan.works.map((w: any) => {
-      const tagged = { ...w, id: tag(w.id), dependencies: w.dependencies.map((d: any) => ({ ...d, id: tag(d.id) })) };
-      return { ...tagged, influenceManifest: influenceManifest(tagged, adapter, s.plan.inputsFor(w).map((i: any) => i.id)).id };
-    });
-    return { boundary: { ...s.plan, works, adapterFor: () => `test-${behaviour}` }, registry: s.registry };
-  },
-};
+const adopted = adoptedPolicy(ws);
+if (!('policy' in adopted)) throw new Error('the test workspace has no adopted policy');
+const behaviours = { A: behaviour, B: behaviour, C: behaviour, D: behaviour };
+const registry = registryFor(root, behaviours);
+const envelopes = join(root, 'run-envelopes.json');
+const runs: Record<string, unknown> = existsSync(envelopes) ? JSON.parse(readFileSync(envelopes, 'utf8')) : {};
+const store = await openStore(ws.storePath);
+try {
+  for (const runId of runIds) {
+    if (store.ledger.latestPlan(runId)) continue;
+    const planned = await syntheticPlan(store, root, behaviours, { runId, policy: adopted.policy, registry });
+    runs[runId] = planned.run;
+  }
+} finally { store.close(); }
+writeFileSync(envelopes, JSON.stringify(runs));
+
 const stop = new AbortController();
 process.once('SIGTERM', () => stop.abort());
-await serveWorkspace(ws, { idleMs: 0, signal: stop.signal, service: { plans }, onListening: () => process.stdout.write('listening\n') });
+await serveWorkspace(ws, { idleMs: 0, signal: stop.signal, service: { registry, runEnvelope: (id: string) => runs[id] as never },
+  onListening: () => process.stdout.write('listening\n') });

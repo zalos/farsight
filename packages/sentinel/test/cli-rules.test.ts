@@ -127,7 +127,7 @@ test('the current pointer moves only from the revision it was read at', t => {
 });
 
 test('the built-in foundation-preview pack validates, its detector flags exactly its positive fixtures, and the owner promotes it', async t => {
-  const { builtinPackDir } = await import('../dist/service/preview-plan.js');
+  const { builtinPackDir } = await import('../dist/service/package-paths.js');
   const { readPackDirectory, validatePack } = await import('../dist/rules/index.js');
   const { detect, PREVIEW_RULE } = await import('../dist/adapters/preview-detector.js');
   const packDir = realpathSync.native(builtinPackDir('foundation-preview')!);
