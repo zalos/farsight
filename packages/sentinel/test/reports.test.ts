@@ -11,8 +11,10 @@ import { Ajv } from 'ajv';
 import { captureSnapshot } from '../dist/snapshot/index.js';
 import { compareAssessments } from '../dist/findings/index.js';
 import {
-  pinApplicationContext, buildReport, generateReport, renderHtml, renderMarkdown, toSarif, countText, COUNT_ORDER, ReportError,
+  pinApplicationContext, contextPinIntent, buildReport, generateReport, renderHtml, renderMarkdown, toSarif, countText, COUNT_ORDER, ReportError,
 } from '../dist/reports/index.js';
+import { ReceiptBook } from '../dist/policy/receipts.js';
+import { issueReceipt } from '../dist/policy/owner-receipts.js';
 import { validateEnvelope } from '../dist/index.js';
 import { git, needsStore, openCaptureStore, scratch } from './snapshot-helpers.ts';
 
@@ -35,8 +37,25 @@ async function setup(t: any) {
   const inputs = snapshot.entries.filter((e: any) => e.sourceId === 'app' && e.kind === 'file' && e.disposition === 'included').map((e: any) => ({ relativePath: e.relativePath, content: e.content }));
   const entry = (p: string) => snapshot.entries.find((e: any) => e.relativePath === p && e.kind === 'file');
   const readContent = (id: string) => fx.store.readArtifact(id);
-  return { dir, root, fx, snapshot, graph, inputs, entry, readContent };
+  return { t, dir, root, fx, snapshot, graph, inputs, entry, readContent };
 }
+
+const STATE = `sha256:${'5'.repeat(64)}`;
+const POLICY = `sha256:${'6'.repeat(64)}`;
+/** The owner's local CLI confirms one exact intent; the coordinator spends the receipt. */
+function ownerConfirms(t: any, intent: any) {
+  const book = new ReceiptBook(join(scratch(t, 'sentinel-trust-'), 'receipts'));
+  const now = new Date('2026-10-22T09:30:00Z');
+  const r = issueReceipt(book, { channel: 'owner-cli', principal: 'owner' }, { intent, stateDigest: STATE, policyRevision: POLICY }, { now, ttlMs: 600_000 });
+  return book.consume(r.id, { intent, stateDigest: STATE, policyRevision: POLICY }, now);
+}
+/** A context the owner confirmed exactly (unless `authorization` is given). */
+function pin(s: any, over: any = {}) {
+  const base = { snapshot: s.snapshot, sourceId: 'app', repo: 'invoice-app', graph: s.graph, inputs: s.inputs, ...over };
+  const intent = contextPinIntent(base);
+  return pinApplicationContext({ ...base, authorization: 'authorization' in over ? over.authorization : intent ? ownerConfirms(s.t, intent) : undefined });
+}
+const planned = (...statuses: string[]) => statuses.map(st => ({ checkId: `check-${st}`, sourceId: 'app', files: ['src/server/invoiceService.ts'] }));
 
 let seq = 0;
 async function observation(s: any, path: string, needle: string, opts: { nodeId?: string; rule?: string; message?: string; severity?: string; limitations?: string[] } = {}) {
@@ -68,16 +87,16 @@ const RULES = new Map([['sentinel.sql.dynamic-query', {
 async function report(s: any, observations: any[], over: any = {}) {
   return buildReport({
     id: 'rep-1', run: { id: 'run-1', snapshotId: s.snapshot.id, planRevision: 1 }, ledgerSequence: 10, evaluatedAt: '2026-10-22T11:00:00Z',
-    catalogVersion: 'draft-1', disclosure: 'private', observations, coverage: [coverage('complete'), coverage('error')], plannedChecks: 2,
+    catalogVersion: 'draft-1', disclosure: 'private', observations, coverage: [coverage('complete'), coverage('error')], plannedChecks: planned('complete', 'error'),
     inventory: { included: 40, seenByNoStage: 3, unknownScopeBoundaries: 0 }, readContent: s.readContent,
-    contexts: new Map([['app', pinApplicationContext({ snapshot: s.snapshot, sourceId: 'app', repo: 'invoice-app', graph: s.graph, inputs: s.inputs })]]),
+    contexts: new Map([['app', pin(s)]]),
     rules: RULES, ...over,
   });
 }
 
 test('a finding is placed on the screens and journeys that reach it, with a business sentence and its personas', needsStore, async t => {
   const s = await setup(t);
-  const ctx = pinApplicationContext({ snapshot: s.snapshot, sourceId: 'app', repo: 'invoice-app', graph: s.graph, inputs: s.inputs });
+  const ctx = pin(s);
   assert.deepEqual([ctx.binding, ctx.reasons], ['matched', []]);
   const o = await observation(s, 'src/server/invoiceService.ts', 'export async function createInvoice', { nodeId: 'app::src/server/invoiceService.ts::createInvoice' });
   const { document } = await report(s, [o]);
@@ -105,7 +124,7 @@ test('a context built from other bytes, an artifact-only graph or no context lea
     ['a graph with no journeys', { graph: portable, inputs: s.inputs }, 'unavailable', 'sentinel.place.noJourneys'],
     ['no context', {}, 'unavailable', 'sentinel.place.noContext'],
   ] as const) {
-    const pinned = pinApplicationContext({ snapshot: s.snapshot, sourceId: 'app', repo: 'invoice-app', ...ctx });
+    const pinned = pin(s, { graph: undefined, inputs: undefined, ...ctx });
     const { document } = await report(s, [o], { contexts: new Map([['app', pinned]]) });
     const p = document.findings[0]!.place;
     assert.equal(p.binding, binding, name);
@@ -143,9 +162,9 @@ test('every projection carries the same counts and facts; SARIF validates; untru
   const jsx = await observation(s, 'src/ui/router.tsx', '<', { rule: 'sentinel.xss.render', severity: 'medium', message: '<script>alert(1)</script> </pre> `code` ```' });
   const out = await generateReport({
     id: 'rep-1', run: { id: 'run-1', snapshotId: s.snapshot.id, planRevision: 1 }, ledgerSequence: 10, evaluatedAt: '2026-10-22T11:00:00Z',
-    catalogVersion: 'draft-1', disclosure: 'private', observations: [sql, jsx], coverage: [coverage('complete'), coverage('partial')], plannedChecks: 2,
+    catalogVersion: 'draft-1', disclosure: 'private', observations: [sql, jsx], coverage: [coverage('complete'), coverage('partial')], plannedChecks: planned('complete', 'partial'),
     inventory: { included: 40, seenByNoStage: 0, unknownScopeBoundaries: 1 }, readContent: s.readContent, rules: RULES,
-    contexts: new Map([['app', pinApplicationContext({ snapshot: s.snapshot, sourceId: 'app', repo: 'invoice-app', graph: s.graph, inputs: s.inputs })]]),
+    contexts: new Map([['app', pin(s)]]),
   });
   const doc = out.document;
   assert.equal(validateEnvelope('report', JSON.parse(out.json)).ok, true);
@@ -226,9 +245,9 @@ test('the HTML report opens offline with JavaScript disabled after the source an
   const jsx = await observation(s, 'src/ui/router.tsx', '<', { rule: 'sentinel.xss.render', severity: 'medium', message: '<img src="http://example.invalid/x.png">' });
   const priv = await generateReport({
     id: 'rep-1', run: { id: 'run-1', snapshotId: s.snapshot.id, planRevision: 1 }, ledgerSequence: 10, evaluatedAt: '2026-10-22T11:00:00Z',
-    catalogVersion: 'draft-1', disclosure: 'private', observations: [sql, jsx], coverage: [coverage('complete')], plannedChecks: 1,
+    catalogVersion: 'draft-1', disclosure: 'private', observations: [sql, jsx], coverage: [coverage('complete')], plannedChecks: planned('complete'),
     inventory: { included: 40, seenByNoStage: 0, unknownScopeBoundaries: 0 }, readContent: s.readContent, rules: RULES,
-    contexts: new Map([['app', pinApplicationContext({ snapshot: s.snapshot, sourceId: 'app', repo: 'invoice-app', graph: s.graph, inputs: s.inputs })]]),
+    contexts: new Map([['app', pin(s)]]),
   });
   const shareDoc = (await report(s, [sql, jsx], { disclosure: 'shareable' })).document;
   const out = join(s.dir, 'delivered');
@@ -265,5 +284,113 @@ test('the HTML report opens offline with JavaScript disabled after the source an
     assert.ok(pdf.length > 1000, `${name} prints`);
     assert.deepEqual(requests, [url], `${name}: printing loaded nothing`);
     await context.close();
+  }
+});
+
+// ---- review round 1 (SOL, 07bfc14): disclosure across the whole envelope, missing coverage, context authenticity ----
+
+const renderings = (doc: any) => ({ json: JSON.stringify(doc), html: renderHtml(doc), markdown: renderMarkdown(doc).replace(/\\/g, ''), sarif: JSON.stringify(toSarif(doc)) });
+
+test('round 1: a secret finding discloses nothing in any field or format, and a shareable report never repeats source through a message', needsStore, async t => {
+  const s = await setup(t);
+  // A producer message naming the secret's file and a marker, and a symbol whose id names that file.
+  const secret = await observation(s, 'src/server/notify.ts', 'export', { rule: 'sentinel.secrets.generic-key', severity: 'critical',
+    nodeId: 'app::src/server/notify.ts::notify', message: 'SECRET-MARKER-7 found in src/server/notify.ts' });
+  // An ordinary finding whose message quotes the source it cites.
+  const quote = 'export async function createInvoice';
+  const sql = await observation(s, 'src/server/invoiceService.ts', quote, { nodeId: 'app::src/server/invoiceService.ts::createInvoice', rule: 'sentinel.sql.unnamed', message: `found: ${quote}(draft)` });
+  for (const disclosure of ['private', 'shareable'] as const) {
+    const { document } = await report(s, [secret, sql], { disclosure });
+    const secretFinding = document.findings.find((f: any) => f.ruleFamilyId === 'sentinel.secrets.generic-key')!;
+    assert.deepEqual([secretFinding.place.nodeIds, secretFinding.place.limitationKeys], [[], ['sentinel.place.secretWithheld']]);
+    for (const [format, text] of Object.entries(renderings(document))) {
+      assert.ok(!text.includes('SECRET-MARKER-7'), `${disclosure} ${format}: no marker`);
+      assert.ok(!text.includes('notify.ts'), `${disclosure} ${format}: no secret path`);
+      if (disclosure === 'shareable') assert.ok(!text.includes(`${quote}(draft)`), `${disclosure} ${format}: no quoted source`);
+    }
+  }
+  // Near neighbour: a private report may show the ordinary finding's message.
+  const { document } = await report(s, [sql], { disclosure: 'private' });
+  assert.match(document.findings[0]!.explanation.code, /createInvoice\(draft\)/);
+});
+
+test('round 1: a planned check without coverage, an unread file or an unlisted folder makes the report partial', needsStore, async t => {
+  const s = await setup(t);
+  const o = await observation(s, 'src/server/invoiceService.ts', 'export async function createInvoice', { nodeId: 'app::src/server/invoiceService.ts::createInvoice' });
+  const missing = (await report(s, [o], { coverage: [coverage('complete')], plannedChecks: planned('complete', 'missing'), inventory: { included: 40, seenByNoStage: 0, unknownScopeBoundaries: 0 } })).document;
+  assert.equal(missing.completeness, 'partial');
+  assert.deepEqual(missing.gaps.map((g: any) => [g.checkId, g.status, g.reasonCode]), [['check-missing', 'not-run', 'sentinel.report.gap.noCoverage']]);
+  for (const [name, inventory] of [['unread files', { included: 40, seenByNoStage: 2, unknownScopeBoundaries: 0 }], ['unlisted folders', { included: 40, seenByNoStage: 0, unknownScopeBoundaries: 1 }]] as const) {
+    const doc = (await report(s, [o], { coverage: [coverage('complete')], plannedChecks: planned('complete'), inventory })).document;
+    assert.equal(doc.completeness, 'partial', name);
+    for (const text of Object.values(renderings(doc))) assert.ok(!text.includes('Every planned check covered its scope'), name);
+  }
+  const whole = (await report(s, [o], { coverage: [coverage('complete')], plannedChecks: planned('complete'), inventory: { included: 40, seenByNoStage: 0, unknownScopeBoundaries: 0 } })).document;
+  assert.equal(whole.completeness, 'complete');
+  // Coverage for a check the plan does not hold, or two records for one check, is refused.
+  await assert.rejects(report(s, [o], { coverage: [coverage('complete')], plannedChecks: planned('other') }), (e: any) => e.code === 'sentinel.report.invalidInput');
+  await assert.rejects(report(s, [o], { coverage: [coverage('complete'), coverage('complete')], plannedChecks: planned('complete') }), (e: any) => e.code === 'sentinel.report.invalidInput');
+});
+
+test('round 1: a gap is placed on the screens that rely on the code the check did not cover', needsStore, async t => {
+  const s = await setup(t);
+  const { document } = await report(s, [], { coverage: [coverage('complete'), coverage('error')], plannedChecks: planned('complete', 'error') });
+  const gap = document.gaps[0]!;
+  assert.equal(gap.place.binding, 'matched');
+  assert.ok(gap.place.screens.some((x: any) => x.id === 'invoice-app::page::/invoices/new'));
+});
+
+test('round 1: matching input hashes do not authenticate a context; only the owner\'s confirmation of that exact context does', needsStore, async t => {
+  const s = await setup(t);
+  const o = await observation(s, 'src/server/invoiceService.ts', 'export async function createInvoice', { nodeId: 'app::src/server/invoiceService.ts::createInvoice' });
+  // A fabricated label and relationship over the very same inputs.
+  const forged = structuredClone(s.graph);
+  forged.nodes.find((n: any) => n.id === 'invoice-app::page::/invoices/new').name = 'Fabricated screen';
+  const placeWith = async (ctx: any) => (await report(s, [o], { contexts: new Map([['app', ctx]]) })).document.findings[0]!.place;
+  const none = await placeWith(pin(s, { graph: forged, authorization: undefined }));
+  assert.deepEqual([none.binding, none.limitationKeys], ['unavailable', ['sentinel.place.notOwnerConfirmed']]);
+  // A receipt for the genuine context does not authenticate the forged one.
+  const genuineReceipt = ownerConfirms(t, contextPinIntent({ snapshot: s.snapshot, sourceId: 'app', repo: 'invoice-app', graph: s.graph, inputs: s.inputs }));
+  const swapped = await placeWith(pin(s, { graph: forged, authorization: genuineReceipt }));
+  assert.equal(swapped.binding, 'unavailable');
+  assert.ok(!JSON.stringify(swapped).includes('Fabricated screen'));
+});
+
+test('round 1: changing the caller\'s graph after pinning changes nothing in a report', needsStore, async t => {
+  const s = await setup(t);
+  const o = await observation(s, 'src/server/invoiceService.ts', 'export async function createInvoice', { nodeId: 'app::src/server/invoiceService.ts::createInvoice' });
+  const ctx = pin(s);
+  assert.ok(Object.isFrozen(ctx) && Object.isFrozen(ctx.graph) && Object.isFrozen(ctx.graph!.nodes[0]));
+  const before = (await report(s, [o], { contexts: new Map([['app', ctx]]) })).document;
+  for (const n of s.graph.nodes) if (n.kind === 'page') n.name = 'Mutated after pinning';
+  s.graph.edges.length = 0;
+  const after = (await report(s, [o], { contexts: new Map([['app', ctx]]) })).document;
+  assert.deepEqual(after.findings[0]!.place, before.findings[0]!.place);
+  assert.ok(!JSON.stringify(after).includes('Mutated after pinning'));
+});
+
+test('round 1: a withheld-location citation (secret scan) is reported withheld, with no location', needsStore, async t => {
+  const s = await setup(t);
+  const o: any = await observation(s, 'src/server/notify.ts', 'export', { rule: 'sentinel.secrets.generic-key', severity: 'high' });
+  const index = s.snapshot.entries.findIndex((e: any) => e.relativePath === 'src/server/notify.ts');
+  o.evidence = [{ location: 'withheld', snapshotId: s.snapshot.id, sourceId: 'app', entry: index, content: o.evidence[0].content, span: o.evidence[0].span }];
+  const { document } = await report(s, [o]);
+  const e = document.findings[0]!.evidence[0]!;
+  assert.deepEqual([e.state, (e as any).reasonCode, 'location' in e], ['withheld', 'sentinel.report.withheld.secret', false]);
+  for (const text of Object.values(renderings(document))) assert.ok(!text.includes('notify.ts'));
+});
+
+// The official OASIS SARIF 2.1.0 schema is not vendored here; point SENTINEL_SARIF_SCHEMA at a local copy to run this.
+const officialSchema = process.env.SENTINEL_SARIF_SCHEMA;
+test('SARIF output validates against the official SARIF 2.1.0 schema', { ...needsStore, ...(officialSchema ? {} : { skip: 'set SENTINEL_SARIF_SCHEMA to a local copy of the official SARIF 2.1.0 schema' }) }, async t => {
+  const s = await setup(t);
+  const o = await observation(s, 'src/server/invoiceService.ts', 'export async function createInvoice', { nodeId: 'app::src/server/invoiceService.ts::createInvoice' });
+  const { readFileSync } = await import('node:fs');
+  // The official schema has a pattern that is not valid as a Unicode regular expression.
+  const ajv = new Ajv({ strict: false, validateFormats: false, unicodeRegExp: false });
+  const validate = ajv.compile(JSON.parse(readFileSync(officialSchema!, 'utf8')));
+  for (const disclosure of ['private', 'shareable'] as const) {
+    const sarif = toSarif((await report(s, [o], { disclosure })).document);
+    assert.equal(validate(sarif), true, JSON.stringify(validate.errors));
   }
 });

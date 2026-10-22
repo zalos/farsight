@@ -150,8 +150,9 @@ test('an absent finding resolves only through a comparable complete check of all
   assert.equal(outcome({ checks: [check(['src/routes.ts'])], surfaces: surfaces(['src/routes.ts'], ['app::src/routes.ts::route']) }), 'removed-surface/fileRemoved');
   assert.equal(outcome({ checks: [check(['src/service.ts'])], surfaces: surfaces(all, ['app::src/routes.ts::route']) }), 'removed-surface/symbolRemoved');
   assert.equal(outcome({ checks: [check(['src/service.ts'])], surfaces: surfaces([], null, ['app:src/']) }), 'unassessed-in-current-scope/unknownScope');
-  // Without a graph, a missing symbol cannot be told from a clean recheck... unless the check was comparable.
-  assert.equal(outcome({ checks: [check(['src/service.ts'])], surfaces: surfaces(all, null) }), 'resolved-by-comparable-check/comparableCheckClean');
+  // Without a current analysis of its files, whether its code is still there is not shown: never resolved
+  // (review round 1 corrected the earlier expectation, which resolved it).
+  assert.equal(outcome({ checks: [check(['src/service.ts'])], surfaces: surfaces(all, null) }), 'unassessed-in-current-scope/surfaceUnverified');
 });
 
 test('new findings say whether the baseline looked; reopened and expired-disposition findings are labelled', async () => {
@@ -164,4 +165,41 @@ test('new findings say whether the baseline looked; reopened and expired-disposi
   assert.equal(label(compareAssessments({ baseline: { findings: [], checks: [check(['src/service.ts'], { ruleRevision: 'r0' })] }, current: { findings: f, checks: [check(['src/service.ts'])], surfaces: s } })), 'changed-detection/detectionChanged');
   assert.equal(label(compareAssessments({ baseline: { findings: [], checks: [check(['src/service.ts'])], resolved: f }, current: { findings: f, checks: [check(['src/service.ts'])], surfaces: s } })), 'reopened/reopened');
   assert.equal(label(compareAssessments({ baseline: { findings: f, checks: [check(['src/service.ts'])], expiredDispositions: new Set([f[0]!.id]) }, current: { findings: f, checks: [check(['src/service.ts'])], surfaces: s } })), 'reopened-disposition-expired/dispositionExpired');
+});
+
+test('review round 1: part of an issue\'s code removed (the source gone, the sink still there) is never a clean recheck', async () => {
+  const fs = files({ 'src/a.ts': 'export const fromQuery = (req) => run(req.query.q);\n', 'src/sink.ts': 'export function run(sql) { return db.query(sql); }\n' });
+  const b = await findings(fs, [obs(fs, [{ path: 'src/a.ts', needle: 'req.query.q', nodeId: 'app::src/a.ts::fromQuery' }, { path: 'src/sink.ts', needle: 'db.query(sql)', nodeId: 'app::src/sink.ts::run' }])]);
+  const both = ['src/a.ts', 'src/sink.ts'];
+  const outcome = (s: any, checks = [check(both)]) => compareAssessments({ baseline: { findings: b, checks: [check(both)] }, current: { findings: [], checks, surfaces: s } }).historical.map((h: any) => `${h.label}/${h.reasonCode.replace('sentinel.compare.', '')}`)[0];
+  // The source's symbol is gone, the sink's remains: a removed surface, never resolved.
+  assert.equal(outcome(surfaces(both, ['app::src/sink.ts::run'])), 'removed-surface/partRemoved');
+  // The source's file is gone, the sink's remains.
+  assert.equal(outcome(surfaces(['src/sink.ts'], ['app::src/sink.ts::run']), [check(['src/sink.ts'])]), 'removed-surface/partRemoved');
+  // Near neighbour: both still there and comparably rechecked clean.
+  assert.equal(outcome(surfaces(both, ['app::src/a.ts::fromQuery', 'app::src/sink.ts::run'])), 'resolved-by-comparable-check/comparableCheckClean');
+});
+
+test('review round 1: a secret claim and an ordinary claim over the same span are distinct findings with distinct ids', async () => {
+  const fs = files({ 'src/service.ts': SERVICE });
+  const span = [{ path: 'src/service.ts', needle: 'db.query(', nodeId: N('findUser') }];
+  const fx = await findings(fs, [obs(fs, span), obs(fs, span, { limitations: ['sentinel.secrets.redacted'] })]);
+  assert.equal(fx.length, 2);
+  assert.equal(new Set(fx.map((f: any) => f.id)).size, 2);
+  assert.notEqual(fx[0]!.fingerprint.exact, fx[1]!.fingerprint.exact);
+});
+
+test('review round 1: a withheld location is never read, never a path, and never resolved', async () => {
+  const fs = files({ 'src/service.ts': SERVICE });
+  const o: any = obs(fs, [{ path: 'src/service.ts', needle: 'db.query(' }], { rule: 'sentinel.secrets.generic-key' });
+  o.evidence = [{ location: 'withheld', snapshotId: 'snap-1', sourceId: 'app', entry: 3, content: fs.ids['src/service.ts'], span: o.evidence[0].span }];
+  assert.equal(validateEnvelope('observation', o).ok, true);
+  let reads = 0;
+  const n = await normalizeObservation(o, async (id: string) => { reads++; return fs.read(id); });
+  assert.equal(reads, 0, 'a withheld location is not read');
+  assert.equal(n.anchors[0]!.relativePath, null);
+  assert.equal(n.secret, true);
+  const f = correlate([n]);
+  const r = compareAssessments({ baseline: { findings: f, checks: [check(['src/service.ts'], {}, 'complete')] }, current: { findings: [], checks: [{ ...check(['src/service.ts']), ruleFamilyId: 'sentinel.secrets.generic-key' }], surfaces: surfaces(['src/service.ts'], [N('findUser')]) } });
+  assert.deepEqual(r.historical.map((h: any) => h.reasonCode), ['sentinel.compare.locationWithheld']);
 });

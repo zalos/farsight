@@ -274,12 +274,54 @@ try {
     storeDemo = `store refused on unqualified ${host} (not qualification evidence)`;
   }
 
+  // The installed report library, run for real: one synthetic observation, private and shareable reports in every
+  // format, each document valid, and SARIF checked against the official schema when SENTINEL_SARIF_SCHEMA names a copy.
+  const reportsExported = subpaths.includes('./reports');
+  let reportDemo = '';
+  if (reportsExported) {
+    writeFileSync(join(consumer.dir, 'report-demo.mjs'), `
+      import assert from 'node:assert/strict';
+      import { createHash } from 'node:crypto';
+      import { readFileSync } from 'node:fs';
+      import { generateReport } from 'farsight-sentinel/reports';
+      import { validateEnvelope } from 'farsight-sentinel';
+      const bytes = Buffer.from('export function synthetic() { return unsafe(input); }\\n');
+      const content = 'sha256:' + createHash('sha256').update(bytes).digest('hex');
+      const o = { schema: 'sentinel-observation/draft-1', id: 'obs-1', snapshotId: 'snap-1',
+        producer: { kind: 'scanner', adapterId: 'synthetic-scanner', adapterDigest: content, attemptId: 'att-1' }, producerRuleId: 'rule',
+        rule: { familyId: 'sentinel.synthetic.rule', revisionDigest: content }, originalSeverity: 'high', message: 'quoted: unsafe(input)',
+        evidence: [{ snapshotId: 'snap-1', sourceId: 'app', relativePath: 'src/synthetic.ts', content, span: { startByte: 0, endByte: bytes.length } }],
+        limitationKeys: [], observedAt: '2026-10-22T10:00:00Z' };
+      const coverage = { schema: 'sentinel-coverage/draft-1', id: 'cov-1', runId: 'run-1', checkId: 'check-1', workId: 'work-1', workRevision: 1, status: 'complete',
+        granularity: 'per-file-per-rule', assessedScopeArtifact: content, limitationsArtifact: content, basis: { kind: 'executed', attemptId: 'att-1' }, skipped: [], recordedAt: '2026-10-22T10:00:00Z' };
+      let official;
+      if (process.env.SENTINEL_SARIF_SCHEMA) {
+        const { Ajv } = await import('ajv');
+        official = new Ajv({ strict: false, validateFormats: false, unicodeRegExp: false }).compile(JSON.parse(readFileSync(process.env.SENTINEL_SARIF_SCHEMA, 'utf8')));
+      }
+      for (const disclosure of ['private', 'shareable']) {
+        const out = await generateReport({ id: 'rep-' + disclosure, run: { id: 'run-1', snapshotId: 'snap-1', planRevision: 1 }, ledgerSequence: 1,
+          evaluatedAt: '2026-10-22T11:00:00Z', catalogVersion: 'draft-1', disclosure, observations: [o], coverage: [coverage],
+          plannedChecks: [{ checkId: 'check-1', sourceId: 'app', files: ['src/synthetic.ts'] }],
+          inventory: { included: 1, seenByNoStage: 0, unknownScopeBoundaries: 0 }, readContent: async () => bytes });
+        assert.equal(validateEnvelope('report', JSON.parse(out.json)).ok, true);
+        assert.equal(out.document.findings[0].evidence[0].state, disclosure === 'private' ? 'embedded' : 'withheld');
+        if (disclosure === 'shareable') for (const text of [out.json, out.html, out.markdown, JSON.stringify(out.sarif)]) assert.ok(!text.includes('unsafe(input)'));
+        assert.ok(!/<script/i.test(out.html));
+        if (official) assert.equal(official(out.sarif), true, JSON.stringify(official.errors));
+      }
+      console.log(official ? 'official' : 'subset');
+    `);
+    const kind = (await consumer.exec(process.execPath, ['report-demo.mjs'])).stdout.trim();
+    reportDemo = `, generateReport ran installed (private and shareable; SARIF ${kind === 'official' ? 'valid against the official schema' : 'not checked against the official schema: SENTINEL_SARIF_SCHEMA unset'})`;
+  }
+
   // Standalone: everything @farsight/* is inlined, and farsight-cli is not pulled in.
   const modules = readdirSync(join(consumer.dir, 'node_modules'));
   assert.ok(!modules.includes('farsight-cli'), 'farsight-cli is not installed with Sentinel');
   assert.ok(!modules.includes('@farsight'), 'no workspace package is resolved from a registry');
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}, npm consumer`);
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}${reportDemo}, npm consumer`);
 } finally {
   consumer.cleanup();
 }

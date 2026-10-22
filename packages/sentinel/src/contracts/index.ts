@@ -87,10 +87,10 @@ export const FRAMEWORK_IDS = ['next', 'express', 'nest', 'spring'] as const;
 export const RULE_ORIGINS = ['sentinel-original', 'third-party'] as const;
 export const SENTINEL_ACTIONS = [
   'run.start', 'capture.source', 'disposition.propose', 'disposition.approve', 'rule.promote',
-  'tool.acquire', 'paid.admit', 'disclosure.send', 'settings.adopt', 'run.pause', 'run.cancel',
+  'tool.acquire', 'paid.admit', 'disclosure.send', 'settings.adopt', 'run.pause', 'run.cancel', 'context.pin',
 ] as const;
 /** Owner actions: an agent can never be granted them, and a person always confirms them with a receipt. */
-export const OWNER_ACTIONS = ['disposition.approve', 'rule.promote', 'tool.acquire', 'settings.adopt'] as const;
+export const OWNER_ACTIONS = ['disposition.approve', 'rule.promote', 'tool.acquire', 'settings.adopt', 'context.pin'] as const;
 export const ACTION_EFFECTS = ['local-artifacts', 'source-disclosure', 'paid-inference', 'network', 'tool-execution'] as const;
 export const SETTINGS_TRUST = ['adopted', 'not-adopted', 'changed', 'missing', 'invalid'] as const;
 export const ADMISSION_OUTCOMES = ['admitted', 'denied', 'awaiting-confirmation'] as const;

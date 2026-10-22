@@ -16,7 +16,7 @@ import { correlate, type Finding } from '../findings/correlate.js';
 import { normalizeObservation, SEVERITIES, type Severity } from '../findings/normalize.js';
 import type { Comparison } from '../findings/compare.js';
 import type { PinnedContext } from './context.js';
-import { placeNodes, unplaced } from './place.js';
+import { placeFiles, placeNodes, unplaced } from './place.js';
 import { camel, labelKey, labelPartKey } from './words.js';
 
 export const REPORT_SOURCE = 'sentinel report fold draft-1';
@@ -45,6 +45,13 @@ export interface BaselineFindingSummary {
   readonly place?: FindingPlace;
 }
 
+export interface PlannedCheck {
+  readonly checkId: string;
+  readonly sourceId: string;
+  /** The captured files (relative paths) the check was planned over, for placing a gap. */
+  readonly files: readonly string[];
+}
+
 export interface ReportInput {
   readonly id: string;
   readonly run: ReportEnvelope['run'];
@@ -54,7 +61,8 @@ export interface ReportInput {
   readonly disclosure: DisclosureProfile;
   readonly observations: readonly ObservationEnvelope[];
   readonly coverage: readonly CoverageEnvelope[];
-  readonly plannedChecks: number;
+  /** Every check the plan holds, with the files it was to cover; a planned check without a coverage record is a gap. */
+  readonly plannedChecks: readonly PlannedCheck[];
   readonly inventory: { readonly included: number; readonly seenByNoStage: number; readonly unknownScopeBoundaries: number };
   readonly readContent: (id: ArtifactId) => Promise<Uint8Array>;
   /** Pinned contexts by snapshot source id; a source without one is reported unplaced. */
@@ -104,32 +112,44 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
   const reportFindings: ReportFinding[] = [];
   for (const f of findings) {
     const ctx = f.sourceIds.length === 1 ? input.contexts?.get(f.sourceIds[0]!) : undefined;
-    const place = f.sourceIds.length > 1 ? unplaced('unavailable', ['sentinel.place.noContext']) : placeNodes(ctx, f.nodeIds);
+    // A secret finding is never placed: its symbols name the file it is in.
+    const place = f.secret ? unplaced('unavailable', ['sentinel.place.secretWithheld'])
+      : f.sourceIds.length > 1 ? unplaced('unavailable', ['sentinel.place.noContext']) : placeNodes(ctx, f.nodeIds);
     const evidence: ReportEvidence[] = [];
     const seen = new Set<string>();
     for (const o of f.observations) {
       for (const e of o.observation.evidence) {
-        const key = `${e.sourceId}\u0000${e.relativePath}\u0000${e.content}\u0000${e.span.startByte}\u0000${e.span.endByte}`;
+        const where = 'location' in e ? `entry:${e.entry}` : `path:${e.relativePath}`;
+        const key = `${e.sourceId}\u0000${where}\u0000${e.content}\u0000${e.span.startByte}\u0000${e.span.endByte}`;
         if (seen.has(key) || evidence.length >= MAX_EVIDENCE) continue;
         seen.add(key);
         const id = `ev.${digest(key).slice(7, 39)}`;
+        // A secret, or a citation whose location the producer withheld, is never read, located or excerpted.
+        if (f.secret || 'location' in e) {
+          evidence.push({ id, state: 'withheld', reasonCode: 'sentinel.report.withheld.secret', content: e.content });
+          used.add('sentinel.report.withheld.secret');
+          continue;
+        }
         const bytes = Buffer.from(await read(e.content));
         const start = Math.min(e.span.startByte, bytes.length), end = Math.min(e.span.endByte, bytes.length);
         const location = { relativePath: e.relativePath, startByte: start, endByte: Math.max(end, start + 1), startLine: lineOf(bytes, start), endLine: lineOf(bytes, Math.max(start, end - 1)) };
-        if (f.secret) { evidence.push({ id, state: 'withheld', reasonCode: 'sentinel.report.withheld.secret', content: e.content }); used.add('sentinel.report.withheld.secret'); }
-        else if (!profile.embedSource) { evidence.push({ id, state: 'withheld', reasonCode: 'sentinel.report.withheld.shareable', content: e.content, location }); used.add('sentinel.report.withheld.shareable'); }
+        if (!profile.embedSource) { evidence.push({ id, state: 'withheld', reasonCode: 'sentinel.report.withheld.shareable', content: e.content, location }); used.add('sentinel.report.withheld.shareable'); }
         else evidence.push({ id, state: 'embedded', excerpt: bytes.subarray(start, end).toString('utf8').slice(0, MAX_EXCERPT_CHARS), content: e.content, location });
       }
     }
     const words = input.rules?.get(f.ruleFamilyId);
     const firstLoc = f.secret ? undefined : evidence.find(e => e.location)?.location;
-    const title: RegisterText = words?.title ?? {
-      business: `A ${f.severity === 'info' ? 'recorded' : f.severity} issue the checks found`,
-      code: `${f.ruleFamilyId}${firstLoc ? ` at ${firstLoc.relativePath}:${firstLoc.startLine}` : ''}`,
-    };
+    // Disclosure covers every field, not only evidence: a secret finding carries only the rule pack's words or fixed
+    // ones, and a producer's message (untrusted text that can quote source or name a path) is shown only in a private
+    // report of a finding that is not a secret.
+    const title: RegisterText = f.secret
+      ? (words?.title ?? { business: 'A possible secret the checks found', code: f.ruleFamilyId })
+      : (words?.title ?? { business: `A ${f.severity === 'info' ? 'recorded' : f.severity} issue the checks found`,
+        code: `${f.ruleFamilyId}${firstLoc ? ` at ${firstLoc.relativePath}:${firstLoc.startLine}` : ''}` });
+    const message = !f.secret && profile.embedSource ? f.observations.map(o => o.observation.message)[0] : undefined;
     const explanation: RegisterText = {
-      business: [words?.explanation.business, placeSentence(place)].filter(Boolean).join(' ').slice(0, 4000),
-      code: (words?.explanation.code ?? f.observations.map(o => o.observation.message)[0] ?? f.ruleFamilyId).slice(0, 4000),
+      business: [words?.explanation.business, f.secret ? 'Where it is and what it says are withheld from every report.' : placeSentence(place)].filter(Boolean).join(' ').slice(0, 4000),
+      code: (words?.explanation.code ?? message ?? `${f.ruleFamilyId}: see the evidence locations.`).slice(0, 4000),
     };
     const outcome = outcomes.get(f.id);
     if (outcome) { used.add(outcome.reasonCode); used.add(labelKey(outcome.label)); }
@@ -152,17 +172,37 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
       ...(h.match ? { match: { kind: h.match.kind, baselineFindingIds: [...h.match.baselineFindingIds] } } : {}), place };
   });
 
-  const gaps: ReportGap[] = input.coverage.filter(c => c.status !== 'complete').map(c => {
-    const reasonCode = c.basis.kind === 'unavailable' ? c.basis.reasonCode : `sentinel.report.gap.${camel(c.status)}`;
+  // Every planned check has exactly one coverage record; a planned check with none is a gap, never a silent pass.
+  const planned = new Map(input.plannedChecks.map(p => [p.checkId, p]));
+  if (planned.size !== input.plannedChecks.length) throw new ReportError('sentinel.report.invalidInput', 'a planned check is listed twice');
+  const recorded = new Map<string, CoverageEnvelope>();
+  for (const c of input.coverage) {
+    if (!planned.has(c.checkId)) throw new ReportError('sentinel.report.invalidInput', `coverage for ${c.checkId}, which the plan does not hold`);
+    if (recorded.has(c.checkId)) throw new ReportError('sentinel.report.invalidInput', `two coverage records for ${c.checkId}`);
+    recorded.set(c.checkId, c);
+  }
+  const gapPlace = (p: PlannedCheck, files: readonly string[]) => {
+    const ctx = input.contexts?.get(p.sourceId);
+    return placeFiles(ctx, files);
+  };
+  const gaps: ReportGap[] = [];
+  for (const p of input.plannedChecks) {
+    const c = recorded.get(p.checkId);
+    if (c?.status === 'complete') continue;
+    const status: ReportGap['status'] = c ? c.status as ReportGap['status'] : 'not-run';
+    const reasonCode = !c ? 'sentinel.report.gap.noCoverage' : c.basis.kind === 'unavailable' ? c.basis.reasonCode : `sentinel.report.gap.${camel(c.status)}`;
     used.add(reasonCode);
     const def = STRINGS[reasonCode];
-    return {
-      checkId: c.checkId, status: c.status as ReportGap['status'], reasonCode,
-      explanation: { business: (def?.professional ?? reasonCode).slice(0, 4000), code: `${c.checkId}: ${c.status}${c.skipped.length ? ` (${c.skipped.length} scopes skipped)` : ''}`.slice(0, 4000) },
-      place: unplaced('unavailable', ['sentinel.place.gapUnplaced']),
-    };
-  });
-  used.add('sentinel.place.gapUnplaced');
+    // A partial check is placed by the scopes it skipped; anything else by the whole scope it was planned over.
+    const skipped = c?.skipped.map(x => x.scopeId).filter(x => x.startsWith(`${p.sourceId}:`)).map(x => x.slice(p.sourceId.length + 1)) ?? [];
+    const place = gapPlace(p, c?.status === 'partial' && skipped.length ? skipped : p.files);
+    for (const k of place.limitationKeys) used.add(k);
+    gaps.push({
+      checkId: p.checkId, status, reasonCode,
+      explanation: { business: (def?.professional ?? reasonCode).slice(0, 4000), code: `${p.checkId}: ${c ? c.status : 'no coverage record'}${c?.skipped.length ? ` (${c.skipped.length} scopes skipped)` : ''}`.slice(0, 4000) },
+      place,
+    });
+  }
 
   const severityParts = SEVERITIES.map(s => ({ key: `sentinel.count.part.${s}`, n: reportFindings.filter(f => f.severity === s).length })).filter(p => p.n);
   const rc = (n: number, unit: string, scope: string, extra: Partial<ReportCount> = {}): ReportCount => ({ n, unit, scope, source: REPORT_SOURCE, ...extra });
@@ -171,7 +211,7 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
     findings: rc(reportFindings.length, 'sentinel.count.findings', 'sentinel.scope.report', { bizUnit: 'sentinel.count.issues', ...(severityParts.length ? { breakdown: severityParts } : {}) }),
     observations: rc(new Set(reportFindings.flatMap(f => f.observationIds)).size, 'sentinel.count.observations', 'sentinel.scope.report'),
     coverageGaps: rc(gaps.length, 'sentinel.count.gaps', 'sentinel.scope.report'),
-    plannedChecks: rc(input.plannedChecks, 'sentinel.count.plannedChecks', 'sentinel.scope.report'),
+    plannedChecks: rc(input.plannedChecks.length, 'sentinel.count.plannedChecks', 'sentinel.scope.report'),
     seenByNoStage: rc(input.inventory.seenByNoStage, 'sentinel.count.seenByNoStage', 'sentinel.scope.inventory', { of: input.inventory.included }),
     unknownScopeBoundaries: rc(input.inventory.unknownScopeBoundaries, 'sentinel.count.unknownBoundaries', 'sentinel.scope.inventory'),
     ...(input.comparison ? { historical: rc(historical.length, 'sentinel.count.historical', 'sentinel.scope.report', historicalParts.length ? { breakdown: historicalParts } : {}) } : {}),
@@ -179,6 +219,7 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
   const countKeys = (c: ReportCount) => [c.unit, c.scope, ...(c.bizUnit ? [c.bizUnit] : []), ...(c.breakdown ?? []).map(p => p.key)];
   for (const c of Object.values(counts)) if (c) for (const k of countKeys(c)) used.add(k);
   for (const f of reportFindings) for (const c of Object.values(f.place.counts)) for (const k of countKeys(c)) used.add(k);
+  for (const g of gaps) for (const c of Object.values(g.place.counts)) for (const k of countKeys(c)) used.add(k);
   for (const h of historical) for (const c of Object.values(h.place.counts)) for (const k of countKeys(c)) used.add(k);
   for (const s of SEVERITIES) used.add(`sentinel.report.severity.${s}`);
 
@@ -194,11 +235,13 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
     for (const e of f.evidence) closure.add(e.content);
     if (f.place.context) { closure.add(f.place.context.artifact); closure.add(f.place.context.sourceBindingReceipt); }
   }
+  for (const g of gaps) if (g.place.context) { closure.add(g.place.context.artifact); closure.add(g.place.context.sourceBindingReceipt); }
   const document: ReportEnvelope = {
     schema: 'sentinel-report/draft-1', id: input.id, run: input.run, ledgerSequence: input.ledgerSequence, evaluatedAt: input.evaluatedAt,
     catalogVersion: input.catalogVersion,
     disclosure: { profile: input.disclosure, profileDigest: digest({ profile: input.disclosure, rules: DISCLOSURE_PROFILES[input.disclosure] }) },
-    completeness: gaps.length ? 'partial' : 'complete',
+    // Complete only when every planned check covered its scope and every captured file was seen and listed.
+    completeness: gaps.length || input.inventory.seenByNoStage > 0 || input.inventory.unknownScopeBoundaries > 0 ? 'partial' : 'complete',
     baseline: input.comparison ? { reportId: input.comparison.baselineReportId } : null,
     counts, findings: reportFindings, gaps, decisions: [],
     ...(input.comparison ? { historical } : {}),

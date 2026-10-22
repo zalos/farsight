@@ -4,7 +4,7 @@
 // placed it in (`nodeId`) and a digest of the cited text with its whitespace collapsed, so moving code up or down a
 // file does not change it, while editing the cited code does. Line numbers never enter identity.
 import { createHash } from 'node:crypto';
-import type { ArtifactId, Digest, ObservationEnvelope, SourceEvidence } from '../contracts/index.js';
+import type { ArtifactId, Digest, ObservationEnvelope } from '../contracts/index.js';
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export const SEVERITIES: readonly Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
@@ -15,7 +15,9 @@ export type AnchorRole = 'source' | 'step' | 'sink' | 'single';
 export interface Anchor {
   readonly role: AnchorRole;
   readonly sourceId: string;
-  readonly relativePath: string;
+  /** Null when the producer withheld the location (secret-scan citations name a capture entry, never a path). */
+  readonly relativePath: string | null;
+  readonly withheld: boolean;
   readonly content: ArtifactId;
   readonly span: { readonly startByte: number; readonly endByte: number };
   /** The canonical graph symbol the evidence sits in, when the producer or parser named one. */
@@ -65,13 +67,19 @@ export async function normalizeObservation(o: ObservationEnvelope, readContent: 
   const anchors: Anchor[] = [];
   const n = o.evidence.length;
   for (let i = 0; i < n; i++) {
-    const e: SourceEvidence = o.evidence[i]!;
+    const e = o.evidence[i]!;
+    const role: AnchorRole = n === 1 ? 'single' : i === 0 ? 'source' : i === n - 1 ? 'sink' : 'step';
+    if ('location' in e) {
+      // A withheld location is never read or turned into a path: its identity is the cited content and span only.
+      anchors.push({ role, sourceId: e.sourceId, relativePath: null, withheld: true, content: e.content, span: { startByte: e.span.startByte, endByte: e.span.endByte },
+        nodeId: null, textDigest: sha(`withheld\u0000${e.content}\u0000${e.span.startByte}\u0000${e.span.endByte}`), evidenceIndex: i });
+      continue;
+    }
     const bytes = await read(e.content);
     const slice = Buffer.from(bytes).subarray(Math.min(e.span.startByte, bytes.length), Math.min(e.span.endByte, bytes.length));
     const text = slice.toString('utf8').replace(/\s+/g, ' ').trim();
     anchors.push({
-      role: n === 1 ? 'single' : i === 0 ? 'source' : i === n - 1 ? 'sink' : 'step',
-      sourceId: e.sourceId, relativePath: e.relativePath, content: e.content, span: { startByte: e.span.startByte, endByte: e.span.endByte },
+      role, sourceId: e.sourceId, relativePath: e.relativePath, withheld: false, content: e.content, span: { startByte: e.span.startByte, endByte: e.span.endByte },
       nodeId: e.nodeId ?? null, textDigest: sha(text), evidenceIndex: i,
     });
   }
@@ -82,6 +90,6 @@ export async function normalizeObservation(o: ObservationEnvelope, readContent: 
     observationId: o.id, snapshotId: o.snapshotId, producer: producerOf(o), ruleFamilyId: familyId,
     ruleRevision: o.rule?.revisionDigest ?? null,
     severity: mapped ?? 'info', originalSeverity: original, severityUnmapped: !mapped,
-    anchors, secret: isSecretObservation(o), observation: o,
+    anchors, secret: isSecretObservation(o) || anchors.some(a => a.withheld), observation: o,
   };
 }

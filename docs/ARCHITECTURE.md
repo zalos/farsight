@@ -666,10 +666,14 @@ symbols are still there, a complete current check of its rule family covered all
 revision, engine, capabilities, or a reviewed compatibility mapping) and conditions (environment, limits) are the
 same. Otherwise it is a removed surface (file or symbol gone; a folder that could not be listed is unknown, not
 removed), unassessed scope (no check, a failed or partial check, a narrower scope), changed detection or
-incomparable conditions; probable and ambiguous pairings stay open. **Context:** a retained enriched graph is pinned
-only when every input file it names has the captured content id, every node it locates for the source is in a named
-input, and every captured `farsight.config.json` or `screens.json` is among its inputs; the receipt records what was
-verified. A mismatched context, a graph without journeys (a portable parser artifact) or no context leaves the place
+incomparable conditions; probable and ambiguous pairings stay open. Any anchor's code gone (a source removed while the
+sink remains) is a removed surface, resolution needs a current analysis showing the code still there, and a withheld
+(secret) location is never resolved. **Context:** a retained enriched graph is pinned only when every input file it
+names has the captured content id, every node it locates for the source is in a named input, every captured
+`farsight.config.json` or `screens.json` is among its inputs, and the owner confirmed exactly this context document for
+this snapshot and source (the owner-only `context.pin` action, a spent receipt): matching hashes alone do not show its
+journeys and labels are true. The verified graph is copied and frozen, so later changes to the caller's objects reach
+nothing; core's folds run on their own working copy. The receipt records what was verified. A mismatched context, a graph without journeys (a portable parser artifact) or no context leaves the place
 empty with its reason; no current graph is consulted and nothing enriches or fetches. **Placement** reuses core's cached
 `flowWalks`, `impactOf` + `affectedReach` and `personaOfScreen`: direct use where a screen's walk contains the symbol,
 potential impact where only dependents reach it, screens deduplicated, personas kept with their screens, bounds
@@ -677,7 +681,11 @@ explicit (`of` carries the full count), one business sentence from the same fold
 (`sentinel-report/draft-1`, extended additively with evidence locations, fingerprints, match strength, `historical`
 and `definitions`) carries every word it uses with its definition. A disclosure profile (`private` embeds excerpts,
 `shareable` withholds them) never changes a finding, a place or a count; secret evidence is never embedded or located
-in any profile. **Renderings** read only the document: Markdown escapes and fences source; HTML is one file with
+in any profile, and disclosure covers every field: a secret finding is never placed and carries only the rule pack's
+or fixed words, a producer's message appears only in a private report of a non-secret finding, and a withheld-location
+citation (secret scan) is never read or located. Every planned check has one coverage record or is a `not-run` gap; the
+report is complete only with no gap, no file seen by no check and no unlisted folder; a gap is placed on the screens
+relying on the code the check did not cover. **Renderings** read only the document: Markdown escapes and fences source; HTML is one file with
 inline styles, no script, no external resource, a content security policy that refuses loads anyway, internal anchors
 and a print stylesheet; SARIF 2.1.0 uses the rule family as `ruleId`, Sentinel's fingerprints under their own
 `partialFingerprints` keys (never GitHub's line hash), and refuses more results than a limit rather than cutting.

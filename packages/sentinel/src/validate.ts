@@ -309,7 +309,8 @@ const attempt: Check<AttemptEnvelope> = (v, out) => {
 
 const observation: Check<ObservationEnvelope> = (v, out) => {
   v.evidence.forEach((e, i) => {
-    pathError(out, `/evidence/${i}/relativePath`, e.relativePath);
+    // A withheld location carries no path to check; an ordinary citation's path is checked as everywhere.
+    if (!('location' in e)) pathError(out, `/evidence/${i}/relativePath`, e.relativePath);
     if (e.span.endByte < e.span.startByte) out.add(err(`/evidence/${i}/span`, 'span ends before it starts'));
     if (e.snapshotId !== v.snapshotId) out.add(err(`/evidence/${i}/snapshotId`, 'evidence cites another snapshot'));
   });
@@ -359,6 +360,7 @@ const report: Check<ReportEnvelope> = (v, out) => {
   countErrors(out, '/counts/seenByNoStage', v.counts.seenByNoStage);
   countErrors(out, '/counts/unknownScopeBoundaries', v.counts.unknownScopeBoundaries);
   if (v.completeness === 'complete' && v.gaps.length) out.add(err('/completeness', 'a report with coverage gaps is partial'));
+  if (v.completeness === 'complete' && (v.counts.seenByNoStage.n > 0 || v.counts.unknownScopeBoundaries.n > 0)) out.add(err('/completeness', 'a report with unread files or unlisted folders is partial'));
   for (const i of duplicates(v.findings, f => f.id)) out.add(err(`/findings/${i}/id`, 'duplicate finding'));
   const findings = new Set(v.findings.map(f => f.id));
   v.findings.forEach((f, i) => {

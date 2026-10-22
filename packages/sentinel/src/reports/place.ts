@@ -18,7 +18,9 @@ const indexes = new WeakMap<object, GraphIndex>();
 function indexOf(ctx: PinnedContext): GraphIndex {
   const g = ctx.graph!;
   let ix = indexes.get(g);
-  if (!ix) indexes.set(g, ix = buildIndex(g.nodes as never, g.edges as never));
+  // Core's folds memoize on the objects they index, so they work on a private copy of the sealed graph; the sealed
+  // graph itself, which the report's artifact was made from, is never handed to them.
+  if (!ix) indexes.set(g, ix = buildIndex(structuredClone(g.nodes) as never, structuredClone(g.edges) as never));
   return ix;
 }
 
@@ -112,6 +114,25 @@ export function placeNodes(ctx: PinnedContext | undefined, nodeIds: readonly str
     },
     limitationKeys: [...limitations].sort(),
   };
+}
+
+const CODE_KINDS = new Set(['function', 'component', 'page', 'route', 'class']);
+const GAP_SYMBOLS = 64;
+
+/**
+ * Places the files a gap covers: the code symbols the pinned context locates in them, through the same fold as a
+ * finding. A gap placed this way says which screens rely on code a check did not cover; it claims nothing else.
+ */
+export function placeFiles(ctx: PinnedContext | undefined, files: readonly string[]): FindingPlace {
+  if (!ctx) return unplaced('unavailable', ['sentinel.place.noContext']);
+  if (ctx.binding !== 'matched' || !ctx.graph || !ctx.artifact) return unplaced(ctx.binding, ctx.reasons, ctx);
+  const wanted = new Set(files);
+  const ids = ctx.graph.nodes.filter(n => n.loc?.repo === ctx.repo && wanted.has(n.loc.path) && CODE_KINDS.has(n.kind)).map(n => `${ctx.sourceId}::${n.id.slice(ctx.repo.length + 2)}`);
+  if (!ids.length) return { ...unplaced('unavailable', ['sentinel.place.noAnchorSymbol'], ctx), binding: 'matched', context: contextOf(ctx) };
+  // A gap over a large scope is placed by a bounded, deterministic subset of its symbols, and says so.
+  const sorted = [...new Set(ids)].sort();
+  const place = placeNodes(ctx, sorted.slice(0, GAP_SYMBOLS));
+  return sorted.length > GAP_SYMBOLS ? { ...place, limitationKeys: [...new Set([...place.limitationKeys, 'sentinel.place.truncated'])].sort() } : place;
 }
 
 function contextOf(ctx: PinnedContext): NonNullable<FindingPlace['context']> {

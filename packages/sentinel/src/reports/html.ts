@@ -72,7 +72,7 @@ ${f.evidence.map(e => evidenceHtml(doc, e)).join('\n')}
 <dt>Rule family</dt><dd class="code">${esc(h.ruleFamilyId)}</dd>${placeHtml(doc, h.place)}</dl></section>`).join('\n')}` : '';
   const gaps = doc.gaps.length
     ? `<table><thead><tr><th>Check</th><th>Status</th><th>Why</th></tr></thead><tbody>${doc.gaps.map(g => `<tr id="${anchor('gap', g.checkId)}"><td class="code">${esc(g.checkId)}</td><td>${esc(g.status)}</td><td>${esc(g.explanation.business)}<div class="code">${esc(g.explanation.code)}</div></td></tr>`).join('')}</tbody></table>`
-    : '<p>Every planned check covered its scope.</p>';
+    : doc.completeness === 'complete' ? '<p>Every planned check covered its scope.</p>' : '<p>Every planned check recorded its scope, but some captured files were seen by no check or some folders were never listed: read the counts.</p>';
   const toc = doc.findings.map(f => `<li><a href="#${anchor('finding', f.id)}">${esc(f.title.business)}</a></li>`).join('');
   const definitions = (doc.definitions ?? []).map(d => `<tr id="${anchor('word', d.key)}"><td>${esc(d.text.business.replace('{n}', 'n').replace('{m}', 'm'))}<div class="code">${esc(d.key)}</div></td><td>${esc(defineOf(doc, d.key) ?? '')}</td></tr>`).join('');
   return `<!doctype html>
