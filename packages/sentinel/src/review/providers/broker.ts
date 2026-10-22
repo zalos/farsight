@@ -16,6 +16,7 @@ import type { ActionEffect, ActionIntent, Budget, DecisionChannel, Principal } f
 import { admit, type AdmissionResult } from '../../policy/admission.js';
 import { canonicalDigest } from '../../policy/digest.js';
 import { isConsumedReceipt, receiptAuthority, type ReceiptBook } from '../../policy/receipts.js';
+import { snapshot } from '../../policy/immutable.js';
 import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.js';
 import type { BudgetLedger, Reservation } from './budget.js';
 import { resolveCredential, type CredentialSource, type Secret } from './credentials.js';
@@ -108,8 +109,16 @@ export class ModelBroker {
   constructor(deps: BrokerDeps) { this.#deps = deps; }
   #now() { return (this.#deps.now ?? (() => new Date()))(); }
 
-  async openEnvelope(req: OpenEnvelopeRequest): Promise<ModelEnvelope> {
-    const { binding, policy } = req;
+  async openEnvelope(given: OpenEnvelopeRequest): Promise<ModelEnvelope> {
+    const { binding, policy } = given;
+    // Every admission input is a private frozen copy taken before anything is awaited: a caller that changes its
+    // objects during the keychain read cannot change the budget, run, requester or state the receipt is checked
+    // against and the ledger records.
+    const req = {
+      binding, policy,
+      ...snapshot({ runId: given.runId, budget: given.budget, requestedBy: given.requestedBy, stateDigest: given.stateDigest }),
+      ...(given.receipt ? { receipt: Object.freeze({ book: given.receipt.book, id: given.receipt.id }) } : {}),
+    };
     if (!isProviderBinding(binding)) fail('sentinel.provider.notTrusted', 'only bindProvider’s own binding is accepted');
     if (!isEffectivePolicy(policy) || policy.revision !== binding.policyRevision) fail('sentinel.provider.bindingChanged', 'the policy changed since the binding was made');
     const b = req.budget;
@@ -210,7 +219,8 @@ export class ModelBroker {
     }
     if (parsed.returnedModel === null) throw new ModelCallError(new ProviderError('sentinel.provider.identityMalformed', 'no model name', 'possible'), settled);
     if (parsed.returnedModel !== binding.model) {
-      throw new ModelCallError(new ProviderError('sentinel.provider.identityMismatch', `${binding.model} asked, ${parsed.returnedModel.slice(0, 64)} answered`, 'possible'), settled);
+      // The returned name is provider-controlled text: it stays out of the public error (it could echo anything sent).
+      throw new ModelCallError(new ProviderError('sentinel.provider.identityMismatch', `${binding.model} asked, another model answered`, 'possible'), settled);
     }
     if (settled.state !== 'settled') throw new ModelCallError(new ProviderError('sentinel.provider.malformedResponse', 'no usage reported; the reservation stays held', 'possible'), settled);
     return Object.freeze({

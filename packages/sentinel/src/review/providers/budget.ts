@@ -9,6 +9,7 @@
 // for epochs the coordinator has fenced, releases what was only held and turns what was dispatched into uncertain:
 // a restart never forgets a call that may have been billed. A settlement above its reservation is recorded in full and
 // marks the envelope overdrawn, which refuses every further reservation; nothing is clamped.
+import { createHash } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { checkSqliteRuntime } from '../../store/runtime.js';
 import { fail } from './errors.js';
@@ -188,7 +189,8 @@ export class BudgetLedger {
       if (t.overdrawn) fail('sentinel.provider.envelopeOverdrawn', 'an earlier call reported more than it reserved');
       if (t.chargedTokens + r.tokens > t.maxTokens) fail('sentinel.provider.budgetExhausted', `${t.maxTokens - t.chargedTokens} tokens left, ${r.tokens} needed`);
       if (t.chargedCostNanos + r.costNanos > t.maxCostNanos) fail('sentinel.provider.budgetExhausted', 'not enough money left for the worst case');
-      const rid = `res-${r.envelopeId.slice(0, 40)}-${r.operationId.slice(0, 60)}`.slice(0, 128);
+      // A digest of the exact pair: distinct operations never share an id, whatever their length.
+      const rid = `res-${createHash('sha256').update(`${r.envelopeId}\u0000${r.operationId}`).digest('hex').slice(0, 48)}`;
       this.#run('INSERT INTO reservations (id, envelope_id, operation_id, state, tokens, cost_nanos, epoch, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
         rid, r.envelopeId, r.operationId, 'held', r.tokens, r.costNanos, r.epoch, r.at, r.at);
       this.#event(rid, null, 'held', 'reserved', r.at);
@@ -224,9 +226,11 @@ export class BudgetLedger {
     const before = this.#row(rid);
     const out = this.#move(rid, from, 'settled', detail, at, ', used_input = ?, used_output = ?, used_cost_nanos = ?, reconciled_by = ?',
       u.inputTokens, u.outputTokens, u.costNanos, by);
-    if (u.inputTokens + u.outputTokens > before.tokens || u.costNanos > before.costNanos) this.#event(rid, 'settled', 'settled', 'overrun: reported usage above the reservation', at);
+    // Any call above its own reservation broke the per-call bound: the envelope takes no further call, even with room left.
+    const overrun = u.inputTokens + u.outputTokens > before.tokens || u.costNanos > before.costNanos;
+    if (overrun) this.#event(rid, 'settled', 'settled', 'overrun: reported usage above the reservation', at);
     const t = this.#totals(before.envelopeId);
-    if (t.chargedTokens > t.maxTokens || t.chargedCostNanos > t.maxCostNanos) this.#run('UPDATE envelopes SET overdrawn = 1 WHERE id = ?', before.envelopeId);
+    if (overrun || t.chargedTokens > t.maxTokens || t.chargedCostNanos > t.maxCostNanos) this.#run('UPDATE envelopes SET overdrawn = 1 WHERE id = ?', before.envelopeId);
     return out;
   }
 
