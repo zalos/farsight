@@ -22,10 +22,12 @@ import type { WorkEnvelope } from '../contracts/work.js';
 import { planBoundaryFor, verifyInputSet, verifyWorkEnvelope, workEnvelopesFor, canonicalArtifactId, influenceManifestOf, type InfluenceManifest } from '../planner/boundary.js';
 import { openSnapshot } from '../snapshot/materialize.js';
 import type { SentinelStore } from '../store/index.js';
+import { boundOwner } from '../store/owner-binding.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { ExecutionError } from './errors.js';
 import type { AdmittedPlan } from './plans.js';
 import { checkProfileRegistry } from './profile.js';
+import { NOT_SELECTED, unitsToRun } from './selection.js';
 import type { AdapterRegistry, TrustedAdapter } from './registry.js';
 import { orderPlan } from './scheduler.js';
 import { inputFingerprintOf, type CapturedInput } from './supervisor.js';
@@ -65,7 +67,7 @@ export interface ExecutionBinding {
    * inputs), and the job and auxiliary inputs by digest and role.
    */
   sourceInputs?: ArtifactId[];
-  derived?: { job: ArtifactId; auxiliary: Array<{ id: ArtifactId; role: string }> };
+  derived?: { job: ArtifactId; auxiliary: Array<{ id: ArtifactId; role: string }>; analysis?: { inventory: WorkRef; result: ArtifactId; index: ArtifactId; artifact: ArtifactId; manifest: ArtifactId } };
 }
 
 export interface ExecutableUnit {
@@ -88,10 +90,18 @@ export interface ValidatedPlan {
   readonly works: readonly Readonly<WorkEnvelope>[];
   /** Published work of earlier revisions this one depends on. */
   readonly external: ReadonlySet<string>;
+  /** Only the exact bootstrap references proven by existing plan validation. */
+  reusedProven(ref: WorkRef): boolean;
   unitOf(ref: WorkRef): ExecutableUnit;
   bindingOf(ref: WorkRef): Readonly<ExecutionBinding>;
   /** Where the coordinator restores the pinned snapshot for the check units' inputs (null for a bootstrap revision). */
   readonly restored: string | null;
+}
+
+const validated = new WeakMap<object, { store: SentinelStore; epoch: string }>();
+export function isValidatedPlan(store: SentinelStore, value: unknown): value is ValidatedPlan {
+  const binding = value && typeof value === 'object' ? validated.get(value) : undefined;
+  return binding?.store === store && binding.epoch === store.epoch;
 }
 
 const key = (r: WorkRef) => `${r.id}@${r.revision}`;
@@ -125,6 +135,8 @@ export function bindingMismatch(binding: ExecutionBinding, invocation: { adapter
 /** Bind an admitted plan revision for execution in `run`. Restores the pinned snapshot under scratchRoot when needed. */
 export async function executablePlan(store: SentinelStore, admitted: AdmittedPlan, recordedRun: RunEnvelope, currentRevision: number,
   registry: AdapterRegistry, scratchRoot: string): Promise<ValidatedPlan> {
+  boundOwner(store);
+  store.assertHeld();
   const plan = admitted.plan;
   checkProfileRegistry(admitted.profile, registry);
   if (plan.runId !== recordedRun.id || plan.revision !== currentRevision) refuse('the plan is not the run\'s current revision');
@@ -146,7 +158,13 @@ export async function executablePlan(store: SentinelStore, admitted: AdmittedPla
     const boundary = planBoundaryFor(plan, { run, conversion, snapshot,
       pathOf: i => join(root, sources.has(i.sourceId) ? i.sourceId : refuse(`no captured source ${i.sourceId}`), ...i.relativePath.split('/')) });
     works = [...boundary.works];
-    const held = new Set(works.filter(w => w.state === 'blocked').map(key));
+    // A selected rerun runs exactly its selection: every other unit is held, disabled by the selection, and its
+    // envelope says so, so the coordinator records the hold and never admits it.
+    if (admitted.selection) {
+      const runs = unitsToRun(admitted.selection);
+      works = works.map(w => (runs.has(w.id) ? w : { ...w, state: 'disabled-by-policy', reasonCode: NOT_SELECTED } as WorkEnvelope));
+    }
+    const held = new Set(works.filter(w => w.state === 'blocked' || w.state === 'disabled-by-policy').map(key));
     inputsOf = w => (held.has(key(w)) ? [] : boundary.inputsFor(w).map(i => ({ id: i.id, path: i.path })));
   } else {
     works = workEnvelopesFor(plan, conversion).map(c => c.envelope);
@@ -183,7 +201,8 @@ export async function executablePlan(store: SentinelStore, admitted: AdmittedPla
       }
     }
     const listed = inputsOf(w);
-    if (unit.stage === 'check' && adapter) verifyInputSet(plan, w, listed);
+    // A held unit never runs, so it is given no inputs; every unit that can run gets exactly the plan's.
+    if (unit.stage === 'check' && adapter && w.state !== 'disabled-by-policy' && w.state !== 'blocked') verifyInputSet(plan, w, listed);
     const inputs = deepFreeze(listed.filter((i, n) => listed.findIndex(x => x.id === i.id) === n));
     const checks = plan.checks.filter(c => c.state === 'planned' && c.unit?.id === w.id && c.unit.revision === w.revision);
     const inputScopes = deepFreeze(capturedInputScopes(unit, checks, inputs));
@@ -191,11 +210,14 @@ export async function executablePlan(store: SentinelStore, admitted: AdmittedPla
     if (adapter) bindings.set(key(w), deepFreeze(executionBinding(plan, w, adapter, inputs.map(i => i.id))));
   }
   const get = <T>(m: Map<string, T>, r: WorkRef): T => m.get(key(r)) ?? refuse(`work ${key(r)} is not in the plan`);
-  return Object.freeze({
+  const proven = new Set(plan.reused.map(key));
+  const result = Object.freeze({
     run, admitted: deepFreeze(structuredClone(admitted)), works: Object.freeze(works.map(w => units.get(key(w))!.work)),
-    external: new Set(plan.reused.map(key)), restored,
+    external: new Set(proven), restored, reusedProven: (r: WorkRef) => proven.has(key(r)),
     unitOf: (r: WorkRef) => get(units, r), bindingOf: (r: WorkRef) => get(bindings, r),
   });
+  validated.set(result, { store, epoch: store.epoch });
+  return result;
 }
 
 const RUN_IDENTITY = ['id', 'parentId', 'baselineId', 'snapshotId', 'planRevision', 'ruleLockDigest', 'toolLockDigest', 'policyRevisionDigest', 'promptPolicyDigest', 'requestedScope', 'budgets'] as const;

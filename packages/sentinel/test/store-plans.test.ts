@@ -43,7 +43,7 @@ test('a plan revision and its pinned artifacts are admitted in one transaction; 
   const { dir, ledger } = await ledgerAt(t);
   const boot = ledger.admitPlan(stagePlan(ledger, 'a', 1, 'bootstrap', null));
   assert.deepEqual({ ...boot, sequence: 0, admittedAt: '' }, { runId: 'run-a', revision: 1, kind: 'bootstrap', digest: sha('a digest 1'), previous: null,
-    plan: sha('a plan 1'), ruleLock: null, policy: null, profile: sha('a profile'), snapshotId: null, sequence: 0, admittedAt: '' });
+    plan: sha('a plan 1'), ruleLock: null, policy: null, profile: sha('a profile'), selection: null, snapshotId: null, sequence: 0, admittedAt: '' });
   admitSnapshot(ledger, 'snap-a');
   const analysis = ledger.admitPlan(stagePlan(ledger, 'a', 2, 'analysis', sha('a digest 1'), 'snap-a'));
   assert.deepEqual(ledger.latestPlan('run-a'), analysis);

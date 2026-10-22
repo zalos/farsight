@@ -20,6 +20,7 @@ import type { PlanRecord } from '../store/store-types.js';
 import { validateEnvelope } from '../validate.js';
 import { ExecutionError } from './errors.js';
 import { checkProfileForPlan, type ExecutionProfileRecord } from './profile.js';
+import { checkSelection, SELECTION_SCHEMA, type RerunSelection } from './selection.js';
 import { COVERAGE_SCHEMA } from './coverage.js';
 import { evaluateRequiredCoverage, type RequiredCoverage } from '../planner/coverage.js';
 import type { CoverageEnvelope } from '../contracts/coverage.js';
@@ -37,6 +38,8 @@ export interface AdmitPlanRequest {
   ruleLock: RuleLockEnvelope | null;
   policy: EffectivePolicy | null;
   profile: ExecutionProfileRecord;
+  /** A selected rerun's selection (analysis revisions only): the units this run executes. */
+  selection?: RerunSelection | null;
 }
 
 export interface AdmittedPlan {
@@ -45,6 +48,7 @@ export interface AdmittedPlan {
   ruleLock: RuleLockEnvelope | null;
   policy: EffectivePolicyRecord | null;
   profile: ExecutionProfileRecord;
+  selection: RerunSelection | null;
 }
 
 const refuse = (reason: string): never => { throw new ExecutionError('sentinel.execution.planInvalid', { reason }); };
@@ -71,34 +75,40 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest)
   if (request.policy !== null && !isEffectivePolicy(request.policy)) refuse('the policy is accepted only as effectivePolicy returned it');
   const policy = request.policy ? structuredClone(policyRecordOf(request.policy)) : null;
   const profile = structuredClone(request.profile);
+  const selection = request.selection ? structuredClone(request.selection) : null;
   check(plan, ruleLock, policy, profile);
+  if (selection) checkSelection(plan, selection);
   if (plan.pins.snapshotId !== null && !store.ledger.getSnapshot(plan.pins.snapshotId)) refuse('the plan pins a snapshot that was not admitted');
   const ids = {
     plan: store.objects.identifyCanonicalJson(plan), profile: store.objects.identifyCanonicalJson(profile),
     ruleLock: ruleLock ? store.objects.identifyCanonicalJson(ruleLock) : null, policy: policy ? store.objects.identifyCanonicalJson(policy) : null,
+    selection: selection ? store.objects.identifyCanonicalJson(selection) : null,
   };
   // Admitting exactly the same revision again (the same plan and pinned records) returns the existing record.
   const existing = store.ledger.getPlan(plan.runId, plan.revision);
   if (existing) {
     if (existing.digest === plan.digest && existing.plan === ids.plan.id && existing.profile === ids.profile.id
-      && existing.ruleLock === (ids.ruleLock?.id ?? null) && existing.policy === (ids.policy?.id ?? null)) return existing;
+      && existing.ruleLock === (ids.ruleLock?.id ?? null) && existing.policy === (ids.policy?.id ?? null)
+      && existing.selection === (ids.selection?.id ?? null)) return existing;
     refuse(`revision ${plan.revision} of run ${plan.runId} was already admitted with other content`);
   }
-  const pinned = [ids.profile.id, ...(ids.ruleLock ? [ids.ruleLock.id] : []), ...(ids.policy ? [ids.policy.id] : [])];
+  const pinned = [ids.profile.id, ...(ids.ruleLock ? [ids.ruleLock.id] : []), ...(ids.policy ? [ids.policy.id] : []), ...(ids.selection ? [ids.selection.id] : [])];
   const stageId = `plan.${plan.runId}.${plan.revision}.${plan.digest.slice(7, 23)}`.slice(0, 128);
   store.ledger.registerStaging(stageId, [
     { id: ids.plan.id, schema: 'sentinel-plan/draft-1', privacy: 'source-derived', links: pinned },
     { id: ids.profile.id, schema: profile.schema, privacy: 'metadata' },
     ...(ruleLock ? [{ id: ids.ruleLock!.id, schema: 'sentinel-rulelock/draft-1', privacy: 'metadata' as const }] : []),
     ...(policy ? [{ id: ids.policy!.id, schema: policy.kind, privacy: 'metadata' as const }] : []),
+    ...(selection ? [{ id: ids.selection!.id, schema: SELECTION_SCHEMA, privacy: 'metadata' as const }] : []),
   ]);
   try {
     const receipts = [await store.objects.putCanonicalJson(plan, { expect: ids.plan }), await store.objects.putCanonicalJson(profile, { expect: ids.profile })];
     if (ruleLock) receipts.push(await store.objects.putCanonicalJson(ruleLock, { expect: ids.ruleLock! }));
     if (policy) receipts.push(await store.objects.putCanonicalJson(policy, { expect: ids.policy! }));
+    if (selection) receipts.push(await store.objects.putCanonicalJson(selection, { expect: ids.selection! }));
     store.assertHeld();
     return store.ledger.admitPlan({ runId: plan.runId, revision: plan.revision, kind: plan.kind, digest: plan.digest, previous: plan.previous,
-      plan: ids.plan.id, ruleLock: ids.ruleLock?.id ?? null, policy: ids.policy?.id ?? null, profile: ids.profile.id,
+      plan: ids.plan.id, ruleLock: ids.ruleLock?.id ?? null, policy: ids.policy?.id ?? null, profile: ids.profile.id, selection: ids.selection?.id ?? null,
       snapshotId: plan.pins.snapshotId, stageIds: [stageId], receipts });
   } catch (error) {
     try { store.assertHeld(); store.ledger.abortStaging(stageId); } catch { /* recovery aborts a stage left open */ }
@@ -120,10 +130,12 @@ export async function loadPlan(store: SentinelStore, runId: Id, revision?: numbe
   const ruleLock = record.ruleLock ? await readJson<RuleLockEnvelope>(store, record.ruleLock) : null;
   const policy = record.policy ? await readJson<EffectivePolicyRecord>(store, record.policy) : null;
   const profile = await readJson<ExecutionProfileRecord>(store, record.profile);
+  const selection = record.selection ? await readJson<RerunSelection>(store, record.selection) : null;
   check(plan, ruleLock, policy, profile);
+  if (selection) checkSelection(plan, selection);
   if (plan.runId !== record.runId || plan.revision !== record.revision || plan.digest !== record.digest || plan.kind !== record.kind
     || plan.previous !== record.previous || plan.pins.snapshotId !== record.snapshotId) refuse('the stored plan is not the revision the ledger admitted');
-  return { record, plan, ruleLock, policy, profile };
+  return { record, plan, ruleLock, policy, profile, selection };
 }
 
 /**

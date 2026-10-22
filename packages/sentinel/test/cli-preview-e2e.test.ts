@@ -108,11 +108,32 @@ test('init → adopt → plan → run → status → report, twice where it matt
   // A rerun is a new run over the ended run's retained snapshot, naming it as its parent; it waits to be run.
   const units = plan.body.facts.unitIds as string[];
   assert.equal(units.length, 2);
+  // A strict subset: a linked run over the parent's published bootstrap that runs exactly the selected unit.
+  const reportBefore = run('report', planId).body.facts.report;
   const one = run('rerun', planId, '--stage', units[0]!);
-  assert.deepEqual([one.status, one.body.reasonCode], [3, 'sentinel.service.selectionUnsupported'], 'a strict subset is previewed, never widened silently');
+  assert.deepEqual([one.status, one.body.outcome], [0, 'prepared'], one.stderr);
   const rerunPreview = one.body.facts.preview;
   assert.deepEqual([rerunPreview.selected, rerunPreview.downstream, rerunPreview.all], [[units[0]], [], false]);
   assert.ok(rerunPreview.prerequisites.length >= 1, 'the published bootstrap is reused, not rerun');
+  assert.deepEqual([rerunPreview.units.length, rerunPreview.held.length, rerunPreview.held[0].parentUnit], [1, 1, units[1]], 'the other unit is held; its result stays the parent\'s');
+  const subsetId = one.body.facts.runId;
+  assert.deepEqual([subsetId, one.body.facts.parentId], [rerunPreview.runId, planId]);
+  assert.equal(run('rerun', planId, '--stage', units[0]!).body.outcome, 'kept', 'the same selection under the same terms is the same rerun');
+  const waiting = run('status', subsetId);
+  assert.deepEqual([waiting.body.outcome, waiting.body.reasonCode, waiting.body.facts.state, waiting.body.facts.units, waiting.body.facts.held], ['answered', 'sentinel.service.runAwaiting', 'planned', 1, 1]);
+  const subsetRun = run('run', subsetId);
+  assert.equal(subsetRun.status, 2, subsetRun.stderr);
+  assert.equal(subsetRun.body.facts.state, 'completed');
+  assert.deepEqual({ ...run('report', planId).body.facts.report, generatedAt: null }, { ...reportBefore, generatedAt: null }, 'the parent\'s report is unchanged');
+  // The other unit, rerun in the background: the service runs exactly its selection too.
+  const two = run('rerun', planId, '--stage', units[1]!);
+  assert.equal(two.body.outcome, 'prepared');
+  const detachedSubset = run('run', two.body.facts.runId, '--detach', '--confirm');
+  assert.deepEqual([detachedSubset.status, detachedSubset.body.outcome], [0, 'submitted'], detachedSubset.stderr);
+  const waited = run('wait', two.body.facts.runId);
+  assert.deepEqual([waited.status, waited.body.facts.state], [2, 'completed'], waited.stderr);
+  assert.equal(subsetRun.body.facts.previewFindings + waited.body.facts.previewFindings, 1, 'between them, the two selections find exactly the parent\'s one finding');
+  stopService(env);
   assert.equal(run('rerun', planId, '--stage', 'work-nope').body.reasonCode, 'sentinel.service.stageUnknown');
   const reran = run('rerun', planId);
   assert.deepEqual([reran.status, reran.body.outcome, reran.body.facts.parentId, reran.body.facts.snapshotId], [0, 'prepared', planId, plan.body.facts.snapshotId], 'no recapture: the parent\'s snapshot');
@@ -123,6 +144,12 @@ test('init → adopt → plan → run → status → report, twice where it matt
   assert.equal(run('rerun', rerunId).body.reasonCode, 'sentinel.service.runNotEnded', 'a run that has not ended is resumed, not rerun');
   const rerunRunResult = run('run', rerunId);
   assert.deepEqual([rerunRunResult.status, rerunRunResult.body.facts.previewFindings], [2, 1]);
+  // Once that rerun has ended, asking again is a fresh run, never the ended one handed back.
+  const fresh = run('rerun', planId);
+  assert.deepEqual([fresh.body.outcome, fresh.body.facts.preview.all], ['prepared', true]);
+  assert.notEqual(fresh.body.facts.runId, rerunId);
+  assert.equal(run('rerun', planId).body.facts.runId, fresh.body.facts.runId, 'while it waits, the same request is joined');
+  assert.equal(run('status', rerunId).body.facts.state, 'completed', 'the ended rerun is unchanged');
   // Changed source is a new snapshot and a new plan, not a rerun.
   writeFileSync(join(ws, 'src/more.ts'), 'export const del = (n: string) => db.query(`DELETE FROM t WHERE n = ${n}`);\n');
   const changed = run('plan');

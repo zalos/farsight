@@ -640,9 +640,8 @@ are read from the ledger: the recorded outcome and the coverage records. A run r
 policy only with the full report). `rerun <run> [--stage <unit,…>]` and `retry <run>` (the units that did not
 publish) plan a new run naming an ended one as its parent, over its retained snapshot with nothing captured again,
 after previewing the consequences from the parent's admitted plan: the selected units and everything downstream run
-again, prerequisites and the bootstrap are reused as published. Only a whole-analysis rerun executes today; a strict
-subset is previewed and refused, because planning just those units and reusing another run's published work are not
-built yet. Changed source is a new `plan`. The report is rendered from the ledger and stored artifacts, pinned to the run's last
+again, prerequisites and the bootstrap are reused as published. A strict subset is a selected rerun (ADR 43).
+Changed source is a new `plan`. The report is rendered from the ledger and stored artifacts, pinned to the run's last
 event. The published bundle ships the modules the code names by file URL (the launch gate, the bootstrap operations'
 implementations) as entries of their own, references rewritten and digests recorded in its manifest.
 
@@ -669,6 +668,49 @@ the revision the promotion was confirmed against (a create-once link per revisio
 temporary name), and the pack's exact files are kept so a plan resolves the lock against them. A repository supplies
 no lock. **Not in this decision:** the full report and finding policy (PR 19); per-input paths in the worker
 protocol, which would let a unit cover several files. Same-account code is outside this boundary, as for the store.
+
+43. **A selected rerun is a linked run over the parent's retained snapshot that runs exactly its selection and holds
+the rest (2026-10-22).**
+
+`rerun <run> --stage <unit,…>` naming a strict subset of an ended run's analysis units plans a new run whose parent
+is that run, over the parent's snapshot, under the rule lock, adopted policy and execution profile in effect now. It
+reuses the parent's published bootstrap through the parent chain (the same snapshot, published in a run of that
+lineage), never capturing or parsing again, even when the source is gone. The analysis is planned afresh from that
+evidence; a parent unit maps to the new unit with the same stage, adapter, implementation digest, source, checks,
+input-set digest, input fingerprint and scopes. A selected unit with no such match is refused as
+`sentinel.service.selectionStale` naming it (another detector build, changed rule bytes, other inputs), never widened.
+A unit the revision would have to reuse from the parent is refused as `sentinel.service.prerequisiteNotReusable`, and
+a parent with no published bootstrap in its lineage as `sentinel.service.bootstrapUnavailable`. The selected units and
+everything downstream run; every other unit is held `disabled-by-policy` with reason
+`sentinel.execution.notSelected`, given no inputs and never started.
+
+**The selection is admitted with the plan.** The record `sentinel-rerun-selection/draft-1` (`execution/selection.ts`)
+names the parent run, revision, plan digest and snapshot; the selected parent → unit pairs; the downstream units; the
+held units with their parent counterparts; and the reused bootstrap. Admission checks it against the revision:
+every unit runs or is held exactly once, what runs is closed downstream, nothing that runs depends on a held unit,
+and the reused set is the plan's. It is stored as an immutable artifact, linked from the plan and pinned in the
+ledger's `plans.selection_id` (migration 5, `plan-selection`), so the coordinator, a resume after a crash and the
+service all hold the same units back. The preview `rerun` prints is that same admitted plan. The run is created on
+the first `run`, foreground or detached, from an envelope derived from the admitted plan and selection. `retry` of a
+selected run reruns only the selected units that did not publish.
+
+**One request is one run; asking again after it ended is a new one.** A rerun's id is its request (parent, selection,
+lock, policy, profile) and a generation: the first generation not yet admitted, or admitted and not ended. Repeating
+the request while its run waits or runs joins it (`kept`), and a crash resumes it; once it has completed or been
+canceled, the same `rerun` is a fresh run with its own id, and the ended one is never handed back as new. A
+whole-analysis rerun follows the same rule; a plain `plan` of the same content stays the same run (ADR 37).
+
+**Coverage stays honest.** A held unit's results stay the parent's and are not copied as the child's coverage, so a
+selected rerun whose held units carry required checks ends incomplete, and the preview counts them (`requiredHeld`).
+The parent's runs, results and report are unchanged.
+
+**Open gate: dependency-bearing selections are refused.** A selection where something that runs needs an analysis
+unit that does not run is refused (`prerequisiteNotReusable`), even when the parent published that unit under exactly
+the same terms; only the bootstrap is reused. The shipped planner's check units depend only on the bootstrap, so no
+shipped plan reaches this today. Consuming genuine, eligible parent publications as prerequisites and counting held
+results as coverage belong to differential selection (PR 27); until both exist, the selective-stage rerun completion
+gate stays open, and a selected rerun never claims complete coverage on its own. **Not in this decision:** selecting
+by stage name rather than unit id.
 
 
 26. **The pattern engine runs behind an original protocol shim inside its pinned image, and coverage is per file per

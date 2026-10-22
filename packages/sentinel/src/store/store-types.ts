@@ -170,6 +170,8 @@ export interface AdmitPlanInput {
   policy: ArtifactId | null;
   /** The trusted execution profile the plan was made and is run under. */
   profile: ArtifactId;
+  /** A selected rerun's selection record (analysis revisions only); null or absent otherwise. */
+  selection?: ArtifactId | null;
   /** The admitted snapshot an analysis revision pins; null for a bootstrap revision. */
   snapshotId: Id | null;
   /** Unbound stages of this epoch holding exactly the receipts' artifacts, the plan linking each pinned one. */
@@ -188,6 +190,8 @@ export interface PlanRecord {
   ruleLock: ArtifactId | null;
   policy: ArtifactId | null;
   profile: ArtifactId;
+  /** A selected rerun's selection record, or null. */
+  selection: ArtifactId | null;
   snapshotId: Id | null;
   sequence: Count;
   admittedAt: Timestamp;

@@ -87,6 +87,7 @@ export interface PreparedOutputs {
 }
 
 function prepare(store: SentinelStore, items: Array<{ value: unknown; schema: string; privacy: ArtifactPrivacy; links?: ArtifactId[]; output?: boolean }>): PreparedOutputs {
+  bootstrapIo.beforePrepare?.(items);
   const records: PreparedOutputs['records'] = [];
   const seen = new Set<string>();
   const outputs: ArtifactId[] = [];
@@ -104,7 +105,14 @@ function prepare(store: SentinelStore, items: Array<{ value: unknown; schema: st
 }
 
 /** Package-internal test seam: awaited before each prepared record is written (to widen the write window). */
-export const bootstrapIo: { beforeWrite?: (value: unknown) => Promise<void> } = {};
+export const bootstrapIo: {
+  beforeWrite?: (value: unknown) => Promise<void>;
+  // Internal fault injection before identities are computed. Only an in-process test can set this hook;
+  // no request, persisted option, driver context, worker message or public export can reach it. Production
+  // defaults to no hook. Tests can publish validly hashed but semantically wrong coordinator-produced evidence
+  // through the real attempt/publication path; corrupting bytes alone only exercises the hash checker.
+  beforePrepare?: (items: Array<{ value: unknown; schema: string; privacy: ArtifactPrivacy; links?: ArtifactId[]; output?: boolean }>) => void;
+} = {};
 
 /** Stage, store and publish prepared outputs through the attempt; the ledger's fence decides acceptance. */
 export async function publishPrepared(store: SentinelStore, work: WorkRef, attemptId: Id, prepared: PreparedOutputs,
