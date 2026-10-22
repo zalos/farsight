@@ -3,7 +3,8 @@
 // `/bin/sh /input/<its own digest>` under PR 07's container controls; inputs are read-only and sealed 0444, so nothing
 // supplied as an input is executed, and the shim itself is pinned by the adapter digest.
 //
-// Inputs, in the order the coordinator lists them: this shim, the job file, then each captured content once. The job
+// Inputs, in any order: this shim, the job file, each captured content once, and (from the canonical coordinator) its
+// own job record. The shim finds its job by exclusion (see below), never by position. The job
 // names each file as `F <index> <content hex> <source-relative path>`; the shim rebuilds the tree in the tmpfs one folder
 // below the scan root (so a captured root `.gitleaksignore` is an ordinary scanned file, never an ignore list), writes
 // the pinned configuration and report template itself, and runs Gitleaks once with fixed arguments: an empty ignore
@@ -45,9 +46,20 @@ INPUTS=$(printf '%s' "$start" | sed -n 's/.*"inputs":\\[\\([^]]*\\)\\].*/\\1/p' 
 SEQ=0
 bound() { printf '"attemptId":"%s","work":{"id":"%s","revision":%s},"coordinatorEpoch":"%s","seq":%s' "$ATT" "$WID" "$WREV" "$EPOCH" "$SEQ"; SEQ=$((SEQ + 1)); }
 
-# The job is always the second input (the first is this shim), and must say so on its first line.
-JOB=$(printf '%s\\n' "$INPUTS" | sed -n 2p)
-[ -n "$JOB" ] && [ "$(head -n 1 "/input/$JOB" 2>/dev/null)" = 'sentinel-gitleaks-job/1' ] || die 'sentinel.secrets.inputInvalid'
+# The job is the one input that is neither this shim nor a captured source the coordinator names in inputScopes, and
+# whose first line says so. Order is not authority: a captured file that looks like a job is a source, never the job,
+# and without inputScopes two job-shaped inputs are refused, not guessed. The run record names the job's digest, which
+# the coordinator checks against the job it sealed.
+SELF=\${0##*/}
+SOURCES=" $(printf '%s' "$start" | grep -o '"input":"sha256:[0-9a-f]\\{64\\}"' | sed 's/.*sha256:\\([0-9a-f]*\\)"$/\\1/' | tr '\\n' ' ')"
+JOB=''
+COUNT=0
+for h in $INPUTS; do
+  [ "$h" = "$SELF" ] && continue
+  case "$SOURCES" in *" $h "*) continue ;; esac
+  if [ "$(head -n 1 "/input/$h" 2>/dev/null)" = 'sentinel-gitleaks-job/1' ]; then JOB=$h; COUNT=$((COUNT + 1)); fi
+done
+[ "$COUNT" -eq 1 ] || die 'sentinel.secrets.inputInvalid'
 
 rm -rf "$W"
 mkdir -p "$W/scan/tree" "$W/no-ignores" || die 'sentinel.secrets.workerError'

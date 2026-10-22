@@ -844,10 +844,15 @@ PR 11 scans captured current-tree bytes with Gitleaks 8.30.1 (MIT) through the P
 external adapter, the official multi-platform image index pinned by digest (`ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0…`),
 installed ahead of time and never pulled at scan time, no host fallback (`src/adapters/gitleaks/`). **Shape:** Gitleaks
 cannot speak the worker protocol, so an original POSIX shell shim does, inside the unmodified image (alpine: busybox
-sh and applets). The shim is the attempt's first input and runs as `/bin/sh /input/<its digest>`; the adapter digest
+sh and applets). The shim runs as `/bin/sh /input/<its digest>`; the adapter digest
 pins it, and with it the configuration and report template it writes. Only arm64 is measured; amd64, listed in the
 index, gives `candidate` results under an explicit qualification run and is otherwise refused. **Inputs:** the shim, a
-line job (`F <index> <content> <path>`) and each captured content once. Files over 8 MiB, names with a line break or
+line job (`F <index> <content> <path>`) and each captured content once, in any order (the canonical coordinator lists
+captured sources first, then its job record and the auxiliary worker and job). The shim takes as its job the one input
+that is neither itself nor a captured source the start's `inputScopes` names, and whose first line is the job header:
+a captured file shaped like a job is scanned as a source, never read as the job, and without `inputScopes` two
+job-shaped inputs are refused (`inputInvalid`), not guessed. The run record names the job digest it read, which the
+coordinator's normalization requires to be the job it sealed. Files over 8 MiB, names with a line break or
 another control character, and paths the release's own global allowlist skips — the file or any folder above it,
 since the engine prunes a matching folder whole (measured: `images.png/`, `package-lock.json/`, `node_modules/`) —
 are not sent; each is a skipped scope with its reason, never a silent omission. The allowlist patterns are matched in

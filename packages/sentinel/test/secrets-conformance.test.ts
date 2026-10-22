@@ -241,3 +241,49 @@ test('host and engine agree on every allowlisted path of a case-folding corpus (
   assert.ok(engineSkips.some(p => p.includes('\u017F')) && engineSkips.some(p => p.includes('\u212A')), 'the corpus exercises both foldings');
   t.diagnostic(`${paths.length} paths, ${engineSkips.length} skipped by the engine, host agrees`);
 });
+
+// ---- the job is found by authority, not by position --------------------------------------------------------------
+
+async function ordered(files: Record<string, string>, opts: { scoped: boolean }) {
+  const i = n++;
+  const targets = captured(join(root.root, `tree-${i}`), files);
+  const dir = join(root.root, `job-${i}`); mkdirSync(dir);
+  const scoped = snapshotFor('snap-synthetic', 'src-synthetic', targets);
+  const built = buildSecretsJob({ ...scoped, sourceId: 'src-synthetic' }, dir);
+  const sources = targets.filter((t, k, a) => a.findIndex(x => x.artifact === t.artifact) === k).map(t => ({ id: t.artifact, path: t.path }));
+  // The canonical coordinator's order: captured sources first, then its own job record, then the auxiliary worker and job.
+  const record = Buffer.from(JSON.stringify({ schema: 'sentinel-production-secrets-job/draft-1', note: 'canonical job record' }));
+  const recordPath = join(dir, 'record.json'); writeFileSync(recordPath, record);
+  const worker = built.inputs.find((x: any) => x.id === GITLEAKS_PRODUCTION_BUILD.workerDigest)!;
+  const job = built.inputs.find((x: any) => x.id === built.jobDigest)!;
+  const outcome = await service.run({ adapterId: GITLEAKS_ADAPTER.id, attemptId: `att-secrets-${i}`, work: { id: 'work-secrets', revision: 1 },
+    inputs: [...sources, { id: sha(record), path: recordPath }, worker, job],
+    ...(opts.scoped ? { assignment: { checks: ['chk-secrets'], scopes: ['src-synthetic'], inputScopes: sources.map(s => ({ input: s.id, scopes: ['src-synthetic'] })) } } : {}) });
+  const outputs = new Map(outcome.outputs.map((o: any) => [o.id, o.path]));
+  const r = outcome.state === 'succeeded' ? normalizeSecretsRun({ job: built.job, jobDigest: built.jobDigest, outcome, observedAt: new Date().toISOString(),
+    outputBytes: (id: string) => readFileSync(outputs.get(id) as string), targetBytes: (id: string) => { const p = sources.find(s => s.id === id)?.path; return p ? readFileSync(p) : undefined; },
+    ...(QUALIFY ? { qualifyingArchitecture: QUALIFY } : {}) }) : null;
+  return { outcome, r, scoped };
+}
+
+test('in the canonical order (sources first) the shim finds its sealed job by exclusion and scans every source', { skip }, async () => {
+  const { outcome, r } = await ordered({ 'app.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`, 'notes.txt': 'nothing here\n' }, { scoped: true });
+  assert.equal(outcome.state, 'succeeded', outcome.code);
+  assert.notEqual(r!.status, 'error', r!.reasonCode);
+  assert.equal(r!.scanned.length, 2);
+  assert.equal(r!.observations.length, 1);
+});
+
+test('a captured file shaped like a job is a source: scanned, never the job; without scopes the ambiguity is refused', { skip }, async () => {
+  const fake = 'sentinel-gitleaks-job/1\nF 0 0000000000000000000000000000000000000000000000000000000000000000 ../escape.env\n';
+  const files = { 'docs/looks-like-a-job.txt': fake, 'app.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n` };
+  const scoped = await ordered(files, { scoped: true });
+  assert.equal(scoped.outcome.state, 'succeeded', scoped.outcome.code);
+  assert.notEqual(scoped.r!.status, 'error', scoped.r!.reasonCode);
+  assert.equal(scoped.r!.scanned.length, 2, 'the job-shaped file is scanned as captured content');
+  assert.equal(scoped.r!.observations.length, 1);
+  const legacy = await ordered(files, { scoped: false });
+  assert.equal(legacy.outcome.state, 'failed');
+  assert.equal(legacy.outcome.diagnostics.text, 'sentinel-gitleaks-worker/1 sentinel.secrets.inputInvalid\n', 'two job-shaped inputs and no scopes: refused, not guessed');
+  absent(legacy.outcome.diagnostics.text, 'the refusal');
+});
