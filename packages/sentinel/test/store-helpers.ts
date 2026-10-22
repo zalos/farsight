@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import * as sqlite from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import type { LedgerOwner, ObjectReceipt, ObjectVerifier, VerifiedObject } from '../dist/store/store-types.js';
 
@@ -17,8 +18,11 @@ export class FakeOwner implements LedgerOwner {
   readonly storePath: string;
   readonly epoch: string;
   readonly storeId: string;
+  readonly runtime = { sqlite };
+  readonly layout: { root: string; ledger: string };
   constructor(storePath: string, epoch: string, storeId = 'store-1') {
     this.storePath = storePath;
+    this.layout = { root: storePath, ledger: join(storePath, 'ledger.sqlite') };
     this.epoch = epoch;
     this.storeId = storeId;
   }

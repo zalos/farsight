@@ -3,8 +3,7 @@
 // its own transaction, that the store owner is still held and that this ledger's epoch is still the current one.
 // Publication additionally fences the exact work revision, its active attempt and that attempt's state, so a
 // superseded attempt in the same epoch cannot win.
-import { lstatSync } from 'node:fs';
-import { join } from 'node:path';
+import { closeSync, lstatSync, openSync } from 'node:fs';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { isCalendarTimestamp, validateEnvelope } from '../validate.js';
 import type {
@@ -20,8 +19,6 @@ import {
   type StagedArtifact, type VerifiedObject,
 } from './store-types.js';
 
-/** STRICT tables and `json_valid` need SQLite 3.38 or later. The runtime release policy is checked by its owner. */
-const MIN_SQLITE = [3, 38, 0] as const;
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const MAX_STAGED = 4096;
@@ -59,6 +56,26 @@ const checkTime = (value: unknown, what: string): string => {
   if (typeof value !== 'string' || !isCalendarTimestamp(value)) throw invalid(`${what} is not a Sentinel timestamp`);
   return value;
 };
+/**
+ * The ledger and its WAL/SHM siblings are regular files owned by this user with no group or other access; a new
+ * ledger file is created 0600 before SQLite opens it (SQLite gives its siblings the main file's mode).
+ */
+function preparePrivateLedgerFile(path: string): void {
+  const uid = typeof process.getuid === 'function' ? process.getuid() : undefined;
+  for (const p of [path, `${path}-wal`, `${path}-shm`, `${path}-journal`]) {
+    let stat;
+    try { stat = lstatSync(p); } catch { continue; }
+    if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0 || (uid !== undefined && stat.uid !== uid)) {
+      throw new LedgerError('sentinel.store.unsafePath', 'a ledger file is not a private regular file of this user');
+    }
+  }
+  try { closeSync(openSync(path, 'wx', 0o600)); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+      throw new LedgerError('sentinel.store.unsafePath', 'could not create the ledger file', { cause: error });
+    }
+  }
+}
+
 const privacyRank = (p: ArtifactPrivacy) => ARTIFACT_PRIVACY.indexOf(p);
 
 function contract<K extends 'run' | 'work' | 'attempt'>(kind: K, value: unknown) {
@@ -75,16 +92,6 @@ function isConstraint(error: unknown): boolean {
   return typeof code === 'number' && (code & 0xff) === 19;
 }
 
-function sqliteVersionOk(version: string | undefined): boolean {
-  if (!version) return false;
-  const parts = version.split('.').map(Number);
-  for (let i = 0; i < MIN_SQLITE.length; i++) {
-    const have = parts[i] ?? 0;
-    if (have !== MIN_SQLITE[i]) return have > MIN_SQLITE[i]!;
-  }
-  return true;
-}
-
 type Row = Record<string, unknown>;
 
 /**
@@ -93,20 +100,10 @@ type Row = Record<string, unknown>;
  */
 export async function openLedger(owner: LedgerOwner, options: OpenLedgerOptions = {}): Promise<Ledger> {
   owner.assertHeld();
-  let sqlite: typeof import('node:sqlite');
-  try { sqlite = await import('node:sqlite'); } catch (cause) {
-    throw new LedgerError('sentinel.store.sqliteUnavailable', 'node:sqlite is not available on this runtime', { cause });
-  }
-  if (!sqliteVersionOk(process.versions.sqlite)) {
-    throw new LedgerError('sentinel.store.sqliteUnsupported',
-      `SQLite ${process.versions.sqlite ?? 'unknown'} is older than ${MIN_SQLITE.join('.')}`);
-  }
-  const path = options.path ?? join(owner.storePath, 'sentinel.db');
-  for (const p of [path, `${path}-wal`, `${path}-shm`]) {
-    let stat;
-    try { stat = lstatSync(p); } catch { continue; }
-    if (!stat.isFile()) throw new LedgerError('sentinel.store.unsafePath', 'the ledger path is not a regular file');
-  }
+  // The owner has already checked the SQLite release and the store root (canonical, local, owner-only, no alias).
+  const sqlite = owner.runtime.sqlite;
+  const path = owner.layout.ledger;
+  preparePrivateLedgerFile(path);
   const now = options.now ?? (() => new Date().toISOString());
   const failpoint = options.failpoint ?? (() => {});
   const db = new sqlite.DatabaseSync(path, { enableForeignKeyConstraints: true, timeout: 0, defensive: true });
@@ -125,6 +122,7 @@ export async function openLedger(owner: LedgerOwner, options: OpenLedgerOptions 
       build: options.build ?? 'unknown',
       now,
       backupTag: checkId(owner.epoch, 'owner epoch'),
+      sqlite,
       failpoint,
     });
     const ledger = new Ledger(db, owner, path, migration, now, failpoint, options.objects);

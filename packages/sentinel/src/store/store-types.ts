@@ -11,13 +11,16 @@ export interface LedgerOwner {
   readonly storeId: Id;
   /** A fresh, never-reused identity for this acquisition of the store. */
   readonly epoch: Id;
+  /** The SQLite runtime the owner already checked against the release policy; the ledger opens through it only. */
+  readonly runtime: { readonly sqlite: typeof import('node:sqlite') };
+  /** The checked store layout; the ledger lives at `layout.ledger` and nowhere else. */
+  readonly layout: { readonly root: string; readonly ledger: string };
   assertHeld(): void;
   /** The ledger registers itself so releasing ownership closes it first. Required: a ledger never outlives its owner. */
   registerResource(resource: { close(): void }): unknown;
 }
 
 export const LEDGER_ERROR_CODES = [
-  'sentinel.store.sqliteUnavailable',
   'sentinel.store.sqliteUnsupported',
   'sentinel.store.notLedger',
   'sentinel.store.unsafePath',
@@ -203,8 +206,6 @@ export interface Migration {
 }
 
 export interface OpenLedgerOptions {
-  /** Defaults to `<storePath>/sentinel.db`. */
-  path?: string;
   /** Recorded beside each applied migration. */
   build?: string;
   /** The clock for ledger-written timestamps; defaults to the system clock. */

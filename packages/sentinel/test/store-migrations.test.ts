@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, statSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { openLedger } from '../dist/store/ledger.js';
@@ -46,6 +46,7 @@ test('a new ledger is created at the newest schema with WAL, FULL sync, foreign 
   assert.equal(one('PRAGMA journal_mode'), 'wal');
   assert.equal(Number(one('PRAGMA application_id')), LEDGER_APPLICATION_ID);
   assert.equal(Number(one('PRAGMA user_version')), 1);
+  assert.equal(statSync(ledger.path).mode & 0o777, 0o600);
   const m = db.prepare('SELECT version, name, checksum, build FROM schema_migrations').all() as Array<Record<string, unknown>>;
   assert.equal(m.length, 1);
   assert.equal(m[0]!.build, 'test-build');
@@ -65,6 +66,7 @@ test('an upgrade takes a verified backup first, then applies every pending step'
   const backup = ledger.migration.backupPath!;
   ledger.close();
   assert.ok(existsSync(backup));
+  assert.equal(statSync(backup).mode & 0o777, 0o600);
   assert.deepEqual(peek(backup), { version: 1, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 });
   assert.deepEqual(peek(path), { version: 2, appId: LEDGER_APPLICATION_ID, runs: 1, later: 1 });
 });
@@ -117,14 +119,17 @@ test('a changed migration, a foreign database and an unsafe path are refused', a
   await assert.rejects(openLedger(owner(dir), { migrations: [V2] }), code('sentinel.store.migrationMismatch'));
 
   const other = scratch(t);
-  const foreign = new DatabaseSync(join(other, 'sentinel.db'));
+  const foreign = new DatabaseSync(join(other, 'ledger.sqlite'));
   foreign.exec('CREATE TABLE t (a TEXT)');
   foreign.close();
+  chmodSync(join(other, 'ledger.sqlite'), 0o644);
+  await assert.rejects(openLedger(owner(other)), code('sentinel.store.unsafePath'), 'a group-readable ledger is refused');
+  chmodSync(join(other, 'ledger.sqlite'), 0o600);
   await assert.rejects(openLedger(owner(other)), code('sentinel.store.notLedger'));
 
   const linked = scratch(t);
   writeFileSync(join(linked, 'target.db'), '');
-  symlinkSync(join(linked, 'target.db'), join(linked, 'sentinel.db'));
+  symlinkSync(join(linked, 'target.db'), join(linked, 'ledger.sqlite'));
   await assert.rejects(openLedger(owner(linked)), code('sentinel.store.unsafePath'));
 });
 

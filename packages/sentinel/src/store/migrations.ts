@@ -2,7 +2,7 @@
 // transaction; an existing ledger is first copied with SQLite's online backup and the copy verified, so a failed
 // upgrade leaves the prior schema and data untouched and a recoverable copy beside it.
 import { createHash } from 'node:crypto';
-import { closeSync, fsyncSync, mkdirSync, openSync, renameSync, rmSync } from 'node:fs';
+import { chmodSync, closeSync, fsyncSync, lstatSync, mkdirSync, openSync, renameSync, rmSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { LedgerError, type LedgerFailpoint, type Migration, type MigrationReport } from './store-types.js';
@@ -334,17 +334,21 @@ function fsyncPath(path: string): void {
  * any schema change. Returns its path. On failure nothing is left at the final path.
  */
 async function takeBackup(
-  db: DatabaseSync, path: string, from: number, tag: string, failpoint: (p: LedgerFailpoint) => void,
+  sqlite: typeof import('node:sqlite'), db: DatabaseSync, path: string, from: number, tag: string,
+  failpoint: (p: LedgerFailpoint) => void,
 ): Promise<string> {
-  const { backup, DatabaseSync: Db } = await import('node:sqlite');
+  const { backup, DatabaseSync: Db } = sqlite;
   const dir = join(dirname(path), 'backups');
   const final = join(dir, `${basename(path)}.v${from}.${tag}.bak`);
   const temp = `${final}.partial`;
   try {
     failpoint('backup:before');
-    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    try { mkdirSync(dir, { mode: 0o700 }); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
+    const d = lstatSync(dir);
+    if (!d.isDirectory() || (d.mode & 0o077) !== 0) throw new Error('the backup directory is not private');
     rmSync(temp, { force: true });
     await backup(db, temp);
+    chmodSync(temp, 0o600);
     failpoint('backup:after-copy');
     const copy = new Db(temp, { readOnly: true });
     try {
@@ -372,13 +376,14 @@ export async function migrateLedger(db: DatabaseSync, path: string, options: {
   build: string;
   now: () => string;
   backupTag: string;
+  sqlite: typeof import('node:sqlite');
   failpoint: (p: LedgerFailpoint) => void;
 }): Promise<MigrationReport> {
   const { migrations, build, now, failpoint } = options;
   const state = checkLedgerFile(db, migrations);
   const to = migrations.length;
   if (state.version === to) return { from: state.version, to, backupPath: null };
-  const backupPath = state.version > 0 ? await takeBackup(db, path, state.version, options.backupTag, failpoint) : null;
+  const backupPath = state.version > 0 ? await takeBackup(options.sqlite, db, path, state.version, options.backupTag, failpoint) : null;
   // Re-check after the await: nothing else holds this connection, but the check is cheap and keeps the step honest.
   checkLedgerFile(db, migrations);
   db.exec('BEGIN IMMEDIATE');
