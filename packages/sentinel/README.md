@@ -82,6 +82,16 @@ exactly one work unit or kept with its reason (unsupported, applicability unknow
 `workEnvelopesFor` gives the coordinator canonical work envelopes for a plan. A new rule plans a new revision over
 the already published capture and parse; earlier revisions never change (ADR 24).
 
+## Model providers (draft, opt-in)
+
+`farsight-sentinel/review/providers` is the only part of Sentinel that talks to a model: a local Ollama or an
+OpenAI-compatible endpoint. A provider is used only when it appears in the owner's adopted settings, with a model
+profile whose binding digest an owner receipt confirms whenever inference is priced or context leaves the machine.
+Every call reserves its worst case from a durable shared budget before it is sent. A call whose usage is unknown
+stays charged until the owner reconciles it. Redirects are never followed and there is no fallback to another
+provider (ADR 35). Nothing here runs unless a caller opens an envelope; the package's tests use local mock endpoints
+only.
+
 ## Next middleware applicability (draft)
 
 `farsight-sentinel/frameworks/next` reads a captured Next 14.2.25 / React 18.3.1 project (versions from its lockfile
@@ -238,6 +248,26 @@ checked for mutation, and a separate shadowed parameter does not imply a mutatio
 Every other runtime use defaults to unknown until the pack explicitly models how it consumes the value.
 An alias is followed only while its declaration stays local: exports, namespace containers and unsupported
 module-loading paths remain explicit boundaries. Type-only imports and unrelated local member names are harmless.
+
+### Bounded call paths and imported deep analysis (draft)
+
+```ts
+import { boundedCallPaths, importDeepAnalysis } from 'farsight-sentinel/analysis';
+
+const paths = await boundedCallPaths({ snapshot, analysis: analysis.sources[0], readContent, queries: [{ from, to }] });
+paths.results[0].outcome;   // reached | not-reached-complete | not-reached-bounded (with its frontiers)
+paths.establishes;          // always 'call-reachability': a path is never a data flow
+
+const imported = await importDeepAnalysis({ document, snapshot, authorization: spentReceipt, readContent, importedAt });
+imported.status;            // refused | untrusted | unbound | imported (observations limited to the tool's scope)
+```
+
+Sentinel ships no deep engine: none qualified for cross-file flow (E3), so deep checks stay unsupported. A path
+search follows the parser's call edges within explicit bounds and reports cycles; it says "not reached" without a
+frontier only when every visited function's calls are accounted for by the graph. A customer's own analyzer output
+is imported only with the owner's spent receipt for exactly that document and snapshot (`deepImportIntent`; the
+document's own attestation is never trusted alone) and a binding to the exact captured bytes; imported flows never
+count as checks Sentinel ran. ADR 36.
 
 ## Spring Security servlet pack (draft, PR 17)
 

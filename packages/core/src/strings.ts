@@ -62,6 +62,10 @@ import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
 import { SENTINEL_NEST_STRINGS } from './strings-sentinel-nest.js';
 
+import { SENTINEL_PROVIDER_STRINGS } from './strings-sentinel-providers.js';
+
+import { SENTINEL_ANALYSIS_STRINGS } from './strings-sentinel-analysis.js';
+
 import { SENTINEL_NEXT_STRINGS } from './strings-sentinel-next.js';
 
 import { SENTINEL_SPRING_STRINGS } from './strings-sentinel-spring.js';
@@ -209,6 +213,11 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_GLOSSARY_STRINGS,
   // Sentinel's Nest framework pack: why a control fact is unknown, and the registrations it could not follow (strings-sentinel-nest.ts)
   ...SENTINEL_NEST_STRINGS,
+
+  ...SENTINEL_PROVIDER_STRINGS,
+
+  // Sentinel's bounded call paths and imported deep-analysis results (strings-sentinel-analysis.ts)
+  ...SENTINEL_ANALYSIS_STRINGS,
 
   ...SENTINEL_NEXT_STRINGS,
 

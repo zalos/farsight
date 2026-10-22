@@ -779,6 +779,40 @@ in the production registry, the planner's batching, the scan command (PR 09), an
     Not decided here: CLI and planner integration (PR 09 still pending), CSRF/CORS/rate-limit/header properties,
     guard bodies, Fastify, and versions other than 10.4.15.
 
+36. **Sentinel retains bounded call paths as structural evidence and imports deep analysis only when attested and bound (2026-10-22).**
+No evaluated engine qualified for cross-file flow in E3 (`feasibility-decisions.json`, `engine.crossFile`), so
+Sentinel selects, bundles, downloads and runs no deep engine, and `interprocedural-flow` stays unavailable with
+`sentinel.capability.noQualifiedEngine`. Two draft boundaries replace it honestly, exported as
+`farsight-sentinel/analysis`. **Bounded call paths** (`sentinel-paths/draft-1`, `boundedCallPaths`): one index per
+parser artifact; a breadth-first search over the parser's `calls` edges (optionally `http` and `renders`; never
+guard, validation or test edges) within explicit depth, fan-out and visit bounds; strongly connected components are
+reported as call cycles, and every node is visited once, so cycles terminate. A query is `reached` (the shortest
+path, each step with the parser's resolution and its captured call sites), `not-reached-bounded` with the frontier
+kinds it met, or `not-reached-complete` only when nothing was left unexplored and every visited function's captured
+text is accounted for: the parser records no edge for a computed call, a call on an unknown value, a global or a
+function handed on as a value, so each visited function's whole-line bytes are scanned lexically (Unicode
+identifiers included, a keyword read as a property counted) and any call-like site beyond the recorded ones, or any
+function name used as a value, is a frontier (the scan may over-count, never under-count). A parser edge to a
+top-level function whose name the calling function also binds (a parameter, a local) is not followed
+(`shadowedCall`). The artifact, its parser index, the snapshot and the reader are bound before anything is cached or
+read: the index must be the artifact's own analysis (the envelope names the artifact's fingerprint), every location it
+cites must be a captured file of that snapshot with the same content id, bytes read must hash to the id cited, and
+caches are keyed by the artifact and index together, so nothing computed for one capture is served for another. The envelope binds the snapshot, source, analysis fingerprint, a digest of the graph read and the
+bounds, and always states `establishes: call-reachability` with `notDataFlow` and `graphOnly`: a path never claims
+flow, taint, sanitization or protection. **Attested deep import** (`sentinel-deep-import/draft-1`,
+`importDeepAnalysis`): a customer-run analyzer's flows are untrusted input. A document that does not validate is
+refused. Nothing it asserts about itself is trusted: it is used only with the owner's spent receipt for the new
+owner-only `evidence.import` action, bound to the canonical digest of the whole document (tool, version,
+distribution, licence terms, provenance, configuration and flows) and to the snapshot and source
+(`deepImportIntent`); without it, or with one for any other document, snapshot or action, it yields nothing;
+one bound to another snapshot or source, or to any file whose content differs from the capture, is unbound; a flow
+location outside a file the tool read, or past its bytes, is unknown. Accepted flows become `imported` observations
+(producer `imported`, the document digest as provenance) limited to the tool's stated files and configuration; they
+never count as executed checks, and the analyzer's mode name and stated build are recorded, never read as a
+capability. Runtime control facts and framework packs stay separate: nothing here reads guard edges or turns a path
+into an authorization proof. Not decided here: scan wiring (PR 09/10), selecting an engine if a future one
+qualifies, and how imported observations are correlated (PR 19). Words are `strings-sentinel-analysis.ts`.
+
 27. **Sentinel's first framework pack reads Spring Security servlet chains from source, for one exact version (2026-10-22).**
 
 `@farsight/sentinel` gains a public `./frameworks/spring` export: `analyzeSpring(input)`, which returns one validated
@@ -937,6 +971,75 @@ position only when every earlier layer was read and none can refuse. Node's `req
 not bind its own, and only Node's `http`/`https` `createServer` may receive an application without opening it. Proving
 a principal or permission would need the provenance of the value a refusal reads, which this pack does not model; it is a draft, source-only capability until PR 09 wires it into a
 scan. Reason words are `strings-sentinel-express.ts`.
+
+35. **Sentinel's model providers are one owner-bound broker over a durable shared budget (2026-10-22).**
+
+`@farsight/sentinel/review/providers` is the only Sentinel code that reads a provider credential or contacts a model
+endpoint. It is separate from Echo and imports none of it, though it follows Echo's reviewed transport rules:
+`redirect: error`, byte caps and one deadline. It supports two kinds: Ollama's native API and an OpenAI-compatible
+chat-completions API. Compatibility is per endpoint. `probeCapability` lists what one origin offers (an unpaid
+listing), and a binding needs a capability record for exactly its kind, origin and model.
+
+**Binding.** `bindProvider(policy, profile)` joins a provider from the adopted settings (kind, origin, keychain
+reference, disclosure, per-action budget) with a model profile. The profile names the model, hard limits, a rate
+schedule or an explicit local no-fee basis, recorded hosted terms, and the capability record. A local-only provider
+must be a literal loopback address; a hosted one must use https and needs recorded retention and training terms.
+An unpriced profile is refused, and only a local runtime may declare no fee. The binding's canonical digest is the
+`input` of the `paid.admit` intent (`envelopeIntent`), so the owner's receipt confirms the origin, credential
+reference, disclosure, model, limits, price, terms and capability together. Any change needs a new receipt
+(`bindingChanged`); so does any change of the policy revision, since each call re-makes the binding under the policy
+in force, and a revoked grant therefore stops the envelope. The profile is a Sentinel-owned type, not a settings field yet; moving it into the settings
+contract is a follow-up for the policy owner.
+
+**Admission.** `openEnvelope` admits one run budget under one binding through the shared gate (ADR 23).
+- The policy verdict is the reused grant matcher, evaluated first with no credential read; a denial reads and
+  contacts nothing.
+- Capability is the binding's probed record.
+- Credential authority is either "local-only, none needed" or a keychain value actually read, in process, through
+  core's reader for the approved reference. The value lives in a `Secret` that prints, serializes and inspects as
+  redacted, and no error carries it.
+- Priced or hosted use needs a spent owner receipt for this exact intent, whatever the grants say. The receipt is
+  required before the keychain is read.
+
+**Calls.** `generate` builds one non-streaming request and refuses it if it is over its byte limit or if its worst
+case does not fit the model context (Ollama is given `num_ctx`, so input is never cut silently). The worst case is
+every request byte as a token, plus a per-message template allowance and the full output allowance, priced at the
+trusted rates in exact nano-unit integers, rounded up. That worst case is reserved durably first and marked
+dispatched before the request leaves.
+
+The transport is node:http/https with `agent: false`. The URL is the binding origin plus a fixed path and is
+re-checked. Any 3xx is refused and never followed. Certificates are always verified, whatever the environment says.
+The response is read to its byte cap. One deadline and the caller's signal stop the call. Each error says whether
+the request may have reached the provider, judged by whether the (TLS) connection came up.
+- A reply with both usage counts settles the reservation at its use.
+- No usage, or any failure after sending, leaves it `uncertain` and charged at its worst case.
+- Only a call proven never connected is released.
+
+A reply that names no model, or another model, is not used, but its usage is still charged. Identity is recorded at
+its actual strength: host-reported for Ollama (with the probe's weight digest as a probe-time fact) and
+provider-response for OpenAI-compatible. Output stopped at the allowance is returned as truncated. There is no
+retry, and no fallback to another provider: an envelope has exactly one binding.
+
+**Budget ledger.** `BudgetLedger` is a narrow standalone seam until the coordinator's durable store (PR 08) can hold
+it. It is one SQLite file behind the store's release gate; every mutation is one `BEGIN IMMEDIATE` transaction, and
+it holds no run, work or attempt state.
+- A reservation moves `held → dispatched → settled | uncertain`. `released` is only for a call never sent.
+- An operation id reserves once: a repeat is refused rather than re-sent, and other amounts conflict.
+- Reservations from any number of processes share one envelope; a multi-process test shows exactly the fitting
+  number succeed.
+- `recover(staleEpochs)`, for epochs the coordinator has fenced, releases what was only held and turns dispatched
+  into uncertain, so a restart never forgets a call that may have been billed.
+- An uncertain reservation is settled only by `reconcile`, which names its authority (a spent receipt's digest).
+- Usage above a reservation is charged in full, recorded as an overrun, and overdraws the envelope, which then
+  refuses every further reservation until the owner approves a new budget. Nothing is clamped.
+
+**Tests.** Ordinary tests use original local mock endpoints on 127.0.0.1, a throwaway self-signed certificate for
+the TLS check, and in-memory credential sources. No hosted provider is called, no model is downloaded and no real
+keychain entry is read.
+
+Not decided here: the evidence broker, prompts and review lanes (PR 22); the coordinator stage that opens envelopes
+and fences epochs (PR 08 integration); a settings-contract home for profiles and capability records; live
+model acceptance; and a second model configuration.
 
 30. **Sentinel's Next pack decides middleware applicability statically and never claims an effect (2026-10-22).**
 

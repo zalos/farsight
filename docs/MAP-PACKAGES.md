@@ -124,13 +124,27 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   (`analyzeNest`: version, bootstrap, module graph, ordered chains, control facts and the scope report),
   `support.ts` (`NEST_PACK`, the support manifest) and `errors.ts` (reason codes, `strings-sentinel-nest.ts`);
   `test/frameworks-nest.test.ts` runs capture → parse → analyze over `test/fixtures/nest/` and the E2 corpus.
+
+  `src/review/providers/` is the opt-in model broker (PR 21, ADR 35), exported as `./review/providers`: `profile.ts`
+  (model profiles and the owner-bound provider binding), `kinds.ts` (Ollama and OpenAI-compatible wire formats and
+  `probeCapability`), `transport.ts` (one bounded node:http/https exchange, no redirects, verified TLS),
+  `credentials.ts` (keychain references read in-process into a redacted `Secret`), `budget.ts` (the durable SQLite
+  reservation ledger), `broker.ts` (`openEnvelope` through the shared admission gate, `generate`), `decimal.ts` and
+  `errors.ts`; its words are `strings-sentinel-providers.ts`. `test/providers.test.ts` drives local mock endpoints.
+  `test/store-integration.test.ts` drives the facade end to end across processes.
+
+  `src/analysis/` is PR 18 (ADR 36), exported as `./analysis`: `paths/paths.ts` (`boundedCallPaths`, one graph
+  index per artifact, bounded search, call cycles, `sentinel-paths/draft-1`), `paths/body.ts` (the lexical check that
+  the graph records every call a visited function could make) and `deep/import.ts` (`importDeepAnalysis` for
+  attested, bound `sentinel-deep-import/draft-1` documents; `DEEP_ANALYSIS_SUPPORT` states that no engine exists).
+  Words in core's `strings-sentinel-analysis.ts`; tests in `test/analysis-paths.test.ts`.
   `src/frameworks/express/` is the Express 4.21.2 pack (PR 15, ADR 31), exported as `./frameworks/express`:
   `syntax.ts` (Oxc over captured bytes, exact UTF-8 spans), `modules.ts` (bindings, imports, exports, relative
   resolution), `model.ts` (applications, routers, layers in order, open objects), `effects.ts` (refusal, pass-through,
   error-handler bodies), `patterns.ts` (Express 4 path and method matching), `version.ts` (manifest and npm lockfile),
   `pack.ts` (`analyzeExpress`: dispatch simulation into `sentinel-controls/draft-1` facts) and `support.ts`; words in
   core's `strings-sentinel-express.ts`, tests in `test/framework-express.test.ts`.
-  Depends only on graph, code-parser and core; nothing in the
+  `test/store-integration.test.ts` drives the facade end to end across processes. Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the
   manifest's `bin` and root export; `scripts/test-sentinel-package.mjs` installs it into a clean npm consumer and

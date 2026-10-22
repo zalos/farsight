@@ -90,6 +90,13 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'frameworks/nest/errors.js': ['@farsight/core/dist/strings-sentinel-nest.js'],
   'frameworks/nest/syntax.js': ['dynamic:oxc-parser'],
 
+  // Model providers (PR 21): the only network client in the package, and the keychain read through core's reader.
+  'review/providers/broker.js': ['node:crypto'],
+  'review/providers/budget.js': ['node:crypto', 'node:path'],
+  'review/providers/credentials.js': ['@farsight/core/dist/keychain.js'],
+  'review/providers/errors.js': ['@farsight/core/dist/strings-sentinel-providers.js'],
+  'review/providers/transport.js': ['node:http', 'node:https'],
+
   // The Next pack (PR 14) reads literal syntax with Oxc, loaded on first read only; it never runs application code.
   'frameworks/next/analyze.js': ['node:crypto'],
   'frameworks/next/config.js': ['dynamic:oxc-parser'],
@@ -156,6 +163,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'snapshot/parser.js': ['@farsight/core/dist/strings-sentinel-parser.js', '@farsight/graph', 'dynamic:@farsight/code-parser', 'dynamic:@farsight/code-parser/adapters/java',
     'dynamic:@farsight/code-parser/adapters/tsjs', 'node:crypto', 'node:fs', 'node:path'],
   'snapshot/policy.js': ['node:crypto', 'node:path'],
+  // Bounded call paths and attested deep import (ADR 36): pure over parser evidence and captured bytes; no engine, no process.
+  'analysis/paths/paths.js': ['@farsight/graph', 'node:crypto'],
+  'analysis/deep/import.js': ['@farsight/graph', 'node:crypto'],
   // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
   'frameworks/express/pack.js': ['@farsight/graph', 'node:crypto'],
   'frameworks/express/syntax.js': ['dynamic:oxc-parser'],
@@ -258,7 +268,8 @@ test('draft contracts, store, capture, parser, policy, planner and Spring pack a
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli', 'framework-express', 'framework-spring']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import']);
+  assert.equal(listed.find(c => c.id === 'interprocedural-flow')?.state, 'unavailable', 'no deep engine is claimed');
   assert.equal(listed.find(c => c.id === 'framework-express')?.reasonCode, 'sentinel.capability.draftExpress');
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
   assert.equal(listed.find(c => c.id === 'framework-spring')?.reasonCode, 'sentinel.capability.draftSpring');
