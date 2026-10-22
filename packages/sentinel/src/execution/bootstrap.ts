@@ -103,16 +103,26 @@ function prepare(store: SentinelStore, items: Array<{ value: unknown; schema: st
   return { records, outputs, bytes };
 }
 
+/** Package-internal test seam: awaited before each prepared record is written (to widen the write window). */
+export const bootstrapIo: { beforeWrite?: (value: unknown) => Promise<void> } = {};
+
 /** Stage, store and publish prepared outputs through the attempt; the ledger's fence decides acceptance. */
-export async function publishPrepared(store: SentinelStore, work: WorkRef, attemptId: Id, prepared: PreparedOutputs): Promise<PublicationReceipt> {
+export async function publishPrepared(store: SentinelStore, work: WorkRef, attemptId: Id, prepared: PreparedOutputs,
+  /** Called after every object is durable and immediately before the ledger accepts: it throws to refuse. */
+  beforeAccept?: () => void): Promise<PublicationReceipt> {
   const ids = prepared.records.map(r => store.objects.identifyCanonicalJson(r.value));
   const stageId = `stage.${attemptId}`.slice(0, 128);
   const staged: StagedArtifact[] = prepared.records.map((r, i) => ({ id: ids[i]!.id, schema: r.schema, privacy: r.privacy, links: r.links }));
   store.ledger.registerStaging(stageId, staged, { work, attemptId });
   try {
     const receipts = [];
-    for (let i = 0; i < ids.length; i++) receipts.push(await store.objects.putCanonicalJson(prepared.records[i]!.value, { expect: ids[i]! }));
+    for (let i = 0; i < ids.length; i++) {
+      await bootstrapIo.beforeWrite?.(prepared.records[i]!.value);
+      receipts.push(await store.objects.putCanonicalJson(prepared.records[i]!.value, { expect: ids[i]! }));
+    }
     store.assertHeld();
+    // No await from here to the acceptance: what beforeAccept checked still holds when the ledger commits.
+    beforeAccept?.();
     return store.ledger.publish({ work, attemptId, stageId, receipts, outputs: prepared.outputs, endedAt: now() });
   } catch (error) {
     try { store.assertHeld(); store.ledger.abortStaging(stageId); } catch { /* recovery aborts a stage left open */ }

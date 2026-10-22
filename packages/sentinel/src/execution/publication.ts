@@ -41,6 +41,8 @@ export interface PublishRequest {
   hooks?: PublicationHooks;
   /** Coordinator records published with the result (the influence manifest, the coverage evaluation), in order. */
   records?: ReadonlyArray<{ value: unknown; schema: string }>;
+  /** Called after every object is durable and immediately before the ledger accepts: it throws to refuse. */
+  beforeAccept?: () => void;
 }
 
 /**
@@ -85,6 +87,11 @@ export async function publishOutcome(request: PublishRequest): Promise<Publicati
   hooks?.at?.('after-objects', context);
   const outputs = [...new Set([resultIdentity.id, ...recordIds, ...artifactIds])];
   receipts = receipts.filter((r, i) => receipts.findIndex(x => x.id === r.id) === i);
+  // No await from here to the acceptance: what beforeAccept checked still holds when the ledger commits.
+  try { request.beforeAccept?.(); } catch (error) {
+    try { store.ledger.abortStaging(stageId); } catch { /* recovery aborts a stage left open */ }
+    throw error;
+  }
   const receipt = store.ledger.publish({ work, attemptId, stageId, receipts, outputs, endedAt: request.endedAt });
   hooks?.at?.('after-publish', context);
   return receipt;

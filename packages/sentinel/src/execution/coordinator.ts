@@ -481,7 +481,11 @@ export class Coordinator {
           const coverage = coverageRecords({ runId: this.#plan.run.id, attemptId, work: ref, checks: executable.checks, scopes: this.#scopes,
             adapterGranularity: executable.adapter!.coverage, result: outcome.result!, recordedAt: now() });
           await publishOutcome({ store: this.#store, work: ref, attemptId, result: outcome.result!, outputs: outcome.outputs, endedAt: now(),
-            records: coverage.records, ...(this.#hooks ? { hooks: { at: (b, c) => this.#hooks!.at?.(b, c) } } : {}) });
+            records: coverage.records, ...(this.#hooks ? { hooks: { at: (b, c) => this.#hooks!.at?.(b, c) } } : {}),
+            // A run whose deadline passed while the result's objects were stored accepts nothing more.
+            beforeAccept: () => {
+              if (this.#deadlinePassed || Date.now() >= this.#runDeadline) throw new ExecutionError('sentinel.execution.runDeadline', { reason: 'the run deadline passed before acceptance' });
+            } });
           this.#coverage.set(key(ref), coverage.envelopes);
         } catch (error) {
           const canceled = error instanceof LedgerError && error.code === 'sentinel.store.wrongState';
@@ -604,10 +608,18 @@ export class Coordinator {
       this.#end(ref, id, 'failed', codeOf(failure), detailOf(failure));
       return id;
     }
+    // The bounds are checked again after every object write, immediately before the ledger accepts: an operation
+    // whose unit or run deadline passed while its objects were being stored is never published.
+    const unitDeadlineAt = t0 + deadlineMs;
+    const stillWithin = () => {
+      if (this.#cancel.signal.aborted) throw new ExecutionError('sentinel.execution.canceled', { reason: 'canceled before acceptance' });
+      if (this.#deadlinePassed || Date.now() >= this.#runDeadline) throw new ExecutionError('sentinel.execution.runDeadline', { reason: 'the run deadline passed before acceptance' });
+      if (performance.now() >= unitDeadlineAt) throw new ExecutionError('sentinel.execution.deadlineExceeded', { deadlineMs, elapsedMs: Math.round(performance.now() - t0) });
+    };
     try {
-      await publishPrepared(this.#store, ref, id, prepared!);
+      await publishPrepared(this.#store, ref, id, prepared!, stillWithin);
     } catch (error) {
-      const canceled = error instanceof LedgerError && error.code === 'sentinel.store.wrongState';
+      const canceled = (error instanceof LedgerError && error.code === 'sentinel.store.wrongState') || isExecutionError(error, 'sentinel.execution.canceled');
       this.#end(ref, id, canceled ? 'canceled' : 'failed', canceled ? 'sentinel.execution.canceled' : codeOf(error), detailOf(error));
     }
     return id;
