@@ -101,4 +101,3 @@ export async function publishedSecrets(t: any, mode: string, extra: Record<strin
   assert.ok(mode === 'positive' || changed > 0);
   return { dir, path, ws, store, runId, files, work, policy: adopted.policy };
 }
-
