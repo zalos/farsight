@@ -24,6 +24,9 @@ import type { ContainerBackend } from './isolation.js';
 import { runBoundedSync, succeeded } from './processes.js';
 import type { ContainerIntent, IntentJournal } from './supervisor.js';
 
+/** Package-internal fault-injection seam for the tests (short writes, short reads); production never replaces it. */
+export const journalIo = { writeSync, readSync };
+
 export const MAX_JOURNAL_RECORDS = 4096;
 export const MAX_JOURNAL_RECORD_BYTES = 4096;
 const SAFE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
@@ -36,12 +39,17 @@ export interface UnresolvedRecord { journal: string; file: string; reason: strin
  * bounded: at most MAX_JOURNAL_RECORDS entries, each a private regular file (opened without following links and
  * without blocking) of at most MAX_JOURNAL_RECORD_BYTES with every expected field.
  */
+/** One field's type and bound: a record whose fields do not all pass is unresolved, never used. */
+export type FieldCheck = (value: unknown) => boolean;
+export const isId = (v: unknown) => typeof v === 'string' && SAFE.test(v);
+export const isDigest = (v: unknown) => typeof v === 'string' && /^sha256:[0-9a-f]{64}$/.test(v);
+
 export class JournalDir<T extends Record<string, string | number>> {
   readonly dir: string;
   readonly #name: string;
-  readonly #fields: readonly (keyof T & string)[];
+  readonly #fields: Readonly<Record<string, FieldCheck>>;
 
-  constructor(storePath: string, name: string, fields: readonly (keyof T & string)[]) {
+  constructor(storePath: string, name: string, fields: Readonly<Record<string, FieldCheck>>) {
     this.#name = name;
     this.#fields = fields;
     const base = join(storePath, 'execution');
@@ -62,8 +70,24 @@ export class JournalDir<T extends Record<string, string | number>> {
     try { unlinkSync(tmp); } catch { /* none left from an earlier write */ }
     const bytes = Buffer.from(`${JSON.stringify(value)}\n`);
     if (bytes.byteLength > MAX_JOURNAL_RECORD_BYTES) throw new ExecutionError('sentinel.execution.journalUnreadable', { reason: 'record too large' });
+    if (Object.entries(this.#fields).some(([k, check]) => !check((value as Record<string, unknown>)[k]))) {
+      throw new ExecutionError('sentinel.execution.journalUnreadable', { reason: 'a field is missing or out of bounds' });
+    }
     const fd = openSync(tmp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-    try { writeSync(fd, bytes); syncFile(fd, tmp); } finally { closeSync(fd); }
+    try {
+      // A write may be short: loop until every byte is written; no progress fails, and nothing is published.
+      for (let off = 0; off < bytes.byteLength;) {
+        const n = journalIo.writeSync(fd, bytes, off, bytes.byteLength - off);
+        if (!Number.isInteger(n) || n <= 0) throw new ExecutionError('sentinel.execution.durabilityFailed', { path: tmp, osCode: 'no progress', operation: 'write' });
+        off += n;
+      }
+      syncFile(fd, tmp);
+    } catch (error) {
+      closeSync(fd);
+      try { unlinkSync(tmp); } catch { /* the next list() removes a temporary file that was never renamed */ }
+      throw error;
+    }
+    closeSync(fd);
     renameSync(tmp, file);
     syncDirectory(this.dir);
   }
@@ -86,9 +110,11 @@ export class JournalDir<T extends Record<string, string | number>> {
         if (!name.endsWith('.json')) { unresolved.push({ journal: this.#name, file: name, reason: 'unexpected entry' }); continue; }
         const read = readRecord(join(this.dir, name));
         if (typeof read === 'string') { unresolved.push({ journal: this.#name, file: name, reason: read }); continue; }
-        const v = (read ?? {}) as Record<string, unknown>;
-        if (!this.#fields.every(k => typeof v[k] === 'string' || typeof v[k] === 'number')) { unresolved.push({ journal: this.#name, file: name, reason: 'missing fields' }); continue; }
-        records.push(Object.fromEntries(this.#fields.map(k => [k, v[k]])) as T);
+        const v = (read && typeof read === 'object' && !Array.isArray(read) ? read : {}) as Record<string, unknown>;
+        const keys = Object.keys(this.#fields);
+        if (!keys.every(k => this.#fields[k]!(v[k]))) { unresolved.push({ journal: this.#name, file: name, reason: 'missing fields' }); continue; }
+        if (Object.keys(v).some(k => !keys.includes(k))) { unresolved.push({ journal: this.#name, file: name, reason: 'unexpected fields' }); continue; }
+        records.push(Object.fromEntries(keys.map(k => [k, v[k]])) as T);
       }
     } finally { dir.closeSync(); }
     return { records, unresolved };
@@ -107,18 +133,32 @@ function readRecord(path: string): unknown {
     return (e as NodeJS.ErrnoException).code === 'ELOOP' ? 'a link' : `unreadable (${(e as NodeJS.ErrnoException).code ?? 'error'})`;
   }
   try {
-    const s = fstatSync(fd);
+    const s = fstatSync(fd, { bigint: true });
     if (!s.isFile()) return 'not a regular file';
-    if (s.uid !== process.getuid?.() || (s.mode & 0o077) !== 0) return 'not private';
-    if (s.size > MAX_JOURNAL_RECORD_BYTES) return 'too large';
-    const buf = Buffer.alloc(MAX_JOURNAL_RECORD_BYTES + 1);
-    const n = readSync(fd, buf, 0, buf.length, 0);
-    if (n > MAX_JOURNAL_RECORD_BYTES) return 'too large';
-    try { return JSON.parse(buf.subarray(0, n).toString('utf8')); } catch { return 'not JSON'; }
+    if (Number(s.uid) !== process.getuid?.() || (Number(s.mode) & 0o077) !== 0) return 'not private';
+    const size = Number(s.size);
+    if (size > MAX_JOURNAL_RECORD_BYTES) return 'too large';
+    // Read exactly the file's length, looping over short reads; then confirm nothing follows and the file is still
+    // the one measured. A valid JSON prefix of a longer or changing file is never accepted.
+    const buf = Buffer.alloc(size + 1);
+    let got = 0;
+    for (;;) {
+      const n = journalIo.readSync(fd, buf, got, buf.length - got, got);
+      if (n <= 0) break;
+      got += n;
+      if (got > size) return 'changed while read';
+    }
+    if (got !== size) return 'changed while read';
+    const after = fstatSync(fd, { bigint: true });
+    if (after.size !== s.size || after.ino !== s.ino || after.dev !== s.dev || after.mtimeNs !== s.mtimeNs) return 'changed while read';
+    try { return JSON.parse(buf.subarray(0, size).toString('utf8')); } catch { return 'not JSON'; }
   } finally { closeSync(fd); }
 }
 
-const INTENT_FIELDS = ['name', 'owner', 'store', 'attempt', 'epoch', 'invocation'] as const;
+const INTENT_FIELDS: Readonly<Record<string, FieldCheck>> = Object.freeze({
+  name: (v: unknown) => typeof v === 'string' && /^sentinel-[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(v),
+  owner: isId, store: isId, attempt: isId, epoch: isId, invocation: isDigest,
+});
 
 /** Container create intents, by owner nonce. */
 export class IntentFiles implements IntentJournal {
@@ -147,7 +187,12 @@ export interface WorkerJournal {
   settle(identity: WorkerIdentity): void;
 }
 
-const WORKER_FIELDS = ['attempt', 'store', 'epoch', 'pid', 'token', 'kernelStart'] as const;
+const WORKER_FIELDS: Readonly<Record<string, FieldCheck>> = Object.freeze({
+  attempt: isId, store: isId, epoch: isId,
+  pid: (v: unknown) => Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) <= 4_194_304,
+  token: (v: unknown) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v),
+  kernelStart: (v: unknown) => typeof v === 'string' && /^(|[0-9a-f-]{36}:\d{1,20})$/.test(v),
+});
 
 export class WorkerFiles implements WorkerJournal {
   readonly #journal: JournalDir<WorkerIdentity>;
@@ -270,7 +315,9 @@ export async function recoverStore(store: SentinelStore, options: { intents: Int
   const workers = options.workers.list();
   report.unresolved.push(...workers.unresolved);
   for (const w of workers.records) {
-    if (w.epoch === epoch || w.store !== store.storeId) continue;
+    // A record naming another store is not ours to act on, and not ours to drop: kept and reported.
+    if (w.store !== store.storeId) { report.unresolved.push({ journal: 'workers', file: `${w.attempt}.json`, reason: 'names another store' }); continue; }
+    if (w.epoch === epoch) continue;
     if (!w.pid) {
       // Journaled before spawn, never given its pid: find it by its token (twice, so a child between fork and
       // exec when its parent died has carried the token into its argument list by the second look).
@@ -305,6 +352,7 @@ export async function recoverStore(store: SentinelStore, options: { intents: Int
   const intents = options.intents.list();
   report.unresolved.push(...intents.unresolved);
   for (const intent of intents.records) {
+    if (intent.store !== store.storeId) { report.unresolved.push({ journal: 'intents', file: `${intent.owner}.json`, reason: 'names another store' }); continue; }
     if (intent.epoch === epoch) continue;
     if (removedOwners.has(intent.owner)) { options.intents.settle(intent); report.settledIntents.push(intent.name); continue; }
     if (!options.backend) { report.pendingIntents.push(intent); continue; }
@@ -350,7 +398,7 @@ export class UnknownCleanup {
   readonly dir: string;
 
   constructor(storePath: string) {
-    this.dir = new JournalDir<Record<string, string>>(storePath, 'unknown', []).dir;
+    this.dir = new JournalDir<Record<string, string>>(storePath, 'unknown', {}).dir;
   }
 
   acknowledge(dirs: readonly string[], report: RecoveryReport): string[] {

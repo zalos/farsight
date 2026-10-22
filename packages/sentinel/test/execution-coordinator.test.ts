@@ -265,7 +265,7 @@ test('a recorded pid now held by an unrelated process is never killed', async ()
   const unrelated = spawn('/bin/sleep', ['30'], { stdio: 'ignore' });
   try {
     await new Promise(r => unrelated.once('spawn', r));
-    new WorkerFiles(store.storePath).record({ attempt: 'att-earlier', store: store.storeId, epoch: 'epoch-earlier', pid: unrelated.pid!, token: 'token-it-never-had', kernelStart: '' });
+    new WorkerFiles(store.storePath).record({ attempt: 'att-earlier', store: store.storeId, epoch: 'epoch-earlier', pid: unrelated.pid!, token: '00000000-0000-4000-8000-000000000000', kernelStart: '' });
     const { plan, registry } = syntheticPlan(s.root);
     const c = await Coordinator.open({ store, plan, registry, scratchRoot: s.work });
     assert.deepEqual(c.recovery.stoppedWorkers, []);
