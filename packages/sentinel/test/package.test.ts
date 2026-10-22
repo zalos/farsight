@@ -22,7 +22,7 @@ test('the package is optional, private and exports only files that exist', () =>
   assert.match(manifest.version, /-draft\./);
   // core supplies the shared catalog (and later counts/placement/grants); @types/node because the public store
   // declarations name Node built-ins. No scanner, container client or model SDK dependency.
-  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', 'ajv']);
+  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', '@vscode/tree-sitter-wasm', 'ajv']);
   assert.equal(manifest.bin['farsight-sentinel'], './dist/cli.js');
   for (const [key, target] of Object.entries(manifest.exports as Record<string, any>)) {
     if (key.includes('*')) continue;
@@ -75,6 +75,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/registry.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
+  // The Spring pack: tree-sitter's Java grammar, loaded on first analysis only; graph is pure JSON helpers.
+  'frameworks/spring/pack.js': ['@farsight/graph', 'node:crypto'],
+  'frameworks/spring/syntax.js': ['dynamic:@vscode/tree-sitter-wasm', 'node:path', 'node:url'],
   'policy/admission.js': ['@farsight/core/dist/grants.js'],
   'policy/adoption.js': ['node:fs', 'node:os', 'node:path'],
   'policy/digest.js': ['node:crypto'],

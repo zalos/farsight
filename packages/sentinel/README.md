@@ -198,6 +198,30 @@ client of the service gets what the adopted grants give agents, which by default
 say *unavailable* (exit 3) until plan revisions exist. With `--json`, every result carries its `outcome`, `exitCode`, the three
 admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR 37 in `docs/ARCHITECTURE.md`.
 
+## Spring Security servlet pack (draft, PR 17)
+
+`src/frameworks/spring/` turns one source's parser evidence into `sentinel-controls/draft-1` control facts for its
+Spring routes, for exactly **Spring Boot 3.4.3 with Spring Security 6.4.3**, servlet stack. It is not exported yet: the
+scan CLI (PR 09) integrates it. Inputs are the captured snapshot, the PR 05 parser evidence for the source, a reader
+for captured bytes and the selected environment (`activeProfiles`, or `null` when none was selected). Nothing is
+built, resolved or run. The public graph supplies route identities. The pack reads every route mapping, security
+chain, matcher, rule and method-security annotation again from the captured Java syntax (tree-sitter's Java grammar),
+and each resolved fact cites exact byte spans of captured files.
+
+Per route, facts sit at four positions in Spring's order:
+1. servlet filters and filters a chain adds, which are unknown when present;
+2. the selected chain's authorization rule;
+3. MVC interceptors, which are unknown when present;
+4. method security.
+
+Spring runs the first chain whose `securityMatcher` matches, and the first matching rule in it decides. A route no
+chain matches is `unknown` (`sentinel.spring.noChainMatches`), with every chain matcher cited, and never protected:
+source cannot exclude a chain a dependency contributes. Anything outside the supported subset is `unknown` with a
+`sentinel.spring.*` reason and, where it applies to the whole source, a frontier: helper-built chains, non-literal
+matchers, partial matches, equal orders, profiles not selected, conditional beans, filters, customizers,
+interceptors, servlet paths, other versions and WebFlux. `src/frameworks/spring/support.ts` states the subset and is
+part of the pack digest. The environment and the configuration bytes read key the facts.
+
 ## Versions and evolution
 
 - **Draft until review.** Every name ends in `/draft-1`. A name moves to `/v1` only after an independent
