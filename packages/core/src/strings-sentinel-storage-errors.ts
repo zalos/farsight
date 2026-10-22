@@ -30,6 +30,7 @@ export const SENTINEL_STORAGE_ERROR_STRINGS: Record<string, StringEntry> = {
   'sentinel.store.objectMissing': same('an object named by the publication is absent or differs from its receipt', 'Before a publication is accepted, every object it names is re-read and hashed in this store. One was missing or different, so nothing was accepted.'),
   'sentinel.store.objectVerifierUnavailable': same('publication needs the object store to verify its objects', 'A ledger opened without the object store cannot accept a publication, because nothing could check that its bytes exist.'),
   'sentinel.store.asyncTransaction': same('a ledger transaction must finish without waiting', 'Ledger changes run in short synchronous transactions. A change that waits is refused and rolled back.'),
+  'sentinel.store.corruptRecord': same('a retained ledger record cannot be read', 'A kept work or attempt record no longer reads as a valid record, so the artifacts it names cannot be listed. Reachability stops rather than treating them as unprotected.'),
   'sentinel.store.snapshotStale': same('the ledger changed after the snapshot was taken', 'A reachability snapshot is valid only while nothing is committed after it. Take a new one.'),
   // The object store.
   'sentinel.object.invalidInput': same('the object store refused a malformed request', 'A digest, size, codec or receipt did not have the required form, so nothing was read or written.'),
