@@ -4,7 +4,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAdapterRegistry } from '../dist/execution/registry.js';
@@ -140,6 +140,26 @@ test('cross-file flow is not claimed: a request value passed to a sink in anothe
   }));
   assert.equal(r.findings.filter(f => f.relativePath.startsWith('cross/')).length, 0);
   assert.equal(r.coverage.find(c => c.relativePath === 'cross/sink.ts')!.status, 'complete', 'scanned, and still no claim');
+});
+
+test('changing or deleting the caller’s files after the worker copied them changes nothing: results describe the captured bytes', { skip }, async () => {
+  const t = targets({ 'live/mutated.ts': POSITIVE, 'live/deleted.ts': POSITIVE.replace('f(', 'g(') });
+  const mutated = t.find(x => x.relativePath === 'live/mutated.ts')!;
+  const deleted = t.find(x => x.relativePath === 'live/deleted.ts')!;
+  const captured = readFileSync(mutated.path);
+  // runPatternAttempt copies and hashes every input before its first await; then the originals change under it.
+  const pending = attempt(t);
+  writeFileSync(mutated.path, POSITIVE.replace('SELECT', 'DELETE'));
+  assert.equal(readFileSync(mutated.path).length, captured.length, 'same length, different bytes');
+  rmSync(deleted.path);
+  const r = await pending;
+  const f = r.findings.find(x => x.relativePath === 'live/mutated.ts')!;
+  assert.equal(f.artifact, mutated.artifact);
+  const query = 'db.query("SELECT * FROM t WHERE id = " + id)';
+  assert.equal(f.span.quoteDigest, sha(query), 'the span quotes the captured bytes, not the changed file');
+  assert.equal(captured.subarray(f.span.startByte, f.span.endByte).toString('utf8'), query);
+  assert.ok(r.findings.some(x => x.relativePath === 'live/deleted.ts'), 'a deleted original was already captured');
+  assert.ok(r.coverage.filter(c => c.relativePath.startsWith('live/')).every(c => c.status === 'complete' || c.status === 'not-run'));
 });
 
 test('the attempt deadline stops the engine and leaves every applicable file in error', { skip }, async () => {

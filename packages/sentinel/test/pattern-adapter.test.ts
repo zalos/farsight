@@ -113,7 +113,7 @@ function run(t: { after(fn: () => void): void }, engine: Record<string, unknown>
   const built = buildPatternJob(RULES, targets, scratch(t));
   const scanned = ((engine.paths as any)?.scanned ?? []) as string[];
   const engineBytes = Buffer.from(JSON.stringify({ version: '1.181.0', engine_requested: 'OSS', results: [], errors: [], paths: { scanned: [], skipped: [] }, time: timing(scanned), ...engine }));
-  const { __arch: _arch, ...recordFields } = record as any;
+  const { __arch: _arch, __targets: _targets, ...recordFields } = record as any;
   const recordBytes = Buffer.from(JSON.stringify({ schema: 'sentinel-pattern-run/draft-1', job: built.jobDigest, exitCode: 0, timedOut: false, stdoutTruncated: false, excluded: [], engineOutput: sha(engineBytes), ...recordFields }));
   const bytes = new Map([[sha(engineBytes), engineBytes], [sha(recordBytes), recordBytes]]);
   const outcome: any = {
@@ -123,8 +123,9 @@ function run(t: { after(fn: () => void): void }, engine: Record<string, unknown>
       { id: sha(recordBytes), mediaType: 'application/vnd.sentinel.pattern-run+json', bytes: recordBytes.length, path: '' },
     ],
   };
-  const paths = new Map(targets.map(x => [x.relativePath, x.path]));
-  return normalizePatternRun({ job: built.job, jobDigest: built.jobDigest, rules: RULES, outcome, outputBytes: id => bytes.get(id)!, targetBytes: r => readFileSync(paths.get(r)!) });
+  const byArtifact = new Map(targets.map(x => [x.artifact, readFileSync(x.path)]));
+  const override = (record as any).__targets as ((a: string, b: Buffer | undefined) => Buffer | undefined) | undefined;
+  return normalizePatternRun({ job: built.job, jobDigest: built.jobDigest, rules: RULES, outcome, outputBytes: id => bytes.get(id)!, targetBytes: a => (override ? override(a, byArtifact.get(a)) : byArtifact.get(a)) });
 }
 const all = packTargets().map(x => TREE + x.relativePath);
 const directTs = readFileSync(`${PACK}fixtures/typescript/direct.ts.fixture`);
@@ -224,6 +225,22 @@ test('taint evidence stays local: a same-file trace names its source, a missing 
   const cross = run(t, { paths: { scanned: all, skipped: [] }, results: [{ ...sinkHit, extra: { dataflow_trace: { taint_source: loc(TREE + 'typescript/direct.ts') } } }] });
   assert.equal(cross.findings.length, 0);
   assert.equal(cross.refused[0]!.reasonCode, 'sentinel.pattern.refused.crossFile');
+});
+
+test('a scanned copy that differs from the pinned artifact, or is missing, earns no coverage and keeps no result', t => {
+  const good = hit('sentinel.sql.concatenated-query-tsjs', 'typescript/direct.ts', QUERY, directTs);
+  const directArtifact = sha(directTs);
+  // Same length, different bytes: the span would still "fit", which is exactly why the whole file is re-hashed.
+  const changed = Buffer.from(directTs.toString('utf8').replace('invoices', 'invoicez'));
+  assert.equal(changed.length, directTs.length);
+  const r = run(t, { paths: { scanned: all, skipped: [] }, results: [good] }, { __targets: (a: string, b: Buffer | undefined) => (a === directArtifact ? changed : b) });
+  assert.equal(r.findings.length, 0);
+  assert.deepEqual(r.refused.map((x: any) => x.reasonCode), ['sentinel.pattern.refused.inputMismatch']);
+  assert.deepEqual(cov(r, 'typescript/direct.ts'), ['error:inputMismatch', 'error:inputMismatch']);
+  const missing = run(t, { paths: { scanned: all, skipped: [] }, results: [good] }, { __targets: (a: string, b: Buffer | undefined) => (a === directArtifact ? undefined : b) });
+  assert.equal(missing.findings.length, 0);
+  assert.deepEqual(cov(missing, 'typescript/direct.ts'), ['error:inputMismatch', 'error:inputMismatch']);
+  assert.ok(missing.coverage.filter((c: any) => c.relativePath === 'typescript/local.ts').every((c: any) => c.status === 'complete'), 'other files are unaffected');
 });
 
 test('results from an image platform conformance has not measured are not trusted', t => {
