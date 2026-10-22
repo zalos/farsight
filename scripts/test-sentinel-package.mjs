@@ -14,7 +14,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { npmConsumer } from './npm-consumer.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -46,6 +47,24 @@ try {
   for (const name of bins) {
     const help = await consumer.exec(consumer.bin(name), ['--help']);
     assert.match(help.stdout + help.stderr, /sentinel/i, `${name} --help names Sentinel`);
+  }
+
+  // The launch gate ships as its own file, and enforces its authorization from the installed tarball: without the
+  // exact line the adapter never loads; with it, it does (src/execution/launch-gate.ts).
+  const gate = join(installed, 'dist', 'execution', 'launch-gate.mjs');
+  // Required whenever the source package can start built-in workers (it has the supervisor).
+  const startsWorkers = existsSync(join(sourceDir, 'src', 'execution', 'supervisor.ts'));
+  if (startsWorkers) assert.ok(existsSync(gate), 'the launch gate is shipped as dist/execution/launch-gate.mjs');
+  if (startsWorkers) {
+    const token = '11111111-2222-4333-8444-555555555555';
+    const marker = join(consumer.dir, 'gate-adapter-ran');
+    const adapter = join(consumer.dir, 'gate-adapter.mjs');
+    writeFileSync(adapter, `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'ran');\n`);
+    const launch = (input) => spawnSync(process.execPath, ['--import', pathToFileURL(gate).href, adapter, `--sentinel-token=${token}`], { input, env: {}, timeout: 20_000 });
+    assert.equal(launch('').status, 78, 'refused without its authorization');
+    assert.equal(existsSync(marker), false, 'the adapter never loaded');
+    assert.equal(launch(`sentinel-launch ${token}\n`).status, 0, 'the installed gate admits its exact authorization');
+    assert.ok(existsSync(marker), 'the adapter loaded through the installed gate');
   }
 
   const evalModule = async (code) => (await consumer.exec(process.execPath, ['--input-type=module', '-e', code])).stdout;

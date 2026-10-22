@@ -386,3 +386,6 @@ async function captureEnumerated(store: CaptureStore, request: CaptureRequest, p
     throw e;
   }
 }
+
+/** The file this implementation runs from (moved by the packer into a bundle chunk): its bytes are the operation adapter's digest. */
+export const CAPTURE_IMPLEMENTATION_URL: string = import.meta.url;

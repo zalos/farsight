@@ -182,3 +182,6 @@ export async function loadBootstrap(store: SentinelStore, runId: Id, inventoryUn
   }
   return { snapshot: opened.snapshot, analyses, record };
 }
+
+/** The file this implementation runs from (moved by the packer into a bundle chunk): its bytes are the operation adapter's digest. */
+export const INVENTORY_IMPLEMENTATION_URL: string = import.meta.url;
