@@ -75,11 +75,12 @@ export interface TrivyAdapterBuild {
 }
 
 /** Builds the adapter around the shim; a test variant (other id or arguments) gets its own digests. */
-export function buildTrivyAdapter(options: { id?: string; engineArgs?: readonly string[] } = {}): TrivyAdapterBuild {
+export function buildTrivyAdapter(options: { id?: string; engineArgs?: readonly string[]; maxOutputBytes?: number } = {}): TrivyAdapterBuild {
   const args = options.engineArgs ?? TRIVY_ENGINE_ARGS;
+  if (options.maxOutputBytes !== undefined && (!Number.isSafeInteger(options.maxOutputBytes) || options.maxOutputBytes < 0 || options.maxOutputBytes > TRIVY_MAX_OUTPUT_BYTES)) throw new Error('sentinel.trivy: the output bound is an integer up to the default');
   for (const a of args) if (!/^[A-Za-z0-9=.,_/-]+$/.test(a)) throw new Error('sentinel.trivy: engine arguments are fixed plain tokens');
   const workerBytes = Buffer.from(TRIVY_WORKER_SOURCE
-    .replace('[MAX_OUT]', String(TRIVY_MAX_OUTPUT_BYTES))
+    .replace('[MAX_OUT]', String(options.maxOutputBytes ?? TRIVY_MAX_OUTPUT_BYTES))
     .replace('[ENGINE_ARGS]', args.join(' '))
     .replace('[BUNDLE_LAYER]', TRIVY_CHECKS_BUNDLE.layer), 'utf8');
   const workerDigest = `sha256:${createHash('sha256').update(workerBytes).digest('hex')}`;
