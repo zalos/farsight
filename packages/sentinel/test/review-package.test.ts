@@ -22,7 +22,7 @@ const run = (cmd: string, args: string[], cwd: string, env: Record<string, strin
 const CONSUMER = `
 import { BudgetLedger, ModelBroker, bindProvider, reconcileIntent, reconcileReservation, inspectEnvelopes, type ProviderBinding } from 'farsight-sentinel/review/providers';
 import { createModelReviewOperation, guidedSpec, planReviewWork, recoverModelWork, type ModelOperationOutcome } from 'farsight-sentinel/review';
-import { effectivePolicy, admit, ReceiptBook, DEFAULT_SETTINGS } from 'farsight-sentinel/policy';
+import { effectivePolicy, ReceiptBook, DEFAULT_SETTINGS } from 'farsight-sentinel/policy';
 import type { SettingsEnvelope } from 'farsight-sentinel/contracts';
 import { createHash } from 'node:crypto';
 const [mode, origin, ledgerPath, receipts] = process.argv.slice(2) as [string, string, string, string];
@@ -54,12 +54,10 @@ else {
   const open = inspectEnvelopes(ledger, { runId: 'run-1' }).flatMap(e => e.open);
   const uncertain = open.find(r => r.state === 'uncertain')!;
   const usage = { inputTokens: 90, outputTokens: 4, cost: '0' };
-  const { intent, stateDigest } = reconcileIntent(ledger, uncertain.id, usage);
+  void reconcileIntent(ledger, uncertain.id, usage);
   void new ReceiptBook(receipts);
-  const admission = admit({ intent, requestedBy: { principal: 'human', channel: 'owner-cli' }, policy, capability: () => ({ available: true, detail: 'stub' }),
-    credential: () => ({ basis: 'local-only', detail: 'loopback' }), stateDigest, now: NOW }).record;
   let refused = '';
-  try { reconcileReservation(ledger, admission, uncertain.id, usage, NOW); } catch (e) { refused = (e as { code: string }).code; }
+  try { reconcileReservation(ledger, policy, uncertain.id, usage, { requestedBy: { principal: 'human', channel: 'owner-cli' } }, NOW); } catch (e) { refused = (e as { code: string }).code; }
   process.stdout.write(JSON.stringify({ recovered, outcome: (out.records[0]!.value as { outcome: string }).outcome, usage: out.usage.certainty, coverage: out.coverage.length,
     uncertain: uncertain.state, refused, envelopes: inspectEnvelopes(ledger, {}).length }));
 }

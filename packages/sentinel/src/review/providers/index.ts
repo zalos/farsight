@@ -14,4 +14,4 @@ export { ProviderError, PROVIDER_ERROR_CODES } from './errors.js';
 export type { ProviderErrorCode, Spend } from './errors.js';
 export { toNanos, fromNanos, costOf } from './decimal.js';
 export { probeIntent, probeModel, reconcileIntent, reconcileReservation, inspectEnvelopes, INSPECT_LIMITS } from './owner.js';
-export type { ReconcileUsage } from './owner.js';
+export type { ReconcileUsage, OwnerAuthority } from './owner.js';

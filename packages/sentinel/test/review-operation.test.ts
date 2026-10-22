@@ -144,45 +144,39 @@ test('SIGKILL mid-call: recovery fences the epoch, the sent call stays charged a
   assert.equal(totals.byState.uncertain, 1, 'the killed call stays charged until the owner reconciles it');
 });
 
-test('owner helpers: a probe and a reconciliation run only under the CLI’s admitted, confirmed decision; inspection is a bounded read', needsStore, async t => {
+test('owner helpers decide their own intent; the only authority is the owner\u2019s receipt, spent once; inspection is a bounded read', needsStore, async t => {
   const ep = await mockEndpoint(t, (req, res) => (req.path === '/api/tags'
     ? json(res, 200, { models: [{ name: 'review-model:1', model: 'review-model:1', digest: 'd'.repeat(64) }] }) : undefined));
   const dir = scratchDir(t);
   const r = await rig(t, ep.origin, join(dir, 'models.db'), 'epoch-a');
   const book = new ReceiptBook(join(dir, 'receipts'));
-  // As the CLI's decide(): admit; confirm with a receipt; admit again to spend it.
-  let lastReceipt: { book: ReceiptBook; id: string } | undefined;
-  const decide = (intent: any, stateDigest: string, confirm: boolean) => {
-    const base = { intent, requestedBy: HUMAN, policy: r.policy, capability: () => ({ available: true, detail: 'stub' }), credential: () => ({ basis: 'local-only' as const, detail: 'loopback' }), stateDigest, now: NOW };
-    lastReceipt = undefined;
-    if (!confirm) return admit(base).record;
-    const rc = issueReceipt(book, { channel: 'owner-cli', principal: 'owner' }, { intent, stateDigest, policyRevision: r.policy.revision }, { now: NOW, ttlMs: 600_000 });
-    lastReceipt = { book, id: rc.id };
-    return admit({ ...base, receipt: lastReceipt }).record;
-  };
+  const issue = (intent: any, stateDigest: string) => ({ book, id: issueReceipt(book, { channel: 'owner-cli', principal: 'owner' }, { intent, stateDigest, policyRevision: r.policy.revision }, { now: NOW, ttlMs: 600_000 }).id });
+  // The CLI's preview: admit without a receipt says awaiting confirmation (exit 4).
   const p = probeIntent(r.policy, 'local-review', 'review');
   assert.deepEqual([p.intent.action, p.intent.effects], ['tool.acquire', ['network']]);
-  const unconfirmed = decide(p.intent, p.stateDigest, false);
-  assert.equal(unconfirmed.outcome, 'awaiting-confirmation', 'a probe is an owner action: exit 4 until confirmed');
-  await assert.rejects(probeModel(unconfirmed, r.policy, 'local-review', 'review', { credentials: async () => '', now: NOW }), (e: any) => e.code === 'sentinel.provider.notAdmitted');
+  const preview = admit({ intent: p.intent, requestedBy: HUMAN, policy: r.policy, capability: () => ({ available: true, detail: 'stub' }), credential: () => ({ basis: 'local-only', detail: 'x' }), stateDigest: p.stateDigest, now: NOW });
+  assert.equal(preview.record.outcome, 'awaiting-confirmation');
+  // No receipt, a forged admission-shaped object, or an agent channel: nothing runs.
+  await assert.rejects(probeModel(r.policy, 'local-review', 'review', { requestedBy: HUMAN }, { credentials: async () => '', now: NOW }), (e: any) => e.code === 'sentinel.provider.receiptRequired');
+  await assert.rejects(probeModel(r.policy, 'local-review', 'review', { requestedBy: HUMAN, receipt: { book, id: 'receipt-forged' } } as any, { credentials: async () => '', now: NOW }), (e: any) => /receipt/i.test(e.code ?? e.message));
+  await assert.rejects(probeModel(r.policy, 'local-review', 'review', { requestedBy: { principal: 'agent', channel: 'mcp' }, receipt: issue(p.intent, p.stateDigest) }, { credentials: async () => '', now: NOW }), (e: any) => e.code === 'sentinel.provider.notAdmitted');
   assert.equal(ep.seen.length, 0);
-  const probed = await probeModel(decide(p.intent, p.stateDigest, true), r.policy, 'local-review', 'review', { credentials: async () => '', now: NOW });
+  const rc = issue(p.intent, p.stateDigest);
+  const probed = await probeModel(r.policy, 'local-review', 'review', { requestedBy: HUMAN, receipt: rc }, { credentials: async () => '', now: NOW });
   assert.deepEqual([probed.settingsPatch.path, probed.capability.revision], ['/providers/0/models/0/capability', `sha256:${'d'.repeat(64)}`]);
-  await assert.rejects(probeModel(decide(p.intent, p.stateDigest, true), r.policy, 'local-review', 'other', { credentials: async () => '', now: NOW }), (e: any) => e.code === 'sentinel.provider.notTrusted');
+  await assert.rejects(probeModel(r.policy, 'local-review', 'review', { requestedBy: HUMAN, receipt: rc }, { credentials: async () => '', now: NOW }), (e: any) => /already used/.test(e.message), 'spent once');
 
-  // An uncertain reservation, reconciled under the owner's confirmation.
+  // An uncertain reservation, reconciled under the owner's receipt. These grants admit paid.admit without asking:
+  // the receipt is still required and spent exactly once by the helper.
   const res = r.ledger.dispatch(r.ledger.reserve({ envelopeId: r.envelope.id, operationId: 'op-u', tokens: 300, costNanos: 0n, epoch: 'epoch-a', at: '2026-10-22T12:00:00Z' }).id, '2026-10-22T12:00:00Z');
   r.ledger.markUncertain(res.id, '2026-10-22T12:00:00Z', 'timeout');
   const usage = { inputTokens: 120, outputTokens: 10, cost: '0' };
   const ri = reconcileIntent(r.ledger, res.id, usage);
-  // These grants admit paid.admit without asking; the owner's receipt is still required, and spent once.
-  assert.throws(() => reconcileReservation(r.ledger, decide(ri.intent, ri.stateDigest, false), res.id, usage, NOW), (e: any) => e.code === 'sentinel.provider.receiptRequired');
+  assert.throws(() => reconcileReservation(r.ledger, r.policy, res.id, usage, { requestedBy: HUMAN }, NOW), (e: any) => e.code === 'sentinel.provider.receiptRequired');
   const other = reconcileIntent(r.ledger, res.id, { ...usage, inputTokens: 1 });
-  const otherAdmission = decide(other.intent, other.stateDigest, true);
-  assert.throws(() => reconcileReservation(r.ledger, otherAdmission, res.id, usage, NOW, lastReceipt), (e: any) => e.code === 'sentinel.provider.notAdmitted', 'an admission for other usage');
-  const admission = decide(ri.intent, ri.stateDigest, true);
-  const receipt = lastReceipt!;
-  const settled = reconcileReservation(r.ledger, admission, res.id, usage, NOW, receipt);
+  assert.throws(() => reconcileReservation(r.ledger, r.policy, res.id, usage, { requestedBy: HUMAN, receipt: issue(other.intent, other.stateDigest) }, NOW), (e: any) => /different action, input/.test(e.message), 'a receipt for other usage');
+  const receipt = issue(ri.intent, ri.stateDigest);
+  const settled = reconcileReservation(r.ledger, r.policy, res.id, usage, { requestedBy: HUMAN, receipt }, NOW);
   assert.equal(settled.state, 'settled');
   assert.match(settled.reconciledBy!, /^sha256:/);
   assert.throws(() => reconcileIntent(r.ledger, res.id, usage), (e: any) => e.code === 'sentinel.provider.reservationState', 'a settled reservation is not reconciled twice');

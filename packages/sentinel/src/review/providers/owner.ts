@@ -1,17 +1,44 @@
-// Owner command helpers for models (PR 21/22). The canonical CLI owns dispatch, admission and receipts
-// (`src/service/local.ts`): it decides `probeIntent` / `reconcileIntent` with the three verdicts and `--confirm`, then
-// calls these helpers with the admitted admission record. The helpers spend nothing themselves; they check that the
-// admission is exactly for their intent, and return bounded facts with no credential or provider text. A refusal is a
+// Owner command helpers for models (PR 21/22). The canonical CLI owns dispatch and the preview: it may call `admit()`
+// on `probeIntent` / `reconcileIntent` without a receipt to report "awaiting confirmation" (exit 4). With `--confirm`
+// it issues the owner's receipt and passes only its reference here. Each helper then decides the intent itself through
+// the shared three-verdict `admit()`, and its only authority is the consumed receipt that admission (or, where the
+// grants asked for none, this helper) spends exactly once: an unforgeable object, never a JSON admission record or a
+// boolean a caller could build. Results are bounded facts with no credential or provider text; a refusal is a
 // ProviderError with its catalog code.
-import type { ActionIntent, AdmissionEnvelope, ModelCapability } from '../../contracts/index.js';
+import type { ActionIntent, DecisionChannel, ModelCapability, Principal } from '../../contracts/index.js';
+import { admit, type CredentialAnswer } from '../../policy/admission.js';
 import { canonicalDigest } from '../../policy/digest.js';
-import { intentDigest, type ReceiptBook } from '../../policy/receipts.js';
+import { intentDigest, isConsumedReceipt, receiptAuthority, type ConsumedReceipt, type ReceiptBook } from '../../policy/receipts.js';
 import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.js';
 import type { BudgetLedger, Reservation } from './budget.js';
-import { resolveCredential, type CredentialSource } from './credentials.js';
+import { resolveCredential, type CredentialSource, type Secret } from './credentials.js';
 import { fromNanos, toNanos } from './decimal.js';
 import { fail } from './errors.js';
 import { probeConfigured } from './kinds.js';
+
+export interface OwnerAuthority {
+  /** Set by the channel the request arrived on (the owner CLI), never by a request body. */
+  readonly requestedBy: { readonly principal: Principal; readonly channel: DecisionChannel };
+  /** The owner's receipt for exactly this intent, issued by the CLI's confirm flow; spent here, once. */
+  readonly receipt?: { readonly book: ReceiptBook; readonly id: string };
+}
+
+/**
+ * Admits `intent` and returns the consumed receipt that authorizes it. The policy is decided first with nothing read;
+ * then the full admission, which spends the receipt when the grants require confirmation; when they do not, the
+ * receipt is spent here instead. Without a receipt nothing is authorized: these actions always need the owner.
+ */
+function authorize(policy: EffectivePolicy, intent: ActionIntent, stateDigest: string, who: OwnerAuthority, credential: () => CredentialAnswer, now: Date): ConsumedReceipt {
+  const base = { intent, requestedBy: who.requestedBy, policy, capability: () => ({ available: true, detail: 'owner helper' }), credential, stateDigest, now };
+  const preview = admit(base);
+  if (!preview.record.verdicts.policy.allowed) fail('sentinel.provider.notAdmitted', preview.record.verdicts.policy.reasonCode);
+  if (!who.receipt) return fail('sentinel.provider.receiptRequired', 'the owner\u2019s confirmation');
+  const result = admit({ ...base, receipt: who.receipt });
+  if (result.record.outcome !== 'admitted') fail('sentinel.provider.notAdmitted', result.record.outcome);
+  const spent = result.receipt ?? who.receipt.book.consume(who.receipt.id, { intent, stateDigest, policyRevision: policy.revision }, now);
+  if (!isConsumedReceipt(spent) || receiptAuthority(spent)?.intentDigest !== intentDigest(intent)) fail('sentinel.provider.notAdmitted', 'the receipt is for another intent');
+  return spent;
+}
 
 const located = (policy: EffectivePolicy, providerId: string, modelId: string) => {
   if (!isEffectivePolicy(policy)) fail('sentinel.provider.notTrusted', 'only effectivePolicy’s own result');
@@ -20,13 +47,6 @@ const located = (policy: EffectivePolicy, providerId: string, modelId: string) =
   const m = provider?.models?.findIndex(x => x.id === modelId) ?? -1;
   if (!provider || m < 0) fail('sentinel.provider.notTrusted', 'the adopted settings define no such provider or model');
   return { provider: provider!, model: provider!.models![m]!, p, m };
-};
-
-const admitted = (admission: AdmissionEnvelope, intent: ActionIntent, stateDigest: string, needReceipt: boolean) => {
-  if (admission.outcome !== 'admitted') fail('sentinel.provider.notAdmitted', admission.outcome === 'awaiting-confirmation' ? 'waiting for the owner' : 'denied');
-  if (admission.intentDigest !== intentDigest(intent) || admission.action !== intent.action) fail('sentinel.provider.notAdmitted', 'the admission is for another intent');
-  if (needReceipt && admission.receipt === null) fail('sentinel.provider.receiptRequired', 'the owner’s confirmation');
-  void stateDigest;
 };
 
 /** The probe the owner confirms: one network listing of a configured provider; bound to its current settings. */
@@ -40,15 +60,24 @@ export function probeIntent(policy: EffectivePolicy, providerId: string, modelId
 }
 
 /**
- * Runs the admitted probe and returns the capability with the JSON pointer it belongs at in the settings. It never
- * writes settings: the owner re-adopts them with the record.
+ * Decides and runs the probe: one listing of a configured provider. Returns the capability with the JSON pointer it
+ * belongs at in the settings; it never writes settings, the owner re-adopts them with the record.
  */
-export async function probeModel(admission: AdmissionEnvelope, policy: EffectivePolicy, providerId: string, modelId: string,
+export async function probeModel(policy: EffectivePolicy, providerId: string, modelId: string, who: OwnerAuthority,
   options: { credentials: CredentialSource; now: Date; timeoutMs?: number; maxResponseBytes?: number; signal?: AbortSignal }): Promise<{ capability: ModelCapability; settingsPatch: { path: string; value: ModelCapability } }> {
   const { intent, stateDigest } = probeIntent(policy, providerId, modelId);
-  admitted(admission, intent, stateDigest, true);
   const { provider, p, m } = located(policy, providerId, modelId);
-  const credential = await resolveCredential(options.credentials, provider.credential);
+  let credential: Secret | null = null;
+  let answer: CredentialAnswer = provider.disclosure === 'local-only' && provider.credential === null
+    ? { basis: 'local-only', detail: 'a loopback provider needs no remote credential' } : { basis: 'unknown', detail: 'not read yet' };
+  if (provider.credential !== null) {
+    // Read only once the policy allows (authorize previews it first with nothing read).
+    const preview = admit({ intent, requestedBy: who.requestedBy, policy, capability: () => ({ available: true, detail: 'owner helper' }), credential: () => answer, stateDigest, now: options.now });
+    if (!preview.record.verdicts.policy.allowed) fail('sentinel.provider.notAdmitted', preview.record.verdicts.policy.reasonCode);
+    try { credential = await resolveCredential(options.credentials, provider.credential); answer = { basis: 'keychain-scope', allowed: true, detail: 'read for the approved reference' }; }
+    catch { answer = { basis: 'keychain-scope', allowed: false, detail: 'the approved reference could not be read' }; }
+  }
+  authorize(policy, intent, stateDigest, who, () => answer, options.now);
   const capability = await probeConfigured(policy, providerId, modelId, { credential, now: options.now, timeoutMs: Math.min(options.timeoutMs ?? 10_000, 60_000),
     maxResponseBytes: Math.min(options.maxResponseBytes ?? 1024 * 1024, 4 * 1024 * 1024), ...(options.signal ? { signal: options.signal } : {}) });
   return { capability, settingsPatch: { path: `/providers/${p}/models/${m}/capability`, value: capability } };
@@ -72,19 +101,12 @@ export function reconcileIntent(ledger: BudgetLedger, reservationId: string, usa
 
 const snapshotOf = (r: Reservation) => ({ ...r, costNanos: String(r.costNanos), usedCostNanos: r.usedCostNanos === null ? null : String(r.usedCostNanos) });
 
-/**
- * Settles the uncertain reservation under the admitted reconciliation. Lowering charged spend always needs the owner's
- * confirmation: when admission spent a receipt, that one counts; when the grants asked for none, the owner's receipt
- * for exactly this intent is spent here, once, as the broker does for priced use.
- */
-export function reconcileReservation(ledger: BudgetLedger, admission: AdmissionEnvelope, reservationId: string, usage: ReconcileUsage, now: Date,
-  receipt?: { readonly book: ReceiptBook; readonly id: string }): Reservation {
+/** Decides the reconciliation and settles the uncertain reservation under the owner's spent receipt. */
+export function reconcileReservation(ledger: BudgetLedger, policy: EffectivePolicy, reservationId: string, usage: ReconcileUsage, who: OwnerAuthority, now: Date): Reservation {
+  if (!isEffectivePolicy(policy)) fail('sentinel.provider.notTrusted', 'only effectivePolicy\u2019s own result');
   const { intent, stateDigest } = reconcileIntent(ledger, reservationId, usage);
-  admitted(admission, intent, stateDigest, false);
-  let authority = admission.receipt;
-  if (authority === null && receipt) authority = receipt.book.consume(receipt.id, { intent, stateDigest, policyRevision: admission.policyRevision }, now).digest;
-  if (authority === null) fail('sentinel.provider.receiptRequired', 'the owner\u2019s confirmation');
-  return ledger.reconcile(reservationId, { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costNanos: toNanos(usage.cost)! }, authority!,
+  const spent = authorize(policy, intent, stateDigest, who, () => ({ basis: 'local-only', detail: 'a ledger record; no provider is contacted' }), now);
+  return ledger.reconcile(reservationId, { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costNanos: toNanos(usage.cost)! }, spent.digest,
     now.toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z'));
 }
 
