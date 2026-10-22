@@ -1,0 +1,177 @@
+# Native installed-command acceptance for the four pinned external scanners. Provisioning is explicit and separate
+# from scans: no runtime pull, host scanner, live advisory download, project execution or hosted provider call.
+name: sentinel-scanner-cli
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sentinel-scanner-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    name: scanner CLI affected checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.select.outputs.run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Check selection and workflow pins
+        run: node --test scripts/test/ci-changes.test.mjs scripts/test/sentinel-scanner-cli-workflow.test.mjs
+      - name: Select the package and isolation dependency union
+        id: select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFileSync } from 'node:fs';
+          import { detectChecks } from './scripts/ci-changes.mjs';
+          const { checks, reason } = detectChecks({ base: process.env.BASE_SHA, head: process.env.HEAD_SHA, event: process.env.GITHUB_EVENT_NAME });
+          const run = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' || checks.sentinel || checks.isolation;
+          appendFileSync(process.env.GITHUB_OUTPUT, `run=${run}\n`);
+          console.log(`${reason}; scanner CLI: ${run ? 'run' : 'skip'}`);
+          JS
+
+  scanner-cli-linux-amd64:
+    name: scanner-cli-linux-amd64
+    needs: changes
+    # Missing outputs or a failed selector cannot silently skip acceptance. Explicit cancellation is respected.
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SENTINEL_ISOLATION: '1'
+      PATTERN_INDEX: semgrep/semgrep@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b
+      PATTERN_AMD64: sha256:c47e426f7f0cfa19af6d7877560d0a7135f683b8090ad0efc97c4ec7810dc435
+      OSV_INDEX: ghcr.io/google/osv-scanner@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0
+      OSV_AMD64: sha256:d2c46aa2483c4e02759bc25f2224d28a5ceeb3dca5a1ecd1f569fbed83a626f0
+      TRIVY_INDEX: ghcr.io/aquasecurity/trivy@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+      TRIVY_AMD64: sha256:2e6c00d711ab4ae41d8a30c2c1fd3bd3b62704c177bb120f95012e939edfb3df
+      ZIZMOR_INDEX: ghcr.io/zizmorcore/zizmor@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9
+      ZIZMOR_AMD64: sha256:cfc533b8fa781c51c6fb4085057945bc3eebb6b6e8a25ab7daa85c885f071269
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Require a native non-root amd64 host and daemon
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != 0
+          test "$(uname -m)" = x86_64
+          test "$(node -p 'process.platform + "/" + process.arch')" = linux/x64
+          docker version --format '{{json .Server}}' > docker-server.json
+          # shellcheck disable=SC2016 # This is JavaScript template interpolation.
+          node -e 'const s=JSON.parse(require("fs").readFileSync("docker-server.json","utf8")); if(s.Os!=="linux"||s.Arch!=="amd64")process.exit(1); console.log(`${s.Version} ${s.Os}/${s.Arch}`);'
+          # A dedicated runner starts without Sentinel containers; tests clean their own supervised resources.
+          containers=$(docker ps -aq --filter label=org.farsight.sentinel.store)
+          test -z "$containers"
+      - run: pnpm install --frozen-lockfile
+      - name: Build the exact package closure
+        run: pnpm --filter '@farsight/sentinel...' build
+      - name: Bind workflow pins to the built adapters
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { writeFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const testedCommit=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
+          assert.match(testedCommit,/^[a-f0-9]{40}$/);
+          const pins=[];
+          for (const [id,prefix,engine,platforms] of [
+            ['pattern','PATTERN','PATTERN_ENGINE','PATTERN_IMAGE_PLATFORMS'],
+            ['osv','OSV','OSV_ENGINE','OSV_IMAGE_PLATFORMS'],
+            ['trivy','TRIVY','TRIVY_ENGINE','TRIVY_IMAGE_PLATFORMS'],
+            ['zizmor','ZIZMOR','ZIZMOR_ENGINE','ZIZMOR_IMAGE_PLATFORMS'],
+          ]) {
+            const m=await import(`./packages/sentinel/dist/adapters/${id}/adapter.js`);
+            const p=m[platforms].find(p=>p.architecture==='amd64');
+            assert.equal(m[engine].image,process.env[`${prefix}_INDEX`]);
+            assert.equal(p?.platform,'linux/amd64');assert.equal(p?.state,'measured');
+            assert.equal(p?.manifest,process.env[`${prefix}_AMD64`]);
+            assert.match(m[`${prefix}_WORKER_DIGEST`],/^sha256:[a-f0-9]{64}$/);
+            pins.push({adapter:id,version:m[engine].version,image:m[engine].image,platform:p.platform,manifest:p.manifest,worker:m[`${prefix}_WORKER_DIGEST`]});
+          }
+          writeFileSync('scanner-cli-pins.json',JSON.stringify({testedCommit,runId:process.env.GITHUB_RUN_ID,pins},null,2)+'\n');
+          JS
+      - name: Explicitly provision the four pinned image indexes and verify native manifests
+        run: |
+          set -euo pipefail
+          check() {
+            docker manifest inspect "$1" > image-index.json
+            # shellcheck disable=SC2016 # This is JavaScript template interpolation.
+            EXPECT="$2" node -e '
+              const i=JSON.parse(require("fs").readFileSync("image-index.json","utf8"));
+              const m=(i.manifests??[]).filter(p=>p.platform?.os==="linux"&&p.platform?.architecture==="amd64");
+              if(m.length!==1||m[0].digest!==process.env.EXPECT)process.exit(1);
+              console.log(`verified linux/amd64 ${m[0].digest}`);'
+            docker pull --platform linux/amd64 "$1"
+            docker image inspect "$1" > installed-image.json
+            IMAGE="$1" node -e '
+              const a=JSON.parse(require("fs").readFileSync("installed-image.json","utf8"));
+              if(a.length!==1||a[0].Os!=="linux"||a[0].Architecture!=="amd64"||!a[0].RepoDigests?.includes(process.env.IMAGE))process.exit(1);'
+          }
+          check "$PATTERN_INDEX" "$PATTERN_AMD64"
+          check "$OSV_INDEX" "$OSV_AMD64"
+          check "$TRIVY_INDEX" "$TRIVY_AMD64"
+          check "$ZIZMOR_INDEX" "$ZIZMOR_AMD64"
+      - name: Explicitly acquire the pinned Trivy checks bundle
+        run: |
+          set -euo pipefail
+          mkdir -m 700 "$RUNNER_TEMP/scanner-cli-owner"
+          node packages/sentinel/scripts/acquire-trivy-checks.mjs --dir "$RUNNER_TEMP/scanner-cli-owner"
+          echo "SENTINEL_TRIVY_CHECKS_DIR=$RUNNER_TEMP/scanner-cli-owner" >> "$GITHUB_ENV"
+      - name: Scanner drivers, actual canonical CLI, assets and admission; zero skips
+        working-directory: packages/sentinel
+        run: |
+          set -euo pipefail
+          umask 022
+          node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-concurrency=1 --test-timeout=600000 \
+            --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=scanner-cli.tap \
+            test/drivers.test.ts test/drivers-boundary.test.ts test/drivers-canonical.test.ts test/drivers-conformance.test.ts \
+            test/scanner-assets.test.ts test/scanner-admission.test.ts test/cli-scanners-e2e.test.ts
+          grep -Eq '^# tests [1-9][0-9]*$' scanner-cli.tap
+          grep -qx '# skipped 0' scanner-cli.tap
+          grep -qx '# fail 0' scanner-cli.tap
+          grep -qx '# cancelled 0' scanner-cli.tap
+      - name: Pack and run the npm-only installed public CLI through all four engines
+        run: |
+          set -euo pipefail
+          umask 022
+          pnpm pack:sentinel
+          node scripts/test-sentinel-scanner-consumer.mjs | tee scanner-consumer.log
+          grep -q '^sentinel scanner consumer ok: npm-only init twice' scanner-consumer.log
+      - name: Verify supervised container cleanup
+        if: always()
+        run: |
+          set -euo pipefail
+          # Query failure is a failure; never hide it behind a pipeline or delete an unowned container.
+          containers=$(docker ps -aq --filter label=org.farsight.sentinel.store)
+          if [ -n "$containers" ]; then echo "::error::Sentinel containers left behind: $containers"; exit 1; fi
+      - name: Retain the acceptance report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sentinel-scanner-cli-linux-amd64
+          if-no-files-found: error
+          path: |
+            packages/sentinel/scanner-cli.tap
+            scanner-consumer.log
+            docker-server.json
+            scanner-cli-pins.json

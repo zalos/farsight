@@ -28,6 +28,31 @@ from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store c
 | **sentinel-service** (not yet required) | when Sentinel is selected, `pnpm install --frozen-lockfile` → `pnpm --filter '@farsight/sentinel...' build` → the CLI, owner socket, detached service, kill-and-resume and rule-lock suites (`cli-prework`, `service-detached`, `service-policy`, `cli-preview-e2e`, `cli-rules`, `preview-slice`, `trusted-profile`, `receipts-publish`) on native amd64 as the runner's non-root user under umask 022. Running as root, on another architecture, or any skipped test fails it | 20 min |
 | **sentinel-package** (not yet required) | when relevant, `pnpm install --frozen-lockfile` → `pnpm pack:cli` (builds only the CLI's closure, so Sentinel stays unbuilt; the job fails if `packages/sentinel/dist` exists) → `scripts/test-farsight-package.mjs` → `pnpm test:cli:package:absent` → `pnpm test:sentinel:package` (below) | 15 min |
 
+### Native installed scanner CLI acceptance
+
+The separate `sentinel-scanner-cli` workflow runs on pull requests and pushes to `main`, with manual dispatch too.
+Its inexpensive selection job reuses the union of `sentinel-package` and `sentinel-isolation` inputs from the existing
+selector, including the manifest-derived dependency closures. Documentation-only changes skip the acceptance job;
+mixed changes retain it, and an unavailable range, failed selector or missing output cannot silently skip it.
+
+The selected `scanner-cli-linux-amd64` job requires a native non-root Ubuntu amd64 host, a Linux amd64 Docker daemon,
+Node 24 and the exact measured adapter pins. An explicit provisioning step verifies each index's amd64 manifest and
+pulls the four pinned Semgrep, OSV-Scanner, Trivy and zizmor images; another explicit step acquires the pinned Trivy
+checks bundle through its bounded owner setup script. OSV tests use original synthetic offline archives; no live
+advisory database, project package manager or host scanner runs. Runtime execution never pulls or acquires assets.
+
+The job runs driver/binding/asset/admission tests and the real public four-engine CLI with test-file concurrency one.
+An empty suite, any skip, failure or cancellation fails acceptance. It then packs the npm artifact and runs
+`test-sentinel-scanner-consumer.mjs` from a clean consumer: init, adopt settings, promote exact packs, missing-asset
+refusal, owner-receipted tools/databases, plan, detach/join/wait, and report regeneration after service restart and
+source removal. Required coverage gaps stay exit 2. Tests stop only their own supervised resources; the final step
+queries the daemon directly and fails if Sentinel containers remain. It never deletes an unowned container or hides
+a failed daemon query. The tested commit/image/worker pins, TAP result, installed-consumer success log and daemon identity are retained as CI evidence.
+
+This job is not yet a protected required check. Adding the workflow is not a measurement: native installed-command
+acceptance is recorded only after the selected job actually passes on its exact commit. It covers the four-engine public dispatch path. Preview compatibility remains in the existing service checks;
+Gitleaks and the remaining plan gates remain separate.
+
 ### Which changes select which checks
 
 These are deliberately broad suite boundaries, not an inferred per-test dependency graph. Mixed changes take the

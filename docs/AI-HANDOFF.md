@@ -1980,3 +1980,13 @@ archives, then still requires final exact candidate/provenance receipt admission
 checks-bundle rights sentence now names MIT. Focused coverage includes restricted grants refusing before scanner
 attempts, a sufficient grant running the real pinned scanner, rerun refusal, direct service/receipt denial, no daemon
 contact on asset-policy denial, and preview/lifecycle/receipt regressions.
+
+## Native installed scanner CLI gate — 2026-10-22
+
+Branch `codex/sol-scanner-native-ci` adds the separate `sentinel-scanner-cli` workflow over the reviewed four-engine
+CLI and native IaC metadata context. It verifies source/image/amd64-manifest pins, explicitly provisions four images
+and the bounded checks bundle, requires zero-skip actual canonical CLI/driver/admission tests, and runs the npm-only
+installed detached lifecycle and retained-report consumer. Selection uses the existing package/isolation dependency
+union and fails closed; test files run sequentially. No scanner, policy, grant or authority logic changes. Local
+validation replays the selected commands on the existing arm64 container runtime; it is not native amd64 CI evidence.
+The native job must pass after integration before its installed-command gate is claimed.
