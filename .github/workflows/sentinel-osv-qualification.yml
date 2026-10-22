@@ -68,7 +68,6 @@ jobs:
         working-directory: packages/sentinel
         env:
           SENTINEL_ISOLATION: '1'
-          SENTINEL_OSV_QUALIFY: linux/amd64
         run: |
           set -o pipefail
           node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=600000 \
@@ -79,12 +78,11 @@ jobs:
       - name: Install the packed tarball and run its shipped OSV worker
         env:
           SENTINEL_ISOLATION: '1'
-          SENTINEL_OSV_QUALIFY: linux/amd64
         run: |
           set -o pipefail
           pnpm pack:sentinel
           node scripts/test-sentinel-package.mjs | tee package.log
-          grep -q 'installed osv worker run by the workspace service: 1 finding (amd64 candidate' package.log
+          grep -q 'installed osv worker run by the workspace service: 1 finding (amd64 measured' package.log
       - name: No container left behind
         if: always()
         run: |
