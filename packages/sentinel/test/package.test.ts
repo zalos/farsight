@@ -234,7 +234,7 @@ test('draft contracts, store, capture, parser, policy and planner are available;
 });
 
 test('planned commands refuse with exit 3 and start nothing', () => {
-  for (const command of ['retry', 'rerun', 'compare', 'bundle']) {
+  for (const command of ['compare', 'bundle']) {
     const r = cli(command, '--json');
     assert.equal(r.status, 3, command);
     assert.match(r.stderr, new RegExp(`^unavailable: ${command} is not implemented in this draft build \\(planned in PR \\d+\\)\\. Nothing was started\\.`));

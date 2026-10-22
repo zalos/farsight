@@ -21,7 +21,7 @@ import { result, type CommandResult, type PrintedVerdicts } from '../cli/outcome
 
 import { candidateDigest, emptyLock, lockDigest, promote, promotionIntent, readPackDirectory, validatePack } from '../rules/index.js';
 import { RuleLockBook } from './rule-locks.js';
-import { canonicalResult, currentPlan, executeRun, planWorkspaceCanonical, previewFindingsOf, type CanonicalDisclosure, type CurrentPlan } from './canonical.js';
+import { canonicalResult, currentPlan, executeRun, followRun, planWorkspaceCanonical, previewFindingsOf, type CanonicalDisclosure, type CurrentPlan } from './canonical.js';
 
 export interface Workspace {
   readonly path: string;
@@ -181,6 +181,27 @@ export async function planWorkspace(ws: Workspace, options: { confirm: boolean; 
       const planned = await planWorkspaceCanonical(store, { workspace: ws.path, trustDir: trustFolder(ws), policy, scratchRoot: work, now: options.now,
         ...(options.parentId ? { parentId: options.parentId } : {}) });
       return { ...result('plan', planned.outcome, { verdicts: printed(decided.record), facts: { ...planned.disclosure } }), disclosure: planned.disclosure };
+    } finally { removeScratch(work); }
+  });
+}
+
+/**
+ * Retry or rerun an ended run as a new run that names it as its parent (canonical.ts followRun): admitted as
+ * `capture.source` like any planning, planned and admitted, and left waiting to be run.
+ */
+export async function followWorkspaceRun(ws: Workspace, options: { mode: 'retry' | 'rerun'; runId: string; confirm: boolean; now: Date }):
+  Promise<CommandResult> {
+  const adopted = adoptedPolicy(ws);
+  if ('refusal' in adopted) return adopted.refusal;
+  const { policy } = adopted;
+  const decided = decide(ws, policy, intentOf('capture.source', sha(Buffer.from(ws.path)), ['local-artifacts']), policy.revision, options.confirm, options.now);
+  if (!decided.admitted) return decided.result;
+  return withStore(ws, async store => {
+    const work = scratchUnder(ws);
+    try {
+      const followed = await followRun(store, options.runId, options.mode, { workspace: ws.path, trustDir: trustFolder(ws), policy, scratchRoot: work, now: options.now });
+      if ('reasonCode' in followed) return result(options.mode, 'configuration-failure', { verdicts: printed(decided.record), reasonCode: followed.reasonCode, facts: { runId: options.runId } });
+      return result(options.mode, followed.outcome, { verdicts: printed(decided.record), facts: { ...followed.disclosure, parentId: options.runId } });
     } finally { removeScratch(work); }
   });
 }

@@ -45,7 +45,9 @@ test('arguments: each command takes only its own flags; typos and repeats are re
   no(['capabilities', '--json=yes'], 'sentinel.args.unexpectedArgument');
   no(['scan-everything'], 'sentinel.args.unknownCommand');
   // A command this build does not run is refused as unavailable, whatever its arguments.
-  assert.equal(ok(['rerun']).command, 'rerun');
+  assert.equal(ok(['compare']).command, 'compare');
+  assert.equal(ok(['rerun', 'r']).command, 'rerun');
+  no(['rerun'], 'sentinel.args.missingArgument');
   no(['wait'], 'sentinel.args.missingArgument');
   no(['serve', '--idle-ms'], 'sentinel.args.missingValue');
   no(['pause', 'r', '--detach'], 'sentinel.args.unknownFlag');

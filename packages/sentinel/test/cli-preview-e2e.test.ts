@@ -102,6 +102,23 @@ test('init → adopt → plan → run → status → report, twice where it matt
   assert.equal(run('wait', planId).status, 2);
   stopService(env);
   assert.equal(run('run', 'plan-' + '0'.repeat(32)).body.reasonCode, 'sentinel.service.planUnknown');
+
+  // A retry is a new run over the ended run's snapshot, naming it as its parent; it waits to be run like any run.
+  const retried = run('retry', planId);
+  assert.deepEqual([retried.status, retried.body.outcome, retried.body.facts.parentId, retried.body.facts.snapshotId], [0, 'prepared', planId, plan.body.facts.snapshotId], 'no recapture: the parent\'s snapshot');
+  const retryId = retried.body.facts.runId;
+  assert.notEqual(retryId, planId);
+  assert.equal(run('status', retryId).body.facts.state, 'running', 'its bootstrap published; its analysis waits');
+  assert.equal(run('retry', retryId).body.reasonCode, 'sentinel.service.runNotEnded', 'a run that has not ended is resumed, not retried');
+  const retryRun = run('run', retryId);
+  assert.deepEqual([retryRun.status, retryRun.body.facts.previewFindings], [2, 1]);
+  // A rerun captures the workspace again: new content is a new snapshot and its own plan.
+  writeFileSync(join(ws, 'src/more.ts'), 'export const del = (n: string) => db.query(`DELETE FROM t WHERE n = ${n}`);\n');
+  const reran = run('rerun', planId);
+  assert.deepEqual([reran.status, reran.body.facts.parentId, reran.body.facts.checks.planned], [0, planId, 3]);
+  assert.notEqual(reran.body.facts.snapshotId, retried.body.facts.snapshotId);
+  assert.equal(run('run', reran.body.facts.runId).body.facts.previewFindings, 2);
+  assert.equal(run('retry', 'run-' + '0'.repeat(32)).body.reasonCode, 'sentinel.service.runUnknown');
   // A settings change after planning invalidates the plan rather than running under other rules.
   const path = join(ws, '.farsight/sentinel/settings.json');
   writeFileSync(path, readFileSync(path, 'utf8').replace('"medium"', '"high"'));

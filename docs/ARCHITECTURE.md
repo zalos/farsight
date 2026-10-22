@@ -604,23 +604,32 @@ short 0700 folder under `/tmp`); its path is measured in bytes with room for the
 Linux); folder and socket must be this user's and closed to others; a stale socket of ours is replaced and anything
 else refused; frames are length-bounded JSON; the handshake must name the store and owner the client expects.
 
-**A foundation preview, not coverage.** One original coded check (SQL text assembled from strings in TS/JS and
-Java) runs as a built-in worker through PR 08's coordinator, so the path init → adopt → plan → run → report works
-with Node and npm alone; the worker is the package's own executable, entered only when its otherwise empty
-environment carries the detector's identity, which keeps it findable in the published bundle. The preview planner
-stands behind PR 08's `PlanBoundary` and is replaced by PR 06's planner. A preview run ends
-`required-coverage-incomplete` (exit 2), never satisfied, and its report says it is not scanner coverage. A plan's
-identity is its captured inventory, policy revision and adapter, so the same content plans to the same id; running a
-completed plan again executes nothing. The report is rendered from the ledger and stored artifacts, pinned to the
-run's last event.
+**The canonical path, with a foundation preview as its only check.** The command line plans nothing itself. `plan`
+captures the workspace (admitted as `capture.source`), admits the bootstrap revision, has the coordinator's own
+capture, parse and inventory operations publish it (ADR 25), plans the analysis with PR 06's planner from exactly that
+published evidence, under the owner's promoted rule lock and the adopted policy, and admits it with the lock, policy
+and execution profile before anything is scheduled; `run`, foreground or in the service, executes only the run's
+current admitted revision. A run's identity is its captured inventory, lock, policy and profile, so the same content
+under the same terms is the same run (`kept`). The profile is the coordinator's execution profile record over the
+shipped registry: the bootstrap operations and one check adapter, an original preview detector (SQL text assembled
+from strings in TS/JS and Java) shipped as the pack `rules/foundation-preview` the owner promotes. The analysis plans
+one scope per unit, because a worker receives its inputs by artifact id and must tell which file is which scope; the
+detector covers a unit only when it can, and reports anything else skipped, so an unread file stays partial. Results
+are read from the ledger: the recorded outcome and the coverage records. A run resting on the preview rule ends
+`required-coverage-incomplete` (exit 2), and this build never prints `satisfied` (findings are judged against the
+policy only with the full report). `retry` and `rerun` plan a new run naming an ended one as its parent, over its
+snapshot or a fresh capture. The report is rendered from the ledger and stored artifacts, pinned to the run's last
+event. The published bundle ships the modules the code names by file URL (the launch gate, the bootstrap operations'
+implementations) as entries of their own, references rewritten and digests recorded in its manifest.
 
 **The owner's background service holds the store; authority reaches it as a receipt.** `serve` (or `run --detach`,
 starting it on demand as this same executable with a fixed argument list and an explicit environment) opens the
 store for its lifetime, listens on the socket and records its address and owner nonce in the owner's private user
 state, never the checkout. While it runs it alone opens the store: status, wait and report go through it; plan and
 foreground run refuse until it stops (after an idle period, or on SIGTERM, pausing work in flight). Starting or
-resuming a run needs either a receipt the owner's own CLI issued after `--confirm`, bound to `run.start`, the plan's
-digest and the policy revision and spent once by the service, or what the adopted grants give the connection's
+resuming a run needs either a receipt the owner's own CLI issued after `--confirm`, bound to `run.start`, the run's
+current admitted plan digest, the policy revision and the exact instance (workspace identity, store and run), spent
+once by the service, or what the adopted grants give the connection's
 agent principal, by admission; the defaults give agents nothing. Pause and cancel are writes decided the same way
 under their own actions (`run.pause`, `run.cancel`), so a receipt for one never serves another and being connected
 grants nothing. The launcher captures its own invocation and stops exactly the process it started; the service
@@ -632,7 +641,8 @@ coordinator's recovery with each output accepted once.
 validates the folder with the rules module's `validatePack` and, only after `--confirm`, promotes it with its
 `promote` under a receipt for exactly that candidate against exactly the current revision; each revision is filed once
 under its digest and read back through `verifyPinnedLock`, and the current pointer is replaced atomically, only from
-the revision the promotion was confirmed against. A repository supplies no lock. **Not in this decision:** retry and rerun, which need plan
-revisions from PR 06's planner; a ledger read of a run (until then a private plan record sits beside the settings);
-the full report (PR 19). Same-account code is outside this boundary, as for the store.
+the revision the promotion was confirmed against (a create-once link per revision, published whole through a synced
+temporary name), and the pack's exact files are kept so a plan resolves the lock against them. A repository supplies
+no lock. **Not in this decision:** the full report and finding policy (PR 19); per-input paths in the worker
+protocol, which would let a unit cover several files. Same-account code is outside this boundary, as for the store.
 

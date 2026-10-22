@@ -100,8 +100,11 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   The command line and local service (ADR 37): `src/cli.ts` (the owner's entrypoint, and the preview worker when the
   coordinator starts it), `src/cli/` (`args.ts` typed parsing, `outcome.ts` typed results and exit codes, `actor.ts`
   the entrypoint actor rule, `init.ts`), `src/service/local.ts` (adopt, plan, run, status, report in the owner's
-  process), `src/service/owner-service.ts` (the background service: socket, descriptor, receipts, one run at a time,
-  pause/cancel/wait), `src/service/launch.ts` (the one process the CLI starts: its own `serve`), `src/service/preview-plan.ts` (the foundation-preview planner and registry), `src/adapters/preview-detector.ts`
+  process), `src/service/canonical.ts` (plan and run through the canonical planner, admission and coordinator; results from the
+  ledger), `src/service/owner-service.ts` (the background service: socket, descriptor, receipts bound to their instance,
+  one run at a time, pause/cancel/wait), `src/service/launch.ts` (the one process the CLI starts: its own `serve`),
+  `src/service/rule-locks.ts` + `publish-once.ts` (the owner's lock revisions, packs and chain links, published whole),
+  `src/service/trusted-profile.ts` (the shipped registry and execution profile), `src/service/package-paths.ts`, `src/adapters/preview-detector.ts`
   (the one original coded check), `src/transport/ipc.ts` (the owner socket and handshake) and `src/reports/preview.ts`;
   `scripts/test-sentinel-preview-consumer.mjs` runs the npm-only path from the packed tarball.
 

@@ -21,6 +21,7 @@ import type { AdapterRegistry } from '../execution/registry.js';
 import { planAnalysis, planBootstrap, plannerAnalysisFrom, plannerLockFrom, plannerPolicyFrom, plannerSnapshotFrom } from '../planner/index.js';
 import type { EffectivePolicy } from '../policy/index.js';
 import { captureSnapshot } from '../snapshot/capture.js';
+import { openSnapshot } from '../snapshot/materialize.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import type { SentinelStore } from '../store/index.js';
 import { PREVIEW_FINDINGS_SCHEMA, PREVIEW_RULE } from '../adapters/preview-detector.js';
@@ -84,6 +85,8 @@ export async function currentPlan(store: SentinelStore, runId: string): Promise<
  */
 export async function planWorkspaceCanonical(store: SentinelStore, options: {
   workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; registry?: AdapterRegistry; parentId?: string | null; now: Date;
+  /** Re-plan over this admitted snapshot instead of capturing again (a retry of the run that pinned it). */
+  snapshotId?: string;
 }): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure }> {
   const book = new RuleLockBook(options.trustDir);
   const current = book.current();
@@ -91,11 +94,12 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   const packs = book.packsOf(current.lock);
   const registry = options.registry ?? foundationRegistry();
   const profile = foundationProfile(registry);
-  const captured = await captureSnapshot(store, {
-    mode: 'working-copy', sources: [{ sourceId: WORKSPACE_SOURCE, repositoryId: 'local-workspace', root: options.workspace }],
-    policy: { exclude: { '*': ['.farsight'] } },
-  });
-  const snapshot = captured.snapshot;
+  const snapshot = options.snapshotId !== undefined
+    ? (await openSnapshot(store, options.snapshotId)).snapshot
+    : (await captureSnapshot(store, {
+      mode: 'working-copy', sources: [{ sourceId: WORKSPACE_SOURCE, repositoryId: 'local-workspace', root: options.workspace }],
+      policy: { exclude: { '*': ['.farsight'] } },
+    })).snapshot;
   // The run is what it would read and do: the captured inventory (not the capture's time), the lock, the policy and
   // the profile. The same content under the same terms plans to the same run.
   const runId = `run-${digest({ inventory: snapshot.inventoryDigest, lock: current.digest, policy: options.policy.revision, profile: profile.digest, parent: options.parentId ?? null }).slice(7, 39)}`;
@@ -186,4 +190,18 @@ export async function canonicalResult(store: SentinelStore, command: string, run
     return result(command, untouched ? 'prepared' : 'configuration-failure', { ...base, facts, reasonCode: untouched ? 'sentinel.service.runAwaiting' : 'sentinel.service.runInterrupted' });
   }
   return result(command, 'submitted', { ...base, facts });
+}
+
+/**
+ * A new run that follows an ended one (its parent): `retry` re-plans over the parent's admitted snapshot with no
+ * recapture; `rerun` captures the workspace again. Either is planned and admitted like any run, under the lock and
+ * policy current now, and waits to be run. A run that has not ended is resumed, not retried.
+ */
+export async function followRun(store: SentinelStore, parentId: string, mode: 'retry' | 'rerun', options: {
+  workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; registry?: AdapterRegistry; now: Date;
+}): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure } | { reasonCode: string }> {
+  const parent = store.ledger.getRun(parentId);
+  if (!parent) return { reasonCode: 'sentinel.service.runUnknown' };
+  if (parent.state !== 'completed' && parent.state !== 'canceled') return { reasonCode: 'sentinel.service.runNotEnded' };
+  return planWorkspaceCanonical(store, { ...options, parentId, ...(mode === 'retry' ? { snapshotId: parent.envelope.snapshotId } : {}) });
 }

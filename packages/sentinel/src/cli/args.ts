@@ -6,8 +6,7 @@
 export const COMMANDS = {
   help: null, version: null, capabilities: null, validate: null, init: null, settings: null,
   plan: null, run: null, status: null, report: null, wait: null, pause: null, resume: null, cancel: null, serve: null,
-  // A new attempt of failed work and a fresh run of a finished plan need plan revisions from PR 06's planner.
-  retry: 'PR 09', rerun: 'PR 09',
+  retry: null, rerun: null,
   rules: null,
   compare: 'PR 19', bundle: 'PR 26',
 } as const satisfies Record<string, string | null>;
@@ -38,9 +37,9 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   wait: { flags: { ...COMMON, ...STORE, '--timeout': 'value' }, positional: ['runId'], min: 1 },
   pause: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
   cancel: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
-  retry: RUN_REF,
+  retry: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
   resume: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
-  rerun: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--idempotency-key': 'value' }, positional: ['runId'], min: 1 },
+  rerun: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
   report: { flags: { ...COMMON, ...STORE, '--format': 'value' }, positional: ['runId'], min: 1 },
   serve: { flags: { ...COMMON, ...STORE, '--idle-ms': 'value' }, positional: [], min: 0 },
   compare: { flags: COMMON, positional: [], min: 0 },

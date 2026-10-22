@@ -6,7 +6,7 @@
 // (cli/outcome.ts); `--json` prints it whole, with the three verdicts.
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import {
-  adoptWorkspaceSettings, confirmForService, currentRules, promoteRulePack, planWorkspace, previewReport, runPlan, describeRun, runStatus, workspaceOf, PolicyError,
+  adoptWorkspaceSettings, confirmForService, currentRules, followWorkspaceRun, promoteRulePack, planWorkspace, previewReport, runPlan, describeRun, runStatus, workspaceOf, PolicyError,
   type Workspace,
 } from './service/local.js';
 import { connectService, serveWorkspace } from './service/owner-service.js';
@@ -59,6 +59,7 @@ function help(): string {
     `  ${word('sentinel.cli.usageReport')}`,
     `  ${word('sentinel.cli.usageServe')}`,
     `  ${word('sentinel.cli.usageRules')}`,
+    `  ${word('sentinel.cli.usageFollow')}`,
     '',
     word('sentinel.cli.planned', { commands: planned.join(', ') }),
     '',
@@ -232,7 +233,7 @@ async function owner(p: ParsedCommand): Promise<number> {
     }
     // While the service runs it alone holds the store: reads go through it, and nothing new is planned or run here.
     const live = await connectService(ws);
-    if (live && (p.command === 'plan' || p.command === 'run')) {
+    if (live && (p.command === 'plan' || p.command === 'run' || p.command === 'retry' || p.command === 'rerun')) {
       live.close();
       return serviceOut(result(p.command, 'configuration-failure', { reasonCode: 'sentinel.service.ownerServiceRunning' }));
     }
@@ -276,6 +277,10 @@ async function owner(p: ParsedCommand): Promise<number> {
       }
       const r = promoteRulePack(ws, { packDir: realpathSync.native(named), confirm, now });
       return serviceOut(r, [`pack ${String(r.facts.packId)} ${String(r.facts.version)} · candidate ${String(r.facts.candidate)} · replaces lock ${String(r.facts.previousLock)}${r.facts.lock ? ` · now lock ${String(r.facts.lock)}` : ''}`]);
+    }
+    if (p.command === 'retry' || p.command === 'rerun') {
+      const r = await followWorkspaceRun(ws, { mode: p.command, runId: p.args.runId!, confirm, now });
+      return serviceOut(r, r.facts.runId && r.facts.parentId ? [`run ${String(r.facts.runId)} · follows ${String(r.facts.parentId)} · ${String(r.facts.planDigest)}`] : []);
     }
     if (p.command === 'plan') {
       const r = await planWorkspace(ws, { confirm, now });
@@ -394,7 +399,7 @@ async function dispatch(p: ParsedCommand): Promise<number> {
     case 'validate': return validate(p);
     case 'init': return init(p);
     case 'settings': case 'plan': case 'run': case 'status': case 'report':
-    case 'serve': case 'wait': case 'pause': case 'resume': case 'cancel': case 'rules': return owner(p);
+    case 'serve': case 'wait': case 'pause': case 'resume': case 'cancel': case 'rules': case 'retry': case 'rerun': return owner(p);
     default: {
       const change = plannedIn(p.command)!;
       errOut(word('sentinel.cli.unavailable', { command: p.command, change }));

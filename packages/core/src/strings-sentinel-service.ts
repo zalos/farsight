@@ -122,6 +122,9 @@ export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
   'sentinel.service.coverageIncomplete': same('required checks did not all complete', 'At least one required check was not planned, could not run or covered only part of its scope, so the run\'s required coverage is incomplete.'),
   'sentinel.service.runAwaiting': same('planned and admitted; waiting to run', 'The run\'s analysis is admitted and nothing of it has started. Run it with farsight-sentinel run, in the foreground or with --detach --confirm.'),
 
+  'sentinel.service.runNotEnded': same('the run has not ended: resume it rather than retry it', 'Retry and rerun start a new run after one has completed or been canceled. A paused or interrupted run continues with farsight-sentinel resume.'),
+  'sentinel.cli.usageFollow': same('farsight-sentinel retry|rerun <runId> [--json]    plan a new run after an ended one: retry over its snapshot, rerun over a fresh capture', 'Either plans and admits a new run that names the ended run as its parent, under the rule lock and policy current now, and leaves it waiting to be run.'),
+
   // ---- the preview report ----
   'sentinel.report.previewTitle': same('Sentinel scan — foundation preview', 'The heading of a preview report: a run\'s counts with their scopes and re-check commands, before full reports exist.'),
   'sentinel.report.previewOnly': same('Foundation preview: these counts show the pipeline works end to end. They are not scanner or framework coverage.', 'A preview report demonstrates planning, running and reporting with one original fixture detector. It makes no claim about what real scanners would find.'),

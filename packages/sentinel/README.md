@@ -173,15 +173,15 @@ npm install -g <pinned farsight-sentinel tarball URL>   # a GitHub Release asset
                                                         # until then a local build of scripts/pack-sentinel.mjs
 cd /path/to/your/workspace
 farsight-sentinel init                     # .farsight/sentinel/settings.json (0600); again: kept byte for byte
-farsight-sentinel settings adopt           # shows the settings digest and waits (exit 4)
-farsight-sentinel settings adopt --confirm # you, the owner, adopt these exact bytes
-farsight-sentinel plan                     # captures the workspace; prints the plan id, digest and effects
-farsight-sentinel run <planId>             # foreground; a foundation preview ends exit 2 (never "satisfied")
-farsight-sentinel status <planId>          # the run's state and a bounded page of its events
-farsight-sentinel report <planId>          # Markdown (or --format json), from stored results only
-farsight-sentinel run <planId> --detach --confirm   # hand it to the background service (started on demand)
-farsight-sentinel wait <planId>            # its result once it ends; pause|resume|cancel <planId> --confirm
-farsight-sentinel rules promote <packDir>  # shows a rule pack and the lock it would replace; --confirm promotes it
+farsight-sentinel settings adopt --confirm # you, the owner, adopt these exact bytes (without --confirm: shown, exit 4)
+farsight-sentinel rules promote builtin:foundation-preview --confirm   # the shipped original pack into your rule lock
+farsight-sentinel plan                     # capture, publish the bootstrap, plan and admit the analysis; prints the run id
+farsight-sentinel run <runId>              # foreground; a foundation preview ends exit 2 (never "satisfied")
+farsight-sentinel status <runId>           # the run's state and a bounded page of its events
+farsight-sentinel report <runId>           # Markdown (or --format json), from stored results only
+farsight-sentinel run <runId> --detach --confirm   # hand it to the background service (started on demand)
+farsight-sentinel wait <runId>             # its result once it ends; pause|resume|cancel <runId> --confirm
+farsight-sentinel retry|rerun <runId>      # a new run after an ended one: over its snapshot, or a fresh capture
 ```
 
 `init` writes the settings file only when it is missing: PR 06's defaults plus one grant letting the owner (a
