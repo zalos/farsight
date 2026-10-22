@@ -114,9 +114,6 @@ export class FrameDecoder {
     this.#pendingBytes = needed;
   }
 
-  /** Bytes reserved for a partial line: at most the frame limit, whatever the chunking. */
-  get bufferedCapacity(): number { return this.#pending?.byteLength ?? 0; }
-
   get frames(): number { return this.#frames; }
   get bytes(): number { return this.#total; }
 
