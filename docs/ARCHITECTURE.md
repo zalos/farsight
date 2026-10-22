@@ -1276,7 +1276,10 @@ the coordinator stage and capability-table entry that run the pack (PR 09 integr
 44. **Sentinel runs the four framework packs as one supervised inspection, and their facts are never findings (2026-10-22).**
 `farsight-sentinel/frameworks/controls` turns the control facts the Next, Express, Nest and Spring packs (ADRs 30–32,
 27) emit for one captured source into the coverage of three inspection rule families, `sentinel.controls.authentication`,
-`.authorization` and `.input-validation`, one check per surface the parser found. The packs run in `worker.ts`, a
+`.authorization` and `.input-validation`. The checks are repository-scoped, one per family and source: the packs read
+configuration, manifests and code across the source, and a repository check's sealed inputs are every captured file,
+so no surface check claims to have read configuration outside its own inputs. Each check's extent is every route and
+page surface the parser indexed, and each surface keeps its own row in the report. The packs run in `worker.ts`, a
 built-in adapter the supervisor starts as a child process: the module is pinned by digest and runs through the launch
 gate with only the worker environment and its sealed inputs (the job, the snapshot envelope, the source's retained
 parser artifact, result and index, and its captured files, each read only by id and checked against its digest). The
@@ -1290,19 +1293,21 @@ Inspection is not assessment. `applies` and `does-not-apply` both mean only that
 supported scope, whether a control is on the surface's request path; neither becomes a finding, an observation or a
 policy failure (a public route, or one with no input, can be correct). The rules are `candidate` with
 `evidenceRequired: control-fact` and the limitation `sentinel.controls.limitation.inspectionOnly`; the report record is
-`kind: framework-inspection`, `assessment: none`. Judging facts against a policy is PR 20's. A check is complete only
-when every pack that claims the surface resolved every position it gives for the property and those packs agree; one
-pack's positions fold along the path (a Spring chain that permits, then method security that applies, applies). An
-unknown position or packs that disagree leave it partial with the pack's own reason or `sentinel.controls.conflict`;
-no claim, a property the claiming pack does not model (Express models no input validation) or a pack that refused
-leaves it not run (`unclaimed`, `propertyNotModeled`, `libraryRefused`). A refused pack also keeps every other check
-short of complete, since it might have claimed the surface. A pack's frontiers bear on the inspection only where it
-claimed a surface: Nest's missing bootstrap in an Express repository limits nothing.
+`kind: framework-inspection`, `assessment: none`. Judging facts against a policy is PR 20's. A surface is established
+when every pack that claims it resolved every position it gives for the property and those packs agree; one pack's
+positions fold along the path (a Spring chain that permits, then method security that applies, applies). A check is
+complete only when every surface in its extent is established and no pack that found its framework left a frontier.
+An unknown position, disagreeing packs (`sentinel.controls.conflict`), an unclaimed surface, a property the claiming
+pack does not model (Express models no input validation), a frontier or a refused pack each leave it partial with that
+reason; every pack refusing leaves it not run. A pack that found nothing (no fact, no resolved version, no source-wide
+gap) limits nothing: Nest's missing bootstrap in an Express repository is not a gap. Coverage is `aggregate`, which
+the plan accepts only for repository checks. The plan attributes limits by scope and the three families share the
+source's scope, so recorded coverage is the conservative union across them; each family's own state is in the report.
 
 Version authority is the packs' own: each reads exact versions from the captured manifests and lockfiles, and the rules
 carry no `frameworks` gate (the snapshot's `frameworkVersions` is not populated). Spring runs with no active profile
 selected (`activeProfiles: null`), so profile-conditioned chains stay unknown. The result binds the whole job: the
 snapshot, the retained analysis and every captured file are its inputs, and nothing is reused across snapshots. Not
-decided here: the coordinator driver (`driver.ts`) that seals the job from the retained analysis, which waits on the
-trusted parsed-evidence context; the capability-table, profile and report wiring; finer input fingerprints than the
-whole source. Words are `strings-sentinel-framework-controls.ts`; the pack is `rules/framework-controls/`.
+decided here: the coordinator driver (`driver.ts`) that seals the job from the coordinator-derived retained analysis,
+which waits on its final types; the capability-table, profile and report wiring; per-surface checks and the
+assessments policy requires of them (PR 20). Words are `strings-sentinel-framework-controls.ts`; the pack is `rules/framework-controls/`.

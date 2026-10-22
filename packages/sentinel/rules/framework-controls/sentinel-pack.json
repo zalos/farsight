@@ -17,7 +17,7 @@
           "javascript",
           "java"
         ],
-        "scopeKind": "surface"
+        "scopeKind": "repository"
       },
       "requires": [
         "framework-order"
@@ -56,7 +56,7 @@
           "javascript",
           "java"
         ],
-        "scopeKind": "surface"
+        "scopeKind": "repository"
       },
       "requires": [
         "framework-order"
@@ -95,7 +95,7 @@
           "javascript",
           "java"
         ],
-        "scopeKind": "surface"
+        "scopeKind": "repository"
       },
       "requires": [
         "framework-order"

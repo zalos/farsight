@@ -130,7 +130,7 @@ export async function runFrameworkControlsWorker(): Promise<void> {
   const h = hex(doc);
   writeFileSync(`${OUT}/${h}`, doc);
   send({
-    protocol: P, type: 'result', ...binding, seq: seq++, inputFingerprint: start.inputFingerprint, granularity: 'per-file-per-rule',
+    protocol: P, type: 'result', ...binding, seq: seq++, inputFingerprint: start.inputFingerprint, granularity: 'aggregate',
     artifacts: [{ id: `sha256:${h}`, mediaType: CONTROLS_OUTPUT_MEDIA, bytes: doc.length }], observations: [],
     // No self-reported coverage: only the driver's view of this document counts.
     coveredChecks: [], scannedSet: [], skipped: [], actualReadSet: [], unresolvedFrontiers: [], diagnostics: [],

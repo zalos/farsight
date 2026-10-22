@@ -174,7 +174,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `pack.ts` (`analyzeExpress`: dispatch simulation into `sentinel-controls/draft-1` facts) and `support.ts`; words in
   core's `strings-sentinel-express.ts`, tests in `test/framework-express.test.ts`.
   `src/frameworks/controls/` runs the four framework packs as one inspection (ADR 44): `worker.ts` (the built-in child
-  adapter over sealed inputs), `facts.ts` (control facts → inspection coverage and the `framework-inspection` report,
+  adapter over sealed inputs), `facts.ts` (control facts → repository-scoped inspection coverage and the `framework-inspection` report,
   never a finding); rule pack `rules/framework-controls/`, words in core's `strings-sentinel-framework-controls.ts`, tests
   in `test/framework-controls-facts.test.ts` and `test/framework-controls-worker.test.ts`.
   `test/store-integration.test.ts` drives the facade end to end across processes. Depends only on graph, code-parser and core; nothing in the
