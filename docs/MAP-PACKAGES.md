@@ -118,7 +118,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `scripts/package-assets.mjs`, which `scripts/pack-sentinel.mjs` calls), its words
   `strings-sentinel-pattern.ts`, its tests `test/pattern-adapter.test.ts` and, with `SENTINEL_ISOLATION=1`,
   `test/pattern-conformance.test.ts` against the real image (ADR 26; linux/amd64 through the scoped PR/manual
-  `sentinel-pattern-qualification` workflow). 
+  `sentinel-pattern-qualification` workflow).
   `src/frameworks/nest/` is the Nest framework pack (PR 16, ADR 32), exported as `./frameworks/nest`: `syntax.ts`
   (captured bytes through the pinned `oxc-parser`, loaded on first use, with UTF-8 byte spans), `analyze.ts`
   (`analyzeNest`: version, bootstrap, module graph, ordered chains, control facts and the scope report),
