@@ -41,6 +41,26 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel capture and isolation merged; parser integration — 2026-10-22
+
+PR [#139](https://github.com/zalos/farsight/pull/139) merged at `625a920`, and capture
+[#140](https://github.com/zalos/farsight/pull/140) at `464da4e`, each after all eight final CI checks and SOL review.
+Capture integrated with isolation passed 252 Sentinel tests (17 explicit opt-in/platform skips); dedicated Linux
+isolation passed without skips. Fresh fixed-source ingests against main `625a920` were identical: 7,426 nodes,
+15,542 edges, source digest `77c0b7cf871d`, 20,644,581 graph bytes and 28,110,848 database bytes. Fresh front-door,
+Map and code-map screenshots were inspected with zero page errors; fixture design-image 404s remain.
+
+Parser reconciliation and its complete portable artifact types passed SOL review, including independent UTF-8
+span probes and a strict external TypeScript consumer of the actual tarball. The permanent npm smoke installs the
+package and compiles its parser types. Integration on capture plus isolation passed 266 Sentinel tests with the
+same 17 explicit skips. Rule/policy mutation and resource-bound findings are fixed and independently verified;
+its integration passed 297 tests with the same skips. Their PR acceptance remains in progress.
+
+Scheduler and CLI review found additional recovery, durable-state, resource-limit and transport-boundary gaps.
+Opus is addressing them before acceptance; the existing kill matrix alone does not close those findings.
+Planner integration, the original Spring source pack and the pinned pattern adapter proceed in separate worktrees.
+No primary-checkout build, dogfood refresh, or global installation was performed.
+
 ## Sentinel isolation qualified; capture integration — 2026-10-22
 
 PR [#139](https://github.com/zalos/farsight/pull/139), branch `codex/sentinel-isolation-integration`, passed SOL

@@ -10,7 +10,8 @@ identifiers, not GitHub PR numbers.
 
 - PR 03 merged as [#135](https://github.com/zalos/farsight/pull/135), `97ff419`, after independent SOL
   review, clean npm consumers, measured macOS/Linux storage recovery, and all nine final CI checks.
-  PR 04 capture and PR 07 isolation are in progress in independent Opus worktrees. PR 06's pure shared-grant
+  PR 04 capture and PR 07 isolation subsequently merged as [#140](https://github.com/zalos/farsight/pull/140)
+  and [#139](https://github.com/zalos/farsight/pull/139), with all final CI checks and independent review. PR 06's pure shared-grant
   prerequisite merged as [#137](https://github.com/zalos/farsight/pull/137), `2df3dc2`, after SOL review, identical
   real-ingest output and all seven CI checks. Parser integration and the rules/policy foundation have started
   against the reviewed draft interfaces; they will integrate in dependency order. None of those full gates is complete.
@@ -83,20 +84,20 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 | 01 | Feasibility harness and capability decisions | 00 | done (bounded) | Every support claim has a fixture/version; rejections have reasons; owner accepts the matrix | [#132](https://github.com/zalos/farsight/pull/132) `2bd38f6`, [#133](https://github.com/zalos/farsight/pull/133) `ef5c525`, [acceptance](feasibility-acceptance.md), owner acceptance 2026-10-21 |
 | 02 | Optional package, contracts, ADR | 01 | done | Schema bounds and unknown versions tested; Farsight packs/runs with Sentinel absent or unbuilt; `sentinel` scope and CI selection registered | [#134](https://github.com/zalos/farsight/pull/134) `269c3bc`; 30 contract tests, nine schemas, 36 installed fixtures; SOL review and all CI checks passed |
 | 03 | Ledger, object store, coordinator ownership | 02, 01 ownership probe | done | One owner on simultaneous starts; safe takeover; upgrade failure safe | [#135](https://github.com/zalos/farsight/pull/135) `97ff419`; macOS 135 passed/3 explicit skips, Linux 134/4; clean npm reopen; independent SOL review and all nine CI checks |
-| 04 | Immutable capture and security inventory | 03 | in progress | E1 reconciles all entries; unreadable scope stays unknown | — |
+| 04 | Immutable capture and security inventory | 03 | done | E1 reconciles all entries; unreadable scope stays unknown | [#140](https://github.com/zalos/farsight/pull/140), `464da4e`; SOL reviews, 252 integrated tests/17 explicit skips, identical real ingests, browser checks and all eight final CI checks |
 | 05 | Parser integration and inventory reconciliation | 04 | in progress | TS/Java malformed, unsupported and limit cases reconciled; real-ingest comparison vs `main` | — |
 | 06 | Rules, policy merge, deterministic planning | 05 | in progress | Repository config cannot weaken mandatory rules | Shared matcher prerequisite [#137](https://github.com/zalos/farsight/pull/137), `2df3dc2`; rules/policy under implementation; planner remains pending |
-| 07 | Worker protocol and scanner isolation | 03, 01 isolation decision, 02 | in progress | Network, host-file, resource and malformed-output canaries fail safely; no host fallback | [#139](https://github.com/zalos/farsight/pull/139); SOL approved, macOS real-container checks 92 passed, Linux qualification 82 passed/zero skipped; final CI and merge pending |
+| 07 | Worker protocol and scanner isolation | 03, 01 isolation decision, 02 | done | Network, host-file, resource and malformed-output canaries fail safely; no host fallback | [#139](https://github.com/zalos/farsight/pull/139), `625a920`; SOL approved, macOS real-container checks 92 passed, Linux qualification 82 passed/zero skipped, all eight final CI checks |
 | 08 | Scheduler, resume, pause, cancellation | 03, 06, 07 | in progress | E4 kills at every boundary, 20 repetitions, zero lost/duplicate outputs | — |
-| 09 | Standalone CLI and minimal report slice | 08 | pending | Duplicate starts return one run; disconnect does not stop work; bounded status | — |
-| 10 | Pattern scanner and original rules | 09, 01 engine decision | pending | Pinned engine matches known positives/negatives incl. exit-zero omissions | — |
+| 09 | Standalone CLI and minimal report slice | 08 | in progress | Duplicate starts return one run; disconnect does not stop work; bounded status | — |
+| 10 | Pattern scanner and original rules | 09, 01 engine decision | in progress | Pinned engine matches known positives/negatives incl. exit-zero omissions | — |
 | 11 | Current-tree secrets | 09 | pending | Synthetic secrets never appear in output, export or logs | — |
 | 12 | Offline dependency advisories | 09 | pending | Lockfile/Maven complete vs partial matching distinguished; advisory DB gate measured | — |
 | 13 | Infrastructure and CI checks | 09, 12 | pending | Workflow/Dockerfile/IaC positives and negatives against installed tools | — |
 | 14 | Next matcher semantics | 05, 06, 09 | pending | Matching, excluded, dynamic and version-mismatch cases correct | — |
 | 15 | Express order and mounts | 05, 06, 09 | pending | Auth before/after route, nested mounts and bypass fixtures | — |
 | 16 | Nest guards, pipes, interceptors | 05, 06, 09 | pending | Direct providers pass; dynamic/unresolved stay unknown | — |
-| 17 | Spring servlet security | 05, 06, 09 | pending | E2 six review cases plus bypass negatives; no false protected verdict | — |
+| 17 | Spring servlet security | 05, 06, 09 | in progress | E2 six review cases plus bypass negatives; no false protected verdict | — |
 | 18 | Bounded paths, optional deep engine | 10, 14–17, E3 | pending | Cross-file distinguished from a call path; no invented deep backend | — |
 | 19 | Finding identity, comparison, standalone report | 10–18 | pending | Identity stable under movement; standalone HTML/Markdown/JSON readable offline | — |
 | 20 | Dispositions, assertions, runtime-evidence import | 19 | pending | Decisions bound to scoped evidence and expiry | — |
