@@ -9,7 +9,7 @@
 // Placement is optional and owner-confirmed: an application graph the owner supplies is pinned (reports/context.ts)
 // only with the owner's spent `context.pin` receipt and only when it binds to the captured bytes; its inputs are the
 // files as they are on disk now, so a graph made after the source changed does not bind.
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ArtifactId, CoverageEnvelope, ObservationEnvelope, PlanCheck, PlanWork, SnapshotEnvelope } from '../contracts/index.js';
@@ -19,6 +19,10 @@ import { loadPlan } from '../execution/plans.js';
 import { loadBootstrap } from '../execution/bootstrap.js';
 import type { ParserIndex, ParserResult } from '../snapshot/parser.js';
 import { PREVIEW_DETECTOR_ID, PREVIEW_FINDINGS_SCHEMA } from '../adapters/preview-detector.js';
+import { NAME_LIMITATIONS, NAME_MESSAGE, OBSERVATION_LIMITATIONS, OBSERVATION_MESSAGE } from '../adapters/gitleaks/normalize.js';
+import { GITLEAKS_RULE_IDS } from '../adapters/gitleaks/rules.js';
+import { resolveWithheldLocation } from '../snapshot/locations.js';
+import type { WithheldLocationEvidence } from '../contracts/index.js';
 import { compareAssessments, type CheckAssessment, type Comparison } from '../findings/compare.js';
 import type { Finding } from '../findings/correlate.js';
 import {
@@ -30,9 +34,11 @@ import { STRINGS } from '@farsight/core/dist/strings.js';
 import { RuleLockBook } from './rule-locks.js';
 
 /** The scanner adapters whose accepted records this report reads, and the preview detector's own findings. */
-const SCANNER_ADAPTERS = new Set(['pattern-semgrep', 'advisories-osv', 'iac-trivy', 'ci-zizmor']);
+const SECRETS_ADAPTER = 'secrets-gitleaks';
+const SCANNER_ADAPTERS = new Set(['pattern-semgrep', 'advisories-osv', 'iac-trivy', 'ci-zizmor', SECRETS_ADAPTER]);
 const FINDING_SCHEMA = 'sentinel-driver-finding/draft-1';
 const COVERAGE_SCHEMA = 'sentinel-coverage/draft-1';
+const DRIVER_REPORT_SCHEMA = 'sentinel-driver-report/draft-1';
 export const REPORT_FORMATS = ['md', 'json', 'html', 'sarif'] as const;
 export type ReportFormat = (typeof REPORT_FORMATS)[number];
 /** The largest application graph a context pin reads. */
@@ -67,6 +73,11 @@ export interface RunAssessment {
   readonly conditions: ReadonlyMap<string, CheckAssessment['conditions']>;
   readonly ledgerSequence: number;
   readonly ruleLock: unknown;
+  /**
+   * The opaque, store-keyed identity of a withheld citation's file: stable across this store's captures, never its path,
+   * and not derivable from the report without the store. Identical bytes in two files are two keys.
+   */
+  readonly withheldKey: (e: WithheldLocationEvidence) => string;
 }
 
 function lastSequence(store: SentinelStore, runId: string): number {
@@ -133,6 +144,12 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
   const severityOf = new Map<string, string>();
   for (const [familyId, d] of ruleDefinitions(options.trustDir, admitted.ruleLock)) severityOf.set(familyId, d.severity);
 
+  // Files whose name the secret scan matched: a path that may hold a secret is never printed, in any profile.
+  const nameWithheld = new Set<string>();
+  const entryIndex = new Map<string, number>();
+  snapshot.entries.forEach((e, i) => { if (e.kind === 'file' && e.disposition === 'included') entryIndex.set(fileScope(e.sourceId, e.relativePath), i); });
+  const locationKeyOf = withheldKeyFor(store.storeId, snapshot);
+
   const coverage: CoverageEnvelope[] = [];
   const observations: ObservationEnvelope[] = [];
   const unitChecks = new Map(plan.units.map(u => [u.id, new Set(u.checks)]));
@@ -152,18 +169,23 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
     // A citation is evidence only of bytes this unit was assigned and the capture holds under that path.
     const cite = async (sourceId: string, path: string, content: string | null, span: { startByte: number; endByte: number } | 'file' | { lines: [number, number] }) => {
       const key = fileScope(sourceId, path);
-      if (content === null || assigned.get(key) !== content || captured.get(key)?.content !== content) return unbound(`${path} is not assigned captured bytes`);
+      // Reasons never name the path: it may be one the secret scan withholds.
+      if (content === null || assigned.get(key) !== content || captured.get(key)?.content !== content) return unbound('a citation is not assigned captured bytes');
       const bytes = await bytesOf(content);
       if (sha(bytes) !== content) unbound('a captured artifact is not its bytes');
       const s = span === 'file' ? { startByte: 0, endByte: bytes.length }
-        : 'lines' in span ? (lineSpan(bytes, span.lines[0], span.lines[1]) ?? unbound(`lines outside ${path}`))
+        : 'lines' in span ? (lineSpan(bytes, span.lines[0], span.lines[1]) ?? unbound('cited lines outside the captured file'))
           : span;
-      if (!Number.isSafeInteger(s.startByte) || !Number.isSafeInteger(s.endByte) || s.startByte < 0 || s.endByte < s.startByte || s.endByte > bytes.length) unbound(`a span outside ${path}`);
+      if (!Number.isSafeInteger(s.startByte) || !Number.isSafeInteger(s.endByte) || s.startByte < 0 || s.endByte < s.startByte || s.endByte > bytes.length) unbound('a span outside the captured file');
       const nodeId = nodeAt(indexOf.get(sourceId), path, content, s);
       return { snapshotId: snapshot.id, sourceId, relativePath: path, content: content as ArtifactId, span: { startByte: s.startByte, endByte: s.endByte }, ...(nodeId ? { nodeId } : {}) };
     };
+    // A scanner unit's own report states how many findings it accepted; the publication must hold exactly that many, so
+    // a dropped or added finding record refuses the report rather than reading as fewer (or more) findings.
+    let findingRecords = 0;
+    const driverReports: number[] = [];
     for (const output of pub.outputs) {
-      if (output.schema !== COVERAGE_SCHEMA && output.schema !== FINDING_SCHEMA && output.schema !== PREVIEW_FINDINGS_SCHEMA && output.schema !== 'application/json') continue;
+      if (output.schema !== COVERAGE_SCHEMA && output.schema !== FINDING_SCHEMA && output.schema !== PREVIEW_FINDINGS_SCHEMA && output.schema !== DRIVER_REPORT_SCHEMA && output.schema !== 'application/json') continue;
       let value: any;
       try { value = JSON.parse(new TextDecoder('utf8', { fatal: true }).decode(await store.readArtifact(output.id as never))); }
       catch { return unbound('accepted report evidence is unavailable or is not UTF-8 JSON'); }
@@ -176,8 +198,23 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
         coverage.push(valid.value as CoverageEnvelope);
         continue;
       }
+      if (output.schema === DRIVER_REPORT_SCHEMA) {
+        if (!unit.adapterId || !SCANNER_ADAPTERS.has(unit.adapterId) || value.runId !== runId || value.work?.id !== unit.id || value.work?.revision !== unit.revision
+          || value.attemptId !== pub.attemptId || !Number.isSafeInteger(value.findings) || value.findings < 0) unbound('an accepted scanner report is bound to another unit or attempt');
+        driverReports.push(value.findings);
+        continue;
+      }
       if (output.schema === FINDING_SCHEMA) {
+        findingRecords++;
         if (!unit.adapterId || !SCANNER_ADAPTERS.has(unit.adapterId)) unbound('a scanner finding from a unit no scanner ran');
+        // A secret-scan record is read only as one, from a unit the secret scanner ran; nothing else is read as one.
+        if ((unit.adapterId === SECRETS_ADAPTER) !== (value.kind === 'secret')) unbound('an accepted finding has another adapter kind');
+        if (unit.adapterId === SECRETS_ADAPTER) {
+          const secret = await secretObservation(value, { unit, attemptId: pub.attemptId, runId, snapshot, assignedCheck, adapterDigest: adapterDigest(SECRETS_ADAPTER), bytesOf, severityOf });
+          observations.push(secret.observation);
+          for (const path of secret.names) nameWithheld.add(path);
+          continue;
+        }
         if (value?.runId !== runId || value.snapshotId !== snapshot.id || value.work?.id !== unit.id || value.work?.revision !== unit.revision || value.attemptId !== pub.attemptId
           || value.sourceId !== unit.sourceId || value.adapter !== unit.adapterId) unbound('an accepted finding is bound to another run, unit or attempt');
         observations.push(...await scannerObservations(value, unit, pub.attemptId, pub.acceptedAt, cite, assignedCheck, adapterDigest(unit.adapterId!), severityOf));
@@ -204,6 +241,21 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
         }));
       }
     }
+    if (unit.adapterId && SCANNER_ADAPTERS.has(unit.adapterId) && (driverReports.length !== 1 || driverReports[0] !== findingRecords)) {
+      unbound('a scanner unit\'s accepted findings do not match its own report');
+    }
+  }
+
+  // A citation by another scanner of a file whose name the secret scan matched is withheld the same way: by its capture
+  // entry, never its path or a symbol (a symbol id names its file). Decided from the run's own evidence, so every
+  // profile and every rendering of this run withholds it alike.
+  for (let i = 0; i < observations.length; i++) {
+    const o = observations[i]!;
+    if (!o.evidence.some(e => !('location' in e) && nameWithheld.has(fileScope(e.sourceId, e.relativePath)))) continue;
+    observations[i] = observation({ ...o, evidence: o.evidence.map(e => {
+      if ('location' in e || !nameWithheld.has(fileScope(e.sourceId, e.relativePath))) return e;
+      return { location: 'withheld' as const, snapshotId: e.snapshotId, sourceId: e.sourceId, entry: entryIndex.get(fileScope(e.sourceId, e.relativePath))!, content: e.content, span: e.span };
+    }) });
   }
 
   // Every planned check, with the captured files it was to cover (a gap is placed by them).
@@ -220,6 +272,8 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
   // Files captured that no check was planned over, and folders capture could not list.
   const scoped = new Set<string>();
   for (const p of plannedChecks) for (const f of p.files) scoped.add(fileScope(p.sourceId, f));
+  // A gap is placed by its files' symbols; a withheld name is not used to place anything.
+  for (const p of plannedChecks) (p as unknown as { files: string[] }).files = p.files.filter(f => !nameWithheld.has(fileScope(p.sourceId, f)));
   const inventory = {
     included: captured.size,
     seenByNoStage: [...captured.keys()].filter(k => !scoped.has(k)).length,
@@ -242,7 +296,79 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
   return {
     runId, planRevision: run.planRevision, snapshot, checks: plan.checks, units: plan.units, observations, coverage, plannedChecks, inventory,
     analyses: evidence.analyses, conditions, ledgerSequence: lastSequence(store, runId), ruleLock: admitted.ruleLock,
+    withheldKey: e => locationKeyOf(e),
   };
+}
+
+/**
+ * The opaque key of a withheld citation's file: an HMAC of its source and path under a key only this store holds. It
+ * is the same for the same file in any capture of this store (so a comparison can continue a secret finding) and is
+ * not a digest of the path anyone could recompute from the report. A reference that does not resolve in this
+ * snapshot refuses the report.
+ */
+function withheldKeyFor(storeId: string, snapshot: SnapshotEnvelope): (e: WithheldLocationEvidence) => string {
+  return e => {
+    const resolved = resolveWithheldLocation(snapshot, e);
+    if (!resolved.ok) return unbound('a withheld citation does not resolve in the captured snapshot');
+    return `loc.${createHmac('sha256', `sentinel-withheld-location/1\u0000${storeId}`).update(`${resolved.entry.sourceId}\u0000${resolved.entry.relativePath}`).digest('hex').slice(0, 32)}`;
+  };
+}
+
+/**
+ * One accepted secret-scan record, read as exactly the observation the secret scanner may make: bound to this run,
+ * snapshot, unit, attempt and adapter; assigned exactly the unit's admitted checks; a known detector; the fixed
+ * redacted message and limitations; and only withheld citations, each resolving in the private snapshot to a captured
+ * file this unit was assigned, with a span inside those bytes (a name match cites no span). Its rule family is the
+ * admitted check's. Anything else refuses the report: a malformed or foreign record is never read as zero findings.
+ */
+async function secretObservation(v: any, ctx: {
+  unit: PlanWork; attemptId: string; runId: string; snapshot: SnapshotEnvelope; adapterDigest: string | undefined;
+  assignedCheck: (id: string) => { check: PlanCheck; pin: { familyId: string; definitionDigest: string } };
+  bytesOf: (id: string) => Promise<Buffer>; severityOf: ReadonlyMap<string, string>;
+}): Promise<{ observation: ObservationEnvelope; names: string[] }> {
+  const { unit, snapshot } = ctx;
+  if (v.adapter !== SECRETS_ADAPTER || v.runId !== ctx.runId || v.snapshotId !== snapshot.id || v.work?.id !== unit.id || v.work?.revision !== unit.revision
+    || v.attemptId !== ctx.attemptId || v.schema !== 'sentinel-observation/draft-1') unbound('an accepted secret finding is bound to another run, unit or attempt');
+  if (!Array.isArray(v.assignedChecks) || canonicalJson(v.assignedChecks.map((c: any) => c?.id).sort()) !== canonicalJson([...unit.checks].sort())) unbound('a secret finding is not assigned exactly its unit\'s checks');
+  const pins = v.assignedChecks.map((claim: any) => {
+    const { check, pin } = ctx.assignedCheck(claim.id);
+    if (claim.familyId !== check.familyId || claim.revision !== check.ruleRevision || check.scopeKind !== 'repository' || check.scopeId !== unit.sourceId) unbound('a secret finding changes its admitted check tuple');
+    return pin;
+  });
+  const pin = pins[0]!;
+  if (pins.some((p: any) => p.familyId !== pin.familyId || p.definitionDigest !== pin.definitionDigest)) unbound('a secret finding spans rule families');
+  if (v.rule !== undefined && (v.rule?.familyId !== pin.familyId || v.rule?.revisionDigest !== pin.definitionDigest)) unbound('a secret finding claims another rule');
+  const p = v.producer;
+  if (!isRecord(p) || p.kind !== 'scanner' || p.adapterId !== SECRETS_ADAPTER || p.attemptId !== ctx.attemptId || !ctx.adapterDigest || p.adapterDigest !== ctx.adapterDigest) unbound('a secret finding names another producer');
+  if (typeof v.producerRuleId !== 'string' || !GITLEAKS_RULE_IDS.has(v.producerRuleId)) unbound('a secret finding names an unknown detector');
+  const name = v.message === NAME_MESSAGE && canonicalJson(v.limitationKeys) === canonicalJson([...NAME_LIMITATIONS]);
+  const content = v.message === OBSERVATION_MESSAGE && canonicalJson(v.limitationKeys) === canonicalJson([...OBSERVATION_LIMITATIONS]);
+  if (!name && !content) unbound('a secret finding carries text other than the redacted message');
+  if (!Array.isArray(v.evidence) || !v.evidence.length || v.evidence.length > 256) unbound('a secret finding cites nothing');
+  const names: string[] = [];
+  const assigned = new Set(unit.inputs.map(i => `${i.sourceId}\u0000${i.relativePath}\u0000${i.content}`));
+  for (const e of v.evidence) {
+    if (!isRecord(e) || e.location !== 'withheld' || 'relativePath' in e || 'nodeId' in e || e.snapshotId !== snapshot.id || e.sourceId !== unit.sourceId) unbound('a secret finding cites a location it may not');
+    const found = resolveWithheldLocation(snapshot, e as WithheldLocationEvidence);
+    if (!found.ok) return unbound('a secret finding cites a file its unit was not assigned');
+    const resolved = found;
+    if (!assigned.has(`${resolved.entry.sourceId}\u0000${resolved.entry.relativePath}\u0000${resolved.entry.content}`)) unbound('a secret finding cites a file its unit was not assigned');
+    const bytes = await ctx.bytesOf(resolved.entry.content);
+    if (sha(bytes) !== resolved.entry.content) unbound('a captured artifact is not its bytes');
+    const span = e.span;
+    if (!isRecord(span) || !Number.isSafeInteger(span.startByte) || !Number.isSafeInteger(span.endByte) || span.startByte < 0 || span.endByte < span.startByte || span.endByte > bytes.length
+      || (name && (span.startByte !== 0 || span.endByte !== 0)) || (content && span.endByte === span.startByte)) unbound('a secret finding cites a span outside its captured file');
+    if (name) names.push(fileScope(resolved.entry.sourceId, resolved.entry.relativePath));
+  }
+  const original = String(v.originalSeverity ?? '');
+  const o = observation({
+    schema: 'sentinel-observation/draft-1', id: v.id, snapshotId: snapshot.id, producer: { kind: 'scanner', adapterId: SECRETS_ADAPTER, adapterDigest: p.adapterDigest, attemptId: ctx.attemptId },
+    producerRuleId: v.producerRuleId, rule: { familyId: pin.familyId, revisionDigest: pin.definitionDigest as never },
+    originalSeverity: (original === 'unrated' ? ctx.severityOf.get(pin.familyId) ?? original : original).slice(0, 200),
+    message: v.message, evidence: v.evidence.map((e: any) => ({ location: 'withheld', snapshotId: e.snapshotId, sourceId: e.sourceId, entry: e.entry, content: e.content, span: { startByte: e.span.startByte, endByte: e.span.endByte } })),
+    limitationKeys: [...v.limitationKeys], observedAt: v.observedAt,
+  } as ObservationEnvelope);
+  return { observation: o, names };
 }
 
 function observation(o: ObservationEnvelope): ObservationEnvelope {
@@ -349,7 +475,7 @@ function ruleWords(trustDir: string | undefined, lock: any): Map<string, { title
 
 /** Everything a comparison needs of one side, from its accepted evidence. */
 async function sideOf(store: SentinelStore, a: RunAssessment) {
-  const findings = await findingsOf(a.observations, id => store.readArtifact(id as never));
+  const findings = await findingsOf(a.observations, id => store.readArtifact(id as never), { withheldKey: a.withheldKey });
   const byFamily = new Map<string, { status: CheckAssessment['status']; files: Set<string> }>();
   const coverageOf = new Map(a.coverage.map(c => [c.checkId, c]));
   const files = new Map(a.plannedChecks.map(p => [p.checkId, p]));
@@ -506,7 +632,7 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
     disclosure: req.disclosure, observations: current.observations, coverage: current.coverage, plannedChecks: current.plannedChecks,
     inventory: current.inventory, readContent, ...(contexts ? { contexts } : {}), rules: ruleWords(req.trustDir, current.ruleLock),
     ...(comparison ? { comparison } : {}),
-  }, currentFindings);
+  }, currentFindings ?? await findingsOf(current.observations, readContent, { withheldKey: current.withheldKey }));
   const doc = build.document;
   return {
     document: doc, json: canonicalJson(doc), markdown: renderMarkdown(doc), html: renderHtml(doc), sarif: toSarif(doc),

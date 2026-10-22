@@ -34,7 +34,7 @@ export interface CompatibilityMapping {
 
 export interface ComparableFinding extends MatchableFinding {
   readonly ruleFamilyId: string;
-  readonly anchors: readonly { readonly sourceId: string; readonly relativePath: string | null; readonly withheld?: boolean; readonly content?: string; readonly nodeId: string | null; readonly span: { readonly startByte: number; readonly endByte: number } }[];
+  readonly anchors: readonly { readonly sourceId: string; readonly relativePath: string | null; readonly withheld?: boolean; readonly content?: string; readonly locationKey?: string | null; readonly nodeId: string | null; readonly span: { readonly startByte: number; readonly endByte: number } }[];
 }
 
 export interface AssessmentSide<F extends ComparableFinding = ComparableFinding> {
@@ -98,7 +98,7 @@ function checkOf(side: AssessmentSide, rule: string): CheckAssessment | 'none' |
   return hits.length === 0 ? 'none' : hits.length > 1 ? 'several' : hits[0]!;
 }
 
-const fileKey = (a: { sourceId: string; relativePath: string | null; content?: string }) => (a.relativePath === null ? `${a.sourceId}:withheld:${a.content ?? ''}` : `${a.sourceId}:${a.relativePath}`);
+const fileKey = (a: { sourceId: string; relativePath: string | null; content?: string; locationKey?: string | null }) => (a.relativePath === null ? `${a.sourceId}:withheld:${a.locationKey ?? ''}:${a.content ?? ''}` : `${a.sourceId}:${a.relativePath}`);
 
 export function compareAssessments<F extends ComparableFinding>(request: ComparisonRequest<F>): Comparison {
   const { baseline, current } = request;

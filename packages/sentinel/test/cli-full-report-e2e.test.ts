@@ -12,6 +12,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scannerFixture } from './cli-scanners-helpers.ts';
 import { unlock } from './snapshot-helpers.ts';
+import { VALUE, GENERIC_VALUE, absent } from './secrets-helpers.ts';
 
 const CLI = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 const EXAMPLE = fileURLToPath(new URL('../../../examples/invoice-app', import.meta.url));
@@ -24,18 +25,30 @@ test('public CLI: full report, owner-confirmed context, offline HTML in both dis
   // An application with journeys beside the scanner fixtures, so a confirmed graph can place findings on screens.
   cpSync(EXAMPLE, join(f.ws, 'app'), { recursive: true, filter: src => !src.includes('node_modules') });
   writeFileSync(join(f.ws, 'app', 'src', 'lookup.ts'), 'export function lookupInvoice(id: string) { return db.query("SELECT * FROM invoices WHERE id = " + id); }\n');
+  // Synthetic secrets for the fifth engine: a value in content, identical bytes in two files, and a source file whose
+  // name is the value and whose code the pattern scanner also flags. None may reach any output.
+  writeFileSync(join(f.ws, 'service.env'), `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`);
+  writeFileSync(join(f.ws, 'first.txt'), `api_key = "${GENERIC_VALUE}"\n`);
+  writeFileSync(join(f.ws, 'second.txt'), `api_key = "${GENERIC_VALUE}"\n`);
+  writeFileSync(join(f.ws, 'src', `${VALUE}.ts`), 'export function named(id: string) { return db.query("SELECT * FROM named WHERE id = " + id); }\n');
+  const clean = (text: string, where: string) => { for (const v of [VALUE, GENERIC_VALUE]) absent(text, where, v); };
   const env = { PATH: process.env.PATH!, HOME: process.env.HOME!, XDG_STATE_HOME: join(dir, 'state') };
   const cli = (...args: string[]) => {
     const r = spawnSync(process.execPath, [CLI, ...args, '--json'], { cwd: f.ws, env, encoding: 'utf8', timeout: 300000, maxBuffer: 64 << 20 });
+    clean(r.stdout, `${args[0]} stdout`); clean(r.stderr, `${args[0]} stderr`);
     let body: any;
     try { body = JSON.parse(r.stdout); } catch { assert.fail(`command ${args.join(' ')} returned no typed result (${r.status}): ${r.stderr.slice(0, 2000)}`); }
     return { status: r.status, body };
   };
-  const raw = (...args: string[]) => spawnSync(process.execPath, [CLI, ...args], { cwd: f.ws, env, encoding: 'utf8', timeout: 300000, maxBuffer: 64 << 20 });
+  const raw = (...args: string[]) => {
+    const r = spawnSync(process.execPath, [CLI, ...args], { cwd: f.ws, env, encoding: 'utf8', timeout: 300000, maxBuffer: 64 << 20 });
+    clean(r.stdout, `${args[0]} rendering`); clean(r.stderr, `${args[0]} stderr`);
+    return r;
+  };
   assert.equal(cli('init', '--profile', 'scanners').status, 0);
   assert.equal(cli('settings', 'adopt', '--confirm').status, 0);
-  for (const id of ['pattern-semgrep', 'advisories-osv', 'iac-trivy', 'ci-zizmor']) assert.equal(cli('assets', 'adopt-tool', id, '--confirm').status, 0, id);
-  for (const pack of ['pattern', 'foundation-preview', 'advisories', 'infrastructure', 'ci']) assert.equal(cli('rules', 'promote', `builtin:${pack}`, '--confirm').status, 0, pack);
+  for (const id of ['pattern-semgrep', 'advisories-osv', 'iac-trivy', 'ci-zizmor', 'secrets-gitleaks']) assert.equal(cli('assets', 'adopt-tool', id, '--confirm').status, 0, id);
+  for (const pack of ['pattern', 'foundation-preview', 'advisories', 'infrastructure', 'ci', 'secrets']) assert.equal(cli('rules', 'promote', `builtin:${pack}`, '--confirm').status, 0, pack);
   assert.equal(cli('assets', 'adopt-database', 'osv:npm', '--license', 'MIT', '--manifest', f.manifest, '--archive', f.db.path, '--confirm').status, 0);
   assert.equal(cli('assets', 'adopt-database', 'trivy-checks', '--manifest', f.trivyManifest, '--archive', f.checks.path, '--confirm').status, 0);
   const first = cli('plan').body.facts.runId as string;
@@ -58,10 +71,19 @@ test('public CLI: full report, owner-confirmed context, offline HTML in both dis
   assert.equal(doc.schema, 'sentinel-report/draft-1');
   // One finding family per engine: pattern (SQL), OSV (dependencies), Trivy (infrastructure), zizmor (CI).
   const families = new Set(doc.findings.map((x: any) => x.ruleFamilyId.split('.').slice(0, 2).join('.')));
-  for (const prefix of ['sentinel.sql', 'sentinel.deps', 'sentinel.iac', 'sentinel.ci']) assert.ok(families.has(prefix), `${prefix}: ${[...families]}`);
+  for (const prefix of ['sentinel.sql', 'sentinel.secrets', 'sentinel.deps', 'sentinel.iac', 'sentinel.ci']) assert.ok(families.has(prefix), `${prefix}: ${[...families]}`);
+  // Secrets: withheld, never placed, two findings for the identical files; the secret-named file's pattern finding is
+  // reported with its location withheld too.
+  const secretFindings = doc.findings.filter((x: any) => x.ruleFamilyId.startsWith('sentinel.secrets.'));
+  assert.ok(secretFindings.length >= 4 && secretFindings.every((x: any) => x.evidence.every((e: any) => e.state === 'withheld' && !e.location)));
+  const dup = new Set(secretFindings.flatMap((x: any) => x.evidence.map((e: any) => e.content)));
+  assert.ok(secretFindings.length > dup.size, 'identical bytes in two files stay two findings');
+  assert.ok(doc.findings.some((x: any) => x.ruleFamilyId.startsWith('sentinel.sql') && x.evidence.some((e: any) => e.state === 'withheld' && e.reasonCode === 'sentinel.report.withheld.secret')),
+    'the pattern finding in the secret-named file keeps its location withheld');
   assert.equal(doc.counts.findings.n, doc.findings.length);
   assert.ok(doc.counts.plannedChecks.n >= doc.gaps.length);
-  assert.ok(doc.findings.every((x: any) => x.evidence.every((e: any) => e.state === 'withheld' && e.reasonCode === 'sentinel.report.withheld.shareable' && e.location)), 'shareable: locations, no excerpts');
+  assert.ok(doc.findings.every((x: any) => x.evidence.every((e: any) => e.state === 'withheld' && !e.excerpt
+    && (e.reasonCode === 'sentinel.report.withheld.shareable' ? !!e.location : e.reasonCode === 'sentinel.report.withheld.secret' && !e.location))), 'shareable: locations, no excerpts; secret locations not even that');
   assert.ok(doc.findings.every((x: any) => x.place.binding === 'unavailable'), 'no context, no place');
   for (const g of doc.gaps) assert.ok(g.reasonCode && g.explanation.business && g.explanation.code, g.checkId);
   for (const c of Object.values(doc.counts) as any[]) assert.ok(c.unit && c.scope && c.source, JSON.stringify(c));
@@ -76,6 +98,7 @@ test('public CLI: full report, owner-confirmed context, offline HTML in both dis
   assert.deepEqual([again.status, again.body.reasonCode], [3, 'sentinel.report.outExists'], 'never replaces a file');
   const sh = readFileSync(shareable, 'utf8');
   const pv = readFileSync(priv, 'utf8');
+  clean(sh, 'shareable html'); clean(pv, 'private html');
   for (const html of [sh, pv]) {
     assert.match(html, /Content-Security-Policy/);
     assert.match(html, /@media print/);
@@ -99,6 +122,7 @@ test('public CLI: full report, owner-confirmed context, offline HTML in both dis
   const placedDoc = JSON.parse(readFileSync(await (async () => {
     const out = join(dir, 'placed.json');
     assert.equal(cli('report', first, '--full', '--format', 'json', '--context', graphPath, '--confirm', '--out', out).status, 0);
+    clean(readFileSync(out, 'utf8'), 'placed report');
     return out;
   })(), 'utf8'));
   assert.ok(placedDoc.findings.some((x: any) => x.place.binding === 'matched' && x.place.context), 'a finding placed through the confirmed context');
@@ -126,7 +150,7 @@ test('public CLI: full report, owner-confirmed context, offline HTML in both dis
   assert.ok(cmpDoc.historical.every((h: any) => h.label && h.reasonCode));
 
   // Delivered and regenerated without the source: the report reads the store, never the workspace.
-  for (const path of Object.keys(f.files)) rmSync(join(f.ws, path), { force: true });
+  for (const path of [...Object.keys(f.files), 'service.env', 'first.txt', 'second.txt', `src/${VALUE}.ts`]) rmSync(join(f.ws, path), { force: true });
   rmSync(join(f.ws, 'app'), { recursive: true, force: true });
   const regenerated = JSON.parse(raw('report', first, '--full', '--format', 'json').stdout);
   assert.deepEqual({ ...regenerated, evaluatedAt: null }, { ...doc, evaluatedAt: null });

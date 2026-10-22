@@ -250,7 +250,7 @@ handles explicit bounded owner acquisition/adoption and receipt-bound private as
 `service/full-report.ts` builds the full `sentinel-report/draft-1` document of a completed scanner run (and a comparison
 with a baseline run) from accepted publications bound to their run, unit and attempt, pins an owner-confirmed
 application graph against the captured bytes, and writes a rendering once (`report --full`, `compare`, ADR 38).
-`test/cli-full-report-e2e.test.ts` and `scripts/test-sentinel-report-browser.mjs` cover the command path and offline
+`test/cli-full-report-e2e.test.ts` (five engines), `test/service-full-report-secrets.test.ts` (real Gitleaks, forged records) and `scripts/test-sentinel-report-browser.mjs` cover the command path and offline
 delivery.
 `test/cli-scanners-e2e.test.ts`, `test/scanner-assets.test.ts` and
 `scripts/test-sentinel-scanner-consumer.mjs` cover the public command path, strict asset boundaries and installed

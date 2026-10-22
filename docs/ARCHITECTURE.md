@@ -1008,3 +1008,18 @@ policy result: its outcome is `answered` with `sentinel.service.policyNotEvaluat
 minimal `sentinel-scanner-report/draft-1` and the preview report are unchanged. While the background service holds
 the store the full report is refused (`ownerServiceRunning`). The HTML policy names only directives a `<meta>`
 policy honours, so a delivered file opens with no console error.
+**Secret-scan evidence in the full report (2026-10-22).** The report reads Gitleaks' accepted publications as exactly
+the observation that scanner may make, and nothing else as one: a `secret` record only from a `secrets-gitleaks` unit
+and no other kind from it; bound to the run, snapshot, unit, revision, attempt and adapter digest; assigned exactly the
+unit's admitted repository checks; a known pinned detector; the fixed redacted message and limitations; and only
+withheld citations, each resolving in the private snapshot (`resolveWithheldLocation`) to a captured file the unit was
+assigned, with a span inside those bytes (a name match cites none). Its rule family is the admitted check's, never the
+record's. Every scanner unit's own report states how many findings it accepted, and the publication must hold exactly
+that many finding records, so a dropped or added record refuses the report instead of reading as fewer findings. A
+withheld citation's identity is an opaque key for its file (`findings` `withheldKey`, the capture entry by default; the
+command line uses an HMAC of source and path under a key only the store holds), so identical bytes in two files are two
+findings, a secret finding continues across captures of one store, and no report carries a recomputable digest of the
+path. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
+its entry, without a symbol, never used to place a gap), and the minimal scanner report replaces such a name wherever it
+appears. Refusal reasons never name a path. Names the scan did not match are not withheld; the context-graph
+attestation limitation above is unchanged.

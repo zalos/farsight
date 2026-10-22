@@ -26,7 +26,7 @@ export interface Finding {
 }
 
 const digest = (v: unknown): Digest => `sha256:${createHash('sha256').update(canonicalJson(v)).digest('hex')}`;
-const symbolOf = (a: Anchor) => a.nodeId ?? (a.withheld ? `${a.sourceId}::withheld::${a.content}` : `${a.sourceId}::file::${a.relativePath}`);
+const symbolOf = (a: Anchor) => a.nodeId ?? (a.withheld ? `${a.sourceId}::withheld::${a.locationKey ?? ''}::${a.content}` : `${a.sourceId}::file::${a.relativePath}`);
 
 /** The two keys issue identity is built from. Neither contains a line number or a byte offset. */
 export function fingerprintOf(sourceIds: readonly string[], ruleFamilyId: string, anchors: readonly Anchor[], secret = false) {

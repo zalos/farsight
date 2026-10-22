@@ -13,7 +13,7 @@ import type {
 } from '../contracts/index.js';
 import { validateEnvelope } from '../validate.js';
 import { correlate, type Finding } from '../findings/correlate.js';
-import { normalizeObservation, SEVERITIES, type Severity } from '../findings/normalize.js';
+import { normalizeObservation, SEVERITIES, type NormalizeOptions, type Severity } from '../findings/normalize.js';
 import type { Comparison } from '../findings/compare.js';
 import { contextProblem, type PinnedContext } from './context.js';
 import { placeFiles, placeNodes, unplaced } from './place.js';
@@ -82,10 +82,11 @@ export interface ReportBuild {
 }
 
 /** Correlates a run's observations into findings, reading each cited span once. */
-export async function findingsOf(observations: readonly ObservationEnvelope[], readContent: (id: ArtifactId) => Promise<Uint8Array>): Promise<Finding[]> {
+export async function findingsOf(observations: readonly ObservationEnvelope[], readContent: (id: ArtifactId) => Promise<Uint8Array>,
+  options: NormalizeOptions = {}): Promise<Finding[]> {
   const cache = new Map<string, Promise<Uint8Array>>();
   const normalized = [];
-  for (const o of observations) normalized.push(await normalizeObservation(o, readContent, cache));
+  for (const o of observations) normalized.push(await normalizeObservation(o, readContent, cache, options));
   return correlate(normalized);
 }
 

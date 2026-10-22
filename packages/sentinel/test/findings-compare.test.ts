@@ -203,3 +203,27 @@ test('review round 1: a withheld location is never read, never a path, and never
   const r = compareAssessments({ baseline: { findings: f, checks: [check(['src/service.ts'], {}, 'complete')] }, current: { findings: [], checks: [{ ...check(['src/service.ts']), ruleFamilyId: 'sentinel.secrets.generic-key' }], surfaces: surfaces(['src/service.ts'], [N('findUser')]) } });
   assert.deepEqual(r.historical.map((h: any) => h.reasonCode), ['sentinel.compare.locationWithheld']);
 });
+
+test('withheld citations of identical bytes in two files are two findings; an opaque location key keeps them apart and stable', async () => {
+  const bytes = Buffer.from('api_key = "synthetic"\n');
+  const content = sha(bytes);
+  const read = async () => bytes;
+  const secret = (id: string, entry: number) => ({
+    schema: 'sentinel-observation/draft-1', id, snapshotId: 'snap-1',
+    producer: { kind: 'scanner', adapterId: 'secrets-gitleaks', adapterDigest: content, attemptId: 'att-1' }, producerRuleId: 'generic-api-key',
+    rule: { familyId: 'sentinel.secrets.current-tree', revisionDigest: content }, originalSeverity: 'high', message: 'withheld',
+    evidence: [{ location: 'withheld', snapshotId: 'snap-1', sourceId: 'app', entry, content, span: { startByte: 0, endByte: bytes.length } }],
+    limitationKeys: ['sentinel.secrets.valueWithheld'], observedAt: '2026-10-22T10:00:00Z',
+  }) as any;
+  for (const o of [secret('obs-a', 3), secret('obs-b', 7)]) assert.equal(validateEnvelope('observation', o).ok, true);
+  // By default the capture entry separates them.
+  const byEntry = correlate([await normalizeObservation(secret('obs-a', 3), read), await normalizeObservation(secret('obs-b', 7), read)]);
+  assert.equal(byEntry.length, 2, 'two files, two findings');
+  // A caller's opaque key (stable across captures) separates them too, and identifies the same file in another capture.
+  const key = (e: any) => (e.entry === 3 ? 'loc.first' : e.entry === 7 ? 'loc.second' : 'loc.first');
+  const keyed = correlate([await normalizeObservation(secret('obs-a', 3), read, new Map(), { withheldKey: key }), await normalizeObservation(secret('obs-b', 7), read, new Map(), { withheldKey: key })]);
+  assert.equal(keyed.length, 2);
+  const moved = correlate([await normalizeObservation(secret('obs-c', 12), read, new Map(), { withheldKey: key })]);
+  assert.equal(moved[0]!.id, keyed.find(f => f.observationIds.includes('obs-a'))!.id, 'the same file at another capture entry is the same finding');
+  for (const f of keyed) assert.ok(!JSON.stringify(f.fingerprint).includes('first'), 'the fingerprint is a digest, not the key');
+});

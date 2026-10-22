@@ -4,7 +4,7 @@
 // placed it in (`nodeId`) and a digest of the cited text with its whitespace collapsed, so moving code up or down a
 // file does not change it, while editing the cited code does. Line numbers never enter identity.
 import { createHash } from 'node:crypto';
-import type { ArtifactId, Digest, ObservationEnvelope } from '../contracts/index.js';
+import type { ArtifactId, Digest, ObservationEnvelope, WithheldLocationEvidence } from '../contracts/index.js';
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export const SEVERITIES: readonly Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
@@ -19,6 +19,12 @@ export interface Anchor {
   readonly relativePath: string | null;
   readonly withheld: boolean;
   readonly content: ArtifactId;
+  /**
+   * For a withheld location only: an opaque key for the cited file, never its path. Two files with the same bytes are
+   * two locations; by default the capture entry, which a caller holding the private snapshot may replace with a key
+   * that is stable across captures (withheldKey).
+   */
+  readonly locationKey: string | null;
   readonly span: { readonly startByte: number; readonly endByte: number };
   /** The canonical graph symbol the evidence sits in, when the producer or parser named one. */
   readonly nodeId: string | null;
@@ -61,8 +67,13 @@ function producerOf(o: ObservationEnvelope): string {
 }
 
 /** Reads every cited span once per content and normalizes the observation. */
+export interface NormalizeOptions {
+  /** An opaque key for a withheld citation's file (never its path); the capture entry when absent. */
+  readonly withheldKey?: (evidence: WithheldLocationEvidence) => string;
+}
+
 export async function normalizeObservation(o: ObservationEnvelope, readContent: (id: ArtifactId) => Promise<Uint8Array>,
-  cache: Map<string, Promise<Uint8Array>> = new Map()): Promise<NormalizedObservation> {
+  cache: Map<string, Promise<Uint8Array>> = new Map(), options: NormalizeOptions = {}): Promise<NormalizedObservation> {
   const read = (id: string) => { let p = cache.get(id); if (!p) cache.set(id, p = readContent(id)); return p; };
   const anchors: Anchor[] = [];
   const n = o.evidence.length;
@@ -70,16 +81,18 @@ export async function normalizeObservation(o: ObservationEnvelope, readContent: 
     const e = o.evidence[i]!;
     const role: AnchorRole = n === 1 ? 'single' : i === 0 ? 'source' : i === n - 1 ? 'sink' : 'step';
     if ('location' in e) {
-      // A withheld location is never read or turned into a path: its identity is the cited content and span only.
-      anchors.push({ role, sourceId: e.sourceId, relativePath: null, withheld: true, content: e.content, span: { startByte: e.span.startByte, endByte: e.span.endByte },
-        nodeId: null, textDigest: sha(`withheld\u0000${e.content}\u0000${e.span.startByte}\u0000${e.span.endByte}`), evidenceIndex: i });
+      // A withheld location is never read or turned into a path: its identity is an opaque key for the file, the cited
+      // content and the span. Identical bytes in two files are two locations, never one.
+      const locationKey = options.withheldKey ? options.withheldKey(e) : `entry:${e.entry}`;
+      anchors.push({ role, sourceId: e.sourceId, relativePath: null, withheld: true, content: e.content, locationKey, span: { startByte: e.span.startByte, endByte: e.span.endByte },
+        nodeId: null, textDigest: sha(`withheld\u0000${locationKey}\u0000${e.content}\u0000${e.span.startByte}\u0000${e.span.endByte}`), evidenceIndex: i });
       continue;
     }
     const bytes = await read(e.content);
     const slice = Buffer.from(bytes).subarray(Math.min(e.span.startByte, bytes.length), Math.min(e.span.endByte, bytes.length));
     const text = slice.toString('utf8').replace(/\s+/g, ' ').trim();
     anchors.push({
-      role, sourceId: e.sourceId, relativePath: e.relativePath, withheld: false, content: e.content, span: { startByte: e.span.startByte, endByte: e.span.endByte },
+      role, sourceId: e.sourceId, relativePath: e.relativePath, withheld: false, content: e.content, locationKey: null, span: { startByte: e.span.startByte, endByte: e.span.endByte },
       nodeId: e.nodeId ?? null, textDigest: sha(text), evidenceIndex: i,
     });
   }

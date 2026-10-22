@@ -329,6 +329,11 @@ files and files that exceed their captured size cannot establish a binding. The 
 A matched context records the owner's confirmation of that graph against these captured bytes. It does not
 independently verify the supplied graph's relationships, labels or producer.
 
+Secret-scan findings are reported with their locations withheld in every profile and never placed; two files with the
+same bytes stay two findings. A file whose name the secret scan matched is withheld from every report, including other
+scanners' citations of it and the minimal `report <runId>` output. A missing, extra or forged accepted secret record
+refuses the report.
+
 ### Express control facts (draft)
 
 ```ts
