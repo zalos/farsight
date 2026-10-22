@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CAPABILITIES, POLICY_ERROR_CODES, POLICY_REASON_CODES } from '../dist/index.js';
+import { NEST_REASON_CODES } from '../dist/frameworks/nest/index.js';
 
 const pkgDir = fileURLToPath(new URL('../', import.meta.url));
 const packagesDir = fileURLToPath(new URL('../../', import.meta.url));
@@ -22,6 +23,7 @@ test('the package is optional, private and exports only files that exist', () =>
   assert.match(manifest.version, /-draft\./);
   // core supplies the shared catalog (and later counts/placement/grants); @types/node because the public store
   // declarations name Node built-ins. No scanner, container client or model SDK dependency.
+
   // oxc-parser (the version the public parser pins) because the Express pack reads source syntax itself (ADR 31).
   assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', '@vscode/tree-sitter-wasm', 'ajv', 'oxc-parser']);
   assert.equal(manifest.bin['farsight-sentinel'], './dist/cli.js');
@@ -83,6 +85,11 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/scratch.js': ['node:fs', 'node:path'],
   'execution/registry.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
+  // The Nest pack (PR 16) reads captured bytes with the parser's own pinned oxc-parser, loaded on first analysis only.
+  'frameworks/nest/analyze.js': ['node:crypto'],
+  'frameworks/nest/errors.js': ['@farsight/core/dist/strings-sentinel-nest.js'],
+  'frameworks/nest/syntax.js': ['dynamic:oxc-parser'],
+
   // Model providers (PR 21): the only network client in the package, and the keychain read through core's reader.
   'review/providers/broker.js': ['node:crypto'],
   'review/providers/budget.js': ['node:crypto', 'node:path'],
@@ -321,7 +328,8 @@ test('every printed word is a registered catalog entry with a definition', async
   for (const c of CAPABILITIES) used.add(c.reasonCode);
   for (const code of ['unknownKind', 'tooLarge', 'malformedJson', 'missingVersion', 'wrongKind', 'unsupportedVersion', 'invalid', 'invariant', 'errorLimit']) used.add(`sentinel.contract.${code}`);
   used.add('sentinel.protocol.noSharedVersion');
-  for (const code of [...POLICY_ERROR_CODES, ...POLICY_REASON_CODES]) used.add(code);
+  for (const code of [...POLICY_ERROR_CODES, ...POLICY_REASON_CODES, ...NEST_REASON_CODES]) used.add(code);
+  assert.deepEqual(Object.keys(STRINGS).filter(k => k.startsWith('sentinel.nest.')).sort(), [...NEST_REASON_CODES].sort(), 'the Nest catalog and the pack\'s codes are one list');
   assert.ok(used.size > 30);
   for (const key of used) {
     const entry = STRINGS[key];

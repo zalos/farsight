@@ -222,6 +222,33 @@ client of the service gets what the adopted grants give agents, which by default
 say *unavailable* (exit 3) until plan revisions exist. With `--json`, every result carries its `outcome`, `exitCode`, the three
 admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR 37 in `docs/ARCHITECTURE.md`.
 
+### Nest request controls (draft)
+
+```ts
+import { analyzeNest } from 'farsight-sentinel/frameworks/nest';
+
+const { controls, scope } = await analyzeNest({
+  snapshot, sourceId: 'app', graph: analysis.sources[0].artifact.graph,
+  readArtifact: id => store.readArtifact(id),
+});
+controls.facts;          // sentinel-controls/draft-1: authentication, authorization, input-validation per route
+scope.surfaces[0].chain; // guards → interceptors → pipes, each global → controller → method (→ parameter)
+```
+
+The pack (ADR 32) supports Nest 10.4.15 exactly, resolved from the captured lockfile or an exact pin. Only the
+framework's own `ValidationPipe` over a class with class-validator rules is validation; parse pipes and multipart
+interceptors parse, and a guard's effect is never inferred. Dynamic modules, factories, middleware, custom decorators
+and inherited controllers are `sentinel.nest.*` frontiers that leave the facts they could change `unknown`. The pack
+is not yet called by the planner or the CLI.
+
+Framework constructors passed to ordinary helpers, returned, or hidden in unsupported alias expressions,
+aggregates, tagged-template arguments or class fields leave an explicit `frameworkEscapes` frontier. The pack does not execute those helpers
+or assume they preserve the constructor: validation and absence remain unknown. Supported local aliases are still
+checked for mutation, and a separate shadowed parameter does not imply a mutation of the imported framework.
+Every other runtime use defaults to unknown until the pack explicitly models how it consumes the value.
+An alias is followed only while its declaration stays local: exports, namespace containers and unsupported
+module-loading paths remain explicit boundaries. Type-only imports and unrelated local member names are harmless.
+
 ### Bounded call paths and imported deep analysis (draft)
 
 ```ts

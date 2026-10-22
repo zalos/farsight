@@ -1,0 +1,22 @@
+import { Body, Controller, Get, Param, ParseIntPipe, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { CreateOrderDto } from './create-order.dto';
+
+@Controller('orders')
+export class OrdersController {
+  @Get(':id')
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return { id };
+  }
+
+  @Post()
+  create(@Body() dto: CreateOrderDto) {
+    return dto;
+  }
+
+  @Post('import')
+  @UseInterceptors(FileInterceptor('file'))
+  importFile(@UploadedFile() file: Express.Multer.File) {
+    return { size: file.size };
+  }
+}

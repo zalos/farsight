@@ -6,6 +6,55 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Nest with provider and paths libraries — 2026-10-22
+
+Branch `codex/sentinel-nest-integration` merges reviewed provider/path integration `2ab52485` into Nest
+`b3ddfb2c`. Nest implementation, tests, fixtures and catalog (14 files) remain byte-identical to `b3ddfb2c`;
+all 217 incoming implementation, schema, rule, asset, packaging and selected test/control files remain
+byte-identical to `2ab52485`. Additive resolutions retain every framework, provider and analysis export,
+catalog registration, precise import audit and package consumer fixture. No new runtime behavior is introduced.
+
+Validation: Sentinel dependency-closure build and typecheck, generated-schema check and catalog lint (4,203
+entries), ten package-boundary cases and two capability-union controls pass with zero skips. A clean npm-only
+consumer compiles 14 exports and 21 contract types, validates 21 schemas and 55 fixtures, verifies retained
+Pattern/OSV assets, reopens the store, runs the captured call path/import refusal and analyzes installed Nest,
+Spring and Express fixtures. No advisory database ships and no scanner or target code runs. The unchanged Nest
+behavioral suites are not repeated. The provider-only installed type/budget probe remains bound to the unchanged
+`2ab52485` provider implementation; no hosted/model call or real keychain read is performed. Canonical framework
+commands, public provider dispatch and deep-engine qualification remain separate completion gates.
+
+## Nest integration retains the reviewed Next and Spring aggregate — 2026-10-22
+
+Branch `codex/sentinel-nest-integration` merges reviewed aggregate `467a13b1` into `f78f3ce8`.
+Nest source, tests, fixtures and catalog remain byte-identical to `f78f3ce8`; Next, Spring and Express source,
+tests and catalogs, plus the adapter and execution runtime, remain byte-identical to `467a13b1`. All four public
+framework library exports and existing installed-package checks are retained. Next's command capability remains
+unavailable; Spring and Express keep their incoming draft library capabilities. No operation is registered here.
+
+Validation on Node 24.19.0: dependency-closure build, Sentinel typecheck, schemas and catalog passed. Ten package
+checks and two capability checks passed with zero skips. A fresh npm consumer imports twelve typed exports,
+compiles 19 contract types, validates 19 schemas and 53 fixtures, reopens storage across processes, analyses Nest,
+Spring (open/protected/unknown) and Express (before/after/conditional), and verifies Pattern/OSV assets. The
+unchanged Nest suite was not repeated after its 104-test combined framework/package run at `f78f3ce8`.
+No target code or scanner was run. Final native CI and canonical framework command integration remain open.
+
+## Nest library merged with main foundations — 2026-10-22
+
+Branch `codex/sentinel-nest-integration` merges main `6bf00a7d` into reviewed Nest head `17ac292e`.
+The Nest implementation, its test and fixture tree, and its catalog are byte-identical to that reviewed head.
+Express, Pattern and OSV adapter source, execution runtime and OOM controls are byte-identical to incoming main.
+The export map, catalog registration, package import audit, documentation and standalone consumer retain both
+framework libraries and both scanner asset sets. Capability expectations retain main's Express draft library;
+no framework operation is added to the planner or preview command.
+
+Validation on Node 24.19.0: Sentinel dependency-closure build, typecheck, schema check and catalog lint passed.
+The focused Nest, Express and package suites passed 104 tests, and two capability controls passed, all without
+skips. A clean npm-only consumer exercised both installed framework APIs, compiled ten public exports and 19
+contract types, validated 19 schemas and 53 fixtures, and reopened storage across processes. It verified all 17
+Pattern pack files and the Pattern/OSV worker digests, with no advisory database bundled. No scanner or target
+code was executed. Broader historical suite and graph measurements remain qualified to their recorded heads;
+canonical framework command integration and new native qualification are separate gates.
+
 ## Provider foundation with paths and framework libraries — 2026-10-22
 
 Branch `codex/sentinel-providers-integration` merges frozen paths/framework integration `58cd029c` into provider
@@ -111,6 +160,47 @@ pnpm lint:strings
 ```
 
 Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .farsight/settings.example.json .farsight/settings.json` (or nothing — the server falls back to a one-source workspace) and an ingest or `/api/sync` before `serve`/`mcp` have a graph.
+
+## Sentinel Nest framework escapes — 2026-10-22
+
+Branch `codex/sentinel-nest-escape-fixes`, based on `910acbb6`, adds `frameworkEscapes` where a framework value
+leaves supported local aliases: sequences, aggregates, class fields, parameter/default passing, returns and
+unsupported constructor methods. These frontiers prevent validation credit and absence claims. Existing alias
+mutation checks retain lexical shadowing, and the registration-origin dependency-copy resolution is unchanged.
+Type and noncomputed property names do not count as runtime value passing. ADR 32 and the package README record
+the boundary; fixtures are captured and parsed, never executed.
+
+Validation: the graph/core/code-parser/Sentinel build and typecheck closure passed; catalog lint and exact commit
+subject lint passed. The focused owner suite (37 tests) plus the independent captured-source probes (23) passed:
+60 passed, 0 failed, 0 skipped. Running the 15 new durable cases against unchanged baseline output produced
+13 failures for the escape cases and 2 passes for the harmless-name/shadow controls. No full suite, scanner,
+network engine, target application execution or primary checkout build was needed. Independent review is pending.
+
+### General framework reference uses (follow-up)
+
+The follow-up after `1b2494ae` replaces the syntax-specific escape list with a whitelist of supported runtime
+reference uses. Unmodeled consumers default to `frameworkEscapes`; tagged templates, instance/helper flows,
+subclasses, exports and assignment results cannot hide a framework value. Types, declaration/property names,
+discarded reads, supported local aliases and unused shadowed parameters remain harmless. Unfollowed global
+registrations keep their more specific reason.
+
+Validation: 75 focused captured-source cases passed, 0 failed, 0 skipped (45 durable owner cases plus 30
+independent probes). The eight new durable cases against a fresh immutable build of `1b2494ae` produced seven
+failures and one positive-control pass. Affected builds/types, catalog and exact commit subject lint passed.
+All fixtures remain inert capture/parse/analysis inputs; no target code is executed. Independent review is pending.
+
+### Export, namespace and runtime-import boundaries (follow-up)
+
+The follow-up after `d2bfd655` proves a supported alias stays in a local, nonexported declaration outside an
+unmodeled namespace. Later assignments to exported live bindings are escapes too. Qualified runtime
+import-equals references are no longer erased as types. Framework CommonJS/dynamic loads and retained host or
+Node loader capabilities are unknown; actual lexical/module declarations shadow those host loader names.
+Valid type-only imports, unrelated namespace member names and a shadowed local `require` remain positive controls.
+
+Validation: 91 focused captured-source cases passed, 0 failed, 0 skipped (58 durable owner cases plus 33
+independent probes, including all three new review failures). Thirteen new durable cases against a fresh
+immutable `d2bfd655` build produced 10 negative failures and 3 positive-control passes. Sentinel build/typecheck,
+catalog and exact subject lint passed. No target application code was executed. Independent review is pending.
 
 ## Provider access
 
@@ -2142,3 +2232,17 @@ before touching prior build artifacts. The regression test uses a disposable unb
 show a pinned GitHub tarball install for CI and distinguish a release commit from subsequent `main` changes.
 MCP already reports its running build in `graph_overview`; `refresh_graph` already re-ingests and reloads,
 so upgrading the process still requires reconnecting it.
+
+
+## Nest built-in module loader follow-up (2026-10-22)
+
+Branch `codex/sol-nest-builtin-loader`, based on the frozen Nest framework implementation:
+validation stays unknown when captured source can extract Node's `process.getBuiltinModule` loader capability,
+including real process imports, aliases, destructuring, computed access and the global process properties.
+Fixed reads of unrelated process properties, type references and local shadows preserve the existing analysis.
+Target source is captured and parsed only; the fixture code is never executed.
+
+Before correction, all 12 original/neighbor loader regressions falsely reported validation applies, while seven
+harmless controls passed. After correction, the complete focused Nest suite passed 77 tests with no skips.
+The affected dependency build, Sentinel typecheck, diff check and exact Conventional Commit subject lint passed.
+Independent review and parent integration remain with the integrating lead; no push or merge was performed.

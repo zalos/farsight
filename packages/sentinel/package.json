@@ -50,6 +50,10 @@
       "types": "./dist/planner/index.d.ts",
       "import": "./dist/planner/index.js"
     },
+    "./frameworks/nest": {
+      "types": "./dist/frameworks/nest/index.d.ts",
+      "import": "./dist/frameworks/nest/index.js"
+    },
     "./review/providers": {
       "types": "./dist/review/providers/index.d.ts",
       "import": "./dist/review/providers/index.js"

@@ -119,6 +119,11 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `strings-sentinel-pattern.ts`, its tests `test/pattern-adapter.test.ts` and, with `SENTINEL_ISOLATION=1`,
   `test/pattern-conformance.test.ts` against the real image (ADR 26; linux/amd64 through the scoped PR/manual
   `sentinel-pattern-qualification` workflow).
+  `src/frameworks/nest/` is the Nest framework pack (PR 16, ADR 32), exported as `./frameworks/nest`: `syntax.ts`
+  (captured bytes through the pinned `oxc-parser`, loaded on first use, with UTF-8 byte spans), `analyze.ts`
+  (`analyzeNest`: version, bootstrap, module graph, ordered chains, control facts and the scope report),
+  `support.ts` (`NEST_PACK`, the support manifest) and `errors.ts` (reason codes, `strings-sentinel-nest.ts`);
+  `test/frameworks-nest.test.ts` runs capture → parse → analyze over `test/fixtures/nest/` and the E2 corpus.
 
   `src/review/providers/` is the opt-in model broker (PR 21, ADR 35), exported as `./review/providers`: `profile.ts`
   (model profiles and the owner-bound provider binding), `kinds.ts` (Ollama and OpenAI-compatible wire formats and

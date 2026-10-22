@@ -690,6 +690,95 @@ checks detector bytes against the pinned pack digest, and returns every other ru
 batch of at most 2,000 targets to keep timed output under its 3 MiB bound. **Not decided here:** registering the adapter
 in the production registry, the planner's batching, the scan command (PR 09), and amd64 qualification.
 
+32. **Sentinel's Nest pack resolves request controls from registrations, and never from names (2026-10-22).**
+    `packages/sentinel/src/frameworks/nest/` (PR 16, exported as `./frameworks/nest`) emits `sentinel-controls/draft-1`
+    facts for one captured source, with a `sentinel-nest-scope/draft-1` scope report of each surface's ordered chain.
+    Its inputs are the snapshot, the bytes the store captured and the public parser's artifact for the same snapshot.
+    The parser graph names the surfaces (a route node and the controller method it calls) and nothing more: an
+    annotation match, a guard node, a declared `validates` edge or a reachable reader is never protection evidence.
+    The pack reads the captured TypeScript itself with the parser's pinned `oxc-parser` (loaded on first analysis),
+    converts its UTF-16 offsets to UTF-8 byte spans (refusing one inside a surrogate pair) and cites every resolved fact
+    by content id, span and quote digest. Nothing is executed, installed or imported from the target.
+
+    - **One exact version.** `@nestjs/common` and `@nestjs/core` 10.4.15, from the captured `package-lock.json` or an
+      exact `package.json` pin, and class-validator 0.14.1 for validation. A range, a missing entry or another release
+      leaves `framework.version` null and every fact unknown.
+    - **What is followed.** One `NestFactory.create(RootModule)` kept in a named variable and its literal
+      `useGlobalGuards`/`useGlobalInterceptors`/`useGlobalPipes`; `@Module` metadata from the root module through local
+      imports; `{ provide: APP_GUARD | APP_INTERCEPTOR | APP_PIPE, useClass }`; `@UseGuards`/`@UseInterceptors`/
+      `@UsePipes` on a controller or handler and pipes passed to a parameter decorator. The chain is ordered as Nest
+      10.4.15 evaluates it: guards, interceptors, pipes, each global → controller → method (pipes also per parameter).
+    - **Distinct effects.** Only `ValidationPipe` imported from `@nestjs/common`, with literal options, over a
+      parameter whose type is a local class with class-validator rules, is validation. `Parse*Pipe` and the
+      `@nestjs/platform-express` file interceptors are parsing; `DefaultValuePipe` and `ClassSerializerInterceptor` are
+      transformation. A guard's effect is never inferred, so authentication and authorization are `unknown`
+      (`guardEffectUnresolved`) whenever a guard is in the chain, and `does-not-apply` only when the chain has no
+      guard, no unmodeled interceptor and no frontier. A local class named `ValidationPipe` is a local pipe.
+    - **Frontiers stay explicit.** Dynamic and external modules, provider factories/values/aliases, middleware,
+      non-literal registrations, custom decorators, inherited controllers, unregistered controllers, unresolved
+      providers and unreadable files are `sentinel.nest.*` frontiers. A frontier that could change a verdict leaves
+      it unknown: global frontiers apply to every surface, surface frontiers to that surface only. A handler on the
+      HTTP adapter is a frontier outside the controller surfaces.
+    - **E2.** The accepted framework corpus's route-scoped ValidationPipe gives `input-validation: applies`; the same
+      DTO with no pipe registered gives `does-not-apply`, citing the parameter and the bootstrap. A multipart
+      interceptor only parses: the upload stays `does-not-apply` with the interceptor cited.
+    - **Only what certainly runs counts (review, 2026-10-22).** The application is the `const` the bootstrap declares from
+      `NestFactory.create`; a global registration counts only as a straight-line statement on it, after the create and
+      before `init`/`listen`, before any statement that can return or throw, in a bootstrap the module calls
+      unconditionally. Every other `useGlobal*` call (conditional, in a `try`, after initialization, in another
+      function, on another binding) is `registrationNotFollowed`, and handing the application to other code is
+      `applicationEscapes`; both leave the facts they could change unknown. Names resolve lexically: a parameter or
+      local declaration that rebinds an imported name (a bootstrap parameter called `ValidationPipe`) is not the
+      import, while aliased and namespace imports are. Stacked `UseGuards`/`UseInterceptors`/`UsePipes` register bottom
+      to top (each appends to the metadata the decorators below it wrote).
+    - **Validation needs its preconditions.** `applies` also needs ValidationPipe options known not to weaken it
+      (whitelist, forbidNonWhitelisted, transform, error and debug settings, `forbidUnknownValues: true`), no conditional
+      rule on the DTO (`ValidateIf`, `IsOptional`, `groups`, `always`), no inherited rules, and decorator metadata: the
+      captured tsconfig nearest the controller must set `experimentalDecorators` and `emitDecoratorMetadata` to true
+      itself (cited as evidence); off is `decoratorMetadataOff`, inherited, missing or SWC-built is
+      `decoratorMetadataUnknown`.
+    - **Owning projects, constraints and interceptors (second review, 2026-10-22).** Versions are those of the project
+      that owns each analysed file (the nearest manifest declaring Nest; its nearest lockfile, nested installs before
+      hoisted ones; else an exact pin); the envelope's one version is set only when every owning project resolves to the
+      supported release. `Allow` is not a constraint; custom (`Validate`, `ValidateBy`, `ValidatePromise`) and nested
+      (`ValidateNested`) constraints hold logic the pack does not read, so they leave validation unknown. An interceptor
+      the pack does not model runs before the pipes and can answer without the handler, so it blocks `applies`; it, or a
+      guard, also blocks `does-not-apply`, since unmodelled code may check the input itself.
+    - **Decorators, dependency copies and rewritten code (third review, 2026-10-22).** Any DTO decorator that is not
+      class-validator's own (a local wrapper such as one returning `ValidateIf(() => false)`, class-transformer's, one
+      on the class) and any rule argument the pack cannot read leave validation unknown. Every dependency resolves as
+      Node would from the file that loads it: the nearest lockfile install for that folder, else an exact pin in the
+      nearest manifest that declares it; ranges and missing installs are unresolved. ValidationPipe loads
+      class-validator from where @nestjs/common is installed and a DTO registers its rules with the copy its own folder
+      resolves, so `applies` needs both to be the same installed copy of 0.14.1. Writing to a member of the
+      application (`app.useGlobalPipes = ...`) is `applicationMutated`; writing to anything imported from Nest,
+      class-validator or class-transformer, through assignment, `Object.defineProperty` and the like, or rewriting
+      reflected metadata, is `frameworkMutated`; both block every fact they could change.
+    - **Framework values leaving followed bindings (fourth review, 2026-10-22).** A local framework alias is
+      followed only through supported identifier/member bindings, type wrappers and conditional/logical alternatives.
+      A constructor hidden in a sequence, aggregate or class field, supplied as a parameter/default, returned, or
+      handed to an ordinary function is `frameworkEscapes`. Constructor methods such as `bind`, `call` and `apply`
+      are also outside the modeled exports and factory call. Such code may mutate the actual framework, so every
+      control fact stays unknown. Modeled registration arguments and framework decorators remain supported; type
+      names, noncomputed property names and unused shadowed parameters do not pass the imported value anywhere.
+    - **Supported uses, with unknown as the default (fifth review, 2026-10-22).** Each runtime reference to a
+      framework value is followed only through supported local bindings, member/type wrappers and modeled receivers.
+      Any other consumer is `frameworkEscapes`, including tagged-template arguments, constructor instances handed
+      to helpers, subclasses, returns and exports. A new syntax form therefore stays unknown until explicitly
+      modeled. Types, declaration/property names, discarded reads and unused shadowed parameters are not escapes.
+      Existing registrations that cannot certainly run retain their precise `registrationNotFollowed` frontier.
+    - **Local binding boundaries (sixth review, 2026-10-22).** Keeping a framework value in a variable is supported
+      only when that declaration is local and not inside an unmodeled namespace. Exports, including live bindings
+      assigned after declaration, remain unknown at the boundary. Qualified names in runtime TypeScript
+      import-equals declarations are values, while type-only imports and qualified type names remain erased.
+      Unmodeled framework module loads, dynamic import targets, retained host loaders and Node loader factories
+      also leave a frontier; a local function merely named `require` grants no loading capability.
+    - **Digests.** `packDigest` covers the support manifest, `environmentDigest` the resolved versions and
+      `registrationDigest` every cited registration span; a change to any invalidates the facts.
+
+    Not decided here: CLI and planner integration (PR 09 still pending), CSRF/CORS/rate-limit/header properties,
+    guard bodies, Fastify, and versions other than 10.4.15.
+
 36. **Sentinel retains bounded call paths as structural evidence and imports deep analysis only when attested and bound (2026-10-22).**
 No evaluated engine qualified for cross-file flow in E3 (`feasibility-decisions.json`, `engine.crossFile`), so
 Sentinel selects, bundles, downloads and runs no deep engine, and `interprocedural-flow` stays unavailable with
