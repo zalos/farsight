@@ -69,6 +69,11 @@ export interface ReportInput {
   readonly contexts?: ReadonlyMap<string, PinnedContext>;
   /** Readable words for rule families, from the rule pack. */
   readonly rules?: ReadonlyMap<string, { readonly title: RegisterText; readonly explanation: RegisterText }>;
+  /**
+   * Files (`sourceId:relativePath`) whose location is withheld, such as a file whose name the secret scan matched: never
+   * used to place anything, since a symbol id names its file.
+   */
+  readonly withheldFiles?: ReadonlySet<string>;
   /** A comparison computed with `compareAssessments` over these findings and a baseline's. */
   readonly comparison?: { readonly baselineReportId: string; readonly result: Comparison; readonly baselineFindings: ReadonlyMap<string, BaselineFindingSummary> };
 }
@@ -189,7 +194,8 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
   }
   const gapPlace = (p: PlannedCheck, files: readonly string[]) => {
     const ctx = input.contexts?.get(p.sourceId);
-    return placeFiles(ctx, files, { snapshotId: input.run.snapshotId, sourceId: p.sourceId });
+    const placeable = files.filter(f => !input.withheldFiles?.has(`${p.sourceId}:${f}`));
+    return placeFiles(ctx, placeable, { snapshotId: input.run.snapshotId, sourceId: p.sourceId });
   };
   const gaps: ReportGap[] = [];
   for (const p of input.plannedChecks) {

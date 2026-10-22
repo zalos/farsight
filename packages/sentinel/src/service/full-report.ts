@@ -78,6 +78,8 @@ export interface RunAssessment {
    * and not derivable from the report without the store. Identical bytes in two files are two keys.
    */
   readonly withheldKey: (e: WithheldLocationEvidence) => string;
+  /** Files (`sourceId:relativePath`) whose name the secret scan matched: never printed or used to place anything. */
+  readonly withheldFiles: ReadonlySet<string>;
 }
 
 function lastSequence(store: SentinelStore, runId: string): number {
@@ -303,7 +305,7 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
   return {
     runId, planRevision: run.planRevision, snapshot, checks: plan.checks, units: plan.units, observations, coverage, plannedChecks, inventory,
     analyses: evidence.analyses, conditions, ledgerSequence: lastSequence(store, runId), ruleLock: admitted.ruleLock,
-    withheldKey: e => locationKeyOf(e),
+    withheldKey: e => locationKeyOf(e), withheldFiles: nameWithheld,
   };
 }
 
@@ -637,7 +639,7 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
     id: reportIdOf(runId, req.baselineRunId), run: { id: runId, snapshotId: current.snapshot.id, planRevision: current.planRevision },
     ledgerSequence: current.ledgerSequence, evaluatedAt: now.toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z'), catalogVersion: 'draft-1',
     disclosure: req.disclosure, observations: current.observations, coverage: current.coverage, plannedChecks: current.plannedChecks,
-    inventory: current.inventory, readContent, ...(contexts ? { contexts } : {}), rules: ruleWords(req.trustDir, current.ruleLock),
+    inventory: current.inventory, readContent, withheldFiles: current.withheldFiles, ...(contexts ? { contexts } : {}), rules: ruleWords(req.trustDir, current.ruleLock),
     ...(comparison ? { comparison } : {}),
   }, currentFindings ?? await findingsOf(current.observations, readContent, { withheldKey: current.withheldKey }));
   const doc = build.document;
