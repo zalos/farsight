@@ -64,6 +64,32 @@ export function completed(record) {
   const r = record.execution;
   return !!r && Number.isInteger(r.exitCode) && !r.spawnError && !r.timedOut && !r.outputExceeded && !r.cancelled && !r.exitSignal && record.containerCompleted === true && record.containerExitMatchesClient === true;
 }
+const inputControlPaths = Object.freeze({ partial: 'controls/partial.ts', 'out-of-rule-language': 'controls/unsupported.rs', oversize: 'controls/oversized.ts' });
+function inputControlChecks(record) {
+  const expected = inputControlPaths[record.scenario], a = record.assessment;
+  const scanned = a?.scanned, omitted = a?.omitted, skipped = a?.skipped;
+  const usableSkipped = Array.isArray(skipped) && skipped.every(skip => skip && typeof skip.path === 'string' && pathOf(skip.path) === expected && typeof skip.reason === 'string' && skip.reason.length > 0);
+  const usableScanned = Array.isArray(scanned) && scanned.length <= 1 && scanned.every(path => path === expected);
+  const expectedOmissions = usableScanned && scanned.includes(expected) ? [] : [expected];
+  const reconciled = a?.requested === 1 && Array.isArray(a.requestedFiles) && a.requestedFiles.length === 1 && a.requestedFiles[0] === expected &&
+    usableScanned && a.scannedCount === scanned.length && Array.isArray(omitted) && JSON.stringify(omitted) === JSON.stringify(expectedOmissions) && a.omittedCount === omitted.length &&
+    Array.isArray(a.unexpectedScanned) && a.unexpectedScanned.length === 0 && usableSkipped;
+  const findingsKnown = Array.isArray(a?.findings) && a.findings.every(finding => finding.path === expected);
+  const checks = { exitZero: record.execution?.exitCode === 0, reconciledInputInventory: reconciled, findingPathsKnown: findingsKnown };
+  if (record.scenario === 'partial') {
+    const partialDiagnostic = error => error && ['warn', 'error'].includes(error.level) && pathOf(error.path) === expected &&
+      Array.isArray(error.type) && error.type[0] === 'PartialParsing' && Array.isArray(error.type[1]) && error.type[1].length > 0 &&
+      error.type[1].every(location => pathOf(location.path) === expected && location.start?.line === 4 && location.end?.line === 4);
+    checks.intendedPartialDiagnostic = Array.isArray(a?.diagnostics) && a.diagnostics.length > 0 && a.diagnostics.every(partialDiagnostic);
+    checks.intendedPartialSkip = usableSkipped && skipped.some(skip => skip.reason === 'analysis_failed_parser_or_internal_error');
+  } else {
+    checks.noEngineErrors = Array.isArray(a?.diagnostics) && a.diagnostics.length === 0;
+    checks.intendedInputOmitted = usableScanned && scanned.length === 0 && Array.isArray(omitted) && omitted.length === 1 && omitted[0] === expected;
+    checks.noFindings = Array.isArray(a?.findings) && a.findings.length === 0;
+    if (record.scenario === 'oversize') checks.intendedSizeSkip = usableSkipped && skipped.some(skip => skip.reason === 'exceeded_size_limit');
+  }
+  return checks;
+}
 export function controls(record) {
   const isolation = record.isolation;
   const candidate = CANDIDATES.find(pin => pin.id === record.candidate);
@@ -95,7 +121,8 @@ export function controls(record) {
       checks.allEligibleFilesScanned = record.assessment?.scannedCount === 9 && record.assessment?.omittedCount === 0 && record.assessment?.unexpectedScanned.length === 0;
       checks.noEligibleInputSkipped = Array.isArray(record.assessment?.skipped) && record.assessment.skipped.every(skip => skip && typeof skip.path === 'string' && typeof skip.reason === 'string' && skip.reason.length > 0 && !record.assessment.requestedFiles.includes(pathOf(skip.path)));
       checks.attribution = record.assessment?.unattributedFindings === 0 && record.assessment?.unknownRuleFindings === 0;
-    }
+    } else if (Object.hasOwn(inputControlPaths, record.scenario)) Object.assign(checks, inputControlChecks(record));
+    else checks.knownScenario = false;
   }
   return { passed: Object.values(checks).every(v => v === true), checks };
 }

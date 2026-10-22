@@ -173,7 +173,7 @@ test('valid-file controls require usable skip inventory and reject files reporte
     assert.equal(controls(invalid).passed, false);
   }
   const partial = controlledRecord('partial');
-  partial.assessment = assessed(result([], ['/input/controls/partial.ts'], [{ type: 'PartialParsing' }]), 'pattern', 'partial');
+  partial.assessment = assessed(result([], ['/input/controls/partial.ts'], [partialDiagnostic()]), 'pattern', 'partial');
   partial.assessment.skipped = [{ path: '/input/controls/partial.ts', reason: 'analysis_failed_parser_or_internal_error' }];
   assert.equal(controls(partial).passed, true);
 });
@@ -196,5 +196,108 @@ test('inspected isolation must match exact tmpfs, swap, mounts and privilege pol
       const invalid = structuredClone(record); change(invalid);
       assert.equal(controls(invalid).passed, false);
     }
+  }
+});
+
+
+function partialDiagnostic() {
+  return { level: 'warn', code: 3, path: '/input/controls/partial.ts',
+    type: ['PartialParsing', [{ path: '/input/controls/partial.ts', start: { line: 4 }, end: { line: 4 } }]],
+    message: 'Syntax error at line /input/controls/partial.ts:4' };
+}
+function inputControlRecord(scenario, candidate = CANDIDATES[0]) {
+  const paths = { partial: 'controls/partial.ts', oversize: 'controls/oversized.ts', 'out-of-rule-language': 'controls/unsupported.rs' };
+  const record = controlledRecord(scenario, candidate);
+  record.assessment = assessed(result([], scenario === 'partial' ? ['/input/' + paths[scenario]] : [], scenario === 'partial' ? [partialDiagnostic()] : []), 'pattern', scenario);
+  record.assessment.skipped = scenario === 'partial' ? [{ path: '/input/' + paths[scenario], reason: 'analysis_failed_parser_or_internal_error' }]
+    : scenario === 'oversize' ? [{ path: '/input/' + paths[scenario], reason: 'exceeded_size_limit' }] : [];
+  return record;
+}
+test('all six cross-file labels cite their own caller; safe traces cannot borrow the positive caller span', () => {
+  for (const language of ['typescript', 'javascript', 'java']) {
+    for (const kind of ['positive', 'safe']) {
+      const label = corpus.index.labels.find(l => l.id === `${language}-cross-file-${kind}`);
+      const line = kind === 'positive' ? 3 : 6;
+      assert.equal(label.sourceStartLine, line);
+      assert.equal(label.sourceEndLine, line);
+      const sourceLine = corpus.texts[label.sourcePath].split('\n')[line - 1];
+      assert.ok(sourceLine.includes(kind === 'positive' ? "request.value() +" : '\"SELECT id FROM customer WHERE name = ?\", request.value()'));
+      const f = finding(label.id);
+      f.extra = { dataflow_trace: { source: { path: '/input/' + label.sourcePath, start: { line } }, sink: { path: f.path, start: f.start } } };
+      assert.equal(assessed(result([f])).labels.find(l => l.id === label.id).crossFileTrace, true);
+      f.extra.dataflow_trace.source.start.line = kind === 'positive' ? 6 : 3;
+      assert.equal(assessed(result([f])).labels.find(l => l.id === label.id).crossFileTrace, false);
+    }
+  }
+});
+test('input controls pass their intended zero-exit observations while preserving explicit gaps outside capability scores', () => {
+  for (const candidate of CANDIDATES) for (const scenario of ['partial', 'oversize', 'out-of-rule-language']) {
+    const record = inputControlRecord(scenario, candidate);
+    assert.equal(controls(record).passed, true);
+    assert.ok(record.assessment.gaps.includes(`${scenario}-input-is-not-a-clean-check`));
+    assert.equal(record.assessment.scores, undefined);
+    assert.equal(record.assessment.requested, 1);
+  }
+  const partialOmission = inputControlRecord('partial');
+  partialOmission.assessment.scanned = []; partialOmission.assessment.scannedCount = 0;
+  partialOmission.assessment.omitted = ['controls/partial.ts']; partialOmission.assessment.omittedCount = 1;
+  assert.equal(controls(partialOmission).passed, true);
+});
+test('every input control rejects unrelated configuration failure and unavailable or unreconciled inventories', () => {
+  for (const scenario of ['partial', 'oversize', 'out-of-rule-language']) {
+    const record = inputControlRecord(scenario);
+    for (const change of [
+      value => { value.execution.exitCode = 7; value.assessment.diagnostics = [missingDiagnostic()]; },
+      value => value.execution.exitCode = 7,
+      value => value.execution.timedOut = true,
+      value => value.execution.cancelled = true,
+      value => value.execution.outputExceeded = true,
+      value => value.assessment.scanned = null,
+      value => value.assessment.skipped = null,
+      value => value.assessment.skipped = [{ reason: 'missing_path' }],
+      value => value.assessment.scannedCount = 8,
+      value => value.assessment.omittedCount = 8,
+      value => value.assessment.requestedFiles = ['controls/unrelated.ts'],
+      value => value.assessment.unexpectedScanned = ['unrelated.ts'],
+      value => value.assessment.skipped = [{ path: '/input/unrelated.ts', reason: 'exceeded_size_limit' }],
+      value => value.assessment.findings = [{ path: 'unrelated.ts' }],
+    ]) {
+      const invalid = structuredClone(record); change(invalid);
+      assert.equal(controls(invalid).passed, false, scenario);
+    }
+  }
+});
+test('partial control requires intended malformed-line diagnostic and skip without unrelated errors', () => {
+  const record = inputControlRecord('partial');
+  for (const change of [
+    value => value.assessment.diagnostics = [],
+    value => value.assessment.diagnostics = [missingDiagnostic()],
+    value => value.assessment.diagnostics.push(missingDiagnostic()),
+    value => value.assessment.diagnostics[0].path = '/input/unrelated.ts',
+    value => value.assessment.diagnostics[0].type[0] = 'SemgrepError',
+    value => value.assessment.diagnostics[0].type[1][0].path = '/input/unrelated.ts',
+    value => value.assessment.diagnostics[0].type[1][0].start.line = 1,
+    value => value.assessment.skipped = [],
+    value => value.assessment.skipped[0].reason = 'exceeded_size_limit',
+  ]) {
+    const invalid = structuredClone(record); change(invalid);
+    assert.equal(controls(invalid).passed, false);
+  }
+});
+test('oversize and rule-language controls require the sole requested omission and zero findings', () => {
+  for (const scenario of ['oversize', 'out-of-rule-language']) {
+    const record = inputControlRecord(scenario);
+    for (const change of [
+      value => value.assessment.findings = [{ path: value.assessment.requestedFiles[0] }],
+      value => value.assessment.diagnostics = [missingDiagnostic()],
+      value => { value.assessment.scanned = [...value.assessment.requestedFiles]; value.assessment.scannedCount = 1; value.assessment.omitted = []; value.assessment.omittedCount = 0; },
+    ]) {
+      const invalid = structuredClone(record); change(invalid);
+      assert.equal(controls(invalid).passed, false);
+    }
+  }
+  for (const change of [value => value.assessment.skipped = [], value => value.assessment.skipped[0].reason = 'analysis_failed_parser_or_internal_error']) {
+    const invalid = inputControlRecord('oversize'); change(invalid);
+    assert.equal(controls(invalid).passed, false);
   }
 });

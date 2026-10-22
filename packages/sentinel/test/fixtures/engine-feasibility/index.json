@@ -1,6 +1,6 @@
 {
   "schemaVersion": "sentinel-engine-corpus-v1",
-  "authorship": "Original inert source; manually authored semantic labels and inclusive source spans before engine runs; no parser/engine oracle.",
+  "authorship": "Original inert source; initial semantic labels and inclusive spans manually authored before engine runs. Three safe caller spans corrected by independent source review afterward; no parser/engine oracle.",
   "labelReview": {
     "state": "needs-independent-review",
     "reviewer": null
@@ -199,8 +199,8 @@
       "endLine": 6,
       "reason": "Caller passes constant SQL and a separate value across the file boundary; assumes query binding semantics.",
       "sourcePath": "typescript/CrossEntry.ts",
-      "sourceStartLine": 3,
-      "sourceEndLine": 3
+      "sourceStartLine": 6,
+      "sourceEndLine": 6
     },
     {
       "id": "javascript-direct-positive",
@@ -265,8 +265,8 @@
       "endLine": 6,
       "reason": "Caller passes constant SQL and a separate value across the file boundary; assumes query binding semantics.",
       "sourcePath": "javascript/CrossEntry.js",
-      "sourceStartLine": 3,
-      "sourceEndLine": 3
+      "sourceStartLine": 6,
+      "sourceEndLine": 6
     },
     {
       "id": "java-direct-positive",
@@ -331,8 +331,8 @@
       "endLine": 7,
       "reason": "Caller passes constant SQL and a separate value across the file boundary; assumes query binding semantics.",
       "sourcePath": "java/CrossEntry.java",
-      "sourceStartLine": 3,
-      "sourceEndLine": 3
+      "sourceStartLine": 6,
+      "sourceEndLine": 6
     }
   ],
   "rules": [

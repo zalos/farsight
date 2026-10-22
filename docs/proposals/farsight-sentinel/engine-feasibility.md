@@ -131,3 +131,31 @@ with the shared helper's explicit swap limit and retained swap inspection; its r
 must accompany final acceptance. Frozen input, rule and index hashes and threshold proposals
 are unchanged. The focused follow-up passes 13 engine-matrix tests; all 26 existing scanner tests
 also pass. No additional scanner trial was started by this lane after the control review.
+
+
+## Caller-span and input-control corrections
+
+A later independent source review found that all three safe cross-file labels incorrectly cited
+the positive caller's line 3. The safe TS, JS and Java caller spans now name line 6; the three
+positive caller spans remain line 3. A regression examines all six literal caller locations and
+requires trace attribution to use each label's own caller. Source and rule bytes, sink spans,
+semantic labels, denominators and threshold proposals remain unchanged. The corrected index
+SHA-256 is `6548f0d047e8f80c0aca3b2f0a178003169141f30a66f8d117cb5d585fa39715`; the earlier index hash above identifies the historical measurements only.
+The correction affects safe trace attribution, not their recorded finding counts: the retained
+runs reported no safe cross-file hits. Earlier raw results remain immutable. The integration lead
+must independently review the six caller spans and rerun the corrected committed profile.
+
+The partial, oversized and out-of-rule-language controls now require completed exit zero and usable,
+reconciled requested/scanned/omitted/skipped inventories with no unexpected paths. Oversized input
+must have the intended path's `exceeded_size_limit`, zero scanned paths, one omission and no findings
+or engine errors. Out-of-rule-language input must have zero scanned paths, one omission and no
+findings or errors; a silent omission remains an explicit gap. Partial input must retain the intended
+malformed line's `PartialParsing` diagnostic and its `analysis_failed_parser_or_internal_error` skip;
+an unrelated configuration error or absent intended diagnostic fails the control. A partially scanned
+file remains a gap whether or not the valid prefix produced a finding. These are experiment controls
+outside the capability denominator, not successful security analyses.
+
+Eighteen engine-matrix tests and all 26 existing scanner tests pass, including negative controls for
+unrelated exit-seven/configuration failures, missing/malformed inventories, unexpected paths, spurious
+findings and absent or unrelated partial/size diagnostics. No new scanner measurement was run in this
+lane after these corrections; the final integrated evidence must identify the corrected index and code.
