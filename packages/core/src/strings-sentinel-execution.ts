@@ -37,6 +37,7 @@ export const SENTINEL_EXECUTION_STRINGS: Record<string, StringEntry> = {
   'sentinel.execution.journalUnreadable': same('a recovery journal record could not be read: {reason}', 'A journal record that is not a small private regular file with the expected fields is kept as it is and reported, so cleanup it may describe is never silently dropped.'),
   'sentinel.execution.cleanupObligation': same('a worker of an earlier coordinator could not be confirmed stopped: process {pid}', 'Recovery stops an earlier worker only after confirming it is that worker. When it cannot confirm either way, the obligation is kept and checked again by every later recovery.'),
   'sentinel.execution.dependencyFailed': same('held because a work unit it depends on did not publish', 'This work waits on another that failed or is itself held, so it cannot run in this plan revision.'),
+  'sentinel.execution.runDeadline': same('the run used up its time budget', 'A run has a deadline over all its work. Attempts still running when it passes are stopped, and work that could not start in time is held; the run then ends with an execution failure.'),
   'sentinel.execution.commandFailed': same('a container runtime command failed ({operation})', 'A command to the container runtime returned an error, so the attempt stopped. No other container was touched.'),
   'sentinel.execution.scratchUnsafe': same('the attempt scratch folder is not a private folder', 'Attempts work in a folder only this user can open, so inputs and outputs cannot be read or swapped by others.'),
 };

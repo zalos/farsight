@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { mkdirSync, writeFileSync, symlinkSync, existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { WorkerFiles } from '../dist/execution/recovery.js';
+import { WorkerFiles, processesCarrying } from '../dist/execution/recovery.js';
+import { influenceManifest } from '../dist/execution/plan.js';
 import { Coordinator, COORDINATOR_BOUNDARIES } from '../dist/execution/coordinator.js';
 import { decide, orderPlan, ReservationPool, retryable, DEFAULT_RETRY } from '../dist/execution/scheduler.js';
 import { isExecutionError } from '../dist/execution/errors.js';
@@ -340,7 +341,8 @@ test('the plan is frozen at open and bound to its adapter, actual inputs and inf
   const store = await storeIn(s.root);
   try {
     // A declared fingerprint, stage digest or manifest that does not match is refused before execution.
-    for (const [field, value, reason] of [['inputFingerprint', `sha256:${'7'.repeat(64)}`, /input fingerprint/], ['influenceManifest', `sha256:${'8'.repeat(64)}`, /influence manifest/]] as const) {
+    // The declared fingerprint is bound through the manifest: changing either without the other is refused.
+    for (const [field, value, reason] of [['inputFingerprint', `sha256:${'7'.repeat(64)}`, /influence manifest/], ['influenceManifest', `sha256:${'8'.repeat(64)}`, /influence manifest/]] as const) {
       const p = syntheticPlan(s.root);
       (p.plan.works[0] as any)[field] = value;
       await assert.rejects(Coordinator.open({ store, plan: p.plan, registry: p.registry, scratchRoot: s.work }), (e: any) => is('sentinel.execution.planInvalid')(e) && reason.test(e.detail.reason), field);
@@ -392,4 +394,98 @@ test('coverage decides the outcome: complete only with every planned check and s
     const resumed = await (await Coordinator.open({ store: again, plan: skip.plan, registry: skip.registry, scratchRoot: s2.work })).run();
     assert.equal(resumed.coverage.find((c: any) => c.work.id === 'work-B').verdict, 'incomplete');
   } finally { again.close(); }
+});
+
+test('a store closed from the attempt-recording callback stops exactly the worker it was starting', async () => {
+  const s = fresh('callback-close');
+  const store = await storeIn(s.root);
+  const { plan, registry } = syntheticPlan(s.root, { A: 'hang' }, { limits: { timeoutMs: 20_000 } });
+  let token = '';
+  // Closed inside the callback after the attempt was recorded: nothing throws, so only the guard can stop it.
+  const hooks = { at: (b: string) => { if (b === 'after-attempt-start' && !token) { token = new WorkerFiles(store.storePath).list().records[0].token; try { store.close(); } catch { /* reported by the close */ } } } };
+  const started = Date.now();
+  await (await Coordinator.open({ store, plan, registry, scratchRoot: s.work, hooks })).run().catch(() => undefined);
+  assert.ok(token, 'the worker was started');
+  assert.deepEqual(processesCarrying(token), [], 'no process carries its token: the guard stopped it');
+  assert.ok(Date.now() - started < 5_000, 'stopped at the close, not at its deadline');
+});
+
+test('a pause asked for before run() holds that run; the next run() resumes it', async () => {
+  const s = fresh('pause-first');
+  const store = await storeIn(s.root);
+  try {
+    const { plan, registry } = syntheticPlan(s.root);
+    const c = await Coordinator.open({ store, plan, registry, scratchRoot: s.work });
+    c.pause();
+    const paused = await c.run();
+    assert.equal(paused.state, 'paused');
+    assert.equal(paused.published, 0, 'nothing was admitted');
+    assert.equal((await c.run()).published, 4);
+  } finally { store.close(); }
+});
+
+test('the retry policy, capacity and plan are copied at open; changing the caller\'s objects later changes nothing', async () => {
+  const s = fresh('frozen-config');
+  const store = await storeIn(s.root);
+  try {
+    const { plan, registry } = syntheticPlan(s.root, { A: 'exit-nonzero-after-result' });
+    const retry = { maxAttempts: 1 };
+    const capacity = { slots: 1, memoryBytes: 2_147_483_648, cpus: 2 };
+    const c = await Coordinator.open({ store, plan, registry, scratchRoot: s.work, retry, capacity });
+    retry.maxAttempts = 6;
+    capacity.slots = 64;
+    await c.run();
+    assert.equal(store.ledger.listAttempts({ id: 'work-A', revision: 1 }).length, 1, 'still one attempt: the ceiling at open');
+  } finally { store.close(); }
+});
+
+test('a successful attempt names its invocation record, published with the result and bound to the approved plan', async () => {
+  const s = fresh('invocation');
+  const store = await storeIn(s.root);
+  try {
+    const { plan, registry } = syntheticPlan(s.root);
+    await (await Coordinator.open({ store, plan, registry, scratchRoot: s.work })).run();
+    const ref = { id: 'work-A', revision: 1 };
+    const [a] = store.ledger.listAttempts(ref);
+    const invocationId = store.ledger.getAttempt(a.id).envelope.invocation;
+    assert.match(invocationId, /^sha256:[0-9a-f]{64}$/);
+    const out = store.ledger.getPublication(ref).outputs.find((o: any) => o.schema === 'sentinel-invocation/draft-1');
+    assert.equal(out?.id, invocationId, 'the attempt and the publication name the same record');
+    const record = JSON.parse((await store.readArtifact(invocationId)).toString('utf8'));
+    assert.equal(record.attemptId, a.id);
+    assert.equal(record.adapter.digest, plan.works[0].stage.implementationDigest);
+    assert.deepEqual(record.inputs, plan.inputsFor().map((i: any) => i.id).sort());
+  } finally { store.close(); }
+});
+
+test('the run budget bounds the whole run: running work is stopped at the deadline and what cannot start is held', async () => {
+  const s = fresh('run-budget');
+  const store = await storeIn(s.root);
+  try {
+    const { plan, registry } = syntheticPlan(s.root, { A: 'hang' }, { limits: { timeoutMs: 60_000 } });
+    plan.run.budgets = { ...plan.run.budgets, deadlineMs: 800 };
+    const started = Date.now();
+    const summary = await (await Coordinator.open({ store, plan, registry, scratchRoot: s.work })).run();
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed < 4_000, `the run ended ${elapsed} ms after starting, near its 800 ms budget`);
+    assert.equal(summary.state, 'completed');
+    assert.equal(summary.outcome, 'execution-failure');
+    const [a] = store.ledger.listAttempts({ id: 'work-A', revision: 1 });
+    assert.equal(store.ledger.getAttempt(a.id).envelope.error.code, 'sentinel.execution.runDeadline');
+    assert.equal(summary.published, 0);
+  } finally { store.close(); }
+});
+
+test('a declared input fingerprint may cover more than the inputs: it is accepted when the manifest binds it', async () => {
+  const s = fresh('wide-fingerprint');
+  const store = await storeIn(s.root);
+  try {
+    const { plan, registry } = syntheticPlan(s.root);
+    for (const w of plan.works) {
+      w.inputFingerprint = `sha256:${'c'.repeat(64)}`; // e.g. inputs plus rules and configuration
+      w.influenceManifest = influenceManifest(w, registry.get(plan.adapterFor(w)), plan.inputsFor().map((i: any) => i.id)).id;
+    }
+    const summary = await (await Coordinator.open({ store, plan, registry, scratchRoot: s.work })).run();
+    assert.equal(summary.published, 4);
+  } finally { store.close(); }
 });

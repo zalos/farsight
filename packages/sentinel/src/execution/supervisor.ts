@@ -60,7 +60,7 @@ export interface AttemptRequest {
    * The coordinator records the attempt in the ledger here, so the ledger's fence exists before the worker acts.
    * Throwing stops and removes the worker; the error is rethrown.
    */
-  onWorker?: (worker: AttemptWorker) => void;
+  onWorker?: (worker: AttemptWorker, invocation: { digest: Digest; record: InvocationRecord }) => void;
   /** A durable journal of container intents (recovery, PR 08): recorded before a create, settled once removed. */
   intents?: IntentJournal;
   /** A durable journal of built-in worker identities: recorded after spawn and before the worker acts. */
@@ -249,7 +249,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       outcome.container = { id: containerId, image: image! };
       outcome.worker = { kind: 'owned-container', containerId, ownershipLabels: { store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch } };
       request.hooks?.at?.('after-spawn');
-      request.onWorker?.(outcome.worker);
+      request.onWorker?.(outcome.worker, outcome.invocation);
     } catch (error) {
       // A container that exists is removed before the error leaves; its intent is settled only when that is confirmed.
       if (containerId) {
@@ -274,6 +274,9 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     proc = spawnWorker(process.execPath, [adapter.module, inputDir, outputDir, tokenArgument(token)], { cwd: workDir, env: {
       SENTINEL_INPUT: inputDir, SENTINEL_OUTPUT: outputDir, SENTINEL_ADAPTER_ID: adapter.id, SENTINEL_ADAPTER_DIGEST: adapter.digest,
     } });
+    // The owner's guard holds the process from the instant it exists, so closing the store at any later moment
+    // (including from the callback below) stops exactly this process.
+    guard.proc = proc;
     const pid = proc.child.pid;
     if (pid) outcome.worker = { kind: 'owned-child', pid, processStartedAt: proc.startedAt.toISOString() };
     try {
@@ -282,7 +285,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       identity = { attempt: request.attemptId, store: owner.storeId, epoch: owner.epoch, pid, token, kernelStart: kernelStartOf(pid) ?? '' };
       request.workers?.record(identity);
       request.hooks?.at?.('after-spawn');
-      request.onWorker?.(outcome.worker);
+      request.onWorker?.(outcome.worker, outcome.invocation);
+      if (guard.ownerClosed) throw new ExecutionError('sentinel.execution.canceled', { reason: 'the store closed while the attempt was being recorded' });
     } catch (error) {
       proc.kill();
       await proc.exited;
