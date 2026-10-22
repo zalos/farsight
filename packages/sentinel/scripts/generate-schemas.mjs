@@ -26,6 +26,7 @@ const ENVELOPES = {
   controls: ['sentinel-controls/draft-1', 'ControlFactsEnvelope'],
   plan: ['sentinel-plan/draft-1', 'PlanEnvelope'],
   paths: ['sentinel-paths/draft-1', 'PathEvidenceEnvelope'],
+  pathrequest: ['sentinel-path-request/draft-1', 'PathRequestEnvelope'],
   deepimport: ['sentinel-deep-import/draft-1', 'DeepImportEnvelope'],
 };
 

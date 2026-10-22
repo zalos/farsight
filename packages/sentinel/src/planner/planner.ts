@@ -11,6 +11,8 @@
 // revision (or a child run's first one) that depends on the already published bootstrap work, never a recapture,
 // and never changes an earlier revision.
 import type { Digest, Id, WorkRef } from '../contracts/common.js';
+import { pathRequestOf, PATHS_ADAPTER_ID } from '../analysis/paths/request.js';
+import type { PathRequestEnvelope } from '../contracts/pathrequest.js';
 import type { CaptureEntry } from '../contracts/snapshot.js';
 import { digestOf } from '../store/ledger-json.js';
 import { validateEnvelope } from '../validate.js';
@@ -220,6 +222,8 @@ export function planBootstrap(request: BootstrapRequest): PlanRevision {
 }
 
 export interface AnalysisRequest {
+  /** Optional structural task data. Requires independent store admission proof of its exact retained ancestor. */
+  readonly pathRequest?: PathRequestEnvelope;
   readonly runId: Id;
   readonly revision?: number;
   readonly previous?: PlanRevision | null;
@@ -246,6 +250,13 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   const limits = { ...DEFAULT_PLANNER_LIMITS, ...request.limits };
   for (const [k, v] of Object.entries(limits)) if (!Number.isSafeInteger(v) || v < 1 || v > (DEFAULT_PLANNER_LIMITS as unknown as Record<string, number>)[k]!) throw invalid(`${k} must be 1..${(DEFAULT_PLANNER_LIMITS as unknown as Record<string, number>)[k]}`);
   const { snapshot, lock, policy } = request;
+  let pathRequest: ReturnType<typeof pathRequestOf> | undefined;
+  if (request.pathRequest !== undefined) {
+    try { pathRequest = pathRequestOf(request.pathRequest); }
+    catch { throw invalid('the structural path request is malformed or exceeds its bounds'); }
+    if (pathRequest.value.snapshotId !== snapshot.id || !snapshot.sources.some(s => s.sourceId === pathRequest!.value.sourceId)
+      || pathRequest.value.ancestor.runId === runId) throw new PlanError('sentinel.plan.pinMismatch', 'the structural request does not name an ancestor over this captured source');
+  }
   // Only the adapters' frozen derivations may carry a lock pin, a policy revision, a snapshot or analysis identity.
   for (const [what, view] of [['rule lock', lock], ['policy', policy], ['snapshot', snapshot], ...request.analyses.map(a => ['parser analysis', a] as const)] as const) {
     if (!isTrustedView(view)) throw new PlanError('sentinel.plan.pinMismatch', `the ${what} is accepted only as its planner adapter derived it`);
@@ -440,6 +451,9 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
       if (c.entry && c.entry.kind !== 'directory-boundary' && !(c.entry.kind === 'file' && c.entry.disposition === 'included')) { state('scope-unavailable', c.entry.reasonCode); continue; }
       if ('reasonCode' in adapter) { state('unsupported', adapter.reasonCode); continue; }
       if (missing) { state('unsupported', missing.reasonCode!); continue; }
+      if (rule.adapterId === PATHS_ADAPTER_ID && (!pathRequest || pathRequest.value.sourceId !== c.sourceId)) {
+        state('scope-unavailable', 'sentinel.plan.pathRequestUnavailable' satisfies PlanReasonCode); continue;
+      }
       if (c.scopeKind === 'repository' && (repositoryFiles.get(c.sourceId)?.length ?? 0) > limits.maxRepositoryInputs) {
         state('scope-unavailable', 'sentinel.plan.repositoryTooLarge' satisfies PlanReasonCode); continue;
       }
@@ -481,6 +495,7 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
       const inputs = [...files].sort().map(relativePath => ({ sourceId, relativePath, content: contentOf.get(`${sourceId}\u0000${relativePath}`)! }));
       const needsDatabases = families.some(f => rulePin.get(f)!.requires.includes('advisory-database'));
       const inputFingerprint = digestOf({
+        ...(adapterId === PATHS_ADAPTER_ID ? { pathRequest: pathRequest!.id } : {}),
         inventory: snapshot.inventoryDigest, environment, analysis: analyses.get(sourceId)!.analysisFingerprint,
         rules: families.map(f => { const r = rulePin.get(f)!; return [r.familyId, r.revision, r.definitionDigest, r.packDigest]; }),
         adapterId, implementationDigest, scopes: [...scopes].sort(),
@@ -511,6 +526,7 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   const pins: PlanPins = {
     snapshotId: snapshot.id, inventoryDigest: snapshot.inventoryDigest, environment, ruleLockDigest: lock.digest, policyDigest: policy.digest,
     profileId: checkId(profile.id, 'profile id'),
+    ...(pathRequest ? { pathRequest: pathRequest.id } : {}),
     rules: selected.map(({ rule: r }) => ({ familyId: r.familyId, revision: r.revision, definitionDigest: r.definitionDigest, packDigest: r.packDigest, adapterId: r.adapterId })),
     tools: [...lock.tools].map(t => ({ adapterId: t.adapterId, artifactDigest: t.artifactDigest })).sort(byKey(t => t.adapterId)),
     databases: [...lock.databases].map(d => ({ databaseId: d.databaseId, snapshotDigest: d.snapshotDigest })).sort(byKey(d => d.databaseId)),

@@ -6,6 +6,30 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Canonical structural-path request integration — 2026-10-22
+
+Selected reruns merged as [#159](https://github.com/zalos/farsight/pull/159), `64d86ae9`, with the file tree exactly
+the reviewed `147eb71c` candidate (runtime `bfb60d65`). All sixteen required and selected CI checks passed.
+Independent SOL replay of the final recovery delta passed eleven actual controls with zero skips, including the
+unchanged original crash-window public-CLI probe, paused/source-removed owner reopening, future-revision guards and
+inherited privacy. Opus's one final source-only review approved the earlier `62de9d6c`; the subsequent corrections
+were implemented by SOL and independently reviewed by SOL. No whole PR 09/19/27 or final release gate is implied.
+
+The next isolated branch, `codex/sentinel-path-requests`, starts ADR 45's bounded source-derived request schema,
+optional plan pin, source-filtered planner fingerprint and request/generation identity. Its byte/count/schema bounds
+run before expensive processing, reject duplicate/unsorted node pairs or broader edge kinds and preserve old no-pin
+canonical plan output. A query never grants execution or supplies the missing deep-flow capability. Fifty focused
+contract, planner and package controls pass with zero skips; the affected closure build and typecheck, generated
+schemas and catalog check pass. This is a private integration checkpoint, not a completed path-command feature.
+
+Before production admission is wired, Spring owns factoring the already reviewed retained-analysis source verifier
+into a common readonly proof for exact current ended/canceled ancestors and their accepted parser/operation closure.
+No parallel loader or structural JSON authority is substituted. That reviewed API must be integrated with request
+admission/retention and execution before the owner CLI, packaged trusted child and privacy-safe inspection report
+are qualified end to end after source removal. The driver/service/report/assets changes remain coordinated with the
+framework lane. Durable deep-import acceptance remains design-only; no engine acquisition, target execution or model
+call is part of this checkpoint. The end-of-plan product cleanup review remains required.
+
 ## Selected-rerun crash-window recovery — 2026-10-22
 
 Runtime checkpoint `bfb60d65` corrects independent review's genuine legacy admit-before-advance crash window on

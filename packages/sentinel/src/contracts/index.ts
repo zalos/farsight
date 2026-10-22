@@ -16,6 +16,7 @@ export type * from './controls.js';
 export type * from './plan.js';
 export type * from './paths.js';
 export type * from './deepimport.js';
+export type * from './pathrequest.js';
 
 /**
  * Every envelope: its kind, the one schema version this build reads and writes, and the generated type.
@@ -42,6 +43,7 @@ export const ENVELOPES = {
   controls: { schema: 'sentinel-controls/draft-1', type: 'ControlFactsEnvelope' },
   plan: { schema: 'sentinel-plan/draft-1', type: 'PlanEnvelope' },
   paths: { schema: 'sentinel-paths/draft-1', type: 'PathEvidenceEnvelope' },
+  pathrequest: { schema: 'sentinel-path-request/draft-1', type: 'PathRequestEnvelope' },
   deepimport: { schema: 'sentinel-deep-import/draft-1', type: 'DeepImportEnvelope' },
 } as const;
 

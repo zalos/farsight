@@ -1447,3 +1447,32 @@ matches, and adds a private publication field; it is not part of this change. A 
 its entry, without a symbol, never used to place a gap), and the minimal scanner report replaces such a name wherever it
 appears. Refusal reasons never name a path. The minimal scanner report's other names are unchanged; the full report
 uses the conservative projection above. The context-graph attestation limitation above is unchanged.
+
+
+45. **Canonical structural path requests are pinned source-derived data; owner-confirmed deep imports remain a separate acceptance boundary (2026-10-22).**
+
+A structural path request has the closed `sentinel-path-request/draft-1` contract: the exact recorded ancestor run,
+revision and plan digest; captured snapshot and source; sorted unique exact node pairs; sorted allowed call/http/render
+edge kinds; and explicit depth, fan-out and visit bounds matching the bounded-path library. At most 10,000 pairs and
+one MiB of serialized request are accepted; the byte/count bounds apply before parsing or expensive processing.
+Queries are data, never executable code, a grant or proof of flow. The request's canonical artifact identity is the
+optional `PlanPins.pathRequest`; absent pins preserve every old plan's canonical bytes and bootstrap revisions reject
+this pin. A path unit's influence and input fingerprint include the request identity. Other sources stay unavailable
+rather than reading another source's query, and no request supplies the missing interprocedural-flow capability.
+Changed queries, bounds, adopted terms or terminal generation give a different linked task identity.
+
+Admission must prove the actual current ancestor revision, allowed ended state and exact source/capture through the
+same retained bootstrap/source authority used by canonical execution. The request is staged as source-derived with
+the plan, linked to the exact admitted ancestor and accepted operation/parser closure; callers cannot supply those
+links or turn copied artifact JSON into authority. Execution rechecks the pin and uses sealed retained bytes, never
+today's workspace or an unpinned prepare-only parameter. The shared readonly authority extraction and its canonical
+owner command/driver/report wiring are implementation gates; the contract/planner checkpoint alone does not enable
+production path execution. Public reports must keep call reachability distinct from data flow or protection, retain
+bounds/frontiers and apply current, baseline and proven selected-ancestor privacy to every path-controlled detail.
+
+Deep imports retain ADR 36's separate owner `evidence.import` receipt boundary and tool-scope-only observations.
+A consumed in-process receipt cannot be reconstructed from serialized JSON; durable import acceptance and its crash
+behavior require their own reviewed transaction and retained closure. No scanner attempt or executed coverage is
+fabricated for an import, and no deep engine, build, network permission, model call or target execution is inferred
+from an analyzer's mode. This decision reserves the owner boundary; durable import implementation follows the first
+canonical structural-path slice rather than being implied by the library contract.

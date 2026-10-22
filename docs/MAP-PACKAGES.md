@@ -289,3 +289,10 @@ delivery.
 `test/cli-scanners-e2e.test.ts`, `test/scanner-assets.test.ts` and
 `scripts/test-sentinel-scanner-consumer.mjs` cover the public command path, strict asset boundaries and installed
 npm-only detached execution. These are executable internals, not new JavaScript package exports.
+
+
+Sentinel structural task requests (ADR 45) add `contracts/pathrequest.ts` and
+`analysis/paths/request.ts`: bounded, immutable canonical query data and deterministic request/generation identity.
+`planner/planner.ts` optionally pins that artifact and fingerprints source-scoped path work; missing requests and
+unavailable deep-flow capability stay explicit gaps. These helpers grant no execution or receipt authority. Shared
+retained-source admission, canonical driver/owner dispatch and report projection remain required integration gates.

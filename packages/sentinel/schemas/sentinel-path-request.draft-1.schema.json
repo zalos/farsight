@@ -1,0 +1,161 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/PathRequestEnvelope",
+  "definitions": {
+    "PathRequestEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-path-request/draft-1"
+        },
+        "ancestor": {
+          "type": "object",
+          "properties": {
+            "runId": {
+              "$ref": "#/definitions/Id"
+            },
+            "revision": {
+              "$ref": "#/definitions/Ordinal"
+            },
+            "planDigest": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "runId",
+            "revision",
+            "planDigest"
+          ],
+          "additionalProperties": false,
+          "description": "The recorded ancestor revision, never the latest merely admitted revision."
+        },
+        "snapshotId": {
+          "$ref": "#/definitions/Id"
+        },
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "queries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PathRequestPair"
+          },
+          "description": "Sorted by exact from/to tuple, without duplicates or same-node queries.",
+          "minItems": 1,
+          "maxItems": 10000
+        },
+        "bounds": {
+          "$ref": "#/definitions/PathBounds",
+          "description": "Explicit, library-bounded; edge kinds are sorted without duplicates."
+        }
+      },
+      "required": [
+        "schema",
+        "ancestor",
+        "snapshotId",
+        "sourceId",
+        "queries",
+        "bounds"
+      ],
+      "additionalProperties": false
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "Ordinal": {
+      "type": "integer",
+      "description": "A positive integer ordinal or revision.",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "PathRequestPair": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "$ref": "#/definitions/NodeId"
+        },
+        "to": {
+          "$ref": "#/definitions/NodeId"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "additionalProperties": false
+    },
+    "NodeId": {
+      "type": "string",
+      "description": "A canonical application-graph identity (`repo::path/to/File.tsx::Component`), a screen or a journey ID from pinned context. Unlike a ledger `Id` it may contain `/` and `::`; it is bounded and free of control characters.",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+$"
+    },
+    "PathBounds": {
+      "type": "object",
+      "properties": {
+        "edgeKinds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PathEdgeKind"
+          },
+          "maxItems": 3
+        },
+        "maxDepth": {
+          "$ref": "#/definitions/PathDepth",
+          "description": "Edges in the longest path explored."
+        },
+        "maxFanout": {
+          "$ref": "#/definitions/PathFanout",
+          "description": "Outgoing edges followed per node; beyond it the node is a frontier."
+        },
+        "maxVisited": {
+          "$ref": "#/definitions/PathVisits",
+          "description": "Nodes visited per query."
+        }
+      },
+      "required": [
+        "edgeKinds",
+        "maxDepth",
+        "maxFanout",
+        "maxVisited"
+      ],
+      "additionalProperties": false
+    },
+    "PathEdgeKind": {
+      "type": "string",
+      "enum": [
+        "calls",
+        "http",
+        "renders"
+      ],
+      "description": "The edge kinds a path may follow. Guard, validation and test edges are never traversed: they are not calls."
+    },
+    "PathDepth": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64
+    },
+    "PathFanout": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4096
+    },
+    "PathVisits": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-path-request.draft-1.schema.json",
+  "title": "sentinel-path-request/draft-1"
+}

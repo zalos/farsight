@@ -1,6 +1,7 @@
 // Runtime validation for the draft envelopes: an exact version check first (never coerced), then the
 // generated JSON schema, then invariants a JSON schema cannot express (cross-field and cross-record rules).
 import { Ajv, type ValidateFunction } from 'ajv';
+import { MAX_PATH_REQUEST_BYTES } from './contracts/pathrequest.js';
 import schemas from './schemas.generated.js';
 import { ENVELOPES, MAX_ENVELOPE_BYTES, type EnvelopeKind } from './contracts/index.js';
 import type {
@@ -8,7 +9,7 @@ import type {
   ReportCount, ReportEnvelope, RunEnvelope, SnapshotEnvelope, WorkEnvelope, FindingPlace, HelloMessage,
   WelcomeMessage, RefuseMessage, RulePackManifest, RuleLockEnvelope, SettingsEnvelope, RepoConfigEnvelope,
   EffectivePolicyEnvelope, AdoptionEnvelope, ReceiptEnvelope, AdmissionEnvelope, ControlFactsEnvelope, Rights, Budget,
-  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope,
+  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope, PathRequestEnvelope,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
 import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf } from './planner/identity.js';
@@ -35,6 +36,7 @@ export interface EnvelopeTypes {
   controls: ControlFactsEnvelope;
   plan: PlanEnvelope;
   paths: PathEvidenceEnvelope;
+  pathrequest: PathRequestEnvelope;
   deepimport: DeepImportEnvelope;
 }
 
@@ -61,7 +63,7 @@ export interface ContractError {
 
 export type ValidationResult<T> = { ok: true; value: T } | { ok: false; errors: ContractError[] };
 
-const VERSION = /^(sentinel-[a-z]+)\/(draft-[1-9][0-9]*|v[1-9][0-9]*)$/;
+const VERSION = /^(sentinel-[a-z]+(?:-[a-z]+)*)\/(draft-[1-9][0-9]*|v[1-9][0-9]*)$/;
 const versionField = (kind: EnvelopeKind) => (kind === 'protocol' ? 'protocol' : 'schema');
 
 let ajv: Ajv | undefined;
@@ -191,8 +193,9 @@ export function validateEnvelope<K extends EnvelopeKind>(kind: K, value: unknown
 
 /** Decodes and validates serialized JSON, refusing oversized input before parsing it. */
 export function parseEnvelope<K extends EnvelopeKind>(kind: K, text: string): ValidationResult<EnvelopeTypes[K]> {
-  if (Buffer.byteLength(text, 'utf8') > MAX_ENVELOPE_BYTES) {
-    return fail([{ code: 'sentinel.contract.tooLarge', path: '', message: `larger than ${MAX_ENVELOPE_BYTES} bytes` }]);
+  const maxBytes = kind === 'pathrequest' ? MAX_PATH_REQUEST_BYTES : MAX_ENVELOPE_BYTES;
+  if (Buffer.byteLength(text, 'utf8') > maxBytes) {
+    return fail([{ code: 'sentinel.contract.tooLarge', path: '', message: `larger than ${maxBytes} bytes` }]);
   }
   let value: unknown;
   try {
@@ -536,6 +539,7 @@ const BOOTSTRAP_STAGES: ReadonlySet<string> = new Set(['capture', 'parse', 'inve
 const plan: Check<PlanEnvelope> = (v, out) => {
   if ((v.revision === 1) !== (v.previous === null)) out.add(err('/previous', 'only a run\'s first revision has no predecessor'));
   const analysis = v.kind === 'analysis';
+  if (!analysis && v.pins.pathRequest !== undefined) out.add(err('/pins/pathRequest', 'a bootstrap revision pins no structural request'));
   for (const field of ['snapshotId', 'inventoryDigest', 'environment', 'ruleLockDigest', 'policyDigest'] as const) {
     if ((v.pins[field] === null) === analysis) out.add(err(`/pins/${field}`, analysis ? 'an analysis revision pins it' : 'a bootstrap revision has nothing to pin here'));
   }
@@ -693,6 +697,19 @@ const paths: Check<PathEvidenceEnvelope> = (v, out) => {
 };
 
 /** An import binds each file it read once, and every flow points into a file it read. */
+const pathrequest: Check<PathRequestEnvelope> = (v, out) => {
+  if (Buffer.byteLength(JSON.stringify(v), 'utf8') > MAX_PATH_REQUEST_BYTES) out.add(err('', 'a structural request exceeds its 1 MiB bound'));
+  for (let i = 0; i < v.queries.length; i++) {
+    const q = v.queries[i]!;
+    if (q.from === q.to) out.add(err(`/queries/${i}`, 'a query names two different nodes'));
+    if (i) {
+      const p = v.queries[i - 1]!;
+      if (p.from > q.from || (p.from === q.from && p.to >= q.to)) out.add(err(`/queries/${i}`, 'queries are sorted exact tuples, each once'));
+    }
+  }
+  for (let i = 1; i < v.bounds.edgeKinds.length; i++) if (v.bounds.edgeKinds[i - 1]! >= v.bounds.edgeKinds[i]!) out.add(err(`/bounds/edgeKinds/${i}`, 'edge kinds are sorted, each once'));
+};
+
 const deepimport: Check<DeepImportEnvelope> = (v, out) => {
   for (const i of duplicates(v.binding.files, f => f.relativePath)) out.add(err(`/binding/files/${i}`, 'each file read is listed once'));
   v.binding.files.forEach((f, i) => pathError(out, `/binding/files/${i}/relativePath`, f.relativePath));
@@ -708,7 +725,7 @@ const deepimport: Check<DeepImportEnvelope> = (v, out) => {
 
 const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   snapshot, run, work, attempt, observation, coverage, disposition, report, protocol,
-  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan, paths, deepimport,
+  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan, paths, pathrequest, deepimport,
 };
 
 /**
