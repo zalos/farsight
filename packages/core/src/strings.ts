@@ -57,9 +57,11 @@ import { SENTINEL_PLAN_STRINGS } from './strings-sentinel-plan.js';
 import { SENTINEL_SERVICE_STRINGS } from './strings-sentinel-service.js';
 import { SENTINEL_GLOSSARY_STRINGS } from './strings-sentinel-glossary.js';
 import { SENTINEL_STORAGE_ERROR_STRINGS } from './strings-sentinel-storage-errors.js';
+import { SENTINEL_PATTERN_STRINGS } from './strings-sentinel-pattern.js';
 import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
 import { SENTINEL_NEXT_STRINGS } from './strings-sentinel-next.js';
+import { SENTINEL_EXPRESS_STRINGS } from './strings-sentinel-express.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
 import { TOUR_STRINGS } from './strings-tour.js';
@@ -183,6 +185,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_PLAN_STRINGS,
   // Sentinel ledger, object store and reachability error codes (strings-sentinel-storage-errors.ts)
   ...SENTINEL_STORAGE_ERROR_STRINGS,
+  // Sentinel's pattern adapter: coverage reasons, refused results, limitations and rule titles (strings-sentinel-pattern.ts)
+  ...SENTINEL_PATTERN_STRINGS,
   // Sentinel worker execution: protocol, adapter registry, container isolation, supervisor (strings-sentinel-execution.ts)
   ...SENTINEL_EXECUTION_STRINGS,
   // Sentinel source capture: entry reasons and capture/restore refusals (strings-sentinel-capture.ts)
@@ -197,6 +201,8 @@ export const STRINGS: Record<string, StringEntry> = {
   // Sentinel's glossary: each code-register term and its business twin, sentinel.term.biz.* (strings-sentinel-glossary.ts)
   ...SENTINEL_GLOSSARY_STRINGS,
   ...SENTINEL_NEXT_STRINGS,
+  // the Express framework pack: why a control fact about an Express route is unknown (strings-sentinel-express.ts)
+  ...SENTINEL_EXPRESS_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
   // who may do what — the role × action table's words live in strings-roles.ts (roles.*, gate.roles.*, its counts)

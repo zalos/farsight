@@ -46,6 +46,10 @@
       "types": "./dist/planner/index.d.ts",
       "import": "./dist/planner/index.js"
     },
+    "./frameworks/express": {
+      "types": "./dist/frameworks/express/index.d.ts",
+      "import": "./dist/frameworks/express/index.js"
+    },
     "./frameworks/next": {
       "types": "./dist/frameworks/next/index.d.ts",
       "import": "./dist/frameworks/next/index.js"

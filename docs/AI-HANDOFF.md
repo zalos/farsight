@@ -54,6 +54,19 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Next fix-stack integration with merged foundations — 2026-10-22
+
+Branch `codex/sentinel-next-integration` incorporates the reviewed patch-identity correction and follow-ups through
+`89323726`, then merges main `95387a4e`. The merge preserves the complete Pattern and Express implementations,
+reserved ADRs, catalogs, package exports, audit entries and installed-consumer hooks alongside Next. The Next runtime
+is unchanged from the frozen root-shape correction; other framework/scanner/runtime implementations come unchanged
+from merged main. The root-shape slice passed 46 focused Next/package tests with zero skips before integration.
+
+Production coordinator and CLI dispatch for framework packs remain open. The merge is a library foundation and
+makes no framework effect or full-plan acceptance claim. Integration build, focused checks and fresh installed npm
+consumer evidence are verified separately before handoff; no target application code is executed or installed.
+No primary build, dogfood replacement, server restart or push is part of this integration.
+
 ## Next pnpm root-shape preflight — 2026-10-22
 
 The follow-up on `codex/sentinel-next-patch-indent` preserves `c8c3f160` and validates every meaningful lockfile root
@@ -108,6 +121,15 @@ for the ordinary two-space form. Target code is never installed, compiled or exe
 checks passed; all 36 focused Next/package tests and both exact review probes passed with zero skips. Independent review and integration
 remain with the coordinating owner; no primary build, graph replacement or push occurred.
 
+## Sentinel sampled-memory test — 2026-10-22
+
+Branch `codex/sol-memory-test` changes only the bootstrap resource regression: the real parse and store now receive
+controlled resident-memory samples just above and below the recorded grant. This avoids assuming a small parse
+must grow process memory after allocation reuse or garbage collection. The refusal still checks the exact memory
+error and absence of a publication; the neighbor checks successful publication. Runtime grants are unchanged.
+Validation: dependency-closure build and all 10 bootstrap tests passed with no skips. Native platform metadata is
+reviewed separately against the native CI evidence.
+
 ## Sentinel scheduler merged; CLI integration — 2026-10-22
 
 The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`, and scheduler as
@@ -129,6 +151,31 @@ No primary-checkout build, dogfood refresh or global installation was performed.
 Branch `codex/sentinel-cli-reliability`, based on `e0e7c547`: public retry/rerun accepts an ended admitted bootstrap, prepares a fresh child over its retained snapshot and credits no parent work as completed. Fatal errors after coordinator acceptance are retained in a private durable service journal, bound to store/run/current admitted plan and containing known catalog codes only. Wait, status and unfinished report read this diagnostic after restart; raw exception text is withheld.
 
 Checks: Sentinel dependency closure build; `service-reliability.test.ts` (three regressions: partially published bootstrap through public retry/rerun after source changes; actual SQLite finalization failure across service/store restart; bounded diagnostics and copied cross-store refusal); existing `preview-slice.test.ts` (six tests), and `cli-preview-e2e.test.ts` (two actual CLI lifecycle/detached-service tests): 11 passed, zero skipped. No primary build, ingest, server or graph changes. Independent SOL review and integration remain open.
+
+## Sentinel planner merged; pattern qualification in progress — 2026-10-22
+
+The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc9`, after independent
+SOL review and all eight final CI checks. PR 06 is complete; scheduler and CLI integration use its canonical
+plans and coverage evaluator.
+
+The pattern adapter is integrated on `codex/sentinel-pattern-integration` for draft PR/native Linux qualification.
+It runs Semgrep 1.181.0 only in the pinned container, reads sealed capture copies, normalizes bounded results and
+reports per-rule/file omissions explicitly. Local integration passed full build and typecheck, 350 Sentinel tests
+(25 explicit opt-in/platform skips), 22 focused real-container tests with zero skips, core 404, scripts 181 and
+catalog lint (3,825 entries). The clean npm consumer verified eight typed exports, 19 contracts/schemas, 53 fixtures,
+cross-process storage and 17 shipped pattern assets. SOL independently reviewed input binding, diagnostics,
+real-engine behavior and qualification workflow failure handling.
+
+Fresh fixed-source ingests of runtime head `b7edd5d` against main `a690cc9` were identical in all node and edge
+values: 7,906 nodes, 16,354 edges, source digest `6474c835ecc8`, 21,867,834 graph bytes and 29,835,264 database bytes
+in both. Fresh front-door, Map and code-map screenshots were inspected with zero page errors; known fixture
+design-image 404s remain on the first two surfaces. No primary build or dogfood refresh occurred.
+
+The adapter remains unregistered. PR 10 is not complete until native amd64 qualification, scheduler/CLI wiring,
+batching and actual installed-command acceptance pass. The scheduler, detached CLI, secrets scanner, offline
+advisories and framework packs remain in implementation/review. SOL found secrets allowlist omissions and a
+filename redaction channel; those findings must be closed before acceptance. npm release packaging prework is
+underway; no release has been cut.
 
 ## Sentinel policy merged; planner integration verified — 2026-10-22
 

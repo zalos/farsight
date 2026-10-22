@@ -1,0 +1,5 @@
+// Original synthetic fixture: a request value is passed as a bound parameter.
+export function search(req: { value(): string }, db: { query(sql: string, args?: unknown[]): unknown }) {
+  const term = req.value();
+  return db.query("SELECT * FROM invoices WHERE note = $1", [term]);
+}

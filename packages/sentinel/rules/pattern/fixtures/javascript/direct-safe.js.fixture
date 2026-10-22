@@ -1,0 +1,4 @@
+// Original synthetic fixture: a parameterized query.
+export function findVendor(db, id) {
+  return db.query("SELECT * FROM vendors WHERE id = $1", [id]);
+}
