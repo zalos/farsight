@@ -8,13 +8,14 @@
 // input fingerprint, and every artifact it lists is re-read and hashed from the output folder, with nothing
 // unlisted, linked or oversized there.
 //
-// Authorization is the start message, never time. The coordinator sends it only in answer to the worker's hello,
-// which it reads only after the attempt is durable in the ledger (onWorker) and the worker's identity, with its
-// process id, is durable in the worker journal. A worker launched by a coordinator that died earlier therefore never
-// receives a start; its stdin's only write end died with that coordinator (libuv opens the parent's end close-on-
-// exec), so the worker reads end of stream, and the worker contract (StartMessage) makes it exit. Even a worker that
-// broke that contract holds no binding: the ledger has no attempt for it to publish under, and the new owner's epoch
-// fences any it had.
+// Authorization, never time, in two layers. A built-in worker process starts in the launch gate (launch-gate.ts),
+// which loads the adapter only after reading its authorization line; the supervisor writes that line only once the
+// worker's identity with its pid is durable in the worker journal. So a process launched by a coordinator that died
+// before recording its pid never runs adapter code, however late it execs. Then the adapter is authorized for an
+// attempt only by its start message, which answers a hello read only after the attempt is durable in the ledger
+// (onWorker); a worker whose coordinator dies before then reads end of stream and, by the worker contract
+// (StartMessage), exits. Even a worker that broke that contract holds no binding: the ledger has no attempt for it
+// to publish under, and the new owner's epoch fences any it had.
 //
 // Ending: a result, an acknowledged cancel, the deadline, a cancel the worker ignores past its grace, a protocol
 // or framing error, an output or stdout budget, or the worker exiting. Every path stops the worker, removes its
@@ -27,7 +28,7 @@ import type { AttemptWorker } from '../contracts/attempt.js';
 import type { ProtocolMessage, ResultMessage } from '../contracts/protocol.js';
 import type { ResourcePolicy } from '../contracts/work.js';
 import type { WorkerJournal, WorkerIdentity } from './recovery.js';
-import { kernelStartOf, tokenArgument } from './recovery.js';
+import { kernelStartOf, launchAuthorization, tokenArgument } from './recovery.js';
 import { syncDirectory } from './durability.js';
 import type { OwnedResource } from '../store/owner.js';
 import { canonicalJsonBytes } from '../store/objects.js';
@@ -180,7 +181,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   if (adapter.kind === 'built-in' && moduleDigestOf(adapter.module) !== adapter.moduleDigest) {
     throw new ExecutionError('sentinel.execution.adapterIdentityMismatch', { adapter: adapter.id });
   }
-  const argv = adapter.kind === 'external' ? [...adapter.command] : [process.execPath, adapter.module, inputDir, outputDir, tokenArgument(token)];
+  const builtInArgs = adapter.kind === 'built-in' ? [process.execPath, '--import', LAUNCH_GATE, adapter.module, inputDir, outputDir, tokenArgument(token)] : [];
+  const argv = adapter.kind === 'external' ? [...adapter.command] : builtInArgs;
   const environmentNames = adapter.kind === 'external'
     ? ['HOME', 'SENTINEL_INPUT', 'SENTINEL_OUTPUT', 'SENTINEL_ADAPTER_ID', 'SENTINEL_ADAPTER_DIGEST']
     : ['SENTINEL_INPUT', 'SENTINEL_OUTPUT', 'SENTINEL_ADAPTER_ID', 'SENTINEL_ADAPTER_DIGEST'];
@@ -279,7 +281,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     request.workers?.record(identity);
     request.hooks?.at?.('before-spawn');
     // A built-in worker inherits nothing: its environment is exactly these four names.
-    proc = spawnWorker(process.execPath, [adapter.module, inputDir, outputDir, tokenArgument(token)], { cwd: workDir, env: {
+    // The launch gate runs first and loads the adapter only once it reads its authorization (launch-gate.ts).
+    proc = spawnWorker(process.execPath, builtInArgs.slice(1), { cwd: workDir, env: {
       SENTINEL_INPUT: inputDir, SENTINEL_OUTPUT: outputDir, SENTINEL_ADAPTER_ID: adapter.id, SENTINEL_ADAPTER_DIGEST: adapter.digest,
     } });
     // The owner's guard holds the process from the instant it exists, so closing the store at any later moment
@@ -292,6 +295,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       // Now with its process id and, on Linux, its exact kernel start; still before the attempt is recorded.
       identity = { attempt: request.attemptId, store: owner.storeId, epoch: owner.epoch, pid, token, kernelStart: kernelStartOf(pid) ?? '' };
       request.workers?.record(identity);
+      // Durable with its pid, so recovery can find and verify it: only now may it load the adapter.
+      proc.child.stdin.write(launchAuthorization(token));
       request.hooks?.at?.('after-spawn');
       request.onWorker?.(outcome.worker, outcome.invocation);
       if (guard.ownerClosed) throw new ExecutionError('sentinel.execution.canceled', { reason: 'the store closed while the attempt was being recorded' });
@@ -347,6 +352,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   if (outcome.state !== 'succeeded') delete outcome.result;
   return outcome;
 }
+
+const LAUNCH_GATE = new URL('./launch-gate.js', import.meta.url).href;
 
 function setFailure(outcome: WorkerOutcome, code: ExecutionErrorCode, detail: Record<string, unknown>, override = false): void {
   if (outcome.code && !override) return;

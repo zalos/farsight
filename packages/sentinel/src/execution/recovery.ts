@@ -220,6 +220,8 @@ export class WorkerFiles implements WorkerJournal {
 }
 
 export const tokenArgument = (token: string): string => `--sentinel-token=${token}`;
+/** The one line the launch gate accepts (launch-gate.ts keeps its own copy of the format, so it imports nothing). */
+export const launchAuthorization = (token: string): string => `sentinel-launch ${token}\n`;
 
 /** Linux: the process's exact start identity, `<boot id>:<start ticks>`. null elsewhere or when it is gone. */
 export function kernelStartOf(pid: number): string | null {
@@ -337,10 +339,11 @@ export async function recoverStore(store: SentinelStore, options: { intents: Int
     if (!w.pid) {
       // Journaled before spawn and never given its pid, so its coordinator died before it recorded the attempt.
       //
-      // What proves this worker harmless is not its absence but its authorization (supervisor.ts): it never
-      // received a start, because the start answers a hello read only after the attempt is in the ledger, and the
-      // coordinator that would have sent it is dead (we hold its store lock). Its stdin ends, and a conforming worker
-      // exits there; any worker has no attempt to publish under, and our epoch fences the old one.
+      // What proves this worker harmless is not its absence but its launch authorization (launch-gate.ts): a
+      // built-in worker process loads its adapter only after reading an authorization line, and the supervisor
+      // writes that line only after recording the pid. This record has no pid, so the line was never written; the
+      // coordinator that alone could write it is dead (we hold its store lock). Any process launched for this record,
+      // whenever it starts, blocks or exits in the gate and never runs adapter code.
       //
       // What the scan below proves is narrower, and differs by platform:
       //   macOS: libuv starts a child with posix_spawn, one system call that returns with the child already running
@@ -348,7 +351,7 @@ export async function recoverStore(store: SentinelStore, options: { intents: Int
       //     visible now by its token, and one scan is exact.
       //   Linux: libuv forks, then the child execs. A child still between the two carries its parent's argument
       //     list, not the token, and no scan, repeated or delayed, can find it or prove it will never exec. If it
-      //     does exec, the authorization above holds: it reads end of stream and exits.
+      //     does exec, the launch gate above holds it.
       // So the scan stops what it can find; the record is settled because the worker can have no effect, not
       // because no process could ever appear.
       const pids = processesCarrying(w.token);

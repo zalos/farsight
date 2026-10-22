@@ -58,6 +58,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/plan.js': ['node:crypto'],
   'execution/errors.js': ['@farsight/core/dist/strings-sentinel-execution.js'],
   'execution/isolation.js': ['node:crypto', 'node:fs', 'node:os', 'node:path'],
+  'execution/launch-gate.js': ['node:fs'],
   'execution/processes.js': ['node:child_process'],
   'execution/publication.js': ['node:fs'],
   'execution/recovery.js': ['node:fs', 'node:path'],
