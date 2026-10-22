@@ -1,54 +1,50 @@
 // The owner's scratch, inside the exact store it holds: `<store>/scratch/<epoch>/w-<random>/`, one lease per
 // operation. The capture's store boundary covers it, so nothing a run writes there is ever read back as source.
 //
-// A lease is created only from a store openStore() returned (a look-alike has no owner, so no lease), with the hold
-// checked before and after, every folder made one level at a time (0700, this user, not a link) and their identities
-// recorded privately. A copy of the lease object is not a lease.
+// A lease is created only from a store openStore() returned (a look-alike has no owner, so no lease). Each folder
+// is made one level at a time (0700, this user, not a link); before and after each one the hold and every folder
+// already recorded, from the store root down, are checked again, and the new folder must resolve to its own path.
+// A folder replaced or turned into a link on the way refuses the lease; nothing is returned. A copy of the lease
+// object is not a lease.
 //
-// Release removes the lease only when every consumer that could still use it is proven stopped by the existing
-// lifecycle records, never by a promise settling, a path or a name alone:
-//   - an attempt's work or prep folder: its attempt is this store's and this epoch's, ended in the ledger (the
-//     coordinator ends an attempt only after the supervisor reaped its worker, whose journal record is settled only
-//     after the process exited, and whose container intent is settled only after its removal was confirmed), and
-//     neither the worker journal, the intent journal nor the terminal-unknown journal still names it;
-//   - a container client configuration folder: every Docker client this lease's runner started has exited, and
-//     the lease saw every connection that made one;
-//   - anything else (a restore still present, a parser folder, an unknown name, a file): its consumers are not
-//     known, so the lease is retained.
-// Store-wide uncertainty that cannot be tied to this lease's attempts (an unreadable journal record, a
-// terminal-unknown entry naming no attempt) retains it too; it is never evidence that the lease is safe to remove.
+// Release removes only what the lease can tie to a consumer it watched stop, never by a name, a count or a ledger
+// state alone:
+//   - while any container client the lease's runner started is still running, nothing is removed;
+//   - a container client configuration folder goes only when it is exactly the folder (path and identity) the
+//     execution layer made for a client runner this lease wrapped, and every client of the lease has exited;
+//   - anything else in the lease (an attempt's work or prep folder, a restore, a parser folder, an unknown name, a
+//     file) keeps the whole lease. Their owners remove them when they stop (the supervisor its work folder, the
+//     coordinator its restore and prep); one left behind is evidence of a consumer this lease cannot prove stopped.
 //
-// Removal is itself bounded: a post-order walk of at most MAX_ENTRIES entries, MAX_DEPTH levels and MAX_MS, each
-// folder opened without following a link, its identity compared and its mode set through that descriptor, then
-// each entry unlinked and each folder removed with a non-recursive rmdir. Running out of budget or seeing an
-// identity change stops there and retains what is left; entries already removed stay removed and the result says
-// so. The descriptor checks keep a chmod from following a link that was observed in place; the later path-based
-// unlink and rmdir are not descriptor-relative, so a process running as the same account that swaps paths between
-// two checks is detected only when the swap is observed. That is the owner-only boundary of ADR 19, not a
-// filesystem confinement.
+// Release is bounded from its first read: entries visited (listing included), folder depth and wall time, with
+// listings read incrementally. Before every destructive step (each chmod, unlink and rmdir) the hold, every
+// recorded folder of the lease and the folder being changed are checked again; the first change seen stops the
+// walk, and what is left stays, reported as partial when something was already removed. A folder's mode is set
+// through a descriptor opened without following a link; unlink and rmdir are path-based. A process running as the
+// same account that swaps paths between two checks is therefore detected only when a check observes it: this is
+// the owner-only boundary of ADR 19, not a filesystem confinement.
 import { randomBytes } from 'node:crypto';
-import { closeSync, constants as FS, fchmodSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, rmdirSync, unlinkSync, type BigIntStats } from 'node:fs';
+import {
+  closeSync, constants as FS, fchmodSync, fstatSync, lstatSync, mkdirSync, openSync, opendirSync, realpathSync, rmdirSync, unlinkSync,
+  type BigIntStats, type Dir,
+} from 'node:fs';
 import { join } from 'node:path';
 import type { SentinelStore } from '../store/index.js';
 import { StoreError } from '../store/errors.js';
 import { boundOwner } from '../store/owner-binding.js';
 import { identityOf, STORE_FILE_NAMES, type FileIdentity } from '../store/paths.js';
-import type { DockerRunner } from '../execution/isolation.js';
-import { IntentFiles, UnknownCleanup, WorkerFiles } from '../execution/recovery.js';
-import { PREP_PREFIX } from '../execution/scratch.js';
-import { RESTORE_PREFIX } from '../execution/plan.js';
+import { clientConfigOf, type DockerRunner } from '../execution/isolation.js';
 
 const UID = typeof process.getuid === 'function' ? process.getuid() : undefined;
 const DIR_FLAGS = FS.O_RDONLY | (FS.O_DIRECTORY ?? 0) | (FS.O_NOFOLLOW ?? 0);
-/** Deletion budget: entries visited, folder depth below the lease, and wall time. */
+/** Release budget from its first read: entries visited (listings included), folder depth below the lease, wall time. */
 export const LEASE_LIMITS = Object.freeze({ maxEntries: 100_000, maxDepth: 256, maxMs: 30_000 });
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const CONFIG_PREFIX = 'docker-config-';
+type Limits = { readonly maxEntries: number; readonly maxDepth: number; readonly maxMs: number };
 
 export interface ScratchLease {
   /** The lease's folder: the scratch root its consumers are given. */
   readonly path: string;
-  /** Wraps a container client runner so the lease knows every client process it started has exited. */
+  /** Wraps a container client runner so the lease knows its clients, and the configuration folder a real one made. */
   readonly wrapRunner: (runner: DockerRunner) => DockerRunner;
 }
 
@@ -59,14 +55,16 @@ export type ScratchRelease =
   | { readonly removed: true }
   | { readonly removed: false; readonly reason: ScratchRetainReason; readonly partial: boolean; readonly lease: string };
 
+interface Link { readonly path: string; readonly identity: FileIdentity }
+
 interface LeaseState {
   readonly store: object;
   readonly epoch: string;
-  readonly storeRoot: string;
   /** store root → scratch → epoch → lease, each with the identity seen when it was made or found. */
-  readonly chain: readonly { readonly path: string; readonly identity: FileIdentity }[];
+  readonly chain: readonly Link[];
+  /** Client configuration folders inside this lease, by exact path, as the execution layer made them. */
+  readonly configs: Map<string, FileIdentity>;
   live: number;
-  connects: number;
   released: boolean;
 }
 
@@ -74,10 +72,13 @@ const leases = new WeakMap<ScratchLease, LeaseState>();
 
 const fail = (detail: Record<string, string>): never => { throw new StoreError('sentinel.store.scratchUnsafe', detail); };
 
-/** Creates one level (never parents) or accepts an existing private real folder; returns its identity. */
-function privateDir(path: string): FileIdentity {
-  try { mkdirSync(path, { mode: 0o700 }); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') fail({ path, reason: 'create' }); }
-  return checkedDir(path) ?? fail({ path, reason: 'not a private folder of this user' });
+function lstatOrUndefined(path: string): BigIntStats | undefined {
+  try { return lstatSync(path, { bigint: true }); } catch { return undefined; }
+}
+
+/** Every recorded folder is still a real folder with its recorded identity. */
+function chainIntact(chain: readonly Link[]): boolean {
+  return chain.every(link => { const st = lstatOrUndefined(link.path); return !!st && !st.isSymbolicLink() && st.isDirectory() && identityOf(st) === link.identity; });
 }
 
 /** The folder's identity when it is a real folder of this user closed to others, seen through one no-follow descriptor. */
@@ -93,33 +94,51 @@ function checkedDir(path: string): FileIdentity | undefined {
   } finally { closeSync(fd); }
 }
 
-function lstatOrUndefined(path: string): BigIntStats | undefined {
-  try { return lstatSync(path, { bigint: true }); } catch { return undefined; }
+/**
+ * Makes one folder under the recorded chain (or accepts an existing private one), checking the hold and the whole
+ * chain before and after, and that the new folder resolves to its own path (no ancestor became a link).
+ */
+function childDir(owner: { assertHeld(): void }, chain: readonly Link[], path: string, fresh: boolean): Link {
+  owner.assertHeld();
+  if (!chainIntact(chain)) fail({ path, reason: 'a folder above it changed' });
+  try { mkdirSync(path, { mode: 0o700 }); } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (fresh || code !== 'EEXIST') fail({ path, reason: code === 'EEXIST' ? 'exists' : 'create' });
+  }
+  owner.assertHeld();
+  if (!chainIntact(chain)) fail({ path, reason: 'a folder above it changed' });
+  let real: string;
+  try { real = realpathSync.native(path); } catch { return fail({ path, reason: 'unresolvable' }); }
+  if (real !== path) fail({ path, reason: 'not its own canonical path' });
+  const identity = checkedDir(path) ?? fail({ path, reason: 'not a private folder of this user' });
+  return Object.freeze({ path, identity });
 }
 
 /** Opens a fresh lease under the exact store this process holds. Refuses anything openStore() did not return. */
 export function openScratchLease(store: SentinelStore): ScratchLease {
   const owner = boundOwner(store);
   owner.assertHeld();
-  const scratch = join(owner.storePath, STORE_FILE_NAMES.scratch);
-  const scratchId = privateDir(scratch);
-  const epochDir = join(scratch, owner.epoch);
-  const epochId = privateDir(epochDir);
-  let path = '';
-  for (let i = 0; i < 8 && !path; i++) {
-    const candidate = join(epochDir, `w-${randomBytes(12).toString('hex')}`);
-    try { mkdirSync(candidate, { mode: 0o700 }); path = candidate; } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') fail({ path: candidate, reason: 'create' }); }
+  const root: Link = Object.freeze({ path: owner.storePath, identity: owner.rootIdentity });
+  const scratch = childDir(owner, [root], join(owner.storePath, STORE_FILE_NAMES.scratch), false);
+  const epoch = childDir(owner, [root, scratch], join(scratch.path, owner.epoch), false);
+  let leaf: Link | undefined;
+  for (let i = 0; i < 8 && !leaf; i++) {
+    try { leaf = childDir(owner, [root, scratch, epoch], join(epoch.path, `w-${randomBytes(12).toString('hex')}`), true); } catch (e) {
+      if (!(e instanceof StoreError && e.detail?.reason === 'exists')) throw e;
+    }
   }
-  if (!path) fail({ path: epochDir, reason: 'no fresh name' });
-  const leaseId = checkedDir(path) ?? fail({ path, reason: 'not a private folder of this user' });
+  if (!leaf) return fail({ path: epoch.path, reason: 'no fresh name' });
+  const leafPath = leaf.path;
+  const chain = Object.freeze([root, scratch, epoch, leaf]);
+  // The last check before the capability exists: the hold and every folder it names.
   owner.assertHeld();
-  const state: LeaseState = {
-    store, epoch: owner.epoch, storeRoot: owner.storePath, live: 0, connects: 0, released: false,
-    chain: Object.freeze([{ path: owner.storePath, identity: owner.rootIdentity }, { path: scratch, identity: scratchId },
-      { path: epochDir, identity: epochId }, { path, identity: leaseId }]),
-  };
+  if (!chainIntact(chain)) fail({ path: leafPath, reason: 'a folder of the lease changed' });
+  const state: LeaseState = { store, epoch: owner.epoch, chain, configs: new Map(), live: 0, released: false };
   const wrapRunner = (runner: DockerRunner): DockerRunner => {
-    state.connects++;
+    // Only the folder the execution layer itself made for this exact runner is ever associated, and only as a direct
+    // child of this lease; a caller's runner, or a folder elsewhere, associates nothing.
+    const config = clientConfigOf(runner);
+    if (config && config.path.startsWith(`${leafPath}/`) && !config.path.slice(leafPath.length + 1).includes('/')) state.configs.set(config.path, config.identity);
     return Object.freeze({
       run: async (args: readonly string[], signal?: AbortSignal) => {
         state.live++;
@@ -129,135 +148,111 @@ export function openScratchLease(store: SentinelStore): ScratchLease {
       runSync: (args: readonly string[]) => { state.live++; try { return runner.runSync(args); } finally { state.live--; } },
       start: (id: string) => {
         state.live++;
-        const proc = runner.start(id);
+        let proc: ReturnType<DockerRunner['start']>;
+        try { proc = runner.start(id); } catch (e) { state.live--; throw e; }
         void proc.exited.finally(() => { state.live--; });
         return proc;
       },
     });
   };
-  const lease: ScratchLease = Object.freeze({ path, wrapRunner });
+  const lease: ScratchLease = Object.freeze({ path: leafPath, wrapRunner });
   leases.set(lease, state);
   return lease;
 }
 
-/** Why a lease child may not be removed yet, or undefined when its consumers are proven stopped. */
-function childVerdict(store: SentinelStore, s: LeaseState, name: string, journals: Journals): ScratchRetainReason | undefined {
-  if (name.startsWith(CONFIG_PREFIX)) return s.live === 0 ? undefined : 'consumerNotStopped';
-  if (name.startsWith(RESTORE_PREFIX)) return 'consumerUnknown';
-  const attempt = attemptOf(name);
-  if (!attempt) return 'consumerUnknown';
-  const row = store.ledger.getAttempt(attempt);
-  if (!row || row.epoch !== s.epoch) return 'consumerUnknown';
-  if (row.state === 'running') return 'consumerNotStopped';
-  if (journals.attempts.has(attempt)) return 'consumerNotStopped';
-  return undefined;
+/** A caller's budget can only tighten the defaults; anything not a positive safe integer leaves the default. */
+function budgetOf(limits: Partial<Limits> | undefined): Limits {
+  const tight = (v: unknown, d: number) => (typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? Math.min(v, d) : d);
+  return { maxEntries: tight(limits?.maxEntries, LEASE_LIMITS.maxEntries), maxDepth: tight(limits?.maxDepth, LEASE_LIMITS.maxDepth), maxMs: tight(limits?.maxMs, LEASE_LIMITS.maxMs) };
 }
 
-/** The attempt a supervisor work folder (`<attempt>-<uuid>`) or a driver's prep folder (`prep.<attempt>.<uuid>`) is for. */
-export function attemptOf(name: string): string | undefined {
-  const cut = name.length - 37;
-  if (cut <= 0 || !UUID.test(name.slice(cut + 1))) return undefined;
-  if (name.startsWith(PREP_PREFIX)) return name[cut] === '.' ? name.slice(PREP_PREFIX.length, cut) || undefined : undefined;
-  return name[cut] === '-' ? name.slice(0, cut) : undefined;
-}
-
-interface Journals { readonly attempts: ReadonlySet<string>; readonly uncertain: boolean }
-
-/** Every attempt the store's lifecycle journals still hold open; `uncertain` when one cannot be tied to an attempt. */
-function readJournals(store: SentinelStore): Journals {
-  const attempts = new Set<string>();
-  const workers = new WorkerFiles(store.storePath).list();
-  const intents = new IntentFiles(store.storePath).list();
-  for (const w of workers.records) attempts.add(String(w.attempt));
-  for (const i of intents.records) attempts.add(String(i.attempt));
-  let uncertain = workers.unresolved.length > 0 || intents.unresolved.length > 0;
-  for (const name of new UnknownCleanup(store.storePath).list()) {
-    const m = /^workers\.(.+)\.json$/.exec(name);
-    if (m) attempts.add(m[1]!); else uncertain = true;
-  }
-  return { attempts, uncertain };
-}
-
-function chainIntact(s: LeaseState): boolean {
-  return s.chain.every(link => { const st = lstatOrUndefined(link.path); return !!st && !st.isSymbolicLink() && st.isDirectory() && identityOf(st) === link.identity; });
-}
+class Stop extends Error { constructor(readonly reason: ScratchRetainReason) { super(reason); } }
 
 /**
- * Removes the lease when every consumer is proven stopped (see the module comment); otherwise retains it and says
- * why. Never throws over a caller's own error; idempotent.
+ * Removes the lease when the module comment's conditions hold; otherwise retains it and says why. Never throws over
+ * a caller's own error; idempotent.
  */
-export function releaseScratchLease(store: SentinelStore, lease: ScratchLease, limits: Readonly<typeof LEASE_LIMITS> = LEASE_LIMITS): ScratchRelease {
+export function releaseScratchLease(store: SentinelStore, lease: ScratchLease, limits?: Partial<Limits>): ScratchRelease {
   const s = leases.get(lease);
   if (!s || s.store !== store) return { removed: false, reason: 'consumerUnknown', partial: false, lease: '' };
-  const name = `${s.epoch}/${lease.path.slice(lease.path.lastIndexOf('/') + 1)}`;
-  const retain = (reason: ScratchRetainReason, partial = false): ScratchRelease => Object.freeze({ removed: false, reason, partial, lease: name });
   if (s.released) return { removed: true };
-  try { store.assertHeld(); } catch { return retain('ownerNotHeld'); }
-  if (!chainIntact(s)) return retain('leaseChanged');
-  let names: string[];
-  try { names = readdirSync(lease.path); } catch { return retain('leaseChanged'); }
-  let journals: Journals;
-  try { journals = readJournals(store); } catch { return retain('storeUncertain'); }
-  const configs = names.filter(n => n.startsWith(CONFIG_PREFIX)).length;
-  if (configs > s.connects) return retain('consumerUnknown');
-  for (const child of names) {
-    const verdict = childVerdict(store, s, child, journals);
-    if (verdict) return retain(verdict);
-  }
-  if (journals.uncertain) return retain('storeUncertain');
-  const budget = { entries: 0, deadline: Date.now() + limits.maxMs, maxEntries: limits.maxEntries, maxDepth: limits.maxDepth };
-  const leaf = s.chain[s.chain.length - 1]!;
-  let removedAny = false;
+  const name = `${s.epoch}/${lease.path.slice(lease.path.lastIndexOf('/') + 1)}`;
+  let partial = false;
+  const retain = (reason: ScratchRetainReason): ScratchRelease => Object.freeze({ removed: false, reason, partial, lease: name });
+  const budget = budgetOf(limits);
+  const deadline = Date.now() + budget.maxMs;
+  let entries = 0;
+  const spend = () => { if (++entries > budget.maxEntries || Date.now() > deadline) throw new Stop('budgetExhausted'); };
+  // A client still running may be using anything in the lease, whatever the lease holds.
+  if (s.live > 0) return retain('consumerNotStopped');
+  const fence = (below: readonly Link[] = []) => {
+    if (s.live > 0) throw new Stop('consumerNotStopped');
+    try { store.assertHeld(); } catch { throw new Stop('ownerNotHeld'); }
+    if (!chainIntact([...s.chain, ...below])) throw new Stop('leaseChanged');
+    if (Date.now() > deadline) throw new Stop('budgetExhausted');
+  };
   try {
-    const outcome = removeTree(leaf.path, leaf.identity, 0, budget, () => { removedAny = true; }, () => { store.assertHeld(); return chainIntact(s); }, new Set(names));
-    if (outcome !== 'removed') return retain(outcome, removedAny);
-  } catch { return retain('removeFailed', removedAny); }
+    fence();
+    const leaf = s.chain[s.chain.length - 1]!;
+    // The lease's own listing, read incrementally within the budget: the first child the lease cannot tie to a
+    // stopped consumer keeps the whole lease, before anything is removed.
+    const children: Link[] = [];
+    eachEntry(leaf.path, entry => {
+      spend();
+      const path = join(leaf.path, entry);
+      const identity = s.configs.get(path);
+      const st = lstatOrUndefined(path);
+      if (!identity || !st || st.isSymbolicLink() || !st.isDirectory() || identityOf(st) !== identity) throw new Stop('consumerUnknown');
+      children.push(Object.freeze({ path, identity }));
+    });
+    for (const child of children) removeTree([child], budget, spend, fence, () => { partial = true; });
+    fence();
+    rmdirSync(leaf.path); // never recursive: anything that appeared since keeps the lease
+  } catch (e) {
+    if (e instanceof Stop) return retain(e.reason);
+    return retain('removeFailed');
+  }
   s.released = true;
   // The epoch folder goes too once empty; another lease of this epoch keeps it.
-  try { rmdirSync(s.chain[2]!.path); } catch { /* still in use, or not ours to judge */ }
+  try { store.assertHeld(); if (chainIntact(s.chain.slice(0, 3))) rmdirSync(s.chain[2]!.path); } catch { /* still in use, or not ours to judge */ }
   return { removed: true };
 }
 
-type TreeOutcome = 'removed' | 'budgetExhausted' | 'leaseChanged' | 'ownerNotHeld' | 'consumerUnknown';
+/** Each entry name of a folder, read incrementally through one directory handle. */
+function eachEntry(path: string, visit: (name: string) => void): void {
+  let dir: Dir;
+  try { dir = opendirSync(path, { bufferSize: 16 }); } catch { throw new Stop('leaseChanged'); }
+  try { for (let e = dir.readSync(); e; e = dir.readSync()) visit(e.name); } finally { dir.closeSync(); }
+}
 
-/** Post-order removal of one folder with its identity checked through a no-follow descriptor; bounded by `budget`. */
-function removeTree(path: string, identity: FileIdentity, depth: number, budget: { entries: number; deadline: number; readonly maxEntries: number; readonly maxDepth: number },
-  removed: () => void, fence: () => boolean, checked?: ReadonlySet<string>): TreeOutcome {
-  if (depth > budget.maxDepth || Date.now() > budget.deadline) return 'budgetExhausted';
+/**
+ * Post-order removal of the last folder of `below` (the folders from the lease down to it, each with its known
+ * identity), fenced before every destructive step against the hold, the lease and every one of those folders.
+ */
+function removeTree(below: readonly Link[], budget: Limits, spend: () => void, fence: (below?: readonly Link[]) => void, removed: () => void): void {
+  const dir = below[below.length - 1]!;
+  if (below.length > budget.maxDepth) throw new Stop('budgetExhausted');
+  fence(below);
   let fd: number;
-  try { fd = openSync(path, DIR_FLAGS); } catch { return 'leaseChanged'; }
+  try { fd = openSync(dir.path, DIR_FLAGS); } catch { throw new Stop('leaseChanged'); }
   try {
-    if (identityOf(fstatSync(fd, { bigint: true })) !== identity) return 'leaseChanged';
+    if (identityOf(fstatSync(fd, { bigint: true })) !== dir.identity) throw new Stop('leaseChanged');
+    fence(below);
     // Through the descriptor: a sealed folder is reopened without following a path that may have changed.
     fchmodSync(fd, 0o700);
   } finally { closeSync(fd); }
-  let names: string[];
-  try { names = readdirSync(path); } catch { return 'leaseChanged'; }
-  const again = lstatOrUndefined(path);
-  if (!again || again.isSymbolicLink() || identityOf(again) !== identity) return 'leaseChanged';
-  // At the lease's top level only the children whose consumers were just checked are removed: one that appeared
-  // since belongs to a consumer nobody checked, so the walk stops and the lease is kept.
-  if (checked && names.some(n => !checked.has(n))) return 'consumerUnknown';
-  for (const name of names) {
-    if (++budget.entries > budget.maxEntries || Date.now() > budget.deadline) return 'budgetExhausted';
-    const child = join(path, name);
-    const st = lstatOrUndefined(child);
-    if (!st) continue;
-    if (st.isDirectory()) {
-      const inner = removeTree(child, identityOf(st), depth + 1, budget, removed, fence);
-      if (inner !== 'removed') return inner;
-    } else {
-      // A link, file, socket or pipe: unlinked, never followed.
-      unlinkSync(child);
-      removed();
-    }
-  }
-  if (depth === 0) {
-    try { if (!fence()) return 'leaseChanged'; } catch { return 'ownerNotHeld'; }
-  }
-  const last = lstatOrUndefined(path);
-  if (!last || last.isSymbolicLink() || identityOf(last) !== identity) return 'leaseChanged';
-  rmdirSync(path);
+  eachEntry(dir.path, name => {
+    spend();
+    const path = join(dir.path, name);
+    const st = lstatOrUndefined(path);
+    if (!st) return;
+    if (st.isDirectory()) { removeTree([...below, Object.freeze({ path, identity: identityOf(st) })], budget, spend, fence, removed); return; }
+    // A link, file, socket or pipe: unlinked, never followed, and only after the fence holds.
+    fence(below);
+    unlinkSync(path);
+    removed();
+  });
+  fence(below);
+  rmdirSync(dir.path);
   removed();
-  return 'removed';
 }
