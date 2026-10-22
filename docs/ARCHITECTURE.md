@@ -340,3 +340,65 @@ before each listing and before and after each read, and LFS content only through
 root: these detect a swap between observations; they are not an OS-level audit of every read. The capture reason codes are catalog keys
 (`strings-sentinel-capture.ts`); the `source-capture` capability is `available-draft`. Not in this decision: parser
 artifacts and file outcomes (PR 05), framework versions from lockfiles (left empty), and any scan coverage.
+
+22. **Sentinel parses a snapshot with the public parser and checks its reads around it (2026-10-22).**
+
+`@farsight/sentinel` gains a public `./parser` export: `parseSnapshot(store, request)` and
+`retainSnapshotAnalysis(store, target, analysis)`, with the reconciliation pieces (`reconcileAnalysisInputs`,
+`joinFileOutcomes`, `fingerprintTree`, `assertParserInputSafe`) exported for review and tests. It is a separate subpath,
+not part of the root or `./snapshot`, because it loads `@farsight/code-parser`. That happens lazily, on the first parse:
+the TS/JS adapter has a native binding and the Java adapter a WASM grammar, and importing Sentinel must start nothing.
+
+The parser runs only over a private copy restored from the store (ADR 21), never over the original checkout. The copy
+is read-only and non-executable, which `assertParserInputSafe` re-checks before the parse. The parser is the public
+`createParser` with the built-in `tsJsAdapter` and `javaAdapter` only; custom adapters are not accepted. Selection
+must state `gitignore` and `testFiles`, and may name include/exclude globs. Application enrichment options
+(`externals`, `plumbing`, `setup`) are refused. Every `ParserLimits` field must be given, within the accepted
+ceilings (`PARSER_LIMIT_CEILINGS`: 120 s, 16 MiB per file, 512 MiB total, 200 000 files and entries). Glob lists
+and source lists are bounded and checked. A captured source id the parser cannot use as a node-name prefix (one
+holding `::`, a slash, a backslash or a line break) is refused as `sentinel.parse.sourceUnsupported` before anything
+is materialized. No application
+ingestion, configuration enrichment (API policy, guards, body readers, test reports), network or process is
+involved. A config file the parser lists while discovering is never read.
+
+The parser has no reader hook, so integrity is checked around it, as the plan requires:
+- The copy is fingerprinted before and after (paths, kinds, file bytes or sorted folder listings, modes), and any
+  difference fails.
+- Every recorded `analysis.inputs` row is reconciled by kind against the copy and the captured inventory:
+  - content against the captured bytes and content id;
+  - a folder against its sorted listing;
+  - metadata against its kind;
+  - a missing path must carry the parser's unavailable encoding, and be either verified absent from a fully listed
+    folder, recorded by capture without its bytes, below an unenumerated boundary, or inside a gitlink.
+- An escaping, absolute or unexplained input fails `sentinel.parse.integrity`, as does a file the parser reports that
+  the capture did not hold.
+
+These checks cover recorded reads and the copy; they are not an operating-system audit of native code.
+
+File outcomes are joined to every captured entry without changing the snapshot: parsed, parse-failed, parser-skipped,
+not-selected, not-captured, unknown-scope. Capture's disposition takes precedence. Unknown boundary descendants stay
+null, and diagnostic lines are kept as the parser gave them, never invented. The result's `counts` tally captured
+entries by class over one source. They are not coverage, and a surface that prints them wires them as `Counted` values
+(`docs/COUNTS.md`) when it exists. `parserComplete` is the parser's own selection flag, and `clearsChecks` is always
+`false`: syntax evidence never clears a check.
+
+Retention keeps the parser's **portable `farsight-analysis` artifact verbatim**, occurrences included. Sentinel does
+not fork its schema: `./parser` re-exports `@farsight/code-parser`'s own `AnalysisArtifact`, `InputFingerprint` and
+`ParserLimits`. The packer vendors the declarations of publishable workspace libraries (those with
+`publishConfig`, here `@farsight/graph` and `@farsight/code-parser`) under `dist/vendor/` and rewrites their imports,
+so a typed consumer sees every graph, resolution and occurrence field. Any other workspace package in a declaration
+is still refused. Its import scan ignores comments and string literals (`Pick<T, 'from' | 'to'>` is not an import).
+One staged publication of the parse stage's attempt stores, per source, three objects:
+- the artifact (`source`, since graph nodes can carry implementation previews);
+- an index (`sentinel-parser-index/draft-1`, `source-derived`) of node and call-site locations, citing captured content
+  ids with byte spans, bounded at 100 000 entries with the remainder counted. Files are read one at a time and
+  released. Line spans come from the raw bytes' newlines, which hold for any bytes. A character span is converted from
+  the parser's UTF-16 offsets only when the file round-trips as UTF-8, in one pass over the file. Otherwise, or when
+  an offset is out of range or splits a character, the location is kept without a byte span and with its reason
+  (`invalidUtf8`, `invalidLine`, `invalidSpan`, `splitSurrogate`). Nothing is estimated or clamped;
+- a result record (`sentinel-parser-result/draft-1`, `source-derived`) whose outputs link the artifact and index.
+
+An object over 16 MiB is refused before a byte is written; splitting a large analysis is left open. If a write or the
+publication fails, the call aborts its own stage while the store is still held, so a retry can register it again,
+and reports the original error. Without the owner, the stage stays pinned for recovery. Parser words are
+catalog keys (`strings-sentinel-parser.ts`).

@@ -114,6 +114,29 @@ gitlink commits, so a restore reproduces the tree. Parser artifacts, framework v
 part of a snapshot yet. A restore is never executable: files are 0400 (0600 when writable), whatever their mode was;
 the original mode stays provenance in the sidecar. A capture stores at most 512 MiB. See ADR 21 in `docs/ARCHITECTURE.md`.
 
+### Parser evidence (draft)
+
+```ts
+import { parseSnapshot, retainSnapshotAnalysis } from 'farsight-sentinel/parser';
+
+const analysis = await parseSnapshot(store, {
+  snapshotId, workDir: '/canonical/private/folder',
+  selection: { gitignore: true, testFiles: 'include' },            // stated in full; enrichment options are refused
+  limits: { maxFiles: 10_000, maxFileBytes: 4 << 20, maxTotalBytes: 128 << 20, maxEntries: 100_000, maxDurationMs: 60_000 },
+});
+analysis.sources[0].result.entries;   // every captured entry: parsed, parse-failed, parser-skipped, not-selected, not-captured, unknown-scope
+```
+
+`parseSnapshot` restores the snapshot from the store into a private, read-only, non-executable folder, never the original
+checkout, and runs the public `@farsight/code-parser` with its built-in TS/JS and Java adapters (loaded on first parse).
+The tree is fingerprinted before and after. Every recorded parser input is reconciled by kind: content against the
+captured bytes, folder listings, kinds, and missing paths. A missing path is verified absent, recorded by capture,
+under an unenumerated boundary or inside a gitlink. Anything unexplained fails with `sentinel.parse.integrity`. The
+complete analysis artifact (occurrences included), an index of node and call-site locations as captured content IDs
+with UTF-8 byte spans, and a result record can be published with `retainSnapshotAnalysis`. `parserComplete` is the
+parser's own selection flag, not coverage, and parser evidence clears no check (`clearsChecks: false`). No
+application ingestion, configuration enrichment, network or process is used.
+
 ## Versions and evolution
 
 - **Draft until review.** Every name ends in `/draft-1`. A name moves to `/v1` only after an independent
