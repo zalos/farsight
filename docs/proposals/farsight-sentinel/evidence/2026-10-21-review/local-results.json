@@ -1,0 +1,2017 @@
+{
+  "format": "sentinel-feasibility-results/draft-1",
+  "revision": "f61e745ce53a8a588f4d4ee47c6b6537e44cbec0",
+  "dirty": false,
+  "runtime": {
+    "node": "24.19.0",
+    "sqlite": "3.53.3",
+    "zstd": "1.5.7",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpus": 10,
+    "memoryBytes": 17179869184
+  },
+  "startedAt": "2026-10-22T00:49:00.843Z",
+  "manifest": {
+    "sha256": "700beb46b7b829d04d73cb7734aa25833c13efab17964aa4981e1d02a8cefac6"
+  },
+  "fixtures": {
+    "corpusSha256": "da437d64dc466cb42440bfd94c6c3ee3e100f014e98f7abbd565dcbe35d2badb",
+    "inventorySha256": "e3c2faabd73972ea09e19cd17f5bdcf69a6e03bfbc00b5b9d5ea3294bf047919"
+  },
+  "effects": {
+    "network": false,
+    "providerDisclosure": false,
+    "sourceExecution": false,
+    "acquisition": false,
+    "localReads": [
+      "pinned synthetic fixtures",
+      "compiled public parser",
+      "local runtime identity"
+    ],
+    "localWrites": [
+      "new output directory",
+      "owned temporary probe directories"
+    ],
+    "executedPrograms": [
+      "git (revision identity and isolated synthetic fixture index)",
+      "Node child processes (owned SQLite prototype only)"
+    ]
+  },
+  "harness": [
+    {
+      "path": "scripts/sentinel-feasibility.mjs",
+      "sha256": "9c67b06e239a902aa4b09c89d0d6ec2dfafd66a758088cf319ea310d71ccb3e3",
+      "bytes": 14534
+    },
+    {
+      "path": "scripts/sentinel-feasibility/parser.mjs",
+      "sha256": "34ef7dfe172ca728799197f9a9eda045b08a24e672859d047c2bd2b282ebb645",
+      "bytes": 17099
+    },
+    {
+      "path": "scripts/sentinel-feasibility/storage.mjs",
+      "sha256": "bdf453f5400169ebb1351954596b5f59225d26b71f02ab793ee20beace80bc26",
+      "bytes": 14961
+    },
+    {
+      "path": "scripts/sentinel-feasibility/storage-worker.mjs",
+      "sha256": "c3010751ef0aed50718655884aed7271aa0b90c09a4829b415f5b2a5ef6678ed",
+      "bytes": 1253
+    },
+    {
+      "path": "scripts/sentinel-feasibility/codec.mjs",
+      "sha256": "f7f5fa3086c484240e2f05a4b01f55ee91390a512b682f2e085a6f865a9deb9f",
+      "bytes": 8130
+    }
+  ],
+  "experiments": [
+    {
+      "experiment": "E1",
+      "status": "measured",
+      "checks": [
+        {
+          "id": "ts-injection-pair:declared-inventory",
+          "passed": true,
+          "evidence": [
+            {
+              "path": "src/query.ts",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "src/query.js",
+              "expected": "file",
+              "actual": "file"
+            }
+          ]
+        },
+        {
+          "id": "ts-injection-pair:source-unchanged",
+          "passed": true,
+          "evidence": {
+            "before": "f0ab876495428558d7686ff2c93dc2b4ea7119206f2746e0ea154a4305f4b878",
+            "after": "f0ab876495428558d7686ff2c93dc2b4ea7119206f2746e0ea154a4305f4b878"
+          }
+        },
+        {
+          "id": "ts-injection-pair:input-digests",
+          "passed": true,
+          "evidence": {
+            "checked": 9,
+            "mismatches": []
+          }
+        },
+        {
+          "id": "ts-injection-pair:candidate:src/query.js",
+          "passed": true,
+          "evidence": {
+            "path": "src/query.js",
+            "actual": {
+              "path": "src/query.js",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "6449c1ad02ece0219d21efcd5faa1bb82a594d9d0cf64cec214b6739d0f44ab8"
+            }
+          }
+        },
+        {
+          "id": "ts-injection-pair:candidate:src/query.ts",
+          "passed": true,
+          "evidence": {
+            "path": "src/query.ts",
+            "actual": {
+              "path": "src/query.ts",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "73757546e357ca04d86c10d772a42a4a0134e0c80aada107f1551b2d1c7df9dd"
+            }
+          }
+        },
+        {
+          "id": "js-cross-file-pair:declared-inventory",
+          "passed": true,
+          "evidence": [
+            {
+              "path": "src/entry.js",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "src/lookup.js",
+              "expected": "file",
+              "actual": "file"
+            }
+          ]
+        },
+        {
+          "id": "js-cross-file-pair:source-unchanged",
+          "passed": true,
+          "evidence": {
+            "before": "caf63744d57ed16b0bb9138f0a7c872fe264b85edc8ef420c56d0fbf93d9bc1d",
+            "after": "caf63744d57ed16b0bb9138f0a7c872fe264b85edc8ef420c56d0fbf93d9bc1d"
+          }
+        },
+        {
+          "id": "js-cross-file-pair:input-digests",
+          "passed": true,
+          "evidence": {
+            "checked": 13,
+            "mismatches": []
+          }
+        },
+        {
+          "id": "js-cross-file-pair:candidate:src/entry.js",
+          "passed": true,
+          "evidence": {
+            "path": "src/entry.js",
+            "actual": {
+              "path": "src/entry.js",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "5f2fff4ed24638d7ff2b81ba36b6d2b6ef208f2d5241212a85a026e8d5bd7d5f"
+            }
+          }
+        },
+        {
+          "id": "js-cross-file-pair:candidate:src/lookup.js",
+          "passed": true,
+          "evidence": {
+            "path": "src/lookup.js",
+            "actual": {
+              "path": "src/lookup.js",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "a4fbe3c3c34f643a77f1affb3c20bef7baaff81960d8f39294148bb14cbaadcc"
+            }
+          }
+        },
+        {
+          "id": "java-injection-pair:declared-inventory",
+          "passed": true,
+          "evidence": [
+            {
+              "path": "src/Queries.java",
+              "expected": "file",
+              "actual": "file"
+            }
+          ]
+        },
+        {
+          "id": "java-injection-pair:source-unchanged",
+          "passed": true,
+          "evidence": {
+            "before": "15cfc47af3c42e122e06c496d82f278b0bbd3786ef276309d2c53af85511a147",
+            "after": "15cfc47af3c42e122e06c496d82f278b0bbd3786ef276309d2c53af85511a147"
+          }
+        },
+        {
+          "id": "java-injection-pair:input-digests",
+          "passed": true,
+          "evidence": {
+            "checked": 7,
+            "mismatches": []
+          }
+        },
+        {
+          "id": "java-injection-pair:candidate:src/Queries.java",
+          "passed": true,
+          "evidence": {
+            "path": "src/Queries.java",
+            "actual": {
+              "path": "src/Queries.java",
+              "status": "analyzed",
+              "adapter": "java",
+              "digest": "ef8c1e185cc679b3dd8ae56bd03ad1a15a96f32dd6203e46012dce7e1a622fa1"
+            }
+          }
+        },
+        {
+          "id": "express-order:declared-inventory",
+          "passed": true,
+          "evidence": [
+            {
+              "path": "src/app.ts",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "package.json",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "package-lock.json",
+              "expected": "file",
+              "actual": "file"
+            }
+          ]
+        },
+        {
+          "id": "express-order:source-unchanged",
+          "passed": true,
+          "evidence": {
+            "before": "5f9d41cb3688ca8efa378f70061162dcad7e17c768eb170e5cfd6415a8b7799e",
+            "after": "5f9d41cb3688ca8efa378f70061162dcad7e17c768eb170e5cfd6415a8b7799e"
+          }
+        },
+        {
+          "id": "express-order:input-digests",
+          "passed": true,
+          "evidence": {
+            "checked": 15,
+            "mismatches": []
+          }
+        },
+        {
+          "id": "express-order:candidate:src/app.ts",
+          "passed": true,
+          "evidence": {
+            "path": "src/app.ts",
+            "actual": {
+              "path": "src/app.ts",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "f8eee11da82b08b769e09a81a3b9b2c2c863171cbff0b767f1e4e3a1ea2902a1"
+            }
+          }
+        },
+        {
+          "id": "nest-validation:declared-inventory",
+          "passed": true,
+          "evidence": [
+            {
+              "path": "src/controller.ts",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "src/bootstrap.ts",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "package.json",
+              "expected": "file",
+              "actual": "file"
+            }
+          ]
+        },
+        {
+          "id": "nest-validation:source-unchanged",
+          "passed": true,
+          "evidence": {
+            "before": "08a035b0e4cb8749ee58c17b3835429d9fed0058d1ac0680dfeedc3e70e0f43a",
+            "after": "08a035b0e4cb8749ee58c17b3835429d9fed0058d1ac0680dfeedc3e70e0f43a"
+          }
+        },
+        {
+          "id": "nest-validation:input-digests",
+          "passed": true,
+          "evidence": {
+            "checked": 28,
+            "mismatches": []
+          }
+        },
+        {
+          "id": "nest-validation:candidate:src/bootstrap.ts",
+          "passed": true,
+          "evidence": {
+            "path": "src/bootstrap.ts",
+            "actual": {
+              "path": "src/bootstrap.ts",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "eedf8c127d2acf6329fb2d88c045f865317af4fc7afa809e3c3d419808b62706"
+            }
+          }
+        },
+        {
+          "id": "nest-validation:candidate:src/controller.ts",
+          "passed": true,
+          "evidence": {
+            "path": "src/controller.ts",
+            "actual": {
+              "path": "src/controller.ts",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "30c505b26a6a31f24d50e7525f920dba07db003fa9f9688ceeb5a8cc85ec963d"
+            }
+          }
+        },
+        {
+          "id": "next-matcher:declared-inventory",
+          "passed": true,
+          "evidence": [
+            {
+              "path": "middleware.ts",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "app/private/route.ts",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "app/public/route.ts",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "package.json",
+              "expected": "file",
+              "actual": "file"
+            }
+          ]
+        },
+        {
+          "id": "next-matcher:source-unchanged",
+          "passed": true,
+          "evidence": {
+            "before": "d15af85023d0360f3c9e4ec7ae4890c511300c9c4a7e12156151aa452f551a13",
+            "after": "d15af85023d0360f3c9e4ec7ae4890c511300c9c4a7e12156151aa452f551a13"
+          }
+        },
+        {
+          "id": "next-matcher:input-digests",
+          "passed": true,
+          "evidence": {
+            "checked": 18,
+            "mismatches": []
+          }
+        },
+        {
+          "id": "next-matcher:candidate:app/private/route.ts",
+          "passed": true,
+          "evidence": {
+            "path": "app/private/route.ts",
+            "actual": {
+              "path": "app/private/route.ts",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "7fe8f7485d39d641e78d1f0b02010884a93afc47fb5b06d24247d374ac386ff4"
+            }
+          }
+        },
+        {
+          "id": "next-matcher:candidate:app/public/route.ts",
+          "passed": true,
+          "evidence": {
+            "path": "app/public/route.ts",
+            "actual": {
+              "path": "app/public/route.ts",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "1507f5fbd3ab6cedec5e8fe6fc213d8f51934785bdacdbe8ffcd8d5bbaa87da1"
+            }
+          }
+        },
+        {
+          "id": "next-matcher:candidate:middleware.ts",
+          "passed": true,
+          "evidence": {
+            "path": "middleware.ts",
+            "actual": {
+              "path": "middleware.ts",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "0475510e7d27f6d32db68ee3a55f126701c0e3f149fb9754303c22f62ef5876e"
+            }
+          }
+        },
+        {
+          "id": "spring-chains:declared-inventory",
+          "passed": true,
+          "evidence": [
+            {
+              "path": "src/Security.java",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "src/Routes.java",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "pom.xml",
+              "expected": "file",
+              "actual": "file"
+            }
+          ]
+        },
+        {
+          "id": "spring-chains:source-unchanged",
+          "passed": true,
+          "evidence": {
+            "before": "3c5ae433169c1b2543ec084cd10d6326ac8ae22f0008a8439683b1518e6856c1",
+            "after": "3c5ae433169c1b2543ec084cd10d6326ac8ae22f0008a8439683b1518e6856c1"
+          }
+        },
+        {
+          "id": "spring-chains:input-digests",
+          "passed": true,
+          "evidence": {
+            "checked": 10,
+            "mismatches": []
+          }
+        },
+        {
+          "id": "spring-chains:candidate:src/Routes.java",
+          "passed": true,
+          "evidence": {
+            "path": "src/Routes.java",
+            "actual": {
+              "path": "src/Routes.java",
+              "status": "analyzed",
+              "adapter": "java",
+              "digest": "337ceea5a248fd9c641893cf12b0b5628fc526ac33bb4f52ffc4b99f10a3b285"
+            }
+          }
+        },
+        {
+          "id": "spring-chains:candidate:src/Security.java",
+          "passed": true,
+          "evidence": {
+            "path": "src/Security.java",
+            "actual": {
+              "path": "src/Security.java",
+              "status": "analyzed",
+              "adapter": "java",
+              "digest": "096d0b608e4c3a0afce92dcb52a799909200ec2abf357072001f94170597564f"
+            }
+          }
+        },
+        {
+          "id": "hidden-security-config:declared-inventory",
+          "passed": true,
+          "evidence": [
+            {
+              "path": ".github/workflows/check.yml",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": ".env.fixture-input",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": ".npmrc",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "config/security.yaml",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "src/index.ts",
+              "expected": "file",
+              "actual": "file"
+            }
+          ]
+        },
+        {
+          "id": "hidden-security-config:source-unchanged",
+          "passed": true,
+          "evidence": {
+            "before": "5396d4b7f10e7916e2388ef2099a5579ffd960e351a43e6f3901496973afe449",
+            "after": "5396d4b7f10e7916e2388ef2099a5579ffd960e351a43e6f3901496973afe449"
+          }
+        },
+        {
+          "id": "hidden-security-config:input-digests",
+          "passed": true,
+          "evidence": {
+            "checked": 13,
+            "mismatches": []
+          }
+        },
+        {
+          "id": "hidden-security-config:candidate:src/index.ts",
+          "passed": true,
+          "evidence": {
+            "path": "src/index.ts",
+            "actual": {
+              "path": "src/index.ts",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "ddf066ee341c060cca67ed6faa462602690b490d98c6fecdf607c447754e14bb"
+            }
+          }
+        },
+        {
+          "id": "hidden-security-config:not-analyzed:.env.fixture-input",
+          "passed": true,
+          "evidence": {
+            "path": ".env.fixture-input",
+            "actual": null,
+            "reporting": "not-reported",
+            "diagnostics": [],
+            "diagnosticPresence": "absent",
+            "securityCoverage": "not-established",
+            "coverageDisposition": "unknown-gap"
+          }
+        },
+        {
+          "id": "hidden-security-config:not-analyzed:.github/workflows/check.yml",
+          "passed": true,
+          "evidence": {
+            "path": ".github/workflows/check.yml",
+            "actual": null,
+            "reporting": "not-reported",
+            "diagnostics": [],
+            "diagnosticPresence": "absent",
+            "securityCoverage": "not-established",
+            "coverageDisposition": "unknown-gap"
+          }
+        },
+        {
+          "id": "hidden-security-config:not-analyzed:.npmrc",
+          "passed": true,
+          "evidence": {
+            "path": ".npmrc",
+            "actual": null,
+            "reporting": "not-reported",
+            "diagnostics": [],
+            "diagnosticPresence": "absent",
+            "securityCoverage": "not-established",
+            "coverageDisposition": "unknown-gap"
+          }
+        },
+        {
+          "id": "hidden-security-config:not-analyzed:config/security.yaml",
+          "passed": true,
+          "evidence": {
+            "path": "config/security.yaml",
+            "actual": null,
+            "reporting": "not-reported",
+            "diagnostics": [],
+            "diagnosticPresence": "absent",
+            "securityCoverage": "not-established",
+            "coverageDisposition": "unknown-gap"
+          }
+        },
+        {
+          "id": "ignored-security-inputs:declared-inventory",
+          "passed": true,
+          "evidence": [
+            {
+              "path": ".gitignore",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "tracked-secret.ts",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "generated/auth.ts",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "nested/.gitignore",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "nested/keep.ts",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "nested/drop.ts",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "src/app.ts",
+              "expected": "file",
+              "actual": "file"
+            }
+          ]
+        },
+        {
+          "id": "ignored-security-inputs:source-unchanged",
+          "passed": true,
+          "evidence": {
+            "before": "f9fa61c3b6a9f418675f860409a8d9efc0a76d4c3aa090dbd2da9e19f6dcdcec",
+            "after": "f9fa61c3b6a9f418675f860409a8d9efc0a76d4c3aa090dbd2da9e19f6dcdcec"
+          }
+        },
+        {
+          "id": "ignored-security-inputs:input-digests",
+          "passed": true,
+          "evidence": {
+            "checked": 19,
+            "mismatches": []
+          }
+        },
+        {
+          "id": "ignored-security-inputs:candidate:nested/keep.ts",
+          "passed": true,
+          "evidence": {
+            "path": "nested/keep.ts",
+            "actual": {
+              "path": "nested/keep.ts",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "42730ed8581d2444fe30f19fe09830aef22ae7b2c7ad7fa1c63968167fc8db2b"
+            }
+          }
+        },
+        {
+          "id": "ignored-security-inputs:candidate:src/app.ts",
+          "passed": true,
+          "evidence": {
+            "path": "src/app.ts",
+            "actual": {
+              "path": "src/app.ts",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "d5684c6907babe396d7ea0bc5593187b77d43a6ab68f1289ce193c099d609501"
+            }
+          }
+        },
+        {
+          "id": "ignored-security-inputs:not-analyzed:.gitignore",
+          "passed": true,
+          "evidence": {
+            "path": ".gitignore",
+            "actual": null,
+            "reporting": "not-reported",
+            "diagnostics": [],
+            "diagnosticPresence": "absent",
+            "securityCoverage": "not-established",
+            "coverageDisposition": "unknown-gap"
+          }
+        },
+        {
+          "id": "ignored-security-inputs:not-analyzed:generated/auth.ts",
+          "passed": true,
+          "evidence": {
+            "path": "generated/auth.ts",
+            "actual": null,
+            "reporting": "not-reported",
+            "diagnostics": [],
+            "diagnosticPresence": "absent",
+            "securityCoverage": "not-established",
+            "coverageDisposition": "unknown-gap"
+          }
+        },
+        {
+          "id": "ignored-security-inputs:not-analyzed:nested/.gitignore",
+          "passed": true,
+          "evidence": {
+            "path": "nested/.gitignore",
+            "actual": null,
+            "reporting": "not-reported",
+            "diagnostics": [],
+            "diagnosticPresence": "absent",
+            "securityCoverage": "not-established",
+            "coverageDisposition": "unknown-gap"
+          }
+        },
+        {
+          "id": "ignored-security-inputs:not-analyzed:nested/drop.ts",
+          "passed": true,
+          "evidence": {
+            "path": "nested/drop.ts",
+            "actual": null,
+            "reporting": "not-reported",
+            "diagnostics": [],
+            "diagnosticPresence": "absent",
+            "securityCoverage": "not-established",
+            "coverageDisposition": "unknown-gap"
+          }
+        },
+        {
+          "id": "ignored-security-inputs:not-analyzed:tracked-secret.ts",
+          "passed": true,
+          "evidence": {
+            "path": "tracked-secret.ts",
+            "actual": null,
+            "reporting": "not-reported",
+            "diagnostics": [],
+            "diagnosticPresence": "absent",
+            "securityCoverage": "not-established",
+            "coverageDisposition": "unknown-gap"
+          }
+        },
+        {
+          "id": "ignored-security-inputs:tracked-inventory",
+          "passed": true,
+          "evidence": {
+            "expected": [
+              "tracked-secret.ts"
+            ],
+            "actual": [
+              "tracked-secret.ts"
+            ]
+          }
+        },
+        {
+          "id": "malformed-unsupported:declared-inventory",
+          "passed": true,
+          "evidence": [
+            {
+              "path": "src/broken.ts",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "src/unknown.rs",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "src/valid.ts",
+              "expected": "file",
+              "actual": "file"
+            }
+          ]
+        },
+        {
+          "id": "malformed-unsupported:source-unchanged",
+          "passed": true,
+          "evidence": {
+            "before": "0856a1f813a509d2b52bd1a968be40cb9d8e73dda5ec2506f5f4a5611ff344e1",
+            "after": "0856a1f813a509d2b52bd1a968be40cb9d8e73dda5ec2506f5f4a5611ff344e1"
+          }
+        },
+        {
+          "id": "malformed-unsupported:input-digests",
+          "passed": true,
+          "evidence": {
+            "checked": 10,
+            "mismatches": []
+          }
+        },
+        {
+          "id": "malformed-unsupported:candidate:src/broken.ts",
+          "passed": true,
+          "evidence": {
+            "path": "src/broken.ts",
+            "actual": {
+              "path": "src/broken.ts",
+              "status": "failed",
+              "adapter": "ts-js",
+              "reason": "parse-error",
+              "digest": "a3fb1bf706e21f00ff73d9143b409bc650fc8c59d1f35d5e1a9e349f7c2d721c"
+            }
+          }
+        },
+        {
+          "id": "malformed-unsupported:candidate:src/valid.ts",
+          "passed": true,
+          "evidence": {
+            "path": "src/valid.ts",
+            "actual": {
+              "path": "src/valid.ts",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "9ba8610918afca985b8d2181c26a95e09d11c200567a81bc19e6a127bb14d4ad"
+            }
+          }
+        },
+        {
+          "id": "malformed-unsupported:not-analyzed:src/unknown.rs",
+          "passed": true,
+          "evidence": {
+            "path": "src/unknown.rs",
+            "actual": {
+              "path": "src/unknown.rs",
+              "status": "skipped",
+              "reason": "unsupported"
+            },
+            "reporting": "reported-not-analyzed",
+            "diagnostics": [
+              {
+                "code": "unsupported",
+                "severity": "warning",
+                "path": "src/unknown.rs",
+                "message": "No registered adapter supports this source file."
+              }
+            ],
+            "diagnosticPresence": "present",
+            "securityCoverage": "not-established",
+            "coverageDisposition": "unknown-gap"
+          }
+        },
+        {
+          "id": "malformed-unsupported:malformed:src/broken.ts",
+          "passed": true,
+          "evidence": {
+            "file": {
+              "path": "src/broken.ts",
+              "status": "failed",
+              "adapter": "ts-js",
+              "reason": "parse-error",
+              "digest": "a3fb1bf706e21f00ff73d9143b409bc650fc8c59d1f35d5e1a9e349f7c2d721c"
+            },
+            "diagnostics": [
+              {
+                "code": "parse-error",
+                "severity": "error",
+                "path": "src/broken.ts",
+                "adapter": "ts-js",
+                "message": "Expected `}` but found `EOF`"
+              }
+            ]
+          }
+        },
+        {
+          "id": "malformed-unsupported:unsupported:src/unknown.rs",
+          "passed": true,
+          "evidence": {
+            "inventory": "unsupported",
+            "parser": {
+              "path": "src/unknown.rs",
+              "status": "skipped",
+              "reason": "unsupported"
+            }
+          }
+        },
+        {
+          "id": "oversized-input:declared-inventory",
+          "passed": true,
+          "evidence": [
+            {
+              "path": "src/small.ts",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "src/large.ts",
+              "expected": "file",
+              "actual": "file"
+            }
+          ]
+        },
+        {
+          "id": "oversized-input:source-unchanged",
+          "passed": true,
+          "evidence": {
+            "before": "dca450c702c782240686ea99e614855cce63d5d96211d836e461db526edae8ae",
+            "after": "dca450c702c782240686ea99e614855cce63d5d96211d836e461db526edae8ae"
+          }
+        },
+        {
+          "id": "oversized-input:input-digests",
+          "passed": true,
+          "evidence": {
+            "checked": 8,
+            "mismatches": []
+          }
+        },
+        {
+          "id": "oversized-input:candidate:src/small.ts",
+          "passed": true,
+          "evidence": {
+            "path": "src/small.ts",
+            "actual": {
+              "path": "src/small.ts",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "66a15e4578b88e15a135cf601517a89cffe77d7cfce7dcefb26107f99e143c6c"
+            }
+          }
+        },
+        {
+          "id": "oversized-input:not-analyzed:src/large.ts",
+          "passed": true,
+          "evidence": {
+            "path": "src/large.ts",
+            "actual": {
+              "path": "src/large.ts",
+              "status": "skipped",
+              "reason": "resource-limit"
+            },
+            "reporting": "reported-not-analyzed",
+            "diagnostics": [
+              {
+                "code": "resource-limit",
+                "severity": "warning",
+                "path": "src/large.ts",
+                "message": "Input exceeds maxFileBytes or maxTotalBytes."
+              }
+            ],
+            "diagnosticPresence": "present",
+            "securityCoverage": "not-established",
+            "coverageDisposition": "unknown-gap"
+          }
+        },
+        {
+          "id": "oversized-input:oversized:src/large.ts",
+          "passed": true,
+          "evidence": {
+            "file": {
+              "path": "src/large.ts",
+              "status": "skipped",
+              "reason": "resource-limit"
+            }
+          }
+        },
+        {
+          "id": "refused-inputs:declared-inventory",
+          "passed": true,
+          "evidence": [
+            {
+              "path": "src/valid.ts",
+              "expected": "file",
+              "actual": "file"
+            },
+            {
+              "path": "src/outside.ts",
+              "expected": "symlink",
+              "actual": "symlink"
+            },
+            {
+              "path": ".gitignore",
+              "expected": "missing",
+              "actual": "missing"
+            }
+          ]
+        },
+        {
+          "id": "refused-inputs:source-unchanged",
+          "passed": true,
+          "evidence": {
+            "before": "f73cc789ffaef1b033cd094fba1dd5721f51e938b779114009bc83f4880062a3",
+            "after": "f73cc789ffaef1b033cd094fba1dd5721f51e938b779114009bc83f4880062a3"
+          }
+        },
+        {
+          "id": "refused-inputs:input-digests",
+          "passed": true,
+          "evidence": {
+            "checked": 8,
+            "mismatches": []
+          }
+        },
+        {
+          "id": "refused-inputs:candidate:src/valid.ts",
+          "passed": true,
+          "evidence": {
+            "path": "src/valid.ts",
+            "actual": {
+              "path": "src/valid.ts",
+              "status": "analyzed",
+              "adapter": "ts-js",
+              "digest": "9ba8610918afca985b8d2181c26a95e09d11c200567a81bc19e6a127bb14d4ad"
+            }
+          }
+        },
+        {
+          "id": "refused-inputs:not-analyzed:.gitignore",
+          "passed": true,
+          "evidence": {
+            "path": ".gitignore",
+            "actual": null,
+            "reporting": "not-reported",
+            "diagnostics": [],
+            "diagnosticPresence": "absent",
+            "securityCoverage": "not-established",
+            "coverageDisposition": "unknown-gap"
+          }
+        },
+        {
+          "id": "refused-inputs:not-analyzed:src/outside.ts",
+          "passed": true,
+          "evidence": {
+            "path": "src/outside.ts",
+            "actual": {
+              "path": "src/outside.ts",
+              "status": "skipped",
+              "reason": "symlink"
+            },
+            "reporting": "reported-not-analyzed",
+            "diagnostics": [
+              {
+                "code": "read-boundary",
+                "severity": "warning",
+                "path": "src/outside.ts",
+                "reason": "symlink",
+                "message": "Symbolic links are not followed."
+              }
+            ],
+            "diagnosticPresence": "present",
+            "securityCoverage": "not-established",
+            "coverageDisposition": "unknown-gap"
+          }
+        },
+        {
+          "id": "ignored-complete-trap",
+          "passed": true,
+          "evidence": {
+            "complete": true,
+            "reported": [
+              "visible.ts"
+            ],
+            "independentInventory": [
+              "ignored.ts",
+              "visible.ts",
+              ".gitignore"
+            ]
+          }
+        },
+        {
+          "id": "gitignore-change",
+          "passed": true,
+          "evidence": {
+            "before": "a1283312ec81eaebdc4c95054a1b2233e62a0145135341356376fe6276875022",
+            "after": "6550e89a1c3dd6cb3774a761b8b90d7ae566efb86742195ace414cbd9395da15",
+            "ignoreBefore": [
+              {
+                "path": ".gitignore",
+                "kind": "content",
+                "digest": "58c22c3af80eb1e3f3d22a77a521b130f4d1ddedc843d277da41c2812483e41c"
+              },
+              {
+                "path": ".gitignore",
+                "kind": "metadata",
+                "digest": "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80"
+              }
+            ],
+            "ignoreAfter": [
+              {
+                "path": ".gitignore",
+                "kind": "content",
+                "digest": "4c7f312ace1f168dbb4e4c4fc8b8a3c8e0e7373917978b9b7236c2ed7c9c9e7e"
+              },
+              {
+                "path": ".gitignore",
+                "kind": "metadata",
+                "digest": "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80"
+              }
+            ]
+          }
+        },
+        {
+          "id": "symlink-refused",
+          "passed": true,
+          "evidence": [
+            {
+              "code": "read-boundary",
+              "severity": "warning",
+              "path": "refused.ts",
+              "reason": "symlink",
+              "message": "Symbolic links are not followed."
+            }
+          ]
+        },
+        {
+          "id": "oversize-not-clean",
+          "passed": true,
+          "evidence": [
+            {
+              "path": "huge.ts",
+              "status": "skipped",
+              "reason": "resource-limit"
+            }
+          ]
+        },
+        {
+          "id": "missing-recorded",
+          "passed": true,
+          "evidence": [
+            {
+              "path": "package.json",
+              "kind": "missing",
+              "digest": "ba691ba042bcedd9a61a36f5969026bc95859dccdc7e47f24e6bce35673baf2f"
+            },
+            {
+              "path": "pnpm-workspace.yaml",
+              "kind": "missing",
+              "digest": "ba691ba042bcedd9a61a36f5969026bc95859dccdc7e47f24e6bce35673baf2f"
+            },
+            {
+              "path": "refused.ts",
+              "kind": "missing",
+              "digest": "ba691ba042bcedd9a61a36f5969026bc95859dccdc7e47f24e6bce35673baf2f"
+            }
+          ]
+        }
+      ],
+      "metrics": {
+        "parserVersion": "0.3.1",
+        "adapters": [
+          {
+            "id": "ts-js",
+            "version": "0.3.1+oxc.0.138.0"
+          },
+          {
+            "id": "java",
+            "version": "0.3.1+tree-sitter-wasm.0.3.1"
+          }
+        ],
+        "corpusDigest": "da437d64dc466cb42440bfd94c6c3ee3e100f014e98f7abbd565dcbe35d2badb",
+        "cases": [
+          {
+            "id": "ts-injection-pair",
+            "wallMs": 79.724333,
+            "complete": true,
+            "inventoryFiles": 2,
+            "reportedFiles": 2,
+            "omittedFiles": [],
+            "diagnostics": []
+          },
+          {
+            "id": "js-cross-file-pair",
+            "wallMs": 3.2115420000000086,
+            "complete": true,
+            "inventoryFiles": 2,
+            "reportedFiles": 2,
+            "omittedFiles": [],
+            "diagnostics": []
+          },
+          {
+            "id": "java-injection-pair",
+            "wallMs": 13.837041999999997,
+            "complete": true,
+            "inventoryFiles": 1,
+            "reportedFiles": 1,
+            "omittedFiles": [],
+            "diagnostics": []
+          },
+          {
+            "id": "express-order",
+            "wallMs": 8.816416000000004,
+            "complete": true,
+            "inventoryFiles": 3,
+            "reportedFiles": 1,
+            "omittedFiles": [
+              "package-lock.json",
+              "package.json"
+            ],
+            "diagnostics": []
+          },
+          {
+            "id": "nest-validation",
+            "wallMs": 3.845874999999978,
+            "complete": true,
+            "inventoryFiles": 3,
+            "reportedFiles": 2,
+            "omittedFiles": [
+              "package.json"
+            ],
+            "diagnostics": []
+          },
+          {
+            "id": "next-matcher",
+            "wallMs": 3.4300839999999937,
+            "complete": true,
+            "inventoryFiles": 4,
+            "reportedFiles": 3,
+            "omittedFiles": [
+              "package.json"
+            ],
+            "diagnostics": []
+          },
+          {
+            "id": "spring-chains",
+            "wallMs": 4.626874999999984,
+            "complete": true,
+            "inventoryFiles": 3,
+            "reportedFiles": 2,
+            "omittedFiles": [
+              "pom.xml"
+            ],
+            "diagnostics": []
+          },
+          {
+            "id": "hidden-security-config",
+            "wallMs": 1.7303339999999992,
+            "complete": true,
+            "inventoryFiles": 5,
+            "reportedFiles": 1,
+            "omittedFiles": [
+              ".env.fixture-input",
+              ".github/workflows/check.yml",
+              ".npmrc",
+              "config/security.yaml"
+            ],
+            "diagnostics": []
+          },
+          {
+            "id": "ignored-security-inputs",
+            "wallMs": 5.4832079999999905,
+            "complete": true,
+            "inventoryFiles": 7,
+            "reportedFiles": 2,
+            "omittedFiles": [
+              ".gitignore",
+              "generated/auth.ts",
+              "nested/.gitignore",
+              "nested/drop.ts",
+              "tracked-secret.ts"
+            ],
+            "diagnostics": []
+          },
+          {
+            "id": "malformed-unsupported",
+            "wallMs": 1.4734170000000404,
+            "complete": false,
+            "inventoryFiles": 3,
+            "reportedFiles": 3,
+            "omittedFiles": [],
+            "diagnostics": [
+              {
+                "code": "parse-error",
+                "severity": "error",
+                "path": "src/broken.ts",
+                "adapter": "ts-js",
+                "message": "Expected `}` but found `EOF`"
+              },
+              {
+                "code": "unsupported",
+                "severity": "warning",
+                "path": "src/unknown.rs",
+                "message": "No registered adapter supports this source file."
+              }
+            ]
+          },
+          {
+            "id": "oversized-input",
+            "wallMs": 1.0951659999999492,
+            "complete": false,
+            "inventoryFiles": 2,
+            "reportedFiles": 2,
+            "omittedFiles": [],
+            "diagnostics": [
+              {
+                "code": "resource-limit",
+                "severity": "warning",
+                "path": "src/large.ts",
+                "message": "Input exceeds maxFileBytes or maxTotalBytes."
+              }
+            ]
+          },
+          {
+            "id": "refused-inputs",
+            "wallMs": 0.6782499999999914,
+            "complete": false,
+            "inventoryFiles": 1,
+            "reportedFiles": 2,
+            "omittedFiles": [],
+            "diagnostics": [
+              {
+                "code": "read-boundary",
+                "severity": "warning",
+                "path": "src/outside.ts",
+                "reason": "symlink",
+                "message": "Symbolic links are not followed."
+              }
+            ]
+          }
+        ],
+        "rssBytes": 146161664
+      },
+      "limitations": [
+        "Measurements concern public syntax artifacts, not security enforcement or application enrichment.",
+        "Ignored/unsupported/security configuration inventory is independent; analysis.complete is selected-parser completeness only.",
+        "No unreadable-directory claim: permission behavior depends on executing identity.",
+        "Label review and capability acceptance remain separate owner decisions.",
+        "Missing configuration probes record actual reads; an unvisited extends target is not claimed captured."
+      ],
+      "artifacts": [
+        {
+          "path": "ts-injection-pair.json",
+          "sha256": "6a270134c564b426125430b02b07f8d94bd4bfff3dee08452fdd281153427725",
+          "bytes": 12991
+        },
+        {
+          "path": "js-cross-file-pair.json",
+          "sha256": "1ccc263b8c8761ff284edc638a464a684a81365c7bc72f2c45a7604d823f5392",
+          "bytes": 14274
+        },
+        {
+          "path": "java-injection-pair.json",
+          "sha256": "2b0f1dff7d9ebd4ccd14dfba7b8c3ae761e14aa2d0f0c8ac517dad48bb418198",
+          "bytes": 8119
+        },
+        {
+          "path": "express-order.json",
+          "sha256": "bbb6413b274a105f19f5cf1a254a37e6ecf5e983a9656cdea578ca0abae13e4b",
+          "bytes": 15232
+        },
+        {
+          "path": "nest-validation.json",
+          "sha256": "ef5a935d66bff1a1e96703c056593ef46cadbccdaaf4ec0cbf939d490c6a8293",
+          "bytes": 26591
+        },
+        {
+          "path": "next-matcher.json",
+          "sha256": "eb770fa4b9f034065e77dddbe7e8f8ed4d0ea2b29a0048777e87f07d51778e91",
+          "bytes": 21221
+        },
+        {
+          "path": "spring-chains.json",
+          "sha256": "5467da8f03d3cf571b6d974958ff23a83c53eadc5266807970e968cfd7f82a43",
+          "bytes": 15048
+        },
+        {
+          "path": "hidden-security-config.json",
+          "sha256": "97d91a8a8a09ff852a8e770f38282bec4050354c88f389baf03cd3ceaec7b1ae",
+          "bytes": 12221
+        },
+        {
+          "path": "ignored-security-inputs.json",
+          "sha256": "5d015763a44cfffbaec5bb776aa766467e72248274e4cf7f33d3cdc96c7a6392",
+          "bytes": 16352
+        },
+        {
+          "path": "malformed-unsupported.json",
+          "sha256": "66444239640d2ad44cd9db430cc9c1455a8e3f4075140cc9b6fe4c2dcb248073",
+          "bytes": 9918
+        },
+        {
+          "path": "oversized-input.json",
+          "sha256": "aadfabc03eb960d26f1740553e4c64770a8458d4bb07b35d6ef05fe521097b5f",
+          "bytes": 7790
+        },
+        {
+          "path": "refused-inputs.json",
+          "sha256": "f4538542571b21d511e4e086ff31002746e58528efa8d7f7464549d42ea5d726",
+          "bytes": 7635
+        },
+        {
+          "path": "boundary-controls.json",
+          "sha256": "4a028d9fa669feb69c81accd0f8dc5b0d96168a6cdf6f537ffda0f9828fa606d",
+          "bytes": 14412
+        }
+      ],
+      "selected": true,
+      "decision": "deferred"
+    },
+    {
+      "experiment": "E2",
+      "status": "deferred",
+      "checks": [],
+      "metrics": {},
+      "limitations": [
+        "Not selected for this run."
+      ],
+      "artifacts": [],
+      "selected": false,
+      "decision": "deferred"
+    },
+    {
+      "experiment": "E3",
+      "status": "deferred",
+      "checks": [],
+      "metrics": {},
+      "limitations": [
+        "Not selected for this run."
+      ],
+      "artifacts": [],
+      "selected": false,
+      "decision": "deferred"
+    },
+    {
+      "experiment": "E4",
+      "status": "measured",
+      "checks": [
+        {
+          "id": "exclusive-contention",
+          "passed": true,
+          "evidence": {
+            "contenders": 2,
+            "outcomes": [
+              "acquired",
+              "busy"
+            ],
+            "journalMode": "delete",
+            "busyTimeoutMs": 250,
+            "phases": [
+              "held",
+              "begin"
+            ]
+          }
+        },
+        {
+          "id": "sigkill-takeover",
+          "passed": true,
+          "evidence": {
+            "signal": "SIGKILL",
+            "takeover": "acquired"
+          }
+        },
+        {
+          "id": "successor-excludes-contender",
+          "passed": true,
+          "evidence": {
+            "outcome": "busy"
+          }
+        },
+        {
+          "id": "release-takeover",
+          "passed": true,
+          "evidence": {
+            "release": "released",
+            "takeover": "acquired"
+          }
+        },
+        {
+          "id": "owner-interrupted-rollback",
+          "passed": true,
+          "evidence": {
+            "committedMarker": "committed",
+            "integrity": "ok"
+          }
+        },
+        {
+          "id": "cross-revision-publication-rejected",
+          "passed": true,
+          "evidence": {
+            "publicationsAfterRollback": 0
+          }
+        },
+        {
+          "id": "cross-revision-active-attempt-rejected",
+          "passed": true,
+          "evidence": {
+            "activeAttempt": "a1"
+          }
+        },
+        {
+          "id": "missing-work-revision-rejected",
+          "passed": true,
+          "evidence": {
+            "missingRevision": 3
+          }
+        },
+        {
+          "id": "duplicate-publication-rejected",
+          "passed": true,
+          "evidence": {
+            "rejectedAttempt": "a1-retry",
+            "integrityAfterRollback": "ok"
+          }
+        },
+        {
+          "id": "ledger-explicit-rollback",
+          "passed": true,
+          "evidence": {
+            "publications": 2
+          }
+        },
+        {
+          "id": "independent-revisions-reopen",
+          "passed": true,
+          "evidence": {
+            "publications": [
+              {
+                "work_id": "logical-work",
+                "work_revision": 1,
+                "attempt_id": "a1",
+                "result_digest": "0e07b0c38da4b48015345d4747bd30b6361f547ab97cfe97ef243f106d5b9b10"
+              },
+              {
+                "work_id": "logical-work",
+                "work_revision": 2,
+                "attempt_id": "a2",
+                "result_digest": "0b3dc1daea5f220a58046f00453fed2adbebebf90e2ed210ffd75bcb16b94c97"
+              }
+            ],
+            "journalMode": "wal",
+            "synchronous": 2
+          }
+        },
+        {
+          "id": "ledger-reopen-integrity",
+          "passed": true,
+          "evidence": {
+            "integrity": "ok",
+            "foreignKeyViolations": 0
+          }
+        }
+      ],
+      "metrics": {
+        "node": "24.19.0",
+        "sqlite": "3.53.3",
+        "platform": "darwin",
+        "arch": "arm64",
+        "childrenStarted": 5,
+        "childrenExited": 5,
+        "busyTimeoutMs": 250,
+        "sigkills": 1,
+        "constraintRollbacks": 4,
+        "publications": 2,
+        "elapsedMs": 900.5496660000001,
+        "cleanupSigkills": 0
+      },
+      "limitations": [
+        "Small local SQLite prototype; not the production coordinator or a supported-version policy.",
+        "Simultaneous starts use SQLite busy_timeout=250ms; zero-wait lock upgrades can reject both contenders. One SIGKILL and cooperative release on this host; other hosts and twenty kills per publication boundary remain unrun.",
+        "No container cleanup, power-loss durability, network filesystem, symlink/alias ownership or stale external-claim fencing validation.",
+        "Ledger constraints and owner locking are separate probes; no complete artifact publication/fsync protocol is implemented."
+      ],
+      "artifacts": [
+        {
+          "path": "E4-owner.sqlite",
+          "sha256": "27f48e9853723cc4080c7f21d9b956288538e5556116ca69c07edd5a9f0e0ccc",
+          "bytes": 8192
+        },
+        {
+          "path": "E4-ledger.sqlite",
+          "sha256": "6415cb1f5ea073212c806767d5c8b170a7b1eec60db1b06da0f73c352e86447b",
+          "bytes": 49152
+        }
+      ],
+      "selected": true,
+      "decision": "deferred"
+    },
+    {
+      "experiment": "E5",
+      "status": "deferred",
+      "checks": [],
+      "metrics": {},
+      "limitations": [
+        "Not selected for this run."
+      ],
+      "artifacts": [],
+      "selected": false,
+      "decision": "deferred"
+    },
+    {
+      "experiment": "E6",
+      "status": "deferred",
+      "checks": [],
+      "metrics": {},
+      "limitations": [
+        "Not selected for this run."
+      ],
+      "artifacts": [],
+      "selected": false,
+      "decision": "deferred"
+    },
+    {
+      "experiment": "E7",
+      "status": "deferred",
+      "checks": [],
+      "metrics": {},
+      "limitations": [
+        "Not selected for this run."
+      ],
+      "artifacts": [],
+      "selected": false,
+      "decision": "deferred"
+    },
+    {
+      "experiment": "E8",
+      "status": "measured",
+      "checks": [
+        {
+          "id": "binary-raw-roundtrip",
+          "passed": true,
+          "evidence": {
+            "inputBytes": 65536,
+            "rawSha256": "50fe5bdeb6860eb61b2ca486dadf5f31f9290b10965559b2d36891a827a98d57",
+            "outcome": "roundtrip",
+            "encoding": "raw bytes including invalid UTF-8"
+          }
+        },
+        {
+          "id": "binary-raw-corrupt-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "changed encoded byte; recomputed encoded hash; original raw hash"
+          }
+        },
+        {
+          "id": "binary-raw-truncated-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "half encoded bytes; recomputed encoded hash; original raw hash"
+          }
+        },
+        {
+          "id": "binary-raw-oversize-rejected",
+          "passed": true,
+          "evidence": {
+            "maxDecodedBytes": 32,
+            "inputBytes": 65536
+          }
+        },
+        {
+          "id": "binary-raw-encoded-hash-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "wrong compressed/object digest"
+          }
+        },
+        {
+          "id": "binary-gzip-roundtrip",
+          "passed": true,
+          "evidence": {
+            "inputBytes": 65536,
+            "rawSha256": "50fe5bdeb6860eb61b2ca486dadf5f31f9290b10965559b2d36891a827a98d57",
+            "outcome": "roundtrip",
+            "encoding": "raw bytes including invalid UTF-8"
+          }
+        },
+        {
+          "id": "binary-gzip-corrupt-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "changed encoded byte; recomputed encoded hash; original raw hash"
+          }
+        },
+        {
+          "id": "binary-gzip-truncated-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "half encoded bytes; recomputed encoded hash; original raw hash"
+          }
+        },
+        {
+          "id": "binary-gzip-oversize-rejected",
+          "passed": true,
+          "evidence": {
+            "maxDecodedBytes": 32,
+            "inputBytes": 65536
+          }
+        },
+        {
+          "id": "binary-gzip-encoded-hash-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "wrong compressed/object digest"
+          }
+        },
+        {
+          "id": "binary-zstd-roundtrip",
+          "passed": true,
+          "evidence": {
+            "inputBytes": 65536,
+            "rawSha256": "50fe5bdeb6860eb61b2ca486dadf5f31f9290b10965559b2d36891a827a98d57",
+            "outcome": "roundtrip",
+            "encoding": "raw bytes including invalid UTF-8"
+          }
+        },
+        {
+          "id": "binary-zstd-corrupt-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "changed encoded byte; recomputed encoded hash; original raw hash"
+          }
+        },
+        {
+          "id": "binary-zstd-truncated-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "half encoded bytes; recomputed encoded hash; original raw hash"
+          }
+        },
+        {
+          "id": "binary-zstd-oversize-rejected",
+          "passed": true,
+          "evidence": {
+            "maxDecodedBytes": 32,
+            "inputBytes": 65536
+          }
+        },
+        {
+          "id": "binary-zstd-encoded-hash-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "wrong compressed/object digest"
+          }
+        },
+        {
+          "id": "utf8-raw-roundtrip",
+          "passed": true,
+          "evidence": {
+            "inputBytes": 64512,
+            "rawSha256": "97a4b1f46921f10a6a630a41e0eb7385e22a771d0eb6f512752801695472dc69",
+            "outcome": "roundtrip",
+            "encoding": "UTF-8 with CRLF and multibyte characters"
+          }
+        },
+        {
+          "id": "utf8-raw-corrupt-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "changed encoded byte; recomputed encoded hash; original raw hash"
+          }
+        },
+        {
+          "id": "utf8-raw-truncated-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "half encoded bytes; recomputed encoded hash; original raw hash"
+          }
+        },
+        {
+          "id": "utf8-raw-oversize-rejected",
+          "passed": true,
+          "evidence": {
+            "maxDecodedBytes": 32,
+            "inputBytes": 64512
+          }
+        },
+        {
+          "id": "utf8-raw-encoded-hash-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "wrong compressed/object digest"
+          }
+        },
+        {
+          "id": "utf8-gzip-roundtrip",
+          "passed": true,
+          "evidence": {
+            "inputBytes": 64512,
+            "rawSha256": "97a4b1f46921f10a6a630a41e0eb7385e22a771d0eb6f512752801695472dc69",
+            "outcome": "roundtrip",
+            "encoding": "UTF-8 with CRLF and multibyte characters"
+          }
+        },
+        {
+          "id": "utf8-gzip-corrupt-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "changed encoded byte; recomputed encoded hash; original raw hash"
+          }
+        },
+        {
+          "id": "utf8-gzip-truncated-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "half encoded bytes; recomputed encoded hash; original raw hash"
+          }
+        },
+        {
+          "id": "utf8-gzip-oversize-rejected",
+          "passed": true,
+          "evidence": {
+            "maxDecodedBytes": 32,
+            "inputBytes": 64512
+          }
+        },
+        {
+          "id": "utf8-gzip-encoded-hash-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "wrong compressed/object digest"
+          }
+        },
+        {
+          "id": "utf8-zstd-roundtrip",
+          "passed": true,
+          "evidence": {
+            "inputBytes": 64512,
+            "rawSha256": "97a4b1f46921f10a6a630a41e0eb7385e22a771d0eb6f512752801695472dc69",
+            "outcome": "roundtrip",
+            "encoding": "UTF-8 with CRLF and multibyte characters"
+          }
+        },
+        {
+          "id": "utf8-zstd-corrupt-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "changed encoded byte; recomputed encoded hash; original raw hash"
+          }
+        },
+        {
+          "id": "utf8-zstd-truncated-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "half encoded bytes; recomputed encoded hash; original raw hash"
+          }
+        },
+        {
+          "id": "utf8-zstd-oversize-rejected",
+          "passed": true,
+          "evidence": {
+            "maxDecodedBytes": 32,
+            "inputBytes": 64512
+          }
+        },
+        {
+          "id": "utf8-zstd-encoded-hash-rejected",
+          "passed": true,
+          "evidence": {
+            "control": "wrong compressed/object digest"
+          }
+        }
+      ],
+      "metrics": {
+        "node": "24.19.0",
+        "zlib": "1.3.2.1-motley-3246f1b",
+        "zstd": "1.5.7",
+        "platform": "darwin",
+        "arch": "arm64",
+        "hardware": {
+          "osRelease": "27.0.0",
+          "cpuModel": "Apple M4",
+          "logicalCpus": 10,
+          "totalMemoryBytes": 17179869184
+        },
+        "maxDecodedBytes": 1048576,
+        "encodedLimitBytes": 2097152,
+        "zstdAvailable": true,
+        "trialsPerInputCodec": 1,
+        "codecOptions": {
+          "raw": "identity",
+          "gzip": {
+            "level": 6
+          },
+          "zstd": "runtime default"
+        },
+        "measurements": [
+          {
+            "input": "binary",
+            "codec": "raw",
+            "inputBytes": 65536,
+            "rawSha256": "50fe5bdeb6860eb61b2ca486dadf5f31f9290b10965559b2d36891a827a98d57",
+            "encodedBytes": 65536,
+            "encodedSha256": "50fe5bdeb6860eb61b2ca486dadf5f31f9290b10965559b2d36891a827a98d57",
+            "compressionMs": 0.044417000000066764,
+            "decodeMs": 0.2988329999998314,
+            "cpuUserMicros": 335,
+            "cpuSystemMicros": 30,
+            "rssBeforeBytes": 86933504,
+            "rssAfterBytes": 87097344,
+            "maxRssBeforeKiB": 144128,
+            "maxRssAfterKiB": 144128,
+            "decodeOutcome": "roundtrip"
+          },
+          {
+            "input": "binary",
+            "codec": "gzip",
+            "inputBytes": 65536,
+            "rawSha256": "50fe5bdeb6860eb61b2ca486dadf5f31f9290b10965559b2d36891a827a98d57",
+            "encodedBytes": 65576,
+            "encodedSha256": "b5fd2f6dff698e9e3e7c8affa00cb47eb3a692732b8a933d22eb9cb7ba00bd82",
+            "compressionMs": 2.711999999999989,
+            "decodeMs": 0.4469169999999849,
+            "cpuUserMicros": 2270,
+            "cpuSystemMicros": 333,
+            "rssBeforeBytes": 87261184,
+            "rssAfterBytes": 87785472,
+            "maxRssBeforeKiB": 144128,
+            "maxRssAfterKiB": 144128,
+            "decodeOutcome": "roundtrip"
+          },
+          {
+            "input": "binary",
+            "codec": "zstd",
+            "inputBytes": 65536,
+            "rawSha256": "50fe5bdeb6860eb61b2ca486dadf5f31f9290b10965559b2d36891a827a98d57",
+            "encodedBytes": 65546,
+            "encodedSha256": "33353aa8f8f3df5a61e9324062297129cb03e8ec386834a2d1cfae5a18f95dbc",
+            "compressionMs": 1.4588329999999132,
+            "decodeMs": 0.3370829999998932,
+            "cpuUserMicros": 814,
+            "cpuSystemMicros": 530,
+            "rssBeforeBytes": 88129536,
+            "rssAfterBytes": 89063424,
+            "maxRssBeforeKiB": 144128,
+            "maxRssAfterKiB": 144128,
+            "decodeOutcome": "roundtrip"
+          },
+          {
+            "input": "utf8",
+            "codec": "raw",
+            "inputBytes": 64512,
+            "rawSha256": "97a4b1f46921f10a6a630a41e0eb7385e22a771d0eb6f512752801695472dc69",
+            "encodedBytes": 64512,
+            "encodedSha256": "97a4b1f46921f10a6a630a41e0eb7385e22a771d0eb6f512752801695472dc69",
+            "compressionMs": 0.007916999999906693,
+            "decodeMs": 0.09325000000012551,
+            "cpuUserMicros": 101,
+            "cpuSystemMicros": 3,
+            "rssBeforeBytes": 89194496,
+            "rssAfterBytes": 89194496,
+            "maxRssBeforeKiB": 144128,
+            "maxRssAfterKiB": 144128,
+            "decodeOutcome": "roundtrip"
+          },
+          {
+            "input": "utf8",
+            "codec": "gzip",
+            "inputBytes": 64512,
+            "rawSha256": "97a4b1f46921f10a6a630a41e0eb7385e22a771d0eb6f512752801695472dc69",
+            "encodedBytes": 300,
+            "encodedSha256": "9fc22e5f542f47cf9d027fc26cc2da801498695e0b68a0ef2acd0c4bf4e3daf0",
+            "compressionMs": 0.22366600000009385,
+            "decodeMs": 0.11349999999993088,
+            "cpuUserMicros": 307,
+            "cpuSystemMicros": 58,
+            "rssBeforeBytes": 89243648,
+            "rssAfterBytes": 89604096,
+            "maxRssBeforeKiB": 144128,
+            "maxRssAfterKiB": 144128,
+            "decodeOutcome": "roundtrip"
+          },
+          {
+            "input": "utf8",
+            "codec": "zstd",
+            "inputBytes": 64512,
+            "rawSha256": "97a4b1f46921f10a6a630a41e0eb7385e22a771d0eb6f512752801695472dc69",
+            "encodedBytes": 83,
+            "encodedSha256": "5f01a9b732233f402c7ae182255ab707bc3d91a4c30b96d354b12fa48c897a16",
+            "compressionMs": 0.170708999999988,
+            "decodeMs": 0.16370800000004238,
+            "cpuUserMicros": 203,
+            "cpuSystemMicros": 127,
+            "rssBeforeBytes": 89653248,
+            "rssAfterBytes": 90456064,
+            "maxRssBeforeKiB": 144128,
+            "maxRssAfterKiB": 144128,
+            "decodeOutcome": "roundtrip"
+          }
+        ]
+      },
+      "limitations": [
+        "Two fixed synthetic objects and one synchronous trial per codec; no representative corpus or performance ranking. Decode timing includes digest verification.",
+        "RSS before/after is a process snapshot. maxRSS is the process lifetime high-water mark in KiB, not a per-codec peak or allocation attribution.",
+        "No provider calls, token/cost observations, scanner limits, admission defaults, retention defaults or /graph payload measurement.",
+        "Experimental built-in zstd availability on this runtime does not establish cross-host portability or select a production codec.",
+        "Individual object bounds/hashes do not validate archive paths, symlinks, object count or a full import protocol."
+      ],
+      "artifacts": [
+        {
+          "path": "E8-binary.raw",
+          "sha256": "50fe5bdeb6860eb61b2ca486dadf5f31f9290b10965559b2d36891a827a98d57",
+          "bytes": 65536
+        },
+        {
+          "path": "E8-binary.gzip",
+          "sha256": "b5fd2f6dff698e9e3e7c8affa00cb47eb3a692732b8a933d22eb9cb7ba00bd82",
+          "bytes": 65576
+        },
+        {
+          "path": "E8-binary.zstd",
+          "sha256": "33353aa8f8f3df5a61e9324062297129cb03e8ec386834a2d1cfae5a18f95dbc",
+          "bytes": 65546
+        },
+        {
+          "path": "E8-utf8.raw",
+          "sha256": "97a4b1f46921f10a6a630a41e0eb7385e22a771d0eb6f512752801695472dc69",
+          "bytes": 64512
+        },
+        {
+          "path": "E8-utf8.gzip",
+          "sha256": "9fc22e5f542f47cf9d027fc26cc2da801498695e0b68a0ef2acd0c4bf4e3daf0",
+          "bytes": 300
+        },
+        {
+          "path": "E8-utf8.zstd",
+          "sha256": "5f01a9b732233f402c7ae182255ab707bc3d91a4c30b96d354b12fa48c897a16",
+          "bytes": 83
+        }
+      ],
+      "selected": true,
+      "decision": "deferred"
+    }
+  ],
+  "endedAt": "2026-10-22T00:49:02.050Z"
+}

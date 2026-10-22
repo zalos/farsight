@@ -139,3 +139,45 @@ measurement false-success conditions and inaccurate cleanup/error classification
 performed actual container trials and retained the initial failed trial. No parser/core/production-store code
 changed, so no application real-ingest before/after claim is made. The primary checkout was neither built nor
 tested, and its existing editor-settings change was preserved.
+
+## Review follow-up measurements — 2026-10-21
+
+The [follow-up index](evidence/2026-10-21-review/index.json) retains new measurements without replacing
+the earlier evidence. Platform preflight now refuses unsupported or unknown host, Docker server and image
+architectures before output/container creation. Network denial requires inspected `none` plus Linux
+`OSError`/`ENETUNREACH` (101); a timeout or refused connection cannot pass. Independently authored inclusive
+source spans replace declaration-pattern guesses for the six expected symbols, and unattributed findings
+fail the paired comparison. The source hashes and original labels remain unchanged.
+
+Parser omission checks now retain whether a path was unreported or reported without analysis, diagnostic
+presence, and an explicit unknown security-coverage gap. Matching an expected omission is not evidence of
+coverage. Unexpected probe failures retain bounded, scrubbed name/code/message fields without stacks.
+
+The [local rerun](evidence/2026-10-21-review/local-results.json) at clean revision `f61e745` again passed
+78 E1, 12 E4 and 30 E8 controls. Its [synthetic archive](evidence/2026-10-21-review/local-artifacts.tgz)
+contains the stage records and 21 hash-verified artifacts, excluding materialized source/work directories.
+[Compiled parser identities](evidence/2026-10-21-review/compiled-parser-files.json) match the earlier
+fresh build; these changes do not modify production parser code or establish a full dependency closure.
+
+The [failed noexec trial](evidence/2026-10-21-review/scanners-noexec-failed.json) at `85aeda1` is retained.
+Semgrep passed its four scenarios with non-executable temporary storage; Opengrep's version command exited
+2 with `Error, couldn't launch child (exec): Permission denied`. All five created containers were removed.
+The internal failing path/mechanism is unverified. The pinned Opengrep candidate therefore has an explicit,
+fixed executable-tmpfs exception; Semgrep retains `noexec`. The preview and result disclose this weaker
+control. There is no automatic retry or host fallback, and this is not a production isolation decision.
+
+The [final scanner rerun](evidence/2026-10-21-review/scanner-results.json) at clean revision `b94c7e4`
+passed 66 scenario controls and four run controls across nine trials. Host/server/image platforms are recorded
+as ARM64, and inspected tmpfs flags confirm the candidate-specific policies. Both scanners again found all
+three positive symbols and no safe siblings; oversized and missing-rule behavior is unchanged. The socket
+returned `OSError` 101, all seven input identities stayed unchanged, and all nine owned containers were removed.
+These results retain all earlier capability limitations and leave the full PR 01 gate open.
+
+Follow-up validation passed the build, package/e2e type checks, 1,615 package tests (two expected live
+skips), 79 script tests, string lint, Echo package smoke, 345 browser/MCP tests and 11 small performance
+checks. All used isolated worktrees. The final independent Claude CLI source review reported no remaining
+actionable findings; it did not execute tests or recheck the six literal fixture spans. The lead checked
+those spans against the source and ran the measurements above. Evidence hashes, local links, secret scans
+including extracted artifacts, commit/title lint and whitespace checks passed. Original review files and
+earlier evidence remain unchanged. The dependency install refreshed shared Git hook metadata only; the
+primary checkout's source/build/test outputs and existing editor-settings edit were preserved.

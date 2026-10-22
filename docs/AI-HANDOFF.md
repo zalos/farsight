@@ -43,6 +43,21 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 ## Sentinel PR 01 first implementation slice — 2026-10-21
 
+PR #132 review follow-up on `codex/sentinel-feasibility` tightens platform refusal, network-denial evidence
+and symbol attribution, makes silent parser omissions explicit unknown coverage gaps, and retains scrubbed
+probe exceptions. Two SOL lanes implemented the fixes; the lead reviewed and reran actual measurements.
+The [follow-up evidence](proposals/farsight-sentinel/evidence/2026-10-21-review/index.json) preserves the
+earlier records. Local E1/E4/E8 again passed 78/12/30 controls. The final scanner rerun passed 66 scenario
+and four run controls with all nine containers removed. A retained failed trial shows the pinned Opengrep
+binary cannot launch its version command with `noexec`; only that candidate has a fixed `exec` exception,
+disclosed in preview/results. Semgrep retains `noexec`, and neither has a host fallback. This is a measured
+experiment limitation, not accepted production isolation. Complete PR 01 acceptance remains open.
+Follow-up validation passed build/type checks, 1,615 package tests (two expected live skips), 79 script
+tests, string lint, Echo package smoke, 345 browser/MCP tests and 11 small perf checks. Claude CLI's final
+source review reported no remaining actionable findings; the lead verified literal fixture spans and
+executed measurements. Original review files and earlier evidence are unchanged. Isolated dependency
+installation refreshed shared Git hook metadata but did not build or test the primary checkout.
+
 PR #131 merged at `0cb2d34`. Branch `codex/sentinel-feasibility` adds inert reviewed fixtures, draft
 manifest/effect preview, bounded parser/SQLite/codec probes and explicit container-only scanner trials.
 The [results and decision record](proposals/farsight-sentinel/feasibility-results.md) links retained synthetic
