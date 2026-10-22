@@ -179,8 +179,12 @@ export async function analyzeNext(input: NextPackInput): Promise<NextPackResult>
     const hasUnder = (dir: string) => [...recorded].some(p => p.startsWith(dir + '/')) || boundaries.some(b => b.relativePath === dir);
     const routerBase = ['app', 'pages'].some(d => hasUnder(join(projectDir, d))) ? projectDir
       : ['app', 'pages'].some(d => hasUnder(join(join(projectDir, 'src'), d))) ? join(projectDir, 'src') : null;
-    const versions = await resolveVersions({ projectDir, files, recorded, read, packageJson: pkg });
-    const supported = PACKAGES.every(p => versions[p].state === 'resolved' && (versions[p] as { version: string }).version === NEXT_SUPPORT.versions[p]);
+    const versions = await resolveVersions({ projectDir, files, recorded, read, packageJson: pkg, pins: NEXT_SUPPORT.packages });
+    // Supported means the exact pinned packages: their versions and their registry content identity.
+    const supported = PACKAGES.every(p => {
+      const v = versions[p];
+      return v.state === 'resolved' && v.version === NEXT_SUPPORT.packages[p].version && v.integrity === NEXT_SUPPORT.packages[p].integrity;
+    });
     const nextVersion = versions.next.state === 'resolved' ? versions.next.version : null;
 
     // Unlisted folders that could hold the router, the middleware or routes.

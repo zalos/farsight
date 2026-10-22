@@ -11,15 +11,11 @@ import { parseSnapshot } from '../dist/snapshot/parser.js';
 import { validateEnvelope } from '../dist/index.js';
 import { analyzeNext, NextPackError } from '../dist/frameworks/next/index.js';
 import { commitRepo, needsStore, openCaptureStore, scratch, unlock } from './snapshot-helpers.ts';
+import { VERSIONS, integrityOf, npmLock, pnpmLock, registryEntry } from './next-helpers.ts';
 
 const LIMITS = { maxFiles: 500, maxFileBytes: 256 * 1024, maxTotalBytes: 8 * 1024 * 1024, maxEntries: 20_000, maxDurationMs: 60_000 };
 const SELECT = { gitignore: true, testFiles: 'include' as const };
-const VERSIONS = { next: '14.2.25', react: '18.3.1', 'react-dom': '18.3.1' };
-
-const lock = (v: Record<string, string> = VERSIONS) => JSON.stringify({
-  name: 'next-fixture', version: '0.0.0', lockfileVersion: 3, requires: true,
-  packages: { '': { name: 'next-fixture', version: '0.0.0', dependencies: v }, ...Object.fromEntries(Object.entries(v).map(([k, ver]) => [`node_modules/${k}`, { version: ver }])) },
-}, null, 2) + '\n';
+const lock = (v: Record<string, string> = VERSIONS) => npmLock(v);
 const route = (name: string) => `// Synthetic Sentinel PR 14 fixture route.\nexport async function GET() {\n  return Response.json({ reached: '${name}' });\n}\n`;
 const page = (name: string) => `// Synthetic Sentinel PR 14 fixture page.\nexport default function Page() {\n  return <main>${name}</main>;\n}\n`;
 const MATCHER = "['/api/dashboard/:path*']";
@@ -199,6 +195,21 @@ test('a dynamic matcher, another version, a missing lockfile or a non-empty next
   const stale = await analyzed(t, { ...APP, 'package.json': JSON.stringify({ name: 'next-fixture', dependencies: { ...VERSIONS, next: '14.2.20' } }) });
   assert.deepEqual(reasonOf(stale.result), ['unknown sentinel.next.reason.versionUnknown']);
 
+  // Review regressions over real captures: a literal null lockfile, and a local tarball claiming the supported version.
+  const nullLock = await analyzed(t, { ...APP, 'package-lock.json': 'null\n' });
+  assert.deepEqual(reasonOf(nullLock.result), ['unknown sentinel.next.reason.versionUnknown']);
+  assert.equal((nullLock.result.projects[0]!.versions.next as any).reason, 'lockfile-invalid');
+  const local = await analyzed(t, { ...APP,
+    'package.json': JSON.stringify({ name: 'next-fixture', dependencies: { ...VERSIONS, next: 'file:vendor/next-custom.tgz' } }),
+    'package-lock.json': npmLock(VERSIONS, { 'node_modules/next': { version: '14.2.25', resolved: 'file:vendor/next-custom.tgz' } }) });
+  assert.deepEqual(reasonOf(local.result), ['unknown sentinel.next.reason.versionUnknown']);
+  assert.equal(local.result.envelopes[0]!.framework.version, null, 'a local package\u2019s version string is not trusted');
+  assert.equal((local.result.projects[0]!.versions.next as any).reason, 'not-registry');
+  const repacked = await analyzed(t, { ...APP, 'package-lock.json': npmLock(VERSIONS, { 'node_modules/next': { ...registryEntry('next', '14.2.25'), integrity: integrityOf('next', 'repacked') } }) });
+  assert.deepEqual(reasonOf(repacked.result), ['unknown sentinel.next.reason.versionUnknown']);
+  assert.equal((repacked.result.projects[0]!.versions.next as any).reason, 'identity-mismatch');
+  assert.equal(repacked.result.projects[0]!.supported, false);
+
   const based = await analyzed(t, { ...APP, 'next.config.js': "module.exports = { basePath: '/app' };\n" });
   assert.deepEqual(reasonOf(based.result), ['unknown sentinel.next.reason.nextConfigUnsupported']);
   const nodeRuntime = await analyzed(t, { ...APP, 'middleware.ts': middleware(`export const config = { matcher: ${MATCHER}, runtime: 'nodejs' };\n`) });
@@ -237,11 +248,7 @@ test('middleware placement, src/ layouts, no middleware and the pages router', n
 });
 
 test('a monorepo: each project is decided on its own versions, middleware and surfaces, through a pnpm lockfile', needsStore, async t => {
-  const pnpm = (importers: Record<string, string>) => ["lockfileVersion: '9.0'", '', 'importers:', '',
-    ...Object.entries(importers).flatMap(([imp, next]) => [`  ${imp}:`, '    dependencies:',
-      '      next:', `        specifier: ${next}`, `        version: ${next}(react-dom@18.3.1(react@18.3.1))(react@18.3.1)`,
-      '      react:', '        specifier: 18.3.1', '        version: 18.3.1',
-      '      react-dom:', '        specifier: 18.3.1', '        version: 18.3.1(react@18.3.1)', '']), ''].join('\n');
+  const pnpm = pnpmLock;
   const files: Record<string, string> = {
     'package.json': JSON.stringify({ name: 'mono', private: true }) + '\n',
     'pnpm-lock.yaml': pnpm({ 'apps/web': '14.2.25', 'apps/old': '13.5.6' }),

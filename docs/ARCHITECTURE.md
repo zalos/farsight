@@ -659,11 +659,19 @@ hash-checked. It never runs application code, never runs a package manager and n
 `guard::middleware:` heuristic, whose edges cover every entry under the file's folder without reading its matcher.
 
 Support is one manifest (`support.ts`), and its canonical digest is the pack digest every envelope pins: Next
-14.2.25 with React and React DOM 18.3.1, the combination PR 01 measured, and nothing else. Versions come only from a
-lockfile that records what was installed (npm lockfile 2/3, pnpm 6.0/9.0 importers), resolved from the project
-folder upwards. A version written only in the package manifest, two candidate lockfiles, an unread lockfile kind, a
-linked package or an exact manifest pin that disagrees with the lockfile is unknown. Another version is recorded
-as resolved and analyzed as nothing: every fact is unknown.
+14.2.25 with React and React DOM 18.3.1, the combination PR 01 measured, and nothing else. Support is the exact
+packages, not their version strings: the manifest pins each one's registry tarball integrity, read from the resolved
+lockfile PR 01's acquisition captured (the retained archive's SHA-256 is in the manifest). Versions come only from a
+lockfile that records what was installed with its content identity (an npm 2/3 entry with the public registry
+tarball URL for that version and a sha512 integrity; a pnpm 6.0/9.0 importer version and its package's
+`resolution.integrity`), resolved from the project folder upwards. The lockfile and the package manifest are
+untrusted input: every value is shape- and size-checked, and a shape the readers do not expect is invalid, never a
+crash. These are unknown: a version written only in the package manifest; a manifest specifier that is not a
+registry version or range (`file:`, `link:`, Git, a URL, `npm:` aliases, `workspace:`); a local, linked, Git or
+mirrored package; an entry without an integrity; the pinned version with another integrity (a repacked or
+substituted package); two candidate lockfiles; an unread lockfile kind; and an exact manifest pin that disagrees
+with the lockfile. Another registry version is recorded as resolved and analyzed as nothing: every fact is
+unknown.
 
 The middleware handler and `config` export, and next.config, are read with Oxc (loaded on first read) as literal
 syntax only, with exact UTF-8 spans and a quote digest for every cited span. Anything Next would have to compute,

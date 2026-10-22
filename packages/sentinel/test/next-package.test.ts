@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, symlink
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { commitRepo, needsStore, scratch } from './snapshot-helpers.ts';
+import { npmLock } from './next-helpers.ts';
 
 const pkgDir = fileURLToPath(new URL('../', import.meta.url));
 const manifest = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
@@ -61,8 +62,7 @@ test('the packed package exposes the pack through its published subpath, typed, 
   const repo = join(dir, 'repo');
   commitRepo(repo, {
     'package.json': JSON.stringify({ name: 'c', dependencies: { next: '14.2.25', react: '18.3.1', 'react-dom': '18.3.1' } }),
-    'package-lock.json': JSON.stringify({ lockfileVersion: 3, packages: { '': {}, 'node_modules/next': { version: '14.2.25' },
-      'node_modules/react': { version: '18.3.1' }, 'node_modules/react-dom': { version: '18.3.1' } } }),
+    'package-lock.json': npmLock(),
     'middleware.ts': "export function middleware() {}\nexport const config = { matcher: '/private/:path*' };\n",
     'app/private/route.ts': 'export function GET() { return new Response(null); }\n',
     'app/public/route.ts': 'export function GET() { return new Response(null); }\n',

@@ -6,6 +6,7 @@ import {
   parseMatcherSource, routeLanguage, decide, decideCaseStable, readMiddleware, readNextConfig, resolveVersions,
   NEXT_SUPPORT, NEXT_PACK_DIGEST, NEXT_REASON_CODES, NEXT_ERROR_CODES,
 } from '../dist/frameworks/next/index.js';
+import { integrityOf, npmLock, pnpmLock, registryEntry } from './next-helpers.ts';
 
 const lang = (s: string) => { const p = parseMatcherSource(s); assert.ok(p.ok, s); return p.language; };
 const route = (path: string) => { const r = routeLanguage(path.split('/').filter(Boolean)); assert.ok(r.ok, path); return r.items; };
@@ -119,15 +120,12 @@ test('next.config: only a statically empty object is supported', async () => {
   assert.equal(await state(''), 'unsupported', 'no export');
 });
 
-const lockfile = (pkgs: Record<string, string>, extra: Record<string, unknown> = {}) => JSON.stringify({
-  name: 'x', lockfileVersion: 3, requires: true,
-  packages: { '': { name: 'x' }, ...Object.fromEntries(Object.entries(pkgs).map(([k, v]) => [`node_modules/${k}`, { version: v }])), ...extra },
-}, null, 2);
+const lockfile = (pkgs: Record<string, string>, extra: Record<string, unknown> = {}) => npmLock(pkgs, extra);
 const OK = { next: '14.2.25', react: '18.3.1', 'react-dom': '18.3.1' };
 
 async function versions(files: Record<string, string>, projectDir = '', pkgJson: Record<string, unknown> = {}) {
   const map = new Map(Object.entries(files).map(([p, t]) => [p, { relativePath: p, content: `c:${p}`, bytes: Buffer.byteLength(t) }]));
-  return resolveVersions({ projectDir, files: map, recorded: new Set(Object.keys(files)), packageJson: pkgJson,
+  return resolveVersions({ projectDir, files: map, recorded: new Set(Object.keys(files)), packageJson: pkgJson, pins: NEXT_SUPPORT.packages,
     read: async f => bytes(files[f.relativePath]!) });
 }
 
@@ -140,7 +138,7 @@ test('versions come from lockfiles only, with the bytes that record them', async
   assert.ok(v.next.span);
   assert.match(bytes(text).subarray(v.next.span!.startByte, v.next.span!.endByte).toString(), /^"node_modules\/next": \{\s+"version": "14.2.25"$/);
   // A nested project resolves through its own node_modules first, then the lockfile folder's.
-  const nested = lockfile(OK, { 'apps/web': { name: 'web' }, 'apps/web/node_modules/next': { version: '14.2.24' } });
+  const nested = lockfile(OK, { 'apps/web': { name: 'web' }, 'apps/web/node_modules/next': registryEntry('next', '14.2.24') });
   const w = await versions({ 'package-lock.json': nested }, 'apps/web');
   assert.equal(w.next.state === 'resolved' && w.next.version, '14.2.24');
   assert.equal(w.react.state === 'resolved' && w.react.version, '18.3.1');
@@ -156,24 +154,66 @@ test('a declaration, an unsupported or ambiguous lockfile, or a stale pin is unk
   assert.equal(reason(await versions({ 'package-lock.json': lockfile({ react: '18.3.1' }) })), 'not-in-lockfile');
   assert.equal(reason(await versions({ 'package-lock.json': lockfile(OK) }, '', { dependencies: { next: '14.2.26' } })), 'pin-disagrees');
   const linked = JSON.stringify({ lockfileVersion: 3, packages: { '': {}, 'node_modules/next': { resolved: '../next', link: true } } });
-  assert.equal(reason(await versions({ 'package-lock.json': linked })), 'not-exact');
+  assert.equal(reason(await versions({ 'package-lock.json': linked })), 'not-registry');
 });
 
-test('pnpm lockfile importers are read strictly', async () => {
-  const pnpm = (v: string, importer = '.') => [
-    "lockfileVersion: '9.0'", '', 'settings:', '  autoInstallPeers: true', '', 'importers:', '', `  ${importer}:`, '    dependencies:',
-    '      next:', `        specifier: ${v}`, `        version: ${v}(react-dom@18.3.1(react@18.3.1))(react@18.3.1)`,
-    '      react:', '        specifier: 18.3.1', '        version: 18.3.1', '      react-dom:', '        specifier: 18.3.1',
-    '        version: 18.3.1(react@18.3.1)', '', 'packages:', '', '  next@14.2.25:', '    resolution: {integrity: sha512-x}', '',
-  ].join('\n');
-  const v = await versions({ 'pnpm-lock.yaml': pnpm('14.2.25') });
+test('untrusted lockfile JSON of any shape is invalid, never a crash', async () => {
+  const reason = (v: Awaited<ReturnType<typeof versions>>) => (v.next as { reason?: string }).reason;
+  for (const text of ['null', '[]', '"x"', '42', 'true', '{"lockfileVersion":3}', '{"lockfileVersion":3,"packages":null}', '{"lockfileVersion":3,"packages":[]}',
+    '{"lockfileVersion":3,"packages":{"":{},"node_modules/next":null}}', '{"lockfileVersion":3,"packages":{"":{},"node_modules/next":"14.2.25"}}',
+    '{"lockfileVersion":3,"packages":{"":{},"node_modules/next":{"version":14}}}', '{"lockfileVersion":3,"packages":{"":null}}']) {
+    const v = await versions({ 'package-lock.json': text });
+    assert.equal(v.next.state, 'unknown', text);
+    assert.ok(['lockfile-invalid', 'lockfile-unsupported', 'not-in-lockfile', 'not-exact'].includes(reason(v)!), `${text}: ${reason(v)}`);
+  }
+  assert.equal(reason(await versions({ 'package-lock.json': 'null' })), 'lockfile-invalid');
+  // A package.json whose dependency fields are not objects, or whose spec is not text, is a non-registry declaration.
+  assert.equal(reason(await versions({ 'package-lock.json': lockfile(OK) }, '', { dependencies: ['next'] })), 'declared-nonregistry');
+  assert.equal(reason(await versions({ 'package-lock.json': lockfile(OK) }, '', { dependencies: { next: { version: '14.2.25' } } })), 'declared-nonregistry');
+});
+
+test('the version string alone never qualifies: local, linked, Git, mirrored, unhashed and repacked packages are unknown', async () => {
+  const reason = (v: Awaited<ReturnType<typeof versions>>) => (v.next as { reason?: string }).reason;
+  const withNext = (entry: Record<string, unknown>, pkgJson: Record<string, unknown> = {}) => versions({ 'package-lock.json': lockfile(OK, { 'node_modules/next': entry }) }, '', pkgJson);
+  const good = registryEntry('next', '14.2.25');
+  assert.equal(reason(await withNext({ version: '14.2.25', resolved: 'file:vendor/next-custom.tgz', integrity: good.integrity })), 'not-registry');
+  assert.equal(reason(await withNext({ ...good, resolved: 'git+ssh://git@example.com/next.git#abc' })), 'not-registry');
+  assert.equal(reason(await withNext({ ...good, resolved: 'https://registry.example.com/next/-/next-14.2.25.tgz' })), 'not-registry');
+  assert.equal(reason(await withNext({ ...good, resolved: 'https://registry.npmjs.org/next/-/next-14.2.24.tgz' })), 'not-registry', 'the tarball names another version');
+  assert.equal(reason(await withNext({ version: '14.2.25', resolved: good.resolved })), 'no-integrity');
+  assert.equal(reason(await withNext({ ...good, integrity: 'sha1-abc' })), 'no-integrity');
+  assert.equal(reason(await withNext({ ...good, integrity: integrityOf('next', 'repacked') })), 'identity-mismatch', 'same version, other bytes');
+  // The case the review found: a local tarball in the lock and a file: spec in package.json.
+  assert.equal(reason(await withNext({ version: '14.2.25', resolved: 'file:vendor/next-custom.tgz' }, { dependencies: { next: 'file:vendor/next-custom.tgz' } })), 'not-registry');
+  for (const spec of ['file:vendor/next.tgz', 'link:../next', 'git+https://example.com/next.git', 'https://example.com/next.tgz', 'npm:other@14.2.25', 'workspace:*', 'example/next']) {
+    assert.equal(reason(await versions({ 'package-lock.json': lockfile(OK) }, '', { dependencies: { next: spec } })), 'declared-nonregistry', spec);
+  }
+  assert.equal(reason(await versions({ 'package.json': '{}' }, '', { dependencies: { next: 'file:vendor/next.tgz' } })), 'declared-nonregistry');
+  // Ranges are declarations the lockfile settles; the exact registry package qualifies.
+  for (const spec of ['^14.2.0', '~14.2.25', '14.2.25', '>=14 <15']) {
+    assert.equal((await versions({ 'package-lock.json': lockfile(OK) }, '', { dependencies: { next: spec } })).next.state, 'resolved', spec);
+  }
+  // A near-neighbour registry lock is resolved, with its own integrity, and is simply another version.
+  const near = await versions({ 'package-lock.json': lockfile({ ...OK, next: '14.2.26' }) });
+  assert.equal(near.next.state === 'resolved' && near.next.version, '14.2.26');
+});
+
+test('pnpm lockfile importers are read strictly, with the package resolution integrity', async () => {
+  const text = pnpmLock({ '.': '14.2.25' });
+  const v = await versions({ 'pnpm-lock.yaml': text });
   assert.deepEqual([v.next, v.react, v['react-dom']].map(x => x.state === 'resolved' && x.version), ['14.2.25', '18.3.1', '18.3.1']);
-  const text = pnpm('14.2.25');
-  if (v.next.state === 'resolved') assert.match(bytes(text).subarray(v.next.span!.startByte, v.next.span!.endByte).toString(), /^ {6}next:\n {8}specifier: 14\.2\.25\n {8}version: 14\.2\.25\(/);
-  const web = await versions({ 'pnpm-lock.yaml': pnpm('14.2.25', 'apps/web') }, 'apps/web');
-  assert.equal(web.next.state, 'resolved');
-  assert.equal((await versions({ 'pnpm-lock.yaml': pnpm('link:../next') })).next.state, 'unknown');
-  assert.equal(((await versions({ 'pnpm-lock.yaml': "lockfileVersion: '5.4'\n" })).next as { reason: string }).reason, 'lockfile-unsupported');
+  if (v.next.state === 'resolved') {
+    assert.equal(v.next.integrity, integrityOf('next', '14.2.25'));
+    assert.match(bytes(text).subarray(v.next.span!.startByte, v.next.span!.endByte).toString(), /^ {6}next:\n {8}specifier: 14\.2\.25\n {8}version: 14\.2\.25\(/);
+  }
+  assert.equal((await versions({ 'pnpm-lock.yaml': pnpmLock({ 'apps/web': '14.2.25' }) }, 'apps/web')).next.state, 'resolved');
+  const reason = async (t: string) => ((await versions({ 'pnpm-lock.yaml': t })).next as { reason?: string }).reason;
+  assert.equal(await reason(pnpmLock({ '.': 'link:../next' })), 'not-registry');
+  assert.equal(await reason(pnpmLock({ '.': 'file:vendor/next.tgz' })), 'not-registry');
+  assert.equal(await reason(pnpmLock({ '.': '14.2.25' }, (n, ver) => `{tarball: file:vendor/${n}-${ver}.tgz}`)), 'not-registry');
+  assert.equal(await reason(pnpmLock({ '.': '14.2.25' }, n => (n === 'next' ? `{integrity: ${integrityOf('next', '0.0.1')}}` : `{integrity: ${integrityOf(n, '18.3.1')}}`))), 'identity-mismatch');
+  assert.equal(await reason(pnpmLock({ '.': '14.2.25' }, () => '{}')), 'no-integrity');
+  assert.equal(await reason("lockfileVersion: '5.4'\n"), 'lockfile-unsupported');
 });
 
 test('the support manifest names exactly the measured versions, and its digest is the pack digest', async () => {

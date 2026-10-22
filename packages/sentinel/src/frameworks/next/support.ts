@@ -6,7 +6,7 @@ import { deepFreeze } from '../../planner/identity.js';
 
 export const NEXT_PACK_ID = 'sentinel.framework.next';
 /** Bumped whenever the pack's semantics change without a manifest change. */
-export const NEXT_PACK_REVISION = 1;
+export const NEXT_PACK_REVISION = 2;
 export const NEXT_ANALYSIS_SCHEMA = 'sentinel-next-analysis/draft-1' as const;
 
 export const NEXT_SUPPORT = deepFreeze({
@@ -15,7 +15,23 @@ export const NEXT_SUPPORT = deepFreeze({
   framework: 'next',
   /** Exact installed versions, all three required, from a lockfile. The PR 01 measured candidates and nothing else. */
   versions: { next: '14.2.25', react: '18.3.1', 'react-dom': '18.3.1' },
-  versionSources: ['package-lock.json lockfileVersion 2|3', 'pnpm-lock.yaml lockfileVersion 6.0|9.0 importers'],
+  /**
+   * The exact packages: each version's registry tarball integrity, so a repacked, local or substituted package that
+   * claims the version does not qualify. Read from the resolved lockfile PR 01's acquisition captured
+   * (next-matcher/package-lock.json in the retained input archive, whose SHA-256 the evidence index records).
+   */
+  packages: {
+    next: { version: '14.2.25', integrity: 'sha512-N5M7xMc4wSb4IkPvEV5X2BRRXUmhVHNyaXwEM86+voXthSZz8ZiRyQW4p9mwAoAPIm6OzuVZtn7idgEJeAJN3Q==' },
+    react: { version: '18.3.1', integrity: 'sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==' },
+    'react-dom': { version: '18.3.1', integrity: 'sha512-5m4nQKp+rZRb09LNH59GM4BxTh9251/ylbKIbpe7TpGxfJ+9kv6BLkLBXIjjspbgbnIBNqlI23tRnTWT0snUIw==' },
+  },
+  packageProvenance: {
+    evidence: 'docs/proposals/farsight-sentinel/evidence/2026-10-22-decisions/framework-acquisition-files.tgz',
+    sha256: '2ec8042f42e24be4f810a5da70f1f207fdfe27190aacc02da2c9007aac0086af',
+    file: 'next-matcher/package-lock.json',
+  },
+  versionSources: ['package-lock.json lockfileVersion 2|3 with the public registry tarball and its integrity',
+    'pnpm-lock.yaml lockfileVersion 6.0|9.0 importers with the package resolution integrity'],
   router: {
     modelled: 'app',
     appDirectories: ['app', 'src/app'],
