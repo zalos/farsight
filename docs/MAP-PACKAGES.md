@@ -91,7 +91,8 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `partitionInventory` and the scoped `EvidenceBroker`), `validator.ts` (the closed reply grammar and citation checks),
   `session.ts` (the bounded, checkpointed loop and the review record), `guided.ts` and `general.ts` (the two lanes),
   `caller.ts` (sessions over the PR 21 broker), `prompts.ts` (the pinned prompt artifacts), `evaluation.ts` (the E5
-  harness and gate, E8 estimates) and `errors.ts`; its words are `strings-sentinel-review.ts`; `test/review.test.ts`
+  harness and gate, E8 estimates) and `errors.ts`; its envelopes are `contracts/review.ts` (partitions, checkpoint,
+  record) and its model configuration `contracts/policy.ts` `ModelSettings`; its words are `strings-sentinel-review.ts`; `test/review.test.ts`
   and `test/fixtures/model-review/` (the original 30-case clean/canary corpus).
   `src/review/providers/` is the opt-in model broker (PR 21, ADR 35), exported as `./review/providers`: `profile.ts`
   (model profiles and the owner-bound provider binding), `kinds.ts` (Ollama and OpenAI-compatible wire formats and

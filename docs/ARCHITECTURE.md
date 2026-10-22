@@ -528,7 +528,9 @@ chat-completions API. Compatibility is per endpoint. `probeCapability` lists wha
 listing), and a binding needs a capability record for exactly its kind, origin and model.
 
 **Binding.** `bindProvider(policy, profile)` joins a provider from the adopted settings (kind, origin, keychain
-reference, disclosure, per-action budget) with a model profile. The profile names the model, hard limits, a rate
+reference, disclosure, per-action budget) with a model profile. *Superseded in the same draft (ADR 39 update):
+models are configured in the adopted settings, `providers[].models[]`, and `bindProvider(policy, providerId,
+modelId)` reads every term there; the caller names ids only.* The profile names the model, hard limits, a rate
 schedule or an explicit local no-fee basis, recorded hosted terms, and the capability record. A local-only provider
 must be a literal loopback address; a hosted one must use https and needs recorded retention and training terms.
 An unpriced profile is refused, and only a local runtime may declare no fee. The binding's canonical digest is the
@@ -652,3 +654,31 @@ Not decided here: the live E5 run, labels review, thresholds and the second mode
 coordinator stage that plans, admits and fences review work (PR 08/09 integration); a registered JSON schema for the
 record and checkpoint drafts; report rendering (PR 19); and feeding PR 18 path envelopes and secret-location refs
 through the two seams. The open items are tracked in the [model integration checklist](proposals/farsight-sentinel/model-integration-checklist.md).
+
+**Update — registered contracts and trusted configuration (2026-10-22).** The additive public contracts are:
+- `sentinel-settings/draft-1` gains an optional `providers[].models[]` (`ModelSettings`). Each model carries its
+  limits, a `rates` or local `no-fee` pricing (there is no unpriced form), recorded `terms` (required for a hosted
+  provider), and the owner-adopted `sentinel-model-capability/draft-1` record (`null` until probed). The validator
+  enforces unique model ids, no-fee only for local-only providers, rates in the budget's currency, an output
+  allowance that leaves room in the context, and a capability for exactly this kind, origin and model.
+  `bindProvider(policy, providerId, modelId)` and `probeConfigured` read only these adopted values; the settings
+  example carries scrubbed models.
+- Three envelopes join the canonical registry, with generated bounded schemas, invariants, valid fixtures and
+  invalid cases:
+  - `sentinel-review-partitions/draft-1`: unique, ordered members; partition ids and the plan digest recomputed;
+    bounds respected.
+  - `sentinel-review-checkpoint/draft-1`: the fixed prompt first; sequential operation ids; usage on exactly the
+    settled operations; claims and `inspected` only over served evidence; an unsettled call implies a stop.
+  - `sentinel-review-record/draft-1`: the digest; a verdict exactly when completed; every unread file a frontier;
+    usage unknown exactly when a call is unsettled; `deterministicCoverage` always false.
+- Plans, checkpoints and records are validated where produced and where read (`parseEnvelope` caps a checkpoint
+  file at the 4 MiB envelope limit). A checkpoint that would outgrow the limit is not written; the session stops
+  at the last one that fitted. A checkpoint for another session, prompt or spec, or with a forged quote digest,
+  never resumes.
+
+Withheld secret-location citations (PR 11's `location: 'withheld'` union) enter through `withheldEntries`. It
+resolves each against the snapshot and fails closed when it cannot. `partitionInventory(…, { withheld })` and
+`withoutWithheld` then remove those files from review whole (their paths are not sent either) and record
+`<sourceId>#entry:<n>` gaps. The citation is consumed by its discriminator and never turned into a path; the
+structural view is replaced by the contract import when PR 11 integrates.
+
