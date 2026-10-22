@@ -200,7 +200,9 @@ containers or model SDKs: its pack preflight (`scripts/pack-preflight.mjs`) requ
 of the CLI's own `workspace:` dependency closure, so an absent or unbuilt Sentinel cannot block a Farsight
 release, and that check still runs before any prior artifact is removed. Sentinel ships separately as the
 `farsight-sentinel` tarball (`scripts/pack-sentinel.mjs`): its bins and root export are bundled with Sentinel's
-workspace closure inlined, its third-party dependencies stay declared, and its schemas travel with it. Both
+workspace closure inlined, its third-party dependencies stay declared, and its schemas travel with it. The
+tarball carries Sentinel's own version, `private` flag and Node floor, independent of application releases;
+`farsight-cli` now declares the workspace's own `engines.node` (`>=24`) instead of `>=20`. Both
 tarballs are verified from a clean `npm init -y` consumer, not a pnpm workspace.
 
 The first contracts are draft versions. A `…/v1` name is adopted only when the contract review completes;

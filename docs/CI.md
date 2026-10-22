@@ -82,10 +82,12 @@ Sentinel's package job (ADR 18) proves the boundary in both directions from clea
 outside the pnpm workspace. First `pnpm pack:cli` builds only `@farsight/cli...` and packs `farsight-cli`; the
 pack preflight (`scripts/pack-preflight.mjs`) requires only the CLI's `workspace:` dependency closure and refuses
 before removing any prior artifact. `scripts/test-farsight-package.mjs` installs that tarball, checks that the
-bundle names no Sentinel module and that no Sentinel package is installed, prints `--version`, ingests the
+bundle names no Sentinel module, that no Sentinel package is installed and that the tarball's `engines.node` equals
+the workspace's, prints `--version`, ingests the
 invoice example and serves it read-only on a free port until `/api/version` answers, then stops its own server
 by pid. Then `pnpm test:sentinel:package` builds `@farsight/sentinel...`, packs `farsight-sentinel` and installs
-it: every bin answers `--help`, the root export imports, packaged schemas parse, and neither `farsight-cli` nor
+it: every bin answers `--help`, the root and each subpath export import, packaged schemas parse, `engines.node`
+is a floor this Node meets and no `workspace:` specifier leaks, and neither `farsight-cli` nor
 any `@farsight/*` package is installed with it. The job fails, rather than skips, when the Sentinel manifest is
 missing. No scanner, container, model or provider is started; npm fetches only declared third-party
 dependencies. Order matters locally too: `scripts/pack.mjs` replaces `build/` wholesale.

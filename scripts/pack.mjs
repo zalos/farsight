@@ -53,7 +53,7 @@ await build({
   bundle: true,
   platform: 'node',
   format: 'esm',
-  target: 'node20',
+  target: 'node24',
   outfile: join(out, 'dist/farsight.mjs'),
   // native/WASM and SDK deps stay external; everything @farsight/* is inlined
   // entry's own shebang is preserved by esbuild (tree-sitter grammars resolve
@@ -95,7 +95,8 @@ writeFileSync(
         '@modelcontextprotocol/sdk': '^1.12.0',
         zod: '^3.24.0',
       },
-      engines: { node: '>=20' },
+      // the workspace's own runtime floor (node:sqlite history needs Node 24), not a looser claim
+      engines: { node: workspacePkg.engines?.node ?? '>=24' },
     },
     null,
     2,

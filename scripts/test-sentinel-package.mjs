@@ -13,8 +13,10 @@ import { fileURLToPath } from 'node:url';
 import { npmConsumer } from './npm-consumer.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
-const artifact = resolve(process.argv[2] ?? join(root, 'build', 'sentinel', `farsight-sentinel-${version}.tgz`));
+const artifact = resolve(process.argv[2] ?? (() => {
+  const source = JSON.parse(readFileSync(join(root, 'packages', 'sentinel', 'package.json'), 'utf8'));
+  return join(root, 'build', 'sentinel', `farsight-sentinel-${source.version}.tgz`);
+})());
 if (!existsSync(artifact)) {
   console.error(`test-sentinel-package: ${artifact} is missing. Run \`pnpm pack:sentinel\` first.`);
   process.exit(1);
@@ -25,7 +27,11 @@ try {
   assert.ok(consumer.manifest().dependencies?.['farsight-sentinel'], 'npm recorded the dependency');
   const installed = join(consumer.dir, 'node_modules', 'farsight-sentinel');
   const pkg = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, version);
+  assert.ok(artifact.endsWith(`farsight-sentinel-${pkg.version}.tgz`), 'the tarball name carries the packaged version');
+  // truthful runtime metadata: a floor this Node satisfies, and no workspace-only protocol leaking out
+  const floor = /^>=(\d+)/.exec(pkg.engines?.node ?? '');
+  assert.ok(floor && Number(process.versions.node.split('.')[0]) >= Number(floor[1]), `engines.node ${pkg.engines?.node}`);
+  assert.ok(Object.values(pkg.dependencies ?? {}).every((spec) => !String(spec).startsWith('workspace:')), 'no workspace: dependency');
 
   const bins = Object.keys(pkg.bin ?? {});
   assert.ok(bins.length, 'the package declares a bin');
@@ -37,6 +43,13 @@ try {
   const imported = await consumer.exec(process.execPath, ['--input-type=module', '-e',
     "const m = await import('farsight-sentinel'); console.log(JSON.stringify(Object.keys(m)));"]);
   assert.ok(JSON.parse(imported.stdout).length > 0, 'the root export exposes named exports');
+  const subpaths = Object.keys(pkg.exports ?? {}).filter((key) => key !== '.' && key !== './package.json' && !key.includes('*'));
+  for (const subpath of subpaths) {
+    const specifier = `farsight-sentinel/${subpath.slice(2)}`;
+    const named = await consumer.exec(process.execPath, ['--input-type=module', '-e',
+      `const m = await import(${JSON.stringify(specifier)}); console.log(Object.keys(m).length);`]);
+    assert.ok(Number(named.stdout) > 0, `${specifier} exposes named exports`);
+  }
 
   const schemas = join(installed, 'schemas');
   let schemaCount = 0;
@@ -53,7 +66,7 @@ try {
   assert.ok(!modules.includes('farsight-cli'), 'farsight-cli is not installed with Sentinel');
   assert.ok(!modules.includes('@farsight'), 'no workspace package is resolved from a registry');
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, import (${JSON.parse(imported.stdout).length} exports), ${schemaCount} schemas, npm consumer`);
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, import (${JSON.parse(imported.stdout).length} exports, ${subpaths.length} subpaths), ${schemaCount} schemas, npm consumer`);
 } finally {
   consumer.cleanup();
 }

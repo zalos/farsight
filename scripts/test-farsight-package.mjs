@@ -32,6 +32,9 @@ const consumer = await npmConsumer('farsight-package-', [artifact]);
 let server;
 try {
   const installed = join(consumer.dir, 'node_modules', 'farsight-cli');
+  const workspaceEngines = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).engines?.node;
+  const packed = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'));
+  assert.equal(packed.engines?.node, workspaceEngines, 'the tarball claims the workspace runtime floor');
   const bundle = readFileSync(join(installed, 'dist', 'farsight.mjs'), 'utf8');
   assert.doesNotMatch(bundle, /["'](?:@farsight\/sentinel|farsight-sentinel)["'/]/, 'the CLI bundle names no Sentinel module');
   const modules = readdirSync(join(consumer.dir, 'node_modules'));

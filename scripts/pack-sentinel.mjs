@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Sentinel is a separate installable artifact (ADR 18); farsight-cli never bundles or imports it.
-// Reads packages/sentinel/package.json: each `bin` and the root export, `dist/<x>.js`, is
+// Reads packages/sentinel/package.json: each `bin` and each JavaScript export, `dist/<x>.js`, is
 // bundled from `src/<x>.ts` with Sentinel's workspace dependencies inlined. Third-party
-// dependencies of that closure stay external and become the tarball's dependencies.
+// dependencies of that closure stay external and become the tarball's dependencies. The
+// tarball carries Sentinel's own version, runtime floor and `private` flag, not the app's.
 //
 //   pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs
-//   → build/sentinel/farsight-sentinel-<version>.tgz
+//   → build/sentinel/farsight-sentinel-<sentinel version>.tgz
 import { build } from 'esbuild';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -32,10 +33,11 @@ if (missing.length) {
     missing.map((path) => 'missing: ' + (isAbsolute(path) ? relative(root, path) : path)));
 }
 
-const rootExport = (exports) => {
-  const dot = typeof exports === 'string' ? exports : exports?.['.'];
-  return typeof dot === 'string' ? dot : dot?.import ?? dot?.default;
-};
+const target = (entry) => (typeof entry === 'string' ? entry : entry?.import ?? entry?.default);
+// subpath → its JavaScript target; non-JavaScript subpaths (schemas, package.json) are handled below
+const jsExports = Object.entries(typeof sentinel.exports === 'string' || !sentinel.exports ? { '.': sentinel.exports ?? sentinel.main } : sentinel.exports)
+  .map(([subpath, entry]) => [subpath, target(entry)])
+  .filter(([, file]) => typeof file === 'string' && /\.js$/.test(file));
 // `dist/<x>.js` → `src/<x>.ts`; the published file is `dist/<x>.mjs`.
 const entries = new Map();
 const entryFor = (target) => {
@@ -44,14 +46,16 @@ const entryFor = (target) => {
   if (!m) fail(`cannot map ${rel} to a source entry; expected dist/<name>.js.`);
   const source = join(dir, 'src', `${m[1]}.ts`);
   if (!existsSync(source)) fail(`packages/sentinel/src/${m[1]}.ts is missing for ${rel}.`);
-  entries.set(m[1], source);
+  entries.set(m[1], source); // dist/contracts/index.js → dist/contracts/index.mjs
   return `dist/${m[1]}.mjs`;
 };
 const bins = Object.fromEntries(Object.entries(typeof sentinel.bin === 'string' ? { 'farsight-sentinel': sentinel.bin } : sentinel.bin ?? {})
   .map(([name, target]) => [name, entryFor(target)]));
-const main = rootExport(sentinel.exports) ?? sentinel.main;
-if (!Object.keys(bins).length || !main) fail('the Sentinel manifest needs a `bin` and a root export (`exports["."]` or `main`).');
-const exported = entryFor(main);
+if (!Object.keys(bins).length || !jsExports.some(([subpath]) => subpath === '.')) {
+  fail('the Sentinel manifest needs a `bin` and a root export (`exports["."]` or `main`).');
+}
+const exportsMap = Object.fromEntries(jsExports.map(([subpath, file]) => [subpath, `./${entryFor(file)}`]));
+exportsMap['./package.json'] = './package.json';
 
 // Third-party dependencies of the closure: kept external, declared once with one range.
 const dependencies = {};
@@ -85,7 +89,6 @@ for (const target of new Set(Object.values(bins))) {
 }
 
 const files = ['dist'];
-const exportsMap = { '.': `./${exported}`, './package.json': './package.json' };
 if (existsSync(join(dir, 'schemas'))) {
   cpSync(join(dir, 'schemas'), join(out, 'schemas'), { recursive: true });
   files.push('schemas');
@@ -93,12 +96,13 @@ if (existsSync(join(dir, 'schemas'))) {
 }
 for (const doc of ['README.md']) if (existsSync(join(dir, doc))) { cpSync(join(dir, doc), join(out, doc)); files.push(doc); }
 writeFileSync(join(out, 'package.json'), JSON.stringify({
-  name: 'farsight-sentinel', version: pkg.version,
-  description: 'Optional security review companion for Farsight, installed and run separately from farsight-cli.',
+  name: 'farsight-sentinel', version: sentinel.version ?? pkg.version,
+  ...(sentinel.private ? { private: true } : {}),
+  description: sentinel.description ?? 'Optional Sentinel package for Farsight, installed and run separately from farsight-cli.',
   license: 'MIT', ...(pkg.repository ? { repository: pkg.repository } : {}), type: 'module',
   bin: bins, exports: exportsMap, files,
   ...(Object.keys(dependencies).length ? { dependencies } : {}),
-  engines: { node: '>=24' },
+  engines: { node: sentinel.engines?.node ?? pkg.engines?.node ?? '>=24' },
 }, null, 2) + '\n');
 execFileSync('npm', ['pack', '--pack-destination', '..'], { cwd: out, stdio: 'inherit' });
-console.log(`\npackaged: build/sentinel/farsight-sentinel-${pkg.version}.tgz`);
+console.log(`\npackaged: build/sentinel/farsight-sentinel-${sentinel.version ?? pkg.version}.tgz`);
