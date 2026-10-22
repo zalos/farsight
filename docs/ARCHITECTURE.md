@@ -457,3 +457,34 @@ revisions, batching) waits for PR 05's parser interface; bounded preauthorizatio
 commands and durable receipts in the store ledger are later work. **Cost:** nine more draft formats to review, and
 owner receipts kept in user state rather than the ledger until the coordinator exists. Same-account code is outside
 this boundary, as for the store.
+
+24. **Sentinel plans deterministically into an immutable plan revision that covers exactly what it can run (2026-10-22).**
+
+`@farsight/sentinel/planner` is a pure planner: the same pinned inputs give the same `sentinel-plan/draft-1`
+revision, byte for byte, with no clock, file, ledger or network access. Its inputs come from the actual modules:
+the rule lock with the validated packs it was promoted from (a rule is planned only with the definition whose
+digest the lock pins), the effective policy (pinned by its `revision`, the digest receipts and admission bind to),
+the snapshot envelope and each source's parser evidence. Surfaces are graph nodes of kind `route` (an HTTP endpoint)
+and `page` (a UI route); a handler is the function a route reaches, not a surface. The profile states which rule
+capabilities its stages establish and which adapters it ships.
+
+A bootstrap revision captures once, parses each source and builds the inventory. An analysis revision derives one
+check per scope a selected rule names, identified by (scope, rule revision, environment, mode). A check the profile
+can run is `planned` and assigned to exactly one work unit (one adapter over one source, bounded); every other check
+stays in the plan with its state and reason: unsupported, applicability unknown (a framework the snapshot could
+not resolve), scope unavailable (not captured, or not parsed where the rule needs parser evidence) or scope unknown
+(a folder capture could not list). A policy rule missing from the lock is a rule gap. Required coverage follows
+mandatory rules, complete-coverage policy and required capabilities; `requiredCoverageAchievable` says whether a
+run can complete it. The contract's invariants refuse a plan in which any unplanned check is covered, any planned
+check is uncovered or covered twice, the work graph has a cycle or an unknown dependency, the tallies do not
+recount, or the content differs from its digest. A revision is never edited: a new rule lock or policy produces a
+new revision (or a child run's first) that depends on the already published bootstrap work, so nothing is captured
+or parsed again, and the earlier revision and its lock stay exactly as pinned.
+
+The coordinator receives canonical `sentinel-work/draft-1` envelopes (`workEnvelopesFor`): stage resources come
+from the trusted profile within the work contract's ceilings, and each unit's influence manifest is the canonical
+JSON its artifact id names. `checksCoveredBy` and `capturedInputsOf` return exactly what the plan assigned; nothing
+in the conversion adds coverage. Persistence and admission of a plan stay with the coordinator and the policy
+gate (`run.start` on the plan digest). Not decided here: the capability registry that states what each stage
+establishes (the profile carries it explicitly), framework control-fact work (framework-order stays unavailable
+until packs exist), and scheduling for model review.

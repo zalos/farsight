@@ -82,11 +82,11 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `decideGrants`) and `user-state.ts` (owner-only files); `src/contracts/controls.ts` is the framework control-fact
   contract PRs 14–17 emit; the reason codes are `strings-sentinel-policy.ts`; `test/rules-policy.test.ts` covers them.
   Depends only on graph, code-parser and core; nothing in the
-  `src/planner/` is the pure deterministic planner (PR 06): `planBootstrap` (capture → parse per source →
-  inventory) and `planAnalysis` (every check the policy's locked rules imply over the snapshot, each with an
-  explicit state, batched into work units that cover exactly their checks), frozen `sentinel-plan/draft-1`
-  revisions with a content digest, `checkWorkGraph` (cycle refusal) and `surfacesFromIndex`. It reads planner-owned
-  structural inputs and touches no file, ledger, clock or network; persistence and admission belong to PR 08.
+  `src/planner/` is the pure deterministic planner (PR 06, ADR 24), exported as `./planner`: `planner.ts`
+  (`planBootstrap`, `planAnalysis`, `checkWorkGraph`, the surface vocabulary), `adapters.ts` (inputs from the rule
+  lock and validated packs, the effective policy, the snapshot and parser evidence), `boundary.ts` (canonical work
+  envelopes, influence manifests, exact coverage and captured inputs for the coordinator) and `errors.ts`. The
+  revision contract is `contracts/plan.ts` (`sentinel-plan/draft-1`); persistence and admission belong to PR 08.
   `test/store-integration.test.ts` drives the facade end to end across processes. Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the
