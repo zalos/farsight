@@ -105,7 +105,15 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `credentials.ts` (keychain references read in-process into a redacted `Secret`), `budget.ts` (the durable SQLite
   reservation ledger), `broker.ts` (`openEnvelope` through the shared admission gate, `generate`), `decimal.ts` and
   `errors.ts`; its words are `strings-sentinel-providers.ts`. `test/providers.test.ts` drives local mock endpoints.
-  `test/store-integration.test.ts` drives the facade end to end across processes. Depends only on graph, code-parser and core; nothing in the
+  `test/store-integration.test.ts` drives the facade end to end across processes.
+
+  `src/frameworks/express/` is the Express 4.21.2 pack (PR 15, ADR 31), exported as `./frameworks/express`:
+  `syntax.ts` (Oxc over captured bytes, exact UTF-8 spans), `modules.ts` (bindings, imports, exports, relative
+  resolution), `model.ts` (applications, routers, layers in order, open objects), `effects.ts` (refusal, pass-through,
+  error-handler bodies), `patterns.ts` (Express 4 path and method matching), `version.ts` (manifest and npm lockfile),
+  `pack.ts` (`analyzeExpress`: dispatch simulation into `sentinel-controls/draft-1` facts) and `support.ts`; words in
+  core's `strings-sentinel-express.ts`, tests in `test/framework-express.test.ts`.
+  Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the
   manifest's `bin` and root export; `scripts/test-sentinel-package.mjs` installs it into a clean npm consumer and

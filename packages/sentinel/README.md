@@ -208,6 +208,23 @@ client of the service gets what the adopted grants give agents, which by default
 say *unavailable* (exit 3) until plan revisions exist. With `--json`, every result carries its `outcome`, `exitCode`, the three
 admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR 37 in `docs/ARCHITECTURE.md`.
 
+### Express control facts (draft)
+
+```ts
+import { analyzeExpress } from 'farsight-sentinel/frameworks/express';
+
+const facts = await analyzeExpress({ snapshot, sourceId: 'app', analysis: analysis.sources[0], readContent: id => store.readArtifact(id) });
+facts.facts;      // per route and property: applies / does-not-apply / unknown at a position before the handler
+facts.frontiers;  // registrations the pack met and could not follow
+```
+
+For exactly Express 4.21.2 (an exact pin, or a range the npm lockfile resolves to it), the pack reads each route's
+registration and every layer registered before it on the application and the routers on its path, in order, from
+captured source only. No layer is credited with authentication or authorization: a body that refuses with 401 or 403
+on a request value is cited as evidence with both properties unknown there, because the client may control that value;
+a name never establishes anything, and a layer registered after a route never clears it. Conditional or dynamic registration, third-party middleware, unreadable paths and error
+handlers that may resume routing are unknown with their reasons. The envelope is `sentinel-controls/draft-1`; ADR 31.
+
 ## Versions and evolution
 
 - **Draft until review.** Every name ends in `/draft-1`. A name moves to `/v1` only after an independent
