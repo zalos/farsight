@@ -120,10 +120,10 @@ export interface SentinelStore {
   /** SQLite's integrity and foreign-key checks over the ledger. Object bytes are checked by `inspect`. */
   checkIntegrity(): { integrity: string; foreignKeyViolations: number };
   /**
-   * Reachability from the ledger's roots at one committed sequence, verifying every reachable and recorded
-   * object. Read-only.
+   * Reachability from the ledger's roots at one committed sequence, reading and verifying every reachable and
+   * recorded object. Read-only; fails closed if the ledger moves during the inspection.
    */
-  inspect(options?: { verify?: boolean }): Promise<ReachabilityReport>;
+  inspect(): Promise<ReachabilityReport>;
   /**
    * A dry-run prune plan: what an explicit, later prune could remove. Never deletes anything; lists no candidate
    * when anything reachable or recorded fails to verify or the ledger moves during the plan.
@@ -195,11 +195,6 @@ function facade(owner: StoreOwner, ledger: Ledger, store: ObjectStore): Sentinel
     arch: owner.runtime.arch, checks: owner.runtime.checks,
   });
 
-  const gcInputs = () => {
-    const snapshot = ledger.gcSnapshot();
-    return { snapshot: reachabilityFromLedger(snapshot), readSequence: () => ledger.currentSequence() };
-  };
-
   return Object.freeze({
     storePath: owner.storePath,
     storeId: owner.storeId,
@@ -221,8 +216,8 @@ function facade(owner: StoreOwner, ledger: Ledger, store: ObjectStore): Sentinel
       throw last;
     },
     checkIntegrity: () => ledger.checkIntegrity(),
-    inspect: (options: { verify?: boolean } = {}) => inspectReachability(store, reachabilityFromLedger(ledger.gcSnapshot()),
-      { readSequence: () => ledger.currentSequence(), ...options }),
+    inspect: () => inspectReachability(store, reachabilityFromLedger(ledger.gcSnapshot()),
+      { readSequence: () => ledger.currentSequence() }),
     planPrune: () => planPruneFromLedger(store, ledger),
     close: () => owner.close(),
   });
