@@ -198,6 +198,16 @@ client of the service gets what the adopted grants give agents, which by default
 say *unavailable* (exit 3) until plan revisions exist. With `--json`, every result carries its `outcome`, `exitCode`, the three
 admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR 37 in `docs/ARCHITECTURE.md`.
 
+## Infrastructure configuration checks (draft)
+
+The Trivy adapter (internal, ADR 33) checks Dockerfiles, Kubernetes YAML and Terraform with Trivy 0.76.1's
+misconfiguration scanner and the pinned trivy-checks 2.3.0 bundle, in an isolated container with no network. The
+owner acquires the bundle once (`node scripts/acquire-trivy-checks.mjs --dir <private folder>`); without it nothing
+runs and every configuration file is reported as `bundle-missing`. Coverage is per file and needs the engine's own scan
+evidence; inline ignore comments, remote modules and unread variable files leave a file partial. Findings are a check
+id, severity and lines at a captured path; no graph node is created. Real-engine tests run with `SENTINEL_ISOLATION=1`
+and `SENTINEL_TRIVY_CHECKS_DIR` set to that folder.
+
 ## Versions and evolution
 
 - **Draft until review.** Every name ends in `/draft-1`. A name moves to `/v1` only after an independent

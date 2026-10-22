@@ -65,6 +65,12 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/osv/normalize.js': ['node:crypto'],
   'adapters/osv/run.js': ['node:fs', 'node:path'],
   'adapters/sealed-input.js': ['node:fs', 'node:path'],
+  // The Trivy misconfiguration adapter (PR 13): its job and bundle files and hashing; the engine runs through execution/.
+  'adapters/trivy/adapter.js': ['node:crypto'],
+  'adapters/trivy/bundle.js': ['node:crypto', 'node:fs', 'node:path'],
+  'adapters/trivy/job.js': ['node:crypto', 'node:fs', 'node:path'],
+  'adapters/trivy/normalize.js': ['node:crypto'],
+  'adapters/trivy/run.js': ['node:fs', 'node:path'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/assets.js': ['node:fs', 'node:path', 'node:url'],
   'execution/bootstrap.js': ['node:fs', 'node:path'],

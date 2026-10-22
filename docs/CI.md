@@ -114,6 +114,12 @@ Docker Desktop and linux-x64 with Docker Engine are measured. The Linux qualific
 Engine 28.0.4, Ubuntu 24.04.5 LTS and cgroup v2: [82 tests passed with zero skips](https://github.com/zalos/farsight/actions/runs/39728679640/job/119658477459). `sentinel-package` becomes a required
 check once it has passed on `main` (an owner branch-protection change); until then it is reported but not required.
 
+The **sentinel-iac-qualification** workflow (not required) qualifies the infrastructure adapter on a native Linux/amd64
+runner (ADR 33). It runs on a pull request that changes the Trivy adapter, its fixtures, the execution service or the
+workflow, and by hand. Its provisioning step pulls the pinned image index, checks its linux/amd64 manifest, and acquires
+the pinned checks bundle with `packages/sentinel/scripts/acquire-trivy-checks.mjs` (the only network steps). The unit and
+real-engine suites must pass with zero skips; the packed tarball's shipped worker must run; no container may be left.
+
 The **secrets** job runs gitleaks over the pushed or PR commits with `.gitleaks.toml`. A finding fails the job and uploads a SARIF artifact; it posts no PR comment. What it checks, and
 how to allowlist a value you have checked: [SECURITY.md](SECURITY.md#the-scan-in-ci).
 
