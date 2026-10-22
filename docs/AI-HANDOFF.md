@@ -234,6 +234,26 @@ catalog and exact subject lint passed. No target application code was executed. 
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Gitleaks and library aggregate — 2026-10-22
+
+The `codex/sol-gitleaks-integration` follow-on normally merges the independently reviewed scanner/library aggregate
+`a7b18df9` into `a512693d`. All 98 recorded scanner, execution, driver, CLI, planner and service implementations keep
+the exact reviewed Gitleaks/privacy bytes; all 42 framework/path/provider implementations keep the incoming library
+bytes. Observation/withheld-location contracts, capture and location resolution remain unchanged from `a512693d`.
+Catalogs, schemas, contract fixtures, capability assertions and consumer hooks form an additive union. The packer
+retains exactly the reviewed single complete hook pass and ships all five scanner asset sets.
+
+Validation covers the affected build/types/generated schemas/catalog, 32 package/contract/genuine-Gitleaks-command
+checks, two capability-union controls and three scanner-workflow controls, all with zero skips. The fresh npm-only
+consumer compiles 14 exports and 21 contract types, checks 21 schemas and 56 fixtures, reopens the store and exercises
+all library behavior hooks and asset manifests. Actual installed secrets and four-scanner command consumers check
+privacy/omissions and adoption/detach/replay behavior against existing pinned local containers. No engine acquisition,
+provider call or target application execution occurs. The broad 657-test suite and crash matrix are not repeated for
+unchanged raw implementations. Previous CI and fixed-source ingest/browser measurements remain attributed to their
+exact `a512693d`/`c3e5414b` context; the final union still requires independent review and its own CI before merge.
+Full report/secret integration, finding-policy/model/framework commands and remaining release gates stay separate.
+No primary build or push.
+
 ## Sentinel scanner/library integration — 2026-10-22
 
 The final `codex/sentinel-scanner-integration` aggregate normally merges the reviewed Nest/provider/path/Next/Spring
@@ -2346,6 +2366,39 @@ archives, then still requires final exact candidate/provenance receipt admission
 checks-bundle rights sentence now names MIT. Focused coverage includes restricted grants refusing before scanner
 attempts, a sufficient grant running the real pinned scanner, rerun refusal, direct service/receipt denial, no daemon
 contact on asset-policy denial, and preview/lifecycle/receipt regressions.
+
+## Gitleaks and scanner aggregate integration — 2026-10-22
+
+Branch `codex/sol-gitleaks-integration` is a new managed integration of approved Gitleaks `16c2c42f` and frozen scanner
+aggregate `992d40cc` (merge `51488a1e`). Ancestry-only merge `c282fbdf` includes aggregate `a26ca4a4` and merged advisory
+main `6bf00a7d`; its source tree is identical to `51488a1e`. Gitleaks worker, driver, private evidence/contracts and
+source-derived capture/job/invocation classifications retain reviewed bytes. Aggregate execution repairs, the
+OOM/deadline tests, Express implementation, native four-engine workflow and qualification pins retain frozen bytes.
+
+Catalog and package unions preserve secrets plus the Express library. Capability tests assert exact available and
+unavailable lists. Packaging discovers every asset hook once; all six hooks and all five engine manifests remain.
+Both the Gitleaks isolation/public installed-CLI job and the separate four-engine native installed workflow remain.
+
+Affected build, dependency typechecks, generated-schema check, catalog lint and all retained workflow/actionlint
+checks passed. Selected tests passed 70 with no skips: 46 contract/package/scope/bootstrap cases, two capability
+cases, 19 real canonical/public engine cases and three native workflow selector cases. A clean npm package verified
+nine exports, 19 contracts/schemas, 54 fixtures, the installed Express fixture and all scanner asset manifests.
+The actual npm-only secrets consumer and four-engine detached/join/wait/restart/retained-report consumer passed.
+Only existing pinned Linux arm64 images and a held checks bundle were used; no engine/database was downloaded.
+Native amd64 qualification of this combined source remains the selected CI jobs' gate, not a local claim.
+No broad suite repeat, primary build, graph refresh, public push or merge into main occurred. Root owns review,
+existing PR integration and publish. The previous paused checkpoint below is historical and superseded.
+
+## Historical Gitleaks checkpoint — 2026-10-22 (superseded by the reviewed completion)
+
+Branch `codex/sol-gitleaks-cli` combines the reviewed secrets library context with the reviewed scanner CLI and
+admission corrections. The separate repository-input binding seam has four passing focused cases. The in-progress
+canonical Gitleaks driver, repository-scoped pack, secrets preset and private job classification compile, but the
+first real public CLI regression currently ends with `sentinel.execution.workerExited` (exit 3), before normalized
+findings. This checkpoint is not ready to integrate or an installed-command qualification. Resume with that exact
+synthetic regression; installed npm lifecycle, redacted-export acceptance and final compatibility checks remain.
+The reviewed worker and normalizer are unchanged. No source target was executed or engine downloaded.
+
 
 ## Native installed scanner CLI gate — 2026-10-22
 

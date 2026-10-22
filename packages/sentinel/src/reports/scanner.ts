@@ -15,7 +15,7 @@ export interface ScannerReport{
 export async function scannerReportOf(store:SentinelStore,runId:string,now:Date):Promise<ScannerReport|undefined>{
  const run=store.ledger.getRun(runId);if(!run||run.state!=='completed')return undefined;
  const admitted=await loadPlan(store,runId,run.planRevision);const plan=admitted.plan;
- if(!plan.units.some(u=>u.adapterId&&['pattern-semgrep','advisories-osv','iac-trivy','ci-zizmor'].includes(u.adapterId)))return undefined;
+ if(!plan.units.some(u=>u.adapterId&&['pattern-semgrep','advisories-osv','iac-trivy','ci-zizmor','secrets-gitleaks'].includes(u.adapterId)))return undefined;
  const records:CoverageEnvelope[]=[];const observations:ScannerReport['observations']=[];const reports:ScannerReport['reports']=[];
  for(const unit of plan.units){const pub=store.ledger.getPublication({id:unit.id,revision:unit.revision});if(!pub)continue;
   for(const output of pub.outputs){if(!['sentinel-coverage/draft-1','sentinel-driver-finding/draft-1','sentinel-driver-report/draft-1'].includes(output.schema))continue;

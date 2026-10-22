@@ -5,6 +5,8 @@ import type { DriverContext, VerifiedAttempt, CheckDriver, PreparedJob, Normaliz
 import { createAdapterRegistry, type ExternalAdapterDefinition } from '../../execution/registry.js';
 import { canonicalJsonBytes } from '../../store/objects.js';
 import { deepFreeze } from '../../policy/immutable.js';
+import { gitleaksDriver, GITLEAKS_DRIVER_DEFINITION } from './gitleaks.js';
+import type { SecretsSnapshot } from '../gitleaks/job.js';
 import { scannerKernels } from './kernels.js';
 import { DriverError, fileScope, sha256 } from './common.js';
 import type { CheckDriver as ScannerKernel, DriverPrepare } from './types.js';
@@ -12,6 +14,7 @@ import type { CheckDriver as ScannerKernel, DriverPrepare } from './types.js';
 export interface DatabaseRecord { readonly databaseId: string; readonly snapshotDigest: string; readonly record: unknown }
 export interface ProductionDriverOptions {
   readonly maxAdvisoryAgeMs: number;
+  readonly secretsSnapshot?: SecretsSnapshot;
   /** Explicit owner-held acquisition records; paths never imply provenance or permission to download. */
   readonly databaseRecords?: readonly DatabaseRecord[];
 }
@@ -109,5 +112,6 @@ export function productionDrivers(options: ProductionDriverOptions): ReadonlyMap
     const definition = Object.freeze({ ...entry.definition, coverage: id === 'pattern-semgrep' ? 'per-file-per-rule' as const : 'per-file' as const });
     result.set(id, Object.freeze({ definition, driver: canonicalDriver(definition, entry.driver, records) }));
   }
+  result.set(GITLEAKS_DRIVER_DEFINITION.id, Object.freeze({ definition: GITLEAKS_DRIVER_DEFINITION, driver: gitleaksDriver(options.secretsSnapshot) }));
   return result;
 }

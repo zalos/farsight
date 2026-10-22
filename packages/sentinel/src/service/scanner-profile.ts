@@ -22,8 +22,8 @@ export function publicProfile(registry:AdapterRegistry,available:ReadonlySet<str
  const planner={id:'static-scanners',registry,capabilities:createCapabilityTable(registry,facts),permits:[...new Set(facts.map(f=>f.capability))],operations:foundationProfile(registry).planner.operations};
  const record=executionProfileRecord(planner,structuredClone(RESOURCES),structuredClone(PARSE));return{planner,registry,record,digest:profileDigest(record)};
 }
-export function publicDrivers(registry:AdapterRegistry,records:readonly DatabaseRecord[]=[]){
- const all=productionDrivers({maxAdvisoryAgeMs:MAX_ADVISORY_AGE_MS,databaseRecords:records});
+export function publicDrivers(registry:AdapterRegistry,records:readonly DatabaseRecord[]=[],secretsSnapshot?:import('../adapters/gitleaks/job.js').SecretsSnapshot){
+ const all=productionDrivers({maxAdvisoryAgeMs:MAX_ADVISORY_AGE_MS,databaseRecords:records,...(secretsSnapshot?{secretsSnapshot}:{})});
  return createCheckDriverRegistry([...(registry.ids.includes('sentinel.preview.detector')?[previewDriver(registry)]:[]),...[...all.values()].filter(e=>registry.ids.includes(e.definition.id)).map(e=>e.driver)],registry);
 }
 
@@ -39,6 +39,7 @@ export async function scannerExecution(store:import('../store/index.js').Sentine
  if(!lock||!trustDir)throw new ScannerAssetError('sentinel.assets.missing');
  await installedAdapters(trustDir,lock,ids,scratch);checkPlanDatabases(admitted.plan,lock);
  const dbs=heldDatabases(trustDir,lock);const book=new RuleLockBook(trustDir);
- return{drivers:publicDrivers(registry,dbs.map(d=>({databaseId:d.databaseId,snapshotDigest:d.snapshotDigest,record:d.record}))),
+ const secretsSnapshot=ids.includes('secrets-gitleaks')?(await(await import('../snapshot/materialize.js')).openSnapshot(store,admitted.plan.pins.snapshotId!)).snapshot:undefined;
+ return{drivers:publicDrivers(registry,dbs.map(d=>({databaseId:d.databaseId,snapshotDigest:d.snapshotDigest,record:d.record})),secretsSnapshot),
   packs:book.packsOf(lock).map(pack=>({pack,files:book.readPackFiles(pack.entry.packDigest)})),databases:dbs,containers:true};
 }
