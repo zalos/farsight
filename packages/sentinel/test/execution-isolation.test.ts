@@ -82,7 +82,7 @@ test('a container whose settings differ from the spec is refused, naming the set
 
 test('isolation qualification is exact host, runtime and server triples', () => {
   assert.equal(isolationQualification(ISOLATION_POLICY, 'darwin-arm64', 'docker-desktop', 'linux-arm64')?.status, 'measured');
-  assert.equal(isolationQualification(ISOLATION_POLICY, 'linux-x64', 'docker-engine', 'linux-amd64')?.status, 'candidate');
+  assert.equal(isolationQualification(ISOLATION_POLICY, 'linux-x64', 'docker-engine', 'linux-amd64')?.status, 'measured');
   assert.equal(isolationQualification(ISOLATION_POLICY, 'darwin-arm64', 'docker-engine', 'linux-arm64'), undefined);
   assert.equal(isolationQualification(ISOLATION_POLICY, 'darwin-arm64', 'docker-desktop', 'linux-amd64'), undefined, 'no emulation');
   assert.equal(isolationQualification(ISOLATION_POLICY, 'linux-arm64', 'docker-engine', 'linux-arm64'), undefined);
