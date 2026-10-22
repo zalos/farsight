@@ -948,6 +948,12 @@ export class Ledger {
     return row ? toPlanRecord(row) : undefined;
   }
 
+  /** Every admitted plan revision of a run, oldest first. */
+  listPlans(runId: Id): PlanRecord[] {
+    checkId(runId, 'run id');
+    return this.#read(() => this.#all('SELECT * FROM plans WHERE run_id = ? ORDER BY revision', runId)).map(toPlanRecord);
+  }
+
   /** Moves an active run to its next admitted plan revision (the analysis after its bootstrap, a new rule lock). */
   advanceRunPlan(runId: Id, revision: number, opts: { idempotency?: IdempotencyRef } = {}): { runId: Id; planRevision: number; sequence: number } {
     checkId(runId, 'run id');

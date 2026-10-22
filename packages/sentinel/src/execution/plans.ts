@@ -20,6 +20,9 @@ import type { PlanRecord } from '../store/store-types.js';
 import { validateEnvelope } from '../validate.js';
 import { ExecutionError } from './errors.js';
 import { checkProfileForPlan, type ExecutionProfileRecord } from './profile.js';
+import { COVERAGE_SCHEMA } from './coverage.js';
+import { evaluateRequiredCoverage, type RequiredCoverage } from '../planner/coverage.js';
+import type { CoverageEnvelope } from '../contracts/coverage.js';
 
 /** The record an effective policy's revision is the digest of. */
 export interface EffectivePolicyRecord {
@@ -74,6 +77,13 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest)
     plan: store.objects.identifyCanonicalJson(plan), profile: store.objects.identifyCanonicalJson(profile),
     ruleLock: ruleLock ? store.objects.identifyCanonicalJson(ruleLock) : null, policy: policy ? store.objects.identifyCanonicalJson(policy) : null,
   };
+  // Admitting exactly the same revision again (the same plan and pinned records) returns the existing record.
+  const existing = store.ledger.getPlan(plan.runId, plan.revision);
+  if (existing) {
+    if (existing.digest === plan.digest && existing.plan === ids.plan.id && existing.profile === ids.profile.id
+      && existing.ruleLock === (ids.ruleLock?.id ?? null) && existing.policy === (ids.policy?.id ?? null)) return existing;
+    refuse(`revision ${plan.revision} of run ${plan.runId} was already admitted with other content`);
+  }
   const pinned = [ids.profile.id, ...(ids.ruleLock ? [ids.ruleLock.id] : []), ...(ids.policy ? [ids.policy.id] : [])];
   const stageId = `plan.${plan.runId}.${plan.revision}.${plan.digest.slice(7, 23)}`.slice(0, 128);
   store.ledger.registerStaging(stageId, [
@@ -102,9 +112,9 @@ async function readJson<T>(store: SentinelStore, id: ArtifactId): Promise<T> {
   return value;
 }
 
-/** An admitted plan revision and what it pins, read back from the store and checked again. */
-export async function loadPlan(store: SentinelStore, runId: Id, revision: number): Promise<AdmittedPlan> {
-  const record = store.ledger.getPlan(runId, revision);
+/** An admitted plan revision (the latest when none is named) and what it pins, read back and checked again. */
+export async function loadPlan(store: SentinelStore, runId: Id, revision?: number): Promise<AdmittedPlan> {
+  const record = revision === undefined ? store.ledger.latestPlan(runId) : store.ledger.getPlan(runId, revision);
   if (!record) return refuse(`plan revision ${revision} of run ${runId} was not admitted`);
   const plan = await readJson<PlanRevision>(store, record.plan);
   const ruleLock = record.ruleLock ? await readJson<RuleLockEnvelope>(store, record.ruleLock) : null;
@@ -114,4 +124,20 @@ export async function loadPlan(store: SentinelStore, runId: Id, revision: number
   if (plan.runId !== record.runId || plan.revision !== record.revision || plan.digest !== record.digest || plan.kind !== record.kind
     || plan.previous !== record.previous || plan.pins.snapshotId !== record.snapshotId) refuse('the stored plan is not the revision the ledger admitted');
   return { record, plan, ruleLock, policy, profile };
+}
+
+/**
+ * Required coverage of an admitted analysis revision, from the canonical coverage records its units published:
+ * PR 06's evaluateRequiredCoverage over them alone. A unit that has not published contributes nothing.
+ */
+export async function requiredCoverageOf(store: SentinelStore, runId: Id, revision?: number): Promise<RequiredCoverage> {
+  const { plan } = await loadPlan(store, runId, revision);
+  if (plan.kind !== 'analysis') refuse('a bootstrap revision has no checks');
+  const records: CoverageEnvelope[] = [];
+  for (const u of plan.units) {
+    for (const o of store.ledger.getPublication({ id: u.id, revision: u.revision })?.outputs ?? []) {
+      if (o.schema === COVERAGE_SCHEMA) records.push(await readJson<CoverageEnvelope>(store, o.id));
+    }
+  }
+  return evaluateRequiredCoverage(plan, records);
 }

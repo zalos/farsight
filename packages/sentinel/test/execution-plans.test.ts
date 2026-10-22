@@ -35,8 +35,10 @@ test('admission refuses a lock, policy or profile that is not the plan\'s, and a
     await assert.rejects(admitPlan(store, { ...base, profile: narrowed }), refused(/at another digest/));
     await assert.rejects(admitPlan(store, { ...base, plan: { ...plan, revision: 2 } }), refused(/digest/));
     await assert.rejects(admitPlan(store, { ...base, ruleLock: null }), refused(/rule lock and effective policy/));
-    // The same exact revision cannot be admitted twice; the ledger keeps the first.
-    await assert.rejects(admitPlan(store, base), (e: any) => e?.code === 'sentinel.store.conflict');
+    // The same exact revision admitted again returns its record; other content under the same revision is refused.
+    assert.deepEqual(await admitPlan(store, base), loaded.record);
+    const narrowedOk = { ...loaded.profile, permits: [...loaded.profile.permits, 'source-bytes'] };
+    await assert.rejects(admitPlan(store, { ...base, profile: narrowedOk }), refused(/already admitted with other content/));
     assert.equal(store.ledger.listOpenStages(500).length, 0, 'no refused admission left a stage open');
   } finally { store.close(); }
 });
@@ -57,5 +59,25 @@ test('a bootstrap revision is admitted without lock or policy, and read back as 
     assert.deepEqual(back.plan, JSON.parse(JSON.stringify(boot)));
     assert.deepEqual(back.profile, record);
     await assert.rejects(loadPlan(store, 'run-plans', 2), refused(/was not admitted/));
+  } finally { store.close(); }
+});
+
+test('re-admitting the same revision returns its record; revisions list in order; coverage reads back from publications', async () => {
+  const s = scratch('plans-idem'); roots.push(s.root);
+  const store = await storeIn(s.root);
+  try {
+    const p = await syntheticPlan(store, s.root, { A: 'covering-ok' });
+    const loaded = await loadPlan(store, p.runId);
+    const { policy } = policyView(loaded.plan.pins.rules.map((r: any) => r.familyId));
+    const again = await admitPlan(store, { plan: loaded.plan, ruleLock: loaded.ruleLock as any, policy, profile: loaded.profile });
+    assert.deepEqual(again, loaded.record, 'idempotent for the same exact revision');
+    assert.deepEqual(store.ledger.listPlans(p.runId), [loaded.record]);
+    const { Coordinator } = await import('../dist/execution/coordinator.js');
+    const { requiredCoverageOf } = await import('../dist/execution/plans.js');
+    assert.equal((await requiredCoverageOf(store, p.runId)).requiredComplete, 0, 'nothing published yet');
+    const summary = await (await Coordinator.open({ store, runId: p.runId, run: p.run, registry: p.registry, scratchRoot: s.work })).run();
+    const read = await requiredCoverageOf(store, p.runId, 1);
+    assert.deepEqual(read, summary.coverage, 'the same evaluation the run ended with');
+    assert.equal(read.requiredComplete, 1, 'only the unit that reported coverage');
   } finally { store.close(); }
 });
