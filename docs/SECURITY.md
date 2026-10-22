@@ -37,9 +37,10 @@ durability is claimed against process death, not power loss (ADR 19).
 
 A capture (ADR 46) leaves out only the store this process holds, at its exact canonical folder with the identity
 it was opened with; the store reached under another name, replaced, renamed or released refuses the capture, and no
-folder is left out by its name. A run's scratch is a lease inside that store, removed only when every attempt,
-worker, container and container client tied to it is proven stopped by the store's own records, by a bounded walk
-that opens each folder without following a link; anything uncertain is kept. Path-based removal under an active
+folder is left out by its name. A run's scratch is a lease inside that store. Release removes only a container
+client configuration folder the execution layer made for that lease, after every client it started exited; any
+other folder or file keeps the lease. Removal is bounded and checks the hold and the folders before every step;
+anything uncertain is kept. Path-based removal under an active
 same-account race is detection, not confinement. Owner trust state and the service's runtime folder are checked
 against the captured workspace before anything is made, and a selected location inside it is refused.
 

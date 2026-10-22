@@ -1560,17 +1560,19 @@ data that never becomes adopted policy. Snapshots captured under the earlier `.f
 recorded boundaries; nothing is reinterpreted, and the same content now plans as a new run.
 Every owner command and the background service take their scratch from a lease at
 `<store>/scratch/<epoch>/w-…` (`service/scratch-lease.ts`), made only from a genuine held store, one private level at
-a time, with the identities recorded privately. A lease is removed only when each consumer tied to it is proven
-stopped by the store's existing lifecycle records: its attempt folders belong to attempts of this store and epoch
-that the ledger ended (the coordinator ends an attempt only after the supervisor reaped its worker; a worker record
-is settled after the process exited and a container intent after its removal was confirmed) and that no worker,
-intent or terminal-unknown record still names; every container client the lease's runner started has exited. A
-restore, a parser folder, an unknown name, an unreadable or unattributable record, owner loss or a changed folder
-retains it, and the result says why. Removal is a bounded post-order walk (entries, depth, time) through no-follow
-descriptors with non-recursive rmdir; exhaustion keeps the rest and reports a partial cleanup. The descriptor
-checks keep a chmod from following an observed link; later path-based unlink and rmdir are not descriptor-relative,
-so a same-account process racing paths is detected only when observed — the owner-only boundary of ADR 19, not a
-filesystem confinement. Earlier epochs' leases are retained, never swept; global worker recovery is unchanged.
+a time, with the hold and every recorded folder re-checked before and after each step and each new folder required
+to resolve to its own path; a folder replaced or linked on the way mints no lease. Release removes only what the
+lease can tie to a consumer it watched stop: a container client configuration folder that is exactly the one the
+execution layer made (path and identity, recorded in `execution/isolation.ts`) for a runner this lease wrapped, once
+no wrapped client is still running. Anything else (an attempt's work or prep folder, a restore, a parser folder, an
+unknown name, a file) keeps the whole lease, whatever the ledger says; their owners remove them when they stop, and
+one left behind is a consumer the lease cannot prove stopped. A running client keeps even an empty lease. Release is
+bounded from its first read (entries, depth, time; listings read incrementally; a caller can only tighten it), and the
+hold, the lease's folders and the folder being changed are checked before every chmod, unlink and rmdir; the first
+change stops the walk and the rest stays, reported partial. A mode is set through a no-follow descriptor; unlink and
+rmdir are path-based, so a same-account process racing paths is detected only when a check observes it — the
+owner-only boundary of ADR 19, not a filesystem confinement. Earlier epochs' leases are retained, never swept, and a
+fresh lease claims nothing about them; global worker recovery is unchanged.
 The trust folder is checked against the captured workspace by its prospective canonical path before anything is
 created, and the service refuses a reached runtime-folder candidate inside the workspace before it makes a folder,
 socket or descriptor (`ipc.runtimeDirInsideSource`); a disjoint long-path base keeps the `/tmp` fallback. The

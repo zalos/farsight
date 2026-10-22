@@ -16,12 +16,13 @@ that commit, implements ADR 46 and is not yet pushed or merged:
   refuses, a look-alike store exempts nothing, and committed trees get no live-store exemption.
 - The canonical plan no longer leaves `.farsight` out by name. Settings are captured as bounded data and never become
   policy. Retained snapshots keep their recorded boundaries; the same content now plans as a new run.
-- Owner commands and the service take their scratch from a lease at `<store>/scratch/<epoch>/w-…`. A lease is released
-  only on scoped proof that each consumer stopped: attempts ended in this epoch with no worker, intent or
-  terminal-unknown record, and every container client from the lease's runner has exited. Anything uncertain
-  retains it and the result says why.
-- Removal is a bounded post-order walk through no-follow descriptors. Path-based removal under an active
-  same-account race is detection, not confinement. Earlier epochs' leases are retained, never swept.
+- Owner commands and the service take their scratch from a lease at `<store>/scratch/<epoch>/w-…`, made along a
+  chain whose hold and folders are re-checked at every step.
+- After SOL's independent review of `60d846ab` (six adversarial failures), release removes only the client
+  configuration folders the execution layer made for that lease, once its clients have exited. Any other child
+  (attempt, prep, restore, parser, unknown) keeps the lease, and a running client keeps even an empty one.
+- Release is bounded from its first read and fenced before every destructive step. Path-based removal under an
+  active same-account race is detection, not confinement. Earlier epochs' leases are retained, never swept.
 - Trust state is checked against the workspace by its prospective path before anything is made. The service refuses
   a reached runtime-folder candidate inside the workspace (`ipc.runtimeDirInsideSource`) before it makes anything;
   the disjoint long-path `/tmp` fallback is kept.
