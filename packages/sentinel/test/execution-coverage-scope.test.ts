@@ -6,15 +6,17 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { analysisView, lockedRules, policyView, snapshotView, trustedProfile } from './planner-helpers.ts';
 import { evaluateRequiredCoverage, planAnalysis, planBootstrap } from '../dist/planner/index.js';
-import { bearsOn, coverageRecords } from '../dist/execution/coverage.js';
+import { bearsOn, coverageRecords, scopeIndex } from '../dist/execution/coverage.js';
 
 const d = (s: string) => `sha256:${createHash('sha256').update(s).digest('hex')}`;
 const profile = trustedProfile();
 const file = (p: string) => ({ sourceId: 'web', relativePath: p, kind: 'file' as const, disposition: 'included' as const, content: d(p), bytes: 1, generated: false });
 const boot = planBootstrap({ runId: 'run-1', sourceIds: ['web'], profile });
-const plan = (rules: any[]) => planAnalysis({ runId: 'run-1', revision: 2, previous: boot, bootstrap: [{ id: boot.units.at(-1)!.id, revision: 1 }], profile,
-  snapshot: snapshotView(['web'], [file('src/a.ts'), file('src/b.ts')]).view, analyses: [analysisView('web', [])],
-  lock: lockedRules(rules as never).view, policy: policyView(rules.map(r => r.familyId)).view });
+const plan = (rules: any[], options: { surfaces?: any[]; requested?: string[] } = {}) => planAnalysis({ runId: 'run-1', revision: 2, previous: boot, bootstrap: [{ id: boot.units.at(-1)!.id, revision: 1 }], profile,
+  snapshot: snapshotView(['web'], [file('src/a.ts'), file('src/b.ts')]).view,
+  analyses: [analysisView('web', [{ path: 'src/a.ts', class: 'parsed', content: d('src/a.ts') }, { path: 'src/b.ts', class: 'parsed', content: d('src/b.ts') }], options.surfaces ?? [])],
+  lock: lockedRules(rules as never).view,
+  policy: policyView(rules.map(r => r.familyId).filter(f => !options.requested?.includes(f)), { requested: options.requested ?? [] }).view });
 
 const result = (checks: string[], scanned: string[], over: Record<string, unknown> = {}) => ({
   protocol: 'sentinel-worker/draft-1', type: 'result', attemptId: 'att-1', work: { id: 'w', revision: 1 }, coordinatorEpoch: 'e', seq: 1,
@@ -24,7 +26,7 @@ const result = (checks: string[], scanned: string[], over: Record<string, unknow
 function evaluate(p: any, unitChecks: any[], res: any, granularity: 'aggregate' | 'per-file-per-rule') {
   const unit = p.units.find((u: any) => u.id === unitChecks[0].unit.id);
   const { envelopes } = coverageRecords({ runId: p.runId, attemptId: 'att-1', work: { id: unit.id, revision: unit.revision }, checks: unitChecks,
-    adapterGranularity: granularity, result: res, recordedAt: '2026-10-22T12:00:00Z' });
+    adapterGranularity: granularity, result: res, recordedAt: '2026-10-22T12:00:00Z', scopes: scopeIndex(p) });
   return { envelopes, coverage: evaluateRequiredCoverage(p, envelopes) };
 }
 
@@ -62,12 +64,37 @@ test('a limitation on a scope that bears on none of the unit\'s checks is kept o
   }
 });
 
-test('scope bindings follow the canonical ids', () => {
-  const repo = { scopeId: 'web', scopeKind: 'repository', sourceId: 'web' } as const;
-  const fileCheck = { scopeId: 'web:src/a.ts', scopeKind: 'source-file', sourceId: 'web' } as const;
-  assert.equal(bearsOn('web:src/a.ts', repo), true);
-  assert.equal(bearsOn('web:src/', repo), true);
-  assert.equal(bearsOn('webapp:src/a.ts', repo), false, 'another source sharing a prefix');
-  assert.equal(bearsOn('web:src/', fileCheck), true, 'a folder holding the file');
-  assert.equal(bearsOn('web:src/b.ts', fileCheck), false);
+test('mixed scopes in one unit: a skipped file keeps a required surface check incomplete, since nothing records the surface\'s file', () => {
+  // The review's case: an optional file rule and a mandatory surface rule, grouped in one unit over the same source.
+  const p = plan([{ familyId: 'sentinel.ts.optional', languages: ['typescript'] }, { familyId: 'sentinel.http.surface', languages: ['typescript'], scopeKind: 'surface' }],
+    { surfaces: [{ nodeId: 'web::src/a.ts::route', path: 'src/a.ts', kind: 'route' }], requested: ['sentinel.ts.optional'] });
+  const surface = p.checks.find((c: any) => c.scopeKind === 'surface' && c.scopeId === 'web::src/a.ts::route' && c.state === 'planned');
+  assert.ok(surface && surface.required, JSON.stringify(p.checks.map((c: any) => [c.scopeId, c.scopeKind, c.state, c.required])));
+  const unit = p.checks.filter((c: any) => c.state === 'planned' && c.unit.id === surface.unit.id);
+  assert.ok(unit.some((c: any) => c.scopeId === 'web:src/a.ts'), 'the file check is in the same unit');
+  const res = result(unit.map((c: any) => c.id), unit.map((c: any) => c.scopeId),
+    { granularity: 'per-file-per-rule', skipped: [{ scopeId: 'web:src/a.ts', reasonCode: 'sentinel.coverage.unsupported' }] });
+  const { envelopes, coverage } = evaluate(p, unit, res, 'per-file-per-rule');
+  const s = envelopes.find(e => e.checkId === surface.id)!;
+  assert.equal(s.status, 'partial');
+  assert.ok(s.skipped.some(x => x.scopeId === 'web:src/a.ts'), 'the skip is kept on the surface check');
+  assert.equal(coverage.complete, false);
+  assert.equal(coverage.checks.find((c: any) => c.checkId === surface.id)!.complete, false);
+  // A skip on a different captured file is proven disjoint from the other file's check, but not from the surface.
+  const other = evaluate(p, unit, result(unit.map((c: any) => c.id), unit.map((c: any) => c.scopeId),
+    { granularity: 'per-file-per-rule', skipped: [{ scopeId: 'web:src/b.ts', reasonCode: 'sentinel.coverage.unsupported' }] }), 'per-file-per-rule');
+  const fileA = other.envelopes.find(e => e.checkId === unit.find((c: any) => c.scopeId === 'web:src/a.ts')!.id)!;
+  assert.equal(fileA.status, 'complete', 'src/b.ts is proven disjoint from src/a.ts');
+  assert.equal(other.envelopes.find(e => e.checkId === surface.id)!.status, 'partial', 'the surface\'s file is not recorded, so it is not proven disjoint');
+});
+
+test('scope extents come from the plan: captured files, folder boundaries, whole sources; anything else is unknown', () => {
+  const p = plan([{ familyId: 'sentinel.ts.eval', languages: ['typescript'] }, { familyId: 'sentinel.repo.policy', languages: ['typescript'], scopeKind: 'repository' }]);
+  const index = scopeIndex(p);
+  const repo = p.checks.find((c: any) => c.scopeId === 'web' && c.scopeKind === 'repository')!;
+  const fileA = p.checks.find((c: any) => c.scopeId === 'web:src/a.ts')!;
+  assert.equal(bearsOn('web:src/a.ts', repo, index), true);
+  assert.equal(bearsOn('web:src/b.ts', fileA, index), false, 'two captured files of the plan are disjoint');
+  assert.equal(bearsOn('webapp:src/a.ts', fileA, index), true, 'a scope the plan does not name is unknown and bears');
+  assert.equal(bearsOn('web:#index-omitted', fileA, index), true, 'an opaque scope bears');
 });

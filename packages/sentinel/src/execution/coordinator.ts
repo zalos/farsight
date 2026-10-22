@@ -39,7 +39,7 @@ import { releaseWorkDir, type InvocationRecord, type WorkerOutcome } from './sup
 import { bindingId, bindingMismatch, checkRecordedRun, checkRecordedWork, executablePlan, EXECUTION_BINDING_SCHEMA, type ValidatedPlan } from './plan.js';
 import { loadPlan } from './plans.js';
 import { publishPrepared, runOperation } from './bootstrap.js';
-import { COVERAGE_SCHEMA, coverageRecords } from './coverage.js';
+import { COVERAGE_SCHEMA, coverageRecords, scopeIndex, type ScopeIndex } from './coverage.js';
 import { evaluateRequiredCoverage, type RequiredCoverage } from '../planner/coverage.js';
 
 export const COORDINATOR_BOUNDARIES = ['before-spawn', 'after-spawn', 'after-attempt-start', ...PUBLICATION_BOUNDARIES] as const;
@@ -148,10 +148,13 @@ export class Coordinator {
   /** Coverage records read back from publications, by work. */
   readonly #coverage = new Map<string, CoverageEnvelope[]>();
   readonly #scratchRoot: string;
+  /** The plan's scope extents, indexed once. */
+  readonly #scopes: ScopeIndex;
 
   private constructor(o: CoordinatorOptions, plan: ValidatedPlan, service: ExecutionService, intents: IntentFiles, workers: WorkerFiles, recovery: RecoveryReport) {
     this.#store = o.store; this.#plan = plan; this.#service = service; this.#intents = intents; this.#workers = workers;
     this.#scratchRoot = o.scratchRoot;
+    this.#scopes = scopeIndex(plan.admitted.plan);
     this.#unknown = new UnknownCleanup(o.store.storePath);
     const wait = o.cleanupWaitMs ?? 30_000;
     if (!Number.isInteger(wait) || wait < 0 || wait > 600_000) throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'cleanupWaitMs is 0 to 600000' });
@@ -475,7 +478,7 @@ export class Coordinator {
         try {
           // One canonical coverage record per check the plan assigned this unit, at no finer granularity than the
           // trusted adapter establishes; published with the result.
-          const coverage = coverageRecords({ runId: this.#plan.run.id, attemptId, work: ref, checks: executable.checks,
+          const coverage = coverageRecords({ runId: this.#plan.run.id, attemptId, work: ref, checks: executable.checks, scopes: this.#scopes,
             adapterGranularity: executable.adapter!.coverage, result: outcome.result!, recordedAt: now() });
           await publishOutcome({ store: this.#store, work: ref, attemptId, result: outcome.result!, outputs: outcome.outputs, endedAt: now(),
             records: coverage.records, ...(this.#hooks ? { hooks: { at: (b, c) => this.#hooks!.at?.(b, c) } } : {}) });
