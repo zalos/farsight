@@ -41,6 +41,21 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel shared matcher merged; npm consumer requirements — 2026-10-22
+
+PR [#137](https://github.com/zalos/farsight/pull/137) merged at `2df3dc2` after Opus implementation, SOL review
+and all seven selected CI checks. The pure matcher moved into core with Work retaining the same export and
+function identity. A fixed-source ingest against main `9877a22` was identical: 7,235 nodes, 15,161 edges,
+20,062,632 graph bytes and 27,320,320 database bytes; source digest `f9bf44740a93`. Fresh front-door, Map and
+code-map screenshots were inspected with zero page errors (fixture image 404s on the first two surfaces).
+Full build/typecheck and affected core/Work suites passed. Primary checkout and dogfood server were untouched.
+
+Capture and isolation remain under review; parser integration and rules/policy work have started in separate
+Opus worktrees. Their full gates remain open. The consumer documentation now requires Node 24 and leads with
+npm installation of a pinned GitHub Release tarball, without pnpm or a checkout. PR 09 explicitly owns Sentinel
+initialization and repeated setup preserving configuration. Clean global-prefix consumer verification, both
+release artifacts, final Fable review and the Java/Spring sample remain release gates.
+
 ## Sentinel PR 03 merged; capture and isolation continue — 2026-10-22
 
 PR [#134](https://github.com/zalos/farsight/pull/134) merged at `269c3bc` with all nine CI checks passing.
