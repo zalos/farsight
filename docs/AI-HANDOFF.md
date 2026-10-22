@@ -19,6 +19,21 @@ Validation: Sentinel dependency-closure build; Next matcher/pack suites (23 test
 capture → delete checkout → parse → analyze patched fixtures and a nested workspace control. The original
 independent patched-package probe was replayed unchanged. Public CLI integration remains separately pending.
 
+## Delayed OOM canary correction — 2026-10-22
+
+Branch `codex/sentinel-oom-settling-investigation` corrects the test-only Docker visibility adapter: it hides the
+first two terminal exit-137 observations, including naturally false flags, instead of hiding the first two true
+OOM flags. The old adapter compounds natural daemon delay and can exhaust the actual backend's four-read bound;
+a deterministic backend regression fails with the old adapter and passes with the correction. Production
+classification, the 500 ms bound, cancellation and exact ownership/cleanup are unchanged. Exit 137 with no
+affirmative OOM evidence remains `workerExited`. Required native positives still require genuine daemon evidence.
+
+Validation: Sentinel dependency-closure build; four pure state controls plus all 20 native isolation checks pass
+with zero skips on Docker Desktop Engine 29.2.1 / Linux arm64. Ten additional focused native OOM/plain-SIGKILL
+trials pass. Native inspect diagnostics retain at most 16 bounded state/timing rows, without paths or source.
+The original Linux CI failure lacked raw inspect observations, so its exact daemon sequence remains unproven;
+required native CI on the corrected head must pass before integration.
+
 ## Start here
 
 Read `AGENTS.md` for project rules and architecture. Codex loads it as project instructions; `CLAUDE.md` imports it and this handoff. Keep durable facts in those repository files so both providers receive updates. This is project memory, not ChatGPT account memory or a synchronization of private conversation histories.
@@ -121,6 +136,25 @@ for the ordinary two-space form. Target code is never installed, compiled or exe
 checks passed; all 36 focused Next/package tests and both exact review probes passed with zero skips. Independent review and integration
 remain with the coordinating owner; no primary build, graph replacement or push occurred.
 
+## Sentinel offline advisory foundation rebased — 2026-10-22
+
+Branch `codex/sentinel-osv-integration` rebases the independently reviewed advisory adapter from `30b618f1`
+onto merged PR 145 (`5196dc70`), preserving PR 158's execution repair. Adapter source, sealed input reader, original
+fixtures, tests and asset hook are byte-identical to that reviewed version. Integration retains both Pattern and
+OSV catalogs, security/ADR sections, asset hooks and installed-worker checks; OSV is ADR 29 on this main branch.
+
+Checked on the rebased source: Sentinel dependency-closure build and typecheck; 54 affected OSV, package, Pattern,
+preview and actual detached-CLI tests, zero skips; 181 script tests, zero skips; catalog and exact-title lint.
+The clean npm consumer validated eight typed exports, 19 schemas, 53 fixtures and cross-process storage. Actual
+installed worker checks passed for Pattern (six original findings), OSV (one original finding), and both together.
+The individual native qualification jobs select their own provisioned worker; both asset sets are always validated,
+and the default local smoke still runs both workers. No image was acquired for these checks.
+
+This is a mergeable adapter foundation, not full PR 12 completion: production scanner command/registry admission,
+owner acquisition CLI and installed public-command acceptance remain integration work. Earlier fixed-source ingest
+and browser evidence below belongs to its named head; this rebase does not alter parser/core graph behavior.
+No primary checkout build, graph replacement or server restart occurred.
+
 ## Sentinel sampled-memory test — 2026-10-22
 
 Branch `codex/sol-memory-test` changes only the bootstrap resource regression: the real parse and store now receive
@@ -129,6 +163,37 @@ must grow process memory after allocation reuse or garbage collection. The refus
 error and absence of a publication; the neighbor checks successful publication. Runtime grants are unchanged.
 Validation: dependency-closure build and all 10 bootstrap tests passed with no skips. Native platform metadata is
 reviewed separately against the native CI evidence.
+
+## Spring PR149 integration rebase — 2026-10-22
+
+Branch `codex/sentinel-spring-integration` is rebased onto fetched main `5196dc70`, including the independently
+approved balanced generic correction `a951674b` (rebased runtime head `1eb1f22e`). Every Spring implementation,
+fixture and framework catalog byte is identical to that reviewed head. Conflict resolution retained main's Pattern
+ADR, adapter, rule assets, packaging hook and installed asset verification alongside the Spring export and fixture.
+Main's Pattern implementation and asset-hook bytes were checked unchanged; no OSV changes were present at this base.
+
+Affected dependency build and typecheck, catalog lint and the exact existing PR title lint passed. Nine focused
+Spring generic/inherited cases and ten package-boundary cases passed with no skips. A fresh npm-only consumer
+validated nine typed exports, 19 contract types and schemas, 53 contract fixtures, cross-process store reopen,
+17 Pattern pack files, and actual installed Spring capture/parse/analysis returning open, protected and unknown.
+The existing broad suites were not repeated for this byte-preserving rebase. No primary build, graph refresh,
+application execution, container invocation, push or merge occurred. Public Spring command integration and the
+end-of-plan Java sample runtime gates remain open. The integrating lead owns review, push and merge.
+
+## Spring generic superclass shadow correction — 2026-10-22
+
+Branch `codex/sentinel-spring-generic-fix` follows reviewed Spring head `ff13168c`. Its type index now erases each
+balanced generic argument group separately, preserving qualified member types between groups. Comments and quoted
+annotation values cannot alter bracket depth. Both direct type resolution and inherited-shadow discovery share the
+same erasure; unsupported spelling remains conservative. A captured nested helper named `AbstractHttpConfigurer`
+therefore makes the configurer method reference unknown, instead of proving authentication from a helper that could
+remove that configurer.
+
+The original capture/parse regression and three neighbors failed on the frozen baseline; its harmless generic
+inheritance neighbor passed. The corrected suite includes nested and package-qualified type paths, comment and
+annotation delimiters, and retains the harmless positive. Sentinel closure build, typecheck, catalog lint and the
+package-boundary audit passed. All tests capture and parse original Java fixtures; no target code is compiled or run.
+Independent review and integration belong to the coordinating owner. No primary build or graph refresh occurred.
 
 ## Sentinel scheduler merged; CLI integration — 2026-10-22
 
@@ -176,6 +241,31 @@ batching and actual installed-command acceptance pass. The scheduler, detached C
 advisories and framework packs remain in implementation/review. SOL found secrets allowlist omissions and a
 filename redaction channel; those findings must be closed before acceptance. npm release packaging prework is
 underway; no release has been cut.
+
+## Sentinel advisory integration; native qualification pending — 2026-10-22
+
+The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc9`, after all eight
+checks. The pattern adapter has a draft qualification PR [#145](https://github.com/zalos/farsight/pull/145);
+its native amd64 diagnostic qualification test needs the explicit candidate-platform input before rerunning.
+
+Offline advisories are integrated on `codex/sentinel-osv-integration`. The OSV-Scanner 2.7.0 adapter uses the pinned
+official container and separately acquired, digest-bound advisory snapshots. Scans cannot fetch databases.
+Missing, stale, refused and skipped inputs remain explicit. SOL verified the final refusal and comparison fixes:
+a failed or partially listed counterpart cannot make an earlier finding appear resolved.
+
+The integration passed full build/typecheck, 351 Sentinel tests (23 explicit opt-in/platform skips), 21 focused
+real-container tests with zero skips, core 404, scripts 181, catalog lint (3,814 entries), and a clean npm consumer
+with eight typed exports, 19 contracts/schemas and 53 fixtures. The installed OSV worker ran through the workspace
+execution service and found the original synthetic advisory; that is not yet acceptance through the installed CLI.
+Fresh fixed-source ingests at runtime head `c537e51` against main `a690cc9` agree on every node and edge value:
+7,917 nodes, 16,387 edges, source digest `16f951b42b53`, 21,904,177 graph bytes and 29,835,264 database bytes in both.
+Fresh front-door, Map and code-map screenshots were inspected with zero page errors; known fixture design-image
+404s remain on the first two surfaces. No primary build or dogfood refresh occurred.
+
+PR 12 remains incomplete until native amd64 qualification and production scheduler/installed CLI wiring.
+Scheduler/CLI admission, receipt scope and crash durability findings remain under correction. Framework packs
+are being checked for false protection claims. Release packaging remains prework; mandatory acceptance gates
+must pass before publication, and no release has been cut.
 
 ## Sentinel policy merged; planner integration verified — 2026-10-22
 
