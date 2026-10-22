@@ -14,6 +14,9 @@
 // run as workers, and what each covered is recorded as canonical coverage records (coverage.ts) that PR 06's
 // evaluateRequiredCoverage alone turns into the run's outcome.
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { restoreSnapshot } from '../snapshot/materialize.js';
+import { reconcileScratch, removeOwned, type ScratchReconciliation } from './scratch.js';
 import type { ArtifactId, CatalogKey, Id, WorkRef } from '../contracts/common.js';
 import type { CoverageEnvelope } from '../contracts/coverage.js';
 import type { RunEnvelope, RunOutcome, RunState } from '../contracts/run.js';
@@ -130,6 +133,8 @@ export class Coordinator {
   readonly #backendOptions: CoordinatorOptions['backendOptions'];
   /** The latest recovery; replaced each time unconfirmed cleanup is re-checked. */
   recovery: RecoveryReport;
+  /** What open removed from, and kept in, the scratch root. */
+  scratch: ScratchReconciliation = { removedRestores: [], removedWorkDirs: [], kept: [] };
   /** This epoch's own creates that ended without a confirmed answer: they block admission until settled. */
   readonly #pendingNow: ContainerIntent[] = [];
   #pauseRequested = false;
@@ -178,7 +183,10 @@ export class Coordinator {
     const intents = new IntentFiles(o.store.storePath);
     const workers = new WorkerFiles(o.store.storePath);
     const recovery = await recoverStore(o.store, { intents, workers, ...(service.backend ? { backend: service.backend } : {}) });
-    return new Coordinator(o, plan, service, intents, workers, recovery);
+    const c = new Coordinator(o, plan, service, intents, workers, recovery);
+    // What dead owners left in this scratch root that is provably unused now goes; anything uncertain stays.
+    c.scratch = reconcileScratch(o.scratchRoot, o.store, recovery);
+    return c;
   }
 
   /** Stop admitting new work; attempts in flight may finish and publish. The run becomes paused once they end. */
@@ -256,7 +264,11 @@ export class Coordinator {
     const deadlineTimer = setTimeout(() => { this.#deadlinePassed = true; this.#deadline.abort(); }, Math.max(0, Math.min(remaining, 2_147_000_000)));
     if (remaining <= 0) { this.#deadlinePassed = true; this.#deadline.abort(); }
     try {
-      return await this.#drive(runId);
+      // The pinned snapshot is restored for this drive only: attempts copy their inputs from it while it lasts, and
+      // the drive returns with nothing in flight, so nothing reads it after.
+      const restored = this.#plan.restored;
+      if (restored && !existsSync(restored)) await restoreSnapshot(this.#store, this.#plan.run.snapshotId, restored);
+      try { return await this.#drive(runId); } finally { if (restored) removeOwned(restored); }
     } finally { clearTimeout(deadlineTimer); }
   }
 

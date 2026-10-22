@@ -59,6 +59,8 @@ for (const boundary of COORDINATOR_BOUNDARIES) {
         // Every worker identity was settled: recovery proved it stopped, or the worker exited and was reaped.
         assert.deepEqual(new WorkerFiles(store.storePath).list(), { records: [], unresolved: [] }, `rep ${rep}: no worker obligation left`);
         assert.equal(summary.recovery.clean, true, `rep ${rep}: recovery is clean`);
+        // Nothing the killed owner left in its scratch survives: its restore and its stopped attempts' folders.
+        assert.deepEqual(readdirSync(join(s.root, 'work')).filter(n => n.startsWith('inputs.') || n.startsWith('att-')), [], `rep ${rep}: scratch reconciled`);
         if (rep === 0) t.diagnostic(`${boundary}: recovery ${JSON.stringify({ interrupted: summary.recovery.interrupted.length, stopped: summary.recovery.stoppedWorkers.length, aborted: summary.recovery.abortedStages.length })}`);
       } finally { store.close(); }
     }

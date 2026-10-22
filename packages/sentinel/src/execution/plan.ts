@@ -20,7 +20,7 @@ import type { ResultMessage } from '../contracts/protocol.js';
 import type { RunEnvelope } from '../contracts/run.js';
 import type { WorkEnvelope } from '../contracts/work.js';
 import { planBoundaryFor, verifyInputSet, verifyWorkEnvelope, workEnvelopesFor, canonicalArtifactId, influenceManifestOf, type InfluenceManifest } from '../planner/boundary.js';
-import { openSnapshot, restoreSnapshot } from '../snapshot/materialize.js';
+import { openSnapshot } from '../snapshot/materialize.js';
 import type { SentinelStore } from '../store/index.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { ExecutionError } from './errors.js';
@@ -31,6 +31,8 @@ import { orderPlan } from './scheduler.js';
 import { inputFingerprintOf, type CapturedInput } from './supervisor.js';
 
 export const EXECUTION_BINDING_SCHEMA = 'sentinel-execution-binding/draft-1';
+/** A coordinator's input restore under its scratch root: `inputs.<epoch>.<uuid>`. */
+export const RESTORE_PREFIX = 'inputs.';
 
 export interface ExecutionBinding {
   schema: typeof EXECUTION_BINDING_SCHEMA;
@@ -65,7 +67,7 @@ export interface ValidatedPlan {
   readonly external: ReadonlySet<string>;
   unitOf(ref: WorkRef): ExecutableUnit;
   bindingOf(ref: WorkRef): Readonly<ExecutionBinding>;
-  /** Where the pinned snapshot was restored for the check units' inputs (null for a bootstrap revision). */
+  /** Where the coordinator restores the pinned snapshot for the check units' inputs (null for a bootstrap revision). */
   readonly restored: string | null;
 }
 
@@ -113,11 +115,13 @@ export async function executablePlan(store: SentinelStore, admitted: AdmittedPla
   if (plan.kind === 'analysis') {
     if (plan.pins.snapshotId !== run.snapshotId) refuse('the plan pins another snapshot than the run');
     const { snapshot } = await openSnapshot(store, run.snapshotId);
-    restored = join(scratchRoot, `inputs-${randomUUID()}`);
-    const tree = await restoreSnapshot(store, run.snapshotId, restored);
-    const roots = new Map(tree.sources.map(s => [s.sourceId, s.root]));
+    // Where the coordinator restores the pinned snapshot while it may start attempts (restoreSnapshot puts each
+    // source at <target>/<sourceId>); named by this owner's epoch so recovery can tell a dead owner's restore apart.
+    restored = join(scratchRoot, `${RESTORE_PREFIX}${store.epoch}.${randomUUID()}`);
+    const root = restored;
+    const sources = new Set(snapshot.sources.map(s => s.sourceId));
     const boundary = planBoundaryFor(plan, { run, conversion, snapshot,
-      pathOf: i => join(roots.get(i.sourceId) ?? refuse(`no restored source ${i.sourceId}`), ...i.relativePath.split('/')) });
+      pathOf: i => join(root, sources.has(i.sourceId) ? i.sourceId : refuse(`no captured source ${i.sourceId}`), ...i.relativePath.split('/')) });
     works = [...boundary.works];
     const held = new Set(works.filter(w => w.state === 'blocked').map(key));
     inputsOf = w => (held.has(key(w)) ? [] : boundary.inputsFor(w).map(i => ({ id: i.id, path: i.path })));
