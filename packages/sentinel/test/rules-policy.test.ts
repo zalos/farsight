@@ -56,7 +56,7 @@ const schemaEnum = (kind: Parameters<typeof schemaOf>[0], def: string, ...path: 
 test('policy enum sets are pinned to an explicit list and to the generated schema', () => {
   const pins: [string, readonly string[], string[], string[] | null][] = [
     ['languages', RULE_LANGUAGES, ['typescript', 'javascript', 'java'], schemaEnum('rulepack', 'RuleLanguage')],
-    ['scope kinds', RULE_SCOPE_KINDS, ['source-file', 'surface', 'dependency-manifest', 'ci-config', 'repository'], schemaEnum('rulepack', 'RuleScopeKind')],
+    ['scope kinds', RULE_SCOPE_KINDS, ['source-file', 'surface', 'dependency-manifest', 'ci-config', 'infrastructure-config', 'repository'], schemaEnum('rulepack', 'RuleScopeKind')],
     ['capabilities', RULE_CAPABILITIES, ['source-bytes', 'pattern-match', 'source-span', 'call-occurrence', 'resolved-receiver-type', 'framework-order', 'interprocedural-flow', 'runtime-observation', 'dependency-manifest', 'advisory-database'], schemaEnum('rulepack', 'RuleCapability')],
     ['meanings', RULE_MEANINGS, ['candidate', 'finding'], schemaEnum('rulepack', 'RuleMeaning')],
     ['severities', SEVERITIES, ['info', 'low', 'medium', 'high', 'critical'], schemaEnum('rulepack', 'Severity')],
