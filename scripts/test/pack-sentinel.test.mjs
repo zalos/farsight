@@ -20,6 +20,7 @@ const MANIFEST = {
   exports: {
     '.': { types: './dist/index.d.ts', import: './dist/index.js' },
     './contracts': { types: './dist/contracts/index.d.ts', import: './dist/contracts/index.js' },
+    './store': { types: './dist/store/index.d.ts', import: './dist/store/index.js' },
     './schemas/*': './schemas/*', './package.json': './package.json',
   },
   dependencies: { '@farsight/core': 'workspace:*' },
@@ -44,7 +45,13 @@ function workspace({ build = true } = {}) {
     "export const ENVELOPES = { report: { schema: 'sentinel-report/draft-1', type: 'ReportEnvelope' } } as const;",
     'export type EnvelopeKind = keyof typeof ENVELOPES;', '',
   ].join('\n'));
+  // A store subpath the root also re-exports, as the real package does: both must see one module instance.
+  write(root, 'packages/sentinel/src/store/index.ts', [
+    'export class StoreError extends Error { readonly code: string; constructor(code: string) { super(code); this.code = code; } }',
+    "export function openStore(path: string): never { throw new StoreError('sentinel.store.missing:' + path.length); }", '',
+  ].join('\n'));
   write(root, 'packages/sentinel/src/index.ts', [
+    "export { StoreError, openStore } from './store/index.js';",
     "import { ENVELOPES, type EnvelopeKind, type ReportEnvelope } from './contracts/index.js';",
     "export * from './contracts/index.js';",
     'export interface EnvelopeTypes { report: ReportEnvelope }',
@@ -91,6 +98,7 @@ test('the tarball carries typed exports, declarations, its own metadata and the 
     assert.deepEqual(manifest.exports, {
       '.': { types: './dist/index.d.ts', import: './dist/index.mjs' },
       './contracts': { types: './dist/contracts/index.d.ts', import: './dist/contracts/index.mjs' },
+      './store': { types: './dist/store/index.d.ts', import: './dist/store/index.mjs' },
       './package.json': './package.json', './schemas/*': './schemas/*',
     });
     assert.equal(manifest.types, './dist/index.d.ts');
@@ -236,4 +244,32 @@ test('npm pack exiting 0 without a tarball keeps build/sentinel; an inherited dr
     assert.ok(existsSync(tarball(root)));
     assert.equal(existsSync(join(root, 'build/sentinel/farsight-sentinel-prior.tgz')), false, 'replaced by the real output');
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('the root export and a subpath share one module instance in the installed tarball', () => {
+  const root = workspace();
+  const consumer = mkdtempSync(join(tmpdir(), 'farsight-sentinel-identity-'));
+  try {
+    const packed = node(root, 'pack-sentinel.mjs');
+    assert.equal(packed.status, 0, packed.stderr);
+    assert.ok(readdirSync(join(root, 'build/sentinel/package/dist/chunks')).length > 0, 'shared modules are emitted once, as chunks');
+    write(consumer, 'package.json', JSON.stringify({ name: 'consumer', private: true, type: 'module' }));
+    const installed = spawnSync('npm', ['install', '--offline', '--no-audit', '--no-fund', tarball(root)],
+      { cwd: consumer, encoding: 'utf8', timeout: 180_000 });
+    assert.equal(installed.status, 0, installed.stderr);
+    write(consumer, 'check.mjs', [
+      "import * as root from 'farsight-sentinel';",
+      "import * as store from 'farsight-sentinel/store';",
+      'let thrown;',
+      "try { store.openStore('x'); } catch (e) { thrown = e; }",
+      'console.log(JSON.stringify({ open: root.openStore === store.openStore, error: root.StoreError === store.StoreError,',
+      '  instanceofRoot: thrown instanceof root.StoreError, instanceofStore: thrown instanceof store.StoreError }));', '',
+    ].join('\n'));
+    const ran = spawnSync(process.execPath, ['check.mjs'], { cwd: consumer, encoding: 'utf8' });
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.deepEqual(JSON.parse(ran.stdout), { open: true, error: true, instanceofRoot: true, instanceofStore: true });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(consumer, { recursive: true, force: true });
+  }
 });
