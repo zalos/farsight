@@ -100,6 +100,12 @@ CREATE TABLE attempts (
   started_at TEXT NOT NULL,
   ended_at TEXT,
   envelope TEXT NOT NULL CHECK (json_valid(envelope)),
+  -- Observed when the attempt ends: the validated final envelope and its usage certainty. The start-time
+  -- identity (envelope, usage_certainty) is immutable; these columns are written once, with the end.
+  final_usage_certainty TEXT CHECK (final_usage_certainty IN ('confirmed','unknown','not-applicable')),
+  final_envelope TEXT CHECK (final_envelope IS NULL OR json_valid(final_envelope)),
+  CHECK ((state = 'running') = (final_envelope IS NULL)),
+  CHECK ((final_envelope IS NULL) = (final_usage_certainty IS NULL)),
   UNIQUE (work_id, work_revision, ordinal),
   UNIQUE (id, work_id, work_revision),
   FOREIGN KEY (work_id, work_revision) REFERENCES work_units(id, revision),

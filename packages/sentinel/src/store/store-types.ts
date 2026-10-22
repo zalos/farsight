@@ -1,6 +1,6 @@
 // Draft types for the Sentinel ledger and its seams with the ownership lock and the object store. The ledger is the
 // only writer of the database; nothing here exposes a connection, a statement or a transaction callback.
-import type { ArtifactId, Count, Digest, Id, Ordinal, Timestamp, WorkRef } from '../contracts/index.js';
+import type { ArtifactId, AttemptUsage, Count, Digest, Id, Ordinal, Timestamp, WorkRef } from '../contracts/index.js';
 
 /**
  * What the ledger needs from the store owner (the ownership lock implements it; this is a structural subset so the
@@ -130,6 +130,8 @@ export interface PublishInput {
   /** The staged artifacts that are this attempt's outputs, in order. Others are only reachable through links. */
   outputs: ArtifactId[];
   endedAt: Timestamp;
+  /** The usage observed at the end. Omitted: the start's usage stands. Never invented by the ledger. */
+  usage?: AttemptUsage;
   idempotency?: IdempotencyRef;
 }
 
@@ -152,6 +154,8 @@ export interface EndAttemptInput {
   endedAt: Timestamp;
   /** The work's state afterwards: retry-eligible (`ready`) or terminal (`failed`). */
   workState: 'ready' | 'failed';
+  /** The usage observed at the end; `canceled-after-spend` needs confirmed usage, here or from the start. */
+  usage?: AttemptUsage;
   idempotency?: IdempotencyRef;
 }
 

@@ -378,3 +378,53 @@ test('publication fails closed without a verifier and refuses forged, tampered o
   const honest = objects.put('honest');
   await check('epoch-5', objects, { ...honest, rawSize: honest.rawSize + 1, storedSize: honest.storedSize + 1 }); // the receipt overstates the bytes
 });
+
+test('an attempt ends only with a final envelope consistent with its stored start', async t => {
+  const { ledger } = await setup(t);
+  start(ledger, 'epoch-1', 'att-1', 1); // started 2026-10-21T12:00:00Z with not-applicable usage
+  const end = (over: Record<string, unknown>) => ledger.endAttempt({ work: W1, attemptId: 'att-1', state: 'failed',
+    endedAt: '2026-10-21T12:01:00Z', workState: 'ready', ...over } as never);
+  assert.throws(() => end({ endedAt: '2026-10-20T12:00:00Z' }), code('sentinel.store.invalidInput'), 'ends before it starts');
+  assert.throws(() => end({ state: 'canceled-after-spend' }), code('sentinel.store.invalidInput'),
+    'the stored start usage is not confirmed and none was observed');
+  assert.throws(() => end({ state: 'canceled-after-spend', usage: { certainty: 'unknown' } }), code('sentinel.store.invalidInput'));
+  assert.throws(() => end({ usage: { certainty: 'not-applicable', inputTokens: 3 } }), code('sentinel.store.invalidInput'));
+  assert.equal(ledger.getAttempt('att-1')!.state, 'running', 'every refusal left the attempt running');
+
+  const spent = { certainty: 'confirmed', inputTokens: 10, outputTokens: 2, monetaryCost: '0.001', currency: 'USD' };
+  end({ state: 'canceled-after-spend', usage: spent, workState: 'failed' });
+  const after = ledger.getAttempt('att-1')!;
+  assert.equal(after.state, 'canceled-after-spend');
+  assert.deepEqual(after.envelope.usage, spent);
+  const db = raw(ledger);
+  t.after(() => db.close());
+  const row = db.prepare('SELECT usage_certainty, final_usage_certainty FROM attempts WHERE id = ?').get('att-1') as Record<string, unknown>;
+  assert.deepEqual({ ...row }, { usage_certainty: 'not-applicable', final_usage_certainty: 'confirmed' },
+    'the start identity is kept; the observed final usage is recorded beside it');
+  assert.throws(() => db.exec("UPDATE attempts SET final_usage_certainty = 'unknown' WHERE id = 'att-1'"), /appendOnly/);
+});
+
+test('publication compares end and start at full nanosecond precision', async t => {
+  const { ledger } = await setup(t);
+  ledger.startAttempt(attemptEnvelope('epoch-1', { id: 'att-1', ordinal: 1, work: W1,
+    startedAt: '2026-10-21T12:00:00.000000002Z' }) as never);
+  const out = identityReceipt('precise');
+  ledger.registerStaging('stage-1', [{ id: out.id, schema: 'text/plain', privacy: 'metadata' }], { work: W1, attemptId: 'att-1' });
+  const publish = (endedAt: string) => ledger.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-1', receipts: [out],
+    outputs: [out.id], endedAt });
+  assert.throws(() => publish('2026-10-21T12:00:00.000000001Z'), code('sentinel.store.invalidInput'));
+  assert.equal(ledger.getPublication(W1), null);
+  publish('2026-10-21T12:00:00.000000002Z');
+  assert.equal(ledger.getAttempt('att-1')!.envelope.state, 'succeeded');
+});
+
+test('a stage removal is visible on its run-filtered event stream', async t => {
+  const { ledger } = await setup(t);
+  start(ledger, 'epoch-1', 'att-1', 1);
+  ledger.registerStaging('stage-1', [{ id: sha('s'), schema: 'text/plain', privacy: 'metadata' }], { work: W1, attemptId: 'att-1' });
+  ledger.abortStaging('stage-1');
+  const kinds = ledger.readEvents({ runId: 'run-1', limit: 500 }).events.map(e => e.kind);
+  assert.deepEqual(kinds.slice(-2), ['staging-registered', 'staging-aborted']);
+  const aborted = ledger.readEvents({ runId: 'run-1', limit: 500 }).events.at(-1)!;
+  assert.deepEqual(aborted.work, W1);
+});

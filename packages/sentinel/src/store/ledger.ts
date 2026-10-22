@@ -5,9 +5,9 @@
 // superseded attempt in the same epoch cannot win.
 import { closeSync, lstatSync, openSync } from 'node:fs';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
-import { isCalendarTimestamp, validateEnvelope } from '../validate.js';
+import { compareTimestamps, isCalendarTimestamp, validateEnvelope } from '../validate.js';
 import type {
-  AttemptEnvelope, Id, RunEnvelope, RunOutcome, RunState, WorkEnvelope, WorkRef,
+  AttemptEnvelope, AttemptUsage, Id, RunEnvelope, RunOutcome, RunState, WorkEnvelope, WorkRef,
 } from '../contracts/index.js';
 import { digestOf } from './ledger-json.js';
 import { LEDGER_MIGRATIONS, migrateLedger } from './migrations.js';
@@ -365,8 +365,7 @@ export class Ledger {
       let superseded: Id | null = null;
       if (work.state === 'running' && opts.supersede) {
         superseded = String(work.active_attempt_id);
-        this.#run("UPDATE attempts SET state = 'interrupted', ended_at = ? WHERE id = ? AND state = 'running'",
-          this.#now(), superseded);
+        this.#finishAttempt(superseded, 'interrupted', this.#now(), undefined, [], true);
       } else if (work.state !== 'ready') {
         throw new LedgerError('sentinel.store.wrongState', `work is ${String(work.state)}, not ready`);
       }
@@ -381,6 +380,24 @@ export class Ledger {
       const sequence = this.#event('attempt-started', String(work.run_id), ref, { attemptId: attempt.id, superseded });
       return { attemptId: attempt.id, work: { id: ref.id, revision: ref.revision }, superseded, sequence };
     });
+  }
+
+  /**
+   * Ends a running attempt with a validated final envelope built from its stored start: the start's identity and
+   * time, the end state and time, the outputs and the observed usage (the start's when none is given). The contract's
+   * own invariants then apply against what is stored — an end before the start (at full precision) or a
+   * canceled-after-spend without confirmed usage is refused; the ledger never invents a usage fact. A supersession
+   * at an instant before the start (clock skew) is recorded at the start.
+   */
+  #finishAttempt(attemptId: Id, state: AttemptEnvelope['state'], endedAt: string, usage: AttemptUsage | undefined,
+    outputs: string[], clampToStart = false): void {
+    const row = this.#get("SELECT envelope FROM attempts WHERE id = ? AND state = 'running'", attemptId);
+    if (!row) throw new LedgerError('sentinel.store.notActiveAttempt', 'the attempt is not running');
+    const start = JSON.parse(String(row.envelope)) as AttemptEnvelope;
+    const at = clampToStart && compareTimestamps(endedAt, start.startedAt) < 0 ? start.startedAt : endedAt;
+    const final = contract('attempt', { ...start, state, endedAt: at, outputs, usage: usage ?? start.usage });
+    this.#run('UPDATE attempts SET state = ?, ended_at = ?, final_usage_certainty = ?, final_envelope = ? WHERE id = ?',
+      state, at, final.usage.certainty, JSON.stringify(final), attemptId);
   }
 
   /** The fence every attempt-scoped write passes: exact revision, its active attempt, running, this epoch. */
@@ -413,10 +430,10 @@ export class Ledger {
     if (input.workState !== 'ready' && input.workState !== 'failed') throw invalid('work ends ready or failed');
     checkTime(input.endedAt, 'endedAt');
     const request = { work: ref, attemptId: input.attemptId, state: input.state, endedAt: input.endedAt,
-      workState: input.workState };
+      workState: input.workState, usage: input.usage ?? null };
     return this.#mutate('endAttempt', request, input.idempotency, () => {
       const { runId } = this.#fenceAttempt(ref, input.attemptId);
-      this.#run('UPDATE attempts SET state = ?, ended_at = ? WHERE id = ?', input.state, input.endedAt, input.attemptId);
+      this.#finishAttempt(input.attemptId, input.state, input.endedAt, input.usage, []);
       this.#run('UPDATE work_units SET state = ?, active_attempt_id = NULL WHERE id = ? AND revision = ?',
         input.workState, ref.id, ref.revision);
       return { attemptId: input.attemptId,
@@ -478,11 +495,13 @@ export class Ledger {
   abortStaging(stageId: StageId): { stageId: StageId; sequence: number } {
     checkId(stageId, 'stage id');
     return this.#transaction(() => {
-      const row = this.#get('SELECT work_id, work_revision FROM staging WHERE stage_id = ?', stageId);
+      const row = this.#get(`SELECT s.work_id, s.work_revision, w.run_id FROM staging s
+        LEFT JOIN work_units w ON w.id = s.work_id AND w.revision = s.work_revision WHERE s.stage_id = ?`, stageId);
       if (!row) throw new LedgerError('sentinel.store.notFound', 'no such stage');
       this.#run('DELETE FROM staging WHERE stage_id = ?', stageId);
       const work = row.work_id === null ? null : { id: String(row.work_id), revision: Number(row.work_revision) };
-      return { stageId, sequence: this.#event('staging-aborted', null, work, { stageId }) };
+      const runId = row.run_id === null ? null : String(row.run_id);
+      return { stageId, sequence: this.#event('staging-aborted', runId, work, { stageId }) };
     }, true);
   }
 
@@ -519,7 +538,7 @@ export class Ledger {
     }
     const receipts = [...input.receipts].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : a.codec < b.codec ? -1 : 1));
     const request = { work: ref, attemptId: input.attemptId, stageId: input.stageId, outputs: input.outputs,
-      receipts: receipts.map(r => ({ ...r })), endedAt: input.endedAt };
+      receipts: receipts.map(r => ({ ...r })), endedAt: input.endedAt, usage: input.usage ?? null };
     // Verified before the transaction: each object is read and hashed by the object store, which can be slow, and
     // the stage registered before any byte was written keeps it pinned against collection until this commit.
     // The transaction then requires that same stage to still be open, so the verification still holds at commit.
@@ -600,7 +619,7 @@ export class Ledger {
           privacy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, ref.id, ref.revision, input.attemptId, id,
         at === undefined ? 'linked' : 'output', at ?? null, String(s.schema), String(s.privacy));
       }
-      this.#run("UPDATE attempts SET state = 'succeeded', ended_at = ? WHERE id = ?", input.endedAt, input.attemptId);
+      this.#finishAttempt(input.attemptId, 'succeeded', input.endedAt, input.usage, input.outputs);
       this.#run("UPDATE work_units SET state = 'published', active_attempt_id = NULL WHERE id = ? AND revision = ?",
         ref.id, ref.revision);
       this.#run('DELETE FROM staging WHERE stage_id = ?', input.stageId);
@@ -670,11 +689,14 @@ export class Ledger {
       activeAttemptId: r.active_attempt_id === null ? null : String(r.active_attempt_id) } : null;
   }
 
-  getAttempt(id: Id): { id: Id; work: WorkRef; state: string; epoch: Id } | null {
+  /** An attempt as recorded: its final envelope once ended, else its start envelope. */
+  getAttempt(id: Id): { id: Id; work: WorkRef; state: string; epoch: Id; envelope: AttemptEnvelope } | null {
     checkId(id, 'attempt id');
-    const r = this.#read(() => this.#get('SELECT work_id, work_revision, state, coordinator_epoch FROM attempts WHERE id = ?', id));
+    const r = this.#read(() => this.#get(
+      'SELECT work_id, work_revision, state, coordinator_epoch, envelope, final_envelope FROM attempts WHERE id = ?', id));
     return r ? { id, work: { id: String(r.work_id), revision: Number(r.work_revision) }, state: String(r.state),
-      epoch: String(r.coordinator_epoch) } : null;
+      epoch: String(r.coordinator_epoch),
+      envelope: JSON.parse(String(r.final_envelope ?? r.envelope)) as AttemptEnvelope } : null;
   }
 
   getPublication(ref: WorkRef): (PublicationReceipt & { outputs: Array<{ id: string; schema: string; privacy: ArtifactPrivacy }> }) | null {
