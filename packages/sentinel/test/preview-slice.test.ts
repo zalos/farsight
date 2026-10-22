@@ -69,6 +69,15 @@ test('canonical plan → admitted analysis → coordinator → coverage records 
     // The CLI's reading of it: required coverage incomplete, the foundation-preview label kept.
     const read = await canonicalResult(store, 'run', planned.disclosure.runId, { executing: false });
     assert.deepEqual([read.outcome, read.reasonCode, read.facts.label], ['required-coverage-incomplete', 'sentinel.service.previewNotCoverage', 'foundation-preview']);
+    // Unlike the synthetic diamond below, this parent has the real accepted capture/parse/inventory chain.
+    const { previewRerun } = await import('../dist/service/canonical.js');
+    const chosen = plan.units.find(u => u.scopes[0] === 'workspace:src/users.ts')!.id;
+    const events = store.ledger.readEvents({ after: 0, limit: 500 });
+    const preview: any = await previewRerun(store, planned.disclosure.runId, [chosen],
+      { trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work });
+    assert.deepEqual([preview.selected, preview.all, preview.units?.length, preview.held?.length], [[chosen], false, 1, 2],
+      'a proven canonical parent previews exactly one unit with the other two held');
+    assert.deepEqual(store.ledger.readEvents({ after: 0, limit: 500 }), events, 'successful preview also creates no records');
   } finally { removeScratch(work); }
 });
 
@@ -107,9 +116,10 @@ test('a run whose bootstrap could not publish is finished: planning again names 
   } finally { removeScratch(work); }
 });
 
-test('a selected rerun previews its consequences from the parent plan: downstream reruns, prerequisites are reused', needsStore, async t => {
+test('a selected rerun refuses an unproven synthetic bootstrap; a whole dependency closure still previews fresh analysis', needsStore, async t => {
   const { syntheticPlan, unitIdsOf } = await import('./coordinator-helpers.ts');
   const { previewRerun } = await import('../dist/service/canonical.js');
+  const { selectionClosure } = await import('../dist/execution/selection.js');
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-rerun-')));
   t.after(() => { unlock(dir); rmSync(dir, { recursive: true, force: true }); });
   const store = await openStore(join(dir, 'store'));
@@ -123,11 +133,14 @@ test('a selected rerun previews its consequences from the parent plan: downstrea
   const summary = await executeRun(store, 'run-diamond', { scratchRoot: work, registry: planned.registry, run: planned.run, drivers });
   assert.equal(summary.state, 'completed', JSON.stringify(summary.failures));
   const id = unitIdsOf(planned.plan);
-  const preview: any = await previewRerun(store, 'run-diamond', [id.B!]);
-  assert.deepEqual(preview.selected, [id.B]);
-  assert.deepEqual(preview.downstream, [id.D], 'what depends on B runs again with it');
-  assert.deepEqual(preview.prerequisites, [id.A, id.C].sort(), 'what B and D depend on and is not rerun (A, and C for D) is reused as published');
-  assert.equal(preview.all, false);
+  const consequences = selectionClosure(planned.plan.units, [id.B!]);
+  assert.deepEqual([...consequences.run].sort(), [id.B, id.D].sort(), 'B and its downstream D would run');
+  assert.deepEqual(consequences.needed, [id.A, id.C].sort(), 'analysis prerequisites are not reusable until PR 27');
+  const events = store.ledger.readEvents({ after: 0, limit: 500 });
+  assert.deepEqual(await previewRerun(store, 'run-diamond', [id.B!]),
+    { reasonCode: 'sentinel.service.bootstrapUnavailable', facts: { parentId: 'run-diamond' } },
+    'the synthetic plan has no accepted coordinator bootstrap, so a strict subset cannot reuse it');
+  assert.deepEqual(store.ledger.readEvents({ after: 0, limit: 500 }), events, 'refusal creates no records');
   const fromA: any = await previewRerun(store, 'run-diamond', [id.A!]);
   assert.deepEqual([fromA.downstream, fromA.prerequisites, fromA.all], [[id.B, id.C, id.D].sort(), [], true], 'selecting the root reruns everything');
   assert.equal(((await previewRerun(store, 'run-diamond', ['work-missing'])) as any).reasonCode, 'sentinel.service.stageUnknown');

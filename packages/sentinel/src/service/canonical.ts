@@ -333,7 +333,7 @@ async function parentClosure(store: SentinelStore, parentId: string, selected: r
   const walkUp = (id: string) => { for (const d of units.get(id)?.dependencies ?? []) if (!rerun.has(d.id) && !prerequisites.has(d.id)) { prerequisites.add(d.id); walkUp(d.id); } };
   for (const id of rerun) walkUp(id);
   let bootstrap: BootstrapEvidence | undefined;
-  if (chosen.size < units.size) {
+  if (rerun.size < units.size) {
     try { bootstrap = await retainedBootstrapForReport(store, parentId, admitted); }
     catch { return { reasonCode: 'sentinel.service.bootstrapUnavailable', facts: { parentId } } as Refusal; }
   }
