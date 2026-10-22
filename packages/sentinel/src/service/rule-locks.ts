@@ -1,17 +1,21 @@
 // The owner's rule locks, in the owner's private state outside every checkout. Each lock revision is stored once,
-// content-addressed by its digest, and never rewritten; which revision is current is one small pointer replaced
-// atomically, and only from the revision it was read at (a promotion that raced another is refused, never merged).
+// content-addressed by its digest, and never rewritten. Which revision is current is a chain of create-once links:
+// `first` names the first selected revision and `next/<digest>` names the one revision that succeeded it. Creating a
+// link is the compare-and-swap: only one promotion can ever succeed a given revision, however many race, so a
+// promotion confirmed against a revision that is no longer current is refused, never merged or lost.
 // A lock is trusted only as read back here and verified against the digest it is filed under: a repository can
 // ship no lock and select none. Promotion itself is E's (rules/lock.ts promote); this file only keeps its results.
 import { join } from 'node:path';
 import type { RuleLockEnvelope } from '../contracts/index.js';
 import { PolicyError } from '../policy/index.js';
-import { createPrivateFileOnce, ensurePrivateDir, readPrivateFile, writePrivateFileAtomic } from '../policy/user-state.js';
+import { createPrivateFileOnce, ensurePrivateDir, readPrivateFile } from '../policy/user-state.js';
 import { lockDigest, verifyPinnedLock } from '../rules/index.js';
 import { ServiceError } from './owner-service.js';
 
 const MAX_LOCK_BYTES = 4 * 1024 * 1024;
 const MAX_POINTER_BYTES = 1024;
+/** Revisions a chain may hold before it is refused as unusable rather than walked without end. */
+const MAX_REVISIONS = 100_000;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const UNSAFE = 'sentinel.receipt.storeUnsafe' as const;
 
@@ -38,13 +42,25 @@ export class RuleLockBook {
     this.#revisions = join(this.#dir, 'locks');
   }
 
-  /** The digest the current pointer names, or null when no lock was ever selected. */
+  /** The digest the chain ends at, or null when no lock was ever selected. */
   currentDigest(): string | null {
-    const bytes = safely(() => readPrivateFile(join(this.#dir, 'current.json'), MAX_POINTER_BYTES, UNSAFE));
+    let digest = this.#link('first');
+    if (digest === null) return null;
+    for (let i = 0; i < MAX_REVISIONS; i++) {
+      const next = this.#link(join('next', `${digest.slice(7)}.json`));
+      if (next === null) return digest;
+      digest = next;
+    }
+    throw new ServiceError('sentinel.service.recordUnsafe');
+  }
+
+  /** One link's target, or null when the link does not exist. */
+  #link(name: string): string | null {
+    const bytes = safely(() => readPrivateFile(join(this.#dir, name), MAX_POINTER_BYTES, UNSAFE));
     if (!bytes) return null;
     let v: { schema?: unknown; digest?: unknown };
     try { v = JSON.parse(bytes.toString('utf8')); } catch { throw new ServiceError('sentinel.service.recordUnsafe'); }
-    if (v?.schema !== 'sentinel-lock-current/draft-1' || typeof v.digest !== 'string' || !DIGEST.test(v.digest)) throw new ServiceError('sentinel.service.recordUnsafe');
+    if (v?.schema !== 'sentinel-lock-link/draft-1' || typeof v.digest !== 'string' || !DIGEST.test(v.digest)) throw new ServiceError('sentinel.service.recordUnsafe');
     return v.digest;
   }
 
@@ -74,13 +90,16 @@ export class RuleLockBook {
   }
 
   /**
-   * Makes `digest` (already stored) current, but only if the pointer still names `expected` (null: none selected
-   * yet). Another promotion that landed in between refuses this one rather than being overwritten.
+   * Makes `digest` (already stored) current by linking it after `expected` (null: as the first). The link is created
+   * once: if any revision already succeeded `expected`, this promotion raced another and is refused.
    */
   select(digest: string, expected: string | null): void {
     this.read(digest);
-    if (this.currentDigest() !== expected) throw new ServiceError('sentinel.service.lockChanged');
-    safely(() => writePrivateFileAtomic(this.#dir, 'current.json',
-      Buffer.from(JSON.stringify({ schema: 'sentinel-lock-current/draft-1', digest })), UNSAFE));
+    if (expected !== null) this.read(expected);
+    const dir = expected === null ? this.#dir : join(this.#dir, 'next');
+    const name = expected === null ? 'first' : `${expected.slice(7)}.json`;
+    safely(() => ensurePrivateDir(dir, UNSAFE));
+    const linked = safely(() => createPrivateFileOnce(dir, name, Buffer.from(JSON.stringify({ schema: 'sentinel-lock-link/draft-1', digest })), UNSAFE));
+    if (!linked) throw new ServiceError('sentinel.service.lockChanged');
   }
 }

@@ -1,0 +1,109 @@
+// The owner's policy decides every write the service takes, with real adopted settings (PR 06's adoption, admission
+// and receipts; nothing mocked): pause and cancel are decided like a start, an agent gets exactly what the adopted
+// grants give it, and an owner receipt authorizes one action on one plan under one policy revision, once, while it is
+// valid. The service runs in this process over a real store; no run executes (authorization is decided first).
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { adoptedPolicy, adoptWorkspaceSettings, confirmForService, workspaceOf } from '../dist/service/local.js';
+import { OwnerService } from '../dist/service/owner-service.js';
+import { requestedByOf } from '../dist/cli/actor.js';
+import { DEFAULT_SETTINGS, SETTINGS_PATH } from '../dist/policy/index.js';
+import { openStore, qualificationFor, SQLITE_RELEASE_POLICY } from '../dist/store/index.js';
+
+const QUALIFIED = qualificationFor(SQLITE_RELEASE_POLICY, `${process.platform}-${process.arch}`, process.versions.sqlite ?? '') !== undefined;
+const needsStore = QUALIFIED || process.env.CI ? {} : { skip: 'not a qualified store host' };
+const PLAN_A = `plan-${'a'.repeat(32)}`;
+const PLAN_B = `plan-${'b'.repeat(32)}`;
+const agent = requestedByOf({ kind: 'service-connection', granted: { principal: 'agent', channel: 'mcp' } });
+const owner = requestedByOf({ kind: 'service-connection', granted: { principal: 'agent', channel: 'local-service' } });
+
+/** A workspace whose adopted settings carry `grants`, with two plan records under the adopted policy revision. */
+async function workspace(t: { after(fn: () => void | Promise<void>): void }, settings: Record<string, unknown>) {
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-svcpol-')));
+  const ws = workspaceOf(join(root, 'ws'), { ...process.env, XDG_STATE_HOME: join(root, 'state') });
+  mkdirSync(join(ws.path, '.farsight', 'sentinel'), { recursive: true, mode: 0o700 });
+  const adopt = (s: Record<string, unknown>) => {
+    writeFileSync(join(ws.path, SETTINGS_PATH), JSON.stringify({ ...structuredClone(DEFAULT_SETTINGS), ...s }), { mode: 0o600 });
+    adoptWorkspaceSettings(ws, { confirm: true, now: new Date() });
+    const p = adoptedPolicy(ws);
+    assert.ok('policy' in p);
+    mkdirSync(ws.planDir, { recursive: true, mode: 0o700 });
+    for (const [id, c] of [[PLAN_A, 'a'], [PLAN_B, 'b']] as const) {
+      writeFileSync(join(ws.planDir, `${id}.json`), JSON.stringify({ schema: 'sentinel-plan-record/draft-1', planId: id,
+        planDigest: `sha256:${c.repeat(64)}`, snapshotId: 'snap-x', policyRevision: p.policy.revision }), { mode: 0o600 });
+    }
+  };
+  adopt(settings);
+  const store = await openStore(ws.storePath);
+  const service = new OwnerService(store, ws, { plans: {
+    record: (id: string) => (id === PLAN_A || id === PLAN_B ? JSON.parse(readFileSync(join(ws.planDir, `${id}.json`), 'utf8')) : undefined),
+    prepare: async () => { throw new Error('nothing runs in this suite'); },
+  } });
+  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  const receipt = (action: 'run.start' | 'run.pause' | 'run.cancel', planId: string, at = new Date()) => {
+    const c = confirmForService(ws, { command: action.slice(4), action, planId, confirm: true, now: at });
+    assert.ok('receiptId' in c, JSON.stringify(c));
+    return c.receiptId;
+  };
+  return { ws, service, adopt, receipt };
+}
+
+const OWNER_GRANTS = [{ actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'], principals: ['human'], scope: { profiles: ['static'] } }];
+
+test('pause and cancel are decided by the adopted policy: no grant, no write, for the owner as for anyone', needsStore, async t => {
+  const w = await workspace(t, { grants: [{ actions: ['capture.source', 'run.start'], principals: ['human'], scope: { profiles: ['static'] } }] });
+  for (const action of ['run.pause', 'run.cancel'] as const) {
+    const c = confirmForService(w.ws, { command: action.slice(4), action, planId: PLAN_A, confirm: true, now: new Date() });
+    assert.ok('result' in c, `${action}: the owner's own CLI issues no receipt the policy does not grant`);
+    assert.deepEqual([c.result.outcome, c.result.reasonCode], ['configuration-failure', 'sentinel.admission.noGrant']);
+    const r: any = await w.service.handle(action, { runId: PLAN_A }, agent);
+    assert.deepEqual([r.outcome, r.reasonCode], ['configuration-failure', 'sentinel.admission.noGrant'], `${action}: nor does the service`);
+  }
+});
+
+test('an agent gets exactly what the grants give it: confirmation by default, the write only when explicitly allowed', needsStore, async t => {
+  const w = await workspace(t, { grants: [...OWNER_GRANTS, { actions: ['run.pause', 'run.cancel'], principals: ['agent'], confirm: 'agent', scope: { profiles: ['static'] } }] });
+  for (const action of ['run.pause', 'run.cancel'] as const) {
+    const r: any = await w.service.handle(action, { runId: PLAN_A }, agent);
+    assert.equal(r.outcome, 'awaiting-confirmation', `${action}: an agent's write waits for a person`);
+    assert.equal(r.exitCode, 4);
+  }
+  // The same request from the owner's own CLI connection is still an agent's: being on the socket is not ownership.
+  assert.equal(((await w.service.handle('run.cancel', { runId: PLAN_A }, owner)) as any).outcome, 'awaiting-confirmation');
+
+  w.adopt({ agentActions: 'allow', grants: [...OWNER_GRANTS, { actions: ['run.cancel'], principals: ['agent'], scope: { profiles: ['static'] } }] });
+  const allowed: any = await w.service.handle('run.cancel', { runId: PLAN_A }, agent);
+  assert.equal(allowed.verdicts.policy.reasonCode, 'sentinel.admission.granted', 'an explicit grant with agent actions allowed admits it');
+  assert.equal(allowed.reasonCode, 'sentinel.service.runUnknown', 'admitted, then answered on the run itself');
+  assert.equal(((await w.service.handle('run.pause', { runId: PLAN_A }, agent)) as any).reasonCode, 'sentinel.admission.noGrant', 'cancel granted is not pause granted');
+});
+
+test('an owner receipt authorizes one action, on one plan, under one policy revision, once, while it is valid', needsStore, async t => {
+  const w = await workspace(t, { grants: OWNER_GRANTS });
+  const r = async (op: string, runId: string, receiptId: string) => (await w.service.handle(op, { runId, receiptId }, agent)) as any;
+
+  const pause = w.receipt('run.pause', PLAN_A);
+  assert.equal((await r('run.cancel', PLAN_A, pause)).reasonCode, 'sentinel.receipt.mismatch', 'a pause receipt does not cancel');
+  assert.equal((await r('run.pause', PLAN_B, pause)).reasonCode, 'sentinel.receipt.mismatch', 'nor pause another plan');
+  const spent = await r('run.pause', PLAN_A, pause);
+  assert.equal(spent.verdicts.policy.reasonCode, 'sentinel.service.ownerReceipt');
+  assert.equal(spent.reasonCode, 'sentinel.service.runNotActive', 'authorized, then answered on the run itself');
+  assert.equal((await r('run.pause', PLAN_A, pause)).reasonCode, 'sentinel.receipt.alreadyUsed', 'spent once');
+
+  const start = w.receipt('run.start', PLAN_A);
+  assert.equal((await r('run.cancel', PLAN_A, start)).reasonCode, 'sentinel.receipt.mismatch', 'a start receipt does not cancel');
+
+  // A receipt outlives neither its expiry nor the policy it was given under.
+  const old = w.receipt('run.cancel', PLAN_A, new Date(Date.now() - 11 * 60_000));
+  assert.equal((await r('run.cancel', PLAN_A, old)).reasonCode, 'sentinel.receipt.expired');
+  const cancel = w.receipt('run.cancel', PLAN_B);
+  w.adopt({ grants: [...OWNER_GRANTS, { actions: ['rule.promote'], principals: ['human'] }] });
+  assert.equal((await r('run.cancel', PLAN_B, cancel)).reasonCode, 'sentinel.receipt.mismatch', 'the policy changed since the receipt was given');
+
+  // A receipt id the owner never issued is unknown, however it is spelled.
+  assert.equal((await r('run.cancel', PLAN_A, 'receipt-forged')).reasonCode, 'sentinel.receipt.unknown');
+  await assert.rejects(w.service.handle('run.cancel', { runId: PLAN_A, receiptId: '../escape' }, agent), /requestInvalid/);
+});

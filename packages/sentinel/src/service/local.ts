@@ -279,7 +279,8 @@ export function confirmForService(ws: Workspace, options: { command: string; act
  * owner action: admitted here as the owner, and only with `confirm` is a receipt issued for exactly this candidate
  * against exactly the current lock revision (its digest), and spent by the same admission. The new revision names
  * its predecessor, is filed under its own digest and becomes current only if no other promotion landed meanwhile.
- * Without `confirm` it shows the candidate and the lock it would replace, and waits (exit 4).
+ * Without `confirm` it shows the candidate and the lock it would replace, and waits (exit 4). A pack the current
+ * revision already locks byte for byte is `kept`: promoting it again issues nothing and files nothing.
  */
 export function promoteRulePack(ws: Workspace, options: { packDir: string; confirm: boolean; now: Date }): CommandResult {
   const adopted = adoptedPolicy(ws);
@@ -296,6 +297,11 @@ export function promoteRulePack(ws: Workspace, options: { packDir: string; confi
     packId: pack.entry.packId, version: pack.entry.version, rules: pack.entry.rules.map(r => r.familyId),
     candidate: candidateDigest(candidate), previousLock: previousDigest, previousRevision: previous.revision,
   };
+  // Promoting exactly what the current revision already locks changes nothing: no receipt, no new revision.
+  const locked = previous.packs.find(p => p.packId === pack.entry.packId);
+  if (selected && locked && locked.packDigest === pack.entry.packDigest && locked.version === pack.entry.version) {
+    return result('rules', 'kept', { facts: { ...facts, lock: selected.digest, revision: previous.revision } });
+  }
   const request = {
     intent, requestedBy: OWNER as { principal: 'human'; channel: 'owner-cli' }, policy, stateDigest: previousDigest, now: options.now,
     capability: () => ({ available: true, detail: 'a validated pack folder; nothing is executed' }),
@@ -316,10 +322,11 @@ export function promoteRulePack(ws: Workspace, options: { packDir: string; confi
     return result('rules', 'configuration-failure', { verdicts: printed(decision.record), facts, reasonCode: decision.record.verdicts.policy.reasonCode });
   }
   const next = promote(previous, candidate, decision.receipt, options.now);
-  // The first promotion files the empty revision it was confirmed against, so every revision's predecessor is kept.
-  if (!selected) book.store(previous);
+  // The first promotion files and selects the empty revision it was confirmed against, so the chain starts where every
+  // revision's `previous` leads. If another first promotion got there first, this one raced it and is refused.
+  if (!selected) book.select(book.store(previous), null);
   const digest = book.store(next);
-  book.select(digest, selected?.digest ?? null);
+  book.select(digest, previousDigest);
   return result('rules', 'prepared', { verdicts: printed(decision.record), facts: { ...facts, lock: digest, revision: next.revision, receipt: decision.record.receipt } });
 }
 

@@ -4,7 +4,7 @@
 // state; the current pointer moves only from the revision it was read at. Synthetic pack, no scanner, no network.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -81,7 +81,14 @@ test('rules promote: the owner confirms one candidate against one lock revision;
   const revisions = readdirSync(join(trust, 'locks')).sort();
   assert.equal(revisions.length, 3, 'the empty lock, revision 2 and revision 3 are each filed once');
   for (const f of revisions) assert.equal(statSync(join(trust, 'locks', f)).mode & 0o777, 0o600);
-  assert.equal(JSON.parse(readFileSync(join(trust, 'current.json'), 'utf8')).digest, second.body.facts.lock);
+  assert.equal(JSON.parse(readFileSync(join(trust, 'first'), 'utf8')).digest, first.body.facts.previousLock, 'the chain starts at the empty lock');
+  assert.equal(JSON.parse(readFileSync(join(trust, 'next', `${String(first.body.facts.lock).slice(7)}.json`), 'utf8')).digest, second.body.facts.lock);
+
+  // Promoting what the current revision already locks is kept: no receipt, no new revision, no new file.
+  writePack(pack, '0.2.0', ['sentinel.ts.eval', 'sentinel.ts.dangerous-call']);
+  const again = run('rules', 'promote', pack, '--confirm');
+  assert.deepEqual([again.status, again.body.outcome, again.body.facts.lock, again.body.facts.revision], [0, 'kept', second.body.facts.lock, 3]);
+  assert.equal(readdirSync(join(trust, 'locks')).length, 3);
 
   // A revision whose bytes no longer match its digest is refused, never used.
   const name = `${String(second.body.facts.lock).slice(7)}.json`;
@@ -104,13 +111,18 @@ test('the current pointer moves only from the revision it was read at', t => {
   const book = new RuleLockBook(join(dir, 'trust'));
   const a = emptyLock(new Date('2026-10-22T00:00:00Z'));
   const b = emptyLock(new Date('2026-10-22T00:00:01Z'));
+  const c = emptyLock(new Date('2026-10-22T00:00:02Z'));
   const da = book.store(a);
   const db = book.store(b);
+  const dc = book.store(c);
   assert.equal(book.store(a), da, 'storing a revision again is the same file');
   book.select(da, null);
   assert.throws(() => book.select(db, null), (e: any) => e.code === 'sentinel.service.lockChanged', 'a stale expectation is refused');
   book.select(db, da);
   assert.equal(book.current()?.digest, db);
+  assert.throws(() => book.select(dc, da), (e: any) => e.code === 'sentinel.service.lockChanged', 'a revision already succeeded cannot be succeeded again');
+  book.select(dc, db);
+  assert.equal(book.current()?.digest, dc);
   assert.throws(() => book.select(`sha256:${'0'.repeat(64)}`, db), (e: any) => e.code === 'sentinel.service.recordUnsafe', 'only a filed revision can be selected');
 });
 
@@ -147,4 +159,49 @@ test('the built-in foundation-preview pack validates, its detector flags exactly
   const promoted = run('rules', 'promote', 'builtin:foundation-preview', '--confirm');
   assert.deepEqual([promoted.outcome, promoted.facts.rules], ['prepared', [PREVIEW_RULE]]);
   assert.deepEqual(run('rules', 'show').facts.packs, [{ packId: 'sentinel-foundation-preview', version: '0.1.0', rules: [PREVIEW_RULE] }]);
+});
+
+test('promotions racing from one revision: exactly one succeeds each revision, the rest are refused, nothing is lost', t => {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-race-')));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const ws = join(dir, 'ws');
+  mkdirSync(ws);
+  const env = { PATH: process.env.PATH ?? '', HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
+  mkdirSync(env.HOME);
+  const sync = (...args: string[]) => JSON.parse(spawnSync(process.execPath, [CLI, ...args, '--json'], { cwd: ws, env, encoding: 'utf8', timeout: 60_000 }).stdout);
+  sync('init');
+  sync('settings', 'adopt', '--confirm');
+  const N = 6;
+  const packs = Array.from({ length: N }, (_, i) => { const p = join(dir, `pack-${i}`); writePack(p, `0.${i + 1}.0`, ['sentinel.ts.eval']); return p; });
+  return new Promise<void>((resolve, reject) => {
+    let left = N;
+    const bodies: any[] = [];
+    for (const p of packs) {
+      const child = spawn(process.execPath, [CLI, 'rules', 'promote', p, '--confirm', '--json'], { cwd: ws, env });
+      let out = '';
+      child.stdout.on('data', d => { out += d; });
+      child.on('close', () => {
+        try { bodies.push(JSON.parse(out)); } catch (e) { reject(e); return; }
+        if (--left > 0) return;
+        try {
+          const won = bodies.filter(b => b.outcome === 'prepared');
+          const lost = bodies.filter(b => b.outcome !== 'prepared');
+          assert.ok(won.length >= 1);
+          for (const b of lost) assert.equal(b.reasonCode, 'sentinel.service.lockChanged', JSON.stringify(b));
+          // Every success is one link of a single chain: distinct predecessors, revisions 2.., the last one current.
+          assert.equal(new Set(won.map(b => b.facts.previousLock)).size, won.length, 'no two promotions succeeded the same revision');
+          const shown = sync('rules', 'show').facts;
+          assert.equal(shown.revision, 1 + won.length, 'no promotion was lost');
+          assert.ok(won.some(b => b.facts.lock === shown.lock));
+          const book = new RuleLockBook(join(env.XDG_STATE_HOME, 'farsight', 'sentinel', 'trust'));
+          let digest = book.current()!.digest;
+          const chain = [digest];
+          for (let lock = book.read(digest); lock.previous; lock = book.read(lock.previous)) chain.push(lock.previous);
+          assert.equal(chain.length, 1 + won.length, 'the current revision reaches the empty lock through every success');
+          for (const b of won) assert.ok(chain.includes(b.facts.lock));
+          resolve();
+        } catch (e) { reject(e); }
+      });
+    }
+  });
 });
