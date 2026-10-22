@@ -13,8 +13,10 @@ It builds on the reviewed PR 03 store (ledger, staging, verified objects, retain
 - `ResourcePolicy` with its 120 s and 2 GiB caps;
 - the worker protocol's `ResultMessage`.
 
-**It changes none of them.** Everything new is a PR 29 module or a canonical-JSON artifact with its own draft
-schema, stored through the existing object API.
+**It changes no PR 02/07 contract, no ledger schema or migration, and no existing PR 03 API or behaviour.** Everything
+new is a PR 29 module or a canonical-JSON artifact with its own draft schema, stored through the existing object
+API. The one addition to PR 03 code is two **bounded, read-only** ledger queries the provenance check needs (§6.1).
+They add no table, column, write path or raw database access.
 
 ## 1. What the build track adds, and what it never does
 
@@ -240,6 +242,7 @@ The build record therefore shows the configured command, not only the requested 
      files' bytes up to the capture limits of §7.
 3. **Hash and stage outside the container.** The coordinator hashes each file, registers staging, writes the objects
    through `objects.put()` with `expect`, and keeps stdout and stderr logs (each bounded, with truncation recorded).
+   Staging registers each **distinct** artifact ID once, however many paths or streams share its bytes (§7).
 4. **Release the workspace.** The volume and every materialised host directory are removed only after publication
    or abort (§8).
 
@@ -256,20 +259,22 @@ say that. A consumer trusts build-derived scope **only through this chain**, che
 
 1. The consumer's work unit lists the build as a dependency: `dependencies` contains `{ id, revision }` of a work
    unit whose stage is `sentinel.stage.javaBuild` with the expected `implementationDigest`.
-2. That exact revision has an **accepted publication**. Its attempt is the publication's attempt, the attempt's
-   final envelope is `succeeded`, and its epoch is this store's.
-3. The publication's ordered outputs are, in order:
-   - the build record;
-   - the outputs manifest;
-   - the stdout log;
-   - the stderr log.
+2. That exact revision has an **accepted publication** in this store. Its attempt is the publication's attempt, and
+   the attempt's final envelope is `succeeded`. The attempt's epoch equals the **epoch recorded on that
+   publication**: the historical epoch under which it was accepted, not the current owner's. A build accepted
+   before a restart stays valid after the store is reopened under a new epoch, without a rebuild. A later epoch
+   cannot accept anything for that revision, because the revision already has its one publication.
+3. The publication's ordered outputs are **exactly two**: the build record, then the outputs manifest. The record
+   names the manifest's artifact ID, so the two cannot share bytes. Logs and files are not outputs; they are roles
+   in the manifest (§7).
 4. The build record's own fields equal the facts above:
    - work ID and revision, attempt ID;
    - snapshot ID and tree digest, equal to the consumer run's snapshot;
    - the authorization record or receipt digest, the profile digest, and the image digest with its toolchain facts;
    - the closure lock digest and the acquisition manifest artifact ID, equal to the authorization's bounded scope.
-5. Every entry in the outputs manifest names an artifact that is a staged or linked artifact **of that same
-   publication**. It is reachable through the manifest's links, and `objects.check()` verifies each one.
+5. Every role in the outputs manifest names an artifact that is a reference **of that same publication**, reachable
+   through the manifest's links. The roles are `stdout`, `stderr` and one entry per captured path. The publication
+   has no reference the manifest does not account for, and `objects.check()` verifies each referenced object.
 
 If any link fails, the build-derived scope is **unknown**, never covered. This includes:
 - a record published by another work unit;
@@ -282,19 +287,45 @@ If any link fails, the build-derived scope is **unknown**, never covered. This i
 Section 9's case A14 is a forged but schema-valid record, which must be refused. Bytecode findings are labelled
 build-derived in both registers, and their source mapping is shown as the class file's claim.
 
+### 6.1 Bounded reads the check needs
+
+The integrated PR 03 ledger does not expose what checks 1, 2 and 5 read:
+- `getWork` returns state and the active attempt, not the stored envelope's stage, implementation digest or
+  dependencies;
+- `getPublication` returns ordered outputs, not linked references or the publication's epoch.
+
+PR 29 adds two read-only ledger methods. Like every ledger read, each runs in one read transaction; neither writes,
+opens a connection to callers or accepts SQL.
+
+| Method | Returns | Bounds and checks |
+|---|---|---|
+| `getWorkProvenance(ref: WorkRef)` | `{ work, runId, state, creationEpoch, stage: { contract, contractVersion, kind, implementationDigest }, inputFingerprint, influenceManifest, dependencies: WorkRef[] }`, or `null` | Parsed from the stored creation envelope after the same contract validation and row cross-checks GC rooting uses; a disagreement throws `sentinel.store.corruptRecord`. `dependencies` is at most 1024, the contract's own bound. |
+| `getPublicationRefs(ref: WorkRef, { after?, limit? })` | `{ publication: { work, attemptId, epoch, sequence, resultDigest, acceptedAt }, refs: Array<{ artifactId, role: 'output' \| 'linked', position, schema, privacy }>, cursor, more }`, or `null` | Ordered by role, then position, then artifact ID. At most 500 refs per page, cursor-paged, and never more than the publication's own (≤ 4096) references. |
+
+Both are additive: no existing method changes shape. They go into the store facade's `StoreLedger` pick list with
+tests. A test checks that neither can return rows from another store or another publication.
+
 ## 7. Publication shape and supported limits
 
-PR 03 accepts at most 4096 staged artifacts per stage. An attempt's envelope carries at most 1024 `outputs`, and
-an object is at most 16 MiB decoded. One build publishes in **one stage**:
+PR 03 accepts at most 4096 staged artifacts per stage, with **unique** IDs. A publication's references are unique per
+artifact, and an attempt's envelope carries at most 1024 distinct `outputs`. Different roles can share bytes: two
+empty logs, identical generated files, or a log that equals a file. So a build publishes a **deduplicated object
+closure** and expresses roles in the outputs manifest:
 
-| Publication part | Count | Role |
+| Publication part | Exact count | Role |
 |---|---|---|
-| Build record, outputs manifest, stdout log, stderr log | 4 | `outputs` (ordered) |
-| Captured files | ≤ **4,000** | `linked`, each a link from the outputs manifest |
-| Total staged | ≤ 4,004 | under the 4096 stage limit |
+| Build record, outputs manifest | exactly **2** | `outputs`, in that order |
+| Distinct artifacts behind the manifest's roles (stdout, stderr, every captured path) | ≤ **4,002** | `linked`, each linked once from the outputs manifest |
+| Total staged (unique IDs) | ≤ **4,004** | under the 4096 stage limit |
+
+The manifest maps each role to an artifact ID: `stdout`, `stderr`, and one entry per captured path with its size
+and type. Several roles may name one ID, and that ID is staged, linked and referenced **once**. A role whose
+artifact is also an output (for example, a captured file that happens to equal the manifest) uses the existing
+reference. Budgets count **distinct artifacts** for the stage limit and **manifest path entries** for the file
+limit, and each is enforced separately.
 
 **Supported capture limits (v1):**
-- **4,000 files**;
+- **4,000 manifest path entries** (captured files), however many distinct objects they share;
 - **16 MiB per file**;
 - **256 MiB total captured bytes**;
 - an outputs manifest of at most 16 MiB, which lists accepted files in full;
@@ -383,6 +414,9 @@ isolation job on each host claimed as qualified.
 | Containment | A1–A5, A7–A12, A17 | As in §9 | Each qualified host |
 | Capture safety and limits | A6, A11, A12 | As in §9; limits of §7 enforced with named partial scope | Each qualified host |
 | Provenance chain | A13, A14; §6 checks 1–5 on a good build | Good build trusted; every forged or mismatched variant unknown | All |
+| Reopen without rebuild | Accept a build, close the store, reopen under a new epoch, run a consumer | Build-derived scope trusted through the publication's historical epoch; no rebuild; no new publication for that revision | All |
+| Deduplicated closure | Empty stdout and stderr; identical files under two paths; a file equal to a log | One staged object and one reference per distinct ID; every role resolves; exactly two outputs; counts as in §7 | All |
+| Bounded reads | `getWorkProvenance` and `getPublicationRefs` on good, corrupt, foreign-store and paged cases | Correct fields; corrupt record throws; no cross-store or cross-publication rows; pages bounded | All |
 | Crash cleanup | A16 (20 repetitions per boundary, matching PR 08) | Zero orphaned labelled containers, volumes or directories; zero unrelated objects touched | Each qualified host |
 | Budgets | A4, and the sample under §7 | Limits recorded by kind; the sample within the caps, else *budget exceeded* recorded and escalated | macOS ARM64 measured; Linux x64 candidate |
 | First real demonstration | The original sample under its bounded authorization record | Build-derived scope with the complete §6 chain; build-derived findings labelled; source-only verdicts unchanged | macOS ARM64 |
@@ -395,7 +429,7 @@ Each step is its own reviewable commit or PR, building only synthetic fixtures u
 | Step | Content | Targets |
 |---|---|---|
 | 29.0 | This design review | — |
-| 29a | Draft schemas and validators for the authorization record, profile, closure lock, acquisition manifest, build record and outputs manifest; admission checks; test-only seam | Unit fixtures |
+| 29a | Draft schemas and validators for the authorization record, profile, closure lock, acquisition manifest, build record and outputs manifest (with roles); admission checks; test-only seam; the two bounded ledger reads of §6.1 | Unit fixtures |
 | 29b | Closure fetcher (explicit coordinates, SHA-256, HTTPS allowlist, verified storage); image digest verification without pulling | Local fake repository; a test image already present |
 | 29c | Build runner on PR 07 isolation: materialisation, `/work` tmpfs volume, `/scratch`, trusted copy step, fixed argv, environment allowlist, Sentinel `settings.xml`, `.mvn` policy, labels | Minimal and multi-module synthetic fixtures |
 | 29d | Capture: stop writers, trusted walker, staging and one publication, build record, §6 chain checker | Same fixtures |
