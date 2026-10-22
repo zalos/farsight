@@ -41,12 +41,16 @@ export class Inventory {
   /** `sourceId \0 path` → a gitlink's pinned commit. */
   readonly gitlinks = new Map<string, string>();
   #reserved = 0;
+  #listed = 0;
   #totalBytes = 0;
   constructor(readonly policy: CapturePolicy) {}
 
-  /** Reserves room for a folder's children (each sub-folder holds one slot for a possible boundary). */
+  /**
+   * Reserves room for a folder's children. The budget (`maxEntries`, shared by every source) counts every recorded
+   * entry and every listed folder: each child takes one slot, kept as its entry, its boundary or its listing.
+   */
   reserve(children: number): boolean {
-    if (this.entries.length + this.#reserved + children > this.policy.maxEntries) return false;
+    if (this.entries.length + this.#listed + this.#reserved + children > this.policy.maxEntries) return false;
     this.#reserved += children;
     return true;
   }
@@ -66,6 +70,7 @@ export class Inventory {
   /** A folder whose entries were listed. */
   listed(sourceId: string, relativePath: string): void {
     if (relativePath === '') return;
+    this.#listed++;
     let set = this.directories.get(sourceId);
     if (!set) this.directories.set(sourceId, set = new Set());
     set.add(relativePath);
@@ -118,8 +123,8 @@ export class Inventory {
    * Refuses everything that would restore onto the same name as something else under case folding and Unicode
    * normalisation. The groups are built from every included file, every folder on its path and every listed folder
    * (empty ones too). An included file whose path or a folder on it collides is refused; a listed folder that
-   * collides is recorded as a refused boundary (its descendants are counted, each recorded on its own) and is not
-   * restored. Bytes no included file still needs stay unstored.
+   * collides is recorded as a refused boundary (descendants unknown, though each is still recorded on its own) and is
+   * not restored. Bytes no included file still needs stay unstored.
    */
   refuseCaseCollisions(): void {
     const keyOf = (sourceId: string, path: string) => `${sourceId}\u0000${foldPath(path)}`;
@@ -151,9 +156,10 @@ export class Inventory {
     for (const [sourceId, dirs] of this.directories) {
       const refused = [...dirs].filter(d => collides(sourceId, d)).sort();
       for (const d of refused) {
-        const below = this.entries.filter(e => e.sourceId === sourceId && e.relativePath.startsWith(`${d}/`)).length;
+        // Its descendants are each recorded on their own, but a subtree may hold unknown boundaries, so no exact
+        // count is claimed.
         this.entries.push({ sourceId, relativePath: d, kind: 'directory-boundary', disposition: 'refused',
-          reasonCode: 'sentinel.capture.caseCollision', knownDescendants: below });
+          reasonCode: 'sentinel.capture.caseCollision', knownDescendants: null });
       }
       for (const d of [...dirs]) if (onCollidingPath(sourceId, d)) dirs.delete(d);
     }

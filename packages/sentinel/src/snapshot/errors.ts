@@ -8,7 +8,7 @@ export const CAPTURE_REASON_CODES = Object.freeze([
   'sentinel.capture.excludedByPolicy', 'sentinel.capture.symlinkNotFollowed', 'sentinel.capture.symlinkEscapes',
   'sentinel.capture.unsafePath', 'sentinel.capture.pathEncoding', 'sentinel.capture.caseCollision',
   'sentinel.capture.specialFile', 'sentinel.capture.unreadable', 'sentinel.capture.tooLarge',
-  'sentinel.capture.quotaExceeded', 'sentinel.capture.entryLimit', 'sentinel.capture.gitObjectMissing',
+  'sentinel.capture.quotaExceeded', 'sentinel.capture.entryLimit', 'sentinel.capture.pathLimit', 'sentinel.capture.gitObjectMissing',
   'sentinel.capture.gitObjectCorrupt', 'sentinel.capture.lfsObjectMissing', 'sentinel.capture.lfsObjectMismatch',
   'sentinel.capture.lfsStoreUnsafe',
   'sentinel.capture.submoduleNotCaptured', 'sentinel.capture.submoduleCapturedSeparately',

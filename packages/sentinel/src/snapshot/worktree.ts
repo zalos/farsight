@@ -6,7 +6,7 @@
 // audit of every read, and a swap restored between two checks is not seen.
 import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readSync, readdirSync, readlinkSync, type Stats } from 'node:fs';
 import { CaptureChanged, Inventory, lfsPointer, resolveLfs } from './inventory.js';
-import { checkName, folderExclusion, joinPath, symlinkVerdict } from './policy.js';
+import { beyondPathBounds, checkName, folderExclusion, joinPath, symlinkVerdict } from './policy.js';
 import { SnapshotError, type CaptureReasonCode } from './errors.js';
 
 export interface WorktreeSource {
@@ -90,6 +90,10 @@ function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dir
   const children = names
     .map(raw => ({ raw, check: checkName(raw, false), abs: Buffer.concat([abs, Buffer.from('/'), raw]) }))
     .sort((a, b) => (a.check.name < b.check.name ? -1 : a.check.name > b.check.name ? 1 : 0));
+  if (rel !== '' && beyondPathBounds(rel, children.map(c => c.check.name))) {
+    inv.boundary(src.sourceId, rel, 'refused', 'sentinel.capture.pathLimit');
+    return;
+  }
   if (!inv.reserve(children.length)) {
     if (rel === '') throw new SnapshotError('sentinel.capture.manifestTooLarge', src.sourceId);
     inv.boundary(src.sourceId, rel, 'refused', 'sentinel.capture.entryLimit');

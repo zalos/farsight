@@ -113,6 +113,17 @@ export function checkName(raw: Buffer | string, inTree: boolean): NameCheck {
 
 export const joinPath = (dir: string, name: string) => (dir === '' ? name : `${dir}/${name}`);
 
+/** Folders deeper than this are not listed: they become an unknown boundary rather than deeper recursion. */
+export const MAX_DEPTH = 256;
+/** A folder whose child would have a longer recorded path is not listed (the contract bounds paths at 4096). */
+export const MAX_PATH = 4096;
+
+/** Whether listing `rel` (whose children are `names`) would pass the depth or path-length bound. */
+export function beyondPathBounds(rel: string, names: readonly string[]): boolean {
+  if (rel !== '' && rel.split('/').length >= MAX_DEPTH) return true;
+  return names.some(n => joinPath(rel, n).length > MAX_PATH);
+}
+
 /** Why a folder is not listed, or undefined when it is listed. */
 export function folderExclusion(policy: CapturePolicy, sourceId: string, path: string, storeRel: string | undefined):
   CaptureReasonCode | undefined {

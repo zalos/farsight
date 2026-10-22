@@ -2,7 +2,7 @@
 // The bytes are the stored blobs exactly as committed: no checkout, so no filter, attribute or hook applies.
 import { GitReadError, GitRepository, MAX_METADATA_OBJECT_BYTES } from './git.js';
 import { CaptureChanged, Inventory, lfsPointer, resolveLfs } from './inventory.js';
-import { checkName, folderExclusion, joinPath, symlinkVerdict } from './policy.js';
+import { beyondPathBounds, checkName, folderExclusion, joinPath, symlinkVerdict } from './policy.js';
 import type { CaptureReasonCode } from './errors.js';
 
 export interface SubmoduleRequest {
@@ -55,6 +55,10 @@ function walkTree(inv: Inventory, src: CommittedSource, rel: string, treeOid: st
   const children = entries
     .map(e => ({ e, check: checkName(e.name, true) }))
     .sort((a, b) => (a.check.name < b.check.name ? -1 : a.check.name > b.check.name ? 1 : 0));
+  if (rel !== '' && beyondPathBounds(rel, children.map(c => c.check.name))) {
+    inv.boundary(src.sourceId, rel, 'refused', 'sentinel.capture.pathLimit');
+    return;
+  }
   if (!inv.reserve(children.length)) {
     if (rel === '') throw new GitReadError('unsupported', 'the root tree has more entries than the capture may record');
     inv.boundary(src.sourceId, rel, 'refused', 'sentinel.capture.entryLimit');

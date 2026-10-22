@@ -331,7 +331,10 @@ provenance only, and no option makes restored project code runnable.
 
 Bounds: a capture stores at most the accepted 512 MiB budget (`maxTotalBytes`, the default) and 16 MiB per file; the
 manifest must fit the 4 MiB envelope limit, checked on its bytes. The schema's 200 000 entries is a bound only; the
-default entry limit is 20 000. Folders that collide by case or Unicode normalisation with a file or another folder are
+default entry limit is 20 000, and it counts every recorded entry and every listed folder across all sources, reserved
+before a folder is listed, so a tree of empty folders cannot outgrow it; a folder that does not fit is an unknown
+boundary, and a source root that does not fit refuses the capture. Folders deeper than 256 levels, or whose entries
+would have paths over 4096 characters, are unknown boundaries too, never deeper recursion. Folders that collide by case or Unicode normalisation with a file or another folder are
 recorded as refused boundaries, not dropped. Working-copy reads go through folders whose identities are checked again
 before each listing and before and after each read, and LFS content only through real folders under the permitted
 root: these detect a swap between observations; they are not an OS-level audit of every read. The capture reason codes are catalog keys

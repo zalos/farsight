@@ -475,7 +475,7 @@ test('a folder and a file that collide by case are both refused, recorded, and t
   const fx = await openCaptureStore(t, dir);
   const r = await captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{ sourceId: 'app', repositoryId: 'r', root }] });
   assert.deepEqual(entryOf(r.snapshot, 'lib'), { sourceId: 'app', relativePath: 'lib', kind: 'directory-boundary', disposition: 'refused',
-    reasonCode: 'sentinel.capture.caseCollision', knownDescendants: 1 }, 'the unrestorable folder is explicit refused scope');
+    reasonCode: 'sentinel.capture.caseCollision', knownDescendants: null }, 'the unrestorable folder is explicit refused scope, count unknown');
   assert.equal(entryOf(r.snapshot, 'LIB').reasonCode, 'sentinel.capture.caseCollision');
   assert.equal(entryOf(r.snapshot, 'lib/x.ts').reasonCode, 'sentinel.capture.caseCollision');
   assert.ok(!r.materialization.sources[0]!.directories.includes('lib'));
@@ -563,4 +563,59 @@ test('submodule requests and the capture budget are checked before anything is r
   const before = fds();
   await captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{ sourceId: 'app', repositoryId: 'r', root }] });
   assert.equal(fds(), before, 'no file handle outlives the capture');
+});
+
+test('the entry budget counts listed folders across every branch and source; depth and path length are bounded', needsStore, async t => {
+  const dir = scratch(t);
+  const root = join(dir, 'work');
+  // Three branches of empty folders: twelve folders, no files.
+  for (const b of ['a', 'b', 'c']) for (const leaf of ['1', '2', '3']) mkdirSync(join(root, b, leaf), { recursive: true });
+  const other = join(dir, 'other');
+  for (const leaf of ['x', 'y', 'z']) mkdirSync(join(other, leaf), { recursive: true });
+  const fx = await openCaptureStore(t, dir);
+  // The budget is shared: the first source's three folders count against the second's.
+  const r = await captureSnapshot(fx.store, { mode: 'working-copy', policy: { maxEntries: 9 },
+    sources: [{ sourceId: 'two', repositoryId: 'r2', root: other }, { sourceId: 'app', repositoryId: 'r', root }] });
+  const listed = r.materialization.sources.reduce((n, m) => n + m.directories.length, 0);
+  assert.ok(r.snapshot.entries.length + listed <= 9, `${r.snapshot.entries.length} entries + ${listed} listed folders`);
+  assert.deepEqual(r.snapshot.entries.filter(e => e.reasonCode === 'sentinel.capture.entryLimit').map(e => e.relativePath), ['b', 'c']);
+  await assert.rejects(captureSnapshot(fx.store, { mode: 'working-copy', policy: { maxEntries: 5 },
+    sources: [{ sourceId: 'two', repositoryId: 'r2', root: other }, { sourceId: 'app', repositoryId: 'r', root }] }), coded('sentinel.capture.manifestTooLarge'),
+  'a source root that no longer fits refuses the capture rather than overrunning the budget');
+  assert.ok(r.snapshot.entries.some(e => e.reasonCode === 'sentinel.capture.entryLimit' && (e as any).knownDescendants === null));
+  for (const [id, path] of [['app', root], ['two', other]] as const) {
+    assert.deepEqual(reconcileInventory(r.snapshot, id, observe(path)).unaccounted, []);
+  }
+
+  // A folder nested past the depth bound becomes an unknown boundary instead of deeper recursion.
+  const deep = join(dir, 'deep');
+  let p = deep;
+  for (let i = 0; i < 260; i++) p = join(p, 'd');
+  mkdirSync(p, { recursive: true });
+  writeFileSync(join(p, 'leaf.ts'), 'x\n');
+  const d = await captureSnapshot(fx.store, { mode: 'working-copy', sources: [{ sourceId: 'deep', repositoryId: 'r', root: deep }] });
+  const bound = d.snapshot.entries.find(e => e.reasonCode === 'sentinel.capture.pathLimit')!;
+  assert.equal(bound.kind, 'directory-boundary');
+  assert.equal(bound.relativePath.split('/').length, 256);
+  assert.equal((bound as any).knownDescendants, null);
+  assert.deepEqual(reconcileInventory(d.snapshot, 'deep', observe(deep)).unaccounted, []);
+});
+
+test('a collision whose folder holds an excluded child reports its descendants as unknown', needsStore, async t => {
+  const dir = scratch(t);
+  const root = join(dir, 'repo');
+  commitRepo(root, { 'keep.ts': 'k\n' });
+  const blob = git(root, ['hash-object', '-w', '--stdin'], 'x\n').trim();
+  git(root, ['update-index', '--add', '--cacheinfo', `100644,${blob},lib/node_modules/dep/index.js`]);
+  git(root, ['update-index', '--add', '--cacheinfo', `100644,${blob},lib/a.ts`]);
+  git(root, ['update-index', '--add', '--cacheinfo', `100644,${blob},LIB`]);
+  git(root, ['commit', '--quiet', '-m', 'collide']);
+  const fx = await openCaptureStore(t, dir);
+  const r = await captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{ sourceId: 'app', repositoryId: 'r', root }] });
+  assert.equal(entryOf(r.snapshot, 'lib/node_modules').reasonCode, 'sentinel.capture.excludedDependencyCache');
+  assert.deepEqual([entryOf(r.snapshot, 'lib').reasonCode, entryOf(r.snapshot, 'lib').knownDescendants], ['sentinel.capture.caseCollision', null]);
+  const target = join(dir, 'restored');
+  t.after(() => unlock(target));
+  await restoreSnapshot(fx.store, r.record.snapshotId, target);
+  assert.deepEqual(observe(join(target, 'app')), ['keep.ts']);
 });
