@@ -26,7 +26,7 @@ It reads no settings, credentials or source and makes no network calls.
 The store (`openStore`, ADR 19) writes only inside the folder it is given, and only after checking it: absolute and
 already canonical (no link, alias, dot segment or other letter case), every folder above it owned by the user or
 root and not writable by others unless sticky, the folder 0700 and its files 0600 with one link each (existing
-broader permissions are refused, never changed), on a file system the path checks identify as local, and for an exact host and SQLite pair the release policy lists (darwin-arm64 with SQLite 3.53.3 or 3.53.4 on APFS measured; linux-x64 with SQLite 3.53.4 on ext4 a candidate pending CI evidence; other allowlisted file system types unmeasured; every other pair refused). On macOS that identification runs
+broader permissions are refused, never changed), on a file system the path checks identify as local, and for an exact host and SQLite pair the release policy lists (darwin-arm64 with SQLite 3.53.3 or 3.53.4 on APFS measured; linux-x64 with SQLite 3.53.4 on Node 24.21.0/ext4 measured ([CI evidence](https://github.com/zalos/farsight/actions/runs/39723522049/job/119642215934)); other allowlisted file system types unmeasured; every other pair refused). On macOS that identification runs
 `/sbin/mount` once with no shell, an empty environment and a 5 s bound; nothing else is spawned. One process owns
 a store at a time through an OS file lock on `owner.sqlite`, which is never deleted and never opened by anything
 else; `owner.json` only describes the holder. Records from an earlier owner's epoch are refused. Evidence objects
