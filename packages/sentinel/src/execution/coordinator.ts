@@ -8,9 +8,14 @@
 // ends the attempt with its recorded error, leaving the work ready for a bounded retry or failed. Each attempt runs
 // under its work's resource policy intersected with the adapter's limits. Pause stops admitting new work while
 // in-flight attempts may still finish and publish; cancel stops the workers and the ledger then refuses any
-// publication for the run. The plan comes from PR 06 through PlanBoundary; this module does not plan.
+// publication for the run. The plan is a revision admitted in the ledger (plans.ts), made by PR 06's planner and
+// bound through its canonical boundary (plan.ts); this module does not plan. A bootstrap revision's capture, parse
+// and inventory units run as the coordinator's own operations (bootstrap.ts); an analysis revision's check units
+// run as workers, and what each covered is recorded as canonical coverage records (coverage.ts) that PR 06's
+// evaluateRequiredCoverage alone turns into the run's outcome.
 import { createHash } from 'node:crypto';
-import type { CatalogKey, Id, WorkRef } from '../contracts/common.js';
+import type { ArtifactId, CatalogKey, Id, WorkRef } from '../contracts/common.js';
+import type { CoverageEnvelope } from '../contracts/coverage.js';
 import type { RunEnvelope, RunOutcome, RunState } from '../contracts/run.js';
 import type { WorkEnvelope } from '../contracts/work.js';
 import type { SentinelStore } from '../store/index.js';
@@ -27,27 +32,12 @@ import {
   type Capacity, type CommittedUnit, type RetryPolicy, type UnitDecision,
 } from './scheduler.js';
 import { createExecutionService, type ExecutionService } from './service.js';
-import { releaseWorkDir, type CapturedInput, type InvocationRecord, type WorkerOutcome } from './supervisor.js';
-import {
-  bindingMismatch, checkRecordedRun, checkRecordedWork, COVERAGE_EVALUATION_SCHEMA, evaluateCoverage, INFLUENCE_SCHEMA, validatePlan,
-  type CoverageEvaluation, type RequiredCoverage, type ValidatedPlan,
-} from './plan.js';
-
-/** What PR 06's planner hands the coordinator: canonical envelopes plus the two lookups execution needs. */
-export interface PlanBoundary {
-  readonly run: RunEnvelope;
-  /** Each pending or ready, or held (blocked / disabled-by-policy, with its reasonCode) by the plan itself. */
-  readonly works: readonly WorkEnvelope[];
-  /** The trusted adapter that executes this work's stage. */
-  adapterFor(work: WorkEnvelope): Id;
-  /** The captured inputs the work's input fingerprint covers. */
-  inputsFor(work: WorkEnvelope): readonly CapturedInput[];
-  /**
-   * The planned checks and scope a work must cover (PR 06's check mapping). Without it a unit's coverage is
-   * unevaluated and the run can at best complete with partial coverage.
-   */
-  requiredCoverage?(work: WorkEnvelope): RequiredCoverage | undefined;
-}
+import { releaseWorkDir, type InvocationRecord, type WorkerOutcome } from './supervisor.js';
+import { bindingId, bindingMismatch, checkRecordedRun, checkRecordedWork, executablePlan, EXECUTION_BINDING_SCHEMA, type ValidatedPlan } from './plan.js';
+import { loadPlan } from './plans.js';
+import { runOperation } from './bootstrap.js';
+import { COVERAGE_SCHEMA, coverageRecords } from './coverage.js';
+import { evaluateRequiredCoverage, type RequiredCoverage } from '../planner/coverage.js';
 
 export const COORDINATOR_BOUNDARIES = ['before-spawn', 'after-spawn', 'after-attempt-start', ...PUBLICATION_BOUNDARIES] as const;
 export type CoordinatorBoundary = typeof COORDINATOR_BOUNDARIES[number];
@@ -59,7 +49,13 @@ export interface CoordinatorHooks {
 
 export interface CoordinatorOptions {
   store: SentinelStore;
-  plan: PlanBoundary;
+  /** The run to execute: its current admitted plan revision is what runs. */
+  runId: Id;
+  /**
+   * The run as requested, recorded on the first run() when the ledger does not hold it yet (its plan revision must
+   * then be admitted). When the ledger holds it, it must be the recorded run, field for field.
+   */
+  run?: RunEnvelope;
   /** A private, canonical folder for attempt work folders. */
   scratchRoot: string;
   registry?: AdapterRegistry;
@@ -97,8 +93,14 @@ export interface RunSummary {
   blockedByCleanup: string[];
   /** Records acknowledged as terminal-unknown by acknowledgeUnknownCleanup(): kept for audit, never clean. */
   unknownCleanup: string[];
-  /** Each published unit's coverage evaluation, read back from its publication. */
-  coverage: CoverageEvaluation[];
+  /** The plan revision's kind: a bootstrap revision leaves the run running once its units publish. */
+  kind: 'bootstrap' | 'analysis';
+  /** The revision that ran. */
+  planRevision: number;
+  /** Required coverage from PR 06's evaluator over every coverage record this revision's units published; null for bootstrap. */
+  coverage: RequiredCoverage | null;
+  /** Coverage records read back from this revision's publications. */
+  coverageRecords: number;
 }
 
 const key = (r: WorkRef) => `${r.id}@${r.revision}`;
@@ -136,11 +138,13 @@ export class Coordinator {
   readonly #deadline = new AbortController();
   #deadlinePassed = false;
 
-  /** Evaluations read back from publications, by work. */
-  readonly #coverage = new Map<string, CoverageEvaluation>();
+  /** Coverage records read back from publications, by work. */
+  readonly #coverage = new Map<string, CoverageEnvelope[]>();
+  readonly #scratchRoot: string;
 
   private constructor(o: CoordinatorOptions, plan: ValidatedPlan, service: ExecutionService, intents: IntentFiles, workers: WorkerFiles, recovery: RecoveryReport) {
     this.#store = o.store; this.#plan = plan; this.#service = service; this.#intents = intents; this.#workers = workers;
+    this.#scratchRoot = o.scratchRoot;
     this.#unknown = new UnknownCleanup(o.store.storePath);
     const wait = o.cleanupWaitMs ?? 30_000;
     if (!Number.isInteger(wait) || wait < 0 || wait > 600_000) throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'cleanupWaitMs is 0 to 600000' });
@@ -153,12 +157,19 @@ export class Coordinator {
     this.recovery = recovery;
   }
 
-  /** Validate the plan, bind to the store, and recover whatever an earlier epoch left. Starts no new work. */
+  /** Load the run's admitted plan revision, bind it, and recover whatever an earlier epoch left. Starts no new work. */
   static async open(o: CoordinatorOptions): Promise<Coordinator> {
     o.store.assertHeld();
-    // The plan as approved: frozen, bound to its adapters and actual inputs, and matching what the ledger holds.
-    const plan = validatePlan(o.plan, o.registry ?? TRUSTED_ADAPTERS);
-    checkRecordedRun(plan, o.store.ledger.getRun(plan.run.id)?.envelope);
+    const registry = o.registry ?? TRUSTED_ADAPTERS;
+    const recorded = o.store.ledger.getRun(o.runId);
+    if (o.run && o.run.id !== o.runId) throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'the run envelope names another run' });
+    if (o.run) checkRecordedRun(o.run, recorded?.envelope);
+    const run = recorded?.envelope ?? o.run;
+    if (!run) throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'the run is not recorded and no run envelope was given' });
+    const revision = recorded?.planRevision ?? run.planRevision;
+    // Exactly the admitted revision, read back and checked, bound to its adapters and actual inputs.
+    const admitted = await loadPlan(o.store, o.runId, revision);
+    const plan = await executablePlan(o.store, admitted, run, revision, registry, o.scratchRoot);
     for (const w of plan.works) checkRecordedWork(plan, { id: w.id, revision: w.revision }, o.store.ledger.getWork({ id: w.id, revision: w.revision }));
     const service = await createExecutionService(o.store, { scratchRoot: o.scratchRoot, ...(o.registry ? { registry: o.registry } : {}),
       ...(o.containers ? { containers: true } : {}), ...(o.backendOptions?.wrapRunner ? { wrapRunner: o.backendOptions.wrapRunner } : {}) });
@@ -196,7 +207,7 @@ export class Coordinator {
 
   /** The plan's units as the ledger has them now. */
   progress(): UnitDecision[] {
-    return decide(this.#plan.works, this.#committed(), this.#retry);
+    return decide(this.#plan.works, this.#committed(), this.#retry, this.#plan.external);
   }
 
   /**
@@ -256,14 +267,14 @@ export class Coordinator {
     const inflight = new Map<string, Promise<void>>();
     for (;;) {
       const decisions = this.progress();
-      this.#persistHolds(decisions);
+      await this.#persistHolds(decisions);
       const admitting = !this.#pauseRequested && !this.#cancelRequested && !this.#deadlinePassed && this.#runState() === 'running' && this.#pendingNow.length === 0;
       let admitted = 0;
       if (admitting) {
         for (const d of decisions) {
           if (d.state !== 'ready' || inflight.has(key(d.ref))) continue;
           const work = this.#work(d.ref);
-          const limits = effectiveLimits(this.#plan.adapterOf(d.ref).limits, work.resources);
+          const limits = effectiveLimits(this.#plan.unitOf(d.ref).adapter!.limits, work.resources);
           const reservation = this.#pool.tryReserve(key(d.ref), { memoryBytes: limits.memoryBytes, cpus: limits.cpus });
           if (!reservation) break;
           const task = this.#unit(work).finally(() => { this.#pool.release(reservation); inflight.delete(key(d.ref)); });
@@ -273,7 +284,7 @@ export class Coordinator {
       }
       if (inflight.size === 0) {
         if (this.#cancelRequested) { this.#finishRunState('canceled'); break; }
-        if (this.#deadlinePassed && this.#runState() === 'running') { this.#expire(); break; }
+        if (this.#deadlinePassed && this.#runState() === 'running') { await this.#expire(); break; }
         if (this.#pendingNow.length) {
           const still = await this.#awaitCleanup();
           if (still.length) return this.#summary(still);
@@ -282,11 +293,14 @@ export class Coordinator {
         if (this.#pauseRequested || this.#runState() === 'pausing') { this.#finishRunState('paused'); this.#pauseRequested = false; break; }
         const final = this.progress();
         if (final.every(d => ['published', 'failed', 'blocked', 'disabled'].includes(d.state))) {
-          this.#persistHolds(final);
-          // Exit codes prove nothing about coverage: complete only when every unit published and its evaluation is complete.
-          const evaluations = final.filter(d => d.state === 'published').map(d => this.#evaluationOf(d.ref));
-          const outcome: RunOutcome = !final.every(d => d.state === 'published' || d.state === 'disabled') ? 'execution-failure'
-            : final.every(d => d.state === 'published') && evaluations.every(e => e?.verdict === 'complete') ? 'complete-coverage' : 'partial-coverage';
+          await this.#persistHolds(final);
+          const failed = !final.every(d => d.state === 'published' || d.state === 'disabled');
+          // A published bootstrap leaves the run running: its analysis revision is planned from what it published.
+          if (this.#plan.admitted.plan.kind === 'bootstrap' && !failed) break;
+          // Exit codes prove nothing about coverage: the outcome is PR 06's evaluation of the coverage records alone.
+          const coverage = this.#plan.admitted.plan.kind === 'analysis' ? this.#requiredCoverage() : null;
+          const outcome: RunOutcome = failed ? 'execution-failure'
+            : final.every(d => d.state === 'published') && coverage?.complete === true ? 'complete-coverage' : 'partial-coverage';
           this.#store.ledger.setRunState(runId, 'completed', { outcome });
           break;
         }
@@ -300,13 +314,13 @@ export class Coordinator {
   }
 
   /** The run's budget is spent: hold what has not run, then end the run as an execution failure. */
-  #expire(): void {
+  async #expire(): Promise<void> {
     for (const d of this.progress()) {
       if (d.state !== 'ready' && d.state !== 'waiting') continue;
       const row = this.#store.ledger.getWork(d.ref);
       const work = this.#work(d.ref);
       if (!row && work.dependencies.some(dep => !this.#store.ledger.getWork(dep))) continue;
-      if (!row) this.#create(work, 'pending');
+      if (!row) await this.#create(work, 'pending');
       const current = this.#store.ledger.getWork(d.ref)!;
       if (['pending', 'ready'].includes(current.state)) this.#store.ledger.setWorkState(d.ref, 'blocked', { reasonCode: 'sentinel.execution.runDeadline' });
     }
@@ -342,7 +356,7 @@ export class Coordinator {
   }
 
   /** Record in the ledger each hold the plan or the scheduler decided: disabled by policy, blocked by a dependency. */
-  #persistHolds(decisions: UnitDecision[]): void {
+  async #persistHolds(decisions: UnitDecision[]): Promise<void> {
     const runState = this.#runState();
     if (runState === 'completed' || runState === 'canceled' || runState === undefined) return;
     for (const d of decisions) {
@@ -353,8 +367,8 @@ export class Coordinator {
       const work = this.#work(d.ref);
       // A revision names its dependencies, which must already be in the ledger; a later pass records it then.
       if (!row && work.dependencies.some(dep => !this.#store.ledger.getWork(dep))) continue;
-      if (!row) { this.#create(work, 'pending'); row = this.#store.ledger.getWork(d.ref)!; }
-      const reason = want === 'disabled-by-policy' ? planReason(work) ?? 'sentinel.execution.planInvalid' : DEPENDENCY_FAILED;
+      if (!row) { await this.#create(work, 'pending'); row = this.#store.ledger.getWork(d.ref)!; }
+      const reason = planReason(work) ?? (want === 'disabled-by-policy' ? 'sentinel.execution.planInvalid' : DEPENDENCY_FAILED);
       if (['pending', 'ready', 'blocked'].includes(row.state)) this.#store.ledger.setWorkState(d.ref, want, { reasonCode: reason });
     }
   }
@@ -366,11 +380,36 @@ export class Coordinator {
     if (this.#runState() !== to) this.#store.ledger.setRunState(this.#plan.run.id, to);
   }
 
-  /** Create a plan unit's revision in the ledger under this epoch; a plan-held unit is created pending, then held. */
-  #create(work: Readonly<WorkEnvelope>, state: 'pending' | 'ready'): void {
+  /**
+   * Create a plan unit's revision in the ledger under this epoch, with its canonical influence manifest accepted in
+   * the same transaction (the root its envelope names). A plan-held unit is created pending, then held.
+   */
+  async #create(work: Readonly<WorkEnvelope>, state: 'pending' | 'ready'): Promise<void> {
     const { reasonCode: _held, ...rest } = structuredClone(work) as WorkEnvelope & { reasonCode?: string };
     void _held;
-    this.#store.ledger.createWork({ ...rest, state, activeAttemptId: null, coordinatorEpoch: this.#store.epoch, createdAt: now() } as WorkEnvelope);
+    const manifest = this.#plan.unitOf(work).manifest;
+    const records = await this.#stageRecords(`manifest.${work.id}.${work.revision}`, [{ value: manifest, schema: 'sentinel-influence/draft-1' }]);
+    try {
+      this.#store.ledger.createWork({ ...rest, state, activeAttemptId: null, coordinatorEpoch: this.#store.epoch, createdAt: now() } as WorkEnvelope, { records });
+    } catch (error) { this.#abortStage(records.stageId); throw error; }
+  }
+
+  /** Stage canonical records unbound under this epoch and store their bytes; the first links the rest. */
+  async #stageRecords(tag: string, values: Array<{ value: unknown; schema: string }>): Promise<{ stageId: string; receipts: Awaited<ReturnType<SentinelStore['objects']['putCanonicalJson']>>[] }> {
+    const ids = values.map(v => this.#store.objects.identifyCanonicalJson(v.value));
+    const stageId = `${tag}.${createHash('sha256').update(`${this.#store.epoch}\u0000${tag}\u0000${Date.now()}\u0000${Math.random()}`).digest('hex').slice(0, 16)}`.slice(0, 128);
+    const unique = ids.map((id, i) => ({ id, i })).filter((x, j, all) => all.findIndex(y => y.id.id === x.id.id) === j);
+    this.#store.ledger.registerStaging(stageId, unique.map(({ id, i }) => ({ id: id.id, schema: values[i]!.schema.slice(0, 128), privacy: 'metadata' as const,
+      ...(i === 0 ? { links: unique.filter(u => u.i !== 0).map(u => u.id.id) } : {}) })));
+    try {
+      const receipts = [];
+      for (const { id, i } of unique) receipts.push(await this.#store.objects.putCanonicalJson(values[i]!.value, { expect: id }));
+      return { stageId, receipts };
+    } catch (error) { this.#abortStage(stageId); throw error; }
+  }
+
+  #abortStage(stageId: string): void {
+    try { this.#store.assertHeld(); this.#store.ledger.abortStaging(stageId); } catch { /* recovery aborts a stage left open */ }
   }
 
   /** One attempt of one unit, from creating its work revision to publishing or ending it. Never throws. */
@@ -380,40 +419,53 @@ export class Coordinator {
     let outcome: WorkerOutcome | undefined;
     try {
       const row = this.#store.ledger.getWork(ref);
-      if (!row) this.#create(work, 'ready');
+      if (!row) await this.#create(work, 'ready');
       else if (row.state === 'pending') this.#store.ledger.setWorkState(ref, 'ready');
       const ordinal = this.#store.ledger.countAttempts(ref) + 1;
       const id = attemptIdFor(ref, ordinal);
+      const executable = this.#plan.unitOf(ref);
+      if (executable.adapter!.kind === 'operation') { attemptId = await this.#operation(work, ordinal, id); return; }
+      const binding = this.#plan.bindingOf(ref);
       // The attempt's deadline is the work's, cut to what is left of the run's budget.
       const left = Math.max(1, Math.floor(this.#runDeadline - Date.now()));
       const resources = { ...structuredClone(work.resources), deadlineMs: Math.min(work.resources.deadlineMs, left) };
       let invocation: { digest: string; record: InvocationRecord } | undefined;
       outcome = await this.#service.run({
-        adapterId: this.#plan.adapterOf(ref).id, attemptId: id, work: ref, inputs: this.#plan.inputsOf(ref),
+        adapterId: executable.adapter!.id, attemptId: id, work: ref, inputs: executable.inputs,
+        assignment: { checks: executable.checks.map(c => c.id), scopes: [...executable.unit.scopes] },
         signal: AbortSignal.any([this.#cancel.signal, this.#deadline.signal]), intents: this.#intents, workers: this.#workers, resources,
         ...(this.#hooks ? { hooks: { at: (b: 'before-spawn' | 'after-spawn') => this.#hooks!.at?.(b, { work: ref, attemptId: id }) } } : {}),
-        onWorker: (worker, inv) => {
+        onWorker: async (worker, inv) => {
           invocation = inv;
-          // The attempt names its exact invocation record (the record's own artifact id), published with the result.
-          this.#store.ledger.startAttempt({
-            schema: 'sentinel-attempt/draft-1', id, work: ref, ordinal, coordinatorEpoch: this.#store.epoch, operationId: id,
-            worker, startedAt: now(), usage: { certainty: 'not-applicable' }, state: 'running', invocation: inv.digest,
-          });
+          // The attempt names its exact invocation record, accepted with its start together with the execution
+          // binding it links: a failed, canceled or interrupted attempt keeps both.
+          const records = await this.#stageRecords(`invocation.${id}`, [{ value: inv.record, schema: 'sentinel-invocation/draft-1' }, { value: binding, schema: EXECUTION_BINDING_SCHEMA }]);
+          if (this.#store.objects.identifyCanonicalJson(inv.record).id !== inv.digest || records.receipts.every(r => r.id !== bindingId(binding))) {
+            this.#abortStage(records.stageId);
+            throw new ExecutionError('sentinel.execution.resultMismatch', { reason: 'the invocation record is not the one the attempt names' });
+          }
+          try {
+            this.#store.ledger.startAttempt({
+              schema: 'sentinel-attempt/draft-1', id, work: ref, ordinal, coordinatorEpoch: this.#store.epoch, operationId: id,
+              worker, startedAt: now(), usage: { certainty: 'not-applicable' }, state: 'running', invocation: inv.digest,
+            }, { records });
+          } catch (error) { this.#abortStage(records.stageId); throw error; }
           attemptId = id;
           this.#hooks?.at?.('after-attempt-start', { work: ref, attemptId: id });
         },
       });
-      const mismatch = outcome.state === 'succeeded' && invocation ? bindingMismatch(this.#plan.manifestOf(ref), invocation.record, outcome.result!) : undefined;
+      const mismatch = outcome.state === 'succeeded' && invocation ? bindingMismatch(binding, invocation.record, outcome.result!) : undefined;
       if (outcome.state === 'succeeded' && attemptId && (mismatch || !invocation)) {
         this.#end(ref, attemptId, 'failed', 'sentinel.execution.resultMismatch', { reason: mismatch ?? 'no invocation was recorded' });
       } else if (outcome.state === 'succeeded' && attemptId) {
         try {
-          const evaluation = evaluateCoverage(ref, outcome.result!, this.#plan.requiredOf(ref));
+          // One canonical coverage record per check the plan assigned this unit, at no finer granularity than the
+          // trusted adapter establishes; published with the result.
+          const coverage = coverageRecords({ runId: this.#plan.run.id, attemptId, work: ref, checks: executable.checks,
+            adapterGranularity: executable.adapter!.coverage, result: outcome.result!, recordedAt: now() });
           await publishOutcome({ store: this.#store, work: ref, attemptId, result: outcome.result!, outputs: outcome.outputs, endedAt: now(),
-            records: [{ value: this.#plan.manifestOf(ref), schema: INFLUENCE_SCHEMA }, { value: invocation!.record, schema: 'sentinel-invocation/draft-1' },
-              { value: evaluation, schema: COVERAGE_EVALUATION_SCHEMA }],
-            ...(this.#hooks ? { hooks: { at: (b, c) => this.#hooks!.at?.(b, c) } } : {}) });
-          this.#coverage.set(key(ref), evaluation);
+            records: coverage.records, ...(this.#hooks ? { hooks: { at: (b, c) => this.#hooks!.at?.(b, c) } } : {}) });
+          this.#coverage.set(key(ref), coverage.envelopes);
         } catch (error) {
           const canceled = error instanceof LedgerError && error.code === 'sentinel.store.wrongState';
           this.#end(ref, attemptId, canceled ? 'canceled' : 'failed', canceled ? 'sentinel.execution.canceled' : codeOf(error), detailOf(error));
@@ -461,19 +513,59 @@ export class Coordinator {
     if (!this.#cancelRequested && !this.#pauseRequested) this.#failedUnstarted.set(key(ref), code);
   }
 
-  /** A published unit's coverage evaluation: this coordinator's, or one read back from an earlier publication. */
-  #evaluationOf(ref: WorkRef): CoverageEvaluation | undefined {
-    return this.#coverage.get(key(ref));
+  /**
+   * A bootstrap unit: the coordinator's own operation (bootstrap.ts) under a recorded attempt whose worker is this
+   * coordinator, naming the operation adapter the plan pinned. Its invocation record (what was asked, with what
+   * settings) is accepted with the start; the operation publishes through the attempt. Returns the attempt id.
+   */
+  async #operation(work: Readonly<WorkEnvelope>, ordinal: number, id: Id): Promise<Id> {
+    const ref: WorkRef = { id: work.id, revision: work.revision };
+    const executable = this.#plan.unitOf(ref);
+    const adapter = executable.adapter!;
+    if (adapter.kind !== 'operation') throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'not an operation' });
+    const profile = this.#plan.admitted.profile;
+    const record = {
+      format: 'sentinel-operation-invocation/draft-1', store: this.#store.storeId, attemptId: id, work: ref, coordinatorEpoch: this.#store.epoch,
+      adapter: { id: adapter.id, version: adapter.version, digest: adapter.digest }, operation: adapter.operation,
+      plan: { runId: this.#plan.run.id, revision: this.#plan.admitted.plan.revision, digest: this.#plan.admitted.plan.digest },
+      influenceManifest: work.influenceManifest, snapshotId: this.#plan.run.snapshotId, sourceId: executable.unit.sourceId,
+      ...(adapter.operation === 'parse' ? { parse: profile.parse } : {}),
+    };
+    const invocation = this.#store.objects.identifyCanonicalJson(record).id as ArtifactId;
+    const records = await this.#stageRecords(`invocation.${id}`, [{ value: record, schema: 'sentinel-operation-invocation/draft-1' }]);
+    try {
+      this.#store.ledger.startAttempt({
+        schema: 'sentinel-attempt/draft-1', id, work: ref, ordinal, coordinatorEpoch: this.#store.epoch, operationId: id,
+        worker: { kind: 'coordinator-operation', adapterId: adapter.id, adapterDigest: adapter.digest },
+        startedAt: now(), usage: { certainty: 'not-applicable' }, state: 'running', invocation,
+      }, { records });
+    } catch (error) { this.#abortStage(records.stageId); throw error; }
+    this.#hooks?.at?.('after-attempt-start', { work: ref, attemptId: id });
+    try {
+      await runOperation(adapter.operation, { store: this.#store, run: this.#plan.run, plan: this.#plan.admitted.plan, unit: executable.unit, profile,
+        attemptId: id, scratchRoot: this.#scratchRoot, signal: AbortSignal.any([this.#cancel.signal, this.#deadline.signal]) });
+    } catch (error) {
+      const canceled = error instanceof LedgerError && error.code === 'sentinel.store.wrongState';
+      this.#end(ref, id, canceled ? 'canceled' : 'failed', canceled ? 'sentinel.execution.canceled' : codeOf(error), detailOf(error));
+    }
+    return id;
   }
 
-  /** Read every earlier publication's evaluation from the store; an unreadable one counts as not complete. */
+  /** Required coverage: PR 06's evaluator over every coverage record this revision's units published. */
+  #requiredCoverage(): RequiredCoverage {
+    return evaluateRequiredCoverage(this.#plan.admitted.plan, [...this.#coverage.values()].flat());
+  }
+
+  /** Read every earlier publication's coverage records from the store; an unreadable one counts as missing. */
   async #loadCoverage(): Promise<void> {
     for (const w of this.#plan.works) {
       const ref = { id: w.id, revision: w.revision };
       if (this.#coverage.has(key(ref))) continue;
-      const out = this.#store.ledger.getPublication(ref)?.outputs.find(o => o.schema === COVERAGE_EVALUATION_SCHEMA);
-      if (!out) continue;
-      try { this.#coverage.set(key(ref), JSON.parse((await this.#store.readArtifact(out.id)).toString('utf8')) as CoverageEvaluation); } catch { /* not complete */ }
+      const outs = this.#store.ledger.getPublication(ref)?.outputs.filter(o => o.schema === COVERAGE_SCHEMA);
+      if (!outs) continue;
+      const records: CoverageEnvelope[] = [];
+      for (const o of outs) { try { records.push(JSON.parse((await this.#store.readArtifact(o.id)).toString('utf8')) as CoverageEnvelope); } catch { /* missing */ } }
+      this.#coverage.set(key(ref), records);
     }
   }
 
@@ -504,18 +596,13 @@ export class Coordinator {
     const units = this.progress();
     const run = this.#store.ledger.getRun(this.#plan.run.id);
     let published = 0;
-    const coverage: CoverageEvaluation[] = [];
-    for (const w of this.#plan.works) {
-      const ref = { id: w.id, revision: w.revision };
-      if (!this.#store.ledger.getPublication(ref)) continue;
-      published++;
-      const e = this.#evaluationOf(ref);
-      if (e) coverage.push(e);
-    }
+    for (const w of this.#plan.works) if (this.#store.ledger.getPublication({ id: w.id, revision: w.revision })) published++;
+    const kind = this.#plan.admitted.plan.kind;
+    const coverage = kind === 'analysis' ? this.#requiredCoverage() : null;
     return { runId: this.#plan.run.id, state: run?.state ?? 'planned', ...(run?.outcome ? { outcome: run.outcome } : {}), units,
-      failures: [...this.#failures], recovery: this.recovery, published, blockedByCleanup, coverage,
-      unknownCleanup: this.#unknown.list(),
-      clean: this.recovery.clean && this.#unknown.list().length === 0 && coverage.length === published && coverage.every(c => c.verdict === 'complete') };
+      failures: [...this.#failures], recovery: this.recovery, published, blockedByCleanup, kind, planRevision: this.#plan.admitted.plan.revision,
+      coverage, coverageRecords: [...this.#coverage.values()].reduce((n, r) => n + r.length, 0), unknownCleanup: this.#unknown.list(),
+      clean: this.recovery.clean && this.#unknown.list().length === 0 };
   }
 }
 

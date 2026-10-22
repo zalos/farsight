@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { COORDINATOR_BOUNDARIES } from '../dist/execution/coordinator.js';
 import { argumentsOf, WorkerFiles } from '../dist/execution/recovery.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
-import { ledgerState, publications, syntheticPlan } from './coordinator-helpers.ts';
+import { ledgerState, publications, unitIdsOf } from './coordinator-helpers.ts';
+import { loadPlan } from '../dist/execution/plans.js';
 
 const full = process.env.SENTINEL_RECOVERY_FULL === '1';
 const smoke = process.env.SENTINEL_RECOVERY_SMOKE === '1';
@@ -49,9 +50,10 @@ for (const boundary of COORDINATOR_BOUNDARIES) {
       const store = await storeIn(s.root);
       try {
         const counts = publications(store, 'run-e4');
-        assert.deepEqual([...counts.keys()].sort(), ['work-A', 'work-B', 'work-C', 'work-D'], `rep ${rep}: nothing lost`);
+        const { plan } = await loadPlan(store, 'run-e4', 1);
+        assert.deepEqual([...counts.keys()].sort(), Object.values(unitIdsOf(plan)).sort(), `rep ${rep}: nothing lost`);
         assert.ok([...counts.values()].every(n => n === 1), `rep ${rep}: nothing duplicated ${JSON.stringify([...counts])}`);
-        const l = ledgerState(store, syntheticPlan(s.root).plan);
+        const l = ledgerState(store, plan);
         assert.equal(l.running, 0, `rep ${rep}: no attempt left running`);
         assert.equal(l.openStages, 0, `rep ${rep}: no stage left open`);
         // Every worker identity was settled: recovery proved it stopped, or the worker exited and was reaped.

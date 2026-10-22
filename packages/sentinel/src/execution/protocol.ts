@@ -14,7 +14,7 @@ import { MAX_ENVELOPE_BYTES } from '../contracts/index.js';
 import type {
   AttemptBinding, CancelMessage, HelloMessage, ProtocolMessage, RefuseMessage, ResultMessage, StartMessage, WelcomeMessage,
 } from '../contracts/protocol.js';
-import type { ArtifactId, Digest, Id, Timestamp, WorkRef } from '../contracts/common.js';
+import type { ArtifactId, Digest, Id, ScopeId, Timestamp, WorkRef } from '../contracts/common.js';
 import { negotiateProtocol, validateEnvelope } from '../validate.js';
 import { ExecutionError, type ExecutionErrorCode } from './errors.js';
 
@@ -160,6 +160,8 @@ export interface SessionBinding {
   inputFingerprint: Digest;
   inputs: ArtifactId[];
   deadlineAt: Timestamp;
+  /** The plan's assignment for this attempt, carried by the start. */
+  assignment?: { checks: Id[]; scopes: ScopeId[] };
 }
 
 export type SessionPhase = 'awaiting-hello' | 'running' | 'canceling' | 'finished' | 'failed';
@@ -184,7 +186,8 @@ export class WorkerSession {
   #failure: ExecutionError | undefined;
 
   constructor(binding: SessionBinding) {
-    this.binding = Object.freeze({ ...binding, work: Object.freeze({ ...binding.work }), inputs: Object.freeze([...binding.inputs]) as ArtifactId[] });
+    this.binding = Object.freeze({ ...binding, work: Object.freeze({ ...binding.work }), inputs: Object.freeze([...binding.inputs]) as ArtifactId[],
+      ...(binding.assignment ? { assignment: Object.freeze({ checks: [...binding.assignment.checks], scopes: [...binding.assignment.scopes] }) } : {}) });
   }
 
   get phase(): SessionPhase { return this.#phase; }
@@ -256,6 +259,7 @@ export class WorkerSession {
     const start: StartMessage = {
       protocol: PROTOCOL, type: 'start', ...this.#nextBinding(),
       inputFingerprint: this.binding.inputFingerprint, inputs: [...this.binding.inputs], deadlineAt: this.binding.deadlineAt,
+      ...(this.binding.assignment ? { checks: [...this.binding.assignment.checks], scopes: [...this.binding.assignment.scopes] } : {}),
     };
     return { send: [answer, start] };
   }

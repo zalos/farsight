@@ -1,4 +1,4 @@
-import type { ArtifactId, CatalogKey, Count, DecimalAmount, Id, Ordinal, Timestamp, WorkRef } from './common.js';
+import type { ArtifactId, CatalogKey, Count, DecimalAmount, Digest, Id, Ordinal, Timestamp, WorkRef } from './common.js';
 
 export type AttemptState = 'running' | 'succeeded' | 'failed' | 'interrupted' | 'canceled' | 'canceled-after-spend';
 
@@ -25,6 +25,16 @@ export type AttemptWorker =
       /** @pattern ^[0-9a-f]{64}$ */
       containerId: string;
       ownershipLabels: { store: Id; attempt: Id; epoch: Id };
+    }
+  | {
+      /**
+       * One of Sentinel's own bootstrap operations (capture, parse, inventory), run by the coordinator in its own
+       * process over the store it owns: there is no separate process to find. Its authority is the operation adapter
+       * the plan pinned, by registry digest.
+       */
+      kind: 'coordinator-operation';
+      adapterId: Id;
+      adapterDigest: Digest;
     }
   | {
       kind: 'external-claim';

@@ -352,9 +352,12 @@ export class Ledger {
   // ---- work and attempts ----
 
   /** Appends a work revision. Revisions of one ID are contiguous: the next is always the highest plus one. */
-  createWork(envelope: WorkEnvelope, opts: { idempotency?: IdempotencyRef } = {}): { work: WorkRef; sequence: number } {
+  createWork(envelope: WorkEnvelope, opts: { idempotency?: IdempotencyRef; records?: AttemptRecords } = {}): { work: WorkRef; sequence: number } {
     const work = contract('work', envelope);
-    return this.#mutate('createWork', work, opts.idempotency, () => {
+    // The influence manifest the work names may be accepted with it, so the root it names is a stored record.
+    const records = opts.records ? this.#checkUnboundStage(opts.records, 'work records') : null;
+    if (records && !records.receipts.some(r => r.id === work.influenceManifest)) throw invalid('work records must hold the work\'s influence manifest');
+    return this.#mutate('createWork', records ? { work, records: { stageId: records.stageId, receipts: records.receipts } } : work, opts.idempotency, () => {
       if (work.state !== 'pending' && work.state !== 'ready') throw invalid('new work starts pending or ready');
       this.#requireCurrentEpoch(work.coordinatorEpoch, 'the work');
       const run = this.#get('SELECT state, plan_revision FROM runs WHERE id = ?', work.runId);
@@ -380,7 +383,9 @@ export class Ledger {
           VALUES (?, ?, ?, ?)`, work.id, work.revision, dep.id, dep.revision);
       }
       const ref = { id: work.id, revision: work.revision };
-      return { work: ref, sequence: this.#event('work-created', work.runId, ref, { state: work.state }) };
+      const sequence = this.#event('work-created', work.runId, ref, { state: work.state });
+      if (records) this.#acceptUnboundStages([records.stageId], records.receipts, [work.influenceManifest], sequence);
+      return { work: ref, sequence };
     });
   }
 

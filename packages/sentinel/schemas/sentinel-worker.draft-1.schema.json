@@ -323,6 +323,21 @@
         },
         "deadlineAt": {
           "$ref": "#/definitions/Timestamp"
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Id"
+          },
+          "description": "The plan's checks this attempt is to cover, and the scopes they are over. A result claims coverage only in these terms; anything else it reports is not coverage of the plan.",
+          "maxItems": 2048
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScopeId"
+          },
+          "maxItems": 256
         }
       },
       "required": [
@@ -377,6 +392,12 @@
       "description": "A UTC RFC 3339 timestamp with an explicit Z offset and a real calendar date (no leap second), years 0000–9999 proleptic Gregorian, up to nine fractional digits. The pattern bounds each field; the `date-time` format check refuses a day the month does not have. Comparisons keep all nine digits.",
       "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$",
       "format": "date-time"
+    },
+    "ScopeId": {
+      "type": "string",
+      "description": "A scope reference such as `<sourceId>:<relativePath>` or a surface ID. Untrusted protocol data: bounded, free of control characters, never resolved as a filesystem path.",
+      "pattern": "^[A-Za-z0-9][^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]*$",
+      "maxLength": 4300
     },
     "CancelMessage": {
       "type": "object",
@@ -597,12 +618,6 @@
         "work"
       ],
       "additionalProperties": false
-    },
-    "ScopeId": {
-      "type": "string",
-      "description": "A scope reference such as `<sourceId>:<relativePath>` or a surface ID. Untrusted protocol data: bounded, free of control characters, never resolved as a filesystem path.",
-      "pattern": "^[A-Za-z0-9][^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]*$",
-      "maxLength": 4300
     },
     "CancelAckMessage": {
       "type": "object",

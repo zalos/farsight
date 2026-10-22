@@ -3,15 +3,23 @@
 // SHA-256 of its canonical definition (for a built-in worker, including its module bytes), so a worker that
 // announces another identity, or a definition changed after registration, is refused.
 //
-// Two kinds exist and they are not interchangeable:
+// Three kinds exist and they are not interchangeable:
 // - external: a third-party tool. Container isolation only, an image pinned by digest, a fixed argument list.
 // - built-in: a worker shipped in Sentinel's own package (parsers and similar). A local child process with no
 //   inherited environment; its module is hashed at registration and again before every start.
+// - operation: one of Sentinel's own bootstrap operations (capture, parse, inventory), run by the coordinator in its
+//   own process over the store it owns, never as a worker. Its digest covers the bytes of the Sentinel module that
+//   implements it, so a plan bound to it is bound to that implementation.
+//
+// A check adapter also states the finest coverage granularity its engine can establish (`coverage`, default
+// `aggregate`). The coordinator never records coverage finer than this, whatever a result claims.
 // No production external adapter is registered yet; PR 10 onwards adds them with their measured pins.
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Digest, Id } from '../contracts/common.js';
+import type { CoverageGranularity } from '../contracts/coverage.js';
 import type { ResourcePolicy } from '../contracts/work.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { ExecutionError } from './errors.js';
@@ -68,6 +76,8 @@ export interface ExternalAdapterDefinition {
   /** The executable and its fixed arguments inside the image. Nothing from a repository is added. */
   command: readonly string[];
   limits?: Partial<AdapterLimits>;
+  /** The finest coverage the engine establishes; `aggregate` when absent. */
+  coverage?: CoverageGranularity;
 }
 
 export interface BuiltInAdapterDefinition {
@@ -78,13 +88,38 @@ export interface BuiltInAdapterDefinition {
   /** Absolute path of the worker module, run with this process's Node and no inherited environment. */
   module: string;
   limits?: Partial<AdapterLimits>;
+  /** The finest coverage the worker establishes; `aggregate` when absent. */
+  coverage?: CoverageGranularity;
 }
 
-export type AdapterDefinition = ExternalAdapterDefinition | BuiltInAdapterDefinition;
+export type BootstrapOperation = 'capture' | 'parse' | 'inventory';
+
+export interface OperationAdapterDefinition {
+  id: Id;
+  version: string;
+  kind: 'operation';
+  operation: BootstrapOperation;
+}
+
+export type AdapterDefinition = ExternalAdapterDefinition | BuiltInAdapterDefinition | OperationAdapterDefinition;
 
 export type TrustedAdapter =
-  | (Readonly<Omit<ExternalAdapterDefinition, 'limits'>> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits> })
-  | (Readonly<Omit<BuiltInAdapterDefinition, 'limits'>> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits>; readonly moduleDigest: Digest });
+  | (Readonly<Omit<ExternalAdapterDefinition, 'limits' | 'coverage'>> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits>; readonly coverage: CoverageGranularity })
+  | (Readonly<Omit<BuiltInAdapterDefinition, 'limits' | 'coverage'>> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits>; readonly moduleDigest: Digest; readonly coverage: CoverageGranularity })
+  | (Readonly<OperationAdapterDefinition> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits>; readonly moduleDigest: Digest; readonly coverage: 'aggregate' });
+
+/** The Sentinel module that implements each bootstrap operation, relative to this file in the built package. */
+const OPERATION_MODULES: Readonly<Record<BootstrapOperation, URL>> = Object.freeze({
+  capture: new URL('../snapshot/capture.js', import.meta.url),
+  parse: new URL('../snapshot/parser.js', import.meta.url),
+  inventory: new URL('./bootstrap.js', import.meta.url),
+});
+const GRANULARITIES: readonly CoverageGranularity[] = ['per-file-per-rule', 'per-file', 'aggregate'];
+const coverageOf = (v: unknown): CoverageGranularity => {
+  if (v === undefined) return 'aggregate';
+  if (!GRANULARITIES.includes(v as CoverageGranularity)) invalid('coverage granularity');
+  return v as CoverageGranularity;
+};
 
 export interface AdapterRegistry {
   get(id: Id): TrustedAdapter;
@@ -149,21 +184,28 @@ function trusted(def: AdapterDefinition): TrustedAdapter {
   if (!def || typeof def !== 'object') invalid('definition');
   if (!ID.test(def.id ?? '')) invalid('id');
   if (typeof def.version !== 'string' || !def.version || def.version.length > 64) invalid('version');
+  if (def.kind === 'operation') {
+    if (!Object.hasOwn(OPERATION_MODULES, def.operation ?? '')) invalid('operation');
+    const moduleDigest = moduleDigestOf(fileURLToPath(OPERATION_MODULES[def.operation]));
+    const body = { id: def.id, version: def.version, kind: def.kind, operation: def.operation, moduleDigest };
+    return Object.freeze({ ...body, limits: ACCEPTED_CEILINGS, coverage: 'aggregate' as const, digest: sha256(canonicalJsonBytes(body)) });
+  }
   const limits = limitsOf(def.limits);
+  const coverage = coverageOf(def.coverage);
   if (def.kind === 'external') {
     if (def.isolation !== 'container') throw new ExecutionError('sentinel.execution.adapterIsolationRefused', { adapter: (def as AdapterDefinition).id });
     if (!IMAGE_REFERENCE.test(def.image ?? '')) invalid('image must be pinned as repository@sha256:<digest>');
     if (!Array.isArray(def.command) || !def.command.length || def.command.length > 64
       || def.command.some(a => typeof a !== 'string' || a.length > 65_536 || a.includes('\0'))
       || def.command.reduce((n, a) => n + a.length, 0) > 262_144) invalid('command');
-    const body = { id: def.id, version: def.version, kind: def.kind, isolation: def.isolation, image: def.image, command: [...def.command], limits };
+    const body = { id: def.id, version: def.version, kind: def.kind, isolation: def.isolation, image: def.image, command: [...def.command], limits, coverage };
     return Object.freeze({ ...body, command: Object.freeze([...def.command]), digest: sha256(canonicalJsonBytes(body)) });
   }
   if (def.kind === 'built-in') {
     if (def.isolation !== 'child') invalid('built-in workers run as a child process');
     if (typeof def.module !== 'string' || !isAbsolute(def.module)) invalid('module must be an absolute path');
     const moduleDigest = moduleDigestOf(def.module);
-    const body = { id: def.id, version: def.version, kind: def.kind, isolation: def.isolation, module: def.module, moduleDigest, limits };
+    const body = { id: def.id, version: def.version, kind: def.kind, isolation: def.isolation, module: def.module, moduleDigest, limits, coverage };
     return Object.freeze({ ...body, digest: sha256(canonicalJsonBytes(body)) });
   }
   return invalid('kind');
