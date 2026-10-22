@@ -87,6 +87,13 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   lock and validated packs, the effective policy, the snapshot and parser evidence), `boundary.ts` (canonical work
   envelopes, influence manifests, exact coverage and captured inputs for the coordinator) and `errors.ts`. The
   revision contract is `contracts/plan.ts` (`sentinel-plan/draft-1`); persistence and admission belong to PR 08.
+  `src/frameworks/next/` is the Next middleware pack (PR 14, ADR 30), exported as `./frameworks/next`: `support.ts`
+  (the support manifest; its digest is the pack digest), `version.ts` (installed versions from lockfiles only),
+  `config.ts` (literal-only Oxc reads of the middleware exports and next.config, with UTF-8 spans), `pattern.ts`
+  (the whole-segment matcher subset, App Router folder forms and the automaton decision), `analyze.ts`
+  (`analyzeNext`: projects, applicability per surface, one `sentinel-controls/draft-1` envelope per project) and
+  `errors.ts`; its words are `strings-sentinel-next.ts`. `test/next-*.test.ts` covers it over real captures and
+  the packed package.
   `test/store-integration.test.ts` drives the facade end to end across processes. Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the
