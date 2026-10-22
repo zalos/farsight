@@ -13,7 +13,7 @@ import { adoptedPolicy, adoptWorkspaceSettings, confirmRunForService, workspaceO
 import { connectService, readServiceDescriptor } from '../dist/service/owner-service.js';
 import { connectOwnerSocket } from '../dist/transport/ipc.js';
 import { initWorkspace } from '../dist/cli/init.js';
-import { processStartTime } from '../dist/execution/recovery.js';
+import { argumentsOf } from '../dist/execution/recovery.js';
 import { openStore, qualificationFor, SQLITE_RELEASE_POLICY } from '../dist/store/index.js';
 import { removeScratch } from './execution-helpers.ts';
 import { publications } from './coordinator-helpers.ts';
@@ -199,9 +199,9 @@ test('pause lets work in flight finish and resume needs the owner again; cancel 
   assert.deepEqual(await publishedCounts(s, s.plans[0]!), { 'work-A-1': 1, 'work-B-1': 1, 'work-C-1': 1, 'work-D-1': 1 });
 });
 
-const psWorks = (() => { try { return processStartTime(process.pid) !== null; } catch { return false; } })();
+const psWorks = (() => { try { return Array.isArray(argumentsOf(process.pid)); } catch { return false; } })();
 
-test('a service killed mid-run: its run reads as interrupted, and resumes with each output accepted once', { skip: (!psWorks && 'recovery reads /bin/ps, which does not report this process here') || needsStore.skip }, async () => {
+test('a service killed mid-run: its run reads as interrupted, and resumes with each output accepted once', { skip: (!psWorks && 'recovery verifies workers by their arguments, which this host does not report') || needsStore.skip }, async () => {
   const s = setup('restart');
   const planId = s.plans[0]!;
   let child = await serve(s);
