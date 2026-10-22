@@ -5,10 +5,10 @@
 // as the owner can change user state, and that is outside this boundary (as for the store, ADR 19).
 import { randomBytes } from 'node:crypto';
 import {
-  closeSync, constants as FS, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readSync, renameSync, unlinkSync,
+  closeSync, constants as FS, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, renameSync, unlinkSync,
   writeSync, type Stats,
 } from 'node:fs';
-import { isAbsolute, join, normalize } from 'node:path';
+import { basename, dirname, isAbsolute, join, normalize } from 'node:path';
 import { policyFail, type PolicyErrorCode } from './errors.js';
 
 const UID = typeof process.getuid === 'function' ? process.getuid() : undefined;
@@ -39,8 +39,15 @@ export function readPrivateFile(path: string, maxBytes: number, code: PolicyErro
     return policyFail(code, `a user-state file cannot be opened (${errno(e) ?? 'error'})`, e);
   }
   try {
-    const st = fstatSync(fd);
+    let st = fstatSync(fd);
     if (!st.isFile()) policyFail(code, 'a user-state entry is not a regular file');
+    if (st.nlink > 1) {
+      // createPrivateFileOnce links a synced temporary name to the final one and then removes it; between the two,
+      // or after a crash there, the record also has that temporary name. Only that exact alias of this same file is
+      // removed; any other second name is refused.
+      removeTemporaryAliases(dirname(path), basename(path), st);
+      st = fstatSync(fd);
+    }
     if (st.nlink !== 1) policyFail(code, 'a user-state file has another name');
     assertOwnerOnly(st, 'a user-state file', code);
     if (st.size > maxBytes) policyFail(code, `a user-state file is larger than ${maxBytes} bytes`);
@@ -112,14 +119,39 @@ export function writePrivateFileAtomic(dir: string, name: string, bytes: Uint8Ar
 /** Creates `name` with `bytes` only if it does not exist yet. Returns false when it already existed. */
 export function createPrivateFileOnce(dir: string, name: string, bytes: Uint8Array, code: PolicyErrorCode): boolean {
   ensurePrivateDir(dir, code);
+  // Whole or not at all: the bytes are written and synced under a fresh temporary name, then linked to the final
+  // name. link(2) never replaces a name, so exactly one creator wins, and the final name never exists with partial
+  // or missing content: a failure or crash before the link leaves nothing there.
+  const temp = join(dir, `.${name}.${randomBytes(8).toString('hex')}.tmp`);
   let fd: number;
-  try { fd = openSync(join(dir, name), FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | NOFOLLOW, 0o600); } catch (e) {
-    if (errno(e) === 'EEXIST') return false;
+  try { fd = openSync(temp, FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | NOFOLLOW, 0o600); } catch (e) {
     return policyFail(code, `a user-state file cannot be created (${errno(e) ?? 'error'})`, e);
   }
-  try { writeAll(fd, bytes); } finally { closeSync(fd); }
+  let linked = false;
+  try {
+    try { writeAll(fd, bytes); } finally { closeSync(fd); }
+    try { linkSync(temp, join(dir, name)); linked = true; } catch (e) {
+      if (errno(e) !== 'EEXIST') return policyFail(code, `a user-state file cannot be published (${errno(e) ?? 'error'})`, e);
+    }
+  } finally {
+    try { unlinkSync(temp); } catch { /* removed already */ }
+  }
   syncDir(dir);
-  return true;
+  return linked;
+}
+
+/** Removes the temporary names createPrivateFileOnce uses for `name` that are this very file; nothing else. */
+function removeTemporaryAliases(dir: string, name: string, file: Stats): void {
+  const pattern = new RegExp(`^\\.${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.[0-9a-f]{16}\\.tmp$`);
+  let entries: string[];
+  try { entries = readdirSync(dir); } catch { return; }
+  for (const entry of entries) {
+    if (!pattern.test(entry)) continue;
+    try {
+      const other = lstatSync(join(dir, entry));
+      if (other.isFile() && other.dev === file.dev && other.ino === file.ino) unlinkSync(join(dir, entry));
+    } catch { /* removed by its writer meanwhile */ }
+  }
 }
 
 /** True when `inner` is `outer` or below it, comparing canonical absolute paths. */
