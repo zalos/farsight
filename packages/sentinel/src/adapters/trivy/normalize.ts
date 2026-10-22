@@ -112,6 +112,17 @@ const UNSENT: Record<string, { status: TrivyCoverageStatus; reason: TrivyCoverag
   'bundle-missing': { status: 'bundle-missing', reason: 'sentinel.trivy.coverage.bundleMissing' },
 };
 
+/**
+ * Trivy 0.76.1 reads a YAML file as Kubernetes only when one of its documents has the keys apiVersion, kind and
+ * metadata (pkg/iac/detection/detect.go). A file whose bytes lack one of those words, with no backslash that could
+ * escape one inside a quoted key, cannot match; anything else the engine did not log is an omission.
+ */
+export function cannotBeKubernetes(bytes: Uint8Array): boolean {
+  const text = Buffer.from(bytes).toString('latin1');
+  if (text.includes('\\')) return false;
+  return !['apiVersion', 'kind', 'metadata'].every(word => text.includes(word));
+}
+
 const lineCount = (b: Uint8Array) => { let n = 1; for (const c of b) if (c === 0x0a) n++; return b.length && b[b.length - 1] === 0x0a ? n - 1 : n; };
 
 /** The coverage of a job that never ran (no bundle, or nothing to send): unsent rows only. */
@@ -191,7 +202,9 @@ export function normalizeTrivyRun(input: TrivyNormalizeInput): TrivyRunResult {
 
   const findings = new Map<string, TrivyFinding>();
   for (const result of engine.Results ?? []) {
-    const target = typeof result?.Target === 'string' ? result.Target : '';
+    // The worker scans below one fixed folder, t/: the engine's targets are relative to the folder above it.
+    const raw = typeof result?.Target === 'string' ? result.Target : '';
+    const target = raw === 't' ? '.' : raw.startsWith('t/') ? raw.slice(2) : '';
     const file = byPath.get(target);
     const folder = !file && folders.has(target) ? target : null;
     if (!file && folder === null) { refused.push({ reasonCode: 'sentinel.trivy.refused.unknownTarget', relativePath: null }); continue; }
@@ -228,8 +241,10 @@ export function normalizeTrivyRun(input: TrivyNormalizeInput): TrivyRunResult {
     if (unparsed.has(t.relativePath)) return sentRow(t, 'error', 'sentinel.trivy.coverage.parseFailed');
     const seen = scanned.has(t.relativePath) || (t.type === 'terraform' && scanned.has(dirOf(t.relativePath)));
     if (!seen) {
-      // At exit 0, a Dockerfile or Terraform file the engine did not report scanning is an omission, never a pass.
-      return t.kind === 'kubernetes-candidate' ? sentRow(t, 'not-applicable', 'sentinel.trivy.coverage.notRecognized') : sentRow(t, 'error', 'sentinel.trivy.coverage.notReported');
+      // At exit 0, a file the engine did not report scanning is an omission, never a pass, unless its bytes prove the
+      // engine's own Kubernetes rule cannot match it (see cannotBeKubernetes).
+      return t.kind === 'kubernetes-candidate' && cannotBeKubernetes(bytes)
+        ? sentRow(t, 'not-applicable', 'sentinel.trivy.coverage.notRecognized') : sentRow(t, 'error', 'sentinel.trivy.coverage.notReported');
     }
     const limits: TrivyCoverageReason[] = [];
     if (INLINE_IGNORE.test(Buffer.from(bytes).toString('latin1'))) limits.push('sentinel.trivy.coverage.inlineIgnore');

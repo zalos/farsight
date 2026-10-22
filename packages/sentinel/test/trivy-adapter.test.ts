@@ -15,6 +15,7 @@ import { STRINGS } from '@farsight/core/dist/strings.js';
 import { ReceiptBook } from '../dist/policy/receipts.js';
 import { issueReceipt } from '../dist/policy/owner-receipts.js';
 import { TRIVY_LAYOUT, capturedTree, sha } from './iac-helpers.ts';
+import { cannotBeKubernetes } from '../dist/adapters/trivy/normalize.js';
 
 function scratch(t: { after(fn: () => void): void }, label = 'trivy') {
   const dir = mkdtempSync(join(realpathSync(tmpdir()), `sentinel-${label}-`));
@@ -105,9 +106,9 @@ function run(t: { after(fn: () => void): void }, report: unknown, record: Record
 const fail = (id: string, start = 0, end = 0, extra: Record<string, unknown> = {}) => ({ ID: id, Severity: 'HIGH', Status: 'FAIL', Namespace: `builtin.x.${id}`,
   Message: 'quotes the file: sentinel-fixture-privileged', CauseMetadata: { StartLine: start, EndLine: end }, ...extra });
 const REPORT = { SchemaVersion: 2, Trivy: { Version: '0.76.1' }, Results: [
-  { Target: 'services/api/Dockerfile', Class: 'config', Type: 'dockerfile', Misconfigurations: [fail('DS-0002'), fail('DS-0025', 2, 2), { ...fail('DS-0001'), Status: 'PASS' }] },
-  { Target: 'deploy/pod.yaml', Class: 'config', Type: 'kubernetes', Misconfigurations: [fail('KSV-0017', 7, 10)] },
-  { Target: 'infra/storage/main.tf', Class: 'config', Type: 'terraform', Misconfigurations: [fail('AWS-0086', 6, 6)] },
+  { Target: 't/services/api/Dockerfile', Class: 'config', Type: 'dockerfile', Misconfigurations: [fail('DS-0002'), fail('DS-0025', 2, 2), { ...fail('DS-0001'), Status: 'PASS' }] },
+  { Target: 't/deploy/pod.yaml', Class: 'config', Type: 'kubernetes', Misconfigurations: [fail('KSV-0017', 7, 10)] },
+  { Target: 't/infra/storage/main.tf', Class: 'config', Type: 'terraform', Misconfigurations: [fail('AWS-0086', 6, 6)] },
 ] };
 const row = (r: any, p: string) => { const c = r.coverage.find((x: any) => x.relativePath === p); return `${c.status}:${c.limitations.map((l: string) => l.split('.').pop()).join(',')}`; };
 
@@ -154,10 +155,10 @@ test('a run that did not evaluate the pinned bundle, failed, was truncated or ra
 
 test('a result naming another file, a check not from the bundle, a bad location or a bad severity is refused', t => {
   const r = run(t, { SchemaVersion: 2, Trivy: { Version: '0.76.1' }, Results: [
-    { Target: '../escape/Dockerfile', Class: 'config', Type: 'dockerfile', Misconfigurations: [fail('DS-0002')] },
-    { Target: 'services/api/Dockerfile', Class: 'config', Type: 'dockerfile', Misconfigurations: [
+    { Target: 't/../escape/Dockerfile', Class: 'config', Type: 'dockerfile', Misconfigurations: [fail('DS-0002')] },
+    { Target: 't/services/api/Dockerfile', Class: 'config', Type: 'dockerfile', Misconfigurations: [
       fail('DS-0002', 0, 0, { Namespace: 'user.custom' }), fail('DS-0025', 3, 99), fail('DS-0026', 0, 0, { Severity: 'SEVERE' }), fail('ds 1')] },
-    { Target: 'deploy/pod.yaml', Class: 'config', Type: 'dockerfile', Misconfigurations: [fail('KSV-0017')] },
+    { Target: 't/deploy/pod.yaml', Class: 'config', Type: 'dockerfile', Misconfigurations: [fail('KSV-0017')] },
   ] });
   assert.equal(r.findings.length, 0);
   assert.deepEqual(r.refused.map(x => x.reasonCode.split('.').pop()).sort(), ['locationInvalid', 'malformed', 'malformed', 'malformed', 'notFromBundle', 'unknownTarget']);
@@ -221,4 +222,12 @@ test('every reason the adapter or its worker can record is a catalog word, and t
   const codes = new Set([...TRIVY_COVERAGE_REASONS, ...TRIVY_REFUSAL_REASONS, ...TRIVY_ENGINE_FAILURES, ...TRIVY_ERROR_CODES, ...worker]);
   for (const c of codes) assert.ok(STRINGS[c]?.define, `${c} is in the catalog with a definition`);
   assert.deepEqual(Object.keys(STRINGS).filter(k => k.startsWith('sentinel.trivy.')).sort(), [...codes].sort());
+});
+
+test('an unlogged YAML file is not applicable only when the engine’s Kubernetes rule provably cannot match it', () => {
+  const yes = (t: string) => cannotBeKubernetes(Buffer.from(t));
+  assert.equal(yes('name: settings\nitems: [1]\n'), true);
+  assert.equal(yes('apiVersion: v1\nkind: Pod\nmetadata:\n  name: x\n'), false);
+  assert.equal(yes('apiVersion: v1\nkind: Pod\n"meta\\u0064ata": {}\n'), false, 'an escape could spell a key');
+  assert.equal(yes('{"apiVersion": "v1", "kind": "Pod", "metadata": {}}\n'), false);
 });

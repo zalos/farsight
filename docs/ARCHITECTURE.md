@@ -678,7 +678,10 @@ command (PR 09) and shipping no database in the package. linux/amd64 is measured
     - **Coverage needs positive evidence.** The worker also reports, from the engine's log and filtered to the job's
       own paths, which files and Terraform module folders were scanned, which failed to parse and where a remote module
       failed to load. At exit 0, a Dockerfile or Terraform file the engine never logged is `notReported`, a gap, never
-      a pass (the engine silently skips `.git` folders, for one). YAML it did not recognize is not applicable. Inline
+      a pass (the engine silently skips `.git` folders, for one). Files are scanned below one fixed folder so the engine's
+      root-relative `proc`, `sys` and `dev` skips cannot hide a captured folder of that name. YAML the engine did not log
+      is not applicable only when its bytes prove the engine's Kubernetes rule (a document with apiVersion, kind and
+      metadata) cannot match; otherwise it is `notReported`. Inline
       `trivy:`/`tfsec:` ignore comments, which the engine honours with no switch to disable them, a remote module
       (scans have no network, so modules are never fetched) and unread variable files leave a file `partial`.
     - **Findings are configuration facts at captured paths.** A finding keeps the check id, the bundle's severity,

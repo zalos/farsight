@@ -122,3 +122,22 @@ test('an engine that fails reports a diagnostic and a result in order, and count
   assert.equal(r.findings.length, 0);
   assert.equal(row(r, 'Dockerfile'), 'error:engineFailed');
 });
+
+test('SOL: a captured folder named like one the engine skips is still scanned; what it cannot reach stays a gap', { skip }, async () => {
+  const r = await run(capturedTree(join(root.root, `tree-${n++}`), {
+    'dev/pod.yaml': 'trivy/k8s-privileged-pod.fixture', 'normal/pod.yaml': 'trivy/k8s-privileged-pod.fixture',
+    'proc/Dockerfile': 'trivy/dockerfile-root.fixture', 'sys/main.tf': 'trivy/tf-open-bucket.fixture',
+    // The engine always skips folders named .git: a manifest there is an omission, not an unrecognized file.
+    'tools/.git/deploy/pod.yaml': 'trivy/k8s-privileged-pod.fixture', 'tools/.git/deploy/settings.yaml': 'trivy/k8s-not-a-manifest.fixture',
+    'root.tf': 'trivy/tf-open-bucket.fixture',
+  }));
+  assert.deepEqual(checks(r, 'dev/pod.yaml'), checks(r, 'normal/pod.yaml'), 'the same findings in dev/ as anywhere else');
+  assert.ok(checks(r, 'dev/pod.yaml').includes('KSV-0017'));
+  assert.equal(row(r, 'dev/pod.yaml'), 'complete:');
+  assert.ok(checks(r, 'proc/Dockerfile').includes('DS-0002'));
+  assert.ok(checks(r, 'sys/main.tf').length > 0);
+  assert.equal(row(r, 'root.tf'), 'complete:', 'a root module reports as the root folder');
+  assert.equal(row(r, 'tools/.git/deploy/pod.yaml'), 'error:notReported');
+  assert.equal(row(r, 'tools/.git/deploy/settings.yaml'), 'not-applicable:notRecognized', 'the near neighbour: provably not a manifest');
+  assert.deepEqual(r.refused, []);
+});

@@ -4,7 +4,9 @@
 //
 // It reads only values the coordinator constrains: protocol ids and digests (fixed character sets), integer target
 // indexes and relative paths limited to [A-Za-z0-9._/-] with no empty, `.` or `..` segment. The captured files are
-// copied under those paths so Terraform modules keep their folders; the coordinator maps every reported path back to
+// copied under those paths, below one fixed folder `t/` (Trivy skips top-level `proc`, `sys` and `dev` folders of the
+// scanned root, and the extra level keeps a captured folder of that name from being skipped), so Terraform modules
+// keep their folders; the coordinator maps every reported path back to
 // its captured artifact. The pinned checks bundle is unpacked into Trivy's cache layout and updates are skipped. Trivy
 // silently falls back to the checks embedded in its binary when that cache is missing, so the worker reports the
 // engine's own "loaded from disk" evidence and the coordinator refuses a run without it. The engine log never leaves
@@ -46,7 +48,7 @@ done
 [ "$COUNT" -eq 1 ] || fail 'sentinel.trivy.jobAmbiguous'
 
 W=/tmp/sentinel-trivy
-mkdir -p "$W/src" "$W/run" "$W/c/policy/content" || exit 2
+mkdir -p "$W/src/t" "$W/run" "$W/c/policy/content" || exit 2
 printf '.\\n' > "$W/allowed"
 SECS=100
 BUNDLE=''
@@ -68,8 +70,8 @@ while IFS=' ' read -r kind a b c; do
         ''|/*|*/|*//*|.|..|./*|../*|*/.|*/..|*/./*|*/../*|*[!A-Za-z0-9._/-]*) fail 'sentinel.trivy.jobInvalid' ;;
       esac
       [ -f "/input/$b" ] || fail 'sentinel.trivy.targetMissing'
-      case "$c" in */*) mkdir -p "$W/src/\${c%/*}" || exit 2 ;; esac
-      cp "/input/$b" "$W/src/$c" || exit 2
+      case "$c" in */*) mkdir -p "$W/src/t/\${c%/*}" || exit 2 ;; esac
+      cp "/input/$b" "$W/src/t/$c" || exit 2
       printf '%s\\n' "$c" >> "$W/allowed"
       d=$c
       while case "$d" in */*) true ;; *) false ;; esac; do d=\${d%/*}; printf '%s\\n' "$d" >> "$W/allowed"; done
@@ -105,10 +107,11 @@ DISK=false; grep -q "Checks successfully loaded from disk" "$W/err.txt" && DISK=
 FALLBACK=false; grep -q "Falling back to embedded checks" "$W/err.txt" && FALLBACK=true
 CHECKS=$(sed -n "s/.*Checks from disk are loaded\${TAB}count=\\([0-9][0-9]*\\)$/\\1/p" "$W/err.txt" | head -n 1)
 DETECTED=$(sed -n "s/.*Detected config files\${TAB}num=\\([0-9][0-9]*\\)$/\\1/p" "$W/err.txt" | head -n 1)
-paths() { sed -n "$1" "$W/err.txt" | grep -Fx -f "$W/allowed" | sort -u | sed 's/.*/"&"/' | tr '\\n' ',' | sed 's/,$//'; }
-SCANNED=$(paths "s/.*Scanned config file\${TAB}file_path=\\"\\([A-Za-z0-9._/-]*\\)\\"$/\\1/p")
-UNPARSED=$(paths "s/.*Failed to parse file\${TAB}file_path=\\"\\([A-Za-z0-9._/-]*\\)\\".*/\\1/p")
-MODULES=$(paths "s/.*Failed to load module.*loc=\\"\\([A-Za-z0-9._/-]*\\):[0-9][0-9-]*\\".*/\\1/p")
+# Logged paths are below t/; t alone is the root module folder, reported as ".".
+paths() { sed -n "$1" "$W/err.txt" | sed 's/^t$/./; s/^t\\///' | grep -Fx -f "$W/allowed" | sort -u | sed 's/.*/"&"/' | tr '\\n' ',' | sed 's/,$//'; }
+SCANNED=$(paths "s/.*Scanned config file\${TAB}file_path=\\"\\(t[A-Za-z0-9._/-]*\\)\\"$/\\1/p")
+UNPARSED=$(paths "s/.*Failed to parse file\${TAB}file_path=\\"\\(t[A-Za-z0-9._/-]*\\)\\".*/\\1/p")
+MODULES=$(paths "s/.*Failed to load module.*loc=\\"\\(t[A-Za-z0-9._/-]*\\):[0-9][0-9-]*\\".*/\\1/p")
 OUT=$(sha256sum "$W/out.json" | cut -c1-64)
 ERRD=$(sha256sum "$W/err.txt" | cut -c1-64)
 if [ -n "$CATEGORY" ]; then
