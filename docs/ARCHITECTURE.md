@@ -687,8 +687,9 @@ turns `all` or `none` into `some`.
 Applicability is kept apart from effect. A matched surface's facts stay `unknown`
 (`sentinel.next.reason.effectNotEstablished`) for every property: running middleware, and its name, are not
 authentication or authorization evidence, and its body is not read. Only provable exclusion resolves, as
-`does-not-apply` citing the matcher bytes, so no excluded surface can be marked protected and the pack emits no
-`applies`. One envelope per Next project carries the facts at order 0 and the frontiers. These include the pages
+`does-not-apply` citing the matcher bytes: the matcher reaches none of the surface's own request paths, so the
+middleware is no control on them (a middleware rewrite from a matched path can still arrive there, which only adds
+an unprotected route in). No excluded surface can be marked protected and the pack emits no `applies`. One envelope per Next project carries the facts at order 0 and the frontiers. These include the pages
 router (the graph has no surfaces for it), router files the graph has no surface for (`route.tsx`, folders that
 name one path) and unlisted router folders. Its `registrationDigest` covers the manifest, lockfile, middleware,
 next.config and the router's file inventory. Each surface's own `influenceDigest` names what decided it.

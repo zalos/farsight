@@ -6,7 +6,8 @@
 // Applicability is not effect. A surface the middleware runs for is *matched*, and every property stays `unknown`
 // (`sentinel.next.reason.effectNotEstablished`): what the body does with a request is not read here, and a
 // middleware's name or presence is not authentication or authorization evidence. Only exclusion resolves: a surface
-// the matcher provably never reaches gets `does-not-apply` for each property, citing the matcher bytes. So no
+// none of whose own request paths the matcher reaches gets `does-not-apply` for each property, citing the matcher
+// bytes (a middleware rewrite from a matched path may still land there; that never makes it protected). So no
 // excluded route is ever marked protected, and nothing this pack emits is `applies`.
 //
 // Inputs are the snapshot envelope, the parser's analysis of the same snapshot and source (PR 05), and a reader of
