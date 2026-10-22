@@ -737,3 +737,44 @@ test('framework binding boundary: a shadowed require is an ordinary local helper
   assert.equal(validation(r.analysis).verdict, 'applies');
   assert.ok(!reasons(r.analysis).includes('sentinel.nest.frameworkEscapes'));
 });
+
+
+// Source-only fixtures: the host's built-in-module factory can provide a second mutable framework copy.
+const builtinLoaders = {
+  'global process factory': "const load = process.getBuiltinModule('module').createRequire(__filename); const Common = load('@nestjs/common');",
+  'computed factory name': "const load = process['getBuiltinModule']('module').createRequire(__filename); const Common = load('@nestjs/common');",
+  'dynamic process member': "const key = 'getBuiltinModule'; const load = process[key]('module').createRequire(__filename); const Common = load('@nestjs/common');",
+  'factory alias': "const builtin = process.getBuiltinModule; const load = builtin('module').createRequire(__filename); const Common = load('@nestjs/common');",
+  'destructured factory': "const { getBuiltinModule: builtin } = process; const load = builtin('module').createRequire(__filename); const Common = load('@nestjs/common');",
+  'process alias': "const host = process; const load = host.getBuiltinModule('module').createRequire(__filename); const Common = load('@nestjs/common');",
+  'default process import': "import host from 'node:process'; const load = host.getBuiltinModule('module').createRequire(__filename); const Common = load('@nestjs/common');",
+  'namespace process import': "import * as host from 'process'; const load = host.getBuiltinModule('module').createRequire(__filename); const Common = load('@nestjs/common');",
+  'named factory import': "import { getBuiltinModule as builtin } from 'node:process'; const load = builtin('module').createRequire(__filename); const Common = load('@nestjs/common');",
+  'globalThis process': "const load = globalThis.process.getBuiltinModule('module').createRequire(__filename); const Common = load('@nestjs/common');",
+  'global process property': "const load = global['process'].getBuiltinModule('module').createRequire(__filename); const Common = load('@nestjs/common');",
+  'global object alias': "const host = globalThis; const load = host.process.getBuiltinModule('module').createRequire(__filename); const Common = load('@nestjs/common');",
+};
+for (const [name, head] of Object.entries(builtinLoaders)) {
+  test(`built-in module boundary: ${name}`, needsStore, async t => {
+    const r = await run(t, { 'main.ts': mainWith('  Common.ValidationPipe.prototype.transform = async (v: unknown) => v;\n  app.useGlobalPipes(new ValidationPipe());', head) });
+    assert.equal(validation(r.analysis).verdict, 'unknown');
+    assert.ok(reasons(r.analysis).includes('sentinel.nest.frameworkEscapes'));
+    assert.ok(r.analysis.controls.facts.every(f => f.verdict === 'unknown'));
+  });
+}
+const harmlessProcessUses = {
+  'ordinary process fields': "const mode = process.env.NODE_ENV; const pid = process.pid; const { env, platform: os } = process; const env2 = globalThis.process.env;",
+  'type-only factory reference': "type Builtin = typeof process.getBuiltinModule; const kind = typeof process;",
+  'imported ordinary fields': "import host from 'node:process'; import { env } from 'process'; const mode = host.env.NODE_ENV; const { pid } = host;",
+  'locally declared process': "const process = { getBuiltinModule(name: string) { return name; } }; process.getBuiltinModule('module');",
+  'parameter shadow': "function local(process: { getBuiltinModule(name: string): string }) { return process.getBuiltinModule('module'); }",
+  'import alias shadow': "import host from 'node:process'; function local(host: { getBuiltinModule(name: string): string }) { return host.getBuiltinModule('module'); }",
+  'local globalThis': "const globalThis = { process: { getBuiltinModule(name: string) { return name; } } }; globalThis.process.getBuiltinModule('module');",
+};
+for (const [name, head] of Object.entries(harmlessProcessUses)) {
+  test(`built-in module boundary: ${name} retains validation`, needsStore, async t => {
+    const r = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());', head) });
+    assert.equal(validation(r.analysis).verdict, 'applies');
+    assert.ok(!reasons(r.analysis).includes('sentinel.nest.frameworkEscapes'));
+  });
+}

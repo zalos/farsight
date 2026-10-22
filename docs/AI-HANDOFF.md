@@ -1921,3 +1921,17 @@ before touching prior build artifacts. The regression test uses a disposable unb
 show a pinned GitHub tarball install for CI and distinguish a release commit from subsequent `main` changes.
 MCP already reports its running build in `graph_overview`; `refresh_graph` already re-ingests and reloads,
 so upgrading the process still requires reconnecting it.
+
+
+## Nest built-in module loader follow-up (2026-10-22)
+
+Branch `codex/sol-nest-builtin-loader`, based on the frozen Nest framework implementation:
+validation stays unknown when captured source can extract Node's `process.getBuiltinModule` loader capability,
+including real process imports, aliases, destructuring, computed access and the global process properties.
+Fixed reads of unrelated process properties, type references and local shadows preserve the existing analysis.
+Target source is captured and parsed only; the fixture code is never executed.
+
+Before correction, all 12 original/neighbor loader regressions falsely reported validation applies, while seven
+harmless controls passed. After correction, the complete focused Nest suite passed 77 tests with no skips.
+The affected dependency build, Sentinel typecheck, diff check and exact Conventional Commit subject lint passed.
+Independent review and parent integration remain with the integrating lead; no push or merge was performed.

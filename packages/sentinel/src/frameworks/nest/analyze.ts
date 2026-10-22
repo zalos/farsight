@@ -319,6 +319,47 @@ function unboundGlobal(file: ParsedFile, name: string, at: number): boolean {
   });
 }
 
+/** A static read of another property cannot carry this capability; aliases and unmodeled uses can. */
+function mayExtractCapability(n: AstNode, anc: readonly AstNode[], path: readonly string[]): boolean {
+  let child = n;
+  for (let i = anc.length - 1; i >= 0; i--) {
+    const p = anc[i]!;
+    if (((RUNTIME_TS.has(p.type) || ['ParenthesizedExpression', 'ChainExpression'].includes(p.type))
+      && p.expression === child)) { child = p; continue; }
+    if (MEMBER.has(p.type) && p.object === child) {
+      const key = !p.computed ? p.property?.name : p.property?.type === 'Literal' ? p.property.value : null;
+      if (typeof key !== 'string') return true;
+      if (key !== path[0]) return false;
+      return path.length === 1 || mayExtractCapability(p, anc.slice(0, i), path.slice(1));
+    }
+    if (p.type === 'UnaryExpression' && ['typeof', 'void'].includes(p.operator)) return false;
+    if (p.type === 'ExpressionStatement') return false;
+    const pattern = p.type === 'VariableDeclarator' && p.init === child ? p.id
+      : p.type === 'AssignmentExpression' && p.right === child ? p.left : null;
+    if (pattern?.type === 'ObjectPattern') return (pattern.properties ?? []).some((q: AstNode) => {
+      if (q.type !== 'Property') return true;
+      const key = !q.computed ? q.key?.name ?? q.key?.value : q.key?.type === 'Literal' ? q.key.value : null;
+      return typeof key !== 'string' || key === path[0];
+    });
+    return true;
+  }
+  return true;
+}
+
+/** Node's process object can create another module loader without importing node:module. */
+function builtinLoaderEscapes(file: ParsedFile, n: AstNode, anc: readonly AstNode[]): boolean {
+  const imported = resolveAt(file, { local: String(n.name) }, n.start);
+  if (['node:process', 'process'].includes(imported.module ?? '')) {
+    if (imported.name === 'getBuiltinModule') return true;
+    if (['*', 'default'].includes(imported.name)) return mayExtractCapability(n, anc, ['getBuiltinModule']);
+  }
+  if (n.name === 'process' && unboundGlobal(file, 'process', n.start)) return mayExtractCapability(n, anc, ['getBuiltinModule']);
+  if (['globalThis', 'global'].includes(n.name) && unboundGlobal(file, n.name, n.start)) {
+    return mayExtractCapability(n, anc, ['process', 'getBuiltinModule']);
+  }
+  return false;
+}
+
 /** A followed local alias must stay inside a declaration the binding pass understands, never an export/container. */
 function bindingEscapes(file: ParsedFile, id: AstNode): boolean {
   const name = String(id.name);
@@ -772,7 +813,8 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
         const imported = resolveAt(file, { local: String(n.name) }, n.start);
         const loaderFactory = ['node:module', 'module'].includes(imported.module ?? '') && ['createRequire', '*', 'default'].includes(imported.name);
         const require = n.name === 'require' && unboundGlobal(file, 'require', n.start);
-        if (loaderFactory || (n.name === 'module' && unboundGlobal(file, 'module', n.start))) frontier(ctx, file.path, 'frameworkEscapes');
+        if (loaderFactory || builtinLoaderEscapes(file, n, anc)
+          || (n.name === 'module' && unboundGlobal(file, 'module', n.start))) frontier(ctx, file.path, 'frameworkEscapes');
         if (require) {
           const p = anc[anc.length - 1];
           if (p?.type !== 'CallExpression' || p.callee !== n || p.arguments?.[0]?.type !== 'Literal'
