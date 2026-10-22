@@ -41,6 +41,15 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel PR 03 in progress — 2026-10-22
+
+PR [#134](https://github.com/zalos/farsight/pull/134) merged at `269c3bc` with all nine CI checks passing.
+The integration branch is `codex/sentinel-store`. Three isolated Opus lanes own runtime/ownership,
+ledger/migrations and objects/reachability; SOL reviews and the lead integrates. PR 03 is not yet validated.
+Acceptance requires real simultaneous fresh-store ownership, crash takeover, epoch and active-attempt fencing,
+transactional migration/backup recovery, independently publishable work revisions and durable object publication.
+Reachability remains inspection/dry-run only; no automatic deletion. See the execution ledger for all remaining work.
+
 ## Sentinel PR 02 foundation validated — 2026-10-22
 
 Branch `codex/sentinel-foundation` adds the optional Sentinel package with nine draft contract envelopes,

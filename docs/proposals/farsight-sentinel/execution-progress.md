@@ -6,8 +6,11 @@ evidence moved it. A row moves to **done** only when its PR has merged and the e
 An open PR, green CI, a stub or a process that exited zero is not that evidence. Numbers are local planning
 identifiers, not GitHub PR numbers.
 
-## Checkpoint — 2026-10-21
+## Checkpoint — 2026-10-22
 
+- PR 02 merged as [#134](https://github.com/zalos/farsight/pull/134), `269c3bc`, after independent SOL
+  contract/packaging review, clean npm consumer checks, browser validation and all nine CI checks. PR 03
+  storage is in progress in three Opus lanes: ownership/runtime, ledger/migrations, objects/reachability.
 - PR 01's measured-decisions slice merged as [#133](https://github.com/zalos/farsight/pull/133), `ef5c525`,
   after the first slice [#132](https://github.com/zalos/farsight/pull/132), `2bd38f6`.
 - The owner continued execution and **accepted PR 01's bounded matrix and proposed resource defaults for
@@ -70,8 +73,8 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 |---|---|---|---|---|---|
 | 00 | Agree the implementation plan | proposal #117 | done | Owner resolved/deferred choices affecting PR 01; docs valid | [#118](https://github.com/zalos/farsight/pull/118) `0c8c747` |
 | 01 | Feasibility harness and capability decisions | 00 | done (bounded) | Every support claim has a fixture/version; rejections have reasons; owner accepts the matrix | [#132](https://github.com/zalos/farsight/pull/132) `2bd38f6`, [#133](https://github.com/zalos/farsight/pull/133) `ef5c525`, [acceptance](feasibility-acceptance.md), owner acceptance 2026-10-21 |
-| 02 | Optional package, contracts, ADR | 01 | in progress | Schema bounds and unknown versions tested; Farsight packs/runs with Sentinel absent or unbuilt; `sentinel` scope and CI selection registered | — |
-| 03 | Ledger, object store, coordinator ownership | 02, 01 ownership probe | pending | One owner on simultaneous starts; safe takeover; upgrade failure safe | — |
+| 02 | Optional package, contracts, ADR | 01 | done | Schema bounds and unknown versions tested; Farsight packs/runs with Sentinel absent or unbuilt; `sentinel` scope and CI selection registered | [#134](https://github.com/zalos/farsight/pull/134) `269c3bc`; 30 contract tests, nine schemas, 36 installed fixtures; SOL review and all CI checks passed |
+| 03 | Ledger, object store, coordinator ownership | 02, 01 ownership probe | in progress | One owner on simultaneous starts; safe takeover; upgrade failure safe | — |
 | 04 | Immutable capture and security inventory | 03 | pending | E1 reconciles all entries; unreadable scope stays unknown | — |
 | 05 | Parser integration and inventory reconciliation | 04 | pending | TS/Java malformed, unsupported and limit cases reconciled; real-ingest comparison vs `main` | — |
 | 06 | Rules, policy merge, deterministic planning | 05 | pending | Repository config cannot weaken mandatory rules | — |
