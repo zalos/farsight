@@ -52,8 +52,10 @@ export interface ObservationEnvelope {
   originalSeverity: ShortText;
   originalConfidence?: ShortText;
   message: BoundedText;
-  /** @maxItems 256 */
-  /** Ordinary citations, or citations whose location is withheld (`location: 'withheld'`); never both shapes in one. */
+  /**
+   * Ordinary citations, or citations whose location is withheld (`location: 'withheld'`); never both shapes in one.
+   * @maxItems 256
+   */
   evidence: ObservationEvidence[];
   /** @maxItems 64 */
   limitationKeys: CatalogKey[];

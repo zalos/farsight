@@ -56,7 +56,8 @@
           "items": {
             "$ref": "#/definitions/ObservationEvidence"
           },
-          "description": "Ordinary citations, or citations whose location is withheld (`location: 'withheld'`); never both shapes in one."
+          "description": "Ordinary citations, or citations whose location is withheld (`location: 'withheld'`); never both shapes in one.",
+          "maxItems": 256
         },
         "limitationKeys": {
           "type": "array",
