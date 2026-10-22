@@ -1032,11 +1032,15 @@ per candidate so references still match. The detector reports whole lines, so a 
 line, each quoted string, the right-hand side of its first assignment (unquoted values with `:` or padding included),
 its pieces split at whitespace and quotes, at assignment, separator and bracket characters, and at path separators (with
 and without a final extension), and its runs of letters and digits; a value of short pieces joined by punctuation is
-withheld whole. Candidates are 8 or more characters and are held in memory only. Fields Sentinel generates and the
-contract constrains (schema, enums, catalog keys, digests, content and artifact ids, generated finding, evidence and
-report ids, counts' words, catalog definitions) are left as they are, so a matched line holding ordinary structural words
-still yields a valid report; the redacted document is checked against the contract again and refused if it does not
-fit. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
+withheld whole. Candidates cut at a value's own boundaries count from 3 characters (a supported detector matches short
+values, such as curl's `user:pass`); runs of letters and digits split out of longer text count from 8; all are held in
+memory only, and a matched value under 3 characters is not withheld. Trust is by position in the report contract, never
+by a key's name or a value's spelling: only positions whose value Sentinel itself generates (the schema, enums, catalog
+keys, digests, content and artifact ids, generated run, check, finding, evidence and report ids, counts' words,
+decisions, catalog definitions) are left as they are, and every position a confirmed graph or captured source can fill
+(context ids, labels and references, node ids, paths, titles, sentences, excerpts, count part labels) is screened however
+it is spelled. A matched line holding ordinary structural words still yields a valid report; the redacted document is
+checked against the contract again and refused if it does not fit. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
 its entry, without a symbol, never used to place a gap), and the minimal scanner report replaces such a name wherever it
 appears. Refusal reasons never name a path. Names the scan did not match are not withheld; the context-graph
 attestation limitation above is unchanged.

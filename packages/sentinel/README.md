@@ -334,7 +334,8 @@ same bytes stay two findings. A file whose name the secret scan matched is withh
 scanners' citations of it and the minimal `report <runId>` output. A missing, extra or forged accepted secret record
 refuses the report. Every candidate a matched line or name yields (the whole value, whatever punctuation joins
 it, and its long pieces) is replaced in every report string that source or a confirmed graph can supply, including
-context labels and ids and private excerpts; generated structure such as enums, catalog keys and digests is kept. Names and
+context labels and ids and private excerpts, from 3 characters at a value's boundaries; only the positions Sentinel
+itself generates (enums, catalog keys, digests, generated ids) are kept, decided by position, never by spelling. Names and
 values the scan did not match are not detected or withheld. A secret finding's identity is keyed by a per-store random secret kept in the owner's
 trust folder (never the public store id, and never in the store, a bundle or a report), so the same file keeps its
 identity across captures without anyone being able to confirm a guessed name from a report. Keep the owner's trust

@@ -25,8 +25,13 @@ test('a matched line yields the whole value whatever punctuation joins it, in ev
   // A matched file name yields its own name and path.
   const path = `config/${SHAPES[0]![1]}.env`;
   assert.ok(tokensOf(path).includes(`${SHAPES[0]![1]}.env`) && tokensOf(path).includes(path) && tokensOf(path).includes(SHAPES[0]![1]), 'the name with and without its extension');
-  // Short fragments alone are not candidates (too common to stand for a value).
-  assert.ok(!tokensOf('a = "abc"').some(t => t.length < 8));
+  // A supported detector can match a short value: a value cut at its own boundaries counts from 3 characters, e.g.
+  // curl's user:pass of 7. Nothing shorter is a candidate, and runs split out of longer text count only from 8.
+  const curl = ['abc', ':', 'def'].join('');
+  assert.ok(tokensOf(`curl -u ${curl} https://example.invalid`).includes(curl), 'a 7-character user:pass');
+  assert.ok(tokensOf(`password = "${['x', 'y', 'z'].join('')}"`).includes(['x', 'y', 'z'].join('')), 'a 3-character quoted value');
+  assert.ok(!tokensOf('a = "ab" -u q').some(t => t.length < 3));
+  assert.ok(!tokensOf('value: abcdefgh-ijklmnop').includes('abcdefgh-ijklmnop'.slice(0, 5)), 'a short run split out of longer text is not a candidate');
 });
 
 test('redaction screens labels, ids, paths and excerpts but leaves enums, catalog keys, digests and generated ids', () => {
@@ -53,4 +58,21 @@ test('redaction screens labels, ids, paths and excerpts but leaves enums, catalo
   const screen = out.findings[0].place.screens[0];
   assert.deepEqual(out.findings[0].place.journeys[0].screenIds, [screen.id], 'a redacted context id still matches its references');
   assert.ok(!out.gaps[0].explanation.business.includes('complete'), 'a structural word on a matched line is withheld from free text');
+});
+
+test('trust is by position in the contract: a context-owned id spelled like a generated id is still screened', () => {
+  const hex = ['0123456789abcdef', 'fedcba9876543210'].join('');
+  const digest = `sha256:${'a'.repeat(64)}`;
+  const spoof = `finding.${hex}`;
+  const doc = {
+    schema: 'sentinel-report/draft-1', id: `report.${'b'.repeat(32)}`,
+    findings: [{ id: `finding.${'c'.repeat(40)}`, place: { binding: 'matched', nodeIds: [spoof], screens: [{ id: spoof, label: { business: spoof, code: spoof }, via: 'direct-use', evidenceArtifact: digest }],
+      journeys: [{ id: `ev.${hex}`, label: { business: 'x', code: 'y' }, screenIds: [spoof] }], personas: [{ id: `sha256:${hex}${hex}`, label: { business: 'p', code: 'p' }, screenIds: [spoof], declared: true, evidenceArtifact: digest }] } }],
+    gaps: [{ checkId: 'chk-1', status: 'partial', reasonCode: 'sentinel.report.gap.partial', explanation: { business: 'b', code: 'c' },
+      place: { binding: 'matched', nodeIds: [], screens: [{ id: spoof, label: { business: 'safe', code: 'safe' }, via: 'potential-impact', evidenceArtifact: digest }], journeys: [], personas: [] } }],
+  };
+  const out: any = redactSecretTokens(doc, new Set(tokensOf(`facebook_secret = "${hex}"`)));
+  assert.ok(!JSON.stringify(out).includes(hex), 'no context-owned position keeps the value, however it is spelled');
+  assert.equal(out.findings[0].id, doc.findings[0]!.id, 'the generated finding id is kept');
+  assert.equal(out.gaps[0].place.screens[0].id, out.findings[0].place.screens[0].id, 'references still match');
 });

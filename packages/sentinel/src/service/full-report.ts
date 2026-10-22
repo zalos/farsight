@@ -328,21 +328,25 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
   };
 }
 
-/** The shortest candidate a match is withheld by: shorter fragments are too common to stand for a value alone. */
-const MIN_TOKEN = 8;
+/**
+ * Candidates cut at a value's own boundaries (quotes, assignment, separators, paths) are kept from 3 characters: a
+ * supported detector can match a short value (curl's `user:pass` is a few characters each side). Runs of letters and
+ * digits split out of longer text are kept only from 8, since shorter runs are ordinary words rather than a value.
+ */
+const MIN_BOUNDED = 3;
+const MIN_RUN = 8;
 
 /**
  * Every candidate a matched value or name can appear as, taken from the matched text itself (a matched line or a matched
  * path) and held in memory only. The detector reports whole lines, not the value's bytes, so the value is withheld at
- * every boundary a supported detector's value can have: the whole trimmed text, each quoted string, the text split at
- * whitespace and quotes (a value with `.`, `/`, `+`, `=`, `:` inside), split also at assignment, separator and bracket
- * characters, the whole right-hand side of the first `key = value` or `key: value` (unquoted values with `:` or
- * padding included), and its runs of letters and digits. A value made
- * of short pieces joined by punctuation is therefore withheld whole, and each long piece of it on its own.
+ * every boundary a supported detector's value can have: the whole trimmed text, each quoted string, the right-hand side
+ * of its first assignment (unquoted values with `:` or padding included), the text split at whitespace and quotes,
+ * split also at assignment, separator and bracket characters, at path separators and `@` (with and without a final
+ * extension), and its runs of letters and digits. A value made of short pieces joined by punctuation is withheld whole.
  */
 export function tokensOf(text: string): string[] {
   const out = new Set<string>();
-  const add = (t: string) => { const v = t.trim(); if (v.length >= MIN_TOKEN) out.add(v); };
+  const add = (t: string, min = MIN_BOUNDED) => { const v = t.trim(); if (v.length >= min) out.add(v); };
   add(text);
   for (const m of text.matchAll(/"([^"\n]*)"|'([^'\n]*)'|`([^`\n]*)`/g)) add(m[1] ?? m[2] ?? m[3] ?? '');
   // The right-hand side of the first assignment, unquoted values included (`key=a:b:c`, `key=base64==`), up to a
@@ -354,46 +358,56 @@ export function tokensOf(text: string): string[] {
   }
   for (const t of text.split(/[\s"'`]+/)) add(t);
   // A path's segments, with and without a final extension: a matched name is withheld wherever it appears alone.
-  for (const t of text.split(/[\s"'`/\\]+/)) { add(t); add(t.replace(/\.[A-Za-z0-9]{1,8}$/, '')); }
-  for (const t of text.split(/[\s"'`=:,;#(){}\[\]<>]+/)) add(t);
-  for (const t of text.split(/[^A-Za-z0-9]+/)) add(t);
+  for (const t of text.split(/[\s"'`/\\@]+/)) { add(t); add(t.replace(/\.[A-Za-z0-9]{1,8}$/, '')); }
+  for (const t of text.split(/[\s"'`=,;#(){}\[\]<>]+/)) add(t);
+  for (const t of text.split(/[^A-Za-z0-9]+/)) add(t, MIN_RUN);
   return [...out];
 }
 
 /**
- * Report fields Sentinel itself generates and the contract constrains: schema names, enums, catalog keys, digests,
- * content and artifact ids, generated finding/evidence/report ids and counts' words. They never carry source or context
- * text, and redacting a word inside one would break the contract, so they are left as they are. Every other string,
- * which source or a confirmed context can supply (titles, explanations, excerpts, paths, context ids and labels,
- * symbols, sentences), is screened.
+ * The positions in a report document whose value Sentinel itself generates and the contract constrains: the schema,
+ * enums, catalog keys, digests, content and artifact ids, generated run, check, finding, evidence, observation and
+ * report ids, counts' words, decisions and the catalog's definitions. Trust is by position in the contract, never by a
+ * key's name or a value's spelling: a context-owned id or label is screened however it is spelled, and so is anything
+ * a confirmed graph or captured source supplies (titles, explanations, excerpts, paths, node ids, screen, journey and
+ * persona ids, labels and references, count part labels).
  */
-const STRUCTURAL = new Set(['schema', 'profile', 'profileDigest', 'completeness', 'unit', 'bizUnit', 'scope', 'source', 'key',
-  'severity', 'comparison', 'comparisonReason', 'kind', 'state', 'reasonCode', 'binding', 'via', 'status', 'limitationKeys',
-  'projectionVersion', 'artifact', 'sourceBindingReceipt', 'content', 'catalogVersion', 'evaluatedAt', 'ruleFamilyId',
-  'checkId', 'observationIds', 'baselineFindingId', 'baselineFindingIds', 'findingId', 'artifactClosure', 'exact', 'probable', 'version', 'reportId', 'snapshotId', 'evidenceArtifact', 'cli', 'mcp']);
-const GENERATED_ID = /^(?:finding|ev|report|obs|run|snap|plan)[.-][0-9a-f]{8,}$|^sha256:[0-9a-f]{64}$/;
+const PLACE = String.raw`(?:findings|gaps|historical)\.\*\.place`;
+const COUNT = String.raw`(?:unit|bizUnit|scope|source|breakdown\.\*\.key|recheck\.cli|recheck\.mcp|n|of|breakdown\.\*\.n)`;
+const TRUSTED = new RegExp('^(?:' + [
+  String.raw`schema|id|run\.(?:id|snapshotId|planRevision)|ledgerSequence|evaluatedAt|catalogVersion`,
+  String.raw`disclosure\.(?:profile|profileDigest)|completeness|baseline\.reportId|artifactClosure\.\*`,
+  String.raw`definitions(?:\..*)?|decisions(?:\..*)?`,
+  String.raw`counts\.[A-Za-z]+\.` + COUNT,
+  String.raw`findings\.\*\.(?:id|observationIds\.\*|ruleFamilyId|severity|comparison|comparisonReason|match\.kind|match\.baselineFindingIds\.\*|fingerprint\.(?:version|exact|probable))`,
+  String.raw`findings\.\*\.evidence\.\*\.(?:id|state|reasonCode|content|location\.(?:startByte|endByte|startLine|endLine))`,
+  String.raw`gaps\.\*\.(?:checkId|status|reasonCode)`,
+  String.raw`historical\.\*\.(?:baselineFindingId|ruleFamilyId|severity|label|reasonCode|match\.kind|match\.baselineFindingIds\.\*)`,
+  PLACE + String.raw`\.(?:binding|limitationKeys\.\*|context\.(?:artifact|sourceBindingReceipt|projectionVersion))`,
+  PLACE + String.raw`\.counts\.[A-Za-z]+\.` + COUNT,
+  PLACE + String.raw`\.screens\.\*\.(?:via|evidenceArtifact)`,
+  PLACE + String.raw`\.personas\.\*\.(?:declared|evidenceArtifact)`,
+].join('|') + ')$');
 
 /**
- * Replaces every secret candidate in every source- or context-controlled string of a report document, in every
- * disclosure profile: context labels, ids, metadata, sentences, titles, paths and excerpts, from whichever file or
- * graph they came. Generated structure (STRUCTURAL, generated ids, the catalog's own definitions) is left as it is, so
- * the document keeps its contract. Each candidate becomes one fixed word, the same everywhere, so the context ids that
- * reference each other still match. The result is checked against the report contract again by the caller, which
- * refuses rather than delivers a document that does not fit.
+ * Replaces every secret candidate in every screened string of a report document, in every disclosure profile:
+ * context labels, ids and references, node ids, paths, titles, sentences and excerpts, from whichever file or graph
+ * they came. Trusted positions (TRUSTED) are left as they are, so the document keeps its contract. Each candidate becomes
+ * one fixed word, the same everywhere, so the context ids that reference each other still match. The result is checked
+ * against the report contract again by the caller, which refuses rather than delivers a document that does not fit.
  */
 export function redactSecretTokens<T>(doc: T, tokens: ReadonlySet<string>): T {
   if (!tokens.size) return doc;
   const ordered = [...tokens].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
   const word = new Map(ordered.map((t, i) => [t, `withheld-${i + 1}`]));
   const scrub = (v: string) => ordered.reduce((s, t) => (s.includes(t) ? s.split(t).join(word.get(t)!) : s), v);
-  const walk = (v: unknown, key?: string): unknown => {
-    if (key === 'definitions') return v;
-    if (typeof v === 'string') return (key && STRUCTURAL.has(key)) || (key === 'id' && GENERATED_ID.test(v)) ? v : scrub(v);
-    if (Array.isArray(v)) return v.map(x => walk(x, key));
-    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, k)]));
+  const walk = (v: unknown, path: string): unknown => {
+    if (typeof v === 'string') return TRUSTED.test(path) ? v : scrub(v);
+    if (Array.isArray(v)) return v.map(x => walk(x, path ? `${path}.*` : '*'));
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, path ? `${path}.${k}` : k)]));
     return v;
   };
-  return walk(doc) as T;
+  return walk(doc, '') as T;
 }
 
 /**
