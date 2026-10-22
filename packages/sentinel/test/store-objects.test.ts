@@ -272,16 +272,34 @@ test('concurrent writers in one process and across processes publish one winner 
     const { readFileSync } = await import('node:fs');
     const store = new ObjectStore({ storePath: process.argv[1], storeId: 'store-test-1', assertHeld() {} });
     const bytes = readFileSync(process.argv[2]);
-    await new Promise(r => setTimeout(r, Number(process.argv[3]) - Date.now()));
-    process.stdout.write(JSON.stringify(await store.put(bytes)));`;
-  const start = Date.now() + 500;
-  const runs = await Promise.all(Array.from({ length: 6 }, () => new Promise<{ status: number | null; out: string; err: string }>(resolve => {
-    const child = spawn(process.execPath, ['--input-type=module', '-e', script, dir, freshPath, String(start)]);
+    // Ready once the bytes are in memory; publish only when the parent releases every writer at once.
+    process.once('message', async () => {
+      process.stdout.write(JSON.stringify(await store.put(bytes)));
+      process.disconnect();
+    });
+    process.send('ready');`;
+  type Run = { status: number | null; out: string; err: string };
+  const children = Array.from({ length: 6 }, () => spawn(process.execPath, ['--input-type=module', '-e', script, dir, freshPath],
+    { stdio: ['ignore', 'pipe', 'pipe', 'ipc'] }));
+  // Bounded: a child that never reports or never finishes is killed, and the test fails rather than hangs.
+  t.after(() => { for (const c of children) if (c.exitCode === null && c.signalCode === null) c.kill('SIGKILL'); });
+  const within = <T>(p: Promise<T>, what: string) => {
+    let timer: NodeJS.Timeout;
+    return Promise.race([p, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${what} timed out`)), 20_000); })])
+      .finally(() => clearTimeout(timer));
+  };
+  const done = children.map(child => new Promise<Run>(resolve => {
     let out = '', err = '';
-    child.stdout.on('data', d => { out += d; });
-    child.stderr.on('data', d => { err += d; });
+    child.stdout!.on('data', d => { out += d; });
+    child.stderr!.on('data', d => { err += d; });
     child.on('close', status => resolve({ status, out, err }));
-  })));
+  }));
+  await within(Promise.all(children.map(child => new Promise<void>((resolve, reject) => {
+    child.once('message', m => m === 'ready' ? resolve() : reject(new Error(`unexpected message ${String(m)}`)));
+    child.once('exit', status => reject(new Error(`a writer exited (${status}) before it was ready`)));
+  }))), 'waiting for every writer to be ready');
+  for (const child of children) child.send('go');
+  const runs = await within(Promise.all(done), 'waiting for every writer to finish');
   for (const r of runs) assert.equal(r.status, 0, r.err);
   const cross = runs.map(r => JSON.parse(r.out));
   assert.equal(cross.filter(r => r.created).length, 1, 'link(2) admits exactly one creator');
@@ -415,10 +433,11 @@ test('a staged file or a published name replaced by another inode yields no rece
     const bytes = readFileSync(path);
     const fd = openSync(path, 'r');
     held.push(fd);
-    const old = statSync(path).ino;
+    const before = statSync(path);
     rmSync(path);
     writeFileSync(path, bytes, { mode: 0o600 });
-    assert.notEqual(statSync(path).ino, old, 'the replacement has its own inode');
+    const after = statSync(path);
+    assert.ok(after.dev !== before.dev || after.ino !== before.ino, `the replacement has its own identity (${before.dev}:${before.ino})`);
   };
   {
     const dir = scratch(t);
