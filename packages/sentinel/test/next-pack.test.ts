@@ -391,3 +391,29 @@ test('captured pnpm patch comments alone are not an explicit empty patch map', n
   assert.deepEqual({ supported: nullMap.result.projects[0]!.supported, verdicts: verdicts(nullMap.result, SURFACE.info) },
     { supported: false, verdicts: ['unknown'] });
 });
+
+
+for (const [label, property] of [
+  ['single-quoted key', "'patched'"],
+  ['double-quoted key', '"patched"'],
+  ['escaped key', '"p' + '\\u0061' + 'tched"'],
+] as const) {
+  test('captured pnpm modification metadata ' + label + ' cannot borrow registry identity', needsStore, async t => {
+    const text = pnpmLock({ '.': '14.2.25' }).replace('  next@14.2.25:\n', '  next@14.2.25:\n    ' + property + ': true\n');
+    const files = { ...APP, 'pnpm-lock.yaml': text };
+    delete (files as Record<string, string>)['package-lock.json'];
+    const { result } = await analyzed(t, files);
+    assert.deepEqual({ supported: result.projects[0]!.supported, verdicts: verdicts(result, SURFACE.info) },
+      { supported: false, verdicts: ['unknown'] });
+  });
+}
+
+test('captured pnpm ordinary quoted metadata retains the measured package identity', needsStore, async t => {
+  const metadata = ["    'engines': {node: '>=16'}", '    "hasBin": true', ''].join('\n');
+  const text = pnpmLock({ '.': '14.2.25' }).replace('  next@14.2.25:\n', '  next@14.2.25:\n' + metadata);
+  const files = { ...APP, 'pnpm-lock.yaml': text };
+  delete (files as Record<string, string>)['package-lock.json'];
+  const { result } = await analyzed(t, files);
+  assert.equal(result.projects[0]!.supported, true);
+  assert.deepEqual(verdicts(result, SURFACE.info), ['does-not-apply']);
+});

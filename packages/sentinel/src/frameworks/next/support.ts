@@ -6,7 +6,7 @@ import { deepFreeze } from '../../planner/identity.js';
 
 export const NEXT_PACK_ID = 'sentinel.framework.next';
 /** Bumped whenever the pack's semantics change without a manifest change. */
-export const NEXT_PACK_REVISION = 5;
+export const NEXT_PACK_REVISION = 6;
 export const NEXT_ANALYSIS_SCHEMA = 'sentinel-next-analysis/draft-1' as const;
 
 export const NEXT_SUPPORT = deepFreeze({

@@ -54,6 +54,19 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Next pnpm modification-metadata key follow-up — 2026-10-22
+
+The follow-up on `codex/sentinel-next-patch-indent` preserves `464c6734` and reads package metadata field names as
+plain or quoted identifiers. A `patched` field in either form refuses the measured registry identity; escaped or
+unsupported key forms are unknown instead of silently ignored. Ordinary quoted `engines` and `hasBin` metadata
+still qualify. No YAML dependency is added. The pack revision advances to 6 to invalidate the earlier decision.
+
+Actual capture/parse probes reproduced all three quoted/escaped modification-key failures on frozen `464c6734`;
+the existing YAML parser confirms each spelling means the same `patched: true` field. The ordinary metadata positive
+passed that baseline. Final validation passed all 43 focused Next/package tests with zero skips, Sentinel build and
+typecheck, catalog lint and diff checks. Target code was never installed, compiled or executed. Independent review
+and integration remain with the coordinating owner; author, primary and integrating-owner trees are untouched.
+
 ## Next pnpm comment-boundary follow-up — 2026-10-22
 
 The follow-up on `codex/sentinel-next-patch-indent` preserves `696d96fb` and makes the shared YAML block reader

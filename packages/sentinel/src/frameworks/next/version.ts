@@ -312,7 +312,14 @@ function fromPnpmLock(text: string, rel: string, pkg: PackageName): Found {
   if (entries.length !== 1) return { state: 'unknown', reason: entries.length ? 'lockfile-ambiguous' : 'no-integrity', detail: `${pkg}@${found.v} has ${entries.length} package entries` };
   if (/\(patch_hash(?:=|\))/.test(lines[entries[0]!]!)) return { state: 'unknown', reason: 'identity-mismatch', detail: `${pkg} has a patched pnpm package entry` };
   const [pf, pt] = blockOf(entries[0]!, 2);
-  if (lines.slice(pf, pt).some(l => indent(l) === 4 && /^patched\s*:/.test(l.trim()))) return { state: 'unknown', reason: 'identity-mismatch', detail: `${pkg} has pnpm package modification metadata` };
+  for (const line of lines.slice(pf, pt)) {
+    if (indent(line) !== 4 || !line.trim() || line.trimStart().startsWith('#')) continue;
+    // Supported field names may be plain or quoted. Escapes and other YAML key forms could conceal `patched`;
+    // refuse them rather than trusting the registry identity without understanding modification metadata.
+    const key = /^(?:'([A-Za-z][A-Za-z0-9_-]*)'|"([A-Za-z][A-Za-z0-9_-]*)"|([A-Za-z][A-Za-z0-9_-]*))\s*:/.exec(line.trim());
+    if (!key) return { state: 'unknown', reason: 'lockfile-invalid', detail: `${pkg} has unsupported pnpm package metadata keys` };
+    if ((key[1] ?? key[2] ?? key[3]) === 'patched') return { state: 'unknown', reason: 'identity-mismatch', detail: `${pkg} has pnpm package modification metadata` };
+  }
   const res = lines.slice(pf, pt).filter(l => indent(l) === 4 && l.trim().startsWith('resolution:'));
   const m = res.length === 1 ? /^resolution: \{integrity: (sha512-[A-Za-z0-9+/]{86}==)\}$/.exec(res[0]!.trim()) : null;
   if (!m) return { state: 'unknown', reason: res.length === 1 && /tarball|repo|directory/.test(res[0]!) ? 'not-registry' : 'no-integrity', detail: `${pkg}@${found.v} records no registry integrity` };
