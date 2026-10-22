@@ -127,6 +127,26 @@ export interface SourceEvidence {
 }
 
 /**
+ * A citation whose location is withheld: it names the capture entry by its position in the snapshot's `entries`,
+ * never by a path. Used where a path itself may carry a secret (secret-scan findings, ADR 28). It is not a
+ * `SourceEvidence` and carries no `relativePath`: a consumer that shows a location resolves it over the private
+ * snapshot (`resolveWithheldLocation`), which refuses any snapshot, source, entry or content that does not match, so
+ * two files with the same bytes resolve to their own entries. Never read `entry` as, or turn it into, a path.
+ */
+export interface WithheldLocationEvidence {
+  location: 'withheld';
+  snapshotId: Id;
+  sourceId: Id;
+  /** Index of the cited file's entry in `SnapshotEnvelope.entries`. */
+  entry: Count;
+  content: ArtifactId;
+  span: ByteSpan;
+}
+
+/** What an observation cites: an ordinary source citation, or one whose location is withheld. */
+export type ObservationEvidence = SourceEvidence | WithheldLocationEvidence;
+
+/**
  * A scope reference such as `<sourceId>:<relativePath>` or a surface ID. Untrusted protocol data: bounded,
  * free of control characters, never resolved as a filesystem path.
  * @pattern ^[A-Za-z0-9][^\u0000-\u001f\u007f-\u009f\u2028\u2029]*$

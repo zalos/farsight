@@ -11,7 +11,7 @@
 // stable evidence ids, which are the only citations a reply may use. A request outside the scope, over budget, for a
 // withheld span (an opaque secret-location ref) or for an unknown tool is refused as data, and recorded.
 import { createHash } from 'node:crypto';
-import type { ArtifactId, CaptureEntry, Digest, ReviewPartition, ReviewPartitionMember, ReviewPartitionsEnvelope, ScopedReason, ServedCitation, SnapshotEnvelope, SourceEvidence } from '../contracts/index.js';
+import type { ArtifactId, CaptureEntry, Digest, WithheldLocationEvidence, ReviewPartition, ReviewPartitionMember, ReviewPartitionsEnvelope, ScopedReason, ServedCitation, SnapshotEnvelope, SourceEvidence } from '../contracts/index.js';
 import { digestOf } from '../store/ledger-json.js';
 import { validateEnvelope } from '../validate.js';
 import { canonicalDigest } from '../policy/digest.js';
@@ -34,18 +34,8 @@ export type PartitionPlan = ReviewPartitionsEnvelope;
 const scopeOf = (sourceId: string, path: string) =>
   /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(path) ? `${sourceId}:#${sha(path).slice(7, 31)}` : `${sourceId}:${path}`;
 
-/**
- * The fields of a withheld-location citation (`location: 'withheld'`, PR 11's secret-scan contract) the review reads,
- * typed structurally until that contract is integrated. It names a capture entry by index, never by path.
- */
-export interface WithheldLocationView {
-  readonly location: 'withheld';
-  readonly snapshotId: string;
-  readonly sourceId: string;
-  readonly entry: number;
-  readonly content: string;
-  readonly span: { readonly startByte: number; readonly endByte: number };
-}
+/** A withheld-location citation (PR 11, `contracts/common.ts`): it names a capture entry by index, never by path. */
+export type WithheldLocationView = WithheldLocationEvidence;
 
 /**
  * The capture entries withheld citations name, checked against the snapshot: the same snapshot and source, an included

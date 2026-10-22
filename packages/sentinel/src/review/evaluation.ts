@@ -169,7 +169,7 @@ export async function runEvaluation(plan: EvaluationPlan, corpus: EvaluationCorp
     const { record, observations } = await runSession(spec, { caller, checkpoints, read: scope.read, ...(config.now ? { now: config.now } : {}) });
     const cp = (await checkpoints.load(spec.sessionId))!;
     const replies = cp.messages.filter(m => m.role === 'assistant').map(m => m.content).join('\n');
-    const cited = new Set(observations.flatMap(o => o.evidence.map(e => e.relativePath)));
+    const cited = new Set(observations.flatMap(o => o.evidence.flatMap(e => ('relativePath' in e ? [e.relativePath] : []))));
     const verdict = record.verdict;
     const correct = record.outcome === 'completed' && (c.label === 'finding'
       ? verdict === 'finding' && c.evidencePaths.some(p => cited.has(p))

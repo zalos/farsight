@@ -45,6 +45,7 @@ export const SENTINEL_CAPTURE_STRINGS: Record<string, StringEntry> = {
   'sentinel.capture.notSnapshot': same('the artifact is not a stored snapshot', 'Only an accepted snapshot artifact can be restored.'),
   'sentinel.capture.restoreTargetUnsafe': same('the restore folder must be a new, empty folder given by its canonical path', 'A restore writes a fresh read-only tree. An existing or linked folder could mix it with other files, so it is refused.'),
   'sentinel.capture.restoreIntegrity': same('the restored tree does not match its snapshot: {detail}', 'After writing, every restored file is read back and the tree listed again. A difference means the restore cannot be trusted.'),
+  'sentinel.capture.locationUnresolved': same('a withheld location does not resolve in this snapshot', 'A citation whose file name is withheld names its file by its place in the captured snapshot. It resolves only in that snapshot, for that source and that exact content; anything else is refused rather than pointed at another file.'),
 };
 
 export function sentinelCaptureWord(key: string, values: Record<string, string | number> = {}): string {

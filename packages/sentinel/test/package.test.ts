@@ -51,6 +51,11 @@ test('no Farsight package depends on or imports Sentinel', () => {
 // Every module import outside the package, per built file. A new import fails here until it is reviewed and
 // added; nothing networked, no worker or cluster, and no static node:sqlite import anywhere.
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
+  // The Gitleaks secret-scan adapter (PR 11): hashing and its own job files; the engine runs through execution/.
+  'adapters/gitleaks/adapter.js': ['node:crypto'],
+  'adapters/gitleaks/job.js': ['node:crypto', 'node:fs', 'node:path'],
+  'adapters/gitleaks/normalize.js': ['node:crypto'],
+  'adapters/gitleaks/run.js': ['node:fs', 'node:path'],
   'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', 'node:fs'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/errors.js': ['@farsight/core/dist/strings-sentinel-execution.js'],
@@ -133,6 +138,10 @@ test('the library imports only its reviewed modules, and nothing that could star
   const processes = readFileSync(`${dist}execution/processes.js`, 'utf8');
   assert.equal([...processes.matchAll(/shell: false/g)].length, 3);
   assert.doesNotMatch(processes, /shell: true|execSync|exec\(/);
+  // The Gitleaks adapter starts nothing itself: its worker is shell text the container runs.
+  for (const f of ['adapter', 'job', 'normalize', 'run', 'rules', 'worker-source', 'index']) {
+    assert.doesNotMatch(readFileSync(`${dist}adapters/gitleaks/${f}.js`, 'utf8'), /node:child_process|(?<![.\w])(spawn|spawnSync|exec|execSync|execFile|execFileSync|fork)\(/, `adapters/gitleaks/${f}.js starts no process`);
+  }
 });
 
 /** Runs `code` in a fresh process that records every child spawn, then reports spawns, SQLite and new files. */

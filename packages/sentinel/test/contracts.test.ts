@@ -119,6 +119,17 @@ test('bounds hold exactly at the limit and fail one past it', () => {
   assert.equal(at(v => { v.entries[0].bytes = Number.MAX_SAFE_INTEGER + 2; }), false);
   // Leading-dot names are ordinary paths; only `.`/`..` segments are refused.
   assert.equal(at(v => { v.entries[0].relativePath = '.github/..hidden/.env.example'; }), true);
+  // Observation evidence holds at most 256 citations of either shape, ordinary or withheld, or a mix.
+  for (const base of ['observation-scanner', 'observation-withheld']) {
+    const one = (v: any) => v.evidence[0];
+    assert.equal(at(v => { v.evidence = Array.from({ length: 256 }, () => ({ ...one(v) })); }, base), true, `${base}: 256 citations`);
+    assert.equal(at(v => { v.evidence = Array.from({ length: 257 }, () => ({ ...one(v) })); }, base), false, `${base}: 257 citations`);
+  }
+  const ordinary = load('observation-scanner').evidence[0];
+  const withheld = load('observation-withheld').evidence[0];
+  const mixed = (n: number) => (v: any) => { v.evidence = Array.from({ length: n }, (_, i) => ({ ...(i % 2 ? withheld : ordinary), snapshotId: v.snapshotId })); };
+  assert.equal(at(mixed(256), 'observation-scanner'), true, 'a mix of 256');
+  assert.equal(at(mixed(257), 'observation-scanner'), false, 'a mix of 257');
 });
 
 test('serialized input is size-checked before it is parsed', () => {

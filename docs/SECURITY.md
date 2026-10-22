@@ -51,7 +51,19 @@ and recording a tool digest in the lock authorizes no download or execution. As 
 owner's own account is outside this boundary. The local runtime folder
 (`.farsight/sentinel/*`) is ignored by git. Later scanner, container and model work arrives with its
 own trust-boundary section here: external scanners run only in containers, with no host fallback, and model
-providers are opt-in per run. The package smokes install from npm into temporary directories with their own npm
+providers are opt-in per run.
+
+The secret scan (ADR 28) runs the pinned official Gitleaks image only inside its container, behind an original shell
+shim, over a rebuilt copy of the captured files, with a pinned configuration and no repository ignore list, baseline
+or inline allow. Matched values never leave the container: the tool's messages and raw output stay there, its report
+names only the rule, lines and a job index (no path), and each observation keeps only the detector, the file and whole
+lines. No result prints a file name: a name can hold a secret no detector recognises out of context, so every finding cites
+the file by its place in the captured snapshot (`WithheldLocationEvidence`), and only the private snapshot resolves it,
+exactly, through one bounded resolver. Names the engine finds secret-shaped are reported as findings themselves. A folder the engine's own allowlist prunes is listed as skipped, with everything in it.
+A tool error, an unreadable report or a file that was
+not scanned is a failed or partial scan, never a clean one. The image is installed by digest ahead of time (CI pulls
+it in the isolation job); a scan never pulls. Its tests assemble an inert synthetic token at run time, so the
+repository's own secret scan needs no allowlist for it, and no assertion or report prints it. The package smokes install from npm into temporary directories with their own npm
 cache and user config/state, and start nothing beyond the packaged command and a read-only Farsight server on a
 free loopback port.
 

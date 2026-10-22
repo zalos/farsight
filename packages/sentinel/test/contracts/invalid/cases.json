@@ -2176,5 +2176,52 @@
       }
     ],
     "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a withheld location never also carries a path",
+    "base": "observation-withheld",
+    "ops": [
+      {
+        "set": "/evidence/0/relativePath",
+        "value": "src/a.ts"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/evidence/0"
+  },
+  {
+    "name": "an ordinary citation cannot claim to be withheld",
+    "base": "observation-scanner",
+    "ops": [
+      {
+        "set": "/evidence/0/location",
+        "value": "withheld"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/evidence/0"
+  },
+  {
+    "name": "a withheld location names its entry",
+    "base": "observation-withheld",
+    "ops": [
+      {
+        "delete": "/evidence/0/entry"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/evidence/0"
+  },
+  {
+    "name": "a withheld location cites the observation's own snapshot",
+    "base": "observation-withheld",
+    "ops": [
+      {
+        "set": "/evidence/0/snapshotId",
+        "value": "snap-2"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/evidence/0/snapshotId"
   }
 ]
