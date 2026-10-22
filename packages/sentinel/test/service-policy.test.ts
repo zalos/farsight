@@ -21,9 +21,9 @@ const agent = requestedByOf({ kind: 'service-connection', granted: { principal: 
 const owner = requestedByOf({ kind: 'service-connection', granted: { principal: 'agent', channel: 'local-service' } });
 
 /** A workspace whose adopted settings carry `grants`, with two plan records under the adopted policy revision. */
-async function workspace(t: { after(fn: () => void | Promise<void>): void }, settings: Record<string, unknown>) {
+async function workspace(t: { after(fn: () => void | Promise<void>): void }, settings: Record<string, unknown>, stateDir?: string) {
   const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-svcpol-')));
-  const ws = workspaceOf(join(root, 'ws'), { ...process.env, XDG_STATE_HOME: join(root, 'state') });
+  const ws = workspaceOf(join(root, 'ws'), { ...process.env, XDG_STATE_HOME: stateDir ?? join(root, 'state') });
   mkdirSync(join(ws.path, '.farsight', 'sentinel'), { recursive: true, mode: 0o700 });
   const adopt = (s: Record<string, unknown>) => {
     writeFileSync(join(ws.path, SETTINGS_PATH), JSON.stringify({ ...structuredClone(DEFAULT_SETTINGS), ...s }), { mode: 0o600 });
@@ -44,11 +44,11 @@ async function workspace(t: { after(fn: () => void | Promise<void>): void }, set
   } });
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
   const receipt = (action: 'run.start' | 'run.pause' | 'run.cancel', planId: string, at = new Date()) => {
-    const c = confirmForService(ws, { command: action.slice(4), action, planId, confirm: true, now: at });
+    const c = confirmForService(ws, { command: action.slice(4), action, planId, confirm: true, now: at, storeId: store.storeId });
     assert.ok('receiptId' in c, JSON.stringify(c));
     return c.receiptId;
   };
-  return { ws, service, adopt, receipt };
+  return { ws, service, adopt, receipt, storeId: store.storeId };
 }
 
 const OWNER_GRANTS = [{ actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'], principals: ['human'], scope: { profiles: ['static'] } }];
@@ -56,7 +56,7 @@ const OWNER_GRANTS = [{ actions: ['capture.source', 'run.start', 'run.pause', 'r
 test('pause and cancel are decided by the adopted policy: no grant, no write, for the owner as for anyone', needsStore, async t => {
   const w = await workspace(t, { grants: [{ actions: ['capture.source', 'run.start'], principals: ['human'], scope: { profiles: ['static'] } }] });
   for (const action of ['run.pause', 'run.cancel'] as const) {
-    const c = confirmForService(w.ws, { command: action.slice(4), action, planId: PLAN_A, confirm: true, now: new Date() });
+    const c = confirmForService(w.ws, { command: action.slice(4), action, planId: PLAN_A, confirm: true, now: new Date(), storeId: w.storeId });
     assert.ok('result' in c, `${action}: the owner's own CLI issues no receipt the policy does not grant`);
     assert.deepEqual([c.result.outcome, c.result.reasonCode], ['configuration-failure', 'sentinel.admission.noGrant']);
     const r: any = await w.service.handle(action, { runId: PLAN_A }, agent);
@@ -106,4 +106,35 @@ test('an owner receipt authorizes one action, on one plan, under one policy revi
   // A receipt id the owner never issued is unknown, however it is spelled.
   assert.equal((await r('run.cancel', PLAN_A, 'receipt-forged')).reasonCode, 'sentinel.receipt.unknown');
   await assert.rejects(w.service.handle('run.cancel', { runId: PLAN_A, receiptId: '../escape' }, agent), /requestInvalid/);
+});
+
+test('a receipt is bound to its workspace, store and run: an identical twin workspace refuses it', needsStore, async t => {
+  // Two workspaces with the same settings and plan records: the same policy revision and the same plan digests.
+  // One owner (one private state, one receipt book), two workspaces.
+  const state = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-owner-state-')));
+  t.after(() => rmSync(state, { recursive: true, force: true }));
+  const a = await workspace(t, { grants: OWNER_GRANTS }, state);
+  const b = await workspace(t, { grants: OWNER_GRANTS }, state);
+  const policy = (ws: typeof a.ws) => { const p = adoptedPolicy(ws); assert.ok('policy' in p); return p.policy.revision; };
+  assert.equal(policy(a.ws), policy(b.ws), 'the twins share a policy revision');
+  assert.notEqual(a.storeId, b.storeId);
+  const r = async (w: typeof a, op: string, receiptId: string) => (await w.service.handle(op, op === 'run.start' ? { planId: PLAN_A, receiptId } : { runId: PLAN_A, receiptId }, agent)) as any;
+
+  for (const op of ['run.pause', 'run.cancel', 'run.start'] as const) {
+    const forA = a.receipt(op, PLAN_A);
+    assert.equal((await r(b, op, forA)).reasonCode, 'sentinel.receipt.mismatch', `${op}: A's receipt is not B's`);
+  }
+  // Naming B's store while confirming in A still binds A's workspace: B refuses it too.
+  const crossed = confirmForService(a.ws, { command: 'pause', action: 'run.pause', planId: PLAN_A, confirm: true, now: new Date(), storeId: b.storeId });
+  assert.ok('receiptId' in crossed);
+  assert.equal((await r(b, 'run.pause', crossed.receiptId)).reasonCode, 'sentinel.receipt.mismatch');
+  // The same receipt kind on its own instance is accepted.
+  const own = a.receipt('run.pause', PLAN_A);
+  assert.equal((await r(a, 'run.pause', own)).verdicts.policy.reasonCode, 'sentinel.service.ownerReceipt');
+  // And a receipt for one run is not one for another run of the same instance.
+  const otherRun = a.receipt('run.pause', PLAN_B);
+  assert.equal((await r(a, 'run.pause', otherRun)).reasonCode, 'sentinel.receipt.mismatch');
+  // Without a store, the owner's own CLI issues nothing: a receipt that names no store could be spent anywhere.
+  const unbound = confirmForService(a.ws, { command: 'pause', action: 'run.pause', planId: PLAN_A, confirm: true, now: new Date() });
+  assert.ok('result' in unbound && unbound.result.reasonCode === 'sentinel.service.notRunning');
 });

@@ -295,6 +295,8 @@ export interface ServiceClient {
   /** A closed client rejects at once; every pending request rejects when the connection closes. */
   request(op: string, body: unknown, options?: RequestOptions): Promise<unknown>;
   readonly closed: boolean;
+  /** The store the service's welcome named: the one the caller expected, checked before the client existed. */
+  readonly storeId: string;
   close(): void;
 }
 
@@ -389,6 +391,7 @@ export async function connectOwnerSocket(address: RuntimeAddress, expect: Servic
       });
     },
     get closed() { return closed || socket.destroyed; },
+    storeId: expect.storeId,
     close: () => socket.destroy(),
   });
 }

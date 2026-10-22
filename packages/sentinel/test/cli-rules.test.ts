@@ -357,3 +357,39 @@ test('every folder a record is published into is synced into its parent when cre
     syncBuiltinESMExports();
   }
 });
+
+test('a parent sync that failed after a folder was created is repeated by the next promotion, never skipped', async t => {
+  const fs = (await import('node:fs')).default;
+  const { syncBuiltinESMExports } = await import('node:module');
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-resync-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const trust = join(root, 'trust');
+  mkdirSync(trust, { mode: 0o700 });
+  const originals = { open: fs.openSync, close: fs.closeSync, sync: fs.fsyncSync };
+  const paths = new Map<number, string>();
+  const synced: string[] = [];
+  let failOnce = true;
+  (fs as any).openSync = function (p: unknown, ...rest: unknown[]) { const fd = (originals.open as any).call(this, p, ...rest); paths.set(fd, String(p)); return fd; };
+  (fs as any).closeSync = function (fd: number) { paths.delete(fd); return originals.close.call(this, fd); };
+  (fs as any).fsyncSync = function (fd: number) {
+    const p = paths.get(fd)!;
+    // The sync that makes the new `rules` folder's entry durable fails once, after the folder was created.
+    if (p === trust && failOnce) { failOnce = false; throw Object.assign(new Error('EIO: i/o error, fsync'), { code: 'EIO' }); }
+    synced.push(p);
+    return originals.sync.call(this, fd);
+  };
+  syncBuiltinESMExports();
+  try {
+    const book = new RuleLockBook(trust);
+    assert.throws(() => book.store(lockA()), /EIO/);
+    assert.ok(existsSync(join(trust, 'rules')), 'the folder was created before its parent sync failed');
+    assert.ok(!synced.includes(trust));
+    const da = book.store(lockA());
+    assert.ok(synced.includes(trust), 'the retry synced the parent the failure left unsynced');
+    book.select(da, null);
+    assert.equal(new RuleLockBook(trust).current()!.digest, da);
+  } finally {
+    Object.assign(fs, { openSync: originals.open, closeSync: originals.close, fsyncSync: originals.sync });
+    syncBuiltinESMExports();
+  }
+});

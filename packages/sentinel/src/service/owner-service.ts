@@ -29,7 +29,7 @@ import {
   type RuntimeAddress, type ServiceClient,
 } from '../transport/ipc.js';
 import {
-  adoptedPolicy, intentOf, isFinalRunState, printed, readPlanRecord, receiptBook, removeScratch, reportIn,
+  adoptedPolicy, isFinalRunState, runWriteBinding, printed, readPlanRecord, receiptBook, removeScratch, reportIn,
   runResultIn, runStateIn, scratchUnder, statusIn, type Workspace,
 } from './local.js';
 import { PREVIEW_ADAPTERS, previewPlan } from './preview-plan.js';
@@ -177,13 +177,14 @@ export class OwnerService {
     if ('refusal' in adopted) return { refusal: adopted.refusal };
     const { policy } = adopted;
     if (policy.revision !== record.policyRevision) return { refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts }) };
-    const intent = intentOf(action, record.planDigest, ['local-artifacts']);
+    // The write is on this workspace's store and this run: a receipt confirmed for another instance does not match.
+    const { intent, stateDigest } = runWriteBinding(this.#ws, action, record.planDigest, { storeId: this.#store.storeId, runId: planId });
     const now = this.#now();
     if (receiptId !== undefined) {
       // The owner's receipt: checked against exactly this action, plan digest and policy revision, and spent once.
       // What the connection said about itself plays no part; an unknown, spent, expired or mismatched one refuses.
       try {
-        const spent = receiptBook(this.#ws).consume(receiptId, { intent, stateDigest: record.planDigest, policyRevision: policy.revision }, now);
+        const spent = receiptBook(this.#ws).consume(receiptId, { intent, stateDigest, policyRevision: policy.revision }, now);
         return { verdicts: RECEIPT_VERDICTS, facts: { ...facts, receipt: spent.digest } };
       } catch (e) {
         if (!(e instanceof PolicyError)) throw e;
@@ -191,7 +192,7 @@ export class OwnerService {
       }
     }
     const decision = admit({
-      intent, requestedBy: by, policy, stateDigest: record.planDigest, now,
+      intent, requestedBy: by, policy, stateDigest, now,
       capability: () => ({ available: true, detail: 'built into this installation; runs locally' }),
       credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
     }).record;

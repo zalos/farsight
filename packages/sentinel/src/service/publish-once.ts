@@ -8,7 +8,7 @@
 // rename-without-replace, so link-then-unlink is the no-overwrite publication here.
 import { randomBytes } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, unlinkSync, writeSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { isAbsolute, join, relative, sep } from 'node:path';
 
 const NOFOLLOW = FS.O_NOFOLLOW ?? 0;
 
@@ -20,22 +20,28 @@ export interface PublishHooks { readonly at?: (boundary: PublishBoundary, name: 
 export const isTemporaryName = (name: string) => name.startsWith('.') && name.endsWith('.tmp');
 
 /**
- * Creates `dir` and any missing parents as private folders (0700), syncing each parent after the entry is created, so
- * a folder a record is published into survives a crash with the record. Existing folders are checked, not changed.
+ * Makes `dir` durable below `base`: every missing level is created as a private folder (0700), and the parent of
+ * every level from `base` down is synced on every call, created now or earlier. A sync that failed after a folder
+ * was created is therefore repeated by the next call rather than skipped because the folder already exists.
+ * `base` must be an existing ancestor of `dir`; folders above it are the caller's.
  */
-export function ensureDurableDir(dir: string): void {
-  let st;
-  try { st = lstatSync(dir); } catch (e) {
-    if (errno(e) !== 'ENOENT') throw new UnsafeRecordError(`a folder cannot be inspected (${errno(e) ?? 'error'})`);
-    const parent = dirname(dir);
-    if (parent === dir) throw new UnsafeRecordError('no folder to create');
-    ensureDurableDir(parent);
-    try { mkdirSync(dir, { mode: 0o700 }); } catch (e2) { if (errno(e2) !== 'EEXIST') throw e2; }
+export function ensureDurableDir(dir: string, base: string): void {
+  const rel = relative(base, dir);
+  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) throw new UnsafeRecordError('the folder is not below its base');
+  let parent = base;
+  for (const part of rel.split(sep)) {
+    const level = join(parent, part);
+    let st;
+    try { st = lstatSync(level); } catch (e) {
+      if (errno(e) !== 'ENOENT') throw new UnsafeRecordError(`a folder cannot be inspected (${errno(e) ?? 'error'})`);
+      try { mkdirSync(level, { mode: 0o700 }); } catch (e2) { if (errno(e2) !== 'EEXIST') throw e2; }
+      st = lstatSync(level);
+    }
+    if (st.isSymbolicLink() || !st.isDirectory()) throw new UnsafeRecordError('not a folder');
+    if (UID !== undefined && st.uid !== UID) throw new UnsafeRecordError('a folder of another account');
     syncDir(parent);
-    st = lstatSync(dir);
+    parent = level;
   }
-  if (st.isSymbolicLink() || !st.isDirectory()) throw new UnsafeRecordError('not a folder');
-  if (UID !== undefined && st.uid !== UID) throw new UnsafeRecordError('a folder of another account');
 }
 
 function syncDir(dir: string): void {

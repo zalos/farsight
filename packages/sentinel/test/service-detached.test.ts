@@ -77,7 +77,7 @@ const stopped = (child: ChildProcess, signal: NodeJS.Signals = 'SIGTERM') => new
 
 /** The owner's CLI: confirm the run here (a receipt minted in this process), then hand it over on a fresh connection. */
 async function start(s: Setup, planId: string): Promise<any> {
-  const confirmed = confirmForService(s.ws, { command: 'run', action: 'run.start', planId, confirm: true, now: new Date() });
+  const confirmed = confirmForService(s.ws, { command: 'run', action: 'run.start', planId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
   assert.ok('receiptId' in confirmed, JSON.stringify(confirmed));
   const client = (await connectService(s.ws))!;
   try { return await client.request('run.start', { planId, receiptId: confirmed.receiptId }); } finally { client.close(); }
@@ -85,7 +85,7 @@ async function start(s: Setup, planId: string): Promise<any> {
 
 /** The owner's pause or cancel: confirmed here, one receipt for exactly that action on that run. */
 async function control(s: Setup, op: 'run.pause' | 'run.cancel', runId: string): Promise<any> {
-  const confirmed = confirmForService(s.ws, { command: op.slice(4), action: op, planId: runId, confirm: true, now: new Date() });
+  const confirmed = confirmForService(s.ws, { command: op.slice(4), action: op, planId: runId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
   assert.ok('receiptId' in confirmed, JSON.stringify(confirmed));
   return ask(s, op, { runId, receiptId: confirmed.receiptId });
 }
@@ -133,11 +133,11 @@ test('a connection without the owner\'s receipt gets only what the grants give a
       } finally { c.close(); }
     }
     // A receipt confirms one plan: spent on another it is refused, and the run it names never started.
-    const other = confirmForService(s.ws, { command: 'run', action: 'run.start', planId: s.plans[1]!, confirm: true, now: new Date() });
+    const other = confirmForService(s.ws, { command: 'run', action: 'run.start', planId: s.plans[1]!, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
     assert.ok('receiptId' in other);
     const mismatch = await ask(s, 'run.start', { planId: s.plans[0], receiptId: other.receiptId });
     // A receipt for one action is never a receipt for another, even on the same plan.
-    const startReceipt = confirmForService(s.ws, { command: 'run', action: 'run.start', planId: s.plans[0]!, confirm: true, now: new Date() });
+    const startReceipt = confirmForService(s.ws, { command: 'run', action: 'run.start', planId: s.plans[0]!, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
     assert.ok('receiptId' in startReceipt);
     assert.equal((await ask(s, 'run.cancel', { runId: s.plans[0], receiptId: startReceipt.receiptId })).reasonCode, 'sentinel.receipt.mismatch');
     assert.equal(mismatch.reasonCode, 'sentinel.receipt.mismatch');
@@ -157,9 +157,9 @@ test('duplicate starts join one run, a receipt is spent once, and the run surviv
   const child = await serve(s);
   try {
     const planId = s.plans[0]!;
-    const confirmed = confirmForService(s.ws, { command: 'run', action: 'run.start', planId, confirm: true, now: new Date() });
+    const confirmed = confirmForService(s.ws, { command: 'run', action: 'run.start', planId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
     assert.ok('receiptId' in confirmed);
-    const second = confirmForService(s.ws, { command: 'run', action: 'run.start', planId, confirm: true, now: new Date() });
+    const second = confirmForService(s.ws, { command: 'run', action: 'run.start', planId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
     assert.ok('receiptId' in second);
     const [a, b] = await Promise.all([confirmed.receiptId, second.receiptId].map(async receiptId => {
       const c = (await connectService(s.ws))!;

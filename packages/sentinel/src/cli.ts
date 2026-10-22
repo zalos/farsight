@@ -202,25 +202,25 @@ async function owner(p: ParsedCommand): Promise<number> {
     }
     if (p.command === 'serve') return await serve(p, ws);
     if (p.command === 'wait') return await waitFor(p, ws);
-    if ((p.command === 'run' && p.flags['--detach'] === true) || p.command === 'resume') {
-      const planId = (p.args.planId ?? p.args.runId)!;
-      const confirmed = confirmForService(ws, { command: p.command, action: 'run.start', planId, confirm, now });
-      if ('result' in confirmed) return serviceOut(confirmed.result);
-      const client = await ensureService(ws);
-      if (!client) return serviceOut(result(p.command, 'configuration-failure', { verdicts: confirmed.verdicts, reasonCode: 'sentinel.service.startFailed', facts: { planId } }));
-      const r = await ask(client, 'run.start', { planId, receiptId: confirmed.receiptId });
+    if ((p.command === 'run' && p.flags['--detach'] === true) || p.command === 'resume' || p.command === 'pause' || p.command === 'cancel') {
+      // Writes on a run. First the owner's decision against the plan (without --confirm it stops here, exit 4, and
+      // starts nothing); then the service is reached and the owner's receipt is minted for exactly its store and this
+      // run, and spent there once. Pause needs a run the service is executing; start, resume and cancel may start it.
+      const runId = (p.args.planId ?? p.args.runId)!;
+      const action = p.command === 'pause' ? 'run.pause' as const : p.command === 'cancel' ? 'run.cancel' as const : 'run.start' as const;
+      const shown = confirmForService(ws, { command: p.command, action, planId: runId, confirm: false, now });
+      if (!confirm || ('result' in shown && shown.result.outcome !== 'awaiting-confirmation')) return serviceOut('result' in shown ? shown.result : result(p.command, 'refused'));
+      const client = p.command === 'pause' ? await connectService(ws) : await ensureService(ws);
+      if (!client) {
+        return serviceOut(result(p.command, p.command === 'pause' ? 'refused' : 'configuration-failure',
+          { reasonCode: p.command === 'pause' ? 'sentinel.service.notRunning' : 'sentinel.service.startFailed', facts: { runId } }));
+      }
+      const confirmed = confirmForService(ws, { command: p.command, action, planId: runId, confirm: true, now, storeId: client.storeId });
+      if ('result' in confirmed) { client.close(); return serviceOut(confirmed.result); }
+      const r = action === 'run.start'
+        ? await ask(client, 'run.start', { planId: runId, receiptId: confirmed.receiptId })
+        : await ask(client, action, { runId, receiptId: confirmed.receiptId });
       return serviceOut(r, r.facts.runId ? [`run ${String(r.facts.runId)} · ${String(r.facts.state)}${r.facts.joined === true ? ' · joined' : ''}`] : []);
-    }
-    if (p.command === 'pause' || p.command === 'cancel') {
-      // Writes like starting: the owner confirms here and the service spends that one receipt. Pause needs a run the
-      // service is executing; cancel may also stop a paused or interrupted one.
-      const runId = p.args.runId!;
-      const confirmed = confirmForService(ws, { command: p.command, action: p.command === 'pause' ? 'run.pause' : 'run.cancel', planId: runId, confirm, now });
-      if ('result' in confirmed) return serviceOut(confirmed.result);
-      const client = p.command === 'cancel' ? await ensureService(ws) : await connectService(ws);
-      if (!client) return serviceOut(result(p.command, 'refused', { verdicts: confirmed.verdicts, reasonCode: p.command === 'cancel' ? 'sentinel.service.startFailed' : 'sentinel.service.notRunning', facts: { runId } }));
-      const r = await ask(client, p.command === 'pause' ? 'run.pause' : 'run.cancel', { runId, receiptId: confirmed.receiptId });
-      return serviceOut(r, r.facts.state ? [`run ${p.args.runId} · ${String(r.facts.state)}`] : []);
     }
     // While the service runs it alone holds the store: reads go through it, and nothing new is planned or run here.
     const live = await connectService(ws);

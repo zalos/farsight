@@ -40,10 +40,13 @@ export class RuleLockBook {
   readonly #revisions: string;
 
   readonly #hooks: PublishHooks;
+  /** The trust folder's parent: every folder from here down is synced into its parent when a record is published. */
+  readonly #base: string;
 
   /** `trustDir` is the owner's private Sentinel state (adoption, receipts). `hooks` is a crash-test seam only. */
   constructor(trustDir: string, options: { hooks?: PublishHooks } = {}) {
     this.#hooks = options.hooks ?? {};
+    this.#base = dirname(trustDir);
     this.#dir = join(trustDir, 'rules');
     this.#revisions = join(this.#dir, 'locks');
   }
@@ -89,7 +92,7 @@ export class RuleLockBook {
   /** Files a revision under its digest, once. A revision already filed must be the same lock. Returns the digest. */
   store(lock: RuleLockEnvelope): string {
     const digest = lockDigest(lock);
-    safely(() => { ensureDurableDir(this.#revisions); ensurePrivateDir(this.#revisions, UNSAFE); });
+    safely(() => { ensureDurableDir(this.#revisions, this.#base); ensurePrivateDir(this.#revisions, UNSAFE); });
     const created = publishOnce(this.#revisions, `${digest.slice(7)}.json`, Buffer.from(JSON.stringify(lock)), this.#hooks);
     if (!created) this.read(digest);
     return digest;
@@ -104,7 +107,7 @@ export class RuleLockBook {
     if (expected !== null) this.read(expected);
     const dir = expected === null ? this.#dir : join(this.#dir, 'next');
     const name = expected === null ? 'first' : `${expected.slice(7)}.json`;
-    safely(() => { ensureDurableDir(dir); ensurePrivateDir(dir, UNSAFE); });
+    safely(() => { ensureDurableDir(dir, this.#base); ensurePrivateDir(dir, UNSAFE); });
     const linked = publishOnce(dir, name, Buffer.from(JSON.stringify({ schema: 'sentinel-lock-link/draft-1', digest })), this.#hooks);
     if (!linked) throw new ServiceError('sentinel.service.lockChanged');
   }

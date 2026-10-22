@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import type { ActionEffect, ActionIntent, AdmissionEnvelope } from '../contracts/index.js';
 import { Coordinator, type RunSummary } from '../execution/coordinator.js';
 import {
-  adoptSettings, adoptionIntent, admit, effectivePolicy, loadPolicyInputs, ReceiptBook, trustDirectory, PolicyError,
+  adoptSettings, adoptionIntent, admit, workspaceIdentity, effectivePolicy, loadPolicyInputs, ReceiptBook, trustDirectory, PolicyError,
   type EffectivePolicy,
 } from '../policy/index.js';
 import { issueReceipt } from '../policy/owner-receipts.js';
@@ -101,10 +101,24 @@ function decide(ws: Workspace, policy: EffectivePolicy, intent: ActionIntent, st
   };
 }
 
-export const intentOf = (action: ActionIntent['action'], input: string, effects: ActionEffect[]): ActionIntent => ({
+export const intentOf = (action: ActionIntent['action'], input: string, effects: ActionEffect[], targets: string[] = []): ActionIntent => ({
   action, input, effects, budget: { maxTokens: null, maxCost: null, currency: null },
-  scope: { profile: PREVIEW_PROFILE, provider: null, targets: [] },
+  scope: { profile: PREVIEW_PROFILE, provider: null, targets },
 });
+
+/** The exact instance a write on a run acts on: this workspace (path, device and inode), this store, this run. */
+export interface RunInstance { readonly storeId: string; readonly runId: string }
+
+/**
+ * A write on a run, bound to the instance it acts on. Two workspaces with the same content, settings and plan digest
+ * still differ in workspace identity and store: a receipt confirmed for one is a mismatch in the other.
+ */
+export function runWriteBinding(ws: Workspace, action: 'run.start' | 'run.pause' | 'run.cancel', planDigest: string, instance: RunInstance):
+  { intent: ActionIntent; stateDigest: string } {
+  const workspace = workspaceIdentity(ws.path).digest;
+  const intent = intentOf(action, planDigest, ['local-artifacts'], [`sentinel.workspace:${workspace}`, `sentinel.store:${instance.storeId}`, `sentinel.run:${instance.runId}`]);
+  return { intent, stateDigest: sha(canonicalJsonBytes({ kind: 'sentinel-run-write/1', plan: planDigest, workspace, store: instance.storeId, run: instance.runId })) };
+}
 
 // ---- settings adoption (an owner action) ----
 
@@ -252,7 +266,9 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
  * action, this plan's digest and the adopted policy revision is issued and not spent. The service spends it once; a
  * connection without one is an agent and gets what the adopted grants give agents, nothing implicit.
  */
-export function confirmForService(ws: Workspace, options: { command: string; action: 'run.start' | 'run.pause' | 'run.cancel'; planId: string; confirm: boolean; now: Date }):
+export function confirmForService(ws: Workspace, options: { command: string; action: 'run.start' | 'run.pause' | 'run.cancel'; planId: string; confirm: boolean; now: Date;
+  /** The store the running service holds, from its verified welcome. Needed to confirm; not to show what would happen. */
+  storeId?: string }):
   { receiptId: string; verdicts: PrintedVerdicts } | { result: CommandResult } {
   const record = readPlanRecord(ws, options.planId);
   if (!record) return { result: result(options.command, 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts: { planId: options.planId } }) };
@@ -262,9 +278,13 @@ export function confirmForService(ws: Workspace, options: { command: string; act
   if (policy.revision !== record.policyRevision) {
     return { result: result(options.command, 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts: { planId: record.planId } }) };
   }
-  const intent = intentOf(options.action, record.planDigest, ['local-artifacts']);
+  // Bound to this workspace, this run and, once a service answered, its store; without a store yet the decision is
+  // shown against the unbound intent and nothing is issued.
+  const { intent, stateDigest } = options.storeId === undefined
+    ? { intent: intentOf(options.action, record.planDigest, ['local-artifacts']), stateDigest: record.planDigest }
+    : runWriteBinding(ws, options.action, record.planDigest, { storeId: options.storeId, runId: record.planId });
   const decision = admit({
-    intent, requestedBy: OWNER as { principal: 'human'; channel: 'owner-cli' }, policy, stateDigest: record.planDigest, now: options.now,
+    intent, requestedBy: OWNER as { principal: 'human'; channel: 'owner-cli' }, policy, stateDigest, now: options.now,
     capability: () => ({ available: true, detail: 'built into this installation; runs locally' }),
     credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
   }).record;
@@ -277,7 +297,11 @@ export function confirmForService(ws: Workspace, options: { command: string; act
   }
   if (!options.confirm) return { result: result(options.command, 'awaiting-confirmation', { verdicts, facts, reasonCode: 'sentinel.service.needsOwnerConfirm' }) };
   assertMayConfirm(OWNER);
-  const receipt = issueReceipt(receiptBook(ws), OWNER, { intent, stateDigest: record.planDigest, policyRevision: policy.revision }, { now: options.now, ttlMs: RECEIPT_TTL_MS });
+  if (options.storeId === undefined) {
+    // Never a receipt that names no store: it could be spent by any service that holds a plan with this digest.
+    return { result: result(options.command, 'configuration-failure', { verdicts, facts, reasonCode: 'sentinel.service.notRunning' }) };
+  }
+  const receipt = issueReceipt(receiptBook(ws), OWNER, { intent, stateDigest, policyRevision: policy.revision }, { now: options.now, ttlMs: RECEIPT_TTL_MS });
   return { receiptId: receipt.id, verdicts };
 }
 
