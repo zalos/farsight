@@ -6,14 +6,14 @@
 // capture is never changed. No application ingestion, configuration enrichment, network or executable input.
 import { canonicalJson } from '@farsight/graph';
 import { sentinelParserWord } from '@farsight/core/dist/strings-sentinel-parser.js';
-import type * as CodeParser from '@farsight/code-parser';
+import type { AnalysisArtifact, InputFingerprint, ParserLimits } from '@farsight/code-parser';
 import { createHash } from 'node:crypto';
 import { chmodSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import type { ArtifactId, CaptureEntry, SnapshotEnvelope, WorkRef } from '../contracts/index.js';
 import type { ArtifactPrivacy, PublicationReceipt, SentinelStore, StagedArtifact } from '../store/index.js';
 import { MAX_ARTIFACT_BYTES } from '../store/index.js';
-import { restoreSnapshot, type RestoreStore } from './materialize.js';
+import { openSnapshot, restoreSnapshot, type RestoreStore } from './materialize.js';
 import type { Materialization } from './materialization.js';
 
 export const PARSER_RESULT_SCHEMA = 'sentinel-parser-result/draft-1';
@@ -22,7 +22,7 @@ export const PARSER_INDEX_SCHEMA = 'sentinel-parser-index/draft-1';
 export const PARSER_STAGE_CONTRACT = 'sentinel.stage.parse';
 
 export const PARSER_ERROR_CODES = Object.freeze([
-  'sentinel.parse.invalidRequest', 'sentinel.parse.integrity', 'sentinel.parse.artifactTooLarge',
+  'sentinel.parse.invalidRequest', 'sentinel.parse.sourceUnsupported', 'sentinel.parse.integrity', 'sentinel.parse.artifactTooLarge',
 ] as const);
 export type ParserErrorCode = typeof PARSER_ERROR_CODES[number];
 
@@ -41,7 +41,8 @@ export class ParserError extends Error {
   /** `detail` fills the catalog sentence; `problems` are the first paths and reasons found (never file contents). */
   constructor(code: ParserErrorCode, detail: string, problems: readonly string[] = []) {
     const shown = problems.slice(0, MAX_PROBLEMS);
-    super(sentinelParserWord(code, { detail: shown.length ? `${detail} (${problems.length}: ${shown.slice(0, 3).join('; ')})` : detail }));
+    const listed = shown.length ? ` (${problems.length} found, ${shown.length} kept; first: ${shown.slice(0, 3).join('; ')})` : '';
+    super(sentinelParserWord(code, { detail: `${detail}${listed}` }));
     this.name = 'ParserError';
     this.code = code;
     this.problemCount = problems.length;
@@ -69,7 +70,7 @@ export interface ParseSnapshotRequest {
   readonly sources?: readonly string[];
   readonly selection: ParserSelection;
   /** Every limit, explicitly. */
-  readonly limits: ParserLimits;
+  readonly limits: Required<ParserLimits>;
   readonly signal?: AbortSignal;
 }
 
@@ -140,9 +141,18 @@ export interface IndexedLocation {
   readonly content: ArtifactId;
   readonly line: number;
   readonly endLine?: number;
-  /** Zero-based, half-open UTF-8 byte span, derived from the captured bytes. */
+  /** Zero-based, half-open byte span into the captured bytes, computed from the raw bytes, never estimated. */
   readonly byteSpan?: { readonly startByte: number; readonly endByte: number };
+  /** Why no byte span is given, when it is not. */
+  readonly spanUnavailable?: SpanUnavailableReason;
 }
+
+/**
+ * `invalidUtf8`: the file is not valid UTF-8, so the parser's character offsets do not map to its bytes.
+ * `invalidLine`: the parser's line range is not inside the file. `invalidSpan`: its offsets are not whole numbers
+ * inside the decoded text. `splitSurrogate`: an offset falls between the two halves of one character.
+ */
+export type SpanUnavailableReason = 'invalidUtf8' | 'invalidLine' | 'invalidSpan' | 'splitSurrogate';
 
 export interface ParserIndex {
   readonly schema: typeof PARSER_INDEX_SCHEMA;
@@ -155,6 +165,8 @@ export interface ParserIndex {
   readonly omitted: number;
   /** Locations naming a path that is not a captured, materialized file: counted, the first few listed. */
   readonly unplaced: { readonly count: number; readonly paths: readonly string[] };
+  /** Indexed locations given without a byte span, by reason. */
+  readonly spanUnavailable: Readonly<Record<SpanUnavailableReason, number>>;
 }
 
 export interface ParserResult {
@@ -164,7 +176,7 @@ export interface ParserResult {
   readonly parser: AnalysisArtifact['analysis']['parser'];
   readonly adapters: AnalysisArtifact['analysis']['adapters'];
   readonly selection: ParserSelection;
-  readonly limits: ParserLimits;
+  readonly limits: Required<ParserLimits>;
   readonly analysisFingerprint: string;
   /** The parser's own flag: its selection completed. Never security coverage. */
   readonly parserComplete: boolean;
@@ -195,64 +207,10 @@ export interface SnapshotAnalysis {
   readonly sources: readonly SourceAnalysis[];
 }
 
-// ---- the public parser's artifact, as Sentinel exposes it ----
-// Declared here so the published declarations name no workspace package. The assignment below fails to compile if
-// the parser's own types ever stop fitting these shapes.
-
-/** One recorded read: a file's bytes, a folder listing, a kind, or an unavailable path (hex SHA-256 digests). */
-export interface InputFingerprint {
-  readonly path: string;
-  readonly kind: 'content' | 'directory' | 'metadata' | 'missing';
-  readonly digest: string;
-}
-
-export interface ParserLimits {
-  readonly maxFiles: number;
-  readonly maxFileBytes: number;
-  readonly maxTotalBytes: number;
-  readonly maxEntries: number;
-  readonly maxDurationMs: number;
-}
-
-export interface ParserLocation {
-  readonly repo: string;
-  readonly path: string;
-  readonly line: number;
-  readonly col?: number;
-  readonly endLine?: number;
-}
-
-/** The portable graph, with the fields Sentinel reads named; every other field is kept verbatim at run time. */
-export interface AnalysisGraph {
-  readonly nodes: readonly ({ readonly id: string; readonly kind: string; readonly loc?: ParserLocation })[];
-  readonly edges: readonly ({
-    readonly id: string; readonly kind: string; readonly from: string; readonly to: string;
-    readonly occurrences?: readonly ({ readonly id: string; readonly loc: ParserLocation; readonly span?: { readonly start: number; readonly end: number } })[];
-  })[];
-}
-
-/** `farsight-analysis` from `@farsight/code-parser`, kept complete (occurrences included). */
-export interface AnalysisArtifact {
-  readonly format: 'farsight-analysis';
-  readonly schemaVersion: number;
-  readonly graph: AnalysisGraph;
-  readonly analysis: {
-    readonly fingerprint: string;
-    readonly parser: { readonly name: '@farsight/code-parser'; readonly version: string };
-    readonly adapters: readonly { readonly id: string; readonly version: string }[];
-    readonly inputs: readonly InputFingerprint[];
-    readonly files: readonly { readonly path: string; readonly status: 'analyzed' | 'skipped' | 'failed'; readonly reason?: string; readonly adapter?: string; readonly digest?: string }[];
-    readonly diagnostics: readonly { readonly code: string; readonly severity: 'error' | 'warning'; readonly message: string; readonly path?: string; readonly adapter?: string; readonly line?: number; readonly nodeId?: string; readonly reason?: string }[];
-    readonly complete: boolean;
-    readonly capabilities: readonly string[];
-    readonly limits: readonly string[];
-  };
-}
-
-// Compile-time drift guards (not exported, so not in the published declarations).
-const fitsArtifact = (a: CodeParser.AnalysisArtifact): AnalysisArtifact => a;
-const fitsLimits = (l: ParserLimits): CodeParser.ParserLimits => l;
-void fitsArtifact; void fitsLimits;
+// The public parser's own types, re-exported unchanged: the retained artifact is its portable `farsight-analysis`
+// document, with no Sentinel restatement. The packed tarball carries these declarations (graph and code-parser are
+// publishable libraries), so a typed consumer sees the full graph, resolution and occurrence fields.
+export type { AnalysisArtifact, InputFingerprint, ParserLimits };
 
 const sha256hex = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const UNAVAILABLE = sha256hex('unavailable');
@@ -260,25 +218,68 @@ const UNAVAILABLE = sha256hex('unavailable');
 // ---- request checks ----
 
 const SELECTION_KEYS = new Set(['gitignore', 'testFiles', 'include', 'exclude', 'testGlobs']);
-const LIMIT_KEYS = ['maxFiles', 'maxFileBytes', 'maxTotalBytes', 'maxEntries', 'maxDurationMs'] as const;
+/** The accepted ceilings (PR 01's resource defaults and the capture bounds): a request may only lower them. */
+export const PARSER_LIMIT_CEILINGS: Readonly<Required<ParserLimits>> = Object.freeze({
+  maxFiles: 200_000, maxFileBytes: 16 * 1024 * 1024, maxTotalBytes: 512 * 1024 * 1024, maxEntries: 200_000, maxDurationMs: 120_000,
+});
+const LIMIT_KEYS = Object.keys(PARSER_LIMIT_CEILINGS) as (keyof ParserLimits)[];
+const MAX_GLOBS = 256;
+const MAX_GLOB_LENGTH = 1024;
+const MAX_SOURCES = 64;
 
 function checkRequest(req: ParseSnapshotRequest): void {
   const bad = (m: string) => new ParserError('sentinel.parse.invalidRequest', m);
-  if (!req || typeof req.snapshotId !== 'string' || !req.snapshotId) throw bad('a snapshot id is required');
+  const plain = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
+  const globs = (v: unknown, what: string) => {
+    if (v === undefined) return;
+    if (!Array.isArray(v) || v.length > MAX_GLOBS) throw bad(`${what} must be a list of at most ${MAX_GLOBS} patterns`);
+    for (const g of v) {
+      if (typeof g !== 'string' || g.length < 1 || g.length > MAX_GLOB_LENGTH || g.includes('\u0000')) {
+        throw bad(`${what} holds a pattern that is empty, too long or contains NUL`);
+      }
+    }
+  };
+  if (!plain(req)) throw bad('the request must be an object');
+  if (typeof req.snapshotId !== 'string' || !req.snapshotId) throw bad('a snapshot id is required');
   if (typeof req.workDir !== 'string' || !isAbsolute(req.workDir)) throw bad('workDir must be absolute');
   let real: string;
   try { real = realpathSync.native(req.workDir); } catch { throw bad('workDir must exist'); }
   if (real !== req.workDir || !lstatSync(real).isDirectory()) throw bad('workDir must be a canonical folder');
   const s = req.selection;
-  if (!s || typeof s !== 'object') throw bad('selection is required');
+  if (!plain(s)) throw bad('selection is required');
   for (const k of Object.keys(s)) if (!SELECTION_KEYS.has(k)) throw bad(`selection.${k} is not a syntax selection option`);
   if (typeof s.gitignore !== 'boolean') throw bad('selection.gitignore must be stated');
   if (s.testFiles !== 'include' && s.testFiles !== 'exclude') throw bad('selection.testFiles must be stated');
+  globs(s.include, 'selection.include');
+  globs(s.exclude, 'selection.exclude');
+  if (s.testGlobs !== undefined) {
+    if (!plain(s.testGlobs)) throw bad('selection.testGlobs must be an object');
+    for (const k of Object.keys(s.testGlobs)) if (k !== 'include' && k !== 'exclude') throw bad(`selection.testGlobs.${k} is unknown`);
+    globs(s.testGlobs.include, 'selection.testGlobs.include');
+    globs(s.testGlobs.exclude, 'selection.testGlobs.exclude');
+  }
   const l = req.limits;
-  if (!l || typeof l !== 'object') throw bad('limits are required');
-  for (const k of Object.keys(l)) if (!(LIMIT_KEYS as readonly string[]).includes(k)) throw bad(`limits.${k} is unknown`);
-  for (const k of LIMIT_KEYS) if (!Number.isSafeInteger(l[k]) || l[k] < 1) throw bad(`limits.${k} must be a positive integer`);
+  if (!plain(l)) throw bad('limits are required');
+  for (const k of Object.keys(l)) if (!(LIMIT_KEYS as string[]).includes(k)) throw bad(`limits.${k} is unknown`);
+  for (const k of LIMIT_KEYS) {
+    const v = (l as Record<string, unknown>)[k];
+    if (typeof v !== 'number' || !Number.isSafeInteger(v) || v < 1 || v > PARSER_LIMIT_CEILINGS[k]) {
+      throw bad(`limits.${k} must be an integer from 1 to ${PARSER_LIMIT_CEILINGS[k]}`);
+    }
+  }
+  if (req.sources !== undefined) {
+    if (!Array.isArray(req.sources) || req.sources.length < 1 || req.sources.length > MAX_SOURCES) {
+      throw bad(`sources must list 1 to ${MAX_SOURCES} source ids`);
+    }
+    if (req.sources.some(id => typeof id !== 'string' || !id) || new Set(req.sources).size !== req.sources.length) {
+      throw bad('sources must be distinct source ids');
+    }
+  }
+  if (req.signal !== undefined && !(req.signal instanceof AbortSignal)) throw bad('signal must be an AbortSignal');
 }
+
+/** The public parser names nodes `<sourceId>::<path>`, so it refuses a source id it cannot keep unambiguous. */
+export const parserAcceptsSourceId = (id: string): boolean => id.length > 0 && !id.includes('::') && !/[\r\n/\\]/.test(id);
 
 // ---- the materialized tree ----
 
@@ -452,72 +453,133 @@ export function joinFileOutcomes(artifact: AnalysisArtifact, sourceId: string, s
 
 // ---- the index ----
 
-/** UTF-8 byte offset of a UTF-16 code-unit offset in `text` (clamped; a split surrogate counts its whole code point). */
-function byteOffset(text: string, unit: number): number {
-  return Buffer.byteLength(text.slice(0, Math.max(0, Math.min(unit, text.length))), 'utf8');
+type Loc = { readonly repo: string; readonly path: string; readonly line: number; readonly endLine?: number };
+type Candidate =
+  | { readonly order: string; readonly type: 'node'; readonly nodeId: string; readonly kind: string; readonly loc: Loc }
+  | { readonly order: string; readonly type: 'occurrence'; readonly occurrenceId: string; readonly edgeId: string; readonly loc: Loc;
+      readonly span?: { readonly start: number; readonly end: number } };
+
+/** One captured file's raw bytes, prepared once: line starts from 0x0A bytes, and the decoded text only if UTF-8 round-trips. */
+class FileBytes {
+  readonly raw: Buffer;
+  readonly lineStarts: number[] = [0];
+  private decoded: { readonly text: string } | null | undefined;
+  constructor(raw: Buffer) {
+    this.raw = raw;
+    for (let i = 0; i < raw.length; i++) if (raw[i] === 0x0a) this.lineStarts.push(i + 1);
+  }
+  /** The line range's bytes. A 0x0A byte is never part of a multi-byte UTF-8 sequence, so this holds for any bytes. */
+  lineSpan(line: number, endLine = line): { startByte: number; endByte: number } | undefined {
+    const n = this.lineStarts.length;
+    if (!Number.isSafeInteger(line) || !Number.isSafeInteger(endLine) || line < 1 || endLine < line || endLine > n) return undefined;
+    return { startByte: this.lineStarts[line - 1]!, endByte: endLine < n ? this.lineStarts[endLine]! : this.raw.length };
+  }
+  /** The text the parser saw, when it is an exact image of the bytes; otherwise null. */
+  text(): string | null {
+    if (this.decoded === undefined) {
+      const text = this.raw.toString('utf8');
+      this.decoded = Buffer.byteLength(text, 'utf8') === this.raw.length && Buffer.from(text, 'utf8').equals(this.raw) ? { text } : null;
+    }
+    return this.decoded?.text ?? null;
+  }
 }
 
-function lineSpan(lineStarts: number[], text: string, line: number, endLine?: number): { startByte: number; endByte: number } | undefined {
-  const first = line - 1;
-  const last = (endLine ?? line) - 1;
-  if (first < 0 || first >= lineStarts.length || last < first) return undefined;
-  const start = lineStarts[first]!;
-  const end = last + 1 < lineStarts.length ? lineStarts[last + 1]! : text.length;
-  return { startByte: byteOffset(text, start), endByte: byteOffset(text, end) };
+const isHigh = (c: number) => c >= 0xd800 && c <= 0xdbff;
+const isLow = (c: number) => c >= 0xdc00 && c <= 0xdfff;
+
+/** Byte offsets of sorted UTF-16 offsets into `text`, in one pass. Offsets must already be validated. */
+function byteOffsets(text: string, units: readonly number[]): Map<number, number> {
+  const out = new Map<number, number>();
+  let unit = 0;
+  let byte = 0;
+  for (const target of units) {
+    while (unit < target) {
+      const c = text.charCodeAt(unit);
+      if (isHigh(c) && unit + 1 < text.length && isLow(text.charCodeAt(unit + 1))) { byte += 4; unit += 2; }
+      else { byte += c < 0x80 ? 1 : c < 0x800 ? 2 : 3; unit += 1; }
+    }
+    out.set(target, byte);
+  }
+  return out;
 }
 
+function spanProblem(text: string, span: { start: number; end: number }): SpanUnavailableReason | undefined {
+  const { start, end } = span;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || end > text.length) return 'invalidSpan';
+  const splits = (at: number) => at > 0 && at < text.length && isLow(text.charCodeAt(at)) && isHigh(text.charCodeAt(at - 1));
+  return splits(start) || splits(end) ? 'splitSurrogate' : undefined;
+}
+
+/**
+ * Indexes the artifact's node and call-site locations against the captured bytes. Files are processed one at a
+ * time and released; byte offsets come from the raw bytes, and a span that cannot be computed exactly is given
+ * without a byte span and with its reason, never estimated or clamped.
+ */
 export function buildIndex(artifact: AnalysisArtifact, snapshotId: string, sourceId: string, root: string,
   captured: ReadonlyMap<string, ArtifactId>): ParserIndex {
-  const texts = new Map<string, { text: string; starts: number[] } | null>();
-  const textOf = (path: string) => {
-    if (!texts.has(path)) {
-      const id = captured.get(path);
-      if (!id) { texts.set(path, null); } else {
-        const text = readFileSync(join(root, ...path.split('/'))).toString('utf8');
-        const starts = [0];
-        for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) starts.push(i + 1);
-        texts.set(path, { text, starts });
-      }
+  const candidates: Candidate[] = [];
+  for (const n of artifact.graph.nodes) {
+    if (n.loc?.repo === sourceId) candidates.push({ order: `n\u0000${n.id}`, type: 'node', nodeId: n.id, kind: n.kind, loc: n.loc });
+  }
+  for (const e of artifact.graph.edges) {
+    for (const o of e.occurrences ?? []) {
+      if (o.loc.repo !== sourceId) continue;
+      candidates.push({ order: `o\u0000${e.id}\u0000${o.id}`, type: 'occurrence', occurrenceId: o.id, edgeId: e.id, loc: o.loc,
+        ...(o.span ? { span: o.span } : {}) });
     }
-    return texts.get(path)!;
-  };
+  }
+  candidates.sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0));
   const unplaced = new Set<string>();
   let unplacedCount = 0;
-  let omitted = 0;
+  const placeable = candidates.filter(c => {
+    if (captured.has(c.loc.path)) return true;
+    unplacedCount++;
+    if (unplaced.size < MAX_LISTED) unplaced.add(c.loc.path);
+    return false;
+  });
+  const kept = placeable.slice(0, MAX_INDEX_ENTRIES);
+  const omitted = placeable.length - kept.length;
+  const byPath = new Map<string, Candidate[]>();
+  for (const c of kept) { const list = byPath.get(c.loc.path); if (list) list.push(c); else byPath.set(c.loc.path, [c]); }
+  const reasons: Record<SpanUnavailableReason, number> = { invalidUtf8: 0, invalidLine: 0, invalidSpan: 0, splitSurrogate: 0 };
+  const located = new Map<Candidate, IndexedLocation>();
+  for (const [path, list] of [...byPath].sort(([a], [b]) => (a < b ? -1 : 1))) {
+    const content = captured.get(path)!;
+    const file = new FileBytes(readFileSync(join(root, ...path.split('/'))));
+    const pending: { c: Candidate; span: { start: number; end: number } }[] = [];
+    for (const c of list) {
+      const base = { path, content, line: c.loc.line, ...(c.loc.endLine !== undefined ? { endLine: c.loc.endLine } : {}) };
+      if (c.type === 'occurrence' && c.span) {
+        const text = file.text();
+        const problem = text === null ? 'invalidUtf8' : spanProblem(text, c.span);
+        if (problem) { reasons[problem]++; located.set(c, { ...base, spanUnavailable: problem }); }
+        else pending.push({ c, span: c.span });
+        continue;
+      }
+      const span = file.lineSpan(c.loc.line, c.loc.endLine);
+      if (span) located.set(c, { ...base, byteSpan: span });
+      else { reasons.invalidLine++; located.set(c, { ...base, spanUnavailable: 'invalidLine' }); }
+    }
+    if (pending.length) {
+      const text = file.text()!;
+      const units = [...new Set(pending.flatMap(p => [p.span.start, p.span.end]))].sort((a, b) => a - b);
+      const bytes = byteOffsets(text, units);
+      for (const { c, span } of pending) {
+        located.set(c, { path, content, line: c.loc.line, ...(c.loc.endLine !== undefined ? { endLine: c.loc.endLine } : {}),
+          byteSpan: { startByte: bytes.get(span.start)!, endByte: bytes.get(span.end)! } });
+      }
+    }
+  }
   const nodes: ParserIndex['nodes'][number][] = [];
   const occurrences: ParserIndex['occurrences'][number][] = [];
-  const room = () => nodes.length + occurrences.length < MAX_INDEX_ENTRIES;
-  const place = (loc: { repo: string; path: string; line: number; endLine?: number } | undefined): IndexedLocation | undefined => {
-    if (!loc || loc.repo !== sourceId) return undefined;
-    const content = captured.get(loc.path);
-    const t = content ? textOf(loc.path) : null;
-    if (!content || !t) {
-      unplacedCount++;
-      if (unplaced.size < MAX_LISTED) unplaced.add(loc.path);
-      return undefined;
-    }
-    const span = lineSpan(t.starts, t.text, loc.line, loc.endLine);
-    return { path: loc.path, content, line: loc.line, ...(loc.endLine ? { endLine: loc.endLine } : {}), ...(span ? { byteSpan: span } : {}) };
-  };
-  for (const n of [...artifact.graph.nodes].sort((a, b) => (a.id < b.id ? -1 : 1))) {
-    const at = place(n.loc);
-    if (!at) continue;
-    if (!room()) { omitted++; continue; }
-    nodes.push({ nodeId: n.id, kind: n.kind, ...at });
-  }
-  for (const e of [...artifact.graph.edges].sort((a, b) => (a.id < b.id ? -1 : 1))) {
-    for (const o of e.occurrences ?? []) {
-      const at = place(o.loc);
-      if (!at) continue;
-      if (!room()) { omitted++; continue; }
-      const t = textOf(at.path)!;
-      const byteSpan = o.span ? { startByte: byteOffset(t.text, o.span.start), endByte: byteOffset(t.text, o.span.end) } : at.byteSpan;
-      occurrences.push({ occurrenceId: o.id, edgeId: e.id, ...at, ...(byteSpan ? { byteSpan } : {}) });
-    }
+  for (const c of kept) {
+    const at = located.get(c)!;
+    if (c.type === 'node') nodes.push({ nodeId: c.nodeId, kind: c.kind, ...at });
+    else occurrences.push({ occurrenceId: c.occurrenceId, edgeId: c.edgeId, ...at });
   }
   return {
     schema: PARSER_INDEX_SCHEMA, snapshotId, sourceId, analysisFingerprint: artifact.analysis.fingerprint,
-    nodes, occurrences, omitted, unplaced: { count: unplacedCount, paths: [...unplaced].sort() },
+    nodes, occurrences, omitted, unplaced: { count: unplacedCount, paths: [...unplaced].sort() }, spanUnavailable: reasons,
   };
 }
 
@@ -539,15 +601,22 @@ function unlockTree(root: string): void {
  */
 export async function parseSnapshot(store: RestoreStore, request: ParseSnapshotRequest): Promise<SnapshotAnalysis> {
   checkRequest(request);
+  // Sources are checked against the snapshot before anything is materialized.
+  const opened = await openSnapshot(store, request.snapshotId);
+  const wanted = request.sources ?? opened.snapshot.sources.map(s => s.sourceId);
+  const known = new Set(opened.snapshot.sources.map(s => s.sourceId));
+  const unknown = wanted.filter(s => !known.has(s));
+  if (unknown.length) throw new ParserError('sentinel.parse.invalidRequest', 'a requested source is not in the snapshot', unknown);
+  const unsupported = wanted.filter(s => !parserAcceptsSourceId(s));
+  if (unsupported.length) {
+    throw new ParserError('sentinel.parse.sourceUnsupported', 'name only sources whose ids the parser accepts', unsupported);
+  }
   const base = mkdtempSync(join(request.workDir, 'parse-'));
   const target = join(base, 'tree');
   try {
     // A restore is read-only and never executable (files 0400, folders 0500); the sidecar keeps the original modes.
     const restored = await restoreSnapshot(store, request.snapshotId, target);
-    const wanted = request.sources ?? restored.snapshot.sources.map(s => s.sourceId);
-    const known = new Set(restored.snapshot.sources.map(s => s.sourceId));
-    const unknown = wanted.filter(s => !known.has(s));
-    if (unknown.length) throw new ParserError('sentinel.parse.invalidRequest', 'a requested source is not in the snapshot', unknown);
+    if (restored.snapshot.id !== opened.snapshot.id) throw new ParserError('sentinel.parse.integrity', 'the snapshot changed between checks');
     // Loaded on first parse: the TS/JS adapter's native binding and the Java WASM grammar are never loaded at import.
     const [{ createParser }, { tsJsAdapter }, { javaAdapter }] = await Promise.all([
       import('@farsight/code-parser'), import('@farsight/code-parser/adapters/tsjs'), import('@farsight/code-parser/adapters/java'),
@@ -566,9 +635,9 @@ export async function parseSnapshot(store: RestoreStore, request: ParseSnapshotR
       });
       const after = fingerprintTree(src.root);
       if (treeDigest(before) !== treeDigest(after)) {
+        const b = new Map(before.map(r => [r.path, canonicalJson(r)]));
         const a = new Map(after.map(r => [r.path, canonicalJson(r)]));
-        const changed = [...new Set([...before.map(r => r.path), ...after.map(r => r.path)])]
-          .filter(p => canonicalJson(before.find(r => r.path === p)) !== (a.get(p) ?? canonicalJson(undefined)));
+        const changed = [...new Set([...b.keys(), ...a.keys()])].filter(p => b.get(p) !== a.get(p)).sort();
         throw new ParserError('sentinel.parse.integrity', 'the materialization changed during the parse', changed);
       }
       const inputs = reconcileAnalysisInputs(artifact.analysis.inputs, before, src.sourceId, restored.snapshot, restored.materialization);
@@ -617,7 +686,7 @@ export interface RetainedSource {
  * and index. Anything over the store's object cap is refused before a byte is written.
  */
 export async function retainSnapshotAnalysis(
-  store: Pick<SentinelStore, 'objects' | 'ledger'>, target: RetainTarget, analysis: SnapshotAnalysis,
+  store: Pick<SentinelStore, 'objects' | 'ledger' | 'assertHeld'>, target: RetainTarget, analysis: SnapshotAnalysis,
 ): Promise<{ receipt: PublicationReceipt; sources: readonly RetainedSource[] }> {
   type Item = { value: unknown; schema: string; privacy: ArtifactPrivacy; links: ArtifactId[] };
   const items = new Map<ArtifactId, Item>();
@@ -641,8 +710,15 @@ export async function retainSnapshotAnalysis(
   }
   const staged: StagedArtifact[] = [...items].map(([id, i]) => ({ id, schema: i.schema, privacy: i.privacy, links: i.links }));
   store.ledger.registerStaging(target.stageId, staged, { work: target.work, attemptId: target.attemptId });
-  const receipts = [];
-  for (const i of items.values()) receipts.push(await store.objects.putCanonicalJson(i.value, { expect: store.objects.identifyCanonicalJson(i.value) }));
-  const receipt = store.ledger.publish({ work: target.work, attemptId: target.attemptId, stageId: target.stageId, receipts, outputs, endedAt: target.endedAt });
-  return { receipt, sources };
+  try {
+    const receipts = [];
+    for (const i of items.values()) receipts.push(await store.objects.putCanonicalJson(i.value, { expect: store.objects.identifyCanonicalJson(i.value) }));
+    const receipt = store.ledger.publish({ work: target.work, attemptId: target.attemptId, stageId: target.stageId, receipts, outputs, endedAt: target.endedAt });
+    return { receipt, sources };
+  } catch (error) {
+    // Release this call's own stage when the store is still held, so a retry can register it again. If the owner is
+    // gone (or the abort is refused) the stage stays pinned for recovery. The original failure is what is reported.
+    try { store.assertHeld(); store.ledger.abortStaging(target.stageId); } catch { /* keep the original error */ }
+    throw error;
+  }
 }

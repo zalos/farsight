@@ -3,12 +3,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { captureSnapshot } from '../dist/snapshot/index.js';
 import {
   parseSnapshot, retainSnapshotAnalysis, reconcileAnalysisInputs, joinFileOutcomes, fingerprintTree, treeDigest,
   assertParserInputSafe, ParserError, PARSER_RESULT_SCHEMA, PARSER_ERROR_CODES, FILE_CLASS_KEYS, INPUT_OUTCOME_KEYS,
+  PARSER_LIMIT_CEILINGS, buildIndex,
 } from '../dist/snapshot/parser.js';
 import { commitRepo, needsStore, openCaptureStore, scratch, unlock, writeTree } from './snapshot-helpers.ts';
 import { attemptEnvelope, runEnvelope, workEnvelope } from './store-helpers.ts';
@@ -94,7 +95,7 @@ test('a failed Java file, a parsed TS file and an unparsed workflow, from the st
   const bytes = await fx.store.readArtifact(okNode.content);
   assert.equal(okNode.content, `sha256:${hex(bytes)}`);
   assert.match(bytes.subarray(okNode.byteSpan.startByte, okNode.byteSpan.endByte).toString('utf8'), /export function ok\(\)/);
-  for (const o of index.occurrences) assert.ok(o.byteSpan.endByte >= o.byteSpan.startByte);
+  for (const o of index.occurrences) assert.ok(o.byteSpan && o.byteSpan.endByte >= o.byteSpan.startByte && !o.spanUnavailable);
 });
 
 test('selection and limits are explicit, pinned in the result, and change the outcome', needsStore, async t => {
@@ -220,5 +221,157 @@ test('every parser code, class and input outcome is a catalog entry with both re
   const catalog = Object.keys(STRINGS).filter(k => /^sentinel\.parse(Class|Input)?\./.test(k)).sort();
   assert.deepEqual(catalog, [...keys].sort(), 'no unused or unlisted parser words');
   const e = new ParserError('sentinel.parse.integrity', 'parser inputs', ['a.ts (content): not a captured file']);
-  assert.match(e.message, /^the parser's reads do not match the snapshot: parser inputs \(1: a\.ts/);
+  assert.match(e.message, /^the parser's reads do not match the snapshot: parser inputs \(1 found, 1 kept; first: a\.ts/);
+});
+
+// ---- byte spans: computed from the raw bytes, never estimated or clamped ----
+
+function indexOf(t: any, files: Record<string, Buffer | string>, nodes: any[], edges: any[] = []) {
+  const root = scratch(t, 'sentinel-index-');
+  const captured = new Map<string, string>();
+  for (const [path, body] of Object.entries(files)) {
+    const bytes = Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8');
+    mkdirSync(join(root, path, '..'), { recursive: true });
+    writeFileSync(join(root, path), bytes);
+    captured.set(path, `sha256:${hex(bytes)}`);
+  }
+  const artifact: any = { analysis: { fingerprint: 'f' }, graph: { nodes, edges } };
+  return { root, index: buildIndex(artifact, 'snap', 'app', root, captured) };
+}
+const at = (path: string, line: number, endLine?: number) => ({ repo: 'app', path, line, ...(endLine ? { endLine } : {}) });
+
+test('a line span comes from the raw bytes even when the file is not valid UTF-8; character spans are not estimated', t => {
+  const raw = Buffer.concat([Buffer.from('//'), Buffer.from([0xff]), Buffer.from('\nexport function x() { return 1 }\n')]);
+  const { index } = indexOf(t, { 'a.ts': raw },
+    [{ id: 'app::a.ts::x', kind: 'function', loc: at('a.ts', 2) }],
+    [{ id: 'e1', kind: 'calls', from: 'a', to: 'b', occurrences: [{ id: 'o1', loc: at('a.ts', 2), span: { start: 4, end: 20 } }] }]);
+  const node = index.nodes[0]!;
+  assert.deepEqual(node.byteSpan, { startByte: 4, endByte: raw.length });
+  assert.equal(raw.subarray(node.byteSpan!.startByte, node.byteSpan!.endByte).toString('utf8'), 'export function x() { return 1 }\n');
+  const occ = index.occurrences[0]!;
+  assert.equal(occ.byteSpan, undefined);
+  assert.equal(occ.spanUnavailable, 'invalidUtf8');
+  assert.equal(index.spanUnavailable.invalidUtf8, 1);
+});
+
+test('character spans over non-ASCII text map to exact bytes; split, negative or out-of-range spans and lines are refused', t => {
+  const text = 'const é = "\u{1F600}";\ncall(é);\n';
+  const bytes = Buffer.from(text, 'utf8');
+  const emoji = text.indexOf('\u{1F600}');
+  const call = text.indexOf('call');
+  const occ = (id: string, span: any) => ({ id, loc: at('u.ts', 1), span });
+  const { index } = indexOf(t, { 'u.ts': text },
+    [{ id: 'n-ok', kind: 'function', loc: at('u.ts', 1, 2) }, { id: 'n-line0', kind: 'function', loc: at('u.ts', 0) },
+      { id: 'n-past', kind: 'function', loc: at('u.ts', 9) }, { id: 'n-back', kind: 'function', loc: at('u.ts', 2, 1) },
+      { id: 'n-elsewhere', kind: 'function', loc: at('missing.ts', 1) }],
+    [{ id: 'e1', kind: 'calls', from: 'a', to: 'b', occurrences: [
+      occ('o-emoji', { start: emoji, end: emoji + 2 }), occ('o-call', { start: call, end: call + 8 }),
+      occ('o-split', { start: emoji + 1, end: emoji + 2 }), occ('o-negative', { start: -1, end: 2 }),
+      occ('o-past', { start: 0, end: text.length + 1 }), occ('o-reversed', { start: 5, end: 4 }), occ('o-fraction', { start: 0.5, end: 2 }),
+    ] }]);
+  const o = (id: string) => index.occurrences.find((x: any) => x.occurrenceId === id)!;
+  const slice = (x: any) => bytes.subarray(x.byteSpan.startByte, x.byteSpan.endByte).toString('utf8');
+  assert.equal(slice(o('o-emoji')), '\u{1F600}');
+  assert.equal(slice(o('o-call')), 'call(é);');
+  assert.equal(o('o-split').spanUnavailable, 'splitSurrogate');
+  for (const id of ['o-negative', 'o-past', 'o-reversed', 'o-fraction']) {
+    assert.deepEqual([o(id).spanUnavailable, o(id).byteSpan], ['invalidSpan', undefined], id);
+  }
+  const n = (id: string) => index.nodes.find((x: any) => x.nodeId === id);
+  assert.equal(slice(n('n-ok')), text);
+  for (const id of ['n-line0', 'n-past', 'n-back']) assert.deepEqual([n(id)!.spanUnavailable, n(id)!.byteSpan], ['invalidLine', undefined], id);
+  assert.equal(n('n-elsewhere'), undefined);
+  assert.deepEqual(index.unplaced, { count: 1, paths: ['missing.ts'] });
+  assert.deepEqual(index.spanUnavailable, { invalidUtf8: 0, invalidLine: 3, invalidSpan: 4, splitSurrogate: 1 });
+});
+
+// ---- requests ----
+
+test('limits above the accepted ceilings, malformed selection lists and unusable source lists are refused', needsStore, async t => {
+  const { work, fx, snapshot } = await captured(t);
+  const bad = (over: any) => parseSnapshot(fx.store, { snapshotId: snapshot.id, workDir: work, selection: SELECT, limits: LIMITS, ...over });
+  const invalid = (e: unknown) => e instanceof ParserError && e.code === 'sentinel.parse.invalidRequest';
+  for (const [k, ceiling] of Object.entries(PARSER_LIMIT_CEILINGS)) {
+    await assert.rejects(bad({ limits: { ...LIMITS, [k]: ceiling + 1 } }), invalid, k);
+    await assert.rejects(bad({ limits: { ...LIMITS, [k]: Number.MAX_SAFE_INTEGER } }), invalid, k);
+  }
+  assert.deepEqual(PARSER_LIMIT_CEILINGS, { maxFiles: 200_000, maxFileBytes: 16 * 1024 * 1024, maxTotalBytes: 512 * 1024 * 1024,
+    maxEntries: 200_000, maxDurationMs: 120_000 });
+  for (const selection of [
+    { ...SELECT, include: 'src/**' }, { ...SELECT, include: [''] }, { ...SELECT, exclude: ['a\u0000b'] },
+    { ...SELECT, exclude: Array.from({ length: 257 }, (_, i) => `p${i}`) }, { ...SELECT, include: ['x'.repeat(1025)] },
+    { ...SELECT, testGlobs: { include: ['a'], other: [] } }, { ...SELECT, testGlobs: ['a'] },
+  ]) await assert.rejects(bad({ selection }), invalid, JSON.stringify(selection).slice(0, 60));
+  for (const sources of [[], ['app', 'app'], [''], Array.from({ length: 65 }, (_, i) => `s${i}`), 'app'] as any[]) {
+    await assert.rejects(bad({ sources }), invalid, JSON.stringify(sources).slice(0, 40));
+  }
+  await assert.rejects(bad({ signal: {} }), invalid);
+  assert.deepEqual(readdirSync(work), [], 'nothing was materialized for a refused request');
+});
+
+test('a captured source id the parser cannot name is refused before anything is materialized', needsStore, async t => {
+  const dir = scratch(t);
+  const root = join(dir, 'repo');
+  commitRepo(root, { 'a.ts': 'export const a = 1;\n' });
+  const fx = await openCaptureStore(t, dir);
+  const { snapshot } = await captureSnapshot(fx.store, { mode: 'working-copy',
+    sources: [{ sourceId: 'app::web', repositoryId: 'example/app', root }] });
+  const work = join(dir, 'work');
+  mkdirSync(work, { mode: 0o700 });
+  await assert.rejects(parseSnapshot(fx.store, { snapshotId: snapshot.id, workDir: work, selection: SELECT, limits: LIMITS }),
+    (e: unknown) => e instanceof ParserError && e.code === 'sentinel.parse.sourceUnsupported' && e.problems[0] === 'app::web');
+  assert.deepEqual(readdirSync(work), []);
+});
+
+test('an error keeps at most twenty problems and says how many it found', () => {
+  const problems = Array.from({ length: 30 }, (_, i) => `p${i}.ts: not a captured file`);
+  const e = new ParserError('sentinel.parse.integrity', 'parser inputs', problems);
+  assert.deepEqual([e.problemCount, e.problems.length], [30, 20]);
+  assert.match(e.message, /30 found, 20 kept/);
+});
+
+// ---- retention ----
+
+async function parseRun(t: any) {
+  const { work, fx, snapshot } = await captured(t);
+  const analysis = await parseSnapshot(fx.store, { snapshotId: snapshot.id, workDir: work, selection: SELECT, limits: LIMITS });
+  const e = fx.store.epoch;
+  const W = { id: 'work-parse', revision: 1 };
+  fx.store.ledger.createRun(runEnvelope(e, { id: 'run-parse', snapshotId: snapshot.id }) as never);
+  fx.store.ledger.createWork(workEnvelope(e, { ...W, runId: 'run-parse', influenceManifest: fx.store.ledger.getSnapshot(snapshot.id)!.manifest }) as never);
+  const attempt: any = attemptEnvelope(e, { id: 'att-parse', ordinal: 1, work: W });
+  delete attempt.invocation;
+  fx.store.ledger.startAttempt(attempt as never);
+  const target = { work: W, attemptId: 'att-parse', stageId: 'stage-parse', endedAt: new Date().toISOString() };
+  return { fx, analysis, target };
+}
+const aborted = (fx: any, stageId: string) => fx.store.ledger.readEvents({ limit: 500 }).events
+  .filter((ev: any) => ev.kind === 'staging-aborted' && ev.payload.stageId === stageId).length;
+
+test('a failed write releases the retention stage it registered, keeps the original error, and a retry succeeds', needsStore, async t => {
+  const { fx, analysis, target } = await parseRun(t);
+  const diskFull = Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' });
+  let calls = 0;
+  const failing = { ledger: fx.store.ledger, assertHeld: () => fx.store.assertHeld(), objects: {
+    identifyCanonicalJson: (v: unknown) => fx.store.objects.identifyCanonicalJson(v),
+    putCanonicalJson: async (v: unknown, o: any) => { if (++calls === 2) throw diskFull; return fx.store.objects.putCanonicalJson(v, o); },
+  } } as any;
+  await assert.rejects(retainSnapshotAnalysis(failing, target, analysis), (e: unknown) => e === diskFull);
+  assert.equal(aborted(fx, target.stageId), 1, 'its own stage was aborted');
+  const { receipt } = await retainSnapshotAnalysis(fx.store, target, analysis);
+  assert.deepEqual(receipt.work, target.work);
+});
+
+test('when the owner is lost mid-retention the stage stays pinned for recovery and the original error is reported', needsStore, async t => {
+  const { fx, analysis, target } = await parseRun(t);
+  const lost = new Error('write failed after the owner was lost');
+  let held = true;
+  const store = { ledger: fx.store.ledger, assertHeld: () => { if (!held) throw new Error('owner lost'); }, objects: {
+    identifyCanonicalJson: (v: unknown) => fx.store.objects.identifyCanonicalJson(v),
+    putCanonicalJson: async () => { held = false; throw lost; },
+  } } as any;
+  await assert.rejects(retainSnapshotAnalysis(store, target, analysis), (e: unknown) => e === lost);
+  assert.equal(aborted(fx, target.stageId), 0, 'nothing is aborted without the owner');
+  fx.store.ledger.abortStaging(target.stageId); // the stage was still registered: recovery can release it
+  assert.equal(aborted(fx, target.stageId), 1);
 });

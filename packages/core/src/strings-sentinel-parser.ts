@@ -8,6 +8,7 @@ const same = (text: string, define: string): StringEntry => ({ hud: text, profes
 export const SENTINEL_PARSER_STRINGS: Record<string, StringEntry> = {
   // ---- refusals ----
   'sentinel.parse.invalidRequest': same('the parse request is not valid: {detail}', 'A parse names an admitted snapshot, a canonical private working folder, the parser selection stated in full and every limit. Application enrichment options are refused.'),
+  'sentinel.parse.sourceUnsupported': same('the parser cannot name this source: {detail}', 'The parser names every node by its source id, so an id containing two colons, a slash, a backslash or a line break would make names ambiguous. The source stays captured; it is not parsed. Name only other sources, or capture it under another id.'),
   'sentinel.parse.integrity': same('the parser\'s reads do not match the snapshot: {detail}', 'The parser has no reader hook, so its recorded reads and the private copy it read are checked afterwards. A read that cannot be explained by the captured snapshot, or a copy that changed, means the result cannot be trusted, so nothing is kept.'),
   'sentinel.parse.artifactTooLarge': same('the parser\'s output is larger than the largest object the store keeps: {detail}', 'The complete analysis is kept as one stored object. This one is over the limit, so it is refused before anything is written. Parse fewer sources or a narrower selection.'),
   // ---- how a captured entry's parser outcome is classed ----

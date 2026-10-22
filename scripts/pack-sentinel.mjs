@@ -6,8 +6,11 @@
 // dependencies of that closure stay external and become the tarball's dependencies. The
 // tarball carries Sentinel's own version, runtime floor and `private` flag, not the app's.
 // Public types are required: every JavaScript export needs a `types` condition, and tsc's
-// declarations ship beside the bundles. A declaration that imports a workspace package, or
-// a module the tarball does not declare, is refused — it would not resolve for a consumer.
+// declarations ship beside the bundles. A declaration that imports a publishable workspace library
+// (one with publishConfig, such as @farsight/graph or @farsight/code-parser) gets that library's
+// declarations vendored under dist/vendor/ with the import rewritten, so its types arrive whole. Any
+// other workspace package, or a module the tarball does not declare, is refused: it would not
+// resolve for a consumer.
 //
 //   pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs
 //   → build/sentinel/farsight-sentinel-<sentinel version>.tgz
@@ -87,21 +90,90 @@ for (const member of buildClosure(root, sentinel.name).closure) {
 
 // tsc's declarations, read and checked before anything is staged. They ship in their own layout:
 // `./x.js` specifiers inside them resolve to `./x.d.ts`, so each relative target must exist too.
+const packageOf = (s) => (s.startsWith('@') ? s.split('/').slice(0, 2).join('/') : s.split('/')[0]);
+const closureByName = new Map(buildClosure(root, sentinel.name).closure.map((m) => [m.name, m]));
+const vendorable = (name) => { const m = closureByName.get(name); return Boolean(m && m.manifest.publishConfig && !m.manifest.private); };
 const declarations = new Map();
 const specifiers = new Set();
 const dist = join(dir, 'dist');
 const brokenRelative = [];
-for (const file of readdirSync(dist, { recursive: true }).map(String).filter((f) => f.endsWith('.d.ts'))) {
-  const text = readFileSync(join(dist, file), 'utf8').replace(/^\/\/# sourceMappingURL=\S+$/m, '').trimEnd() + '\n';
-  for (const m of text.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+|\/\/\/\s*<reference\s+types=)["']([^"']+)["']/gm)) {
-    if (!m[1].startsWith('.')) { specifiers.add(m[1]); continue; }
-    const target = join(dirname(join(dist, file)), m[1]).replace(/\.js$/, '.d.ts');
-    if (!existsSync(target) && !existsSync(join(target.replace(/\.d\.ts$/, ''), 'index.d.ts'))) brokenRelative.push(`${file}: ${m[1]}`);
+const queue = [];
+const queued = new Set();
+const enqueueTree = (srcDist, prefix) => {
+  for (const file of readdirSync(srcDist, { recursive: true }).map(String).filter((f) => f.endsWith('.d.ts'))) {
+    const out = prefix ? `${prefix}/${file}` : file;
+    if (!queued.has(out)) { queued.add(out); queue.push({ abs: join(srcDist, file), out }); }
   }
-  declarations.set(file, text);
+};
+const vendoredRoots = new Set();
+/** The vendored output path of a publishable library's declaration for `spec`, or null when it has none. */
+const vendorTarget = (spec) => {
+  const name = packageOf(spec);
+  const member = closureByName.get(name);
+  const sub = spec.slice(name.length);
+  const entry = member.manifest.exports?.[`.${sub}`];
+  const types = typeof entry === 'object' && entry ? entry.types : sub === '' ? member.manifest.types : undefined;
+  if (typeof types !== 'string' || !/^(\.\/)?dist\/.+\.d\.ts$/.test(types)) return null;
+  const short = name.split('/').pop();
+  if (!vendoredRoots.has(name)) { vendoredRoots.add(name); enqueueTree(join(member.dir, 'dist'), `vendor/${short}`); }
+  return `vendor/${short}/${rel(types).replace(/^dist\//, '')}`;
+};
+/**
+ * `text` with every comment and every string's contents replaced by spaces (quotes kept, offsets unchanged), so neither a
+ * comment nor a string literal such as `'from'` in `Pick<T, 'from' | 'to'>` reads as an import keyword.
+ */
+const maskComments = (text) => {
+  let out = '';
+  for (let i = 0; i < text.length;) {
+    const c = text[i];
+    if (c === '"' || c === "'" || c === '`') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== c) j += text[j] === '\\' ? 2 : 1;
+      out += c + ' '.repeat(Math.max(0, Math.min(j, text.length) - i - 1)) + (j < text.length ? c : ''); i = j + 1;
+    } else if (c === '/' && text[i + 1] === '/' && !text.startsWith('///', i)) {
+      const j = text.indexOf('\n', i); const end = j < 0 ? text.length : j;
+      out += ' '.repeat(end - i); i = end;
+    } else if (c === '/' && text[i + 1] === '*') {
+      const j = text.indexOf('*/', i + 2); const end = j < 0 ? text.length : j + 2;
+      out += text.slice(i, end).replace(/[^\n]/g, ' '); i = end;
+    } else { out += c; i++; }
+  }
+  return out;
+};
+const KEYWORD = /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+|\/\/\/\s*<reference\s+types=)["']/gm;
+enqueueTree(dist, '');
+for (let i = 0; i < queue.length; i++) {
+  const { abs, out } = queue[i];
+  let text = readFileSync(abs, 'utf8').replace(/^\/\/# sourceMappingURL=\S+$/m, '').trimEnd() + '\n';
+  const masked = maskComments(text);
+  const edits = [];
+  for (const m of masked.matchAll(KEYWORD)) {
+    // The keyword is real code; the specifier is read from the original text between its quotes.
+    const quoteAt = m.index + m[0].length - 1;
+    const end = text.indexOf(text[quoteAt], quoteAt + 1);
+    if (end < 0) continue;
+    edits.push({ at: m.index, whole: text.slice(m.index, end + 1), open: text.slice(m.index, quoteAt + 1), spec: text.slice(quoteAt + 1, end), close: text[end] });
+  }
+  const rewrite = ({ whole, open, spec, close }) => {
+    if (spec.startsWith('.')) {
+      const target = join(dirname(abs), spec).replace(/\.js$/, '.d.ts');
+      if (!existsSync(target) && !existsSync(join(target.replace(/\.d\.ts$/, ''), 'index.d.ts'))) brokenRelative.push(`${out}: ${spec}`);
+      return whole;
+    }
+    if (packageOf(spec).startsWith('@farsight/') && vendorable(packageOf(spec))) {
+      const target = vendorTarget(spec);
+      if (!target) { specifiers.add(spec); return whole; }
+      let path = relative(dirname(out), target).split('\\').join('/').replace(/\.d\.ts$/, '.js');
+      if (!path.startsWith('.')) path = `./${path}`;
+      return `${open}${path}${close}`;
+    }
+    specifiers.add(spec);
+    return whole;
+  };
+  for (const e of edits.reverse()) text = text.slice(0, e.at) + rewrite(e) + text.slice(e.at + e.whole.length);
+  declarations.set(out, text);
 }
 if (brokenRelative.length) fail('a declaration imports a sibling declaration that is not built. Run `pnpm --filter @farsight/sentinel... build`.', brokenRelative.map((s) => `missing: ${s}`));
-const packageOf = (s) => (s.startsWith('@') ? s.split('/').slice(0, 2).join('/') : s.split('/')[0]);
 const unresolvable = [...specifiers].filter((s) => {
   const name = packageOf(s);
   if (s.startsWith('node:') || builtinModules.includes(name)) return !dependencies['@types/node'];

@@ -418,3 +418,24 @@ test('the root export and a subpath share one module instance in the installed t
     rmSync(consumer, { recursive: true, force: true });
   }
 });
+
+test("a publishable workspace library's declarations are vendored; a string literal never reads as an import", () => {
+  const root = workspace();
+  try {
+    write(root, 'packages/lib/package.json', JSON.stringify({ name: '@farsight/lib', version: '0.1.0', main: 'dist/index.js', types: './dist/index.d.ts',
+      publishConfig: { access: 'public' }, exports: { '.': { types: './dist/index.d.ts', import: './dist/index.js' } } }));
+    write(root, 'packages/lib/dist/index.js', 'export {};\n');
+    write(root, 'packages/lib/dist/index.d.ts', "export * from './shape.js';\n");
+    // A type whose string literal is 'from': an import scanner that ignores strings would read it as `from '...'`.
+    write(root, 'packages/lib/dist/shape.d.ts', "export interface Edge { kind: string; from: string; to: string }\nexport type Ends = Pick<Edge, 'kind' | 'from' | 'to'>;\n");
+    write(root, 'packages/sentinel/package.json', json({ ...MANIFEST, dependencies: { ...MANIFEST.dependencies, '@farsight/lib': 'workspace:*' } }));
+    write(root, 'packages/sentinel/dist/index.d.ts', readFileSync(join(root, 'packages/sentinel/dist/index.d.ts'), 'utf8') +
+      "\nexport type { Edge, Ends } from '@farsight/lib';\n");
+    const packed = node(root, 'pack-sentinel.mjs');
+    assert.equal(packed.status, 0, packed.stderr);
+    const out = join(root, 'build/sentinel/package/dist');
+    assert.match(readFileSync(join(out, 'index.d.ts'), 'utf8'), /from '\.\/vendor\/lib\/index\.js'/);
+    assert.ok(existsSync(join(out, 'vendor/lib/index.d.ts')) && existsSync(join(out, 'vendor/lib/shape.d.ts')));
+    assert.equal(packedManifest(root).dependencies?.['@farsight/lib'], undefined, 'a vendored library is never a dependency');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
