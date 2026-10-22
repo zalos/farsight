@@ -58,11 +58,11 @@ export function selectChecks(paths, { packageInputs, isolationInputs } = {}) {
     } else if (path.startsWith('e2e/') || /^scripts\/(?:e2e|e2e-perf|synth-graph)\.mjs$/.test(path)) {
       checks.e2e = true;
     } else if (/^packages\/sentinel\/(?!test\/)/.test(path)) {
-      // Nothing in Farsight's application imports Sentinel, so its code needs no e2e run. The isolation
+      // Sentinel's offline HTML delivery is checked by the browser-provisioned e2e job. The isolation
       // canaries exercise the execution code and everything it is built on, so any Sentinel code selects them.
-      checks.validate = checks.sentinel = checks.isolation = true;
+      checks.validate = checks.e2e = checks.sentinel = checks.isolation = true;
     } else if (path.startsWith('packages/sentinel/test/')) {
-      checks.validate = checks.isolation = true;
+      checks.validate = checks.e2e = checks.isolation = true;
     } else if (/^packages\/[^/]+\/test\//.test(path) || path.startsWith('scripts/test/') ||
       /^scripts\/(?:changelog|release|install-hooks|lint-commits)\.mjs$/.test(path)) {
       checks.validate = true;

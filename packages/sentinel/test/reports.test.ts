@@ -240,7 +240,9 @@ test('a comparison report keeps baseline findings it does not continue, with the
   await assert.rejects(report(s, [a, b], { id: 'rep-3', comparison: { baselineReportId: 'rep-1', result, baselineFindings: summaries } }), (e: any) => e.code === 'sentinel.report.invalidInput');
 });
 
-test('the HTML report opens offline with JavaScript disabled after the source and store are gone, and prints', needsStore, async t => {
+// Browser delivery is mandatory in CI's browser-provisioned e2e job, rather than the unit-test job.
+const offlineBrowser = process.env.SENTINEL_REPORT_BROWSER === '1' ? needsStore : { skip: 'set SENTINEL_REPORT_BROWSER=1 to check offline HTML delivery and printing in Chromium' };
+test('the HTML report opens offline with JavaScript disabled after the source and store are gone, and prints', offlineBrowser, async t => {
   const s = await setup(t);
   const sql = await observation(s, 'src/server/invoiceService.ts', 'export async function createInvoice', { nodeId: 'app::src/server/invoiceService.ts::createInvoice' });
   const jsx = await observation(s, 'src/ui/router.tsx', '<', { rule: 'sentinel.xss.render', severity: 'medium', message: '<img src="http://example.invalid/x.png">' });

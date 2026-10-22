@@ -287,6 +287,22 @@ jobs:
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
 
+      - name: Sentinel offline HTML delivery and print (no skips)
+        env:
+          SENTINEL_REPORT_BROWSER: '1'
+        run: |
+          set -o pipefail
+          node --disable-warning=ExperimentalWarning --experimental-strip-types --test \
+            --test-name-pattern='the HTML report opens offline with JavaScript disabled' \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=tap --test-reporter-destination=sentinel-report-browser.tap \
+            packages/sentinel/test/reports.test.ts
+          grep -q '^# tests 1$' sentinel-report-browser.tap
+          grep -q '^# pass 1$' sentinel-report-browser.tap
+          grep -q '^# fail 0$' sentinel-report-browser.tap
+          grep -q '^# cancelled 0$' sentinel-report-browser.tap
+          grep -q '^# skipped 0$' sentinel-report-browser.tap
+
       - run: pnpm e2e
 
       # the perf suite on the small synthetic workspace (≈50 projects · ≈20k nodes): every surface must draw with no
