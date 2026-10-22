@@ -162,3 +162,76 @@ for (const hasSecret of [true, false]) test('Pattern-only child respects ' + (ha
   absent(cli.stdout, 'public minimal selected-child report', VALUE);
   if (!hasSecret) assert.ok(cli.stdout.includes('named.ts'), 'clean ancestor retains useful ordinary file names');
 });
+
+
+for (const hasSecret of [true, false]) test(`a canceled parent with an accepted ${hasSecret ? "secret" : "clean"} publication permits a privacy-bound child report`, native, async t => {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-selected-secrets-')));
+  const path = join(dir, 'workspace'); mkdirSync(join(path, 'src'), { recursive: true });
+  const source = (secret: boolean) => `export function lookup(id: string) { return db.query("SELECT * FROM invoice WHERE ${secret ? `api_key = '${GENERIC_VALUE}' AND ` : ''}id = " + id); }\n`;
+  writeFileSync(join(path, 'src/lookup.ts'), source(hasSecret));
+  writeFileSync(join(path, 'src', hasSecret ? `${VALUE}.ts` : 'named.ts'), 'export function named(id: string) { return db.query("SELECT * FROM named WHERE id = " + id); }\n');
+  const ws = workspaceOf(path, { ...process.env, XDG_STATE_HOME: join(dir, 'state') });
+  initWorkspace({ workspace: path, profile: 'scanners' });
+  const settingsPath = join(path, '.farsight/sentinel/settings.json'), settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+  settings.mandatoryRules = [...PATTERN_SUPPORTED_RULES, ...GITLEAKS_SUPPORTED_RULES].map(r => r.familyId);
+  writeFileSync(settingsPath, JSON.stringify(settings), { mode: 0o600 });
+  assert.equal(adoptWorkspaceSettings(ws, { confirm: true, now: new Date() }).outcome, 'prepared');
+  for (const pack of ['pattern', 'secrets']) assert.equal(promoteRulePack(ws, { packDir: realpathSync.native(builtinPackDir(pack)!), confirm: true, now: new Date() }).outcome, 'prepared');
+  for (const id of ['pattern-semgrep', 'secrets-gitleaks']) assert.equal((await adoptScannerAsset(ws, { kind: 'tool', id, confirm: true, now: new Date() })).outcome, 'prepared');
+  const adopted = adoptedPolicy(ws); assert.ok('policy' in adopted);
+  const store = await openStore(ws.storePath), work = scratchUnder(ws);
+  t.after(() => { try { store.close(); } catch { /* closed for the actual CLI read below */ } removeScratch(work); unlock(dir); rmSync(dir, { recursive: true, force: true }); });
+  const terms = { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() };
+
+  const parentId = (await planWorkspaceCanonical(store, terms)).disclosure.runId;
+  const { Coordinator } = await import('../dist/execution/coordinator.js');
+  const { scannerExecution, publicRegistry } = await import('../dist/service/scanner-profile.js');
+  const plan = (await loadPlan(store, parentId)).plan;
+  const secretUnit = plan.units.find(u => u.adapterId === 'secrets-gitleaks')!;
+  let canceled = false;
+  const coordinator = await Coordinator.open({ ...(await scannerExecution(store, parentId, ws.trustDir, work, publicRegistry())),
+    store, runId: parentId, registry: publicRegistry(), scratchRoot: work, hooks: { at(boundary, ctx) {
+      if (boundary === 'after-publish' && ctx.work.id === secretUnit.id) { canceled = true; coordinator.cancel(); }
+    } } });
+  assert.equal((await coordinator.run()).state, 'canceled');
+  assert.equal(canceled, true);
+  const publication = store.ledger.getPublication(secretUnit)!;
+  assert.ok(publication, 'the actual secret scan published before cancellation');
+  const pattern = plan.units.find(u => u.adapterId === 'pattern-semgrep')!;
+  const child: any = await rerunRun(store, parentId, [pattern.id], terms);
+  assert.equal(child.outcome, 'prepared');
+  assert.equal((await executeRun(store, child.disclosure.runId, { scratchRoot: work, trustDir: ws.trustDir })).state, 'completed');
+  rmSync(join(path, 'src'), { recursive: true });
+  const parentEvents = JSON.stringify(store.ledger.readEvents({ runId: parentId, limit: 500 }));
+  const parentPublication = JSON.stringify(store.ledger.getPublication(secretUnit));
+  const base = { store, runId: child.disclosure.runId, workspace: path, trustDir: ws.trustDir, now: new Date() };
+  for (const disclosure of ['private', 'shareable'] as const) {
+    const report = await fullReport({ ...base, disclosure });
+    assert.equal(report.withheldForSecrets, hasSecret);
+    absent(report.json, 'canceled ancestor full report', GENERIC_VALUE);
+    if (disclosure === 'private') assert.equal(report.json.includes('SELECT * FROM invoice'), !hasSecret);
+    assert.ok(report.document.findings.every(f => !f.ruleFamilyId.startsWith('sentinel.secrets.')), 'privacy knowledge is not a child finding');
+    assert.equal(report.document.completeness, 'partial');
+  }
+  const minimal = await scannerReportOf(store, child.disclosure.runId, base.now);
+  absent(JSON.stringify(minimal), 'canceled ancestor minimal report', VALUE);
+  if (!hasSecret) assert.ok(JSON.stringify(minimal).includes('named.ts'), 'clean ancestor retains ordinary names');
+  // Both readers must reject damage to genuine accepted invocation and summary artifacts, including zero-match scans.
+  const { readdirSync, unlinkSync, chmodSync, statSync } = await import('node:fs');
+  const attempt = store.ledger.getAttempt(publication.attemptId)!;
+  const summary = publication.outputs.find(o => o.schema === 'sentinel-driver-report/draft-1')!;
+  for (const [id, damage] of [[attempt.envelope.invocation!, 'missing'], [summary.id, 'corrupt']] as const) {
+    const hex = id.slice(7), objectDir = join(store.storePath, 'objects', 'sha256', hex.slice(0, 2));
+    const copies = readdirSync(objectDir).filter(n => n.startsWith(hex + '.')).map(n => ({ path: join(objectDir, n), bytes: readFileSync(join(objectDir, n)), mode: statSync(join(objectDir, n)).mode & 0o777 }));
+    assert.ok(copies.length);
+    for (const copy of copies) {
+      if (damage === 'missing') unlinkSync(copy.path);
+      else { chmodSync(copy.path, 0o600); writeFileSync(copy.path, '[]'); }
+    }
+    await assert.rejects(fullReport({ ...base, disclosure: 'private' }), (e: any) => e.code === 'sentinel.report.evidenceUnbound');
+    await assert.rejects(scannerReportOf(store, child.disclosure.runId, base.now), (e: any) => e.code === 'sentinel.execution.bootstrapEvidence');
+    for (const copy of copies) { writeFileSync(copy.path, copy.bytes, { mode: 0o600 }); chmodSync(copy.path, copy.mode); }
+  }
+  assert.equal(JSON.stringify(store.ledger.readEvents({ runId: parentId, limit: 500 })), parentEvents);
+  assert.equal(JSON.stringify(store.ledger.getPublication(secretUnit)), parentPublication, 'the parent evidence remains immutable');
+});
