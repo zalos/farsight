@@ -330,7 +330,8 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
 
 /**
  * Candidates cut at a value's own boundaries (quotes, assignment, separators, paths) are kept from 3 characters: a
- * supported detector can match a short value (curl's `user:pass` is a few characters each side). Runs of letters and
+ * supported detector can match a short value (curl's `user:pass`, measured at 7 characters). 3 is not a proved minimum
+ * for every supported detector. Runs of letters and
  * digits split out of longer text are kept only from 8, since shorter runs are ordinary words rather than a value.
  */
 const MIN_BOUNDED = 3;
@@ -339,10 +340,13 @@ const MIN_RUN = 8;
 /**
  * Every candidate a matched value or name can appear as, taken from the matched text itself (a matched line or a matched
  * path) and held in memory only. The detector reports whole lines, not the value's bytes, so the value is withheld at
- * every boundary a supported detector's value can have: the whole trimmed text, each quoted string, the right-hand side
+ * the boundaries these heuristics recognise (not a proven set for every supported detector): the whole trimmed text, each
+ * quoted string, the right-hand side
  * of its first assignment (unquoted values with `:` or padding included), the text split at whitespace and quotes,
  * split also at assignment, separator and bracket characters, at path separators and `@` (with and without a final
  * extension), and its runs of letters and digits. A value made of short pieces joined by punctuation is withheld whole.
+ * This is a heuristic over a whole matched line: it is not proved complete for every supported detector, and a match
+ * spanning several lines is read only line by line (see ADR 38's limitation).
  */
 export function tokensOf(text: string): string[] {
   const out = new Set<string>();
@@ -377,7 +381,10 @@ const COUNT = String.raw`(?:unit|bizUnit|scope|source|breakdown\.\*\.key|recheck
 const TRUSTED = new RegExp('^(?:' + [
   String.raw`schema|id|run\.(?:id|snapshotId|planRevision)|ledgerSequence|evaluatedAt|catalogVersion`,
   String.raw`disclosure\.(?:profile|profileDigest)|completeness|baseline\.reportId|artifactClosure\.\*`,
-  String.raw`definitions(?:\..*)?|decisions(?:\..*)?`,
+  // Exact scalar paths only: a later field added to either (a disposition's rationale, say) is screened until it is
+  // listed here on purpose. Definitions are the catalog's own words (document.ts); a decision's fields are generated.
+  String.raw`definitions\.\*\.(?:key|define|text\.business|text\.code)`,
+  String.raw`decisions\.\*\.(?:dispositionId|findingId|validity|expiresAt)`,
   String.raw`counts\.[A-Za-z]+\.` + COUNT,
   String.raw`findings\.\*\.(?:id|observationIds\.\*|ruleFamilyId|severity|comparison|comparisonReason|match\.kind|match\.baselineFindingIds\.\*|fingerprint\.(?:version|exact|probable))`,
   String.raw`findings\.\*\.evidence\.\*\.(?:id|state|reasonCode|content|location\.(?:startByte|endByte|startLine|endLine))`,

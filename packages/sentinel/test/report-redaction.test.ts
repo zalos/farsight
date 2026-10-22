@@ -76,3 +76,15 @@ test('trust is by position in the contract: a context-owned id spelled like a ge
   assert.equal(out.findings[0].id, doc.findings[0]!.id, 'the generated finding id is kept');
   assert.equal(out.gaps[0].place.screens[0].id, out.findings[0].place.screens[0].id, 'references still match');
 });
+
+test('decisions and definitions are trusted only at their exact generated fields; anything added to them is screened', () => {
+  const value = ['Qa7Zw', 'Ex3Rt'].join('');
+  const doc = {
+    decisions: [{ dispositionId: 'disp-1', findingId: `finding.${'c'.repeat(40)}`, validity: 'valid', expiresAt: null, rationale: `accepted: ${value}` }],
+    definitions: [{ key: 'sentinel.count.findings', text: { business: 'findings', code: 'findings' }, define: 'issues', note: value }],
+  };
+  const out: any = redactSecretTokens(doc, new Set(tokensOf(`token = "${value}"`)));
+  assert.ok(!JSON.stringify(out).includes(value), 'a field outside the exact list is screened');
+  assert.deepEqual([out.decisions[0].dispositionId, out.decisions[0].findingId, out.decisions[0].validity], ['disp-1', doc.decisions[0]!.findingId, 'valid']);
+  assert.deepEqual(out.definitions[0].text, doc.definitions[0]!.text);
+});

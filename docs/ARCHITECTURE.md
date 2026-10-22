@@ -1028,7 +1028,9 @@ findings keep stable identities only while the owner keeps that trust folder: if
 and every withheld-location identity changes, so a comparison treats each secret finding as new and lists the earlier
 ones as no longer continued; reports generated before the loss keep the old identities and cannot be continued. Every candidate the secret scan's matched text yields is replaced in every source- or context-controlled string of the
 report document in every profile (context labels and ids, paths, symbols, titles, sentences, excerpts), one fixed word
-per candidate so references still match. The detector reports whole lines, so a matched line yields the whole trimmed
+per candidate so references still match. The pinned worker reports only the rule, the lines and a file reference (its
+template is `RuleID`, `StartLine`, `EndLine`, `File`, with `--redact=100`), so the report sees whole matched lines,
+never the value's position, and candidates are a heuristic over those lines: a matched line yields the whole trimmed
 line, each quoted string, the right-hand side of its first assignment (unquoted values with `:` or padding included),
 its pieces split at whitespace and quotes, at assignment, separator and bracket characters, and at path separators (with
 and without a final extension), and its runs of letters and digits; a value of short pieces joined by punctuation is
@@ -1040,7 +1042,15 @@ keys, digests, content and artifact ids, generated run, check, finding, evidence
 decisions, catalog definitions) are left as they are, and every position a confirmed graph or captured source can fill
 (context ids, labels and references, node ids, paths, titles, sentences, excerpts, count part labels) is screened however
 it is spelled. A matched line holding ordinary structural words still yields a valid report; the redacted document is
-checked against the contract again and refused if it does not fit. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
+checked against the contract again and refused if it does not fit. Limitation: this heuristic is not proved complete
+for every supported detector (only the measured shapes are tested, among them curl's 7-character `user:pass`), a match
+spanning several lines is read line by line, and a value under 3 characters is not withheld. The sound replacement is
+an exact value range: the pinned template would emit, as numbers only, the match's start column and the secret's offset
+and length within it (computed inside the container from the unredacted match; Gitleaks fills its match fields with the
+redacted placeholder under `--redact`), retained privately in the publication beside the whole-line citation and read
+over the private snapshot at render time. That changes the pinned template and worker digest, needs Gitleaks
+requalification on both measured platforms and a check of the engine's column semantics for multibyte and multiline
+matches, and adds a private field to the publication; it is not part of this change. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
 its entry, without a symbol, never used to place a gap), and the minimal scanner report replaces such a name wherever it
 appears. Refusal reasons never name a path. Names the scan did not match are not withheld; the context-graph
 attestation limitation above is unchanged.
