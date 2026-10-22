@@ -97,7 +97,8 @@ export class UnsafeRecordError extends Error {
 export function readPublished(dir: string, name: string, maxBytes: number): Buffer | undefined {
   const path = join(dir, name);
   let fd: number;
-  try { fd = openSync(path, FS.O_RDONLY | NOFOLLOW); } catch (e) {
+  // Inspect the opened object before reading. A substituted FIFO must not wait for a writer before fstat can refuse it.
+  try { fd = openSync(path, FS.O_RDONLY | NOFOLLOW | (FS.O_NONBLOCK ?? 0)); } catch (e) {
     if (errno(e) === 'ENOENT') return undefined;
     throw new UnsafeRecordError(errno(e) === 'ELOOP' ? 'a symbolic link' : `cannot be opened (${errno(e) ?? 'error'})`);
   }

@@ -1021,10 +1021,13 @@ command line uses an HMAC of source and path under the store's own secret), so i
 findings and a secret finding continues across captures of one store. The store id is public (container labels, owner
 records, a bundle's provenance, a failed run's facts) and is never the key: the secret is 32 random bytes per store id
 in the owner's private trust folder (`report-keys/`), outside the store directory so no store copy or bundle carries
-it, created once by no-overwrite publication, read only as a private single-link file of exactly 32 bytes (anything
-else refuses rather than minting a new key, which would change identities), and never written to a receipt, result,
-report, log or the service socket. A report and a bundle together, with the store id, confirm no guessed path. Every long token the secret scan matched (a matched name, or anything on a matched line) is replaced
-in every string of the report document in every profile, context labels, ids and excerpts included, with one fixed word
+it, created once by no-overwrite publication, read only as a private single-link file of exactly 32 bytes (an existing
+unsafe key refuses rather than being replaced), and never written to a receipt, result, report, log or the service
+socket. Withheld-location identity continuity requires that same private key: if the owner loses it or opens a store
+under a different private trust folder, the next report creates a new key and its withheld-location identities change.
+Existing report files remain unchanged; a store copy or bundle cannot restore the missing key or prove continuity
+with the earlier identities. A report and a bundle together, with the store id, confirm no guessed path.
+Every long token the secret scan matched (a matched name, or anything on a matched line) is replaced in every string of the report document in every profile, context labels, ids and excerpts included, with one fixed word
 per token so cross-references still match; catalog definitions are left as they are. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
 its entry, without a symbol, never used to place a gap), and the minimal scanner report replaces such a name wherever it
 appears. Refusal reasons never name a path. Names the scan did not match are not withheld; the context-graph
