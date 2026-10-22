@@ -9,7 +9,7 @@ import type { ActionIntent, AdoptionEnvelope, RepoConfigEnvelope, SettingsEnvelo
 import { validateEnvelope } from '../validate.js';
 import { canonicalDigest, sha256Digest } from './digest.js';
 import { PolicyError, policyFail } from './errors.js';
-import { intentDigest, isConsumedReceipt, type ConsumedReceipt } from './receipts.js';
+import { intentDigest, receiptAuthority, type ConsumedReceipt } from './receipts.js';
 import { MAX_SETTINGS_BYTES, parseRepoConfig, parseSettings, type PolicyInputs } from './settings.js';
 import { ensurePrivateDir, isWithin, readCheckoutFile, readPrivateFile, writePrivateFileAtomic } from './user-state.js';
 
@@ -84,13 +84,13 @@ export function adoptSettings(options: { workspace: string; trustDir: string; re
   const ws = workspaceIdentity(options.workspace);
   const dir = checkedTrustDir(options.trustDir, ws);
   const { settingsDigest, intent } = adoptable(ws);
-  const r = options.receipt;
-  if (!isConsumedReceipt(r) || r.receipt.action !== 'settings.adopt' || r.receipt.intentDigest !== intentDigest(intent)) {
-    policyFail('sentinel.policy.adoptionUnauthorized', 'adoption needs the owner’s spent receipt for these settings in this workspace');
+  const authority = receiptAuthority(options.receipt);
+  if (!authority || authority.action !== 'settings.adopt' || authority.intentDigest !== intentDigest(intent)) {
+    return policyFail('sentinel.policy.adoptionUnauthorized', 'adoption needs the owner’s spent receipt for these settings in this workspace');
   }
   const record: AdoptionEnvelope = {
     schema: 'sentinel-adoption/draft-1', workspaceIdentity: ws.digest, workspacePath: ws.path, settingsDigest,
-    receipt: r.digest, adoptedAt: stamp(options.now),
+    receipt: authority.digest, adoptedAt: stamp(options.now),
   };
   const checked = validateEnvelope('adoption', record);
   if (!checked.ok) policyFail('sentinel.policy.adoptionUnauthorized', `the adoption record does not validate: ${checked.errors[0]?.message ?? 'invalid'}`);

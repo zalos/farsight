@@ -6,8 +6,9 @@ import type { ActionIntent, LockedDatabase, LockedPack, LockedTool, RuleLockEnve
 import { validateEnvelope } from '../validate.js';
 import { canonicalDigest } from '../policy/digest.js';
 import { policyFail } from '../policy/errors.js';
-import { intentDigest, isConsumedReceipt, type ConsumedReceipt } from '../policy/receipts.js';
-import { deepFreeze, isValidatedPack, type ValidatedPack } from './pack.js';
+import { intentDigest, receiptAuthority, type ConsumedReceipt } from '../policy/receipts.js';
+import { isValidatedPack, type ValidatedPack } from './pack.js';
+import { deepFreeze } from '../policy/immutable.js';
 
 export type PromotionCandidate =
   | { kind: 'pack'; pack: ValidatedPack }
@@ -75,14 +76,15 @@ export function verifyPinnedLock(value: unknown, pinned: string): RuleLockEnvelo
  * whose digest the receipt confirmed, so a candidate edited after confirmation is refused, never half-applied.
  */
 export function promote(lock: RuleLockEnvelope, c: PromotionCandidate, receipt: ConsumedReceipt, now: Date): RuleLockEnvelope {
-  if (!isConsumedReceipt(receipt)) policyFail('sentinel.rules.promotionUnauthorized', 'promotion needs the owner’s spent receipt');
+  const authority = receiptAuthority(receipt);
+  if (!authority) return policyFail('sentinel.rules.promotionUnauthorized', 'promotion needs the owner’s spent receipt');
   const base: RuleLockEnvelope = structuredClone(lock);
   const entry = candidateEntry(c);
   const intent = intentFor(base, c.kind, entryDigest(c.kind, entry));
-  if (receipt.receipt.action !== intent.action || receipt.receipt.intentDigest !== intentDigest(intent)) {
+  if (authority.action !== intent.action || authority.intentDigest !== intentDigest(intent)) {
     policyFail('sentinel.rules.promotionUnauthorized', 'the receipt confirms another candidate or another lock revision');
   }
-  const promotion = { receipt: receipt.digest, at: stamp(now) };
+  const promotion = { receipt: authority.digest, at: stamp(now) };
   const next: RuleLockEnvelope = { ...base, revision: base.revision + 1, previous: lockDigest(base), createdAt: stamp(now) };
   if (c.kind === 'pack') {
     const pack = entry as Omit<LockedPack, 'promotion'>;

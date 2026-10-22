@@ -10,7 +10,7 @@ import {
   validateEnvelope, schemaOf, readPackDirectory, validatePack, emptyLock, lockDigest, promote, promotionIntent,
   verifyPinnedLock, candidateDigest, isValidatedPack, parseSettings, parseRepoConfig, effectivePolicy, DEFAULT_SETTINGS, ReceiptBook,
   intentDigest, isConsumedReceipt, adoptSettings, adoptionIntent, loadPolicyInputs, trustDirectory, workspaceIdentity,
-  admit, compareDecimal, PolicyError, SETTINGS_PATH, REPO_CONFIG_PATH, MAX_RECEIPT_TTL_MS,
+  admit, compareDecimal, isEffectivePolicy, PolicyError, SETTINGS_PATH, REPO_CONFIG_PATH, MAX_RECEIPT_TTL_MS,
   RULE_LANGUAGES, RULE_SCOPE_KINDS, RULE_CAPABILITIES, RULE_MEANINGS, SEVERITIES, RULE_EVIDENCE, FRAMEWORK_IDS, RULE_ORIGINS,
   SENTINEL_ACTIONS, OWNER_ACTIONS, ACTION_EFFECTS, SETTINGS_TRUST, ADMISSION_OUTCOMES, CREDENTIAL_BASES,
   CONTROL_PROPERTIES, CONTROL_VERDICTS,
@@ -243,6 +243,8 @@ test('a validated pack is deeply immutable, and only validatePack’s own object
   assert.throws(() => { p.files[0].digest = D('0'); }, TypeError);
   assert.throws(() => { p.entry.rules[0].definitionDigest = D('0'); }, TypeError);
   assert.throws(() => { p.entry.rights.origin = 'third-party'; }, TypeError);
+  assert.throws(() => { p.rules[0].familyId = 'sentinel.other.rule'; }, TypeError);
+  assert.throws(() => { p.rules.push({ familyId: 'sentinel.x.y', revision: 1, definitionDigest: D('0') }); }, TypeError);
   assert.equal(pack.manifest.rights.spdx, 'MIT');
   assert.equal(isValidatedPack(pack), true);
 
@@ -274,6 +276,72 @@ test('a tool entry changed after the owner confirmed it is refused', t => {
   const r = confirm(book, promotionIntent(lock, { kind: 'tool', tool }), lockDigest(lock), D('0'));
   tool.artifactDigest = D('8');
   assert.equal(code(() => promote(lock, { kind: 'tool', tool }, r, NOW)), 'sentinel.rules.promotionUnauthorized');
+});
+
+test('a spent receipt is a frozen snapshot; editing or copying it authorizes nothing else', t => {
+  const book = owner(t);
+  const lock = emptyLock(NOW);
+  const toolA = { adapterId: 'pattern-engine', version: '1.2.3', artifactDigest: D('7'), platform: 'linux-x64', rights: { spdx: 'MIT', origin: 'sentinel-original' as const } };
+  const toolB = { ...toolA, artifactDigest: D('8') };
+  const spent = confirm(book, promotionIntent(lock, { kind: 'tool', tool: toolA }), lockDigest(lock), D('0'));
+  const intentB = intentDigest(promotionIntent(lock, { kind: 'tool', tool: toolB }));
+  assert.throws(() => { (spent.receipt as any).intentDigest = intentB; }, TypeError);
+  assert.throws(() => { (spent.receipt as any).actor.principal = 'someone'; }, TypeError);
+  assert.equal(code(() => promote(lock, { kind: 'tool', tool: toolB }, spent, NOW)), 'sentinel.rules.promotionUnauthorized');
+  const copy = { receipt: { ...spent.receipt, intentDigest: intentB }, digest: spent.digest } as any;
+  assert.equal(code(() => promote(lock, { kind: 'tool', tool: toolB }, copy, NOW)), 'sentinel.rules.promotionUnauthorized', 'a wrapper copy has no authority');
+  const next = promote(lock, { kind: 'tool', tool: toolA }, spent, NOW);
+  assert.equal(next.tools[0]!.artifactDigest, D('7'));
+  assert.equal(next.tools[0]!.promotion.receipt, spent.digest);
+});
+
+test('the effective policy is one immutable snapshot: source settings, defaults and the result cannot be changed under it', () => {
+  const source = parseSettings(readFileSync(EXAMPLE)) as any;
+  const policy = effectivePolicy(adopted(source));
+  const local = { action: 'run.start' as const, input: D('e'), effects: ['local-artifacts' as const], budget: { maxTokens: null, maxCost: null, currency: null }, scope: { profile: 'static', provider: null, targets: [] } };
+  const req = { intent: local, requestedBy: { principal: 'agent' as const, channel: 'mcp' as const }, policy, capability: available, credential: localOnly, stateDigest: D('1'), now: NOW };
+  const before = { revision: policy.revision, view: JSON.stringify(policy.view) };
+  assert.equal(admit(req).record.outcome, 'awaiting-confirmation');
+
+  source.agentActions = 'allow';
+  source.grants[0].confirm = 'never';
+  source.providers[0].budget.maxTokens = 10 ** 9;
+  assert.equal(admit(req).record.outcome, 'awaiting-confirmation', 'the caller’s settings are not the policy');
+  assert.equal(policy.revision, before.revision);
+  assert.equal(JSON.stringify(policy.view), before.view);
+
+  const p = policy as any;
+  assert.throws(() => { p.settings.agentActions = 'allow'; }, TypeError);
+  assert.throws(() => { p.settings.grants[0].confirm = 'never'; }, TypeError);
+  assert.throws(() => { p.settings.grants.push({ actions: ['run.start'], principals: ['agent'], confirm: 'never' }); }, TypeError);
+  assert.throws(() => { p.view.grants.push({}); }, TypeError);
+  assert.throws(() => { p.thresholds.failOnSeverity = 'critical'; }, TypeError);
+  assert.throws(() => { (DEFAULT_SETTINGS as any).grants.push({ actions: ['run.start'], principals: ['agent'], confirm: 'never' }); }, TypeError);
+  assert.throws(() => { (DEFAULT_SETTINGS as any).thresholds.failOnSeverity = 'critical'; }, TypeError);
+  const untrusted = effectivePolicy({ trust: 'not-adopted', settings: null, settingsDigest: null, repoConfig: null, repoConfigDigest: null });
+  assert.deepEqual(untrusted.settings.grants, []);
+
+  // A structural copy with friendlier settings is not a policy admission accepts.
+  const forged = { ...JSON.parse(JSON.stringify(policy)), settings: { ...JSON.parse(JSON.stringify(policy.settings)), agentActions: 'allow' } };
+  assert.equal(isEffectivePolicy(forged), false);
+  assert.equal(code(() => admit({ ...req, policy: forged })), 'sentinel.policy.settingsInvalid');
+  // Any grant difference changes the revision a receipt binds to.
+  const other = parseSettings(readFileSync(EXAMPLE)) as any;
+  other.grants[0].confirm = 'never';
+  assert.notEqual(effectivePolicy(adopted(other)).revision, policy.revision);
+});
+
+test('admission decides on a private copy of the request', () => {
+  const policy = effectivePolicy(adopted(parseSettings(readFileSync(EXAMPLE))));
+  const intent = structuredClone(baseIntent) as any;
+  const r = admit({
+    intent, requestedBy: { principal: 'agent', channel: 'mcp' }, policy, stateDigest: D('1'), now: NOW,
+    capability: () => { intent.budget.maxCost = '9999'; intent.scope.provider = 'repo-chosen'; return available(); },
+    credential: () => ({ basis: 'keychain-scope' as const, allowed: true, detail: 'ok' }),
+  });
+  assert.equal(r.record.intentDigest, intentDigest(baseIntent), 'the decision is about the intent as submitted');
+  assert.equal(r.record.outcome, 'awaiting-confirmation');
+  assert.throws(() => { (r.record as any).verdicts.policy.allowed = false; }, TypeError);
 });
 
 function owner(t: { after(fn: () => void): void }) {

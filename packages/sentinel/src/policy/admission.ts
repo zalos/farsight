@@ -12,9 +12,10 @@ import type {
 } from '../contracts/index.js';
 import { OWNER_ACTIONS } from '../contracts/index.js';
 import { validateEnvelope } from '../validate.js';
-import type { PolicyReasonCode } from './errors.js';
+import { policyFail, type PolicyReasonCode } from './errors.js';
+import { snapshot } from './immutable.js';
 import { intentDigest, type ReceiptBook, type ConsumedReceipt } from './receipts.js';
-import type { EffectivePolicy } from './settings.js';
+import { isEffectivePolicy, type EffectivePolicy } from './settings.js';
 
 /** The adapter's answer for verdict 2. */
 export interface CapabilityAnswer { available: boolean; detail: string }
@@ -94,7 +95,12 @@ function grantMiss(g: SentinelGrant, intent: ActionIntent): string | null {
 }
 
 export function admit(req: AdmissionRequest): AdmissionResult {
-  const { intent, requestedBy, policy } = req;
+  const { policy } = req;
+  if (!isEffectivePolicy(policy)) policyFail('sentinel.policy.settingsInvalid', 'admission decides only under effectivePolicy’s own result');
+  // The exact request decided on: a private frozen copy, so the caller cannot change it between verdicts.
+  const intent = snapshot(req.intent);
+  const requestedBy = snapshot(req.requestedBy);
+  const stateDigest = req.stateDigest;
   const digest = intentDigest(intent);
   let policyVerdict: AdmissionVerdict;
   let requiresConfirmation = false;
@@ -133,7 +139,7 @@ export function admit(req: AdmissionRequest): AdmissionResult {
   let outcome: AdmissionEnvelope['outcome'] = allowed ? 'admitted' : 'denied';
   if (allowed && requiresConfirmation) {
     if (req.receipt) {
-      spent = req.receipt.book.consume(req.receipt.id, { intent, stateDigest: req.stateDigest, policyRevision: policy.revision }, req.now);
+      spent = req.receipt.book.consume(req.receipt.id, { intent, stateDigest, policyRevision: policy.revision }, req.now);
     } else {
       outcome = 'awaiting-confirmation';
     }
@@ -151,5 +157,5 @@ export function admit(req: AdmissionRequest): AdmissionResult {
   };
   const checked = validateEnvelope('admission', record);
   if (!checked.ok) throw new Error(`sentinel.contract.invariant: ${checked.errors[0]?.path} ${checked.errors[0]?.message}`);
-  return Object.freeze({ record: Object.freeze(record), receipt: spent });
+  return Object.freeze({ record: snapshot(record), receipt: spent });
 }

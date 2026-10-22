@@ -440,6 +440,11 @@ promoting rules, recording tools, adopting settings) are never granted to an age
 **receipt** binds the intent's canonical digest (action, input, effects, budget, scope), the state and the policy
 revision, expires within an hour and is spent once across processes. Issuing one is not reachable through the
 package's exports, so MCP tools, the HTTP bridge, model output and other packages can ask and never confirm.
+**Trust snapshots:** a validated pack, a spent receipt, the effective policy, the
+defaults and an admission's request are private deep copies, deep-frozen, and the pack, receipt and policy are
+recognised only as the objects their own function returned; what a spent receipt authorizes is captured when it is
+spent and read from there, never from the caller's object. The policy revision a receipt binds is the digest of the
+whole trusted snapshot (settings in effect and view), so any grant, provider or budget difference is a new revision.
 **Control facts** (`sentinel-controls`) are the shared contract for the framework packs of PRs 14–17: per surface
 (a canonical graph identity), property and chain position, a verdict of applies, does-not-apply or unknown; a
 resolved verdict needs evidence spans and a resolved framework version, an unknown one names its reason, and there is

@@ -7,6 +7,7 @@ import type { LockedPack, LockedRule, PackFile, RulePackManifest } from '../cont
 import { isSafeRelativePath, validateEnvelope } from '../validate.js';
 import { canonicalDigest, sha256Digest } from '../policy/digest.js';
 import { policyFail } from '../policy/errors.js';
+import { deepFreeze } from '../policy/immutable.js';
 
 /** The manifest's name at a pack's root. */
 export const PACK_MANIFEST = 'sentinel-pack.json';
@@ -164,14 +165,6 @@ const validated = new WeakSet<object>();
 /** True only for an object `validatePack` returned in this process. */
 export function isValidatedPack(value: unknown): value is ValidatedPack {
   return typeof value === 'object' && value !== null && validated.has(value);
-}
-
-export function deepFreeze<T>(value: T): T {
-  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
-    Object.freeze(value);
-    for (const v of Object.values(value)) deepFreeze(v);
-  }
-  return value;
 }
 
 /** Digest of a sorted file inventory: any changed, added, removed or renamed file changes it. */

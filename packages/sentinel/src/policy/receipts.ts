@@ -12,6 +12,7 @@ import { compareTimestamps, validateEnvelope } from '../validate.js';
 import { canonicalDigest } from './digest.js';
 import { policyFail } from './errors.js';
 import { createPrivateFileOnce, readPrivateFile } from './user-state.js';
+import { snapshot } from './immutable.js';
 
 const MAX_RECEIPT_BYTES = 16 * 1024;
 export const STORE = 'sentinel.receipt.storeUnsafe' as const;
@@ -25,11 +26,23 @@ export interface ConsumedReceipt {
   readonly digest: string;
 }
 
-const consumed = new WeakSet<object>();
+/** What a spent receipt authorizes, captured when it was spent and held privately: the caller cannot reach it. */
+export interface ReceiptAuthority {
+  readonly action: ReceiptEnvelope['action'];
+  readonly intentDigest: string;
+  readonly digest: string;
+}
+
+const consumed = new WeakMap<object, ReceiptAuthority>();
 
 /** True only for a receipt object this process consumed through `ReceiptBook.consume`. */
 export function isConsumedReceipt(value: unknown): value is ConsumedReceipt {
   return typeof value === 'object' && value !== null && consumed.has(value);
+}
+
+/** The authority recorded when the receipt was spent, or undefined for anything `consume` did not return. */
+export function receiptAuthority(value: unknown): ReceiptAuthority | undefined {
+  return typeof value === 'object' && value !== null ? consumed.get(value) : undefined;
 }
 
 /** What the owner's confirmation is checked against when the receipt is spent. */
@@ -54,7 +67,8 @@ export class ReceiptBook {
    * Checks the receipt against exactly this intent, state and policy revision at `now`, then spends it. A receipt
    * is spent only when every check passes; a second spend, from any process, is refused.
    */
-  consume(receiptId: string, binding: ReceiptBinding, now: Date): ConsumedReceipt {
+  consume(receiptId: string, given: ReceiptBinding, now: Date): ConsumedReceipt {
+    const binding = snapshot(given);
     if (!ID.test(receiptId)) policyFail('sentinel.receipt.unknown', 'not a receipt id');
     const bytes = readPrivateFile(join(this.#dir, `${receiptId}.json`), MAX_RECEIPT_BYTES, STORE);
     if (!bytes) return policyFail('sentinel.receipt.unknown', 'no receipt with this id was issued here');
@@ -73,8 +87,10 @@ export class ReceiptBook {
     if (!createPrivateFileOnce(this.#dir, `${receiptId}.spent`, Buffer.from(stamp(now)), STORE)) {
       policyFail('sentinel.receipt.alreadyUsed', 'the receipt was already used');
     }
-    const out: ConsumedReceipt = Object.freeze({ receipt, digest: canonicalDigest(receipt) });
-    consumed.add(out);
+    const frozen = snapshot(receipt);
+    const digest = canonicalDigest(frozen);
+    const out: ConsumedReceipt = Object.freeze({ receipt: frozen, digest });
+    consumed.set(out, Object.freeze({ action: frozen.action, intentDigest: frozen.intentDigest, digest }));
     return out;
   }
 }

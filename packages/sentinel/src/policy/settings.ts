@@ -13,6 +13,7 @@ import { SEVERITIES } from '../contracts/index.js';
 import { validateEnvelope } from '../validate.js';
 import { canonicalDigest } from './digest.js';
 import { policyFail } from './errors.js';
+import { deepFreeze, snapshot } from './immutable.js';
 
 /** The largest settings or repository config file read. */
 export const MAX_SETTINGS_BYTES = 256 * 1024;
@@ -21,14 +22,14 @@ export const MAX_SETTINGS_BYTES = 256 * 1024;
  * What applies when no adopted settings exist: no grants, no providers, agents always wait for a person, findings
  * from medium up fail, and required coverage must complete. A repository can only make this stricter.
  */
-export const DEFAULT_SETTINGS: SettingsEnvelope = Object.freeze({
+export const DEFAULT_SETTINGS: SettingsEnvelope = deepFreeze<SettingsEnvelope>({
   schema: 'sentinel-settings/draft-1',
   mandatoryRules: [],
   thresholds: { failOnSeverity: 'medium', requireCompleteCoverage: true, requiredCapabilities: [] },
   grants: [],
   agentActions: 'confirm',
   providers: [],
-}) as SettingsEnvelope;
+});
 
 function decode(bytes: Uint8Array): unknown {
   try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch {
@@ -70,8 +71,18 @@ export interface EffectivePolicy {
   readonly rules: readonly string[];
   /** The redacted view: the only policy any surface returns. */
   readonly view: EffectivePolicyEnvelope;
-  /** Digest of the view: what a receipt and an admission name as the policy they were decided under. */
+  /**
+   * Digest of the complete trusted snapshot (the settings in effect and the view): what a receipt and an admission
+   * name as the policy they were decided under. Any grant, provider or budget difference changes it.
+   */
   readonly revision: string;
+}
+
+const effective = new WeakSet<object>();
+
+/** True only for an object `effectivePolicy` returned in this process: admission accepts nothing else. */
+export function isEffectivePolicy(value: unknown): value is EffectivePolicy {
+  return typeof value === 'object' && value !== null && effective.has(value);
 }
 
 export interface PolicyInputs {
@@ -83,10 +94,16 @@ export interface PolicyInputs {
   repoConfigDigest: string | null;
 }
 
-export function effectivePolicy(inputs: PolicyInputs): EffectivePolicy {
+/**
+ * The effective policy as one immutable snapshot: the inputs are deep-copied before anything is read, and the result
+ * (settings in effect, thresholds, rules, view) is deep-frozen and recognised by `isEffectivePolicy`, so changing the
+ * caller's settings afterwards, or anything reachable from the result, cannot change what admission decides.
+ */
+export function effectivePolicy(given: PolicyInputs): EffectivePolicy {
+  const inputs = snapshot(given);
   // `adopted` without settings bytes is not a trust state anyone can hold: it is reported as invalid.
   const trust: SettingsTrust = inputs.trust === 'adopted' && (!inputs.settings || !inputs.settingsDigest) ? 'invalid' : inputs.trust;
-  const trusted = trust === 'adopted' ? inputs.settings! : DEFAULT_SETTINGS;
+  const trusted: SettingsEnvelope = trust === 'adopted' ? inputs.settings! : snapshot(DEFAULT_SETTINGS);
   const repo = inputs.repoConfig;
   const refused: RefusedRequest[] = [];
 
@@ -125,7 +142,7 @@ export function effectivePolicy(inputs: PolicyInputs): EffectivePolicy {
   const view: EffectivePolicyEnvelope = {
     schema: 'sentinel-policy/draft-1',
     settingsTrust: trust,
-    settingsDigest: trusted === DEFAULT_SETTINGS ? null : inputs.settingsDigest,
+    settingsDigest: trust === 'adopted' ? inputs.settingsDigest : null,
     repoConfigDigest: inputs.repoConfigDigest,
     rules: rules.map(familyId => ({
       familyId, source: mandatory.has(familyId) && requested.has(familyId) ? 'both' : mandatory.has(familyId) ? 'mandatory' : 'requested',
@@ -140,5 +157,7 @@ export function effectivePolicy(inputs: PolicyInputs): EffectivePolicy {
   };
   const checked = validateEnvelope('policy', view);
   if (!checked.ok) policyFail('sentinel.policy.settingsInvalid', `the effective policy does not validate: ${checked.errors[0]?.message ?? 'invalid'}`);
-  return Object.freeze({ settings: trusted, thresholds, rules: Object.freeze(rules), view: Object.freeze(view), revision: canonicalDigest(view) });
+  const result: EffectivePolicy = deepFreeze({ settings: trusted, thresholds, rules, view, revision: canonicalDigest({ kind: 'sentinel-effective-policy/1', settings: trusted, view }) });
+  effective.add(result);
+  return result;
 }
