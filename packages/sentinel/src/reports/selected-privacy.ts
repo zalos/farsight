@@ -13,8 +13,10 @@ export async function selectedSecretNames(store: SentinelStore, runId: string, a
   if (!admitted.selection) return [];
   const evidence = await retainedBootstrapForReport(store, runId, admitted);
   const names = new Set<string>();
-  for (const id of evidence.selectedAncestors) {
-    const ancestor = await loadPlan(store, id), plan = ancestor.plan;
+  for (const pin of evidence.selectedAncestors) {
+    const id = pin.runId;
+    const ancestor = await loadPlan(store, id, pin.revision), plan = ancestor.plan;
+    if (plan.digest !== pin.planDigest) return refuse('selected privacy plan is not its proven ancestor revision');
     if (plan.pins.snapshotId !== evidence.snapshot.id) return refuse('selected privacy evidence is another capture');
     for (const unit of plan.units.filter(u => u.adapterId === 'secrets-gitleaks')) {
       const publication = store.ledger.getPublication({ id: unit.id, revision: unit.revision });

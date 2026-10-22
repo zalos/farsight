@@ -109,6 +109,32 @@ for (const hasSecret of [true, false]) test('Pattern-only child respects ' + (ha
   }
   assert.equal((await fullReport({ ...base, runId: parentId })).json, parentReport);
   assert.equal(JSON.stringify(store.ledger.readEvents({ runId: parentId, limit: 500 })), parentEvents, 'no ancestor evidence or events changed');
+  // A genuinely admitted successor has no execution or publications. It must never replace the exact ancestor
+  // revision the selected child pinned, whether that executed revision had matches or was clean.
+  const { RuleLockBook } = await import('../dist/service/rule-locks.js');
+  const { publicProfile, publicRegistry } = await import('../dist/service/scanner-profile.js');
+  const { planAnalysis, plannerAnalysisFrom, plannerLockFrom, plannerPolicyFrom, plannerSnapshotFrom } = await import('../dist/planner/index.js');
+  const { admitPlan } = await import('../dist/execution/plans.js');
+  const book = new RuleLockBook(ws.trustDir), current = book.current()!, packs = book.packsOf(current.lock);
+  const profile = publicProfile(publicRegistry(), new Set(['pattern-semgrep', 'secrets-gitleaks']), packs);
+  const future = planAnalysis({ runId: parentId, revision: plan.revision + 1, previous: plan,
+    bootstrap: plan.reused, profile: profile.planner, snapshot: plannerSnapshotFrom(parent.snapshot),
+    analyses: parent.analyses.map(a => plannerAnalysisFrom(a)), lock: plannerLockFrom(current.lock, packs, current.digest),
+    policy: plannerPolicyFrom(adopted.policy), limits: { maxScopesPerWork: 32 } });
+  await admitPlan(store, { plan: future, ruleLock: current.lock, policy: adopted.policy, profile: profile.record });
+  assert.equal(store.ledger.getRun(parentId)!.planRevision, plan.revision);
+  assert.equal(store.ledger.latestPlan(parentId)!.revision, future.revision);
+  assert.ok(future.units.every(u => !store.ledger.getPublication({ id: u.id, revision: u.revision })));
+  const futureEvents = JSON.stringify(store.ledger.readEvents({ runId: parentId, limit: 500 }));
+  const futureFull = await fullReport({ ...base, runId: childId });
+  const futureMinimal = await scannerReportOf(store, childId, now);
+  t.diagnostic(JSON.stringify({ admittedSuccessor: future.revision, executedParent: plan.revision, withheld: futureFull.withheldForSecrets,
+    rawValue: futureFull.json.includes(GENERIC_VALUE), rawFilename: JSON.stringify(futureMinimal).includes(VALUE) }));
+  assert.equal(futureFull.withheldForSecrets, hasSecret, 'an unexecuted successor cannot erase executed-ancestor privacy');
+  absent(futureFull.json, 'full report after successor admission', GENERIC_VALUE);
+  absent(JSON.stringify(futureMinimal), 'minimal report after successor admission', VALUE);
+  if (cleanId) assert.equal((await fullReport({ ...base, runId: cleanId, baselineRunId: childId })).withheldForSecrets, true);
+  assert.equal(JSON.stringify(store.ledger.readEvents({ runId: parentId, limit: 500 })), futureEvents, 'reporting never advances or executes the future revision');
   if (hasSecret) {
     const ref = plan.units.find(u => u.adapterId === 'secrets-gitleaks')!;
     const output = store.ledger.getPublication({ id: ref.id, revision: ref.revision })!.outputs.find(o => o.schema === 'sentinel-driver-finding/draft-1')!;

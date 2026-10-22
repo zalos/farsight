@@ -16,7 +16,7 @@ import type { ArtifactId, CoverageEnvelope, ObservationEnvelope, PlanCheck, Plan
 import { validateEnvelope } from '../validate.js';
 import type { SentinelStore } from '../store/index.js';
 import { loadPlan } from '../execution/plans.js';
-import { retainedBootstrapForReport } from '../execution/retained-bootstrap.js';
+import { retainedBootstrapForReport, type RetainedAncestorRevision } from '../execution/retained-bootstrap.js';
 import type { ParserIndex, ParserResult } from '../snapshot/parser.js';
 import { PREVIEW_DETECTOR_ID, PREVIEW_FINDINGS_SCHEMA, PREVIEW_RULE } from '../adapters/preview-detector.js';
 import { secretObservation } from '../reports/accepted-secrets.js';
@@ -87,7 +87,7 @@ export interface RunAssessment {
    */
   readonly secretTokens: ReadonlySet<string>;
   /** Same-snapshot selected ancestors, proven through their exact admitted selection edges; privacy only. */
-  readonly selectedAncestors: readonly string[];
+  readonly selectedAncestors: readonly RetainedAncestorRevision[];
 }
 
 function lastSequence(store: SentinelStore, runId: string): number {
@@ -697,14 +697,16 @@ export interface FullReport {
 async function knownSecretMatches(store: SentinelStore, assessment: RunAssessment, trustDir?: string): Promise<boolean> {
   const secret = (a: RunAssessment) => a.observations.some(o => o.producer.kind === 'scanner' && o.producer.adapterId === SECRETS_ADAPTER);
   if (secret(assessment)) return true;
-  for (const id of assessment.selectedAncestors) {
-    const admitted = await loadPlan(store, id);
+  for (const pin of assessment.selectedAncestors) {
+    const id = pin.runId;
+    const admitted = await loadPlan(store, id, pin.revision);
+    if (admitted.plan.digest !== pin.planDigest) return unbound('selected-ancestor privacy plan is not its proven revision');
     if (!admitted.plan.units.some(u => u.adapterId === SECRETS_ADAPTER && store.ledger.getPublication({ id: u.id, revision: u.revision }))) continue;
     // A canceled ancestor can retain accepted results, but the completed-run reader cannot authenticate that report.
     // Refuse conservatively rather than discard potential privacy evidence or broaden report eligibility here.
     if (store.ledger.getRun(id)?.state !== 'completed') return unbound('accepted selected-ancestor privacy evidence cannot be assessed');
     const ancestor = await assessRun(store, id, { trustDir });
-    if (ancestor.snapshot.id !== assessment.snapshot.id) return unbound('selected-ancestor privacy evidence is another capture');
+    if (ancestor.planRevision !== pin.revision || ancestor.snapshot.id !== assessment.snapshot.id) return unbound('selected-ancestor privacy evidence is another capture');
     if (secret(ancestor)) return true;
   }
   return false;

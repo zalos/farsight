@@ -6,12 +6,19 @@ import { ExecutionError } from './errors.js';
 const refuse = (reason: string): never => { throw new ExecutionError('sentinel.execution.bootstrapEvidence', { reason }); };
 const isRecord = (v: unknown): v is Record<string, any> => v !== null && typeof v === 'object' && !Array.isArray(v);
 
+/** An exact admitted ancestor already verified by the selected lineage; never a latest-plan lookup. */
+export interface RetainedAncestorRevision {
+  readonly runId: string;
+  readonly revision: number;
+  readonly planDigest: string;
+}
+
 /**
  * A selected run has no new bootstrap. Resolve only the inventory its admitted analysis explicitly reuses, through
  * exact admitted selection edges to the ancestor that actually ran the coordinator's inventory operation. Reporting
  * deliberately needs no live registry, scanner assets or checkout: these are retained invocation/publication facts.
  */
-export async function retainedBootstrapForReport(store: SentinelStore, runId: string, admitted: AdmittedPlan): Promise<BootstrapEvidence & { selectedAncestors: string[] }> {
+export async function retainedBootstrapForReport(store: SentinelStore, runId: string, admitted: AdmittedPlan): Promise<BootstrapEvidence & { selectedAncestors: RetainedAncestorRevision[] }> {
   const sameRef = (a: { id: string; revision: number }, b: { id: string; revision: number }) => a.id === b.id && a.revision === b.revision;
   const snapshotId = admitted.plan.pins.snapshotId;
   const candidates = admitted.plan.reused.filter(r => store.ledger.getPublication(r)?.outputs.some(o => o.schema === INVENTORY_RECORD_SCHEMA));
@@ -57,7 +64,7 @@ export async function retainedBootstrapForReport(store: SentinelStore, runId: st
         const owner = store.ledger.getWork(reused);
         if (!owner || !visited.has(owner.runId) || !store.ledger.getPublication(reused)) return refuse('reused work is not accepted in the proven same-capture lineage');
       }
-      return { ...evidence, selectedAncestors: [...visited].filter(ancestor => ancestor !== runId) };
+      return { ...evidence, selectedAncestors: revisions.slice(1).map(ancestor => ({ runId: ancestor.plan.runId, revision: ancestor.plan.revision, planDigest: ancestor.plan.digest })) };
     }
     const selection = current.selection;
     if (!selection || run.envelope.parentId !== selection.parent.runId || selection.parent.snapshotId !== snapshotId
