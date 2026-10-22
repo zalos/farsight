@@ -143,7 +143,8 @@ test('captured, parsed, locked and adopted inputs plan, admit and convert end to
   // The coordinator's PlanBoundary: a run that names this plan's pins; anything else is refused.
   const base = JSON.parse(readFileSync(new URL('./contracts/valid/run-active.json', import.meta.url), 'utf8'));
   const run = { ...base, id: 'run-1', planRevision: first.revision, snapshotId: snapshot.id, coordinatorEpoch: 'epoch-test',
-    ruleLockDigest: first.pins.ruleLockDigest, policyRevisionDigest: first.pins.policyDigest, toolLockDigest: first.pins.ruleLockDigest };
+    ruleLockDigest: first.pins.ruleLockDigest, policyRevisionDigest: first.pins.policyDigest, toolLockDigest: first.pins.ruleLockDigest,
+    requestedScope: { sourceIds: ['app'], profile: profile.id } };
   const request = { run, conversion: { coordinatorEpoch: 'epoch-test', createdAt: '2026-10-22T12:00:00Z', execution }, snapshot,
     pathOf: (i: { relativePath: string }) => join(work, 'materialized', i.relativePath) };
   const boundary = planBoundaryFor(first, request);
@@ -155,10 +156,20 @@ test('captured, parsed, locked and adopted inputs plan, admit and convert end to
   assert.throws(() => planBoundaryFor(first, { ...request, run: { ...run, policyRevisionDigest: D('other policy') } }), /policy revision/);
   assert.throws(() => planBoundaryFor(first, { ...request, run: { ...run, planRevision: 9 } }), /plan revision/);
   assert.throws(() => planBoundaryFor(boot, request), /only an analysis revision/);
+  assert.throws(() => planBoundaryFor(first, { ...request, run: { ...run, requestedScope: { sourceIds: ['other-source'], profile: profile.id } } }), /requested sources/);
+  assert.throws(() => planBoundaryFor(first, { ...request, run: { ...run, requestedScope: { sourceIds: ['app'], profile: 'other-profile' } } }), /requested profile/);
+  // A plan restored from JSON is the caller's mutable object: the boundary keeps its own frozen copy.
+  const restored = JSON.parse(JSON.stringify(first));
+  const fromRestored = planBoundaryFor(restored, request);
+  restored.units[0].inputFingerprint = D('changed after hand-off');
+  assert.notEqual(fromRestored.plan, restored);
+  assert.ok(Object.isFrozen(fromRestored.plan.units[0]));
+  assert.equal(fromRestored.plan.units[0]!.inputFingerprint, fromRestored.works[0]!.inputFingerprint, 'the plan and its works stay one binding');
   assert.throws(() => boundary.adapterFor({ ...boundary.works[0]!, id: 'work-other' }), /not part of this boundary/);
 
   // The boundary carries the plan: required coverage is computed from coverage records the stages produce.
-  assert.equal(boundary.plan, first);
+  assert.deepEqual(boundary.plan, first);
+  assert.equal(boundary.plan.digest, first.digest, 'the boundary carries its own copy of exactly this plan');
   let n = 0;
   const records = boundary.works.flatMap(w => {
     verifyWorkEnvelope(first, w);

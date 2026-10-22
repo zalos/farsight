@@ -477,7 +477,8 @@ captured file set (bounded; a larger source is not planned as a whole), and ever
 refused, unreadable or unlisted, is kept as its own gap. Each unit binds its exact captured input set by digest,
 apart from its wider input fingerprint. An unresolved framework version is unknown for the source it names, or for
 every source when it names none. A surface rule also keeps, as required gaps, every file of its languages that did
-not parse and every folder capture could not list: surfaces nobody could discover never disappear from coverage.
+not parse, every folder capture could not list, and a parser index that stopped at its bound or placed locations
+outside the capture: surfaces nobody could discover never disappear from coverage.
 Parser evidence is accepted only for the snapshot and source it read: the adapter requires the parser's result and
 index to agree on snapshot, source and analysis fingerprint, and the planner refuses an analysis of another snapshot,
 one that joined other bytes than the snapshot captured, or a surface in an uncaptured file. Planner inputs carry trusted identity only as the deep-frozen views the adapters derive; a copy or an edited view
@@ -499,8 +500,9 @@ recount, or the content differs from its digest. A revision is never edited: a n
 new revision (or a child run's first) that depends on the already published bootstrap work, so nothing is captured
 or parsed again, and the earlier revision and its lock stay exactly as pinned.
 
-The coordinator receives its `PlanBoundary` (`planBoundaryFor`, analysis revisions only, with the run checked
-against the plan's pins) of canonical `sentinel-work/draft-1` envelopes (`workEnvelopesFor`): stage resources come
+The coordinator receives its `PlanBoundary` (`planBoundaryFor`, analysis revisions only, with the run, including
+its requested sources and profile, checked against the plan's pins, and built over its own deep-frozen copy of the
+validated plan and snapshot) of canonical `sentinel-work/draft-1` envelopes (`workEnvelopesFor`): stage resources come
 from the trusted profile within the work contract's ceilings, and each unit's influence manifest is the canonical
 JSON its artifact id names. Each unit's inputs pin the captured content artifacts, which its input fingerprint
 covers; `verifyWorkEnvelope` refuses a work envelope whose fingerprint, manifest, dependencies or identity differ from
@@ -510,7 +512,7 @@ plan and each work's exact checks. Required coverage is computed by `evaluateReq
 this check and its assigned work revision, executed, at per-file-per-rule granularity (an aggregate record
 completes only a whole-repository check). Reuse does not count until a reuse derivation records the exact prior
 check, scope, rule, inputs and environment (PR 27). Imported evidence,
-unrelated reuse and work merely finishing never count; an unplanned required check or a required rule gap keeps
+reuse and work merely finishing never count; an unplanned required check or a required rule gap keeps
 coverage incomplete. Persistence and admission of a plan stay with the coordinator and the policy
 gate (`run.start` on the plan digest). Not decided here: the capability registry that states what each stage
 establishes (the profile carries it explicitly), framework control-fact work (framework-order stays unavailable

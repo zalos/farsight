@@ -69,6 +69,9 @@ export interface PlannerAnalysis {
   readonly analysisFingerprint: string;
   /** The parser's class for each captured path (`parsed`, `parse-failed`, …), with the captured bytes it joined. */
   readonly files: readonly { readonly path: string; readonly class: string; readonly content?: string }[];
+  /** Index entries beyond the parser index's bound, and locations naming uncaptured paths: undiscovered frontiers. */
+  readonly omitted: number;
+  readonly unplaced: number;
   /** Route, handler and page surfaces: canonical graph identities with the file that declares them. */
   readonly surfaces: readonly { readonly nodeId: string; readonly path: string; readonly kind: string }[];
 }

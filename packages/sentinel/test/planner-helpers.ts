@@ -97,9 +97,10 @@ export function snapshotView(sourceIds: string[], entries: unknown[], frameworkV
 
 /** Parser evidence for one source, in the parser result's shape. */
 export const analysisView = (sourceId: string, files: { path: string; class: string; content?: string }[], surfaces: { nodeId: string; path: string; kind: string }[] = [],
-  fingerprint = `fp-${sourceId}`, snapshotId = 'snap-1') =>
+  fingerprint = `fp-${sourceId}`, snapshotId = 'snap-1', frontiers: { omitted?: number; unplaced?: number } = {}) =>
   plannerAnalysisFrom({ sourceId, result: { snapshotId, sourceId, analysisFingerprint: fingerprint, entries: files },
-    index: { snapshotId, sourceId, analysisFingerprint: fingerprint, nodes: surfaces } } as never);
+    index: { snapshotId, sourceId, analysisFingerprint: fingerprint, nodes: surfaces, omitted: frontiers.omitted ?? 0,
+      unplaced: { count: frontiers.unplaced ?? 0, paths: [] } } } as never);
 
 export const included = (sourceId: string, relativePath: string) =>
   ({ sourceId, relativePath, kind: 'file' as const, disposition: 'included' as const, content: D(`${sourceId}/${relativePath}`), bytes: 10, generated: false });

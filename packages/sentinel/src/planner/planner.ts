@@ -223,7 +223,7 @@ export interface AnalysisRequest {
   readonly limits?: Partial<PlannerLimits>;
 }
 
-interface Candidate { scopeKind: PlannerScopeKind; scopeId: string; sourceId: string; path: string | null; entry?: CaptureEntry; boundary?: boolean; repositoryGap?: boolean; undiscovered?: boolean }
+interface Candidate { scopeKind: PlannerScopeKind; scopeId: string; sourceId: string; path: string | null; entry?: CaptureEntry; boundary?: boolean; repositoryGap?: boolean; undiscovered?: boolean; frontier?: PlanReasonCode }
 
 /** Every check the policy's locked rules imply over the snapshot, in a frozen analysis revision. */
 export function planAnalysis(request: AnalysisRequest): PlanRevision {
@@ -357,6 +357,10 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
           const l = languageOf(s.path);
           if (l && rule.languages.includes(l)) candidates.push({ scopeKind: 'surface', scopeId: s.nodeId, sourceId, path: s.path });
         }
+        // The parser index stopped at its bound or placed locations outside the capture: surfaces may be missing.
+        const a = analyses.get(sourceId)!;
+        if (a.omitted > 0) candidates.push({ scopeKind: 'surface', scopeId: `${sourceId}:#index-omitted`, sourceId, path: null, frontier: 'sentinel.plan.surfacesOmitted' });
+        if (a.unplaced > 0) candidates.push({ scopeKind: 'surface', scopeId: `${sourceId}:#index-unplaced`, sourceId, path: null, frontier: 'sentinel.plan.surfacesUnplaced' });
         // Surfaces are discovered only in parsed files. A file of the rule's languages that did not parse, could not
         // be captured, or a folder capture could not list may hold surfaces nobody found: each stays a gap.
         for (const entry of snapshot.entries) {
@@ -412,6 +416,7 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
           continue;
         }
       }
+      if (c.frontier) { state('scope-unknown', c.frontier); continue; }
       if (c.undiscovered) { state('scope-unknown', 'sentinel.plan.surfacesUndiscovered' satisfies PlanReasonCode); continue; }
       if (c.boundary) {
         if (c.repositoryGap && c.entry?.disposition === 'excluded') { state('scope-unavailable', c.entry.reasonCode); continue; }

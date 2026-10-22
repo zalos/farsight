@@ -69,6 +69,8 @@ export function plannerAnalysisFrom(source: SourceAnalysis, surfaceKinds: readon
     snapshotId: result.snapshotId,
     sourceId: source.sourceId,
     analysisFingerprint: result.analysisFingerprint,
+    omitted: index.omitted ?? 0,
+    unplaced: index.unplaced?.count ?? 0,
     files: result.entries.map(e => ({ path: e.path, class: e.class, ...(e.content !== undefined ? { content: e.content } : {}) })),
     surfaces: surfacesFromIndex(source.index, surfaceKinds),
   });

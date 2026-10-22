@@ -185,9 +185,13 @@ export interface BoundaryRequest {
  * The coordinator's boundary for an analysis revision. A bootstrap revision is refused: its units are run by the
  * service, not by a check adapter. The run is checked against the plan's own pins, never trusted to name them.
  */
-export function planBoundaryFor(plan: PlanRevision, request: BoundaryRequest): PlanBoundaryParts {
+export function planBoundaryFor(given: PlanRevision, request: BoundaryRequest): PlanBoundaryParts {
+  // The boundary works from its own deep-frozen copies, validated here: a caller's plan or snapshot object can change
+  // afterwards (a plan restored from JSON is not frozen), and nothing handed out may follow it.
+  const plan = deepFreeze(structuredClone(sealedPlan(given)));
   sealedPlan(plan);
   if (plan.kind !== 'analysis') throw invalid('only an analysis revision is handed to the coordinator');
+  const snapshot = deepFreeze(structuredClone({ id: request.snapshot.id, entries: request.snapshot.entries }));
   const run = request.run;
   const checked = validateEnvelope('run', run);
   if (!checked.ok) throw invalid(`the run is not a valid run envelope: ${checked.errors[0]?.path || '/'}`);
@@ -195,6 +199,9 @@ export function planBoundaryFor(plan: PlanRevision, request: BoundaryRequest): P
     ['run id', run.id, plan.runId], ['plan revision', run.planRevision, plan.revision], ['snapshot', run.snapshotId, plan.pins.snapshotId],
     ['rule lock', run.ruleLockDigest, plan.pins.ruleLockDigest], ['policy revision', run.policyRevisionDigest, plan.pins.policyDigest],
     ['coordinator epoch', run.coordinatorEpoch, request.conversion.coordinatorEpoch],
+    // The run asked for exactly what was planned: the plan's analysed sources, under the plan's profile.
+    ['requested sources', [...run.requestedScope.sourceIds].sort().join('\u0000'), plan.pins.analyses.map(a => a.sourceId).sort().join('\u0000')],
+    ['requested profile', run.requestedScope.profile, plan.pins.profileId],
   ];
   for (const [what, got, want] of pairs) if (got !== want) throw mismatch(`the run's ${what} is not the plan's`);
   const converted = workEnvelopesFor(plan, request.conversion);
@@ -208,7 +215,7 @@ export function planBoundaryFor(plan: PlanRevision, request: BoundaryRequest): P
     run: deepFreeze(structuredClone(checked.value)), works: Object.freeze(works), plan,
     checksFor: (w: WorkEnvelope) => Object.freeze([...known(w).checks]),
     adapterFor: (w: WorkEnvelope) => known(w).adapterId!,
-    inputsFor: (w: WorkEnvelope) => Object.freeze(capturedInputsOf(plan, known(w), request.snapshot)
+    inputsFor: (w: WorkEnvelope) => Object.freeze(capturedInputsOf(plan, known(w), snapshot)
       .map(i => Object.freeze({ id: i.id, path: request.pathOf(i) }))),
   });
 }

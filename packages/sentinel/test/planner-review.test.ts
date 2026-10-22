@@ -88,3 +88,16 @@ test('every binding handed out is a deep-frozen copy', () => {
   const coverage = evaluateRequiredCoverage(p, []);
   assert.throws(() => { (coverage.checks[0] as any).complete = true; }, TypeError);
 });
+
+test('an index that stopped at its bound or placed locations outside the capture leaves surface gaps', () => {
+  const surfaceRule = lockedRules([{ familyId: 'sentinel.http.route-guard', languages: ['typescript'], scopeKind: 'surface', requires: ['source-span'] }]).view;
+  const planWith = (frontiers: { omitted?: number; unplaced?: number }) => planAnalysis({ runId: 'run-1', revision: 2, previous: boot, bootstrap: inventory, profile,
+    snapshot: snapshotView(['web'], [included('web', 'src/a.ts')]).view,
+    analyses: [analysisView('web', [{ path: 'src/a.ts', class: 'parsed' }], [], 'fp-web', 'snap-1', frontiers)],
+    lock: surfaceRule, policy: policyView(['sentinel.http.route-guard']).view });
+  assert.deepEqual(planWith({}).checks, [], 'a complete index of a parsed file with no surface has none to check');
+  const omitted = planWith({ omitted: 1 });
+  assert.deepEqual(omitted.checks.map(c => [c.scopeId, c.state, c.reasonCode, c.required]), [['web:#index-omitted', 'scope-unknown', 'sentinel.plan.surfacesOmitted', true]]);
+  assert.equal(omitted.requiredCoverageAchievable, false);
+  assert.deepEqual(planWith({ unplaced: 2 }).checks.map(c => c.reasonCode), ['sentinel.plan.surfacesUnplaced']);
+});
