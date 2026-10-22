@@ -5,23 +5,10 @@
 import { createHash } from 'node:crypto';
 import { closeSync, constants as FS, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, writeSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
+import { DEFAULT_SETTINGS, parseSettings, SETTINGS_PATH } from '../policy/index.js';
 
-/** The settings file's place in a workspace (PR 06 names it; its example ships beside it). */
-export const SETTINGS_PATH = ['.farsight', 'sentinel', 'settings.json'] as const;
-
-/**
- * The scrubbed defaults: no grants, no providers, agents wait for a person, findings from medium up fail and
- * required coverage must complete. Mirrors PR 06's `DEFAULT_SETTINGS` (policy/settings.ts on its branch) until it is
- * merged; then this is that constant.
- */
-export const DEFAULT_SETTINGS = Object.freeze({
-  schema: 'sentinel-settings/draft-1',
-  mandatoryRules: [] as string[],
-  thresholds: Object.freeze({ failOnSeverity: 'medium', requireCompleteCoverage: true, requiredCapabilities: [] as string[] }),
-  grants: [] as unknown[],
-  agentActions: 'confirm',
-  providers: [] as unknown[],
-});
+/** The settings file's place in a workspace, and its scrubbed defaults: PR 06's own, so init writes what policy reads. */
+export { SETTINGS_PATH, DEFAULT_SETTINGS };
 
 /** The one scan profile this build can describe; scanner coverage arrives with later packages. */
 export const PROFILES = ['static'] as const;
@@ -66,8 +53,9 @@ export function initWorkspace(options: { workspace: string; profile?: string }):
   let workspace: string;
   try { workspace = realpathSync.native(options.workspace); } catch { throw new InitError('sentinel.init.workspaceUnsafe', 'the workspace does not exist'); }
   if (!lstatSync(workspace).isDirectory()) throw new InitError('sentinel.init.workspaceUnsafe', 'the workspace is not a folder');
-  const farsightDir = join(workspace, SETTINGS_PATH[0]);
-  const sentinelDir = join(farsightDir, SETTINGS_PATH[1]);
+  const [farsightName, sentinelName, fileName] = SETTINGS_PATH.split('/') as [string, string, string];
+  const farsightDir = join(workspace, farsightName);
+  const sentinelDir = join(farsightDir, sentinelName);
   // `.farsight` may already be Farsight's own folder; it is used as found. Sentinel's folder is private.
   try { mkdirSync(farsightDir, { mode: 0o755 }); } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw new InitError('sentinel.init.workspaceUnsafe', 'cannot create .farsight');
@@ -75,14 +63,15 @@ export function initWorkspace(options: { workspace: string; profile?: string }):
   const fst = lstatSync(farsightDir);
   if (fst.isSymbolicLink() || !fst.isDirectory()) throw new InitError('sentinel.init.workspaceUnsafe', '.farsight is not a real folder');
   ensurePrivateDir(sentinelDir);
-  const path = join(sentinelDir, SETTINGS_PATH[2]);
+  const path = join(sentinelDir, fileName);
 
   const kept = (): InitResult => {
     const st = lstatSync(path);
     if (st.isSymbolicLink() || !st.isFile()) throw new InitError('sentinel.init.settingsUnsafe', 'the settings path is not a regular file');
     const bytes = readFileSync(path);
+    // Recognised when policy itself would read it: PR 06's parser (schema, bounds, no credential values).
     let recognised = false;
-    try { recognised = (JSON.parse(bytes.toString('utf8')) as { schema?: unknown })?.schema === DEFAULT_SETTINGS.schema; } catch { recognised = false; }
+    try { parseSettings(bytes); recognised = true; } catch { recognised = false; }
     return Object.freeze({ outcome: 'kept', path, digest: sha(bytes), profile, recognised });
   };
   try { lstatSync(path); return kept(); } catch (e) {

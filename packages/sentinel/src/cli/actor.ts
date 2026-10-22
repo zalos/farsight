@@ -5,10 +5,9 @@
 // reaches the service only as an owner receipt, minted in the owner CLI's own process after its confirm step and
 // verified by the service against the receipt book; a connection can carry a receipt's id but never mint one.
 // Code running as the same OS account is outside this boundary.
-import type { DecisionChannel } from '../contracts/index.js';
+import type { DecisionChannel, Principal } from '../contracts/index.js';
 
-/** Mirrors PR 06's `Principal` (contracts/policy.ts on its branch); replaced by the import once it is merged. */
-export type Principal = 'human' | 'agent';
+export type { Principal };
 
 /**
  * The channel a local service connection is recorded under. PR 02's `DecisionChannel` has no value for "a local

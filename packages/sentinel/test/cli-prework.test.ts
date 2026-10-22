@@ -130,6 +130,15 @@ test('init refuses an unsafe path or an unknown profile and leaves a foreign fil
   assert.equal(r.status, 3);
   assert.equal(JSON.parse(r.stdout).reasonCode, 'sentinel.init.unrecognised');
   assert.equal(readFileSync(join(ws2, '.farsight/sentinel/settings.json'), 'utf8'), 'not json');
+  // Recognised means PR 06's parser accepts it: a settings file holding a credential value is not, and is kept as is.
+  const ws3 = scratch(t);
+  initWorkspace({ workspace: ws3 });
+  const p3 = join(ws3, '.farsight/sentinel/settings.json');
+  const withSecret = JSON.stringify({ ...JSON.parse(readFileSync(p3, 'utf8')), mandatoryRules: ['ghp_' + 'a'.repeat(36)] });
+  writeFileSync(p3, withSecret);
+  const again = initWorkspace({ workspace: ws3 });
+  assert.deepEqual([again.outcome, again.recognised], ['kept', false]);
+  assert.equal(readFileSync(p3, 'utf8'), withSecret);
 });
 
 test('socket paths are measured in bytes with room for the terminator, and fall back to a short private folder', t => {
