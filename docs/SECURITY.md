@@ -32,7 +32,7 @@ a store at a time through an OS file lock on `owner.sqlite`, which is never dele
 else; `owner.json` only describes the holder. Records from an earlier owner's epoch are refused. Evidence objects
 are immutable and content-addressed; a publication is accepted only after their bytes are re-read and hashed, and
 the ledger keeps schema, privacy class and links per reference, so shared bytes cannot lower a reference's class.
-Nothing is deleted automatically; the prune plan is a dry run. The store holds no credential and no settings, and
+Nothing is deleted automatically; the prune plan is a dry run, and never lists the provenance (manifest, invocation, outputs, diagnostics) of a retained work or attempt record. The store holds no credential and no settings, and
 durability is claimed against process death, not power loss (ADR 19). The local runtime folder
 (`.farsight/sentinel/*`) is ignored by git. Later scanner, container and model work arrives with its
 own trust-boundary section here: external scanners run only in containers, with no host fallback, and model

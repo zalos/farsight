@@ -235,7 +235,9 @@ this store, and only for the exact work revision, its active attempt and the cur
 registered as staging before a byte is written, so collection can never race a write. Each acquisition has its own
 epoch (`epoch-<uuid>`); a run, work or attempt from an earlier epoch is refused. Reachability inspection and the
 prune plan are read-only: v1 never deletes an object, and a plan names only candidates for a later, explicit,
-separately reviewed prune.
+separately reviewed prune. Retained provenance is protected: every artifact a retained work or attempt record names
+(its influence manifest, invocation, outputs and diagnostics) is a root, so completed work is never a candidate
+while its records are kept.
 
 Qualification is bounded, and anything outside it is refused rather than assumed: SQLite 3.53.3 exactly (as linked
 by Node 24.19.0), on a host the runtime's release policy lists, in a canonical owner-only folder on a measured

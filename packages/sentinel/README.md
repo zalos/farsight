@@ -77,7 +77,8 @@ try {
 store's own verifier, and releases everything if any step fails. One process owns a store at a time; each owner
 has its own epoch, and records from an earlier epoch are refused. A publication is accepted in one transaction,
 only after each named object was re-read and hashed in this store. `inspect()` and `planPrune()` are read-only;
-nothing is ever deleted automatically. Every refusal carries a stable reason code (`STORAGE_ERROR_CODES`) whose
+nothing is ever deleted automatically, and the artifacts a retained work or attempt names (manifest, invocation,
+outputs, diagnostics) are never prune candidates while its records are kept. Every refusal carries a stable reason code (`STORAGE_ERROR_CODES`) whose
 words are in the shared catalog.
 
 Qualified, and refused otherwise: SQLite 3.53.3 (Node 24.19.0) on darwin-arm64, a canonical owner-only folder on
