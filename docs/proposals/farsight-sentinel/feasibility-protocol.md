@@ -86,6 +86,23 @@ capability lessons, outside that rule denominator. Report raw hit locations, saf
 unsupported files and parse failures alongside precision/recall; an exit-zero run that skipped a file is
 not a clean check. Do not rank engines until reviewers accept labels, rules, denominators and thresholds.
 
+Each expected symbol has independently authored inclusive `startLine`/`endLine` bounds in the index,
+tied to the exact source hash. Attribution checks these spans rather than guessing the next declaration
+from its syntax. Invalid or overlapping spans and findings outside the declared spans fail the comparison;
+a new declaration style requires reviewed bounds before it can join the denominator.
+
+The pinned scanner experiment is limited to an ARM64 host, Linux ARM64 Docker server and ARM64 images.
+Other or unknown architectures are refused before materialization or container creation. This prevents
+unrecorded emulation; it does not add AMD64 binaries or establish a portable runtime matrix. A network
+control passes only for an inspected `none` network and Linux `OSError`/`ENETUNREACH` (101), not a timeout
+or a refused connection. Temporary filesystem execution policy is recorded per measured run.
+
+E1's expected parser omissions are observations of parser selection. A `not-analyzed` control records
+whether the path was unreported or reported without analysis, and whether a diagnostic exists. A silent
+omission remains an explicit security-coverage gap even when it matches the fixture expectation. Requiring
+a parser diagnostic would conceal the current ignored-input behavior this experiment is intended to expose.
+Unexpected probe exceptions retain a bounded, scrubbed diagnostic without a stack or private home path.
+
 ## E1–E8 controls and retained measurements
 
 | Gate | Local PR 01 evidence | Required control and later boundary |
