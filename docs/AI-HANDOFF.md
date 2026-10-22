@@ -41,6 +41,22 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel scheduler merged; CLI integration — 2026-10-22
+
+The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`, and scheduler as
+[#147](https://github.com/zalos/farsight/pull/147), `2587eb16`. Scheduler acceptance includes independent SOL
+review, 421 local tests with 32 explicit platform/opt-in skips, clean npm packaging, identical fixed-source graph
+ingests against main, and the full native Linux process/container crash matrix at 20 repetitions with no
+failures, cancellations or skips ([run](https://github.com/zalos/farsight/actions/runs/39803836156)).
+
+Branch `codex/sentinel-cli-integration` combines the owner CLI, detached service, canonical planning and report
+preview on that merged scheduler. The initial combined suite passed 481 tests with 32 explicit skips; subsequent
+bootstrap retry and durable diagnostic corrections passed independent SOL review with 18 focused tests. Final
+integrated checks and installed npm consumer validation remain in progress. The scanner and framework draft PRs
+remain separate until their canonical command paths are validated; a library or worker test alone does not close
+their plan gates. The [execution ledger](proposals/farsight-sentinel/execution-progress.md) records these boundaries.
+No primary-checkout build, dogfood refresh or global installation was performed.
+
 ## Sentinel service reliability — 2026-10-22
 
 Branch `codex/sentinel-cli-reliability`, based on `e0e7c547`: public retry/rerun accepts an ended admitted bootstrap, prepares a fresh child over its retained snapshot and credits no parent work as completed. Fatal errors after coordinator acceptance are retained in a private durable service journal, bound to store/run/current admitted plan and containing known catalog codes only. Wait, status and unfinished report read this diagnostic after restart; raw exception text is withheld.
