@@ -7,11 +7,14 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   partitionInventory, EvidenceBroker, validateReply, runSession, FileCheckpointStore, guidedSpec, guidedReview, generalSpec, reviewAllPartitions,
-  pathFactsFrom, planEvaluation, runEvaluation, e5Gate, estimatePlan, wilson, GUIDED_PROMPT, providerCaller, specDigest,
+  pathFactsFrom, agreementMatrix, planEvaluation, runEvaluation, e5Gate, estimatePlan, wilson, GUIDED_PROMPT, providerCaller, specDigest,
   TOOL_REFUSAL_CODES, REPLY_REJECTION_CODES, REVIEW_FRONTIER_CODES, REVIEW_LIMITATION_CODES, REVIEW_ERROR_CODES, EVALUATION_CODES,
 } from '../dist/review/index.js';
 import { validateEnvelope } from '../dist/index.js';
 import { scratchDir } from './provider-helpers.ts';
+import { commitRepo, needsStore, openCaptureStore, scratch, unlock } from './snapshot-helpers.ts';
+import { captureSnapshot } from '../dist/snapshot/index.js';
+import { rmSync, existsSync } from 'node:fs';
 
 const sha = (b: Uint8Array | string) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 const corpus = JSON.parse(readFileSync(new URL('./fixtures/model-review/e5-corpus.json', import.meta.url), 'utf8'));
@@ -300,6 +303,14 @@ test('E5: the plan is two models × 30 cases × five trials × clean/canary; moc
   assert.equal(b!.canaryChanges, 75, 'every vulnerable canary flipped to no-finding');
   assert.equal(b!.canaryLeaks, 150, 'every canary run of the obedient model repeated its token');
   assert.deepEqual(a!.variableCases, []);
+  // Every failure stays visible per case; agreement is reported beside the gate and is not accuracy.
+  assert.deepEqual(a!.failedCases, []);
+  assert.equal(b!.canaryChangedCases.length, 15);
+  assert.ok(b!.canaryChangedCases.every(c => c.endsWith('.vulnerable')));
+  const agree = agreementMatrix(run);
+  assert.equal(agree.establishes, 'agreement-only');
+  assert.equal(agree.pairs[0]![1]!.value, 1, 'the two mocks agree on every clean packet');
+  assert.equal(agree.pairs[0]![0]!.n, 150);
   const gate = e5Gate(run, corpus, null);
   assert.equal(gate.status, 'not-ready');
   assert.deepEqual([...gate.reasons].sort(), ['sentinel.review.eval.labelsUnreviewed', 'sentinel.review.eval.mockOnly', 'sentinel.review.eval.thresholdsMissing']);
@@ -350,4 +361,45 @@ test('PR 18 path evidence enters only as structural reachability for the same sn
   const b = new EvidenceBroker({ snapshotId: 'snap-1', sourceId: 'web', files: f.members, rules: [], paths: facts }, LIMITS, f.read);
   const r = await b.run({ action: 'paths', nodeId: 'web::route::GET /q' });
   assert.ok(r.ok && (r as any).data.establishes === 'call-reachability, not data flow');
+});
+
+test('demo: review reruns from the saved snapshot after the original checkout is deleted', needsStore, async t => {
+  const dir = scratch(t, 'sentinel-review-');
+  const root = join(dir, 'repo');
+  commitRepo(root, { 'src/query.ts': SRC['src/a.ts'], 'src/util.ts': SRC['src/b.ts'], 'README.md': '# synthetic\n' });
+  const fx = await openCaptureStore(t, dir);
+  const { snapshot } = await captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{ sourceId: 'web', repositoryId: 'example/web', root }] });
+  unlock(root);
+  rmSync(root, { recursive: true, force: true });
+  assert.equal(existsSync(root), false, 'no checkout remains');
+  const read = (id: string) => fx.store.readArtifact(id as any);
+  const plan = partitionInventory(snapshot, 'web', { maxFiles: 10, maxBytes: 64 * 1024 });
+  assert.deepEqual(plan.partitions.flatMap(p => p.members.map(m => m.relativePath)), ['src/query.ts', 'src/util.ts']);
+  const caller = (verdict: 'finding' | 'no-finding') => ({ kind: 'mock' as const, async call(req: any) {
+    const task = JSON.parse(req.messages[1].content);
+    const last = JSON.parse(req.messages[req.messages.length - 1].content);
+    if (!last.evidence) return { content: JSON.stringify({ action: 'read', path: task.files[0], startLine: 1, endLine: 3 }), truncated: false, identity: MOCK_ID, usage: { inputTokens: 1, outputTokens: 1 } };
+    const reply = verdict === 'finding'
+      ? { action: 'final', verdict, inspected: [last.evidence[0].path], claims: [{ statement: 'Request text reaches a SQL string.', citations: [last.evidence[0].id], cwe: 'CWE-89' }] }
+      : { action: 'final', verdict, inspected: [last.evidence[0].path], claims: [] };
+    return { content: JSON.stringify(reply), truncated: false, identity: MOCK_ID, usage: { inputTokens: 1, outputTokens: 1 } };
+  } });
+  const query = plan.partitions[0]!.members.find(m => m.relativePath === 'src/query.ts')!;
+  const g = await guidedReview({ runId: 'run-1', attemptId: 'att-1', snapshotId: snapshot.id, sourceId: 'web', limits: LIMITS, budget: BUDGET,
+    check: { checkId: 'chk-1', familyId: 'sentinel.sql.dynamic-query', revisionDigest: sha('rule'), ruleText: 'Untrusted text concatenated into SQL.', files: [query] } },
+    { caller: caller('finding'), checkpoints: new FileCheckpointStore(join(dir, 'cp-g')), read });
+  assert.equal(g.record.verdict, 'finding');
+  const e = g.observations[0]!.evidence[0]!;
+  assert.deepEqual([e.snapshotId, e.sourceId, e.relativePath, e.content], [snapshot.id, 'web', 'src/query.ts', query.content]);
+  const bytes = await read(e.content);
+  assert.equal(sha(bytes.subarray(e.span.startByte, e.span.endByte)), e.quoteDigest, 'the citation resolves against the stored snapshot bytes');
+  // The rerun (a new attempt) reads the same saved bytes and cites the same span.
+  const again = await guidedReview({ runId: 'run-1', attemptId: 'att-2', snapshotId: snapshot.id, sourceId: 'web', limits: LIMITS, budget: BUDGET,
+    check: { checkId: 'chk-1', familyId: 'sentinel.sql.dynamic-query', revisionDigest: sha('rule'), ruleText: 'Untrusted text concatenated into SQL.', files: [query] } },
+    { caller: caller('finding'), checkpoints: new FileCheckpointStore(join(dir, 'cp-g2')), read });
+  assert.deepEqual(again.observations[0]!.evidence, g.observations[0]!.evidence);
+  assert.notEqual(again.record.sessionId, g.record.sessionId);
+  const general = await reviewAllPartitions({ runId: 'run-1', attemptId: 'att-1', plan, limits: LIMITS, budget: BUDGET },
+    { caller: caller('no-finding'), checkpoints: new FileCheckpointStore(join(dir, 'cp-p')), read });
+  assert.deepEqual(general.results[0]!.record.notInspected, ['src/util.ts'], 'a no-finding answer does not make an unread file reviewed');
 });

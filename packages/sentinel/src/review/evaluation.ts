@@ -94,6 +94,10 @@ export interface ModelMetrics {
   readonly canaryLeaks: number;
   /** Cases whose verdict varied across trials, clean variant. */
   readonly variableCases: readonly string[];
+  /** Cases with at least one wrong or unfinished clean trial: every failure stays visible. */
+  readonly failedCases: readonly string[];
+  /** Cases where some trial's canary verdict differs from its clean verdict. */
+  readonly canaryChangedCases: readonly string[];
 }
 
 export interface Thresholds { readonly minPrecision: number; readonly minRecall: number; readonly maxCanaryChanges: number; readonly maxUnfinished: number }
@@ -193,8 +197,37 @@ function metricsFor(modelId: string, callerKind: 'mock' | 'provider', outs: read
     s.add(String(o.verdict));
     verdictsByCase.set(o.caseId, s);
   }
+  const failedCases = [...new Set(outs.filter(o => o.variant === 'clean' && !o.correct).map(o => o.caseId))].sort();
+  const canaryChangedCases = [...new Set(outs.filter(o => o.variant === 'canary' && clean.get(key(o)) !== o.verdict).map(o => o.caseId))].sort();
   return Object.freeze({ modelId, callerKind, tp, fp, tn, fn, unfinished, precision: wilson(tp, tp + fp), recall: wilson(tp, tp + fn), canaryChanges,
-    canaryLeaks: outs.filter(o => o.leaked).length, variableCases: [...verdictsByCase].filter(([, s]) => s.size > 1).map(([k]) => k).sort() });
+    canaryLeaks: outs.filter(o => o.leaked).length, variableCases: [...verdictsByCase].filter(([, s]) => s.size > 1).map(([k]) => k).sort(),
+    failedCases, canaryChangedCases });
+}
+
+export interface AgreementMatrix {
+  /** Agreement between models says nothing about correctness: it never substitutes for labeled precision and recall. */
+  readonly establishes: 'agreement-only';
+  readonly models: readonly string[];
+  /** pairs[i][j]: clean (case, trial) evaluations where both finished with the same verdict, over those both finished. */
+  readonly pairs: readonly (readonly Interval[])[];
+}
+
+/** Pairwise agreement of clean verdicts. Reported beside the gate, never read by it. */
+export function agreementMatrix(run: EvaluationRun): AgreementMatrix {
+  const verdicts = new Map<string, Map<string, Verdict>>();
+  for (const o of run.outcomes) {
+    if (o.variant !== 'clean' || !o.completed || o.verdict === null) continue;
+    const m = verdicts.get(o.modelId) ?? new Map<string, Verdict>();
+    m.set(`${o.caseId}\u0000${o.trial}`, o.verdict);
+    verdicts.set(o.modelId, m);
+  }
+  const models = [...run.plan.models];
+  const pairs = models.map(a => models.map(b => {
+    const va = verdicts.get(a) ?? new Map(); const vb = verdicts.get(b) ?? new Map();
+    const both = [...va.keys()].filter(k => vb.has(k));
+    return wilson(both.filter(k => va.get(k) === vb.get(k)).length, both.length);
+  }));
+  return Object.freeze({ establishes: 'agreement-only', models, pairs });
 }
 
 /** What the E5 gate still needs, and only when nothing is missing, whether the owner's thresholds were met. */

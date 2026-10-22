@@ -14,9 +14,9 @@ export { guidedReview, guidedSpec, GUIDED_ADAPTER_ID, GUIDED_ADAPTER_DIGEST } fr
 export type { GuidedCheck, GuidedRequest } from './guided.js';
 export { generalReview, generalSpec, reviewAllPartitions, GENERAL_ADAPTER_ID, GENERAL_ADAPTER_DIGEST } from './general.js';
 export type { GeneralRequest } from './general.js';
-export { planEvaluation, runEvaluation, e5Gate, estimatePlan, wilson } from './evaluation.js';
+export { planEvaluation, runEvaluation, e5Gate, estimatePlan, wilson, agreementMatrix } from './evaluation.js';
 export type { EvaluationCase, EvaluationCorpus, EvaluationItem, EvaluationPlan, EvaluationOutcome, Interval, ModelMetrics, Thresholds, GateReport,
-  EvaluationRun, PartitionEstimate, E8Estimate } from './evaluation.js';
+  EvaluationRun, PartitionEstimate, E8Estimate, AgreementMatrix } from './evaluation.js';
 export { GUIDED_PROMPT, GENERAL_PROMPT, promptDigest } from './prompts.js';
 export type { PromptArtifact } from './prompts.js';
 export { ReviewError, TOOL_REFUSAL_CODES, REPLY_REJECTION_CODES, REVIEW_FRONTIER_CODES, REVIEW_LIMITATION_CODES, REVIEW_ERROR_CODES, EVALUATION_CODES } from './errors.js';

@@ -651,4 +651,4 @@ ledger.
 Not decided here: the live E5 run, labels review, thresholds and the second model's configuration (owner); the
 coordinator stage that plans, admits and fences review work (PR 08/09 integration); a registered JSON schema for the
 record and checkpoint drafts; report rendering (PR 19); and feeding PR 18 path envelopes and secret-location refs
-through the two seams.
+through the two seams. The open items are tracked in the [model integration checklist](proposals/farsight-sentinel/model-integration-checklist.md).
