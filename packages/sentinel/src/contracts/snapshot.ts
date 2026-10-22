@@ -76,6 +76,8 @@ export type FrameworkVersion =
       framework: ShortText;
       state: 'unknown';
       reasonCode: CatalogKey;
+      /** The source the unresolved entry was read for, when known; without it the version is unknown for every source. */
+      sourceId?: Id;
     };
 
 /** sentinel-snapshot/draft-1 — immutable capture facts. Analysis outcomes are appended elsewhere, never here. */

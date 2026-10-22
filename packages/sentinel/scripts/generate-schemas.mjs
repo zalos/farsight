@@ -24,6 +24,7 @@ const ENVELOPES = {
   receipt: ['sentinel-receipt/draft-1', 'ReceiptEnvelope'],
   admission: ['sentinel-admission/draft-1', 'AdmissionEnvelope'],
   controls: ['sentinel-controls/draft-1', 'ControlFactsEnvelope'],
+  plan: ['sentinel-plan/draft-1', 'PlanEnvelope'],
 };
 
 const generator = createGenerator({

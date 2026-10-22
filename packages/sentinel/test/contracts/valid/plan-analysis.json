@@ -1,0 +1,227 @@
+{
+  "schema": "sentinel-plan/draft-1",
+  "runId": "run-1",
+  "revision": 2,
+  "kind": "analysis",
+  "previous": "sha256:6f47a22b746ab609a5d9483b9f0aa1b5d842f693fa1804ddda2922d44f54d1eb",
+  "pins": {
+    "snapshotId": "snap-1",
+    "inventoryDigest": "sha256:57c7af9bc5433c1210f55b9e07ade8b6c84517e2192f3502cd2e1252c8150c47",
+    "environment": "sha256:ba5285161ba6eed0085fb13784ce5c92f70ebc268b94fd66aa1d68a32884204d",
+    "ruleLockDigest": "sha256:5205a251fb0083bc318a79503edcfeb8bc4e4df4b9e6ba3fbeee4a2f9815c929",
+    "policyDigest": "sha256:7f811b238f5bc747440600ce92f2cc420489799ad40e48fa19c9dc935345b603",
+    "profileId": "profile-local",
+    "rules": [
+      {
+        "familyId": "sentinel.ts.eval",
+        "revision": 1,
+        "definitionDigest": "sha256:b8a78771c1551df41cdfbc30dd3b51ada4c0a8693fc2a00b94eac18aa8ca43c7",
+        "packDigest": "sha256:9790a3105980506187f5940069701aa9cd8e568b3fab87a9c6a5cbef89076f7f",
+        "adapterId": "sentinel-pattern"
+      },
+      {
+        "familyId": "sentinel.ts.filter-order",
+        "revision": 1,
+        "definitionDigest": "sha256:268b70e28a93c75b615fbad08ef7ac971b14bd9c25e56b0287321c2ec93fb121",
+        "packDigest": "sha256:9790a3105980506187f5940069701aa9cd8e568b3fab87a9c6a5cbef89076f7f",
+        "adapterId": "sentinel-pattern"
+      }
+    ],
+    "tools": [
+      {
+        "adapterId": "osv",
+        "artifactDigest": "sha256:5148d04a6c781343f70c5fcc0cf73dc6d166e243156ccf83e9031a74b98c1c90"
+      }
+    ],
+    "databases": [
+      {
+        "databaseId": "osv-db",
+        "snapshotDigest": "sha256:b7150dbc0777a763f63ffafa9e16df5ed58258b069367d1993b79671d4288b62"
+      }
+    ],
+    "analyses": [
+      {
+        "sourceId": "web",
+        "analysisFingerprint": "fp-web"
+      }
+    ],
+    "operations": {
+      "capture": {
+        "adapterId": "sentinel-bootstrap",
+        "digest": "sha256:d2550da00b405aeb4ee6b1977e4f75dee4b2785e2eee4321053c04c2532be500"
+      },
+      "parse": {
+        "adapterId": "sentinel-bootstrap",
+        "digest": "sha256:d2550da00b405aeb4ee6b1977e4f75dee4b2785e2eee4321053c04c2532be500"
+      },
+      "inventory": {
+        "adapterId": "sentinel-bootstrap",
+        "digest": "sha256:d2550da00b405aeb4ee6b1977e4f75dee4b2785e2eee4321053c04c2532be500"
+      }
+    },
+    "adapters": [
+      {
+        "adapterId": "sentinel-pattern",
+        "digest": "sha256:cd568da86920e106eb5cd4ea84d4475d125810a3e4936d9a9b85344fa6568c8f"
+      }
+    ],
+    "capabilities": [
+      {
+        "capability": "pattern-match",
+        "adapterId": "sentinel-pattern",
+        "adapterDigest": "sha256:cd568da86920e106eb5cd4ea84d4475d125810a3e4936d9a9b85344fa6568c8f"
+      },
+      {
+        "capability": "source-bytes",
+        "adapterId": "sentinel-pattern",
+        "adapterDigest": "sha256:cd568da86920e106eb5cd4ea84d4475d125810a3e4936d9a9b85344fa6568c8f"
+      }
+    ]
+  },
+  "reused": [
+    {
+      "id": "work-inventory-84a8fbc7c9c6eb1cf7f0af7f",
+      "revision": 1
+    }
+  ],
+  "units": [
+    {
+      "id": "work-check-43fefefbcd7003955436e793",
+      "revision": 1,
+      "stage": "check",
+      "contract": "sentinel.stage.check.sentinel-pattern",
+      "implementationDigest": "sha256:cd568da86920e106eb5cd4ea84d4475d125810a3e4936d9a9b85344fa6568c8f",
+      "sourceId": "web",
+      "adapterId": "sentinel-pattern",
+      "dependencies": [
+        {
+          "id": "work-inventory-84a8fbc7c9c6eb1cf7f0af7f",
+          "revision": 1
+        }
+      ],
+      "inputFingerprint": "sha256:9e1b31aa583420ee7997ec8d83f36d0ae83ba7a1ae5342b35137b7c70a145104",
+      "checks": [
+        "chk-3750479127384ebb53d829c0",
+        "chk-ae7982dc91b0e36e9479e0cf"
+      ],
+      "scopes": [
+        "web:src/a.ts",
+        "web:src/b.ts"
+      ],
+      "inputs": [
+        {
+          "sourceId": "web",
+          "relativePath": "src/a.ts",
+          "content": "sha256:a9329df60be78a0697d05a77e3e5336b7441aa173894254873106cb5e943edd2"
+        },
+        {
+          "sourceId": "web",
+          "relativePath": "src/b.ts",
+          "content": "sha256:66529195fa6236f6c49380f08d9e1f9a016d04517a37f2e8397fc7b1811594d2"
+        }
+      ],
+      "inputSetDigest": "sha256:6e86de0b70b98d950cbcf1c5449cb635d41a05d377ff40e51127f64b61906ee3"
+    }
+  ],
+  "checks": [
+    {
+      "familyId": "sentinel.ts.filter-order",
+      "ruleRevision": 1,
+      "scopeKind": "source-file",
+      "scopeId": "web:src/b.ts",
+      "sourceId": "web",
+      "required": true,
+      "state": "unsupported",
+      "reasonCode": "sentinel.plan.capabilityUnavailable",
+      "id": "chk-206f2da59cc304c00155ccf1",
+      "environment": "sha256:ba5285161ba6eed0085fb13784ce5c92f70ebc268b94fd66aa1d68a32884204d",
+      "mode": "deterministic"
+    },
+    {
+      "familyId": "sentinel.ts.eval",
+      "ruleRevision": 1,
+      "scopeKind": "source-file",
+      "scopeId": "web:src/a.ts",
+      "sourceId": "web",
+      "required": true,
+      "state": "planned",
+      "id": "chk-3750479127384ebb53d829c0",
+      "environment": "sha256:ba5285161ba6eed0085fb13784ce5c92f70ebc268b94fd66aa1d68a32884204d",
+      "mode": "deterministic",
+      "unit": {
+        "id": "work-check-43fefefbcd7003955436e793",
+        "revision": 1
+      }
+    },
+    {
+      "familyId": "sentinel.ts.filter-order",
+      "ruleRevision": 1,
+      "scopeKind": "source-file",
+      "scopeId": "web:src/a.ts",
+      "sourceId": "web",
+      "required": true,
+      "state": "unsupported",
+      "reasonCode": "sentinel.plan.capabilityUnavailable",
+      "id": "chk-5b164df3a399157dae82cedc",
+      "environment": "sha256:ba5285161ba6eed0085fb13784ce5c92f70ebc268b94fd66aa1d68a32884204d",
+      "mode": "deterministic"
+    },
+    {
+      "familyId": "sentinel.ts.eval",
+      "ruleRevision": 1,
+      "scopeKind": "source-file",
+      "scopeId": "web:locked/",
+      "sourceId": "web",
+      "required": true,
+      "state": "scope-unknown",
+      "reasonCode": "sentinel.plan.unknownDescendants",
+      "id": "chk-77b34d2e18839eb2248d9786",
+      "environment": "sha256:ba5285161ba6eed0085fb13784ce5c92f70ebc268b94fd66aa1d68a32884204d",
+      "mode": "deterministic"
+    },
+    {
+      "familyId": "sentinel.ts.eval",
+      "ruleRevision": 1,
+      "scopeKind": "source-file",
+      "scopeId": "web:src/b.ts",
+      "sourceId": "web",
+      "required": true,
+      "state": "planned",
+      "id": "chk-ae7982dc91b0e36e9479e0cf",
+      "environment": "sha256:ba5285161ba6eed0085fb13784ce5c92f70ebc268b94fd66aa1d68a32884204d",
+      "mode": "deterministic",
+      "unit": {
+        "id": "work-check-43fefefbcd7003955436e793",
+        "revision": 1
+      }
+    },
+    {
+      "familyId": "sentinel.ts.filter-order",
+      "ruleRevision": 1,
+      "scopeKind": "source-file",
+      "scopeId": "web:locked/",
+      "sourceId": "web",
+      "required": true,
+      "state": "scope-unknown",
+      "reasonCode": "sentinel.plan.unknownDescendants",
+      "id": "chk-b5c3c3866ba7f07565dafaf0",
+      "environment": "sha256:ba5285161ba6eed0085fb13784ce5c92f70ebc268b94fd66aa1d68a32884204d",
+      "mode": "deterministic"
+    }
+  ],
+  "ruleGaps": [],
+  "tallies": {
+    "checks": {
+      "planned": 2,
+      "unsupported": 2,
+      "applicability-unknown": 0,
+      "scope-unavailable": 0,
+      "scope-unknown": 2
+    },
+    "required": 6,
+    "requiredNotPlanned": 4,
+    "units": 1
+  },
+  "requiredCoverageAchievable": false,
+  "digest": "sha256:7dc89f15a7e52b5c0271cfe0891de14a8829af7766eb137300161b147378c153"
+}

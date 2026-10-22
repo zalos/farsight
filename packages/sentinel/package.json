@@ -42,6 +42,10 @@
       "types": "./dist/policy/index.d.ts",
       "import": "./dist/policy/index.js"
     },
+    "./planner": {
+      "types": "./dist/planner/index.d.ts",
+      "import": "./dist/planner/index.js"
+    },
     "./schemas/*": "./schemas/*",
     "./package.json": "./package.json"
   },

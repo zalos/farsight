@@ -1,0 +1,114 @@
+{
+  "schema": "sentinel-plan/draft-1",
+  "runId": "run-1",
+  "revision": 1,
+  "kind": "bootstrap",
+  "previous": null,
+  "pins": {
+    "snapshotId": null,
+    "inventoryDigest": null,
+    "environment": null,
+    "ruleLockDigest": null,
+    "policyDigest": null,
+    "profileId": "profile-local",
+    "rules": [],
+    "tools": [],
+    "databases": [],
+    "analyses": [],
+    "operations": {
+      "capture": {
+        "adapterId": "sentinel-bootstrap",
+        "digest": "sha256:d2550da00b405aeb4ee6b1977e4f75dee4b2785e2eee4321053c04c2532be500"
+      },
+      "parse": {
+        "adapterId": "sentinel-bootstrap",
+        "digest": "sha256:d2550da00b405aeb4ee6b1977e4f75dee4b2785e2eee4321053c04c2532be500"
+      },
+      "inventory": {
+        "adapterId": "sentinel-bootstrap",
+        "digest": "sha256:d2550da00b405aeb4ee6b1977e4f75dee4b2785e2eee4321053c04c2532be500"
+      }
+    },
+    "adapters": [
+      {
+        "adapterId": "sentinel-bootstrap",
+        "digest": "sha256:d2550da00b405aeb4ee6b1977e4f75dee4b2785e2eee4321053c04c2532be500"
+      }
+    ],
+    "capabilities": []
+  },
+  "reused": [],
+  "units": [
+    {
+      "id": "work-capture-649969ea8d410b3fadf9881a",
+      "revision": 1,
+      "stage": "capture",
+      "contract": "sentinel.stage.capture",
+      "implementationDigest": "sha256:d2550da00b405aeb4ee6b1977e4f75dee4b2785e2eee4321053c04c2532be500",
+      "sourceId": null,
+      "adapterId": "sentinel-bootstrap",
+      "dependencies": [],
+      "inputFingerprint": "sha256:830c96efa5381a9bf5c63bad069092924449c326971e742810714a506f392f0d",
+      "checks": [],
+      "scopes": [],
+      "inputs": [],
+      "inputSetDigest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "id": "work-parse-5dd406969bf2cbeb59e9f629",
+      "revision": 1,
+      "stage": "parse",
+      "contract": "sentinel.stage.parse",
+      "implementationDigest": "sha256:d2550da00b405aeb4ee6b1977e4f75dee4b2785e2eee4321053c04c2532be500",
+      "sourceId": "web",
+      "adapterId": "sentinel-bootstrap",
+      "dependencies": [
+        {
+          "id": "work-capture-649969ea8d410b3fadf9881a",
+          "revision": 1
+        }
+      ],
+      "inputFingerprint": "sha256:b07874e58a3e8e3edcd5bcdb77cb92955dcde7fe66aaae1eee2b7789bcd15cc7",
+      "checks": [],
+      "scopes": [],
+      "inputs": [],
+      "inputSetDigest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "id": "work-inventory-84a8fbc7c9c6eb1cf7f0af7f",
+      "revision": 1,
+      "stage": "inventory",
+      "contract": "sentinel.stage.inventory",
+      "implementationDigest": "sha256:d2550da00b405aeb4ee6b1977e4f75dee4b2785e2eee4321053c04c2532be500",
+      "sourceId": null,
+      "adapterId": "sentinel-bootstrap",
+      "dependencies": [
+        {
+          "id": "work-parse-5dd406969bf2cbeb59e9f629",
+          "revision": 1
+        }
+      ],
+      "inputFingerprint": "sha256:123154cc2ac89c663fe2b5330ab9331668ca09761d25e2e7beab2d235c735841",
+      "checks": [],
+      "scopes": [],
+      "inputs": [],
+      "inputSetDigest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  ],
+  "checks": [],
+  "ruleGaps": [],
+  "tallies": {
+    "checks": {
+      "planned": 0,
+      "unsupported": 0,
+      "applicability-unknown": 0,
+      "scope-unavailable": 0,
+      "scope-unknown": 0
+    },
+    "required": 0,
+    "requiredNotPlanned": 0,
+    "units": 3
+  },
+  "requiredCoverageAchievable": true,
+  "digest": "sha256:6f47a22b746ab609a5d9483b9f0aa1b5d842f693fa1804ddda2922d44f54d1eb"
+}

@@ -74,6 +74,14 @@ through owner adoption in user state (`adoptionIntent`, `adoptSettings`, `loadPo
 (`ReceiptBook.consume`) and records three-verdict admission (`admit`). Receipt issuing is internal to the owner CLI
 flow and is not exported. There is no planner yet (ADR 23).
 
+## Deterministic planning (draft)
+
+`farsight-sentinel/planner` turns a pinned rule lock, the effective policy, a captured snapshot and its parser
+evidence into an immutable `sentinel-plan/draft-1` revision: every check a selected rule implies, each planned onto
+exactly one work unit or kept with its reason (unsupported, applicability unknown, scope unavailable or unknown).
+`workEnvelopesFor` gives the coordinator canonical work envelopes for a plan. A new rule plans a new revision over
+the already published capture and parse; earlier revisions never change (ADR 24).
+
 ## The local store (draft)
 
 ```ts

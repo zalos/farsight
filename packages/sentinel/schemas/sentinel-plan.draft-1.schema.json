@@ -1,0 +1,710 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/PlanEnvelope",
+  "definitions": {
+    "PlanEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-plan/draft-1"
+        },
+        "runId": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "bootstrap",
+            "analysis"
+          ]
+        },
+        "previous": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The digest of the revision this one follows in the same run; null exactly for a run's first revision."
+        },
+        "pins": {
+          "$ref": "#/definitions/PlanPins"
+        },
+        "reused": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/WorkRef"
+          },
+          "description": "Work published by an earlier plan (this run or a parent run) that this revision depends on without redoing.",
+          "maxItems": 1024
+        },
+        "units": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PlanWork"
+          },
+          "maxItems": 10000
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PlanCheck"
+          },
+          "maxItems": 200000
+        },
+        "ruleGaps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PlanRuleGap"
+          },
+          "maxItems": 2048
+        },
+        "tallies": {
+          "$ref": "#/definitions/PlanTallies"
+        },
+        "requiredCoverageAchievable": {
+          "type": "boolean",
+          "description": "True only when every required check is planned."
+        },
+        "digest": {
+          "$ref": "#/definitions/Digest",
+          "description": "The canonical digest of every other field."
+        }
+      },
+      "required": [
+        "schema",
+        "runId",
+        "revision",
+        "kind",
+        "previous",
+        "pins",
+        "reused",
+        "units",
+        "checks",
+        "ruleGaps",
+        "tallies",
+        "requiredCoverageAchievable",
+        "digest"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-plan/draft-1 — one immutable plan revision."
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "Ordinal": {
+      "type": "integer",
+      "description": "A positive integer ordinal or revision.",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "PlanPins": {
+      "type": "object",
+      "properties": {
+        "snapshotId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Id"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Null on a bootstrap revision: there is no snapshot yet."
+        },
+        "inventoryDigest": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "environment": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ruleLockDigest": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "policyDigest": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "profileId": {
+          "$ref": "#/definitions/Id"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PlanPinnedRule"
+          },
+          "maxItems": 2048
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "adapterId": {
+                "$ref": "#/definitions/Id"
+              },
+              "artifactDigest": {
+                "$ref": "#/definitions/Digest"
+              }
+            },
+            "required": [
+              "adapterId",
+              "artifactDigest"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 256
+        },
+        "databases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "databaseId": {
+                "$ref": "#/definitions/Id"
+              },
+              "snapshotDigest": {
+                "$ref": "#/definitions/Digest"
+              }
+            },
+            "required": [
+              "databaseId",
+              "snapshotDigest"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 256
+        },
+        "analyses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sourceId": {
+                "$ref": "#/definitions/Id"
+              },
+              "analysisFingerprint": {
+                "type": "string",
+                "description": "The public parser's analysis fingerprint.",
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "sourceId",
+              "analysisFingerprint"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 64
+        },
+        "operations": {
+          "type": "object",
+          "properties": {
+            "capture": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/PlanAdapterPin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "parse": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/PlanAdapterPin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "inventory": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/PlanAdapterPin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "capture",
+            "parse",
+            "inventory"
+          ],
+          "additionalProperties": false,
+          "description": "The registered adapters bound to the bootstrap stages; null when none is bound yet (the work is blocked)."
+        },
+        "adapters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PlanAdapterPin"
+          },
+          "description": "Every registered adapter this revision's units run, by its registry digest.",
+          "maxItems": 256
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "capability": {
+                "type": "string"
+              },
+              "adapterId": {
+                "$ref": "#/definitions/Id"
+              },
+              "adapterDigest": {
+                "$ref": "#/definitions/Digest"
+              }
+            },
+            "required": [
+              "capability",
+              "adapterId",
+              "adapterDigest"
+            ],
+            "additionalProperties": false
+          },
+          "description": "The capability facts this revision relied on: which registered adapter establishes which capability.",
+          "maxItems": 256
+        }
+      },
+      "required": [
+        "snapshotId",
+        "inventoryDigest",
+        "environment",
+        "ruleLockDigest",
+        "policyDigest",
+        "profileId",
+        "rules",
+        "tools",
+        "databases",
+        "analyses",
+        "operations",
+        "adapters",
+        "capabilities"
+      ],
+      "additionalProperties": false
+    },
+    "PlanPinnedRule": {
+      "type": "object",
+      "properties": {
+        "familyId": {
+          "$ref": "#/definitions/RuleFamilyId"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "definitionDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "packDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "adapterId": {
+          "$ref": "#/definitions/Id",
+          "description": "The registered adapter the rule's definition names: the only adapter its checks may run under."
+        }
+      },
+      "required": [
+        "familyId",
+        "revision",
+        "definitionDigest",
+        "packDigest",
+        "adapterId"
+      ],
+      "additionalProperties": false
+    },
+    "RuleFamilyId": {
+      "type": "string",
+      "description": "A stable rule family: `sentinel.<area>.<name>` for original rules, `<vendor>.<area>.<name>` otherwise.",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*){2,7}$",
+      "maxLength": 128
+    },
+    "PlanAdapterPin": {
+      "type": "object",
+      "properties": {
+        "adapterId": {
+          "$ref": "#/definitions/Id"
+        },
+        "digest": {
+          "$ref": "#/definitions/Digest"
+        }
+      },
+      "required": [
+        "adapterId",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
+    "WorkRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false,
+      "description": "A logical work unit at one immutable revision; every reference to work names both."
+    },
+    "PlanWork": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "stage": {
+          "$ref": "#/definitions/PlanStage"
+        },
+        "contract": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "implementationDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "sourceId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "adapterId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/WorkRef"
+          },
+          "maxItems": 1024
+        },
+        "inputFingerprint": {
+          "$ref": "#/definitions/Digest",
+          "description": "Digest of every input that determines its output (inventory, analysis, rule pins, tool, scopes)."
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Id"
+          },
+          "maxItems": 2048
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScopeId"
+          },
+          "maxItems": 256
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PlanInput"
+          },
+          "maxItems": 20000
+        },
+        "inputSetDigest": {
+          "$ref": "#/definitions/Digest",
+          "description": "Digest of exactly `inputs`: the captured bytes this unit may read, bound apart from its wider fingerprint."
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "stage",
+        "contract",
+        "implementationDigest",
+        "sourceId",
+        "adapterId",
+        "dependencies",
+        "inputFingerprint",
+        "checks",
+        "scopes",
+        "inputs",
+        "inputSetDigest"
+      ],
+      "additionalProperties": false,
+      "description": "One physical work unit. It covers exactly `checks`, however many rules or scopes it batches."
+    },
+    "PlanStage": {
+      "type": "string",
+      "enum": [
+        "capture",
+        "parse",
+        "inventory",
+        "check"
+      ],
+      "description": "What a work unit does: the bootstrap stages, or running checks."
+    },
+    "ScopeId": {
+      "type": "string",
+      "description": "A scope reference such as `<sourceId>:<relativePath>` or a surface ID. Untrusted protocol data: bounded, free of control characters, never resolved as a filesystem path.",
+      "pattern": "^[A-Za-z0-9][^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]*$",
+      "maxLength": 4300
+    },
+    "PlanInput": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "relativePath": {
+          "$ref": "#/definitions/RelativePath"
+        },
+        "content": {
+          "$ref": "#/definitions/ArtifactId"
+        }
+      },
+      "required": [
+        "sourceId",
+        "relativePath",
+        "content"
+      ],
+      "additionalProperties": false,
+      "description": "A captured file a work unit reads, by the exact content artifact the plan pinned."
+    },
+    "RelativePath": {
+      "type": "string",
+      "description": "A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL. A newline or other line break inside a name is a legal POSIX name and is kept as captured; the checks use `[\\s\\S]`, never `.`, so a line break cannot hide a `..` segment from them.",
+      "pattern": "^(?![/])(?![\\s\\S]*[/]$)(?!([\\s\\S]*[/])?\\.{1,2}([/]|$))(?![\\s\\S]*[/][/])[^\\\\\\u0000]+$",
+      "maxLength": 4096
+    },
+    "ArtifactId": {
+      "$ref": "#/definitions/Digest",
+      "description": "An immutable object-store identity: the digest of canonical uncompressed bytes."
+    },
+    "PlanCheck": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "familyId": {
+          "$ref": "#/definitions/RuleFamilyId"
+        },
+        "ruleRevision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "scopeKind": {
+          "$ref": "#/definitions/RuleScopeKind"
+        },
+        "scopeId": {
+          "$ref": "#/definitions/ScopeId"
+        },
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "environment": {
+          "$ref": "#/definitions/Digest"
+        },
+        "mode": {
+          "type": "string",
+          "const": "deterministic"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Counts against required coverage: a mandatory rule, complete-coverage policy or a required capability."
+        },
+        "state": {
+          "$ref": "#/definitions/PlanCheckState"
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey",
+          "description": "Required for every state but `planned`."
+        },
+        "unit": {
+          "$ref": "#/definitions/WorkRef",
+          "description": "Only for `planned`: the work unit that covers it."
+        }
+      },
+      "required": [
+        "id",
+        "familyId",
+        "ruleRevision",
+        "scopeKind",
+        "scopeId",
+        "sourceId",
+        "environment",
+        "mode",
+        "required",
+        "state"
+      ],
+      "additionalProperties": false,
+      "description": "One check: (scope, rule revision, environment, mode). Its id is a digest of exactly those."
+    },
+    "RuleScopeKind": {
+      "type": "string",
+      "enum": [
+        "source-file",
+        "surface",
+        "dependency-manifest",
+        "ci-config",
+        "repository"
+      ],
+      "description": "What one check of the rule is about: one file, one surface (route/handler), a manifest, CI config, or the whole repository."
+    },
+    "PlanCheckState": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "unsupported",
+        "applicability-unknown",
+        "scope-unavailable",
+        "scope-unknown"
+      ],
+      "description": "A check's planning state. Only `planned` is assigned to work; every other state carries its reason."
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "PlanRuleGap": {
+      "type": "object",
+      "properties": {
+        "familyId": {
+          "$ref": "#/definitions/RuleFamilyId"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        }
+      },
+      "required": [
+        "familyId",
+        "required",
+        "reasonCode"
+      ],
+      "additionalProperties": false,
+      "description": "A rule the policy selects that could not be scheduled at all."
+    },
+    "PlanTallies": {
+      "type": "object",
+      "properties": {
+        "checks": {
+          "type": "object",
+          "properties": {
+            "planned": {
+              "$ref": "#/definitions/Count"
+            },
+            "unsupported": {
+              "$ref": "#/definitions/Count"
+            },
+            "applicability-unknown": {
+              "$ref": "#/definitions/Count"
+            },
+            "scope-unavailable": {
+              "$ref": "#/definitions/Count"
+            },
+            "scope-unknown": {
+              "$ref": "#/definitions/Count"
+            }
+          },
+          "required": [
+            "planned",
+            "unsupported",
+            "applicability-unknown",
+            "scope-unavailable",
+            "scope-unknown"
+          ],
+          "additionalProperties": false
+        },
+        "required": {
+          "$ref": "#/definitions/Count"
+        },
+        "requiredNotPlanned": {
+          "$ref": "#/definitions/Count",
+          "description": "Required checks in any state but `planned`, plus required rule gaps."
+        },
+        "units": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "required": [
+        "checks",
+        "required",
+        "requiredNotPlanned",
+        "units"
+      ],
+      "additionalProperties": false
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-plan.draft-1.schema.json",
+  "title": "sentinel-plan/draft-1"
+}

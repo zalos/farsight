@@ -41,6 +41,32 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel policy merged; planner integration verified — 2026-10-22
+
+Rules and adopted policy merged as [#142](https://github.com/zalos/farsight/pull/142), `074ee43`, after
+independent SOL review and all eight final checks. The committed-tree Git header correction merged as
+[#143](https://github.com/zalos/farsight/pull/143), `9a0fd21`, after SOL review and all eight checks.
+
+The pure canonical planner passed SOL review through its final scope, input-binding, immutable-restoration
+and coverage corrections. The combined integration on `codex/sentinel-planner-integration` passed full build,
+workspace typecheck, 336 Sentinel tests (17 explicit opt-in/platform skips), catalog lint (3,776 entries),
+and a clean npm consumer: eight typed exports, 19 contracts/schemas, 53 fixtures and cross-process store reopen.
+Fresh fixed-source ingests against main `9a0fd21` agree on all node and edge values: 7,859 nodes, 16,318 edges,
+source digest `0f4108351653`, 21,774,989 graph bytes and 29,679,616 database bytes in both.
+Fresh front-door, Map and code-map screenshots were inspected with zero page errors; the fixture's existing
+design-image 404s remain on the first two pages.
+The planner establishes supported capabilities and exact tool version/image matching; execution-platform
+qualification remains an admission gate. Required coverage comes from canonical coverage evidence, never
+from a worker exiting successfully.
+
+Scheduler integration must use that canonical plan and coverage evaluator, retain its plan and input artifacts,
+and publish real bootstrap evidence. Detached CLI operation exists in an isolated implementation but still needs
+the canonical planner, durable plan storage, promoted locks and policy-controlled service actions. Pattern
+failure diagnostics passed independent real-container review; secrets and offline advisories are under
+implementation/review. Spring registration, callback and inheritance edge cases remain under correction.
+These later packages are not complete. The computer restart removed temporary validation artifacts; the
+planner's comparison and checks above were recreated afterward. No primary build or dogfood refresh occurred.
+
 ## Sentinel parser merged; rules and policy integration — 2026-10-22
 
 PR [#141](https://github.com/zalos/farsight/pull/141) merged at `500351c` after all ten final CI checks and
