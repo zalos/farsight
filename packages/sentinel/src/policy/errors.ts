@@ -5,7 +5,7 @@ export const POLICY_ERROR_CODES = [
   'sentinel.rules.packUnreadable', 'sentinel.rules.packUnsafe', 'sentinel.rules.packChanged', 'sentinel.rules.packTooLarge',
   'sentinel.rules.manifestInvalid', 'sentinel.rules.fileMissing', 'sentinel.rules.executableRule',
   'sentinel.rules.promotionUnauthorized', 'sentinel.rules.lockInvalid', 'sentinel.rules.familyConflict',
-  'sentinel.rules.candidateInvalid',
+  'sentinel.rules.candidateInvalid', 'sentinel.rules.packMissing', 'sentinel.rules.packMismatch', 'sentinel.rules.ruleNotLocked',
   'sentinel.policy.settingsUnreadable', 'sentinel.policy.settingsInvalid', 'sentinel.policy.credentialValue',
   'sentinel.policy.workspaceNotCanonical', 'sentinel.policy.trustDirInsideWorkspace', 'sentinel.policy.trustDirUnsafe',
   'sentinel.policy.adoptionUnauthorized',

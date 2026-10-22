@@ -3,7 +3,7 @@
 // a rule implementation shaped like a script is refused, and nothing here imports, evaluates or spawns pack content.
 import { closeSync, constants as FS, fstatSync, lstatSync, openSync, opendirSync, readSync, realpathSync, type Stats } from 'node:fs';
 import { isAbsolute, join, normalize } from 'node:path';
-import type { LockedPack, LockedRule, PackFile, RulePackManifest } from '../contracts/index.js';
+import type { LockedPack, LockedRule, PackFile, RuleDefinition, RulePackManifest } from '../contracts/index.js';
 import { isSafeRelativePath, validateEnvelope } from '../validate.js';
 import { canonicalDigest, sha256Digest } from '../policy/digest.js';
 import { policyFail } from '../policy/errors.js';
@@ -167,6 +167,10 @@ export function isValidatedPack(value: unknown): value is ValidatedPack {
   return typeof value === 'object' && value !== null && validated.has(value);
 }
 
+/** A rule's definition digest: its definition and every file it names (rule file, then positive, then negative fixtures). */
+export const ruleDefinitionDigest = (rule: RuleDefinition, named: readonly PackFile[]) =>
+  canonicalDigest({ kind: 'sentinel-rule/1', rule, files: named });
+
 /** Digest of a sorted file inventory: any changed, added, removed or renamed file changes it. */
 export const inventoryDigest = (files: readonly PackFile[]) => canonicalDigest({ kind: 'sentinel-pack-inventory/1', files });
 
@@ -231,7 +235,7 @@ export function validatePack(files: ReadonlyMap<string, Uint8Array>, limits: Par
       ...rule.fixtures.positive.map(f => need(f, `${rule.familyId}: the positive fixture`)),
       ...rule.fixtures.negative.map(f => need(f, `${rule.familyId}: the negative fixture`)),
     ];
-    return { familyId: rule.familyId, revision: rule.revision, definitionDigest: canonicalDigest({ kind: 'sentinel-rule/1', rule, files: named }) };
+    return { familyId: rule.familyId, revision: rule.revision, definitionDigest: ruleDefinitionDigest(rule, named) };
   });
   const packDigest = inventoryDigest(inventory);
   const pack: ValidatedPack = deepFreeze(structuredClone({

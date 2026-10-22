@@ -68,7 +68,7 @@ segment. Money is a decimal string. Resource ceilings are the PR 01 proposed def
 
 `./rules` reads a candidate pack as data (`readPackDirectory`, `validatePack`) and promotes it into an immutable lock
 (`promote`) only with the owner's spent receipt for that candidate against that lock; a plan pins `lockDigest(lock)`
-and `verifyPinnedLock` refuses any other revision. `./policy` parses settings and repository intent, merges them so the
+and `verifyPinnedLock` refuses any other revision. `resolveLockedRules` returns the original definitions of the locked rules from the exact validated packs the lock pins, refusing any other pack. `./policy` parses settings and repository intent, merges them so the
 repository can only tighten (`effectivePolicy`, whose `view` is the only policy to serve), binds settings to a workspace
 through owner adoption in user state (`adoptionIntent`, `adoptSettings`, `loadPolicyInputs`), spends receipts once
 (`ReceiptBook.consume`) and records three-verdict admission (`admit`). Receipt issuing is internal to the owner CLI

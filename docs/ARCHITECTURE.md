@@ -421,7 +421,11 @@ recognised only when `validatePack` produced it; a structural copy is refused. P
 recording a tool or database digest (`tool.acquire`) needs the owner's spent receipt for exactly the complete entry
 promotion writes (inventory, rights, rules and their digests, or the tool/database entry) against exactly that lock
 revision; promotion digests and writes its own private copy, and returns a new revision naming its predecessor's digest; a plan pins a lock
-digest, so a pack update never changes an existing plan. A rule family is locked by one pack. Rights (SPDX
+digest, so a pack update never changes an existing plan. A rule family is locked by one pack. A planner gets each rule's definition through
+`resolveLockedRules(lock, pin, packs, families?)`: pure, no download or re-acquisition; the lock must have exactly the
+pinned digest, a pack is used only when it is `validatePack`'s own object whose complete entry equals the locked one,
+and each definition digest is recomputed from that pack and must equal the lock's, so a missing, stale, newer, forged
+or mismatched pack is refused. Rights (SPDX
 expression, origin, upstream for third-party content) travel with every pack, tool and database. Recording a tool
 digest authorizes no download and no execution. **Policy:** `.farsight/sentinel/settings.json` is the owner's file
 (scrubbed twin `settings.example.json`), holding keychain references only; a credential-shaped value anywhere else

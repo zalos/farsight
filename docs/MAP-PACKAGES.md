@@ -75,7 +75,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   fixtures with the git CLI; capture itself never runs it.
   Rule packs, the rule lock and
   trusted policy (ADR 23): `src/rules/pack.ts` (read a candidate pack as data, validate it, digest every file it names),
-  `src/rules/lock.ts` (immutable lock revisions, receipt-confirmed promotion, `verifyPinnedLock`), `src/policy/settings.ts`
+  `src/rules/lock.ts` (immutable lock revisions, receipt-confirmed promotion, `verifyPinnedLock`), `src/rules/resolve.ts` (`resolveLockedRules`: a pinned lock plus the exact validated packs → original rule definitions with their pins, for the planner), `src/policy/settings.ts`
   (settings and repository intent, the stricter-wins merge and the redacted effective policy), `adoption.ts` (owner
   adoption bound to workspace identity and settings digest in user state), `receipts.ts` (spend a receipt once) beside
   the unexported `owner-receipts.ts` (issue one; owner CLI only), `admission.ts` (the three verdicts over core

@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   validateEnvelope, schemaOf, readPackDirectory, validatePack, emptyLock, lockDigest, promote, promotionIntent,
-  verifyPinnedLock, candidateDigest, isValidatedPack, parseSettings, parseRepoConfig, effectivePolicy, DEFAULT_SETTINGS, ReceiptBook,
+  verifyPinnedLock, candidateDigest, isValidatedPack, resolveLockedRules, parseSettings, parseRepoConfig, effectivePolicy, DEFAULT_SETTINGS, ReceiptBook,
   intentDigest, isConsumedReceipt, adoptSettings, adoptionIntent, loadPolicyInputs, trustDirectory, workspaceIdentity,
   admit, compareDecimal, isEffectivePolicy, PolicyError, SETTINGS_PATH, REPO_CONFIG_PATH, MAX_RECEIPT_TTL_MS,
   RULE_LANGUAGES, RULE_SCOPE_KINDS, RULE_CAPABILITIES, RULE_MEANINGS, SEVERITIES, RULE_EVIDENCE, FRAMEWORK_IDS, RULE_ORIGINS,
@@ -290,6 +290,42 @@ test('a validated pack is deeply immutable, and only validatePack’s own object
   assert.throws(() => { (next.packs[0] as any).rights.spdx = 'X'; }, TypeError, 'the new lock is deeply frozen');
   assert.throws(() => { (lock as any).packs.push({}); }, TypeError, 'the old lock is deeply frozen');
   assert.equal(lock.packs.length, 0);
+});
+
+test('locked rules resolve to their original definitions only from the exact pinned packs', t => {
+  const dir = scratch(t);
+  writePack(dir);
+  const v1 = validatePack(readPackDirectory(dir));
+  const book = owner(t);
+  const lock0 = emptyLock(NOW);
+  const lock1 = promote(lock0, { kind: 'pack', pack: v1 }, confirm(book, promotionIntent(lock0, { kind: 'pack', pack: v1 }), lockDigest(lock0), D('0')), NOW);
+  const pin1 = lockDigest(lock1);
+
+  // The mandatory rule of the adopted settings resolves to the manifest's own definition, frozen, with its pins.
+  const policy = effectivePolicy(adopted(parseSettings(Buffer.from(JSON.stringify({ ...parseExample(), mandatoryRules: ['sentinel.sql.dynamic-query'] })))));
+  const [rule] = resolveLockedRules(JSON.parse(JSON.stringify(lock1)), pin1, [v1], policy.rules);
+  assert.deepEqual(rule!.definition, load('rulepack').rules[0]);
+  assert.equal(rule!.definitionDigest, lock1.packs[0]!.rules[0]!.definitionDigest);
+  assert.equal(rule!.packDigest, v1.packDigest);
+  assert.equal(rule!.lockDigest, pin1);
+  assert.throws(() => { (rule!.definition as any).severity = 'info'; }, TypeError);
+  assert.deepEqual(resolveLockedRules(lock1, pin1, [v1]).map(r => r.familyId), ['sentinel.sql.dynamic-query'], 'every locked rule by default');
+
+  // A pack update promoted into a newer lock leaves the active lock resolvable only with the pack it pinned.
+  writeFileSync(join(dir, 'detectors/dynamic-query.yml'), 'rules: [ { id: v2 } ]\n');
+  const v2 = validatePack(readPackDirectory(dir));
+  const lock2 = promote(lock1, { kind: 'pack', pack: v2 }, confirm(book, promotionIntent(lock1, { kind: 'pack', pack: v2 }), pin1, D('0')), NOW);
+  assert.equal(lockDigest(lock1), pin1);
+  assert.equal(code(() => resolveLockedRules(lock1, pin1, [v2])), 'sentinel.rules.packMismatch', 'a newer pack is not the pinned one');
+  assert.equal(resolveLockedRules(lock1, pin1, [v2, v1])[0]!.packDigest, v1.packDigest, 'the matching pack is chosen among several');
+  assert.equal(resolveLockedRules(lock2, lockDigest(lock2), [v2])[0]!.packDigest, v2.packDigest);
+  assert.equal(code(() => resolveLockedRules(lock2, lockDigest(lock2), [v1])), 'sentinel.rules.packMismatch', 'an older pack is stale');
+
+  // Forged, missing, unlocked and wrong pins are refused.
+  assert.equal(code(() => resolveLockedRules(lock1, pin1, [JSON.parse(JSON.stringify(v1))])), 'sentinel.rules.packMismatch');
+  assert.equal(code(() => resolveLockedRules(lock1, pin1, [])), 'sentinel.rules.packMissing');
+  assert.equal(code(() => resolveLockedRules(lock1, pin1, [v1], ['sentinel.extra.rule-one'])), 'sentinel.rules.ruleNotLocked');
+  assert.equal(code(() => resolveLockedRules(lock1, lockDigest(lock2), [v1])), 'sentinel.rules.lockInvalid');
 });
 
 test('a tool entry changed after the owner confirmed it is refused', t => {
