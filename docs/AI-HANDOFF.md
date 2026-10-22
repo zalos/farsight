@@ -6,6 +6,24 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Bounded paths integration on merged foundations — 2026-10-22
+
+Branch `codex/sentinel-paths-integration` rebases the five reviewed path/import commits ending at `09bd0b64`
+onto merged Pattern main `5196dc70`, then includes merged Express main `95387a4e` with a feature-branch merge.
+The path implementation and its two contracts are byte-identical to `09bd0b64`; merged Pattern rules/adapter and
+Express implementation bytes are retained unchanged. Catalogs, ADRs, exports, precise import-audit entries,
+capability assertions and the clean npm consumer retain all three boundaries. `evidence.import` remains an
+owner-only verb, imported observations remain imported, and no qualified deep engine or public command wiring is
+claimed. The consumer runs both the installed path query/import refusal and Express source-only fixture analysis.
+
+Validation on the combined candidate: Sentinel dependency-closure build and typecheck, generated schemas and
+catalog lint; 110 affected path/contract/policy/package/Pattern/Express tests plus two capability-union controls
+passed, zero skips. A fresh npm-only consumer compiled ten typed exports and 21 contract types, checked 21 schemas,
+55 fixtures and all 17 Pattern assets, reopened the store across processes, ran a captured cross-file call query,
+refused import without an owner receipt, and analyzed the Express before/after/conditional fixture. No target code,
+scanner or deep engine ran. Earlier full-suite, fixed-source ingest and browser results belong to `09bd0b64` against
+`e25424fb`, not this merged candidate. Full PR 18 command/deep qualification remains open.
+
 ## Start here
 
 Read `AGENTS.md` for project rules and architecture. Codex loads it as project instructions; `CLAUDE.md` imports it and this handoff. Keep durable facts in those repository files so both providers receive updates. This is project memory, not ChatGPT account memory or a synchronization of private conversation histories.

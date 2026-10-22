@@ -61,6 +61,8 @@ import { SENTINEL_PATTERN_STRINGS } from './strings-sentinel-pattern.js';
 import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
 import { SENTINEL_ANALYSIS_STRINGS } from './strings-sentinel-analysis.js';
+
+import { SENTINEL_EXPRESS_STRINGS } from './strings-sentinel-express.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
 import { TOUR_STRINGS } from './strings-tour.js';
@@ -201,6 +203,9 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_GLOSSARY_STRINGS,
   // Sentinel's bounded call paths and imported deep-analysis results (strings-sentinel-analysis.ts)
   ...SENTINEL_ANALYSIS_STRINGS,
+
+  // the Express framework pack: why a control fact about an Express route is unknown (strings-sentinel-express.ts)
+  ...SENTINEL_EXPRESS_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
   // who may do what — the role × action table's words live in strings-roles.ts (roles.*, gate.roles.*, its counts)

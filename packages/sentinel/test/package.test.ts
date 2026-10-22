@@ -22,7 +22,8 @@ test('the package is optional, private and exports only files that exist', () =>
   assert.match(manifest.version, /-draft\./);
   // core supplies the shared catalog (and later counts/placement/grants); @types/node because the public store
   // declarations name Node built-ins. No scanner, container client or model SDK dependency.
-  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', 'ajv']);
+  // oxc-parser (the version the public parser pins) because the Express pack reads source syntax itself (ADR 31).
+  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', 'ajv', 'oxc-parser']);
   assert.equal(manifest.bin['farsight-sentinel'], './dist/cli.js');
   for (const [key, target] of Object.entries(manifest.exports as Record<string, any>)) {
     if (key.includes('*')) continue;
@@ -136,6 +137,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // Bounded call paths and attested deep import (ADR 36): pure over parser evidence and captured bytes; no engine, no process.
   'analysis/paths/paths.js': ['@farsight/graph', 'node:crypto'],
   'analysis/deep/import.js': ['@farsight/graph', 'node:crypto'],
+  // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
+  'frameworks/express/pack.js': ['@farsight/graph', 'node:crypto'],
+  'frameworks/express/syntax.js': ['dynamic:oxc-parser'],
   'snapshot/worktree.js': ['node:fs'],
 };
 
@@ -235,8 +239,9 @@ test('draft contracts, store, capture, parser, policy and planner are available;
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli', 'bounded-call-paths', 'deep-import']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli', 'framework-express', 'bounded-call-paths', 'deep-import']);
   assert.equal(listed.find(c => c.id === 'interprocedural-flow')?.state, 'unavailable', 'no deep engine is claimed');
+  assert.equal(listed.find(c => c.id === 'framework-express')?.reasonCode, 'sentinel.capability.draftExpress');
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
   for (const id of ['pattern-scan', 'coordinator', 'reports']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
   assert.equal(listed.find(c => c.id === 'rules-and-planning')?.state, 'available-draft');

@@ -87,6 +87,8 @@ try {
   assert.equal(subpaths.includes('./parser'), parserExported, 'the installed ./parser export matches the source package');
   const analysisExported = Object.hasOwn(sourceExports, './analysis');
   assert.equal(subpaths.includes('./analysis'), analysisExported, 'the installed ./analysis export matches the source package');
+  const expressExported = Object.hasOwn(sourceExports, './frameworks/express');
+  assert.equal(subpaths.includes('./frameworks/express'), expressExported, 'the installed ./frameworks/express export matches the source package');
 
   // The envelope registry, as the installed package reports it.
   const registry = JSON.parse(await evalModule("const { ENVELOPES } = await import('farsight-sentinel'); console.log(JSON.stringify(ENVELOPES));"));
@@ -167,6 +169,14 @@ try {
       "  const r: DeepImportResult = await importDeepAnalysis({ document: '{}', snapshot: { id: 'x', entries: [] }, authorization: null, readContent: async () => new Uint8Array(), importedAt: '2026-10-22T10:00:00Z' });",
       '  const doc: DeepImportEnvelope | undefined = undefined;',
       "  return [env.establishes, env.results[0]?.outcome, reason, r.status, DEEP_ANALYSIS_SUPPORT.engine, doc];",
+      '}',
+    ] : []),
+    ...(expressExported ? [
+      "import { analyzeExpress, EXPRESS_PACK, EXPRESS_SUPPORT, EXPRESS_REASON_CODES, matchPath, type ExpressPackInput, type ExpressReason } from 'farsight-sentinel/frameworks/express';",
+      'export async function expressFields(input: ExpressPackInput): Promise<unknown[]> {',
+      '  const reason: ExpressReason = EXPRESS_REASON_CODES[0];',
+      '  const envelope: ControlFactsEnvelope = await analyzeExpress(input);',
+      "  return [EXPRESS_PACK.version, EXPRESS_SUPPORT.dispatch, reason, matchPath('/a/b', '/a', true), envelope.facts[0]?.order];",
       '}',
     ] : []),
   ];
@@ -283,6 +293,7 @@ try {
     assert.ok(read.ok && read.integrity === 'ok', 'reachability and SQLite integrity hold after the reopen');
     storeDemo = `store reopened across processes (${host} SQLite ${process.versions.sqlite}, ${pair?.status ?? 'unqualified on CI'})`;
     if (analysisExported) storeDemo += await analysisDemo();
+    if (expressExported) storeDemo += await expressDemo();
   } else {
     const refused = await node('store-write.mjs').then(() => null, (error) => `${error.stderr}`);
     assert.match(refused ?? '', /sentinel\.store\.(platformUnqualified|runtimeUnqualified)/, `an unqualified pair (${host}, SQLite ${process.versions.sqlite}) is refused`);
@@ -292,8 +303,8 @@ try {
 
   /**
    * The installed analysis API, run for real: an original two-file fixture is captured and parsed through the installed
-   * package alone; a bounded call path is found across the files, and an attested import is refused without trust and
-   * accepted with it. Nothing in the fixture is built or run, and no analyzer exists or is invoked.
+   * package alone; a bounded call path is found across the files and a deep import is refused without the owner's
+   * spent receipt. Nothing in the fixture is built or run, and no analyzer exists or is invoked.
    */
   async function analysisDemo() {
     const appDir = join(storeRoot, 'paths-app');
@@ -351,6 +362,80 @@ try {
     assert.deepEqual(result, { outcome: 'reached', establishes: 'call-reachability', steps: 1, refused: 'untrusted', reason: 'sentinel.deep.notOwnerConfirmed', intent: 'evidence.import', engine: null },
       'a bounded call path, and an import refused without the owner\'s receipt, from the installed package alone');
     return ', analysis API ran installed (call path, import refused without owner receipt)';
+  }
+
+  /**
+   * The installed Express pack, run for real: an original fixture with a route registered before its check, one after
+   * it and one behind a conditional registration in a second application is captured, parsed and analysed through the
+   * installed package alone. git builds the fixture's repository only; nothing in it is installed or run.
+   */
+  async function expressDemo() {
+    const appDir = join(storeRoot, 'express-app');
+    const files = {
+      'package.json': '{ "name": "smoke", "private": true, "type": "module", "dependencies": { "express": "4.21.2" } }\n',
+      'src/auth.ts': `export function requireUser(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'sign in' });
+  next();
+}
+`,
+      'src/app.ts': `import express from 'express';
+import { requireUser } from './auth.js';
+
+const app = express();
+app.get('/early', (req, res) => { res.json({}); });
+app.use(requireUser);
+app.get('/late', (req, res) => { res.json({}); });
+
+export default app;
+`,
+      'src/other.ts': `import express from 'express';
+import { requireUser } from './auth.js';
+
+const router = express.Router();
+if (process.env.STRICT) router.use(requireUser);
+router.get('/maybe', (req, res) => { res.json({}); });
+const second = express();
+second.use(router);
+second.listen(3001);
+`,
+    };
+    for (const [path, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(appDir, path)), { recursive: true });
+      writeFileSync(join(appDir, path), text);
+    }
+    const gitEnv = { PATH: process.env.PATH ?? '', HOME: appDir, LANG: 'C', LC_ALL: 'C', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'dev@example.com', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'dev@example.com' };
+    const gitRun = (args) => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'init.defaultBranch=main', ...args], { cwd: appDir, env: gitEnv, stdio: 'ignore' });
+    gitRun(['init', '--quiet']);
+    gitRun(['add', '--all']);
+    gitRun(['commit', '--quiet', '--no-verify', '-m', 'fixture']);
+    const workDir = join(storeRoot, 'express-work');
+    mkdirSync(workDir, { mode: 0o700 });
+    writeFileSync(join(consumer.dir, 'express-demo.mjs'), `
+      import { openStore } from 'farsight-sentinel/store';
+      import { captureSnapshot } from 'farsight-sentinel/snapshot';
+      import { parseSnapshot } from 'farsight-sentinel/parser';
+      import { analyzeExpress } from 'farsight-sentinel/frameworks/express';
+      const store = await openStore(${JSON.stringify(join(storeRoot, 'express-store'))});
+      try {
+        const { snapshot } = await captureSnapshot(store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'example/smoke', root: ${JSON.stringify(appDir)} }] });
+        const parsed = await parseSnapshot(store, { snapshotId: snapshot.id, workDir: ${JSON.stringify(workDir)},
+          selection: { gitignore: true, testFiles: 'include' },
+          limits: { maxFiles: 100, maxFileBytes: 1 << 20, maxTotalBytes: 1 << 24, maxEntries: 1000, maxDurationMs: 60000 } });
+        const facts = await analyzeExpress({ snapshot, sourceId: 'app', analysis: parsed.sources[0], readContent: id => store.readArtifact(id) });
+        const out = {};
+        for (const f of facts.facts) if (f.property === 'authentication') out[f.surfaceId] = f.order + ':' + (f.verdict === 'unknown' ? f.reasonCode : f.verdict);
+        console.log(JSON.stringify({ version: facts.framework.version, out }));
+      } finally { store.close(); }
+    `);
+    const result = JSON.parse((await node('express-demo.mjs')).stdout.trim());
+    assert.equal(result.version, '4.21.2');
+    assert.deepEqual(result.out, {
+      'app::route::GET /early': '0:does-not-apply',
+      'app::route::GET /late': '0:sentinel.express.refusalUnproven',
+      'app::route::GET /maybe': '0:sentinel.express.registrationDynamic',
+    }, 'a route before its check, one after it and a conditional registration, from the installed package alone');
+    return ', Express pack analysed an installed fixture (before, after, conditional)';
   }
 
   // Standalone: everything @farsight/* is inlined, and farsight-cli is not pulled in.
@@ -420,7 +505,7 @@ try {
     }
   }
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}${analysisExported ? ', analysis types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}npm consumer`);
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}${analysisExported ? ', analysis types compiled' : ''}${expressExported ? ', Express pack types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}npm consumer`);
 } finally {
   consumer.cleanup();
 }
