@@ -31,15 +31,17 @@ function tree(dir: string): Record<string, string> {
 }
 
 /** Capture and parse a synthetic tree, then seal the job, the snapshot, the retained evidence and every captured file. */
-async function sealed(t: any, files: Record<string, string>, jobs = 1) {
+async function sealed(t: any, files: Record<string, string>, jobs = 1, other?: Record<string, string>) {
   const dir = scratch(t, 'sentinel-controls-');
   const root = join(dir, 'repo');
   commitRepo(root, files);
   const { store } = await openCaptureStore(t, dir);
-  const { snapshot } = await captureSnapshot(store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'example/app', root }] });
+  const sources = [{ sourceId: 'app', repositoryId: 'example/app', root }];
+  if (other) { const otherRoot = join(dir, 'other-repo'); commitRepo(otherRoot, other); sources.push({ sourceId: 'other', repositoryId: 'example/other', root: otherRoot }); }
+  const { snapshot } = await captureSnapshot(store, { mode: 'working-copy', sources });
   const parseDir = join(dir, 'parse');
   mkdirSync(parseDir, { mode: 0o700 });
-  const parsed = (await parseSnapshot(store, { snapshotId: snapshot.id, workDir: parseDir, selection: { gitignore: true, testFiles: 'include' }, limits: LIMITS })).sources[0]!;
+  const parsed = (await parseSnapshot(store, { snapshotId: snapshot.id, workDir: parseDir, selection: { gitignore: true, testFiles: 'include' }, limits: LIMITS })).sources.find(x => x.sourceId === 'app')!;
   const sealedDir = join(dir, 'sealed');
   mkdirSync(sealedDir, { mode: 0o700 });
   const ids: { id: string; path: string }[] = [];
@@ -52,7 +54,8 @@ async function sealed(t: any, files: Record<string, string>, jobs = 1) {
   };
   const files_: string[] = [];
   const walk = (v: any) => { if (v && typeof v === 'object') { if (v.disposition === 'included' && typeof v.content === 'string') files_.push(v.content); for (const x of Object.values(v)) walk(x); } };
-  walk(snapshot);
+  // Only this source's captured files are sealed, as the coordinator seals a repository unit's inputs.
+  walk({ entries: snapshot.entries.filter((e: any) => e.sourceId === 'app') });
   for (const id of new Set(files_)) put(await store.readArtifact(id));
   const job = (n: number) => ({
     schema: CONTROLS_JOB_SCHEMA, snapshotId: snapshot.id, sourceId: 'app', snapshot: put(canonicalJson(snapshot)),
@@ -159,6 +162,20 @@ test('a cancel stops the child within its grace, killing it if it does not answe
   assert.ok(o.exit, 'the worker process was reaped');
   assert.equal(o.detail?.forced, true, 'the worker does not answer a cancel mid-analysis: it is killed after the grace');
   assert.ok(Date.now() - t0 < 1_400, 'stopped well before the job would have finished');
+});
+
+test('another source in the snapshot manifest is identity only: facts and reads stay within this source', needsStore, async t => {
+  // The other source is an Express app too; its bytes are not sealed for this unit.
+  const fx = await sealed(t, ORDER, 1, ORDER);
+  const o = await child(fx, {}, 'two-sources');
+  assert.equal(o.state, 'succeeded', JSON.stringify({ code: o.code, detail: o.detail }));
+  const out = JSON.parse(readFileSync(o.outputs[0].path, 'utf8'));
+  assert.deepEqual(out.libraries.filter((l: any) => l.refused).map((l: any) => l.framework), [], 'no library tried to read an unsealed byte');
+  const facts = out.libraries.flatMap((l: any) => l.envelopes.flatMap((e: any) => e.facts));
+  assert.ok(facts.length > 0);
+  assert.ok(facts.every((f: any) => f.surfaceId.startsWith('app::') && f.evidence.every((e: any) => e.sourceId === 'app')));
+  const frontiers = out.libraries.flatMap((l: any) => [...(l.frontiers ?? []), ...l.envelopes.flatMap((e: any) => e.frontiers)]);
+  assert.ok(frontiers.every((f: any) => !f.scopeId.startsWith('other')));
 });
 
 test('two job-shaped inputs are refused with a fixed code; nothing is published', needsStore, async t => {
