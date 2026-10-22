@@ -1,0 +1,31 @@
+{
+  "rules": [
+    {
+      "id": "sentinel.sql.request-to-query-tsjs",
+      "languages": [
+        "typescript",
+        "javascript"
+      ],
+      "severity": "WARNING",
+      "message": "Sentinel original local taint: a request value reaches a query in the same function. Local evidence only.",
+      "mode": "taint",
+      "pattern-sources": [
+        {
+          "pattern": "$REQUEST.value()"
+        }
+      ],
+      "pattern-sinks": [
+        {
+          "patterns": [
+            {
+              "pattern": "$DB.query($SQL, ...)"
+            },
+            {
+              "focus-metavariable": "$SQL"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

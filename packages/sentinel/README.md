@@ -236,3 +236,31 @@ and location), exact-limit bounds, version refusal, the drift check, the enum pi
 boundary, and the store: runtime gate, owner lock across real processes, ledger, objects, reachability and the
 facade end to end (`test/store-integration.test.ts`). They need no scanner, container, network or credential. `test/fixtures/` holds PR 01's feasibility
 inputs, which this package leaves untouched.
+
+## Pattern adapter (draft, not registered)
+
+`src/adapters/pattern/` runs Semgrep 1.181.0 (`semgrep/semgrep@sha256:81474464…304b`, installed ahead, never pulled)
+through the PR 07 execution service only. Semgrep cannot speak the worker protocol, so an original shim
+(`worker-source.ts`, Python standard library) runs inside the pinned image as `/usr/bin/python3 -I -S -B
+/input/<shim digest>`: it reads the one job among its inputs, materializes the targets under the container's noexec
+`/tmp` by their relative paths (never repository ignore files, plus its own empty `.semgrepignore` so the engine's
+default ignores cannot drop requested files), runs the fixed engine arguments (`--json --verbose --dataflow-traces
+--metrics=off --disable-version-check --jobs 1 --timeout 20 --max-target-bytes 1000000 --disable-nosem --no-git-ignore
+--no-rewrite-rule-ids --oss-only --time`) and returns the raw JSON and a run record as outputs. `normalize.ts` then decides,
+coordinator-side: job rules on job targets in declared languages only, byte spans checked against the captured bytes,
+Sentinel's own finding identity, structural locators kept apart from local taint, cross-file flows refused, and
+coverage per file per rule: a rule is complete on a file only when the engine timed it there; a rule the engine's
+prefilter skipped is not run, a rule-named timeout is partial, missing timing is not established, and a requested file
+neither scanned nor skipped is omitted even on exit zero. Results from an unmeasured image platform are refused.
+
+Measured scope (conformance, darwin-arm64 with Docker Desktop, the pinned image): the original pack in `rules/pattern/`
+finds its three direct positives (TS, JS, Java) as structural locators and its three local positives as local taint,
+none of its six negatives, and no cross-file flow; an engine-reported one-second rule timeout marks exactly the rules
+that timed out (host-dependent, so it pins the reporting path, not a threshold). Semgrep 1.181.0's open-source engine
+reported no dataflow trace for those taint results, so local-taint evidence names its sink and records the trace as not
+reported. Platforms: linux/arm64 and linux/amd64 measured. Native amd64 qualification passed all 22 tests with zero skips
+and ran the installed worker against its original fixtures ([qualification run](https://github.com/zalos/farsight/actions/runs/39790599932)). A failed engine run is reported
+only as a fixed category and its exit code; no engine text is forwarded. The tarball ships the pack under
+`rules/pattern/` and the worker with a digest/rights manifest under `assets/pattern/`; nothing exported invokes the
+adapter, so the package gate is partial until the PR 09 command (ADR 26). Integration still open:
+registering the adapter, the planner supplying the shim, job, rules and targets as inputs, and the scan command (PR 09).

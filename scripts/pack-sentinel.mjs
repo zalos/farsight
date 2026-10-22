@@ -20,7 +20,7 @@ import { builtinModules } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, join, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertTarball, buildClosure, missingBuildOutputs, npmPackEnv } from './pack-preflight.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -239,6 +239,13 @@ try {
   for (const [asset] of ASSETS) {
     const emitted = join(out, 'dist', `${asset}.mjs`);
     if (existsSync(emitted)) assets[asset] = { path: `dist/${asset}.mjs`, sha256: createHash('sha256').update(readFileSync(emitted)).digest('hex') };
+  }
+  // Non-code assets the package owns (rule packs, in-container workers and their digest manifests), staged by its own hook.
+  const assetHook = join(dir, 'scripts', 'package-assets.mjs');
+  if (existsSync(assetHook)) {
+    const staged = await (await import(pathToFileURL(assetHook).href)).stageAssets(dir, out);
+    files.push(...staged.files);
+    Object.assign(exportsMap, staged.exports);
   }
   for (const doc of ['README.md']) if (existsSync(join(dir, doc))) { cpSync(join(dir, doc), join(out, doc)); files.push(doc); }
   writeFileSync(join(out, 'package.json'), JSON.stringify({

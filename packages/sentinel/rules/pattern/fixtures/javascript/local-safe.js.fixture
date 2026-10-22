@@ -1,0 +1,5 @@
+// Original synthetic fixture: a request value is passed as a bound parameter.
+export function lookup(req, db) {
+  const name = req.value();
+  return db.query("SELECT * FROM vendors WHERE name = $1", [name]);
+}
