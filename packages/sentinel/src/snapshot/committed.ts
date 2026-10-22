@@ -60,6 +60,7 @@ function walkTree(inv: Inventory, src: CommittedSource, rel: string, treeOid: st
     inv.boundary(src.sourceId, rel, 'refused', 'sentinel.capture.entryLimit');
     return;
   }
+  inv.listed(src.sourceId, rel);
   for (const { e, check } of children) {
     const path = joinPath(rel, check.name);
     inv.release();
@@ -78,6 +79,7 @@ function walkTree(inv: Inventory, src: CommittedSource, rel: string, treeOid: st
       continue;
     }
     if (e.mode === '160000') {
+      inv.gitlink(src.sourceId, path, e.oid);
       const request = src.submodules.find(s => s.path === path);
       if (!request) { inv.boundary(src.sourceId, path, 'excluded', 'sentinel.capture.submoduleNotCaptured'); continue; }
       found.push({ request, commit: e.oid });
@@ -89,7 +91,7 @@ function walkTree(inv: Inventory, src: CommittedSource, rel: string, treeOid: st
       try { target = src.repo.readObject(e.oid, 4096)?.data.toString('utf8'); } catch { target = undefined; }
       if (target === undefined) { inv.symlink(src.sourceId, path, 'refused', 'sentinel.capture.gitObjectMissing'); continue; }
       const verdict = symlinkVerdict(path, target);
-      inv.symlink(src.sourceId, path, verdict === 'sentinel.capture.symlinkEscapes' ? 'refused' : 'excluded', verdict);
+      inv.symlink(src.sourceId, path, verdict === 'sentinel.capture.symlinkEscapes' ? 'refused' : 'excluded', verdict, target);
       continue;
     }
     if (!isBlob) { inv.recorded(src.sourceId, path, 'refused', 'sentinel.capture.specialFile'); continue; }
@@ -97,11 +99,13 @@ function walkTree(inv: Inventory, src: CommittedSource, rel: string, treeOid: st
       inv.recorded(src.sourceId, path, 'excluded', 'sentinel.capture.excludedByPolicy');
       continue;
     }
-    addBlob(inv, src, path, e.oid);
+    addBlob(inv, src, path, e.oid, e.mode);
   }
 }
 
-function addBlob(inv: Inventory, src: CommittedSource, path: string, oid: string): void {
+function addBlob(inv: Inventory, src: CommittedSource, path: string, oid: string, mode: string): void {
+  const git = { mode, oid };
+  const executable = mode === '100755';
   let header;
   try { header = src.repo.objectHeader(oid); } catch (e) {
     const reason = corruptOrMissing(e);
@@ -139,10 +143,10 @@ function addBlob(inv: Inventory, src: CommittedSource, path: string, oid: string
       const again = resolveLfs(pointer, src.lfsObjects);
       if ('reason' in again) throw new CaptureChanged(`${path}'s LFS content changed during capture`);
       return again.bytes;
-    });
+    }, { executable, git, lfs: pointer });
     return;
   }
-  inv.included(src.sourceId, path, bytes, read);
+  inv.included(src.sourceId, path, bytes, read, { executable, git });
 }
 
 /** Git blob ids of every regular file in a commit, or undefined when any object on the way is unavailable. */

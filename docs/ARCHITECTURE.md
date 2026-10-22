@@ -275,8 +275,9 @@ Sentinel must all keep compatible; a change to its rules is a change to every ga
 20. **Sentinel captures source with its own Git object reader, stages before it writes, and records what it cannot read (2026-10-22).**
 
 `@farsight/sentinel` gains a public `./snapshot` export (also re-exported from the root): `captureSnapshot(store,
-request)`, `restoreSnapshot(store, snapshotArtifact, target)`, `readSnapshot` and `reconcileInventory`. Capture works
-through the PR 03 store facade only; it never opens the ledger database or the owner lock.
+request)`, `openSnapshot(store, snapshotId)`, `restoreSnapshot(store, snapshotId, target)`, `readSnapshot` and
+`reconcileInventory`. Capture works through the store facade only; it never opens the ledger database or the owner
+lock.
 
 *Committed-tree* capture reads the pinned commit's objects with a plain TypeScript reader (`snapshot/git.ts`): loose
 objects and version-2 pack indexes and packs, offset and reference deltas, SHA-1 and SHA-256 object formats, file-based
@@ -302,11 +303,27 @@ recorded; LFS content and submodules are read only from local inputs the request
 a separate source with its own repository identity and commit. `reconcileInventory` accounts every path an
 independent walk finds, by its own entry or a boundary above it (E1).
 
-Before a byte is written, the snapshot is checked against its contract and every artifact it will store (source
-bytes as `source`, the manifest as `source-derived`) is registered as staging. Bytes are re-read and re-hashed against
-the inventory as they are stored. Each stage is then published under a running attempt the caller supplies; a stage
-holds at most 4095 artifacts, so a larger capture publishes content stages first and the manifest last, linking only
-accepted content. A failure before publication aborts every unpublished stage. `restoreSnapshot` writes a new
-read-only tree from the store alone, reads it back and lists it again. The capture reason codes are catalog keys
+A snapshot is not a run's output, so it is not published under an attempt: the ledger gains **snapshot admission**
+(schema step 2). Before a byte is written, the envelope is checked against its contract and every artifact is
+registered as *unbound* staging: source bytes as `source`, in stages of at most 4096, then a roots stage holding the
+manifest (`source-derived`, linking every content artifact) and the materialization sidecar (`source`, linking the
+manifest). An unbound stage may link to content another open unbound stage of the same epoch holds; an attempt's
+stage still may not. Bytes are re-read and re-hashed against the inventory as they are stored. `admitSnapshot` then
+re-verifies every object through the object store's verifier and, in one transaction, records the artifacts, their
+representations and links, an immutable `snapshots` row (manifest, materialization, inventory digest, epoch,
+sequence) and a `snapshot-admitted` event, and releases every stage. The manifest and the materialization join the
+GC snapshot's accepted references, so a snapshot is never a prune candidate; its content is reachable through
+their links. A failure before admission aborts every stage. Adding the event kind needs the event log's CHECK
+changed, which SQLite cannot alter in place: step 2 rebuilds the table by SQLite's documented procedure, and the
+migration runner now applies every step with foreign keys off (the pragma is a no-op inside a transaction), runs
+`foreign_key_check` before commit and switches enforcement back on whatever happens.
+
+The envelope records dispositions only. The **materialization sidecar** (`sentinel-capture-materialization/draft-1`,
+canonical JSON, bound to its snapshot by the ledger row and checked against the manifest on every open) records what
+a restore and PR 05's reconciliation need beyond it: every listed folder, empty ones included; each included file's
+executable bit and provenance (its Git mode and blob id, or the LFS pointer it was resolved from); each recorded
+link's target; and every gitlink's commit. A sidecar keeps the root-owned contract unchanged while those facts are
+draft. `restoreSnapshot` writes a new read-only tree from the store alone (folders, files, execute bits), reads it
+back and lists files and folders again; any difference fails it. The capture reason codes are catalog keys
 (`strings-sentinel-capture.ts`); the `source-capture` capability is `available-draft`. Not in this decision: parser
 artifacts and file outcomes (PR 05), framework versions from lockfiles (left empty), and any scan coverage.

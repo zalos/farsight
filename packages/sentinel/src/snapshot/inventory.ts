@@ -10,6 +10,15 @@ export class CaptureChanged extends Error {
   constructor(detail: string) { super(detail); this.name = 'CaptureChanged'; }
 }
 
+/** What restore needs beyond the bytes: the executable bit, and where the bytes came from. */
+export interface FileFacts {
+  readonly executable: boolean;
+  /** Committed capture: the tree entry's mode and blob id. */
+  readonly git?: { readonly mode: string; readonly oid: string };
+  /** The bytes are Git LFS content resolved from a pointer. */
+  readonly lfs?: { readonly oid: string; readonly size: number };
+}
+
 /** Bytes that will be stored: their id is known now, and `read()` returns them again, verified. */
 export interface PendingContent {
   readonly id: ArtifactId;
@@ -22,6 +31,14 @@ export const contentId = (bytes: Uint8Array): ArtifactId => `sha256:${createHash
 export class Inventory {
   readonly entries: CaptureEntry[] = [];
   readonly contents = new Map<ArtifactId, PendingContent>();
+  /** Per source, every folder that was listed (the root excluded), empty or not. */
+  readonly directories = new Map<string, Set<string>>();
+  /** `sourceId \0 path` → facts for included files. */
+  readonly facts = new Map<string, FileFacts>();
+  /** `sourceId \0 path` → a recorded link's target text. */
+  readonly symlinkTargets = new Map<string, string>();
+  /** `sourceId \0 path` → a gitlink's pinned commit. */
+  readonly gitlinks = new Map<string, string>();
   #reserved = 0;
   #totalBytes = 0;
   constructor(readonly policy: CapturePolicy) {}
@@ -40,8 +57,21 @@ export class Inventory {
     this.entries.push({ sourceId, relativePath, kind: 'directory-boundary', disposition, reasonCode, knownDescendants: null });
   }
 
-  symlink(sourceId: string, relativePath: string, disposition: 'excluded' | 'refused', reasonCode: CaptureReasonCode): void {
+  symlink(sourceId: string, relativePath: string, disposition: 'excluded' | 'refused', reasonCode: CaptureReasonCode, target?: string): void {
     this.entries.push({ sourceId, relativePath, kind: 'symlink', disposition, reasonCode });
+    if (target !== undefined) this.symlinkTargets.set(`${sourceId}\u0000${relativePath}`, target);
+  }
+
+  /** A folder whose entries were listed. */
+  listed(sourceId: string, relativePath: string): void {
+    if (relativePath === '') return;
+    let set = this.directories.get(sourceId);
+    if (!set) this.directories.set(sourceId, set = new Set());
+    set.add(relativePath);
+  }
+
+  gitlink(sourceId: string, relativePath: string, commit: string): void {
+    this.gitlinks.set(`${sourceId}\u0000${relativePath}`, commit);
   }
 
   recorded(sourceId: string, relativePath: string, disposition: 'excluded' | 'refused' | 'unreadable' | 'too-large',
@@ -58,8 +88,9 @@ export class Inventory {
   }
 
   /** An included file. `reread` returns the same bytes again (or throws CaptureChanged). */
-  included(sourceId: string, relativePath: string, bytes: Buffer, reread: () => Buffer): void {
+  included(sourceId: string, relativePath: string, bytes: Buffer, reread: () => Buffer, facts: FileFacts): void {
     const id = contentId(bytes);
+    this.facts.set(`${sourceId}\u0000${relativePath}`, facts);
     this.#totalBytes += bytes.length;
     this.entries.push({ sourceId, relativePath, kind: 'file', disposition: 'included', content: id, bytes: bytes.length,
       generated: isGenerated(this.policy, relativePath, bytes) });

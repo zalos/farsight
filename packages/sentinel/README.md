@@ -91,15 +91,15 @@ canonical owner-only folder on a file system the path checks identify as local. 
 ## Source capture (draft)
 
 ```ts
-import { captureSnapshot, restoreSnapshot } from 'farsight-sentinel/snapshot'; // also from 'farsight-sentinel'
+import { captureSnapshot, openSnapshot, restoreSnapshot } from 'farsight-sentinel/snapshot'; // also from 'farsight-sentinel'
 
 const result = await captureSnapshot(store, {
   mode: 'committed-tree',                                   // or 'working-copy' (stability-checked)
   sources: [{ sourceId: 'app', repositoryId: 'example/app', root: '/canonical/path/to/app' }],
-  publishTo: stage => ({ work, attemptId }),                // the running attempt each stage is published under
 });
-result.snapshot;                                            // sentinel-snapshot/draft-1, already published
-await restoreSnapshot(store, result.artifact.id, '/canonical/parent/new-folder'); // read-only, from the store alone
+result.snapshot;                                            // sentinel-snapshot/draft-1, admitted by the ledger
+const { snapshot, materialization } = await openSnapshot(store, result.record.snapshotId); // any process, later
+await restoreSnapshot(store, result.record.snapshotId, '/canonical/parent/new-folder'); // read-only, from the store alone
 ```
 
 A committed tree is read object by object from the local repository; no `git` process, hook, filter or fetch runs,
@@ -108,8 +108,10 @@ capture and one that never settles is refused. Every enumerated entry is recorde
 `.git`, the store, dependency caches and policy exclusions are boundaries whose contents are unknown, and links,
 special files, unsafe or colliding names, unreadable, too-large and over-quota files are recorded with their reason
 (`CAPTURE_REASON_CODES`). LFS content and submodules come only from local inputs you name. Each artifact is staged
-before it is written and published per stage. Parser artifacts, framework versions and scan coverage are not part
-of a snapshot yet. See ADR 20 in `docs/ARCHITECTURE.md`.
+before it is written, and the whole snapshot is admitted in one ledger transaction, without a run. A materialization
+sidecar keeps every listed folder (empty ones too), executable bits, Git and LFS provenance, link targets and
+gitlink commits, so a restore reproduces the tree. Parser artifacts, framework versions and scan coverage are not
+part of a snapshot yet. See ADR 20 in `docs/ARCHITECTURE.md`.
 
 ## Versions and evolution
 

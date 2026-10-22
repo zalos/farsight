@@ -65,8 +65,10 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `test/store-integration.test.ts` drives the facade end to end across processes. `src/snapshot/index.ts` is the
   capture facade (ADR 20; also `./snapshot` and the root): `git.ts` (a read-only Git object reader, no git process),
   `committed.ts` and `worktree.ts` (the two enumerations), `inventory.ts` (entries, budget, quota, case collisions,
-  LFS), `policy.ts` (capture policy and path rules), `capture.ts` (stage, write, recheck, publish),
-  `materialize.ts` (restore from the store alone) and `reconcile.ts` (E1). `test/snapshot-*.test.ts` builds real Git
+  LFS), `policy.ts` (capture policy and path rules), `materialization.ts` (the provenance sidecar), `capture.ts` (stage,
+  write, recheck, admit), `materialize.ts` (reopen and restore from the store alone) and `reconcile.ts` (E1). The
+  ledger's `admitSnapshot`/`getSnapshot` and schema step 2 (`snapshots`, the rebuilt event log) admit a snapshot
+  without a run. `test/snapshot-*.test.ts` builds real Git
   fixtures with the git CLI; capture itself never runs it. Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the

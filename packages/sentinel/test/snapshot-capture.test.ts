@@ -4,13 +4,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, linkSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateEnvelope } from '../dist/index.js';
 import {
-  captureSnapshot, reconcileInventory, restoreSnapshot, readSnapshot, SnapshotError, CAPTURE_REASON_CODES, SNAPSHOT_ERROR_CODES,
+  captureSnapshot, openSnapshot, reconcileInventory, restoreSnapshot, readSnapshot, SnapshotError, CAPTURE_REASON_CODES, SNAPSHOT_ERROR_CODES,
 } from '../dist/snapshot/index.js';
 import { openStore } from '../dist/store/index.js';
 import { commitRepo, git, needsStore, observe, openCaptureStore, scratch, unlock, writeTree } from './snapshot-helpers.ts';
@@ -51,7 +51,7 @@ test('a committed tree is captured from Git objects with no filter, hook or proc
   writeTree(root, { 'src/index.ts': 'uncommitted edit\n', 'untracked.ts': 'not in the commit\n' });
 
   const fx = await openCaptureStore(t, dir);
-  const result = await captureSnapshot(fx.store, { mode: 'committed-tree', publishTo: fx.publishTo,
+  const result = await captureSnapshot(fx.store, { mode: 'committed-tree',
     sources: [{ sourceId: 'app', repositoryId: 'example/app', root }] });
   assert.equal(existsSync(canary), false, 'no filter or hook ran');
   const snap = result.snapshot;
@@ -76,9 +76,17 @@ test('a committed tree is captured from Git objects with no filter, hook or proc
   assert.equal(result.artifact.id, fx.store.objects.identifyCanonicalJson(snap).id, 'the artifact id is the canonical manifest\'s digest');
   assert.deepEqual(await readSnapshot(fx.store, result.artifact.id), snap);
   assert.deepEqual(await fx.store.readArtifact(entryOf(snap, 'src/index.ts').content), RAW);
-  assert.deepEqual(fx.stages.map(s => s.role), ['combined']);
-  assert.equal(result.publications.length, 1);
+  assert.deepEqual([result.record.snapshotId, result.record.manifest, result.record.inventoryDigest], [snap.id, result.artifact.id, snap.inventoryDigest]);
+  assert.deepEqual(fx.store.ledger.getSnapshot(snap.id), result.record);
   assert.equal(result.attempts, 1);
+  // Provenance the envelope does not carry: the Git mode and blob id of every committed file.
+  const m = result.materialization.sources[0]!;
+  const indexTs = m.files.find(f => f.path === 'src/index.ts')!;
+  assert.deepEqual(indexTs.git, { mode: '100644', oid: git(root, ['rev-parse', `${head}:src/index.ts`]).trim() });
+  assert.ok(m.directories.includes('src/main/java') && m.directories.includes('.github/workflows'));
+  assert.ok(!m.directories.includes('node_modules'), 'a boundary is not a listed folder');
+  const opened = await openSnapshot(fx.store, snap.id);
+  assert.deepEqual([opened.snapshot, opened.materialization], [snap, result.materialization]);
   const inspect = await fx.store.inspect();
   assert.equal(inspect.ok, true, JSON.stringify(inspect.errors));
   assert.ok(inspect.reachable.includes(result.artifact.id) && inspect.reachable.includes(sha(RAW)));
@@ -105,7 +113,7 @@ test('capture starts no process and reads no Git configuration command', needsSt
     const fx = await openCaptureStore({ after: f => after.push(f) }, ${JSON.stringify(dir)});
     const before = spawns.length;
     for (const mode of ['committed-tree', 'working-copy']) {
-      await captureSnapshot(fx.store, { mode, publishTo: fx.publishTo, sources: [{ sourceId: 'app', repositoryId: 'r', root: ${JSON.stringify(root)} }] });
+      await captureSnapshot(fx.store, { mode, sources: [{ sourceId: 'app', repositoryId: 'r', root: ${JSON.stringify(root)} }] });
     }
     for (const f of after) f();
     process.stdout.write(JSON.stringify(spawns.slice(before)));`;
@@ -156,7 +164,7 @@ test('packed history, missing and corrupt objects, unsafe and colliding names ar
   writeFileSync(loose(bad), readFileSync(loose(oid('keep.ts'))));
 
   const fx = await openCaptureStore(t, dir);
-  const { snapshot: snap } = await captureSnapshot(fx.store, { mode: 'committed-tree', publishTo: fx.publishTo,
+  const { snapshot: snap } = await captureSnapshot(fx.store, { mode: 'committed-tree',
     sources: [{ sourceId: 'app', repositoryId: 'example/app', root }] });
   assert.equal(entryOf(snap, 'keep.ts').disposition, 'included');
   assert.deepEqual([entryOf(snap, 'gone.ts').disposition, entryOf(snap, 'gone.ts').reasonCode], ['unreadable', 'sentinel.capture.gitObjectMissing']);
@@ -196,14 +204,14 @@ test('LFS pointers resolve only from a permitted local store; submodules only fr
   writeFileSync(join(lfs, oidHex.slice(0, 2), oidHex.slice(2, 4), oidHex), content);
 
   const fx = await openCaptureStore(t, dir);
-  const without = (await captureSnapshot(fx.store, { mode: 'committed-tree', publishTo: fx.publishTo,
+  const without = (await captureSnapshot(fx.store, { mode: 'committed-tree',
     sources: [{ sourceId: 'app', repositoryId: 'example/app', root }] })).snapshot;
   assert.deepEqual([entryOf(without, 'asset.bin').disposition, entryOf(without, 'asset.bin').reasonCode, entryOf(without, 'asset.bin').bytes],
     ['unreadable', 'sentinel.capture.lfsObjectMissing', content.length]);
   assert.equal(entryOf(without, 'vendor/sub').reasonCode, 'sentinel.capture.submoduleNotCaptured');
   assert.equal(entryOf(without, 'vendor/sub').knownDescendants, null);
 
-  const withInputs = (await captureSnapshot(fx.store, { mode: 'committed-tree', publishTo: fx.publishTo, sources: [{
+  const withInputs = (await captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{
     sourceId: 'app', repositoryId: 'example/app', root, lfsObjects: lfs,
     submodules: [
       { path: 'vendor/sub', sourceId: 'app-sub', repositoryId: 'example/sub', root: sub },
@@ -220,6 +228,11 @@ test('LFS pointers resolve only from a permitted local store; submodules only fr
   assert.deepEqual([subSource.repositoryId, subSource.commit], ['example/sub', subHead], 'an independent identity and commit');
   assert.equal(entryOf(withInputs, 'lib.ts', 'app-sub').disposition, 'included');
   assert.equal(withInputs.sources.some((s: any) => s.sourceId === 'app-gone'), false);
+  // The provenance the envelope cannot carry is in the materialization.
+  const appMat = (await openSnapshot(fx.store, withInputs.id)).materialization.sources.find(m => m.sourceId === 'app')!;
+  assert.deepEqual(appMat.files.find(f => f.path === 'asset.bin')!.lfs, { oid: oidHex, size: content.length });
+  assert.deepEqual(appMat.gitlinks.map(g => [g.path, g.commit]),
+    [['vendor/gone', '1'.repeat(40)], ['vendor/sub', subHead], ['vendor/unpermitted', subHead]]);
 });
 
 test('a working copy records hidden inputs, boundaries, limits and refusals; the store and .git stay out', needsStore, async t => {
@@ -239,7 +252,7 @@ test('a working copy records hidden inputs, boundaries, limits and refusals; the
   t.after(() => unlock(root));
   // The store inside the source root is excluded, not captured.
   const fx = await openCaptureStore(t, dir, join(root, '.sentinel-store'));
-  const result = await captureSnapshot(fx.store, { mode: 'working-copy', publishTo: fx.publishTo,
+  const result = await captureSnapshot(fx.store, { mode: 'working-copy',
     sources: [{ sourceId: 'app', repositoryId: 'example/app', root }],
     policy: { maxFileBytes: 1024, exclude: { app: ['out'] } } });
   const snap = result.snapshot;
@@ -282,7 +295,7 @@ test('a clean working copy of a commit is not dirty; any edit makes it dirty', n
   const root = join(dir, 'work');
   commitRepo(root, { 'a.ts': 'a\n', 'b/c.java': 'class C {}\n' });
   const fx = await openCaptureStore(t, dir);
-  const capture = async () => (await captureSnapshot(fx.store, { mode: 'working-copy', publishTo: fx.publishTo,
+  const capture = async () => (await captureSnapshot(fx.store, { mode: 'working-copy',
     sources: [{ sourceId: 'app', repositoryId: 'example/app', root }] })).snapshot.sources[0];
   assert.equal((await capture()).dirty, false);
   writeFileSync(join(root, 'a.ts'), 'edited\n');
@@ -303,37 +316,39 @@ test('a working copy that changes during capture is captured again; one that nev
     () => writeFileSync(join(root, 'added.ts'), 'new\n'),         // a new file, seen only by the recheck
   ];
   const once = await captureSnapshot(fx.store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'r', root }],
-    publishTo: stage => { const target = fx.publishTo(stage); edits[calls++]?.(); return target; } });
+    onStaged: () => edits[calls++]?.() });
   assert.equal(once.attempts, 3, 'two changed attempts, then a stable one');
   assert.equal(entryOf(once.snapshot, 'a.ts').content, sha('v2 longer\n'));
   assert.equal(entryOf(once.snapshot, 'added.ts').disposition, 'included');
 
   const events = () => fx.store.ledger.readEvents({ after: 0, limit: 500 }).events.map(e => e.kind);
-  const publishedAfterFirst = events().filter(k => k === 'work-published').length;
+  const publishedAfterFirst = events().filter(k => k === 'snapshot-admitted').length;
   const abortedBefore = events().filter(k => k === 'staging-aborted').length;
   let n = 0;
   await assert.rejects(captureSnapshot(fx.store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'r', root }],
     policy: { stabilityAttempts: 2 },
-    publishTo: stage => { const target = fx.publishTo(stage); writeFileSync(join(root, 'a.ts'), `edit ${n++}\n`); return target; } }),
+    onStaged: () => writeFileSync(join(root, 'a.ts'), `edit ${n++}\n`) }),
   coded('sentinel.capture.unstable'));
-  assert.equal(events().filter(k => k === 'staging-aborted').length - abortedBefore, 2, 'each attempt\'s stage was aborted');
-  assert.equal(events().filter(k => k === 'work-published').length, publishedAfterFirst, 'nothing was published');
+  assert.equal(events().filter(k => k === 'staging-aborted').length - abortedBefore, 4, 'both stages of each attempt were aborted');
+  assert.equal(events().filter(k => k === 'snapshot-admitted').length, publishedAfterFirst, 'nothing was admitted');
   assert.equal((await fx.store.inspect()).ok, true);
 });
 
-test('stages are registered before any byte is written, in batches, and the manifest links accepted content', needsStore, async t => {
+test('every stage is registered before any byte is written, and one admission accepts them all', needsStore, async t => {
   const dir = scratch(t);
   const root = join(dir, 'work');
   writeTree(root, Object.fromEntries(Array.from({ length: 5 }, (_, i) => [`f${i}.ts`, `file ${i}\n`])));
   const fx = await openCaptureStore(t, dir);
   const objectsDir = join(fx.storePath, 'objects', 'sha256');
   const countObjects = () => (existsSync(objectsDir) ? readdirSync(objectsDir).flatMap(s => readdirSync(join(objectsDir, s))).length : 0);
-  const seenAtRegistration: number[] = [];
+  let staged: readonly string[] = [];
+  let objectsWhenStaged = -1;
   const result = await captureSnapshot(fx.store, { mode: 'working-copy', stageSize: 2, sources: [{ sourceId: 'app', repositoryId: 'r', root }],
-    publishTo: stage => { seenAtRegistration.push(countObjects()); return fx.publishTo(stage); } });
-  assert.deepEqual(fx.stages.map(s => s.role), ['content', 'content', 'content', 'manifest']);
-  assert.equal(new Set(seenAtRegistration.slice(0, 3)).size, 1, 'all content stages were registered before the first content byte');
-  assert.equal(result.publications.length, 4);
+    onStaged: ids => { staged = ids; objectsWhenStaged = countObjects(); } });
+  assert.equal(staged.length, 4, 'three content stages of at most two, then the manifest and the materialization');
+  assert.equal(objectsWhenStaged, 0, 'every stage was registered before the first byte');
+  const kinds = fx.store.ledger.readEvents({ after: 0, limit: 500 }).events.map(e => e.kind);
+  assert.deepEqual(kinds.filter(k => k !== 'epoch-opened'), ['staging-registered', 'staging-registered', 'staging-registered', 'staging-registered', 'snapshot-admitted']);
   const snap = result.snapshot;
   assert.deepEqual(await readSnapshot(fx.store, result.artifact.id), snap);
   const inspect = await fx.store.inspect();
@@ -350,8 +365,8 @@ test('a snapshot restores byte for byte in a new process after the original root
   let files: [string, string][];
   {
     const fx = await openCaptureStore(t, dir, storePath);
-    const r = await captureSnapshot(fx.store, { mode: 'committed-tree', publishTo: fx.publishTo, sources: [{ sourceId: 'app', repositoryId: 'r', root }] });
-    artifact = r.artifact.id;
+    const r = await captureSnapshot(fx.store, { mode: 'committed-tree', sources: [{ sourceId: 'app', repositoryId: 'r', root }] });
+    artifact = r.record.snapshotId;
     files = r.snapshot.entries.filter((e: any) => e.disposition === 'included').map((e: any) => [e.relativePath, e.content]);
     fx.store.close();
   }
@@ -363,7 +378,7 @@ test('a snapshot restores byte for byte in a new process after the original root
     const store = await openStore(${JSON.stringify(storePath)});
     const r = await restoreSnapshot(store, ${JSON.stringify(artifact)}, ${JSON.stringify(target)});
     store.close();
-    process.stdout.write(JSON.stringify(r.files.length));`;
+    process.stdout.write(JSON.stringify(r.sources[0].files));`;
   const out = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', '--input-type=module', '-e', script], { encoding: 'utf8', timeout: 30_000 });
   assert.equal(out.status, 0, out.stderr);
   assert.equal(JSON.parse(out.stdout), files.length);
@@ -375,7 +390,7 @@ test('a snapshot restores byte for byte in a new process after the original root
   const again = await openStore(storePath);
   t.after(() => again.close());
   await assert.rejects(restoreSnapshot(again, artifact as never, target), coded('sentinel.capture.restoreTargetUnsafe'));
-  await assert.rejects(restoreSnapshot(again, files[0]![1] as never, join(dir, 'other')), coded('sentinel.capture.notSnapshot'));
+  await assert.rejects(restoreSnapshot(again, 'snap-unknown', join(dir, 'other')), coded('sentinel.capture.notSnapshot'));
 });
 
 test('requests, limits and roots that cannot be honoured are refused before anything is stored', needsStore, async t => {
@@ -384,7 +399,7 @@ test('requests, limits and roots that cannot be honoured are refused before anyt
   writeTree(root, { 'a.ts': 'a\n', 'd1/x.ts': 'x\n', 'd1/z.ts': 'z\n', 'd2/y.ts': 'y\n' });
   const fx = await openCaptureStore(t, dir);
   const src = [{ sourceId: 'app', repositoryId: 'r', root }];
-  const reject = (req: any, code: string) => assert.rejects(captureSnapshot(fx.store, { publishTo: fx.publishTo, ...req }), coded(code));
+  const reject = (req: any, code: string) => assert.rejects(captureSnapshot(fx.store, { ...req }), coded(code));
   await reject({ mode: 'snapshot', sources: src }, 'sentinel.capture.invalidRequest');
   await reject({ mode: 'working-copy', sources: [] }, 'sentinel.capture.invalidRequest');
   await reject({ mode: 'working-copy', sources: [...src, ...src] }, 'sentinel.capture.invalidRequest');
@@ -395,13 +410,13 @@ test('requests, limits and roots that cannot be honoured are refused before anyt
   await reject({ mode: 'working-copy', sources: [{ ...src[0], revision: 'HEAD' }] }, 'sentinel.capture.invalidRequest');
   await reject({ mode: 'working-copy', sources: src, policy: { maxFileBytes: 64 * 1024 * 1024 } }, 'sentinel.capture.invalidRequest');
   await reject({ mode: 'working-copy', sources: src, policy: { maxEntries: 2 } }, 'sentinel.capture.manifestTooLarge');
-  assert.equal(fx.stages.length, 0, 'no stage was registered');
+  assert.ok(!fx.store.ledger.readEvents({ after: 0, limit: 500 }).events.some(e => e.kind === 'staging-registered'), 'no stage was registered');
   // An entry limit that the root fits under turns unlisted folders into unknown-scope boundaries.
-  const limited = (await captureSnapshot(fx.store, { mode: 'working-copy', publishTo: fx.publishTo, sources: src, policy: { maxEntries: 3 } })).snapshot;
+  const limited = (await captureSnapshot(fx.store, { mode: 'working-copy', sources: src, policy: { maxEntries: 3 } })).snapshot;
   assert.ok(limited.entries.length <= 3);
   assert.equal(reconcileInventory(limited, 'app', observe(root)).unaccounted.length, 0);
   assert.ok(limited.entries.some((e: any) => e.reasonCode === 'sentinel.capture.entryLimit' && e.knownDescendants === null));
-  const quota = (await captureSnapshot(fx.store, { mode: 'working-copy', publishTo: fx.publishTo, sources: src, policy: { maxTotalBytes: 2 } })).snapshot;
+  const quota = (await captureSnapshot(fx.store, { mode: 'working-copy', sources: src, policy: { maxTotalBytes: 2 } })).snapshot;
   assert.deepEqual(quota.entries.filter((e: any) => e.disposition === 'too-large').map((e: any) => e.reasonCode),
     ['sentinel.capture.quotaExceeded', 'sentinel.capture.quotaExceeded', 'sentinel.capture.quotaExceeded']);
   assert.equal(reconcileInventory(quota, 'app', observe(root)).unaccounted.length, 0);
@@ -424,4 +439,27 @@ test('source capture is listed as a draft capability; every scan capability stay
   assert.deepEqual([capture?.state, capture?.reasonCode], ['available-draft', 'sentinel.capability.draftCapture']);
   assert.ok(STRINGS['sentinel.capability.draftCapture']?.define);
   assert.deepEqual(CAPABILITIES.filter((c: any) => c.state !== 'unavailable').map((c: any) => c.id), ['contract-validation', 'ledger', 'source-capture']);
+});
+
+test('restore recreates empty folders and executable bits; the materialization names every listed folder', needsStore, async t => {
+  const dir = scratch(t);
+  const root = join(dir, 'work');
+  writeTree(root, { 'bin/run.sh': '#!/bin/sh\necho ok\n', 'src/a.ts': 'a\n' });
+  chmodSync(join(root, 'bin/run.sh'), 0o755);
+  mkdirSync(join(root, 'empty/nested'), { recursive: true });
+  const fx = await openCaptureStore(t, dir);
+  const r = await captureSnapshot(fx.store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'r', root }] });
+  const m = r.materialization.sources[0]!;
+  assert.deepEqual(m.directories, ['bin', 'empty', 'empty/nested', 'src']);
+  assert.deepEqual(m.files.map(f => [f.path, f.executable]), [['bin/run.sh', true], ['src/a.ts', false]]);
+  const target = join(dir, 'restored');
+  t.after(() => unlock(target));
+  const restored = await restoreSnapshot(fx.store, r.record.snapshotId, target);
+  assert.deepEqual(restored.sources.map(s => [s.files, s.directories]), [[2, 4]]);
+  assert.deepEqual(readdirSync(join(target, 'app/empty')), ['nested'], 'an empty folder is restored');
+  assert.equal(statSync(join(target, 'app/bin/run.sh')).mode & 0o777, 0o500);
+  assert.equal(statSync(join(target, 'app/src/a.ts')).mode & 0o777, 0o400);
+  const writable = await restoreSnapshot(fx.store, r.record.snapshotId, join(dir, 'writable'), { readOnly: false });
+  t.after(() => unlock(writable.root));
+  assert.equal(statSync(join(writable.root, 'app/bin/run.sh')).mode & 0o100, 0o100);
 });

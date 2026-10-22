@@ -70,6 +70,7 @@ function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dir
     inv.boundary(src.sourceId, rel, 'refused', 'sentinel.capture.entryLimit');
     return;
   }
+  inv.listed(src.sourceId, rel);
 
   for (const child of children) {
     const path = joinPath(rel, child.check.name);
@@ -92,7 +93,7 @@ function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dir
       let target: string;
       try { target = readlinkSync(child.abs, 'utf8'); } catch { inv.symlink(src.sourceId, path, 'refused', 'sentinel.capture.unreadable'); continue; }
       const verdict = symlinkVerdict(path, target);
-      inv.symlink(src.sourceId, path, verdict === 'sentinel.capture.symlinkEscapes' ? 'refused' : 'excluded', verdict);
+      inv.symlink(src.sourceId, path, verdict === 'sentinel.capture.symlinkEscapes' ? 'refused' : 'excluded', verdict, target);
       continue;
     }
     if (st.isDirectory()) {
@@ -110,6 +111,7 @@ function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dir
     if (tooBig) { inv.recorded(src.sourceId, path, 'too-large', tooBig, st.size); continue; }
     const bytes = readRegular(child.abs, st);
     if (!bytes) { inv.recorded(src.sourceId, path, 'unreadable', 'sentinel.capture.unreadable', st.size); continue; }
+    const executable = (st.mode & 0o100) !== 0;
     const pointer = lfsPointer(bytes);
     if (pointer) {
       const big = inv.sizeRefusal(pointer.size);
@@ -120,7 +122,7 @@ function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dir
         const again = resolveLfs(pointer, src.lfsObjects);
         if ('reason' in again) throw new CaptureChanged(`${path}'s LFS content changed during capture`);
         return again.bytes;
-      });
+      }, { executable, lfs: pointer });
       continue;
     }
     const abs2 = child.abs;
@@ -130,6 +132,6 @@ function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dir
       const again = readRegular(abs2, now);
       if (!again) throw new CaptureChanged(`${path} became unreadable during capture`);
       return again;
-    });
+    }, { executable });
   }
 }

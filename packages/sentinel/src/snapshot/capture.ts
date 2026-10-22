@@ -1,27 +1,31 @@
-// Capture: enumerate the authorised sources into one immutable inventory, then pin and store it through the PR 03
+// Capture: enumerate the authorised sources into one immutable inventory, then pin, store and admit it through the
 // store facade. Order (each step completes before the next):
 //
 //   1. enumerate every source and hash every included file (no byte is stored yet);
-//   2. build the snapshot envelope and check it against its contract;
-//   3. register staging for every artifact (source bytes, then the manifest) before a byte is written;
-//   4. write the bytes, each re-read and re-hashed against the inventory;
+//   2. build the snapshot envelope and its materialization sidecar, and check the envelope against its contract;
+//   3. register every artifact as unbound staging (source bytes in batches, then the manifest and the sidecar)
+//      before a byte is written;
+//   4. write the source bytes, each re-read and re-hashed against the inventory;
 //   5. working copy only: enumerate again; any difference discards the attempt (stages aborted) and retries;
-//   6. publish each stage under the running attempt the caller names for it.
+//   6. write the manifest and the sidecar, then admit the snapshot: one ledger transaction re-verifies every
+//      object, records the snapshot and releases every stage.
 //
-// A failure before publication aborts every stage it registered: the bytes written become unreferenced and wait
-// for an explicit prune. Nothing here opens the ledger database or the owner lock; it uses the facade only.
+// A failure before admission aborts every stage it registered: the bytes written become unreferenced and wait for
+// an explicit prune. Nothing here opens the ledger database or the owner lock; it uses the facade only.
 import { createHash } from 'node:crypto';
 import { lstatSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, sep } from 'node:path';
-import type { ArtifactId, CaptureEntry, Id, SnapshotEnvelope, SnapshotSource, WorkRef } from '../contracts/index.js';
+import type { ArtifactId, CaptureEntry, Id, SnapshotEnvelope, SnapshotSource } from '../contracts/index.js';
 import { MAX_ENVELOPE_BYTES } from '../contracts/index.js';
-import type { PublicationReceipt, SentinelStore, StoredObject } from '../store/index.js';
+import { MAX_ARTIFACT_BYTES } from '../store/store-types.js';
+import type { SentinelStore, SnapshotRecord, StoredObject } from '../store/index.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { validateEnvelope } from '../validate.js';
 import { enumerateCommit, trackedBlobs, type SubmoduleRequest } from './committed.js';
 import { SnapshotError } from './errors.js';
 import { GitReadError, GitRepository } from './git.js';
 import { CaptureChanged, Inventory } from './inventory.js';
+import { MATERIALIZATION_SCHEMA, materializationSources, type Materialization, type MaterializedSource } from './materialization.js';
 import { digestOf, resolvePolicy, type CapturePolicy } from './policy.js';
 import { enumerateWorktree } from './worktree.js';
 
@@ -43,36 +47,25 @@ export interface CaptureSourceRequest {
   readonly submodules?: readonly SubmoduleRequest[];
 }
 
-/** The running attempt a stage is published under. Each stage is one publication, so each needs its own. */
-export interface CaptureStageTarget {
-  readonly work: WorkRef;
-  readonly attemptId: Id;
-}
-
-export interface CaptureStageInfo {
-  readonly index: number;
-  readonly count: number;
-  /** `content`: source bytes only; `manifest`: the snapshot, linking to published content; `combined`: both. */
-  readonly role: 'content' | 'manifest' | 'combined';
-}
-
 export interface CaptureRequest {
   readonly mode: CaptureModeRequest;
   readonly sources: readonly CaptureSourceRequest[];
   readonly policy?: Partial<CapturePolicy>;
-  /** Called once per stage, before it is registered. */
-  readonly publishTo: (stage: CaptureStageInfo) => CaptureStageTarget;
   /** Defaults to the system clock. */
   readonly now?: () => string;
-  /** Artifacts per stage, 1..4095 (default 4095, the ledger's limit less the manifest's slot). */
+  /** Source artifacts per stage, 1..4096 (default 4096, the ledger's per-stage limit). */
   readonly stageSize?: number;
+  /** Called after every stage is registered and before the first byte is written (a test seam; no effect). */
+  readonly onStaged?: (stageIds: readonly string[]) => void;
 }
 
 export interface CaptureResult {
   readonly snapshot: SnapshotEnvelope;
-  /** The stored snapshot manifest: its id is the snapshot's artifact id. */
+  /** The ledger's record of the admitted snapshot. */
+  readonly record: SnapshotRecord;
+  /** The stored snapshot manifest. */
   readonly artifact: StoredObject;
-  readonly publications: readonly PublicationReceipt[];
+  readonly materialization: Materialization;
   /** How many times the working copy was read before it held still (1 for a committed tree). */
   readonly attempts: number;
 }
@@ -80,8 +73,8 @@ export interface CaptureResult {
 /** The facade operations capture uses. Satisfied by `SentinelStore`. */
 export type CaptureStore = Pick<SentinelStore, 'storePath' | 'objects' | 'ledger' | 'assertHeld'>;
 
-/** The ledger's per-stage limit is 4096 artifacts; one slot stays free for the manifest in a combined stage. */
-const STAGE_LIMIT = 4095;
+/** The ledger's per-stage limit. */
+const STAGE_LIMIT = 4096;
 const CAPTURE_IMPLEMENTATION = 'sentinel-capture/1';
 
 const canonical = (path: string, what: string): string => {
@@ -97,7 +90,7 @@ function checkRequest(request: CaptureRequest): CapturePolicy {
   if (!request || typeof request !== 'object') bad('no request');
   if (request.mode !== 'committed-tree' && request.mode !== 'working-copy') bad('mode must be committed-tree or working-copy');
   if (!Array.isArray(request.sources) || request.sources.length < 1 || request.sources.length > 64) bad('1..64 sources');
-  if (typeof request.publishTo !== 'function') bad('publishTo must name the attempt each stage is published under');
+  if (request.onStaged !== undefined && typeof request.onStaged !== 'function') bad('onStaged must be a function');
   const ids = new Set<string>();
   for (const s of request.sources) {
     if (!s || typeof s.sourceId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(s.sourceId)) bad('a source id is not a valid id');
@@ -148,6 +141,15 @@ function gitFailure(e: unknown): never {
 }
 
 interface Enumerated { readonly inv: Inventory; readonly sources: SnapshotSource[] }
+
+/** What a stability recheck compares: entries, sources (without times) and the sidecar facts. */
+function fingerprint(e: Enumerated): string {
+  const entries = [...e.inv.entries].sort(compareEntries);
+  return JSON.stringify({
+    entries, sources: e.sources.map(({ capturedAt: _t, ...r }) => r),
+    materialization: materializationSources(e.inv, e.sources.map(s => s.sourceId), entries),
+  });
+}
 
 function enumerate(request: CaptureRequest, policy: CapturePolicy, store: CaptureStore, now: () => string): Enumerated {
   const inv = new Inventory(policy);
@@ -254,11 +256,7 @@ function buildEnvelope(mode: CaptureModeRequest, policy: CapturePolicy, e: Enume
   };
 }
 
-const sameInventory = (a: Enumerated, b: Enumerated) =>
-  JSON.stringify([...a.inv.entries].sort(compareEntries)) === JSON.stringify([...b.inv.entries].sort(compareEntries))
-  && JSON.stringify(a.sources.map(({ capturedAt: _t, ...r }) => r)) === JSON.stringify(b.sources.map(({ capturedAt: _t, ...r }) => r));
-
-/** Captures the sources into one snapshot and publishes it. See the module comment for the order of effects. */
+/** Captures the sources into one snapshot and admits it. See the module comment for the order of effects. */
 export async function captureSnapshot(store: CaptureStore, request: CaptureRequest): Promise<CaptureResult> {
   const policy = checkRequest(request);
   const now = request.now ?? (() => new Date().toISOString());
@@ -283,65 +281,58 @@ async function captureOnce(store: CaptureStore, request: CaptureRequest, policy:
   const manifest = canonicalJsonBytes(envelope);
   if (manifest.length > MAX_ENVELOPE_BYTES) throw new SnapshotError('sentinel.capture.manifestTooLarge', `${manifest.length} bytes`);
   const manifestId = store.objects.identify(manifest);
+  const materialization: Materialization = {
+    schema: MATERIALIZATION_SCHEMA, snapshotId: envelope.id, inventoryDigest: envelope.inventoryDigest,
+    sources: materializationSources(first.inv, envelope.sources.map(s => s.sourceId), envelope.entries) as MaterializedSource[],
+  };
+  const sidecar = canonicalJsonBytes(materialization);
+  if (sidecar.length > MAX_ARTIFACT_BYTES) throw new SnapshotError('sentinel.capture.manifestTooLarge', `materialization ${sidecar.length} bytes`);
+  const sidecarId = store.objects.identify(sidecar);
 
   const contentIds = [...first.inv.contents.keys()].sort();
   const size = request.stageSize ?? STAGE_LIMIT;
-  const combined = contentIds.length + 1 <= size;
   const batches: ArtifactId[][] = [];
-  if (!combined) for (let i = 0; i < contentIds.length; i += size) batches.push(contentIds.slice(i, i + size));
-  const stageCount = combined ? 1 : batches.length + 1;
+  for (let i = 0; i < contentIds.length; i += size) batches.push(contentIds.slice(i, i + size));
   const stageId = (i: number) => `${envelope.id}.stage-${i}`;
-  const open: { stageId: string; target: CaptureStageTarget; ids: ArtifactId[]; role: CaptureStageInfo['role'] }[] = [];
-  const published = new Set<string>();
-  const publications: PublicationReceipt[] = [];
-  const receipts = new Map<ArtifactId, StoredObject>();
-  const manifestArtifact = { id: manifestId.id, schema: 'sentinel-snapshot/draft-1', privacy: 'source-derived' as const, links: contentIds };
-  const contentArtifact = (id: ArtifactId) => ({ id, schema: 'application/octet-stream', privacy: 'source' as const, links: [] });
-
-  const register = (index: number, role: CaptureStageInfo['role'], ids: ArtifactId[], withManifest: boolean) => {
-    const target = request.publishTo({ index, count: stageCount, role });
-    const artifacts = [...ids.map(contentArtifact), ...(withManifest ? [manifestArtifact] : [])];
-    store.ledger.registerStaging(stageId(index), artifacts, target);
-    open.push({ stageId: stageId(index), target, ids: withManifest ? [...ids, manifestId.id] : ids, role });
-  };
-  const publish = (stage: typeof open[number]) => {
-    const outputs = stage.role === 'content' ? stage.ids : [manifestId.id];
-    publications.push(store.ledger.publish({ work: stage.target.work, attemptId: stage.target.attemptId, stageId: stage.stageId,
-      receipts: stage.ids.map(id => receipts.get(id)!), outputs, endedAt: now() }));
-    published.add(stage.stageId);
-  };
+  const rootsStage = stageId(batches.length);
+  const open: string[] = [];
+  const receipts: StoredObject[] = [];
 
   try {
-    // 3. Pin everything about to be written before the first byte is.
-    if (combined) register(0, 'combined', contentIds, true);
-    else batches.forEach((ids, i) => register(i, 'content', ids, false));
+    // 3. Pin everything about to be written before the first byte is: source bytes, then the two roots, which link
+    //    to content held by the other (unbound) stages.
+    batches.forEach((ids, i) => {
+      store.ledger.registerStaging(stageId(i), ids.map(id => ({ id, schema: 'application/octet-stream', privacy: 'source' as const })));
+      open.push(stageId(i));
+    });
+    store.ledger.registerStaging(rootsStage, [
+      { id: manifestId.id, schema: 'sentinel-snapshot/draft-1', privacy: 'source-derived', links: contentIds },
+      { id: sidecarId.id, schema: MATERIALIZATION_SCHEMA, privacy: 'source', links: [manifestId.id] },
+    ]);
+    open.push(rootsStage);
+    request.onStaged?.([...open]);
     // 4. Write the source bytes, each verified against the inventory.
     for (const id of contentIds) {
       const content = first.inv.contents.get(id)!;
-      receipts.set(id, await store.objects.put(content.read(), { expect: { id, rawSize: content.bytes } }));
+      receipts.push(await store.objects.put(content.read(), { expect: { id, rawSize: content.bytes } }));
     }
     // 5. A working copy must hold still across the whole capture.
     if (request.mode === 'working-copy') {
       const second = enumerate(request, policy, store, now);
-      if (!sameInventory(first, second)) throw new CaptureChanged('the working copy changed during capture');
+      if (fingerprint(first) !== fingerprint(second)) throw new CaptureChanged('the working copy changed during capture');
     }
+    // 6. The roots, then one admission that verifies every object again and releases every stage.
+    const manifestReceipt = await store.objects.put(manifest, { expect: manifestId });
+    receipts.push(manifestReceipt, await store.objects.put(sidecar, { expect: sidecarId }));
     store.assertHeld();
-    // 6. Publish: source bytes first, so the manifest's links name accepted artifacts.
-    if (combined) {
-      receipts.set(manifestId.id, await store.objects.put(manifest, { expect: manifestId }));
-      publish(open[0]!);
-    } else {
-      for (const stage of open) publish(stage);
-      register(batches.length, 'manifest', [], true);
-      receipts.set(manifestId.id, await store.objects.put(manifest, { expect: manifestId }));
-      publish(open[open.length - 1]!);
-    }
+    const record = store.ledger.admitSnapshot({ snapshotId: envelope.id, stageIds: [...open], manifest: manifestId.id,
+      materialization: sidecarId.id, inventoryDigest: envelope.inventoryDigest, receipts });
+    open.length = 0;
+    return Object.freeze({ snapshot: envelope, record, artifact: manifestReceipt, materialization, attempts: attempt });
   } catch (e) {
     for (const stage of open) {
-      if (published.has(stage.stageId)) continue;
-      try { store.ledger.abortStaging(stage.stageId); } catch { /* the original failure is the one reported */ }
+      try { store.ledger.abortStaging(stage); } catch { /* the original failure is the one reported */ }
     }
     throw e;
   }
-  return Object.freeze({ snapshot: envelope, artifact: receipts.get(manifestId.id)!, publications: Object.freeze(publications), attempts: attempt });
 }

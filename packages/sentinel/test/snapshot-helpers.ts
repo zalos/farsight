@@ -2,15 +2,11 @@
 // store (the PR 03 facade) with one running attempt per capture stage. No network, scanner or model is involved;
 // the git CLI is used only by the tests to build fixtures, never by capture itself.
 import { execFileSync } from 'node:child_process';
-import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { openStore, qualificationFor, SQLITE_RELEASE_POLICY, type SentinelStore } from '../dist/store/index.js';
-import type { CaptureStageInfo, CaptureStageTarget } from '../dist/snapshot/index.js';
 
-const VALID = fileURLToPath(new URL('./contracts/valid/', import.meta.url));
-const load = (name: string) => JSON.parse(readFileSync(`${VALID}${name}.json`, 'utf8'));
 
 const HOST = `${process.platform}-${process.arch}`;
 const QUALIFIED = qualificationFor(SQLITE_RELEASE_POLICY, HOST, process.versions.sqlite ?? '') !== undefined;
@@ -72,44 +68,16 @@ export function commitRepo(root: string, files: Record<string, string | Buffer>,
   return git(root, ['rev-parse', 'HEAD']).trim();
 }
 
-const run = (epoch: string) => ({ ...load('run-active'), coordinatorEpoch: epoch });
-const work = (epoch: string, id: string, manifest: string) =>
-  ({ ...load('work-idle'), coordinatorEpoch: epoch, id, state: 'ready', dependencies: [], influenceManifest: manifest });
-const attempt = (epoch: string, id: string, workId: string, invocation: string) => ({
-  ...load('attempt-running'), coordinatorEpoch: epoch, id, ordinal: 1, work: { id: workId, revision: 1 }, invocation,
-  worker: { kind: 'owned-child', pid: 4242, processStartedAt: '2026-10-21T12:00:00Z' },
-});
-
 export interface CaptureFixture {
   readonly store: SentinelStore;
   readonly storePath: string;
-  /** Creates a fresh work and running attempt for each stage, the way a coordinator's capture step would. */
-  readonly publishTo: (stage: CaptureStageInfo) => CaptureStageTarget;
-  readonly stages: CaptureStageInfo[];
 }
 
-/** Opens a real store at `<dir>/store` with one run whose capture stages each get their own work and attempt. */
+/** Opens a real store at `<dir>/store` (or `storePath`); closed after the test. */
 export async function openCaptureStore(t: { after(fn: () => void): void }, dir: string, storePath = join(dir, 'store')): Promise<CaptureFixture> {
   const store = await openStore(storePath);
   t.after(() => store.close());
-  const manifest = { kind: 'synthetic-influence-manifest', inputs: [] };
-  const invocation = { kind: 'synthetic-capture-invocation' };
-  const ids = [store.objects.identifyCanonicalJson(manifest), store.objects.identifyCanonicalJson(invocation)];
-  store.ledger.registerStaging('stage-capture-inputs', ids.map(i => ({ id: i.id, schema: 'application/json', privacy: 'metadata' as const })));
-  await store.objects.putCanonicalJson(manifest, { expect: ids[0] });
-  await store.objects.putCanonicalJson(invocation, { expect: ids[1] });
-  store.ledger.createRun(run(store.epoch) as never);
-  let n = 0;
-  const stages: CaptureStageInfo[] = [];
-  const publishTo = (stage: CaptureStageInfo): CaptureStageTarget => {
-    stages.push(stage);
-    const workId = `work-capture-${n}`;
-    const attemptId = `att-capture-${n++}`;
-    store.ledger.createWork(work(store.epoch, workId, ids[0]!.id) as never);
-    store.ledger.startAttempt(attempt(store.epoch, attemptId, workId, ids[1]!.id) as never);
-    return { work: { id: workId, revision: 1 }, attemptId };
-  };
-  return { store, storePath, publishTo, stages };
+  return { store, storePath };
 }
 
 /** An independent walk: every non-folder path under `root`, and every folder that cannot be listed. */
