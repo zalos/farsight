@@ -600,7 +600,7 @@
     "ScopeId": {
       "type": "string",
       "description": "A scope reference such as `<sourceId>:<relativePath>` or a surface ID. Untrusted protocol data: bounded, free of control characters, never resolved as a filesystem path.",
-      "pattern": "^[A-Za-z0-9][^\\u0000-\\u001f\\u007f]*$",
+      "pattern": "^[A-Za-z0-9][^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]*$",
       "maxLength": 4300
     },
     "CancelAckMessage": {

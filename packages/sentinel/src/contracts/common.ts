@@ -34,7 +34,9 @@ export type Timestamp = string;
 
 /**
  * A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL.
- * @pattern ^(?![/])(?!.*[/]$)(?!(.*[/])?\.{1,2}([/]|$))(?!.*[/][/])[^\\\u0000]+$
+ * A newline or other line break inside a name is a legal POSIX name and is kept as captured; the checks use
+ * `[\s\S]`, never `.`, so a line break cannot hide a `..` segment from them.
+ * @pattern ^(?![/])(?![\s\S]*[/]$)(?!([\s\S]*[/])?\.{1,2}([/]|$))(?![\s\S]*[/][/])[^\\\u0000]+$
  * @maxLength 4096
  */
 export type RelativePath = string;
@@ -85,7 +87,7 @@ export interface RegisterText {
  * pinned context. Unlike a ledger `Id` it may contain `/` and `::`; it is bounded and free of control characters.
  * @minLength 1
  * @maxLength 1024
- * @pattern ^[^\u0000-\u001f\u007f]+$
+ * @pattern ^[^\u0000-\u001f\u007f-\u009f\u2028\u2029]+$
  */
 export type NodeId = string;
 
@@ -126,7 +128,7 @@ export interface SourceEvidence {
 /**
  * A scope reference such as `<sourceId>:<relativePath>` or a surface ID. Untrusted protocol data: bounded,
  * free of control characters, never resolved as a filesystem path.
- * @pattern ^[A-Za-z0-9][^\u0000-\u001f\u007f]*$
+ * @pattern ^[A-Za-z0-9][^\u0000-\u001f\u007f-\u009f\u2028\u2029]*$
  * @maxLength 4300
  */
 export type ScopeId = string;

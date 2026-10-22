@@ -77,6 +77,16 @@ export function isCalendarTimestamp(value: string): boolean {
     && t.getUTCHours() === h && t.getUTCMinutes() === mi && t.getUTCSeconds() === se;
 }
 
+/**
+ * A safe source-relative POSIX path, checked segment by segment (the schema pattern says the same; this is the
+ * runtime check that does not depend on any regex dialect). A line break is a legal byte in a POSIX name and is
+ * kept; what is refused is an empty, `.` or `..` segment, a leading or trailing slash, a backslash or a NUL.
+ */
+export function isSafeRelativePath(path: string): boolean {
+  if (path.length === 0 || path.length > 4096 || path.includes('\\') || path.includes('\u0000')) return false;
+  return path.split('/').every(segment => segment !== '' && segment !== '.' && segment !== '..');
+}
+
 /** At most this many errors are reported; collection stops there rather than truncating afterwards. */
 export const MAX_REPORTED_ERRORS = 100;
 
@@ -167,7 +177,13 @@ function duplicates<T>(items: readonly T[], key: (item: T) => string): number[] 
   return out;
 }
 
+const pathError = (out: Bounded, at: string, path: string) => {
+  if (!isSafeRelativePath(path)) out.add(err(at, 'not a safe source-relative path'));
+};
+
 const snapshot: Check<SnapshotEnvelope> = (v, out) => {
+  v.entries.forEach((e, i) => pathError(out, `/entries/${i}/relativePath`, e.relativePath));
+  v.frameworkVersions.forEach((f, i) => { if (f.state === 'resolved') pathError(out, `/frameworkVersions/${i}/provenance/relativePath`, f.provenance.relativePath); });
   const sources = new Set(v.sources.map(s => s.sourceId));
   for (const i of duplicates(v.sources, s => s.sourceId)) out.add(err(`/sources/${i}/sourceId`, 'duplicate source'));
   for (const i of duplicates(v.entries, e => `${e.sourceId}\u0000${e.relativePath}`)) out.add(err(`/entries/${i}`, 'duplicate entry for one source path'));
@@ -218,6 +234,19 @@ const run: Check<RunEnvelope> = (v, out) => {
   if (v.policy && POLICY_EXIT_CODES[v.policy.result] !== v.policy.exitCode) out.add(err('/policy/exitCode', 'exit code does not match the policy result'));
   // Awaiting confirmation happens before admission: only a run that has not started can be waiting.
   if (v.policy?.result === 'awaiting-confirmation' && v.state !== 'planned') out.add(err('/policy/result', 'only a planned, unadmitted run can await confirmation'));
+  if (v.policy) {
+    const r = v.policy.result;
+    // A run still in flight has no final policy result yet.
+    if (['running', 'pausing', 'paused', 'canceling'].includes(v.state)) out.add(err('/policy', 'a run in progress has no final policy result'));
+    // Before admission the only results are waiting for the owner or a configuration failure.
+    if (v.state === 'planned' && r !== 'awaiting-confirmation' && r !== 'configuration-failure') out.add(err('/policy/result', 'a planned run has not run any check'));
+    // A canceled run did not finish its required work, so it cannot satisfy the policy.
+    if (v.state === 'canceled' && r === 'satisfied') out.add(err('/policy/result', 'a canceled run cannot satisfy the policy'));
+    if (v.state === 'completed') {
+      if (v.outcome === 'complete-coverage' && r === 'required-coverage-incomplete') out.add(err('/policy/result', 'complete coverage contradicts required coverage incomplete'));
+      if (v.outcome === 'execution-failure' && (r === 'satisfied' || r === 'finding-policy-failed')) out.add(err('/policy/result', 'an execution failure leaves required coverage incomplete or a configuration failure'));
+    }
+  }
   if (v.budgets.maxCost !== null && !v.budgets.currency) out.add(err('/budgets/currency', 'a monetary budget needs its currency'));
   if (v.budgets.maxCost === null && v.budgets.currency) out.add(err('/budgets/currency', 'a currency without a monetary budget'));
 };
@@ -242,6 +271,7 @@ const attempt: Check<AttemptEnvelope> = (v, out) => {
 
 const observation: Check<ObservationEnvelope> = (v, out) => {
   v.evidence.forEach((e, i) => {
+    pathError(out, `/evidence/${i}/relativePath`, e.relativePath);
     if (e.span.endByte < e.span.startByte) out.add(err(`/evidence/${i}/span`, 'span ends before it starts'));
     if (e.snapshotId !== v.snapshotId) out.add(err(`/evidence/${i}/snapshotId`, 'evidence cites another snapshot'));
   });
@@ -298,7 +328,14 @@ const report: Check<ReportEnvelope> = (v, out) => {
     for (const j of duplicates(f.evidence, e => e.id)) out.add(err(`/findings/${i}/evidence/${j}`, 'duplicate evidence'));
   });
   v.gaps.forEach((g, i) => placeErrors(out, `/gaps/${i}/place`, g.place));
-  v.decisions.forEach((d, i) => { if (!findings.has(d.findingId)) out.add(err(`/decisions/${i}/findingId`, 'decision about a finding the report does not contain')); });
+  const at = Date.parse(v.evaluatedAt);
+  v.decisions.forEach((d, i) => {
+    if (!findings.has(d.findingId)) out.add(err(`/decisions/${i}/findingId`, 'decision about a finding the report does not contain'));
+    // Validity is as of the report's pinned clock. Invalidation is the service's own finding and stays as recorded.
+    const expired = d.expiresAt !== null && Date.parse(d.expiresAt) <= at;
+    if (d.validity === 'valid' && expired) out.add(err(`/decisions/${i}/validity`, 'the decision had expired at the report time'));
+    if (d.validity === 'expired' && !expired) out.add(err(`/decisions/${i}/validity`, 'the decision had not expired at the report time'));
+  });
   for (const i of duplicates(v.artifactClosure, a => a)) out.add(err(`/artifactClosure/${i}`, 'duplicate artifact'));
   if (v.baseline?.reportId === v.id) out.add(err('/baseline', 'a report cannot be its own baseline'));
   if (v.baseline === null && v.findings.some(f => f.comparison !== undefined)) out.add(err('/findings', 'comparison labels need a baseline'));

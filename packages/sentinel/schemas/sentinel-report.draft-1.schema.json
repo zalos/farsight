@@ -548,7 +548,7 @@
       "description": "A canonical application-graph identity (`repo::path/to/File.tsx::Component`), a screen or a journey ID from pinned context. Unlike a ledger `Id` it may contain `/` and `::`; it is bounded and free of control characters.",
       "minLength": 1,
       "maxLength": 1024,
-      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+$"
     },
     "PlaceLabel": {
       "type": "object",

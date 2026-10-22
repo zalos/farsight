@@ -13,6 +13,8 @@ import {
 import type { EnvelopeKind, HelloMessage } from '../dist/index.js';
 import { MAX_REPORTED_ERRORS } from '../dist/index.js';
 import { counted, countedProblems } from '@farsight/core/dist/counts.js';
+import { Ajv } from 'ajv';
+import { isCalendarTimestamp, isSafeRelativePath } from '../dist/index.js';
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const VALID = here('./contracts/valid/');
@@ -262,6 +264,29 @@ test('a large broken record produces a bounded error list, not one error per ele
   }
 });
 
+const BYPASS_PATHS = [
+  'a\n/../../outside', 'a\r/../outside', 'a\r\n/../outside', 'a\u2028/../outside', 'a\u2029/../outside',
+  'src\n/', 'a\n//b', 'x\n/./y', '\n/../x', 'a/b\n/..',
+];
+
+test('a line break in a name cannot hide a parent, dot or empty segment, in the schema alone or at runtime', () => {
+  // The published schema on its own, as any other consumer would run it (no Sentinel invariants).
+  const plain = new Ajv({ strict: true, allowUnionTypes: true }).addFormat('date-time', { type: 'string', validate: isCalendarTimestamp });
+  const schemaOnly = plain.compile(schemaOf('snapshot'));
+  const withPath = (p: string) => { const v = load('snapshot'); v.entries[0].relativePath = p; return v; };
+  for (const p of BYPASS_PATHS) {
+    assert.equal(schemaOnly(withPath(p)), false, `schema accepted ${JSON.stringify(p)}`);
+    assert.equal(isSafeRelativePath(p), false, `runtime accepted ${JSON.stringify(p)}`);
+    assert.equal(validateEnvelope('snapshot', withPath(p)).ok, false, JSON.stringify(p));
+  }
+  // A line break is a legal byte in a POSIX name: such a file is captured and listed honestly, not dropped.
+  for (const p of ['dir\nname/file.ts', 'notes\r.txt', 'a/..\n', 'a/\n..', 'x\u2028y/z']) {
+    assert.equal(schemaOnly(withPath(p)), true, `schema refused ${JSON.stringify(p)}`);
+    assert.equal(isSafeRelativePath(p), true, JSON.stringify(p));
+    assert.equal(validateEnvelope('snapshot', withPath(p)).ok, true, JSON.stringify(p));
+  }
+});
+
 test('timestamps are real calendar instants', () => {
   const ok = (t: string) => { const v = load('snapshot'); v.createdAt = t; return validateEnvelope('snapshot', v).ok; };
   assert.equal(ok('2028-02-29T00:00:00Z'), true, 'a leap day');
@@ -269,6 +294,8 @@ test('timestamps are real calendar instants', () => {
   assert.equal(ok('2026-04-31T00:00:00Z'), false);
   assert.equal(ok('2026-12-31T23:59:59.123456789Z'), true);
   assert.equal(ok('2026-99-99T99:99:99Z'), false);
+  assert.equal(ok('2026-02-30T12:00:00Z'), false);
+  assert.equal(isCalendarTimestamp('2026-02-30T12:00:00Z'), false);
 });
 
 test('report counts are core Counted values with registered catalog words', () => {
@@ -310,6 +337,20 @@ test('placement uses canonical graph identities, not ledger ids', () => {
   const run = load('run-active');
   run.id = 'api::src/run';
   assert.equal(validateEnvelope('run', run).ok, false);
+});
+
+test('a report decision is judged against the report\'s own clock; invalidation stays the service\'s word', () => {
+  const report = load('report');
+  report.decisions[0].expiresAt = '2026-10-21T12:05:00.251Z';
+  assert.ok(validateEnvelope('report', report).ok, 'not yet expired one millisecond after the report time');
+  report.decisions[0].validity = 'expired';
+  report.decisions[0].expiresAt = '2020-01-01T00:00:00Z';
+  assert.ok(validateEnvelope('report', report).ok);
+  for (const expiresAt of [null, '2020-01-01T00:00:00Z', '2030-01-01T00:00:00Z']) {
+    report.decisions[0].validity = 'invalidated';
+    report.decisions[0].expiresAt = expiresAt;
+    assert.ok(validateEnvelope('report', report).ok, `invalidated with expiry ${expiresAt}`);
+  }
 });
 
 test('policy results fold with fixed precedence and exit codes', () => {

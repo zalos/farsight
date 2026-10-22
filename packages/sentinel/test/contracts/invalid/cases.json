@@ -419,6 +419,83 @@
     "path": "/createdAt"
   },
   {
+    "name": "a newline cannot hide a parent segment",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "a\n/../../outside"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a carriage return cannot hide a parent segment",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "a\r/../outside"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a line separator cannot hide a parent segment",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "a\u2028/../outside"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a paragraph separator cannot hide a parent segment",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "a\u2029/../outside"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a newline cannot hide a trailing slash",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "src\n/"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a newline cannot hide an empty segment",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "a\n//b"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a newline cannot hide a dot segment",
+    "base": "snapshot",
+    "ops": [
+      {
+        "set": "/entries/0/relativePath",
+        "value": "x\n/./y"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
     "name": "a policy exit code that disagrees with its result",
     "base": "run-completed",
     "ops": [
@@ -534,6 +611,106 @@
         "value": {
           "result": "awaiting-confirmation",
           "exitCode": 4,
+          "reasonCodes": []
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/result"
+  },
+  {
+    "name": "complete coverage contradicts required coverage incomplete",
+    "base": "run-completed",
+    "ops": [
+      {
+        "set": "/outcome",
+        "value": "complete-coverage"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/result"
+  },
+  {
+    "name": "an execution failure cannot satisfy the policy",
+    "base": "run-completed",
+    "ops": [
+      {
+        "set": "/outcome",
+        "value": "execution-failure"
+      },
+      {
+        "set": "/policy",
+        "value": {
+          "result": "satisfied",
+          "exitCode": 0,
+          "reasonCodes": []
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/result"
+  },
+  {
+    "name": "an execution failure is not merely a finding failure",
+    "base": "run-completed",
+    "ops": [
+      {
+        "set": "/outcome",
+        "value": "execution-failure"
+      },
+      {
+        "set": "/policy",
+        "value": {
+          "result": "finding-policy-failed",
+          "exitCode": 1,
+          "reasonCodes": []
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/result"
+  },
+  {
+    "name": "a running run has no final policy result",
+    "base": "run-active",
+    "ops": [
+      {
+        "set": "/policy",
+        "value": {
+          "result": "satisfied",
+          "exitCode": 0,
+          "reasonCodes": []
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy"
+  },
+  {
+    "name": "a planned run has run no check",
+    "base": "run-planned-awaiting",
+    "ops": [
+      {
+        "set": "/policy",
+        "value": {
+          "result": "satisfied",
+          "exitCode": 0,
+          "reasonCodes": []
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/policy/result"
+  },
+  {
+    "name": "a canceled run cannot satisfy the policy",
+    "base": "run-canceled",
+    "ops": [
+      {
+        "set": "/policy",
+        "value": {
+          "result": "satisfied",
+          "exitCode": 0,
           "reasonCodes": []
         }
       }
@@ -849,6 +1026,17 @@
     "expect": "sentinel.contract.invalid"
   },
   {
+    "name": "evidence paths get the same check",
+    "base": "observation-scanner",
+    "ops": [
+      {
+        "set": "/evidence/0/relativePath",
+        "value": "src\n/../../etc/passwd"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
     "name": "complete coverage with skipped scope is partial",
     "base": "coverage-partial",
     "ops": [
@@ -934,6 +1122,17 @@
     "ops": [
       {
         "delete": "/basis/publication/revision"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a scope id with a next-line control",
+    "base": "coverage-partial",
+    "ops": [
+      {
+        "set": "/skipped/0/scopeId",
+        "value": "api:src/a\u0085.ts"
       }
     ],
     "expect": "sentinel.contract.invalid"
@@ -1254,6 +1453,69 @@
       }
     ],
     "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a node id with a line separator",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/findings/0/place/nodeIds/0",
+        "value": "api::a\u2028b"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a decision valid after it expired at the report time",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/decisions/0/expiresAt",
+        "value": "2020-01-01T00:00:00Z"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/decisions/0/validity"
+  },
+  {
+    "name": "a decision expiring exactly at the report time is expired",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/decisions/0/expiresAt",
+        "value": "2026-10-21T12:05:00.250Z"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/decisions/0/validity"
+  },
+  {
+    "name": "a decision marked expired that never expires",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/decisions/0/validity",
+        "value": "expired"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/decisions/0/validity"
+  },
+  {
+    "name": "a decision marked expired before its expiry",
+    "base": "report",
+    "ops": [
+      {
+        "set": "/decisions/0/validity",
+        "value": "expired"
+      },
+      {
+        "set": "/decisions/0/expiresAt",
+        "value": "2030-01-01T00:00:00Z"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/decisions/0/validity"
   },
   {
     "name": "an unknown message type",

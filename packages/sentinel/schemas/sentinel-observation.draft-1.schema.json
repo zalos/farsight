@@ -336,8 +336,8 @@
     },
     "RelativePath": {
       "type": "string",
-      "description": "A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL.",
-      "pattern": "^(?![/])(?!.*[/]$)(?!(.*[/])?\\.{1,2}([/]|$))(?!.*[/][/])[^\\\\\\u0000]+$",
+      "description": "A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL. A newline or other line break inside a name is a legal POSIX name and is kept as captured; the checks use `[\\s\\S]`, never `.`, so a line break cannot hide a `..` segment from them.",
+      "pattern": "^(?![/])(?![\\s\\S]*[/]$)(?!([\\s\\S]*[/])?\\.{1,2}([/]|$))(?![\\s\\S]*[/][/])[^\\\\\\u0000]+$",
       "maxLength": 4096
     },
     "ArtifactId": {
@@ -372,7 +372,7 @@
       "description": "A canonical application-graph identity (`repo::path/to/File.tsx::Component`), a screen or a journey ID from pinned context. Unlike a ledger `Id` it may contain `/` and `::`; it is bounded and free of control characters.",
       "minLength": 1,
       "maxLength": 1024,
-      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+$"
     },
     "CatalogKey": {
       "type": "string",

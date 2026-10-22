@@ -45,6 +45,11 @@ canonical graph identities (`repo::path/to/File.tsx::Component`), not ledger IDs
 calendar instants. Validation stops at the first schema failure and caps invariant errors at 100, so a large
 broken record cannot multiply into a large error list.
 
+Paths are checked segment by segment in the schema and again at runtime. A line break is a legal byte in a
+POSIX name and is kept, but it cannot hide an empty, `.` or `..` segment. A run's policy result has to agree with
+its state and outcome. A report decision's validity has to agree with its expiry at the report's own evaluation
+time. Invalidation remains the service's own finding.
+
 Spans are zero-based, half-open UTF-8 byte offsets. Paths are source-relative POSIX paths with no `.`/`..`
 segment. Money is a decimal string. Resource ceilings are the PR 01 proposed defaults (2 GiB, 2 CPUs,
 128 PIDs, 120 s, 4 MiB output); a profile can only lower them.
