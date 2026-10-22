@@ -1,117 +1,83 @@
-// The Gitleaks adapter (PR 11). Three layers:
-// 1. Pure: the manifest, the report reader, the whole-line span and the redaction shape.
-// 2. The worker through the real execution service, as a built-in child over a stand-in Gitleaks
-//    (fixtures/secrets/fake-gitleaks.mjs) that keeps raw values in its report and quotes them on failure.
-// 3. The real pinned engine in a real container: runs only with SENTINEL_ISOLATION=1 and SENTINEL_GITLEAKS_IMAGE set
-//    (and SENTINEL_GITLEAKS_VERSION); there a missing image or runtime is a failure, never a skip.
-//
-// The synthetic value is assembled here at run time from inert parts, so no secret-shaped value is committed and the
-// repository's own secret scan needs no allowlist for it. No assertion message, diagnostic or report line ever
-// includes it: every check is `includes(...) === false` with a message naming only where it looked.
+// The Gitleaks adapter's pure parts (PR 11): pins, the shim build, the job, and the normaliser over synthetic
+// outcomes. These always run; secrets-conformance.test.ts runs the pinned engine itself in a real container.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
-import { chmodSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createAdapterRegistry } from '../dist/execution/registry.js';
 import {
-  GITLEAKS_CONFIG, GITLEAKS_CONFIG_DIGEST, GITLEAKS_PINS, gitleaksAdapterDefinition, gitleaksWorkerSource, prepareScanInput, readSecretsOutcome,
-} from '../dist/adapters/gitleaks.js';
-import {
-  canonical, gitleaksArgs, lineSpan, observationsFrom, parseManifest, readFindings, OBSERVATION_MESSAGE, MAX_FILE_BYTES,
-} from '../dist/adapters/gitleaks-worker.js';
-import { removeScratch, runAttempt, scratch, storeIn, work } from './execution-helpers.ts';
+  GITLEAKS_ADAPTER, GITLEAKS_CONFIG, GITLEAKS_ENGINE, GITLEAKS_REPORT_TEMPLATE, GITLEAKS_RULE_IDS, GITLEAKS_WORKER_BYTES, GITLEAKS_WORKER_DIGEST,
+  OBSERVATION_MESSAGE, buildGitleaksAdapter, buildSecretsJob, lineSpan, normalizeSecretsRun, readReport, toolAllowlisted, GITLEAKS_MAX_FILE_BYTES,
+} from '../dist/adapters/gitleaks/index.js';
+import { VALUE, absent, captured, sha, treeFiles } from './secrets-helpers.ts';
 
-// `ghp_` and 36 letters and digits: the GitHub token shape, plainly synthetic.
-const VALUE = ['ghp', '_', 'SentinelSynthetic', 'InertFixture', '0000001'].join('');
-const FAKE = fileURLToPath(new URL('./fixtures/secrets/fake-gitleaks.mjs', import.meta.url));
-const WORKER_MODULE = fileURLToPath(new URL('../dist/adapters/gitleaks-worker.js', import.meta.url));
-const sha = (b: string | Buffer) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
+const root = mkdtempSync(join(tmpdir(), 'sentinel-secrets-unit-'));
+after(() => rmSync(root, { recursive: true, force: true }));
+let n = 0;
+const dir = () => { const d = join(root, `d${n++}`); mkdirSync(d, { mode: 0o700 }); return d; };
 
-/** Fails with a message naming the place only; the value and the haystack are never printed. */
-function absent(haystack: string | Buffer | Uint8Array, where: string): void {
-  const found = Buffer.isBuffer(haystack) || haystack instanceof Uint8Array ? Buffer.from(haystack).includes(VALUE) : haystack.includes(VALUE);
-  assert.equal(found, false, `${where} contains the synthetic value`);
-}
-
-const s = scratch('secrets');
-after(() => removeScratch(s.root));
-
-/** The captured current tree: one leaking line, one clean file, an inline allow, and a root ignore list for both. */
-function capturedTree(root: string, extra: Record<string, string | Buffer> = {}) {
-  const files: Record<string, string | Buffer> = {
-    'config/service.env': `# synthetic fixture for the secret scanner\nSENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`,
-    'src/clean.ts': 'export const nothingSecret = 1;\n',
-    'notes/allowed.md': `example ${VALUE} gitleaks:allow\n`,
-    // Fingerprints for both findings, in every form a path could take: none of them may suppress anything.
-    '.gitleaksignore': ['config/service.env:github-pat:2', 'notes/allowed.md:github-pat:1', 'scan/tree/config/service.env:github-pat:2',
-      'scan/tree/notes/allowed.md:github-pat:1', 'tree/config/service.env:github-pat:2'].join('\n') + '\n',
-    ...extra,
-  };
-  const dir = join(root, 'captured');
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
-  return Object.entries(files).map(([relativePath, text]) => {
-    const bytes = Buffer.from(text);
-    const content = sha(bytes);
-    const path = join(dir, content.slice(7));
-    writeFileSync(path, bytes);
-    return { relativePath, content, path, bytes: bytes.length };
-  });
-}
-
-// --- 1. pure ---
-
-test('the pinned configuration extends only the version’s own rules and allows nothing', () => {
-  assert.equal(GITLEAKS_CONFIG, 'title = "sentinel-gitleaks-pinned"\n\n[extend]\nuseDefault = true\n');
-  assert.equal(GITLEAKS_CONFIG_DIGEST, sha(GITLEAKS_CONFIG));
+test('the pins: the official release, its image index, its default rules, and a shim that the adapter digest covers', () => {
+  assert.equal(GITLEAKS_ENGINE.version, '8.30.1');
+  assert.equal(GITLEAKS_ENGINE.license, 'MIT');
+  assert.match(GITLEAKS_ENGINE.image, /^ghcr\.io\/gitleaks\/gitleaks@sha256:[0-9a-f]{64}$/);
+  assert.equal(GITLEAKS_RULE_IDS.size, 222);
+  assert.ok(GITLEAKS_RULE_IDS.has('github-pat') && [...GITLEAKS_RULE_IDS].every(id => /^[a-z0-9][a-z0-9-]*$/.test(id)));
+  assert.equal(GITLEAKS_ADAPTER.isolation, 'container');
+  assert.deepEqual([...GITLEAKS_ADAPTER.command], ['/bin/sh', `/input/${GITLEAKS_WORKER_DIGEST.slice(7)}`]);
+  assert.equal(sha(GITLEAKS_WORKER_BYTES), GITLEAKS_WORKER_DIGEST);
+  const shim = GITLEAKS_WORKER_BYTES.toString('utf8');
+  assert.ok(shim.includes(GITLEAKS_CONFIG) && shim.includes(GITLEAKS_REPORT_TEMPLATE), 'the shim carries the pinned configuration and template');
   assert.doesNotMatch(GITLEAKS_CONFIG, /allowlist|paths|regexes|stopwords|disabledRules/);
-  const args = gitleaksArgs('scan', '/w/gitleaks.toml', '/w/no-ignores', '/w/report.json');
-  const flag = (n: string) => args[args.indexOf(n) + 1];
-  assert.equal(args[0], 'dir');
-  assert.equal(flag('--config'), '/w/gitleaks.toml');
-  assert.equal(flag('--gitleaks-ignore-path'), '/w/no-ignores');
-  assert.ok(args.includes('--ignore-gitleaks-allow') && args.includes('--redact=100'));
-  assert.ok(!args.some(a => /baseline|enable-rule|no-git/.test(a)), 'no baseline, no rule selection');
+  assert.deepEqual([...GITLEAKS_REPORT_TEMPLATE.matchAll(/\{\{\.(\w+)\}\}/g)].map(m => m[1]), ['RuleID', 'StartLine', 'EndLine', 'File'], 'the template names rule, lines and file only');
+  assert.doesNotMatch(shim, /baseline|--no-git|curl|wget|apk /);
+  assert.match(shim, /--ignore-gitleaks-allow --redact=100/);
+  assert.match(shim, / --exit-code 2 /, 'leaks are exit 2, distinct from an engine error (1)');
+  const variant = buildGitleaksAdapter({ id: 'secrets-gitleaks-variant', engineArgs: ['--exit-code', '0'] });
+  assert.notEqual(variant.workerDigest, GITLEAKS_WORKER_DIGEST);
+  assert.notEqual(createAdapterRegistry([variant.definition]).get('secrets-gitleaks-variant').digest, createAdapterRegistry([GITLEAKS_ADAPTER]).get('secrets-gitleaks').digest);
+  assert.throws(() => buildGitleaksAdapter({ engineArgs: ['--config', '/x; rm'] }));
 });
 
-test('no production pin exists, and the registration pins the shim bytes in its command', () => {
-  assert.deepEqual([...GITLEAKS_PINS], []);
-  const pin = { version: '8.0.0-test', image: `example/gitleaks@sha256:${'1'.repeat(64)}` };
-  const def = gitleaksAdapterDefinition(pin);
-  assert.deepEqual(def.command.slice(0, 3), ['node', '--input-type=module', '-e']);
-  assert.equal(def.command[3], gitleaksWorkerSource());
-  assert.deepEqual(def.command.slice(4), ['--', '--sentinel-gitleaks-worker']);
-  const a = createAdapterRegistry([def]).get('gitleaks');
-  const b = createAdapterRegistry([{ ...def, command: [...def.command.slice(0, 3), `${def.command[3]}\n// changed`, ...def.command.slice(4)] }]).get('gitleaks');
-  assert.notEqual(a.digest, b.digest, 'a changed shim is a different adapter');
+test('the job: shim, job, contents in order; unsent files are skipped scopes with their reasons', () => {
+  const big = Buffer.alloc(GITLEAKS_MAX_FILE_BYTES + 1, 0x61);
+  const targets = captured(dir(), treeFiles({ 'web/package-lock.json': '{}\n', 'assets/logo.png': 'x', 'big.bin.txt': big, 'odd\nname.txt': 'x', 'same/copy.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n` }));
+  const built = buildSecretsJob({ snapshotId: 'snap-1', sourceId: 'src-1', targets }, dir());
+  assert.equal(built.inputs[0]!.id, GITLEAKS_WORKER_DIGEST);
+  assert.equal(built.inputs[1]!.id, built.jobDigest);
+  const text = readFileSync(built.inputs[1]!.path, 'utf8');
+  assert.ok(text.startsWith('sentinel-gitleaks-job/1\n') && text.endsWith('\n'));
+  absent(text, 'the job file');
+  assert.deepEqual(built.job.files.map(f => f.relativePath), ['.gitleaksignore', 'config/service.env', 'notes/allowed.md', 'same/copy.env', 'src/clean.ts']);
+  assert.deepEqual(built.job.unsent.map(u => `${u.relativePath.replace('\n', '\\n')} ${u.reasonCode}`).sort(), [
+    'assets/logo.png sentinel.secrets.toolAllowlisted', 'big.bin.txt sentinel.secrets.fileTooLarge',
+    'odd\\nname.txt sentinel.secrets.pathUnsupported', 'web/package-lock.json sentinel.secrets.toolAllowlisted',
+  ]);
+  // Each distinct content is an input once, after the shim and the job.
+  assert.equal(new Set(built.inputs.map(i => i.id)).size, built.inputs.length);
+  assert.throws(() => buildSecretsJob({ snapshotId: 'snap-1', sourceId: 'src-1', targets: [{ ...targets[0]!, artifact: sha('other') }] }, dir()), /inputInvalid/);
+  assert.throws(() => buildSecretsJob({ snapshotId: 'snap-1', sourceId: 'src-1', targets: [{ ...targets[0]!, relativePath: '../x' }] }, dir()), /inputInvalid/);
 });
 
-test('the manifest refuses unsafe paths, extra fields, collisions and inputs it does not name', () => {
-  const c = `sha256:${'a'.repeat(64)}`;
-  const ok = { schema: 'sentinel-secrets-scan-input/draft-1', snapshotId: 'snap-1', sourceId: 'src-1', files: [{ path: 'a/b.env', content: c, bytes: 3 }] };
-  assert.equal(parseManifest(ok, [c]).files.length, 1);
-  const refused = (m: unknown, inputs = [c]) => assert.throws(() => parseManifest(m, inputs), (e: any) => e.code === 'sentinel.secrets.inputInvalid');
-  for (const path of ['../x', '/etc/x', 'a/../b', 'a//b', 'a/', 'a\\b', 'a\u0000b', 'a\nb', '.']) refused({ ...ok, files: [{ ...ok.files[0], path }] });
-  refused({ ...ok, extra: 1 });
-  refused({ ...ok, files: [{ ...ok.files[0], quote: 'x' }] });
-  refused({ ...ok, files: [ok.files[0], { ...ok.files[0], path: 'A/B.env' }] });
-  refused(ok, []);
-  refused(ok, [c, `sha256:${'b'.repeat(64)}`]);
+test('the pinned global allowlist reads the way Gitleaks reads it', () => {
+  for (const p of ['package-lock.json', 'web/pnpm-lock.yaml', 'node_modules/x/index.js', 'img/a.PNG', 'go.sum', 'vendor/modules.txt', '.gitleaks.toml']) assert.ok(toolAllowlisted(p), p);
+  for (const p of ['src/index.ts', 'config/.env', 'package.json', 'docs/readme.md', 'lockfile.json']) assert.ok(!toolAllowlisted(p), p);
 });
 
-test('the report reader keeps four fields and refuses text where a rule ID belongs', () => {
-  const raw = JSON.stringify([{ RuleID: 'github-pat', File: 'scan/tree/a', StartLine: 2, EndLine: 2, Secret: VALUE, Match: VALUE, Line: VALUE, Description: VALUE }]);
-  const kept = readFindings(raw);
-  absent(JSON.stringify(kept), 'the kept findings');
-  assert.deepEqual(kept, [{ RuleID: 'github-pat', File: 'scan/tree/a', StartLine: 2, EndLine: 2 }]);
-  const refused = (text: string, code = 'sentinel.secrets.reportMalformed') => assert.throws(() => readFindings(text), (e: any) => e.code === code);
-  refused(JSON.stringify([{ RuleID: `github-pat ${VALUE}`, File: 'a', StartLine: 1, EndLine: 1 }]));
-  refused(JSON.stringify([{ RuleID: 'r', File: 'a', StartLine: 0, EndLine: 1 }]));
-  refused(JSON.stringify([{ RuleID: 'r', File: 'a', StartLine: 3, EndLine: 2 }]));
-  refused('{"not":"an array"}');
-  refused(`[{"RuleID":"r","Secret":"${VALUE}"`);
-  refused(JSON.stringify(Array.from({ length: 10_001 }, () => ({ RuleID: 'r', File: 'a', StartLine: 1, EndLine: 1 }))), 'sentinel.secrets.tooManyFindings');
+test('a report line names a pinned rule, whole lines and a sent file, and nothing else', () => {
+  const sent = new Set(['a.env', 'b c\td.env']);
+  assert.deepEqual(readReport('F\tgithub-pat\t2\t2\tscan/tree/a.env\nF\tgithub-pat\t1\t3\tscan/tree/b c\td.env\n', sent),
+    [{ rule: 'github-pat', start: 2, end: 2, path: 'a.env' }, { rule: 'github-pat', start: 1, end: 3, path: 'b c\td.env' }]);
+  assert.deepEqual(readReport('', sent), []);
+  const refused = (text: string, code: string) => assert.throws(() => readReport(text, sent), (e: any) => e.code === code);
+  refused(`F\t${VALUE}\t2\t2\tscan/tree/a.env\n`, 'sentinel.secrets.reportMalformed');
+  refused('F\tnot-a-pinned-rule\t2\t2\tscan/tree/a.env\n', 'sentinel.secrets.reportMalformed');
+  refused('F\tgithub-pat\t0\t2\tscan/tree/a.env\n', 'sentinel.secrets.reportMalformed');
+  refused('F\tgithub-pat\t3\t2\tscan/tree/a.env\n', 'sentinel.secrets.reportMalformed');
+  refused('F\tgithub-pat\t2\t2\tscan/tree/a.env', 'sentinel.secrets.reportMalformed');
+  refused('X\tgithub-pat\t2\t2\tscan/tree/a.env\n', 'sentinel.secrets.reportMalformed');
+  refused('F\tgithub-pat\t2\t2\tscan/tree/other.env\n', 'sentinel.secrets.unknownFile');
+  refused('F\tgithub-pat\t2\t2\t/etc/passwd\n', 'sentinel.secrets.unknownFile');
 });
 
 test('a location is whole lines, never a part of one', () => {
@@ -123,144 +89,73 @@ test('a location is whole lines, never a part of one', () => {
   assert.throws(() => lineSpan(b, 4, 4), (e: any) => e.code === 'sentinel.secrets.locationOutOfRange');
 });
 
-test('an observation is built from the closed field list only', () => {
-  const bytes = Buffer.from(`a\nkey=${VALUE}\n`);
-  const content = sha(bytes);
-  const manifest = parseManifest({ schema: 'sentinel-secrets-scan-input/draft-1', snapshotId: 'snap-1', sourceId: 'src-1', files: [{ path: 'k.env', content, bytes: bytes.length }] }, [content]);
-  const producer = { adapterId: 'gitleaks', adapterDigest: `sha256:${'c'.repeat(64)}`, attemptId: 'attempt-1' };
-  const findings = [{ RuleID: 'github-pat', File: 'scan/tree/k.env', StartLine: 2, EndLine: 2 }];
-  const [o] = observationsFrom([...findings, ...findings], manifest, ['scan/tree/'], () => bytes, producer, '2026-10-22T00:00:00Z') as any[];
-  absent(canonical(o), 'the observation');
-  assert.equal(o.message, OBSERVATION_MESSAGE);
-  assert.deepEqual(o.evidence[0].span, { startByte: 2, endByte: 2 + `key=${VALUE}`.length });
-  assert.equal(observationsFrom([...findings, ...findings], manifest, ['scan/tree/'], () => bytes, producer, '2026-10-22T00:00:00Z').length, 1, 'duplicates fold');
-  assert.throws(() => observationsFrom([{ ...findings[0]!, File: 'k.env' }], manifest, ['scan/tree/'], () => bytes, producer, 'x'), (e: any) => e.code === 'sentinel.secrets.unknownFile');
-});
+// --- the normaliser over synthetic outcomes ---
 
-// --- 2. the worker through the execution service, over the stand-in tool ---
-
-function fakeRegistry(behaviours: string[]) {
-  const dir = join(s.root, 'fake');
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
-  return createAdapterRegistry(behaviours.map(b => {
-    const bin = join(dir, `gitleaks-${b}`);
-    writeFileSync(bin, `#!/bin/sh\nexec '${process.execPath}' '${FAKE}' '${b}' "$@"\n`);
-    chmodSync(bin, 0o755);
-    const module = join(dir, `worker-${b}.mjs`);
-    writeFileSync(module, `globalThis.SENTINEL_GITLEAKS_RUN = true; globalThis.SENTINEL_GITLEAKS_BIN = ${JSON.stringify(bin)};\nawait import(${JSON.stringify(new URL(`file://${WORKER_MODULE}`).href)});\n`);
-    return { id: `gitleaks-${b}`, version: '0.0.0-test', kind: 'built-in' as const, isolation: 'child' as const, module,
-      limits: { timeoutMs: 30_000, helloTimeoutMs: 10_000, cancelGraceMs: 2_000 } };
-  }));
-}
-
-let store: Awaited<ReturnType<typeof storeIn>> | undefined;
-after(() => { try { store?.close(); } catch { /* closed */ } });
-let attempt = 0;
-const BEHAVIOURS = ['normal', 'crash', 'malformed', 'no-report', 'lie-clean', 'unknown-file', 'bad-line', 'rule-text', 'flood'];
-let registry: ReturnType<typeof fakeRegistry> | undefined;
-
-async function scanWith(behaviour: string, extra: Record<string, string | Buffer> = {}) {
-  store ??= await storeIn(s.root);
-  registry ??= fakeRegistry(BEHAVIOURS);
-  const n = ++attempt;
-  const files = capturedTree(join(s.root, `tree-${n}`), extra);
-  const input = prepareScanInput(join(s.root, `manifest-${n}`), { snapshotId: 'snap-synthetic', sourceId: 'src-synthetic', files });
-  const outcome = await runAttempt(store, s.work, registry, { adapterId: `gitleaks-${behaviour}`, attemptId: `attempt-s${n}`, work, inputs: input.inputs });
-  const result = readSecretsOutcome(outcome, input);
-  // Nothing that leaves the attempt may carry the value: the outcome (stdout frames, stderr diagnostics, result),
-  // every output artifact, and the scan result the report would be built from.
-  absent(JSON.stringify(outcome), `${behaviour}: the worker outcome`);
-  absent(JSON.stringify(result), `${behaviour}: the scan result`);
-  for (const name of readdirSync(join(outcome.workDir, 'output'))) absent(readFileSync(join(outcome.workDir, 'output', name)), `${behaviour}: an output artifact`);
-  return { outcome, result, input };
-}
-
-test('a leaking line is one redacted observation; ignore lists and inline allows suppress nothing', async () => {
-  const { outcome, result } = await scanWith('normal');
-  assert.equal(outcome.state, 'succeeded', outcome.code);
-  assert.equal(result.status, 'complete');
-  const found = result.observations.map(o => `${o.producerRuleId} ${o.evidence[0]!.relativePath}:${o.evidence[0]!.span.startByte}`).sort();
-  assert.deepEqual(found, ['github-pat config/service.env:43', 'github-pat notes/allowed.md:0']);
-  assert.deepEqual([...result.scanned].sort(), ['.gitleaksignore', 'config/service.env', 'notes/allowed.md', 'src/clean.ts'].map(p => `src-synthetic:${p}`));
-  assert.equal(result.audit.configDigest, GITLEAKS_CONFIG_DIGEST);
-  assert.equal(result.audit.adapterDigest, outcome.adapter.digest);
-});
-
-test('a clean tree is complete with no observations', async () => {
-  const { result } = await scanWith('normal', { 'config/service.env': 'NOTHING=here\n', 'notes/allowed.md': 'plain\n' });
-  assert.equal(result.status, 'complete');
-  assert.equal(result.observations.length, 0);
-});
-
-test('a file above the size limit is a skipped scope and the scan is partial', async () => {
-  const { result } = await scanWith('normal', { 'big.bin': Buffer.alloc(MAX_FILE_BYTES + 1, 0x61) });
-  assert.equal(result.status, 'partial');
-  assert.deepEqual(result.skipped, [{ scopeId: 'src-synthetic:big.bin', reasonCode: 'sentinel.secrets.fileTooLarge' }]);
-  assert.equal(result.observations.length, 2, 'the findings elsewhere remain');
-});
-
-for (const [behaviour, code] of [
-  ['crash', 'sentinel.secrets.toolFailed'], ['flood', 'sentinel.secrets.toolFailed'], ['malformed', 'sentinel.secrets.reportMalformed'],
-  ['no-report', 'sentinel.secrets.reportMissing'], ['lie-clean', 'sentinel.secrets.reportInconsistent'], ['unknown-file', 'sentinel.secrets.unknownFile'],
-  ['bad-line', 'sentinel.secrets.locationOutOfRange'], ['rule-text', 'sentinel.secrets.reportMalformed'],
-] as const) {
-  test(`a tool that misbehaves (${behaviour}) is an error over every file, never zero findings, and its words are dropped`, async () => {
-    const { outcome, result } = await scanWith(behaviour);
-    assert.equal(outcome.state, 'failed');
-    assert.equal(result.status, 'error');
-    assert.equal(result.reasonCode, code);
-    assert.equal(result.observations.length, 0);
-    assert.equal(result.scanned.length, 0);
-    assert.equal(result.skipped.length, 4);
-    assert.ok(result.skipped.every(x => x.reasonCode === code));
-  });
-}
-
-test('the reader refuses an observation that carries anything beyond the redaction shape', async () => {
-  const { outcome, input } = await scanWith('normal');
-  const out = outcome.outputs[0]!;
-  const original = readFileSync(out.path);
-  const tampered = JSON.parse(original.toString('utf8'));
-  tampered.evidence[0].quoteDigest = sha('x');
-  const bytes = Buffer.from(canonical(tampered));
-  chmodSync(out.path, 0o600);
-  writeFileSync(out.path, bytes);
-  const result = readSecretsOutcome(outcome, input);
-  assert.equal(result.status, 'error');
-  assert.equal(result.reasonCode, 'sentinel.secrets.outputRefused');
-  writeFileSync(out.path, original);
-  // A result that forgets a captured file is a gap, not a clean scan.
-  const forgetful = { ...outcome, result: { ...outcome.result!, scannedSet: outcome.result!.scannedSet.slice(1) } };
-  assert.equal(readSecretsOutcome(forgetful, input).reasonCode, 'sentinel.secrets.coverageMismatch');
-});
-
-// --- 3. the real pinned engine, in a real container ---
-
-const IMAGE = process.env.SENTINEL_GITLEAKS_IMAGE;
-const VERSION = process.env.SENTINEL_GITLEAKS_VERSION;
-const real = process.env.SENTINEL_ISOLATION === '1' && !!IMAGE;
-const skipReal = !real && 'real engine: set SENTINEL_ISOLATION=1, SENTINEL_GITLEAKS_IMAGE (repo@sha256:…) and SENTINEL_GITLEAKS_VERSION with the image installed';
-
-test('the pinned engine finds the leaking lines, keeps them through ignore lists and allows, and leaks no value', { skip: skipReal }, async () => {
-  assert.ok(VERSION, 'SENTINEL_GITLEAKS_VERSION names the release inside the image');
-  store ??= await storeIn(s.root);
-  const pin = { version: VERSION!, image: IMAGE! };
-  const reg = createAdapterRegistry([gitleaksAdapterDefinition(pin)]);
-  const runReal = async (extra: Record<string, string> = {}) => {
-    const n = ++attempt;
-    const files = capturedTree(join(s.root, `real-${n}`), extra);
-    const input = prepareScanInput(join(s.root, `real-manifest-${n}`), { snapshotId: 'snap-synthetic', sourceId: 'src-synthetic', files });
-    const outcome = await runAttempt(store!, s.work, reg, { adapterId: 'gitleaks', attemptId: `attempt-r${n}`, work, inputs: input.inputs }, true);
-    const result = readSecretsOutcome(outcome, input, pin);
-    absent(JSON.stringify(outcome), 'real engine: the worker outcome');
-    absent(JSON.stringify(result), 'real engine: the scan result');
-    return { outcome, result };
+function synthetic(options: { exitCode?: number; failure?: string | null; report?: string | null; architecture?: string; state?: string; stderr?: string; extraOutput?: boolean; qualify?: string } = {}) {
+  const targets = captured(dir(), treeFiles());
+  const built = buildSecretsJob({ snapshotId: 'snap-1', sourceId: 'src-1', targets }, dir());
+  const report = options.report === undefined ? 'F\tgithub-pat\t2\t2\tscan/tree/config/service.env\nF\tgithub-pat\t1\t1\tscan/tree/notes/allowed.md\n' : options.report;
+  const reportBytes = report === null ? undefined : Buffer.from(report);
+  const record = Buffer.from(JSON.stringify({ schema: 'sentinel-gitleaks-run/draft-1', job: built.jobDigest, exitCode: options.exitCode ?? 2,
+    failure: options.failure ?? null, report: reportBytes ? sha(reportBytes) : null, reportBytes: reportBytes?.length ?? 0, stderrDigest: sha('') }));
+  const outputs = [{ id: sha(record), mediaType: 'application/vnd.sentinel.gitleaks-run+json', bytes: record.length, path: '' },
+    ...(reportBytes ? [{ id: sha(reportBytes), mediaType: 'application/vnd.sentinel.gitleaks-report', bytes: reportBytes.length, path: '' }] : []),
+    ...(options.extraOutput ? [{ id: sha('x'), mediaType: 'text/plain', bytes: 1, path: '' }] : [])];
+  const bytes = new Map<string, Uint8Array>([[sha(record), record], ...(reportBytes ? [[sha(reportBytes), reportBytes] as [string, Uint8Array]] : [])]);
+  const contents = new Map(targets.map(t => [t.artifact, readFileSync(t.path)]));
+  const outcome: any = {
+    state: options.state ?? 'succeeded', attemptId: 'attempt-1', adapter: { id: 'secrets-gitleaks', digest: sha('adapter') },
+    invocation: { digest: sha('invocation') }, outputs, diagnostics: { text: options.stderr ?? '', bytes: 0, truncated: false },
+    container: { id: 'c', image: { reference: GITLEAKS_ENGINE.image, id: GITLEAKS_ENGINE.image.split('@')[1], architecture: options.architecture ?? 'arm64', os: 'linux', env: [] } },
+    ...(options.state && options.state !== 'succeeded' ? { code: 'sentinel.execution.workerExited' } : { result: { observations: [] } }),
   };
-  const positive = await runReal();
-  assert.equal(positive.result.status, 'complete', positive.result.reasonCode);
-  assert.deepEqual(positive.result.observations.map(o => o.evidence[0]!.relativePath).sort(), ['config/service.env', 'notes/allowed.md']);
-  assert.equal(positive.result.audit.imageId, positive.outcome.container?.image.id);
-  const negative = await runReal({ 'config/service.env': 'NOTHING=here\n', 'notes/allowed.md': 'plain\n' });
-  assert.equal(negative.result.status, 'complete');
-  assert.equal(negative.result.observations.length, 0);
+  return normalizeSecretsRun({ job: built.job, jobDigest: built.jobDigest, outcome, observedAt: '2026-10-22T00:00:00.000Z',
+    outputBytes: id => bytes.get(id), targetBytes: a => contents.get(a), ...(options.qualify ? { qualifyingArchitecture: options.qualify } : {}) });
+}
+
+test('findings become redacted observations citing whole lines; existing findings stay through ignore lists and allows', () => {
+  const r = synthetic();
+  assert.equal(r.status, 'complete');
+  absent(JSON.stringify(r), 'the scan result');
+  assert.deepEqual(r.observations.map(o => `${o.producerRuleId} ${o.evidence[0]!.relativePath} ${o.evidence[0]!.span.startByte}-${o.evidence[0]!.span.endByte}`).sort(),
+    ['github-pat config/service.env 43-108', 'github-pat notes/allowed.md 0-63']);
+  assert.ok(r.observations.every(o => o.message === OBSERVATION_MESSAGE && o.originalSeverity === 'unrated' && !('quoteDigest' in o.evidence[0]!)));
+  assert.equal(r.scanned.length, 4);
+  assert.equal(r.audit.engine, 'gitleaks 8.30.1');
+  assert.deepEqual(r.platform, { architecture: 'arm64', state: 'measured' });
+  // An unmeasured platform of the pinned index counts only under an explicit qualification run, and says so.
+  const candidate = synthetic({ architecture: 'amd64', qualify: 'amd64' });
+  assert.equal(candidate.status, 'complete');
+  assert.deepEqual(candidate.platform, { architecture: 'amd64', state: 'candidate' });
+  assert.equal(synthetic({ architecture: 's390x', qualify: 's390x' }).reasonCode, 'sentinel.secrets.platformUnmeasured', 'only a platform the index lists');
+});
+
+test('every failure is an error over every target with a coded reason, never zero findings', () => {
+  const cases: Array<[Parameters<typeof synthetic>[0], string]> = [
+    [{ failure: 'engineError', exitCode: 1, report: null }, 'sentinel.secrets.toolFailed'],
+    [{ failure: 'killed', exitCode: 137, report: null }, 'sentinel.secrets.toolTimedOut'],
+    [{ failure: 'reportMissing', exitCode: 0, report: null }, 'sentinel.secrets.reportMissing'],
+    [{ failure: 'reportTooLarge', report: null }, 'sentinel.secrets.reportTooLarge'],
+    [{ exitCode: 0 }, 'sentinel.secrets.reportInconsistent'],
+    [{ exitCode: 2, report: '' }, 'sentinel.secrets.reportInconsistent'],
+    [{ exitCode: 3, report: '' }, 'sentinel.secrets.toolFailed'],
+    [{ report: `F\tgithub-pat\t2\t2\tscan/tree/config/service.env\t${VALUE}\n` }, 'sentinel.secrets.unknownFile'],
+    [{ report: 'F\tgithub-pat\t9\t9\tscan/tree/config/service.env\n' }, 'sentinel.secrets.locationOutOfRange'],
+    [{ architecture: 'amd64' }, 'sentinel.secrets.platformUnmeasured'],
+    [{ architecture: 's390x' }, 'sentinel.secrets.platformUnmeasured'],
+    [{ extraOutput: true }, 'sentinel.secrets.outputRefused'],
+    [{ state: 'failed', stderr: 'sentinel-gitleaks-worker/1 sentinel.secrets.inputInvalid\n' }, 'sentinel.secrets.inputInvalid'],
+    [{ state: 'failed', stderr: `something quoting ${VALUE}\n` }, 'sentinel.execution.workerExited'],
+    [{ state: 'timed-out' }, 'sentinel.secrets.toolTimedOut'],
+  ];
+  for (const [options, code] of cases) {
+    const r = synthetic(options);
+    absent(JSON.stringify(r), `the result for ${code}`);
+    assert.equal(r.status, 'error', code);
+    assert.equal(r.reasonCode, code);
+    assert.equal(r.observations.length, 0);
+    assert.equal(r.scanned.length, 0);
+    assert.equal(r.skipped.length, 4);
+    assert.ok(r.skipped.every(s => s.reasonCode === code));
+  }
 });

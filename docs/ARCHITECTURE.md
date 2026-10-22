@@ -519,25 +519,34 @@ platform qualification remains an admission requirement and must use the full lo
 Not decided here: framework control-fact work (framework-order stays unavailable until packs exist),
 and scheduling for model review.
 
-25. **Sentinel's secret scan keeps the detector and whole lines, never the value, and a failed scan is never clean (2026-10-22).**
-PR 11 scans the captured current tree with Gitleaks through the PR 07 execution service, as an external adapter in a
-pinned Linux container only (`src/adapters/gitleaks.ts`, `gitleaks-worker.ts`). **Shape:** Gitleaks cannot speak the
-worker protocol, so the container runs Node with Sentinel's own worker program as its fixed command; the adapter digest
-pins that program's bytes and the image digest pins Node and the Gitleaks binary. No production pin is registered
-(`GITLEAKS_PINS` is empty) until an image is measured and installed; nothing downloads one. **Inputs:** a canonical
-manifest (source-relative path, content digest, size per captured file) and exactly those contents. The worker rebuilds
-the tree in the container's tmpfs one folder below the scan root, runs Gitleaks with a pinned configuration (the
-release's built-in rules, nothing allowed), an empty ignore folder, `--ignore-gitleaks-allow` and no baseline, so a
-repository's `.gitleaks.toml`, `.gitleaksignore`, baseline or `gitleaks:allow` comment cannot suppress an observation.
-**Redaction:** Gitleaks runs with full redaction; its raw report stays in the tmpfs and is removed with the container;
-its stdout and stderr are drained and dropped because a tool message can quote input. An observation is built from a
-closed field list (rule ID, a captured file, a whole-line byte span, a fixed message, fixed limitation keys) and the
-coordinator re-checks every one against that shape, so no field can carry part of a value. **Failure:** a tool exit
-other than no-leaks or leaks-found, a missing, oversized, malformed or inconsistent report, a finding outside the
-captured files, a refused observation or a captured file the result does not account for makes the scan an `error`
-over every captured file with a coded reason; a file over the size limit is a skipped scope and the scan is `partial`.
-The worker reports only a catalog code on stderr. **Audit:** the result names the adapter digest, the tool version and
-image (reference and id), the configuration digest and the manifest. **Not decided here:** the image pin and its
-acquisition, the report and CLI surface (PR 09), and history scanning. **Cost:** a location is whole lines, so a long
-line cites more than the match; and the version's default allowlist (paths and stop words Gitleaks itself skips) is
-part of the pin, not configurable per repository.
+
+28. **Sentinel's secret scan keeps the detector and whole lines, never the value, and a failed scan is never clean (2026-10-22).**
+PR 11 scans captured current-tree bytes with Gitleaks 8.30.1 (MIT) through the PR 07 execution service only: an
+external adapter, the official multi-platform image index pinned by digest (`ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0…`),
+installed ahead of time and never pulled at scan time, no host fallback (`src/adapters/gitleaks/`). **Shape:** Gitleaks
+cannot speak the worker protocol, so an original POSIX shell shim does, inside the unmodified image (alpine: busybox
+sh and applets). The shim is the attempt's first input and runs as `/bin/sh /input/<its digest>`; the adapter digest
+pins it, and with it the configuration and report template it writes. Only arm64 is measured; amd64, listed in the
+index, gives `candidate` results under an explicit qualification run and is otherwise refused. **Inputs:** the shim, a
+line job (`F <index> <content> <path>`) and each captured content once. Files over 8 MiB, names with a line break or
+another control character, and paths the release's own global allowlist skips are not sent; each is a skipped scope
+with its reason, never a silent omission. **No repository control:** the shim rebuilds the tree one folder below the
+scan root, so a captured root `.gitleaksignore` is an ordinary scanned file; Gitleaks gets the pinned configuration
+(the release's built-in rules, nothing allowed), an empty ignore folder, `--ignore-gitleaks-allow` and no baseline.
+Measured by a direct probe of the pinned image (2026-10-22): the same root ignore file suppresses a finding when the tree is the scan root, and
+nothing under the shim's layout. **Redaction:** Gitleaks runs with full redaction and writes its report through the
+pinned template, which names only the rule, the lines and the file; its stdout is discarded and its stderr stays in
+the tmpfs, only its digest leaving. The coordinator accepts a report line only as `F, rule, start, end, file` with the
+rule one of the 222 the pinned default configuration defines (`rules.ts`, generated from the release's own
+`config/gitleaks.toml`) and the file a sent path, then builds each observation from a closed field list: the rule, a
+captured file, a whole-line byte span read from the sealed input copy, a fixed message and fixed limitation keys.
+**Failure:** an engine error, a kill, a missing, oversized, malformed or inconsistent report (exit code and findings
+disagree), an unknown rule or file, lines a file does not have, an unmeasured platform, or a refused job makes the scan
+an `error` over every target with a coded reason; the shim itself reports only a catalog code. **Audit:** the result
+names the engine, adapter digest, image reference and id, platform, configuration and default-rules digests, the shim,
+job and invocation digests, the exit code, and the stderr and report digests. **Packaging:** `scripts/package-assets-gitleaks.mjs`
+ships the shim and a digest/rights manifest as `farsight-sentinel/assets/gitleaks/*`; no image, binary or report ships.
+**Not decided here:** registration in the production registry and the report/CLI surface (PR 08/09), Git history
+scanning. **Cost:** a location is whole lines, so a long line cites more than the match; the release's per-rule
+allowlists and stop words are detector semantics and part of the pin; a path whose file is also another's folder is
+refused rather than partly scanned.

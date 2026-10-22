@@ -162,17 +162,22 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install the pinned canary image (node:22-alpine index, by digest)
         run: docker pull node@sha256:ebc216c22db53dbde85719a874978d5aec04e6e405ad26a3804c6f9abc4ca1a9
+      - name: Install the pinned Gitleaks image (v8.30.1 official index, by digest)
+        run: docker pull ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
       - name: Build Sentinel and its workspace closure
         run: pnpm --filter '@farsight/sentinel...' build
       - name: Isolation canaries and the worker protocol, nothing skipped
         working-directory: packages/sentinel
         env:
           SENTINEL_ISOLATION: '1'
+          # linux/amd64 is listed in the Gitleaks pin but not measured: its results here are candidates, never measured.
+          SENTINEL_GITLEAKS_QUALIFY: linux/amd64
         run: |
           set -o pipefail
           node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=300000 \
             --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=isolation.tap \
-            test/execution-isolation.test.ts test/execution-protocol.test.ts test/execution-container-faults.test.ts test/execution-framing-budget.test.ts
+            test/execution-isolation.test.ts test/execution-protocol.test.ts test/execution-container-faults.test.ts test/execution-framing-budget.test.ts \
+            test/secrets-conformance.test.ts
           grep -qx '# skipped 0' isolation.tap || { echo "::error::an isolation test was skipped"; exit 1; }
           grep -qx '# fail 0' isolation.tap && grep -qx '# cancelled 0' isolation.tap
 

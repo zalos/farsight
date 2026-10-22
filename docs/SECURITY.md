@@ -53,11 +53,13 @@ owner's own account is outside this boundary. The local runtime folder
 own trust-boundary section here: external scanners run only in containers, with no host fallback, and model
 providers are opt-in per run.
 
-The secret scan (ADR 25) runs Gitleaks only inside its pinned container, over a rebuilt copy of the captured files,
-with a pinned configuration and no repository ignore list, baseline or inline allow. Matched values never leave the
-container: the tool's report and messages stay there, and each observation keeps only the detector, the file and
-whole lines, which the coordinator checks again. A tool error, an unreadable report or a file the result does not
-mention is a failed scan, never a clean one. Its tests assemble an inert synthetic token at run time, so the
+The secret scan (ADR 28) runs the pinned official Gitleaks image only inside its container, behind an original shell
+shim, over a rebuilt copy of the captured files, with a pinned configuration and no repository ignore list, baseline
+or inline allow. Matched values never leave the container: the tool's messages and raw output stay there, its report
+is written through a template that names only the rule, lines and file, and each observation keeps only the detector,
+the file and whole lines, which the coordinator checks again. A tool error, an unreadable report or a file that was
+not scanned is a failed or partial scan, never a clean one. The image is installed by digest ahead of time (CI pulls
+it in the isolation job); a scan never pulls. Its tests assemble an inert synthetic token at run time, so the
 repository's own secret scan needs no allowlist for it, and no assertion or report prints it. The package smokes install from npm into temporary directories with their own npm
 cache and user config/state, and start nothing beyond the packaged command and a read-only Farsight server on a
 free loopback port.
