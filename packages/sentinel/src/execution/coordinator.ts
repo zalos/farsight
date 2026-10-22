@@ -129,6 +129,7 @@ export class Coordinator {
   /** This epoch's own creates that ended without a confirmed answer: they block admission until settled. */
   readonly #pendingNow: ContainerIntent[] = [];
   #pauseRequested = false;
+  #active: Promise<RunSummary> | undefined;
   #cancelRequested = false;
   /** The run's aggregate deadline (its recorded creation plus budgets.deadlineMs), and the signal it fires. */
   #runDeadline = Number.POSITIVE_INFINITY;
@@ -198,13 +199,24 @@ export class Coordinator {
     return decide(this.#plan.works, this.#committed(), this.#retry);
   }
 
-  /** Execute (or resume) the run until it completes, pauses or is canceled. */
-  async run(): Promise<RunSummary> {
+  /**
+   * Execute (or resume) the run until it completes, pauses or is canceled. One drive at a time: a run() while one is
+   * active returns that same drive. A pause asked for at any moment before the drive ends is honoured: before this
+   * call, during its set-up awaits, or while work is in flight; it is cleared only once the run is recorded paused.
+   */
+  run(): Promise<RunSummary> {
+    if (this.#active) return this.#active;
+    const drive = this.#run().finally(() => { if (this.#active === drive) this.#active = undefined; });
+    this.#active = drive;
+    return drive;
+  }
+
+  async #run(): Promise<RunSummary> {
     const runId = this.#plan.run.id;
-    // A pause asked for before this call holds this run: it is recorded, and nothing is admitted.
-    const pauseFirst = this.#pauseRequested;
     // Earlier publications' coverage evaluations, read once; they decide the outcome together with this run's.
     await this.#loadCoverage();
+    // Read after every await of the set-up, never before it: a pause requested meanwhile holds this run.
+    const pauseFirst = this.#pauseRequested;
     let state = this.#runState();
     if (state === undefined) {
       // Recorded now: the run's time budget runs from here.
@@ -225,7 +237,6 @@ export class Coordinator {
       this.#finishRunState('paused');
       return this.#summary();
     }
-    this.#pauseRequested = false;
     const recorded = this.#store.ledger.getRun(runId)!;
     this.#runDeadline = Date.parse(recorded.envelope.createdAt) + recorded.envelope.budgets.deadlineMs;
     const remaining = this.#runDeadline - Date.now();
@@ -268,7 +279,7 @@ export class Coordinator {
           if (still.length) return this.#summary(still);
           continue;
         }
-        if (this.#pauseRequested || this.#runState() === 'pausing') { this.#finishRunState('paused'); break; }
+        if (this.#pauseRequested || this.#runState() === 'pausing') { this.#finishRunState('paused'); this.#pauseRequested = false; break; }
         const final = this.progress();
         if (final.every(d => ['published', 'failed', 'blocked', 'disabled'].includes(d.state))) {
           this.#persistHolds(final);
