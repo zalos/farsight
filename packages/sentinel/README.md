@@ -203,7 +203,7 @@ admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR
 ```ts
 import { boundedCallPaths, importDeepAnalysis } from 'farsight-sentinel/analysis';
 
-const paths = await boundedCallPaths({ snapshotId, analysis: analysis.sources[0], readContent, queries: [{ from, to }] });
+const paths = await boundedCallPaths({ snapshot, analysis: analysis.sources[0], readContent, queries: [{ from, to }] });
 paths.results[0].outcome;   // reached | not-reached-complete | not-reached-bounded (with its frontiers)
 paths.establishes;          // always 'call-reachability': a path is never a data flow
 

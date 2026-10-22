@@ -326,7 +326,7 @@ try {
           selection: { gitignore: true, testFiles: 'include' },
           limits: { maxFiles: 100, maxFileBytes: 1 << 20, maxTotalBytes: 1 << 24, maxEntries: 1000, maxDurationMs: 60000 } });
         const readContent = id => store.readArtifact(id);
-        const paths = await boundedCallPaths({ snapshotId: snapshot.id, analysis: parsed.sources[0], readContent,
+        const paths = await boundedCallPaths({ snapshot, analysis: parsed.sources[0], readContent,
           queries: [{ from: 'app::src/a.ts::a', to: 'app::src/b.ts::b' }] });
         const file = p => snapshot.entries.find(e => e.relativePath === p);
         const terms = 'sha256:' + createHash('sha256').update('terms').digest('hex');

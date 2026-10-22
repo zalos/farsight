@@ -705,7 +705,10 @@ function handed on as a value, so each visited function's whole-line bytes are s
 identifiers included, a keyword read as a property counted) and any call-like site beyond the recorded ones, or any
 function name used as a value, is a frontier (the scan may over-count, never under-count). A parser edge to a
 top-level function whose name the calling function also binds (a parameter, a local) is not followed
-(`shadowedCall`), and the index must be the artifact's own analysis: the envelope names the artifact's fingerprint. The envelope binds the snapshot, source, analysis fingerprint, a digest of the graph read and the
+(`shadowedCall`). The artifact, its parser index, the snapshot and the reader are bound before anything is cached or
+read: the index must be the artifact's own analysis (the envelope names the artifact's fingerprint), every location it
+cites must be a captured file of that snapshot with the same content id, bytes read must hash to the id cited, and
+caches are keyed by the artifact and index together, so nothing computed for one capture is served for another. The envelope binds the snapshot, source, analysis fingerprint, a digest of the graph read and the
 bounds, and always states `establishes: call-reachability` with `notDataFlow` and `graphOnly`: a path never claims
 flow, taint, sanitization or protection. **Attested deep import** (`sentinel-deep-import/draft-1`,
 `importDeepAnalysis`): a customer-run analyzer's flows are untrusted input. A document that does not validate is

@@ -11,6 +11,7 @@ import { canonicalJson, type GraphEdge, type GraphNode } from '@farsight/graph';
 import type { AnalysisArtifact } from '@farsight/code-parser';
 import type {
   CallCycle, CallPath, Digest, PathBounds, PathEdgeKind, PathEvidenceEnvelope, PathQueryResult, PathSite, PathStep, ScopedReason,
+  SnapshotEnvelope,
 } from '../../contracts/index.js';
 import { validateEnvelope } from '../../validate.js';
 import { digestOf } from '../../store/ledger-json.js';
@@ -67,16 +68,22 @@ interface GraphIndex {
   /** Distinct recorded call sites (byte starts of call-edge occurrences) per file. */
   readonly callSites: ReadonlyMap<string, readonly number[]>;
   readonly functionNames: ReadonlySet<string>;
-  /** Whether a node's text is accounted for by recorded calls, and the names it binds locally, computed once. */
-  readonly accounted: Map<string, { reason: PathReason | null; locals: ReadonlySet<string> }>;
 }
 
-const indexes = new WeakMap<object, Map<string, GraphIndex>>();
+/** Per request: whether a node's text is accounted for by recorded calls, and the names it binds locally. */
+type Accounted = Map<string, { reason: PathReason | null; locals: ReadonlySet<string> }>;
 
-/** One index per analysis artifact and edge-kind set. */
+const indexes = new WeakMap<object, WeakMap<object, Map<string, GraphIndex>>>();
+
+/**
+ * One index per (artifact, parser index) pair and edge-kind set. The pair is the identity: call sites and bodies come
+ * from the parser index, so an index cached for one pair is never served for another.
+ */
 function indexOf(analysis: PathAnalysis, kinds: readonly PathEdgeKind[]): GraphIndex {
-  let perArtifact = indexes.get(analysis.artifact);
-  if (!perArtifact) indexes.set(analysis.artifact, perArtifact = new Map());
+  let perIndex = indexes.get(analysis.artifact);
+  if (!perIndex) indexes.set(analysis.artifact, perIndex = new WeakMap());
+  let perArtifact = perIndex.get(analysis.index);
+  if (!perArtifact) perIndex.set(analysis.index, perArtifact = new Map());
   const key = [...kinds].sort().join(',');
   const hit = perArtifact.get(key);
   if (hit) return hit;
@@ -114,7 +121,7 @@ function indexOf(analysis: PathAnalysis, kinds: readonly PathEdgeKind[]): GraphI
   }
   const functionNames = new Set(graph.nodes.filter(n => n.kind === 'function' || n.kind === 'component')
     .map(n => n.id.split('::').pop()!.split('.').pop()!).filter(Boolean));
-  const index = { nodes, out, sites, graphDigest, cycleOf, cycles, bodies, callSites, functionNames, accounted: new Map<string, { reason: PathReason | null; locals: ReadonlySet<string> }>() };
+  const index = { nodes, out, sites, graphDigest, cycleOf, cycles, bodies, callSites, functionNames };
   perArtifact.set(key, index);
   return index;
 }
@@ -179,8 +186,8 @@ const CODE_KINDS = new Set(['function', 'component', 'page', 'route', 'class']);
  * frontier. Exactly placed whole-line text is read lexically (body.ts) and compared with the recorded call sites in
  * the same bytes.
  */
-async function accountedFor(ix: GraphIndex, id: string, read: (content: string) => Promise<Uint8Array>): Promise<{ reason: PathReason | null; locals: ReadonlySet<string> }> {
-  const known = ix.accounted.get(id);
+async function accountedFor(ix: GraphIndex, accounted: Accounted, id: string, read: (content: string) => Promise<Uint8Array>): Promise<{ reason: PathReason | null; locals: ReadonlySet<string> }> {
+  const known = accounted.get(id);
   if (known !== undefined) return known;
   const node = ix.nodes.get(id)!;
   let reason: PathReason | null = null;
@@ -203,14 +210,14 @@ async function accountedFor(ix: GraphIndex, id: string, read: (content: string) 
     }
   }
   const result = { reason, locals };
-  ix.accounted.set(id, result);
+  accounted.set(id, result);
   return result;
 }
 
 /** The name a call edge's target is called by: the last segment of its id (`path::Class.method` → `method`). */
 const calleeName = (id: string) => id.split('::').pop()!.split('.').pop()!;
 
-async function search(ix: GraphIndex, q: PathQuery, bounds: PathBounds, complete: boolean, read: (content: string) => Promise<Uint8Array>): Promise<{ result: PathQueryResult; reasons: Set<PathReason> }> {
+async function search(ix: GraphIndex, accounted: Accounted, q: PathQuery, bounds: PathBounds, complete: boolean, read: (content: string) => Promise<Uint8Array>): Promise<{ result: PathQueryResult; reasons: Set<PathReason> }> {
   const reasons = new Set<PathReason>();
   if (!complete) reasons.add('sentinel.paths.analysisIncomplete');
   if (!ix.nodes.has(q.from) || !ix.nodes.has(q.to)) {
@@ -225,7 +232,7 @@ async function search(ix: GraphIndex, q: PathQuery, bounds: PathBounds, complete
     if (depth >= bounds.maxDepth) { reasons.add('sentinel.paths.depthLimit'); break; }
     const next: string[] = [];
     for (const v of frontier) {
-      const body = await accountedFor(ix, v, read);
+      const body = await accountedFor(ix, accounted, v, read);
       if (body.reason) reasons.add(body.reason);
       const edges = ix.out.get(v) ?? [];
       if (edges.length > bounds.maxFanout) reasons.add('sentinel.paths.fanoutLimit');
@@ -268,7 +275,8 @@ async function search(ix: GraphIndex, q: PathQuery, bounds: PathBounds, complete
 }
 
 export interface PathRequest {
-  readonly snapshotId: string;
+  /** The snapshot the parser evidence is for: every location the index cites must be one of its captured files. */
+  readonly snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>;
   /** Reads a captured file's bytes by content id (the store's `readArtifact`): visited bodies are checked against them. */
   readonly readContent: (id: string) => Promise<Uint8Array>;
   readonly analysis: PathAnalysis;
@@ -281,7 +289,9 @@ export async function boundedCallPaths(request: PathRequest): Promise<PathEviden
   const { analysis } = request;
   if (!analysis?.artifact?.graph || !analysis.index) throw new PathError('sentinel.paths.invalidInput', 'the parser evidence for one source is required');
   // The paths are about one snapshot's source: the parser evidence must be for exactly that snapshot and source.
-  if (analysis.index.snapshotId !== request.snapshotId || analysis.index.sourceId !== analysis.sourceId) {
+  const snapshotId = request.snapshot?.id;
+  if (typeof snapshotId !== 'string' || !Array.isArray(request.snapshot.entries)) throw new PathError('sentinel.paths.invalidInput', 'the snapshot is required');
+  if (analysis.index.snapshotId !== snapshotId || analysis.index.sourceId !== analysis.sourceId) {
     throw new PathError('sentinel.paths.unbound', 'the parser evidence is for another snapshot or source');
   }
   // The index and the artifact must be one analysis: the envelope names the artifact's own fingerprint.
@@ -289,20 +299,35 @@ export async function boundedCallPaths(request: PathRequest): Promise<PathEviden
   if (typeof fingerprint !== 'string' || fingerprint !== analysis.index.analysisFingerprint) {
     throw new PathError('sentinel.paths.unbound', 'the index and the artifact are not the same parser analysis');
   }
+  // Every location the index cites is a captured file of this snapshot's source, with the same content.
+  const captured = new Map<string, string>();
+  for (const e of request.snapshot.entries) if (e.sourceId === analysis.sourceId && e.kind === 'file' && e.disposition === 'included') captured.set(e.relativePath, e.content);
+  for (const l of [...analysis.index.nodes, ...analysis.index.occurrences]) {
+    if (captured.get(l.path) !== l.content) throw new PathError('sentinel.paths.unbound', 'the parser index cites bytes this snapshot did not capture');
+  }
   if (!Array.isArray(request.queries) || request.queries.length > MAX_QUERIES) throw new PathError('sentinel.paths.invalidInput', `at most ${MAX_QUERIES} queries`);
   const bounds = boundsOf(request.bounds);
   const ix = indexOf(analysis, bounds.edgeKinds);
   const complete = analysis.artifact.analysis.complete === true;
   if (typeof request.readContent !== 'function') throw new PathError('sentinel.paths.invalidInput', 'readContent is required');
   const cache = new Map<string, Promise<Uint8Array>>();
-  const read = (content: string) => { let p = cache.get(content); if (!p) cache.set(content, p = request.readContent(content)); return p; };
+  // Bytes are checked against their content id: a reader for another store cannot supply a body.
+  const read = (content: string) => {
+    let p = cache.get(content);
+    if (!p) cache.set(content, p = request.readContent(content).then(bytes => {
+      if (`sha256:${createHash('sha256').update(bytes).digest('hex')}` !== content) throw new PathError('sentinel.paths.unbound', 'the reader returned bytes that are not the cited content');
+      return bytes;
+    }));
+    return p;
+  };
+  const accounted: Accounted = new Map();
   const frontiers: ScopedReason[] = [];
   const results: PathQueryResult[] = [];
   const limitations = new Set<PathReason>(['sentinel.paths.notDataFlow', 'sentinel.paths.graphOnly']);
   const cyclesMet = new Set<number>();
   for (const q of request.queries) {
     if (typeof q?.from !== 'string' || typeof q?.to !== 'string' || !q.from || !q.to || q.from === q.to) throw new PathError('sentinel.paths.invalidInput', 'each query names two different node ids');
-    const { result, reasons } = await search(ix, q, bounds, complete, read);
+    const { result, reasons } = await search(ix, accounted, q, bounds, complete, read);
     results.push(result);
     for (const r of reasons) if (frontiers.length < 10_000) frontiers.push({ scopeId: q.from, reasonCode: r });
     for (const p of result.paths) {
@@ -313,7 +338,7 @@ export async function boundedCallPaths(request: PathRequest): Promise<PathEviden
   }
   const cycles: CallCycle[] = [...cyclesMet].sort((a, b) => a - b).slice(0, MAX_CYCLES).map(i => ({ members: ix.cycles[i]!.slice(0, 1000) }));
   const envelope: PathEvidenceEnvelope = {
-    schema: 'sentinel-paths/draft-1', snapshotId: request.snapshotId, sourceId: analysis.sourceId,
+    schema: 'sentinel-paths/draft-1', snapshotId, sourceId: analysis.sourceId,
     analysisFingerprint: fingerprint, graphDigest: ix.graphDigest,
     bounds, boundsDigest: digestOf(bounds) as Digest, establishes: 'call-reachability', results, cycles,
     limitationKeys: [...limitations].sort(), frontiers,

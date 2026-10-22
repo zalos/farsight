@@ -32,7 +32,7 @@ async function setup(t: any, files: Record<string, string> = PATHS_APP) {
   const parsed = await parseSnapshot(fx.store, { snapshotId: snapshot.id, workDir: work, selection: { gitignore: true, testFiles: 'include' }, limits: LIMITS });
   const analysis = parsed.sources[0]!;
   const readContent = (c: string) => fx.store.readArtifact(c);
-  const paths = (queries: { from: string; to: string }[], bounds?: any) => boundedCallPaths({ snapshotId: snapshot.id, analysis, queries, readContent, ...(bounds ? { bounds } : {}) });
+  const paths = (queries: { from: string; to: string }[], bounds?: any) => boundedCallPaths({ snapshot, analysis, queries, readContent, ...(bounds ? { bounds } : {}) });
   return { fx, snapshot, analysis, readContent, paths };
 }
 const outcome = (env: any, i = 0) => [env.results[i].outcome, ...env.results[i].frontierReasons.map((r: string) => r.replace('sentinel.paths.', ''))];
@@ -102,7 +102,7 @@ test('depth, fan-out and visit bounds are frontiers; unknown nodes and invalid r
   assert.deepEqual(outcome(missing), ['not-reached-bounded', 'unknownNode']);
   await assert.rejects(paths([{ from: id('src/chain.ts', 'a1'), to: id('src/chain.ts', 'a1') }]), (e: any) => e instanceof PathError && e.code === 'sentinel.paths.invalidInput');
   await assert.rejects(paths([{ from: 'a', to: 'b' }], { maxDepth: 0 }), (e: any) => e.code === 'sentinel.paths.invalidInput');
-  await assert.rejects(boundedCallPaths({ snapshotId: 'another-snapshot', analysis, queries: [], readContent }), (e: any) => e.code === 'sentinel.paths.unbound');
+  await assert.rejects(boundedCallPaths({ snapshot: { ...snapshot, id: 'another-snapshot' }, analysis, queries: [], readContent }), (e: any) => e.code === 'sentinel.paths.unbound');
   // The envelope is keyed by the graph read and the bounds.
   assert.notEqual(deep.boundsDigest, enough.boundsDigest);
   assert.equal(deep.graphDigest, enough.graphDigest);
@@ -309,7 +309,29 @@ export function direct() {
 test('round 1: an index from another analysis than the artifact is refused, and the envelope names the artifact\'s own fingerprint', needsStore, async t => {
   const { snapshot, analysis, readContent } = await setup(t);
   const spoofed = { ...analysis, index: { ...analysis.index, analysisFingerprint: `sha256:${'9'.repeat(64)}` } };
-  await assert.rejects(boundedCallPaths({ snapshotId: snapshot.id, analysis: spoofed, queries: [], readContent }), (e: any) => e.code === 'sentinel.paths.unbound');
-  const env = await boundedCallPaths({ snapshotId: snapshot.id, analysis, queries: [], readContent });
+  await assert.rejects(boundedCallPaths({ snapshot, analysis: spoofed, queries: [], readContent }), (e: any) => e.code === 'sentinel.paths.unbound');
+  const env = await boundedCallPaths({ snapshot, analysis, queries: [], readContent });
   assert.equal(env.analysisFingerprint, analysis.artifact.analysis.fingerprint);
+});
+
+test('round 2: an artifact, an index, a snapshot and a reader from different captures never mix, and caches never cross them', needsStore, async t => {
+  const start = (body: string) => ({ ...PATHS_APP, 'src/start.ts': `import { query } from './db.js';\n\nexport function start() {\n  ${body}\n}\n` });
+  const a = await setup(t, start('return query(\'select 1\');'));
+  const b = await setup(t, start('return 0;'));
+  const q = [{ from: id('src/start.ts', 'start'), to: id('src/db.ts', 'query') }];
+  // Warm A's caches first.
+  assert.deepEqual(outcome(await a.paths(q)), ['reached']);
+  // A's artifact with B's untouched index and snapshot: refused, never B's identity with A's reach.
+  await assert.rejects(boundedCallPaths({ snapshot: b.snapshot, analysis: { ...b.analysis, artifact: a.analysis.artifact }, queries: q, readContent: b.readContent }),
+    (e: any) => e.code === 'sentinel.paths.unbound');
+  // A's parser evidence with B's snapshot: the index cites bytes B did not capture.
+  await assert.rejects(boundedCallPaths({ snapshot: { ...b.snapshot, id: a.snapshot.id }, analysis: a.analysis, queries: q, readContent: b.readContent }),
+    (e: any) => e.code === 'sentinel.paths.unbound');
+  // A reader for another store cannot supply a body.
+  await assert.rejects(boundedCallPaths({ snapshot: a.snapshot, analysis: a.analysis, queries: q, readContent: async () => Buffer.from('export function start() {}\n') }),
+    (e: any) => e.code === 'sentinel.paths.unbound');
+  // B, asked in its own right after A was warmed, answers from B alone.
+  const own = await b.paths(q);
+  assert.equal(own.snapshotId, b.snapshot.id);
+  assert.notEqual(own.results[0].outcome, 'reached');
 });
