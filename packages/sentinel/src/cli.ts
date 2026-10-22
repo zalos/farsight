@@ -279,7 +279,8 @@ async function owner(p: ParsedCommand): Promise<number> {
       return serviceOut(r, [`pack ${String(r.facts.packId)} ${String(r.facts.version)} · candidate ${String(r.facts.candidate)} · replaces lock ${String(r.facts.previousLock)}${r.facts.lock ? ` · now lock ${String(r.facts.lock)}` : ''}`]);
     }
     if (p.command === 'retry' || p.command === 'rerun') {
-      const r = await followWorkspaceRun(ws, { mode: p.command, runId: p.args.runId!, confirm, now });
+      const stages = typeof p.flags['--stage'] === 'string' ? p.flags['--stage'].split(',').map(x => x.trim()).filter(Boolean) : [];
+      const r = await followWorkspaceRun(ws, { mode: p.command, runId: p.args.runId!, stages, confirm, now });
       return serviceOut(r, r.facts.runId && r.facts.parentId ? [`run ${String(r.facts.runId)} · follows ${String(r.facts.parentId)} · ${String(r.facts.planDigest)}`] : []);
     }
     if (p.command === 'plan') {

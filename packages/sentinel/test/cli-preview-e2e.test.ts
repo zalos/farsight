@@ -103,21 +103,31 @@ test('init → adopt → plan → run → status → report, twice where it matt
   stopService(env);
   assert.equal(run('run', 'plan-' + '0'.repeat(32)).body.reasonCode, 'sentinel.service.planUnknown');
 
-  // A retry is a new run over the ended run's snapshot, naming it as its parent; it waits to be run like any run.
-  const retried = run('retry', planId);
-  assert.deepEqual([retried.status, retried.body.outcome, retried.body.facts.parentId, retried.body.facts.snapshotId], [0, 'prepared', planId, plan.body.facts.snapshotId], 'no recapture: the parent\'s snapshot');
-  const retryId = retried.body.facts.runId;
-  assert.notEqual(retryId, planId);
-  assert.equal(run('status', retryId).body.facts.state, 'running', 'its bootstrap published; its analysis waits');
-  assert.equal(run('retry', retryId).body.reasonCode, 'sentinel.service.runNotEnded', 'a run that has not ended is resumed, not retried');
-  const retryRun = run('run', retryId);
-  assert.deepEqual([retryRun.status, retryRun.body.facts.previewFindings], [2, 1]);
-  // A rerun captures the workspace again: new content is a new snapshot and its own plan.
-  writeFileSync(join(ws, 'src/more.ts'), 'export const del = (n: string) => db.query(`DELETE FROM t WHERE n = ${n}`);\n');
+  // Every unit of the first run published: there is nothing to retry.
+  assert.equal(run('retry', planId).body.reasonCode, 'sentinel.service.nothingToRetry');
+  // A rerun is a new run over the ended run's retained snapshot, naming it as its parent; it waits to be run.
+  const units = plan.body.facts.unitIds as string[];
+  assert.equal(units.length, 2);
+  const one = run('rerun', planId, '--stage', units[0]!);
+  assert.deepEqual([one.status, one.body.reasonCode], [3, 'sentinel.service.selectionUnsupported'], 'a strict subset is previewed, never widened silently');
+  const rerunPreview = one.body.facts.preview;
+  assert.deepEqual([rerunPreview.selected, rerunPreview.downstream, rerunPreview.all], [[units[0]], [], false]);
+  assert.ok(rerunPreview.prerequisites.length >= 1, 'the published bootstrap is reused, not rerun');
+  assert.equal(run('rerun', planId, '--stage', 'work-nope').body.reasonCode, 'sentinel.service.stageUnknown');
   const reran = run('rerun', planId);
-  assert.deepEqual([reran.status, reran.body.facts.parentId, reran.body.facts.checks.planned], [0, planId, 3]);
-  assert.notEqual(reran.body.facts.snapshotId, retried.body.facts.snapshotId);
-  assert.equal(run('run', reran.body.facts.runId).body.facts.previewFindings, 2);
+  assert.deepEqual([reran.status, reran.body.outcome, reran.body.facts.parentId, reran.body.facts.snapshotId], [0, 'prepared', planId, plan.body.facts.snapshotId], 'no recapture: the parent\'s snapshot');
+  assert.equal(reran.body.facts.preview.all, true);
+  const rerunId = reran.body.facts.runId;
+  assert.notEqual(rerunId, planId);
+  assert.equal(run('status', rerunId).body.facts.state, 'running', 'its bootstrap published over the retained snapshot; its analysis waits');
+  assert.equal(run('rerun', rerunId).body.reasonCode, 'sentinel.service.runNotEnded', 'a run that has not ended is resumed, not rerun');
+  const rerunRunResult = run('run', rerunId);
+  assert.deepEqual([rerunRunResult.status, rerunRunResult.body.facts.previewFindings], [2, 1]);
+  // Changed source is a new snapshot and a new plan, not a rerun.
+  writeFileSync(join(ws, 'src/more.ts'), 'export const del = (n: string) => db.query(`DELETE FROM t WHERE n = ${n}`);\n');
+  const changed = run('plan');
+  assert.deepEqual([changed.body.outcome, changed.body.facts.checks.planned], ['prepared', 3]);
+  assert.notEqual(changed.body.facts.snapshotId, plan.body.facts.snapshotId);
   assert.equal(run('retry', 'run-' + '0'.repeat(32)).body.reasonCode, 'sentinel.service.runUnknown');
   // A settings change after planning invalidates the plan rather than running under other rules.
   const path = join(ws, '.farsight/sentinel/settings.json');

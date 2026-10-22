@@ -39,7 +39,7 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   cancel: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
   retry: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
   resume: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
-  rerun: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
+  rerun: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--stage': 'value' }, positional: ['runId'], min: 1 },
   report: { flags: { ...COMMON, ...STORE, '--format': 'value' }, positional: ['runId'], min: 1 },
   serve: { flags: { ...COMMON, ...STORE, '--idle-ms': 'value' }, positional: [], min: 0 },
   compare: { flags: COMMON, positional: [], min: 0 },

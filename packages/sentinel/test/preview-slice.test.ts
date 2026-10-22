@@ -106,3 +106,27 @@ test('a run whose bootstrap could not publish is finished: planning again names 
     assert.ok('disclosure' in next && next.outcome === 'prepared' && next.disclosure.runId !== failedRun);
   } finally { removeScratch(work); }
 });
+
+test('a selected rerun previews its consequences from the parent plan: downstream reruns, prerequisites are reused', needsStore, async t => {
+  const { syntheticPlan, unitIdsOf } = await import('./coordinator-helpers.ts');
+  const { previewRerun } = await import('../dist/service/canonical.js');
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-rerun-')));
+  t.after(() => { unlock(dir); rmSync(dir, { recursive: true, force: true }); });
+  const store = await openStore(join(dir, 'store'));
+  t.after(() => { try { store.close(); } catch { /* closed */ } });
+  // The synthetic diamond: A → {B, C} → D, run to completion.
+  const planned = await syntheticPlan(store, dir, {}, { runId: 'run-diamond' });
+  const work = join(dir, 'work');
+  mkdirSync(work, { mode: 0o700 });
+  const summary = await executeRun(store, 'run-diamond', { scratchRoot: work, registry: planned.registry, run: planned.run });
+  assert.equal(summary.state, 'completed', JSON.stringify(summary.failures));
+  const id = unitIdsOf(planned.plan);
+  const preview: any = await previewRerun(store, 'run-diamond', [id.B!]);
+  assert.deepEqual(preview.selected, [id.B]);
+  assert.deepEqual(preview.downstream, [id.D], 'what depends on B runs again with it');
+  assert.deepEqual(preview.prerequisites, [id.A, id.C].sort(), 'what B and D depend on and is not rerun (A, and C for D) is reused as published');
+  assert.equal(preview.all, false);
+  const fromA: any = await previewRerun(store, 'run-diamond', [id.A!]);
+  assert.deepEqual([fromA.downstream, fromA.prerequisites, fromA.all], [[id.B, id.C, id.D].sort(), [], true], 'selecting the root reruns everything');
+  assert.equal(((await previewRerun(store, 'run-diamond', ['work-missing'])) as any).reasonCode, 'sentinel.service.stageUnknown');
+});

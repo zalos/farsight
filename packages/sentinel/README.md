@@ -181,7 +181,9 @@ farsight-sentinel status <runId>           # the run's state and a bounded page 
 farsight-sentinel report <runId>           # Markdown (or --format json), from stored results only
 farsight-sentinel run <runId> --detach --confirm   # hand it to the background service (started on demand)
 farsight-sentinel wait <runId>             # its result once it ends; pause|resume|cancel <runId> --confirm
-farsight-sentinel retry|rerun <runId>      # a new run after an ended one: over its snapshot, or a fresh capture
+farsight-sentinel rerun <runId> [--stage <unit,...>]   # a linked run over the ended run's retained snapshot; previews
+                                           #   what runs again (selected + downstream) and what is reused
+farsight-sentinel retry <runId>            # the same, selecting the units that did not publish
 ```
 
 `init` writes the settings file only when it is missing: PR 06's defaults plus one grant letting the owner (a

@@ -21,8 +21,9 @@ import { result, type CommandResult, type PrintedVerdicts } from '../cli/outcome
 
 import { candidateDigest, emptyLock, lockDigest, promote, promotionIntent, readPackDirectory, validatePack } from '../rules/index.js';
 import { RuleLockBook } from './rule-locks.js';
+import { loadPlan } from '../execution/plans.js';
 import { ServiceError } from './owner-service.js';
-import { canonicalResult, currentPlan, executeRun, followRun, planWorkspaceCanonical, previewFindingsOf, type CanonicalDisclosure, type CurrentPlan } from './canonical.js';
+import { canonicalResult, currentPlan, executeRun, rerunRun, planWorkspaceCanonical, previewFindingsOf, type CanonicalDisclosure, type CurrentPlan } from './canonical.js';
 
 export interface Workspace {
   readonly path: string;
@@ -195,22 +196,34 @@ export async function planWorkspace(ws: Workspace, options: { confirm: boolean; 
 }
 
 /**
- * Retry or rerun an ended run as a new run that names it as its parent (canonical.ts followRun): admitted as
- * `capture.source` like any planning, planned and admitted, and left waiting to be run.
+ * Rerun or retry an ended run as a new linked run over its retained snapshot (canonical.ts rerunRun): `rerun` the
+ * named units (all when none are named), `retry` the units that did not publish. Admitted as `capture.source` like
+ * any planning; the dependency preview (selected, downstream, reused prerequisites) is in the result either way.
  */
-export async function followWorkspaceRun(ws: Workspace, options: { mode: 'retry' | 'rerun'; runId: string; confirm: boolean; now: Date }):
+export async function followWorkspaceRun(ws: Workspace, options: { mode: 'retry' | 'rerun'; runId: string; stages?: readonly string[]; confirm: boolean; now: Date }):
   Promise<CommandResult> {
   const adopted = adoptedPolicy(ws);
   if ('refusal' in adopted) return adopted.refusal;
   const { policy } = adopted;
   const decided = decide(ws, policy, intentOf('capture.source', sha(Buffer.from(ws.path)), ['local-artifacts']), policy.revision, options.confirm, options.now);
   if (!decided.admitted) return decided.result;
+  const verdicts = printed(decided.record);
   return withStore(ws, async store => {
+    let stages = [...(options.stages ?? [])];
+    if (options.mode === 'retry') {
+      // The units that did not publish: what a retry runs again.
+      const plan = await currentPlan(store, options.runId);
+      if (plan?.kind === 'analysis') {
+        const { plan: revision } = await loadPlan(store, options.runId, plan.revision);
+        stages = revision.units.filter(u => !store.ledger.getPublication({ id: u.id, revision: u.revision })).map(u => u.id);
+        if (!stages.length) return result('retry', 'refused', { verdicts, reasonCode: 'sentinel.service.nothingToRetry', facts: { runId: options.runId } });
+      }
+    }
     const work = scratchUnder(ws);
     try {
-      const followed = await followRun(store, options.runId, options.mode, { workspace: ws.path, trustDir: trustFolder(ws), policy, scratchRoot: work, now: options.now });
-      if ('reasonCode' in followed) return result(options.mode, 'configuration-failure', { verdicts: printed(decided.record), reasonCode: followed.reasonCode, facts: { runId: options.runId } });
-      return result(options.mode, followed.outcome, { verdicts: printed(decided.record), facts: { ...followed.disclosure, parentId: options.runId } });
+      const followed = await rerunRun(store, options.runId, stages, { workspace: ws.path, trustDir: trustFolder(ws), policy, scratchRoot: work, now: options.now });
+      if ('reasonCode' in followed) return result(options.mode, 'configuration-failure', { verdicts, reasonCode: followed.reasonCode, facts: { runId: options.runId, ...(followed.facts ?? {}) } });
+      return result(options.mode, followed.outcome, { verdicts, facts: { ...followed.disclosure, parentId: options.runId, preview: followed.preview } });
     } finally { removeScratch(work); }
   });
 }

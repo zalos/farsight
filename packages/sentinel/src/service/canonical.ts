@@ -45,6 +45,8 @@ export interface CanonicalDisclosure {
   readonly effects: readonly ['local-artifacts'];
   readonly checks: Readonly<Record<string, number>>;
   readonly units: number;
+  /** The analysis units, by id: what `rerun --stage` selects from. */
+  readonly unitIds: readonly string[];
   readonly ruleGaps: number;
   readonly requiredCoverageAchievable: boolean;
   readonly label: 'foundation-preview' | 'deterministic';
@@ -65,6 +67,7 @@ function disclose(plan: PlanRevision): CanonicalDisclosure {
   return Object.freeze({
     planId: plan.runId, runId: plan.runId, revision: plan.revision, planDigest: plan.digest, snapshotId: plan.pins.snapshotId!,
     effects: Object.freeze(['local-artifacts'] as const), checks: Object.freeze({ ...plan.tallies.checks }), units: plan.units.length,
+    unitIds: Object.freeze(plan.units.map(u => u.id).sort()),
     ruleGaps: plan.ruleGaps.length, requiredCoverageAchievable: plan.requiredCoverageAchievable,
     label: isPreview(plan) ? 'foundation-preview' as const : 'deterministic' as const,
   });
@@ -197,16 +200,84 @@ export async function canonicalResult(store: SentinelStore, command: string, run
   return result(command, 'submitted', { ...base, facts });
 }
 
+/** What a selected-stage rerun would do, from the parent's admitted plan alone. */
+export interface RerunPreview {
+  readonly parentId: string;
+  readonly snapshotId: string;
+  /** The units asked for. */
+  readonly selected: readonly string[];
+  /** Units that depend on a selected one, transitively: their inputs change, so they run again too. */
+  readonly downstream: readonly string[];
+  /** Units a selected one depends on, transitively, and the bootstrap: reused from the parent as published. */
+  readonly prerequisites: readonly string[];
+  /** Every check the units to run cover. */
+  readonly checks: number;
+  /** The whole analysis is selected: the rerun re-plans every unit over the retained snapshot. */
+  readonly all: boolean;
+  readonly effects: readonly ['local-artifacts'];
+}
+
 /**
- * A new run that follows an ended one (its parent): `retry` re-plans over the parent's admitted snapshot with no
- * recapture; `rerun` captures the workspace again. Either is planned and admitted like any run, under the lock and
- * policy current now, and waits to be run. A run that has not ended is resumed, not retried.
+ * The dependency consequences of rerunning `selected` units of an ended run (all of them when none are named): which
+ * units run again (the selected and everything downstream of them) and which are reused from the parent
+ * (prerequisites and the published bootstrap). Reads only.
  */
-export async function followRun(store: SentinelStore, parentId: string, mode: 'retry' | 'rerun', options: {
+export async function previewRerun(store: SentinelStore, parentId: string, selected: readonly string[]): Promise<RerunPreview | { reasonCode: string; facts?: Record<string, unknown> }> {
+  const parent = store.ledger.getRun(parentId);
+  if (!parent) return { reasonCode: 'sentinel.service.runUnknown' };
+  if (parent.state !== 'completed' && parent.state !== 'canceled') return { reasonCode: 'sentinel.service.runNotEnded' };
+  const plan = await currentPlan(store, parentId);
+  if (!plan || plan.kind !== 'analysis') return { reasonCode: 'sentinel.service.planUnknown' };
+  const { plan: revision } = await loadPlan(store, parentId, plan.revision);
+  const units = new Map(revision.units.map(u => [u.id, u]));
+  const unknown = selected.filter(id => !units.has(id));
+  if (unknown.length) return { reasonCode: 'sentinel.service.stageUnknown', facts: { unknown } };
+  const chosen = new Set(selected.length ? selected : [...units.keys()]);
+  const dependents = new Map<string, string[]>();
+  for (const u of revision.units) for (const d of u.dependencies) if (units.has(d.id)) dependents.set(d.id, [...(dependents.get(d.id) ?? []), u.id]);
+  const downstream = new Set<string>();
+  const walkDown = (id: string) => { for (const n of dependents.get(id) ?? []) if (!chosen.has(n) && !downstream.has(n)) { downstream.add(n); walkDown(n); } };
+  for (const id of chosen) walkDown(id);
+  const rerun = new Set([...chosen, ...downstream]);
+  const prerequisites = new Set<string>(revision.reused.map(r => r.id));
+  const walkUp = (id: string) => { for (const d of units.get(id)?.dependencies ?? []) if (!rerun.has(d.id) && !prerequisites.has(d.id)) { prerequisites.add(d.id); walkUp(d.id); } };
+  for (const id of rerun) walkUp(id);
+  const sorted = (x: Iterable<string>) => [...x].sort();
+  return Object.freeze({
+    parentId, snapshotId: parent.envelope.snapshotId, selected: sorted(chosen), downstream: sorted(downstream), prerequisites: sorted(prerequisites),
+    checks: [...rerun].reduce((n, id) => n + (units.get(id)?.checks.length ?? 0), 0), all: rerun.size === units.size,
+    effects: Object.freeze(['local-artifacts'] as const),
+  });
+}
+
+/**
+ * A rerun of an ended run: a new run that names it as its parent, over the parent's retained snapshot (nothing is
+ * captured again), planned and admitted under the lock and policy current now, and left waiting to be run. Only the
+ * whole analysis can be rerun today: running a strict subset needs the planner to plan just the selected units and
+ * downstream ones, and the coordinator to reuse the parent's published prerequisites, neither of which exists yet,
+ * so such a selection is previewed and refused (sentinel.service.selectionUnsupported), never widened silently.
+ */
+export async function rerunRun(store: SentinelStore, parentId: string, selected: readonly string[], options: {
+  workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; registry?: AdapterRegistry; now: Date;
+}): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure; preview: RerunPreview } | { reasonCode: string; facts?: Record<string, unknown> }> {
+  const preview = await previewRerun(store, parentId, selected);
+  if ('reasonCode' in preview) return preview;
+  if (!preview.all) return { reasonCode: 'sentinel.service.selectionUnsupported', facts: { preview } };
+  const planned = await planWorkspaceCanonical(store, { ...options, parentId, snapshotId: preview.snapshotId });
+  return { ...planned, preview };
+}
+
+/**
+ * A retry of an ended run: a new run naming it as its parent, re-planned over the parent's retained snapshot with no
+ * recapture, under the lock and policy current now, waiting to be run. A run that has not ended is resumed instead;
+ * a new snapshot of changed source is a new `plan`.
+ */
+export async function followRun(store: SentinelStore, parentId: string, mode: 'retry', options: {
   workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; registry?: AdapterRegistry; now: Date;
 }): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure } | { reasonCode: string }> {
   const parent = store.ledger.getRun(parentId);
   if (!parent) return { reasonCode: 'sentinel.service.runUnknown' };
   if (parent.state !== 'completed' && parent.state !== 'canceled') return { reasonCode: 'sentinel.service.runNotEnded' };
-  return planWorkspaceCanonical(store, { ...options, parentId, ...(mode === 'retry' ? { snapshotId: parent.envelope.snapshotId } : {}) });
+  void mode;
+  return planWorkspaceCanonical(store, { ...options, parentId, snapshotId: parent.envelope.snapshotId });
 }

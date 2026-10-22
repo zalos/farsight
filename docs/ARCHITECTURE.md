@@ -617,8 +617,12 @@ one scope per unit, because a worker receives its inputs by artifact id and must
 detector covers a unit only when it can, and reports anything else skipped, so an unread file stays partial. Results
 are read from the ledger: the recorded outcome and the coverage records. A run resting on the preview rule ends
 `required-coverage-incomplete` (exit 2), and this build never prints `satisfied` (findings are judged against the
-policy only with the full report). `retry` and `rerun` plan a new run naming an ended one as its parent, over its
-snapshot or a fresh capture. The report is rendered from the ledger and stored artifacts, pinned to the run's last
+policy only with the full report). `rerun <run> [--stage <unit,…>]` and `retry <run>` (the units that did not
+publish) plan a new run naming an ended one as its parent, over its retained snapshot with nothing captured again,
+after previewing the consequences from the parent's admitted plan: the selected units and everything downstream run
+again, prerequisites and the bootstrap are reused as published. Only a whole-analysis rerun executes today; a strict
+subset is previewed and refused, because planning just those units and reusing another run's published work are not
+built yet. Changed source is a new `plan`. The report is rendered from the ledger and stored artifacts, pinned to the run's last
 event. The published bundle ships the modules the code names by file URL (the launch gate, the bootstrap operations'
 implementations) as entries of their own, references rewritten and digests recorded in its manifest.
 

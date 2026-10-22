@@ -123,7 +123,11 @@ export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
   'sentinel.service.runAwaiting': same('planned and admitted; waiting to run', 'The run\'s analysis is admitted and nothing of it has started. Run it with farsight-sentinel run, in the foreground or with --detach --confirm.'),
 
   'sentinel.service.runNotEnded': same('the run has not ended: resume it rather than retry it', 'Retry and rerun start a new run after one has completed or been canceled. A paused or interrupted run continues with farsight-sentinel resume.'),
-  'sentinel.cli.usageFollow': same('farsight-sentinel retry|rerun <runId> [--json]    plan a new run after an ended one: retry over its snapshot, rerun over a fresh capture', 'Either plans and admits a new run that names the ended run as its parent, under the rule lock and policy current now, and leaves it waiting to be run.'),
+  'sentinel.cli.usageFollow': same('farsight-sentinel rerun <runId> [--stage <unit,...>] · retry <runId> [--json]    a linked run over an ended run\'s retained snapshot', 'Either previews what would run again (the selected units and everything downstream) and what is reused from the parent (prerequisites, the published bootstrap), then plans and admits a new run naming the ended run as its parent, waiting to be run. Retry selects the units that did not publish. Changed source is a new plan.'),
+
+  'sentinel.service.stageUnknown': same('no unit of the run\'s plan has that id', 'A rerun names units of the ended run\'s admitted analysis, as status lists them.'),
+  'sentinel.service.selectionUnsupported': same('rerunning only some units is not available yet; the preview shows what it would run and reuse', 'A selected rerun runs the chosen units and everything downstream of them, and reuses the parent\'s published prerequisites. Planning just those units and reusing another run\'s published work are not built yet, so only the whole analysis can be rerun. Nothing was planned.'),
+  'sentinel.service.nothingToRetry': same('every unit of the run published: nothing to retry', 'A retry runs again the units that did not publish. A run whose every unit published has none; rerun it to run everything again.'),
 
   // ---- the preview report ----
   'sentinel.report.previewTitle': same('Sentinel scan — foundation preview', 'The heading of a preview report: a run\'s counts with their scopes and re-check commands, before full reports exist.'),
