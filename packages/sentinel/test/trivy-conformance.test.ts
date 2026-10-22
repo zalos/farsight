@@ -5,12 +5,12 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createAdapterRegistry } from '../dist/execution/registry.js';
 import { createExecutionService } from '../dist/execution/service.js';
 import { TRIVY_ADAPTER, buildTrivyAdapter, loadChecksBundle, runTrivyAttempt } from '../dist/adapters/trivy/index.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
-import { TRIVY_LAYOUT, capturedTree } from './iac-helpers.ts';
+import { IAC_FIXTURES, TRIVY_LAYOUT, capturedTree } from './iac-helpers.ts';
 
 const enabled = process.env.SENTINEL_ISOLATION === '1';
 const skip = !enabled && 'real pinned engine: set SENTINEL_ISOLATION=1 with a qualified local Docker, the pinned Trivy image installed and SENTINEL_TRIVY_CHECKS_DIR';
@@ -149,4 +149,22 @@ test('SOL: an over-long report is a truncation gap bound to the bytes actually p
   assert.equal(r.attempt, 'succeeded');
   assert.equal(r.findings.length, 0);
   assert.equal(row(r, 'deploy/pod.yaml'), 'error:outputTruncated');
+});
+
+test('UTF-16 LE and BE BOM manifests omitted by the engine are gaps, with scanned controls', { skip }, async () => {
+  const text = readFileSync(join(IAC_FIXTURES, 'trivy/k8s-privileged-pod.fixture'), 'utf8');
+  const le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, 'utf16le')]);
+  const be = Buffer.from(le).swap16();
+  const targets = capturedTree(join(root.root, `tree-${n++}`), {
+    'normal/le.yaml': { text: le }, 'normal/be.yaml': { text: be },
+    'hidden/.git/le.yaml': { text: le }, 'hidden/.git/be.yaml': { text: be },
+  });
+  const r = await run(targets);
+  assert.equal(r.engineExit, 0);
+  for (const encoding of ['le', 'be']) {
+    assert.equal(row(r, `normal/${encoding}.yaml`), 'complete:');
+    assert.ok(checks(r, `normal/${encoding}.yaml`).includes('KSV-0017'));
+    assert.equal(row(r, `hidden/.git/${encoding}.yaml`), 'error:notReported');
+    assert.deepEqual(checks(r, `hidden/.git/${encoding}.yaml`), []);
+  }
 });
