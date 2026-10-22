@@ -343,7 +343,24 @@ try {
     }
   }
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}npm consumer`);
+  // OSV assets: the in-container worker ships with its exact digest and rights; no advisory database ships.
+  let osvDemo = '';
+  if (existsSync(join(sourceDir, 'scripts', 'package-assets-osv.mjs'))) {
+    const manifestPath = join(installed, 'assets', 'osv', 'manifest.json');
+    assert.ok(existsSync(manifestPath), 'the OSV asset manifest is packaged');
+    const resolved = await evalModule(`import { createRequire } from 'node:module'; const r = createRequire(process.cwd() + '/'); console.log(r.resolve('farsight-sentinel/assets/osv/manifest.json'));`);
+    assert.ok(resolved.trim().endsWith('assets/osv/manifest.json'), 'OSV assets resolve through the exports map');
+    const osv = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    const worker = readFileSync(join(installed, osv.worker.path));
+    assert.equal(`sha256:${createHash('sha256').update(worker).digest('hex')}`, osv.worker.digest, 'the OSV worker matches its digest');
+    assert.equal(osv.adapter.command.at(-1), `/input/${osv.worker.digest.slice(7)}`, 'the fixed command names the shipped worker');
+    assert.match(osv.adapter.image, /^ghcr\.io\/google\/osv-scanner@sha256:[0-9a-f]{64}$/);
+    assert.equal(osv.registered, false);
+    assert.ok(!readdirSync(installed, { recursive: true }).map(String).some((f) => /\.zip$|all\.zip|advisories\/SENTINEL/.test(f)), 'no advisory database or fixture ships');
+    osvDemo = `osv assets (worker ${osv.worker.digest.slice(7, 19)}, no database), `;
+  }
+
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}${osvDemo}npm consumer`);
 } finally {
   consumer.cleanup();
 }

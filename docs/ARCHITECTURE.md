@@ -689,3 +689,35 @@ checks detector bytes against the pinned pack digest, and returns every other ru
 **Cost:** a Python file inside a string in the package, a tie to the image's `/usr/bin/python3`, and one attempt per job
 batch of at most 2,000 targets to keep timed output under its 3 MiB bound. **Not decided here:** registering the adapter
 in the production registry, the planner's batching, the scan command (PR 09), and amd64 qualification.
+
+**(Number to be assigned at integration.) Dependency advisories come from pinned, separately acquired OSV snapshots,
+matched fully offline, and counted only where the engine proves it matched (2026-10-22).**
+
+`src/adapters/osv/` runs OSV-Scanner 2.7.0 (`ghcr.io/google/osv-scanner@sha256:4f3b7e2c…69fcd0`, Apache-2.0, official
+multi-platform index; linux/arm64 measured, linux/amd64 listed and unmeasured) through PR 07's isolated execution
+service only. **Acquisition is separate:** the only network step is `acquireAdvisorySnapshots`, an owner action
+(`tool.acquire`) confirmed by a spent receipt for exactly the request (ecosystems, URLs, size bound). It fetches only
+`https://osv-vulnerabilities.storage.googleapis.com/<npm|Maven>/all.zip`, refuses redirects and anything over the stated
+bound (at most 512 MiB; the npm archive was 219 MB and Maven 10 MB on 2026-10-22), checks the origin's MD5 and stores
+each archive by SHA-256 beside a provenance manifest in an owner-only folder; `loadAdvisorySnapshot` re-hashes it before
+any scan. A scan never downloads: snapshots are inputs by digest, the engine runs `--offline` with no network, and the
+owner's freshness bound turns an old snapshot into `database-stale`. **The worker:** the official image is
+golang:alpine (busybox sh, no Python) and inputs are sealed 0444, so an original POSIX shell shim runs as `/bin/sh
+/input/<digest>`; it reads only constrained values (ids, digests, an integer index and a dependency-file basename from a
+fixed list per file; real relative paths stay with the coordinator), links the snapshots read-only into the layout the
+engine expects, and never forwards engine stderr: it reports the exit code, a fixed failure category, the stderr digest,
+which databases the engine reported loading, and the count of packages it dropped. **What counts** (measured, each a
+silent false negative of the engine): a failed run still prints packages with no advisories, so a failed run counts
+nothing; a database that fails to load leaves the exit code at 1 when another ecosystem matched, so a component counts as
+matched only when the engine reported loading its ecosystem's database; and a lock entry without a registry source is
+listed with `source=LOCAL` and never matched (`lodash@4.17.11`: 0 advisories without `resolved`, 7 with it), so such a
+component is not assessed and its file is `partial`. **Certainty and limits:** lockfiles (npm, pnpm) give resolved
+versions and the transitive closure as locked; a CycloneDX SBOM gives components as its producer listed them; a
+`pom.xml` gives declared direct dependencies only, read by a deliberately small parser that says how each version was
+declared (exact, property, range, managed); ranges and managed versions are not assessed, and a match on a range's lower
+bound is refused. Offline, Maven transitives are never resolved (no deps.dev, no registry), so a POM file is always
+`partial`. Findings are one per component and advisory group across every file that names it; the assessment id
+includes the snapshot digest, so a new snapshot is a new assessment, and `explainAdvisoryChanges` says whether a change
+came from the snapshot (same captured bytes) or the source. Advisory text is not kept. Package matches never claim
+reachability. **Not decided here:** registering the adapter, the planner's scheduling of acquisition and scans, the
+command (PR 09), shipping no database in the package, and amd64 qualification.
