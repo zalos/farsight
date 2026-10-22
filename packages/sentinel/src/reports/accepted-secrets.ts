@@ -63,4 +63,3 @@ export async function secretObservation(v: any, ctx: {
   } as ObservationEnvelope);
   return { observation: o, names, tokens };
 }
-
