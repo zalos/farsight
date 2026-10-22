@@ -4,8 +4,12 @@
 import { type ObjectCodec, type ObjectReceipt, type ObjectRef, type ObjectStore, rawDigestOf } from './objects.js';
 import type { ReachabilitySnapshot } from './gc.js';
 
-/** The ledger's codec names. `gzip-6` names the writer's level; a reader accepts any valid gzip under it. */
-export type LedgerCodec = 'identity' | 'gzip-6';
+/**
+ * The ledger's codec names. At 8d50f14 they are `identity` / `gzip-6`; root has decided the names describe the
+ * stored format (`raw` / `gzip`, level 6 being writer policy), and the ledger will normalize to them. Both are
+ * read; `toLedgerReceipt` emits the ledger's current names until that change lands, then `LEDGER_NAMES` flips.
+ */
+export type LedgerCodec = 'identity' | 'gzip-6' | 'raw' | 'gzip';
 
 export interface LedgerObjectReceipt {
   readonly id: string;
@@ -21,6 +25,10 @@ export interface LedgerObjectPresence {
 }
 
 export interface LedgerGcSnapshot {
+  /** The store the ledger is bound to, asserted by the ledger itself; never filled in by a caller. */
+  readonly storeId: string;
+  /** Asserted by the ledger: true only when every list was read whole in the one snapshot transaction. */
+  readonly complete: boolean;
   readonly sequence: number;
   readonly referenced: readonly string[];
   readonly staged: readonly string[];
@@ -30,14 +38,14 @@ export interface LedgerGcSnapshot {
   readonly objects: readonly LedgerObjectReceipt[];
 }
 
-const TO_LEDGER: Record<ObjectCodec, LedgerCodec> = { raw: 'identity', gzip: 'gzip-6' };
-const FROM_LEDGER: Record<LedgerCodec, ObjectCodec> = { identity: 'raw', 'gzip-6': 'gzip' };
+const LEDGER_NAMES: Record<ObjectCodec, LedgerCodec> = { raw: 'identity', gzip: 'gzip-6' };
+const FROM_LEDGER: Record<LedgerCodec, ObjectCodec> = { identity: 'raw', 'gzip-6': 'gzip', raw: 'raw', gzip: 'gzip' };
 const DIGEST = /^sha256:([0-9a-f]{64})$/;
 
 export function toLedgerReceipt(receipt: ObjectReceipt): LedgerObjectReceipt {
   return Object.freeze({
     id: receipt.artifactId,
-    codec: TO_LEDGER[receipt.codec],
+    codec: LEDGER_NAMES[receipt.codec],
     storedDigest: `sha256:${receipt.encodedDigest}`,
     rawSize: receipt.rawSize,
     storedSize: receipt.encodedSize,
@@ -74,22 +82,23 @@ export function ledgerObjectPresence(store: ObjectStore): LedgerObjectPresence {
 
 /**
  * The ledger's one-transaction snapshot as a reachability snapshot for `inspectReachability`/`planPrune`.
- * Lists that are absent or not lists make it incomplete; a recorded receipt that does not parse becomes an
- * invalid entry, so the inspection fails closed rather than skipping it.
+ * The store id and completeness are the ledger's own assertions, carried through unchanged: a snapshot without
+ * them fails the inspection closed (wrong store, incomplete). Absent or non-list parts also make it incomplete;
+ * a recorded receipt that does not parse becomes an invalid entry rather than being skipped.
  */
-export function reachabilityFromLedger(snapshot: LedgerGcSnapshot, storeId: string): ReachabilitySnapshot {
+export function reachabilityFromLedger(snapshot: LedgerGcSnapshot): ReachabilitySnapshot {
   const list = <T>(v: readonly T[] | undefined): readonly T[] | undefined => (Array.isArray(v) ? v : undefined);
   const parts = {
     referenced: list(snapshot?.referenced), active: list(snapshot?.active), staged: list(snapshot?.staged),
     report: list(snapshot?.reports), links: list(snapshot?.links), objects: list(snapshot?.objects),
   };
-  const complete = Object.values(parts).every(p => p !== undefined);
+  const complete = snapshot?.complete === true && Object.values(parts).every(p => p !== undefined);
   const roots = (['referenced', 'active', 'staged', 'report'] as const)
     .map(kind => ({ kind, id: `ledger:${kind}`, artifacts: [...(parts[kind] ?? [])] }));
   const links = (parts.links ?? []).map(l => (Array.isArray(l) && l.length === 2 ? { from: l[0], to: l[1] } : { from: '', to: '' }));
   const recorded = (parts.objects ?? []).map(r => refFromLedgerReceipt(r) ?? { rawDigest: '', codec: 'raw' as const });
   return {
-    storeId,
+    storeId: snapshot?.storeId as string,
     sequence: snapshot?.sequence as number,
     complete,
     roots,
