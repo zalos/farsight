@@ -97,6 +97,31 @@ advisories and framework packs remain in implementation/review. SOL found secret
 filename redaction channel; those findings must be closed before acceptance. npm release packaging prework is
 underway; no release has been cut.
 
+## Sentinel advisory integration; native qualification pending — 2026-10-22
+
+The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc9`, after all eight
+checks. The pattern adapter has a draft qualification PR [#145](https://github.com/zalos/farsight/pull/145);
+its native amd64 diagnostic qualification test needs the explicit candidate-platform input before rerunning.
+
+Offline advisories are integrated on `codex/sentinel-osv-integration`. The OSV-Scanner 2.7.0 adapter uses the pinned
+official container and separately acquired, digest-bound advisory snapshots. Scans cannot fetch databases.
+Missing, stale, refused and skipped inputs remain explicit. SOL verified the final refusal and comparison fixes:
+a failed or partially listed counterpart cannot make an earlier finding appear resolved.
+
+The integration passed full build/typecheck, 351 Sentinel tests (23 explicit opt-in/platform skips), 21 focused
+real-container tests with zero skips, core 404, scripts 181, catalog lint (3,814 entries), and a clean npm consumer
+with eight typed exports, 19 contracts/schemas and 53 fixtures. The installed OSV worker ran through the workspace
+execution service and found the original synthetic advisory; that is not yet acceptance through the installed CLI.
+Fresh fixed-source ingests at runtime head `c537e51` against main `a690cc9` agree on every node and edge value:
+7,917 nodes, 16,387 edges, source digest `16f951b42b53`, 21,904,177 graph bytes and 29,835,264 database bytes in both.
+Fresh front-door, Map and code-map screenshots were inspected with zero page errors; known fixture design-image
+404s remain on the first two surfaces. No primary build or dogfood refresh occurred.
+
+PR 12 remains incomplete until native amd64 qualification and production scheduler/installed CLI wiring.
+Scheduler/CLI admission, receipt scope and crash durability findings remain under correction. Framework packs
+are being checked for false protection claims. Release packaging remains prework; mandatory acceptance gates
+must pass before publication, and no release has been cut.
+
 ## Sentinel policy merged; planner integration verified — 2026-10-22
 
 Rules and adopted policy merged as [#142](https://github.com/zalos/farsight/pull/142), `074ee43`, after

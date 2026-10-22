@@ -57,12 +57,12 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   runs in the optional, path-filtered CI job, while Echo unit tests remain in required validation.
 
 - `packages/sentinel` — optional security review package (ADR 18). Draft contracts and generated schemas, and a
-  local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The pattern adapter remains unregistered; model runtime is not implemented. `src/store/index.ts` is the store's
+  local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The pattern and advisory adapters remain unregistered; model runtime is not implemented. `src/store/index.ts` is the store's
   public facade (`openStore`, also re-exported from the root and as `./store`); behind it `runtime.ts` (the SQLite
   release gate), `paths.ts` (canonical, local, owner-only folders), `owner.ts` (the lifetime owner lock and epoch),
   `ledger.ts` + `migrations.ts` + `store-types.ts` (the fenced WAL ledger), `objects.ts` (content-addressed objects),
   `objects-ledger.ts` (the ledger seam and verifier) and `gc.ts` (read-only reachability and the dry-run prune plan).
-  `test/store-integration.test.ts` drives the facade end to end across processes. The OSV advisory adapter (PR 12, ADR 29,
+  `test/store-integration.test.ts` drives the facade end to end across processes. The OSV advisory adapter (PR 12, ADR 27,
   `src/adapters/osv/`, not yet registered; `src/adapters/sealed-input.ts` is the shared sealed-copy reader): `adapter.ts` (OSV-Scanner 2.7.0 pins, offline arguments, support), `worker-source.ts`
   (the original shell shim), `job.ts` (dependency-file kinds, snapshot inputs, the line job), `normalize.ts` (components with
   certainty and transitive limits, findings once per component and advisory, per-file coverage, `explainAdvisoryChanges`),
