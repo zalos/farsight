@@ -1,0 +1,294 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync, mkdirSync, symlinkSync, chmodSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
+import {
+  ObjectStore, ObjectStoreError, NODE_OBJECT_IO, identify, canonicalJson, canonicalJsonBytes, objectRelPath,
+  MAX_OBJECT_BYTES, type ObjectStoreIo, type ObjectStoreOwner,
+} from '../dist/store/objects.js';
+
+const objectsModule = new URL('../dist/store/objects.js', import.meta.url).href;
+const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
+
+function scratch(t: { after(fn: () => void): void }): string {
+  const dir = mkdtempSync(join(tmpdir(), 'sentinel-os-'));
+  t.after(() => { chmodTree(dir); rmSync(dir, { recursive: true, force: true }); });
+  return dir;
+}
+function chmodTree(dir: string) {
+  try { chmodSync(dir, 0o700); } catch { return; }
+  for (const e of readdirSync(dir, { withFileTypes: true })) if (e.isDirectory()) chmodTree(join(dir, e.name));
+}
+const owner = (storePath: string, storeId = 'store-test-1'): ObjectStoreOwner => ({ storePath, storeId, assertHeld() {} });
+
+// Synthetic source-like bytes: CRLF, multibyte characters and invalid UTF-8 must all survive untouched.
+const SOURCE = Buffer.concat([Buffer.from('const café = "東京";\r\n// 🔐\r\n'), Buffer.from([0xff, 0xfe, 0x00, 0x80])]);
+
+async function code(p: Promise<unknown>): Promise<string> {
+  try { await p; } catch (e) { assert.ok(e instanceof ObjectStoreError, String(e)); return (e as ObjectStoreError).code; }
+  assert.fail('expected an ObjectStoreError');
+}
+
+test('raw and gzip objects round-trip exactly and are read back by a fresh process', async t => {
+  const dir = scratch(t);
+  const store = new ObjectStore(owner(dir));
+  const gz = await store.put(SOURCE);
+  const raw = await store.put(SOURCE, { codec: 'raw' });
+  assert.equal(gz.artifactId, `sha256:${sha(SOURCE)}`);
+  assert.equal(raw.artifactId, gz.artifactId, 'the logical id is the uncompressed bytes in every codec');
+  assert.equal(gz.codec, 'gzip');
+  assert.equal(gz.canonicalization, 'bytes');
+  assert.equal(gz.created, true);
+  assert.equal(gz.storeId, 'store-test-1');
+  assert.equal(gz.relPath, objectRelPath(gz.rawDigest, 'gzip'));
+  assert.equal(gz.encodedDigest, sha(readFileSync(join(dir, gz.relPath))));
+  assert.equal(raw.encodedDigest, raw.rawDigest);
+  assert.ok(Object.isFrozen(gz));
+  assert.equal(statSync(join(dir, gz.relPath)).mode & 0o777, 0o600);
+  assert.equal(statSync(join(dir, 'objects')).mode & 0o777, 0o700);
+  assert.deepEqual(await store.read(gz), SOURCE);
+  assert.deepEqual(await store.read(raw), SOURCE);
+  assert.deepEqual(readdirSync(join(dir, 'objects/tmp')), [], 'no staged copy is left behind');
+
+  const script = `
+    const { ObjectStore } = await import(${JSON.stringify(objectsModule)});
+    const store = new ObjectStore({ storePath: process.argv[1], storeId: 'store-test-1', assertHeld() {} });
+    const ref = JSON.parse(process.argv[2]);
+    process.stdout.write((await store.read(ref)).toString('base64'));`;
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', script, dir, JSON.stringify(gz)], { encoding: 'utf8', timeout: 20_000 });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(Buffer.from(r.stdout, 'base64'), SOURCE);
+});
+
+test('structured artifacts are canonical JSON and refuse non-canonical bytes', async t => {
+  const dir = scratch(t);
+  const store = new ObjectStore(owner(dir));
+  assert.equal(canonicalJson({ b: [1, -0, 'x'], a: { d: null, c: true } }), '{"a":{"c":true,"d":null},"b":[1,0,"x"]}');
+  for (const bad of [undefined, NaN, Infinity, 1n, () => 1, new Date(0), new Map(), Symbol('s')]) {
+    assert.throws(() => canonicalJson({ v: bad }), (e: any) => e.code === 'sentinel.object.notCanonical');
+  }
+  const cyclic: any = {}; cyclic.self = cyclic;
+  assert.throws(() => canonicalJson(cyclic), (e: any) => e.code === 'sentinel.object.notCanonical');
+
+  const value = { kind: 'finding', evidence: ['sha256:00'], z: 1, a: 'é' };
+  const r1 = await store.putCanonicalJson(value);
+  const r2 = await store.putCanonicalJson({ a: 'é', z: 1, evidence: ['sha256:00'], kind: 'finding' });
+  assert.equal(r1.artifactId, r2.artifactId, 'key order does not change identity');
+  assert.equal(r1.canonicalization, 'canonical-json/1');
+  assert.equal(r2.created, false);
+  assert.deepEqual(await store.readCanonicalJson(r1), JSON.parse(canonicalJson(value)));
+
+  const loose = await store.put(Buffer.from('{ "b": 1, "a": 2 }'));
+  assert.equal(await code(store.readCanonicalJson(loose)), 'sentinel.object.notCanonical');
+  assert.deepEqual(canonicalJsonBytes(value), Buffer.from(canonicalJson(value)));
+});
+
+test('identity and limits are checked before anything is written', async t => {
+  const dir = scratch(t);
+  const store = new ObjectStore(owner(dir));
+  const id = identify(SOURCE);
+  assert.equal(await code(store.put(Buffer.from('other'), { expect: id })), 'sentinel.object.digestMismatch');
+  assert.equal(await code(store.put(Buffer.alloc(MAX_OBJECT_BYTES + 1))), 'sentinel.object.tooLarge');
+  assert.equal(await code(store.put('text' as any)), 'sentinel.object.invalidInput');
+  assert.equal(await code(store.put(SOURCE, { codec: 'zstd' as any })), 'sentinel.object.invalidInput');
+  assert.equal(existsSync(join(dir, 'objects')), false, 'refused puts create nothing');
+  const ok = await store.put(SOURCE, { expect: id });
+  assert.equal(ok.rawDigest, id.rawDigest);
+  // Exactly at the limit is accepted.
+  const big = await store.put(Buffer.alloc(MAX_OBJECT_BYTES, 7));
+  assert.equal(big.rawSize, MAX_OBJECT_BYTES);
+  assert.equal((await store.read(big)).length, MAX_OBJECT_BYTES);
+});
+
+test('missing, truncated, altered, oversize and wrong-store objects fail integrity checks', async t => {
+  const dir = scratch(t);
+  const store = new ObjectStore(owner(dir));
+  const receipt = await store.put(SOURCE);
+  const path = join(dir, receipt.relPath);
+  const original = readFileSync(path);
+
+  assert.deepEqual(await store.check(receipt), { status: 'ok' });
+  assert.equal(await code(store.read({ ...receipt, storeId: 'another-store' })), 'sentinel.object.wrongStore');
+  const absent = identify(Buffer.from('never written'));
+  assert.equal((await store.check({ rawDigest: absent.rawDigest, codec: 'gzip' })).status, 'missing');
+  assert.equal((await store.check({ rawDigest: receipt.rawDigest, codec: 'raw' })).status, 'missing');
+
+  chmodSync(path, 0o600);
+  writeFileSync(path, original.subarray(0, original.length - 3));
+  assert.equal((await store.check(receipt)).status, 'corrupt', 'truncated (size mismatch)');
+  assert.equal((await store.check({ rawDigest: receipt.rawDigest, codec: 'gzip' })).status, 'corrupt', 'truncated gzip without a recorded size');
+
+  const flipped = Buffer.from(original); flipped[flipped.length - 9]! ^= 0xff;
+  writeFileSync(path, flipped);
+  assert.equal((await store.check(receipt)).status, 'corrupt', 'same size, different bytes');
+  assert.equal((await store.check({ rawDigest: receipt.rawDigest, codec: 'gzip' })).status, 'corrupt', 'raw digest still checked without encoded facts');
+
+  // A valid gzip of other bytes under this name: decodes, but not to the digest.
+  writeFileSync(path, gzipSync(Buffer.from('impostor')));
+  assert.equal((await store.check({ rawDigest: receipt.rawDigest, codec: 'gzip' })).status, 'corrupt');
+
+  writeFileSync(path, Buffer.alloc(16 * 1024 * 1024 + 64 * 1024 + 1));
+  assert.match((await store.check({ rawDigest: receipt.rawDigest, codec: 'gzip' }) as any).detail, /limit/);
+
+  rmSync(path);
+  symlinkSync(join(dir, 'elsewhere'), path);
+  assert.equal((await store.check(receipt)).status, 'unsafe', 'a symbolic link is never followed');
+});
+
+test('a gzip bomb stops at the recorded size and at the store limit', async t => {
+  const dir = scratch(t);
+  const store = new ObjectStore(owner(dir));
+  const small = Buffer.from('tiny');
+  const receipt = await store.put(small);
+  const bomb = gzipSync(Buffer.alloc(64 * 1024 * 1024), { level: 9 }); // 64 MiB of zeros in ~64 KiB
+  assert.ok(bomb.length < 128 * 1024);
+  chmodSync(join(dir, receipt.relPath), 0o600);
+  writeFileSync(join(dir, receipt.relPath), bomb);
+  const before = process.memoryUsage().arrayBuffers;
+  const r = await store.check({ rawDigest: receipt.rawDigest, codec: 'gzip', rawSize: small.length });
+  assert.equal(r.status, 'corrupt');
+  const r2 = await store.check({ rawDigest: receipt.rawDigest, codec: 'gzip' });
+  assert.equal(r2.status, 'corrupt', 'without a recorded size the 16 MiB cap still applies');
+  assert.ok(process.memoryUsage().arrayBuffers - before < 48 * 1024 * 1024, 'inflation never allocated the full bomb');
+});
+
+test('an existing valid winner with another encoding is accepted and reported as it is', async t => {
+  const dir = scratch(t);
+  const store = new ObjectStore(owner(dir));
+  const id = identify(SOURCE);
+  const rel = objectRelPath(id.rawDigest, 'gzip');
+  mkdirSync(join(dir, rel, '..'), { recursive: true });
+  const level9 = gzipSync(SOURCE, { level: 9, memLevel: 9, windowBits: 10 });
+  writeFileSync(join(dir, rel), level9);
+  const receipt = await store.put(SOURCE);
+  assert.equal(receipt.created, false);
+  assert.equal(receipt.encodedDigest, sha(level9));
+  assert.equal(receipt.encodedSize, level9.length);
+  assert.deepEqual(readFileSync(join(dir, rel)), level9, 'the winner is never rewritten');
+});
+
+test('a corrupt existing object is never overwritten', async t => {
+  const dir = scratch(t);
+  const store = new ObjectStore(owner(dir));
+  const id = identify(SOURCE);
+  for (const codec of ['gzip', 'raw'] as const) {
+    const rel = objectRelPath(id.rawDigest, codec);
+    mkdirSync(join(dir, rel, '..'), { recursive: true });
+    writeFileSync(join(dir, rel), 'garbage');
+    assert.equal(await code(store.put(SOURCE, { codec })), 'sentinel.object.corruptExisting');
+    assert.equal(readFileSync(join(dir, rel), 'utf8'), 'garbage');
+  }
+});
+
+/** Wraps the real filesystem; `faults` decides per call whether to throw. */
+function faultyIo(fault: (op: string, path: string) => string | undefined): ObjectStoreIo {
+  const boom = (code: string) => Object.assign(new Error(code), { code });
+  const wrapHandle = (h: any, path: string) => ({
+    write: (...a: any[]) => { const c = fault('write', path); return c ? Promise.reject(boom(c)) : h.write(...a); },
+    read: (...a: any[]) => h.read(...a),
+    stat: () => h.stat(),
+    sync: () => { const c = fault('sync', path); return c ? Promise.reject(boom(c)) : h.sync(); },
+    close: () => h.close(),
+  });
+  return {
+    open: async (path, flags, mode) => { const c = fault('open', path); if (c) throw boom(c); return wrapHandle(await NODE_OBJECT_IO.open(path, flags, mode), path); },
+    mkdir: async (path, mode) => { const c = fault('mkdir', path); if (c) throw boom(c); return NODE_OBJECT_IO.mkdir(path, mode); },
+    lstat: path => NODE_OBJECT_IO.lstat(path),
+    link: async (a, b) => { const c = fault('link', b); if (c) throw boom(c); return NODE_OBJECT_IO.link(a, b); },
+    unlink: path => NODE_OBJECT_IO.unlink(path),
+    readdir: path => NODE_OBJECT_IO.readdir(path),
+  };
+}
+
+test('disk-full, fsync, link and directory failures return no receipt and publish nothing', async t => {
+  const cases: [string, (op: string, path: string) => string | undefined, boolean][] = [
+    ['ENOSPC on write', op => op === 'write' ? 'ENOSPC' : undefined, false],
+    ['fsync of the staged file', (op, p) => op === 'sync' && p.includes('.partial') ? 'EIO' : undefined, false],
+    ['link not permitted', op => op === 'link' ? 'EPERM' : undefined, false],
+    ['link on a filesystem without hard links', op => op === 'link' ? 'ENOTSUP' : undefined, false],
+    ['staging directory cannot be created', (op, p) => op === 'mkdir' && p.endsWith('tmp') ? 'EACCES' : undefined, false],
+    // The object name exists after link, but its directory entry is not durable: still no receipt.
+    ['fsync of the shard directory', (op, p) => op === 'sync' && /sha256[\\/][0-9a-f]{2}$/.test(p) ? 'EIO' : undefined, true],
+    ['fsync of the store directory', (op, p) => op === 'sync' && !p.includes('objects') ? 'EIO' : undefined, true],
+  ];
+  for (const [name, fault, linked] of cases) {
+    const dir = scratch(t);
+    const store = new ObjectStore(owner(dir), { io: faultyIo(fault) });
+    assert.equal(await code(store.put(SOURCE)), 'sentinel.object.io', name);
+    const final = join(dir, objectRelPath(identify(SOURCE).rawDigest, 'gzip'));
+    assert.equal(existsSync(final), linked, `${name}: published name`);
+    if (existsSync(join(dir, 'objects/tmp'))) assert.deepEqual(readdirSync(join(dir, 'objects/tmp')), [], `${name}: staged copy removed`);
+    // A later healthy put completes durability (and verifies what is there) rather than rewriting it.
+    const healthy = await new ObjectStore(owner(dir)).put(SOURCE);
+    assert.equal(healthy.created, !linked, name);
+    assert.deepEqual(await store.read(healthy), SOURCE);
+  }
+});
+
+test('losing ownership mid-publication yields no receipt', async t => {
+  const dir = scratch(t);
+  let held = true;
+  const store = new ObjectStore({ storePath: dir, storeId: 's', assertHeld() { if (!held) throw new Error('owner lost'); } },
+    { io: faultyIo(op => { if (op === 'link') held = false; return undefined; }) });
+  await assert.rejects(store.put(SOURCE), /owner lost/);
+});
+
+test('a symlinked objects directory is refused, not followed', async t => {
+  const dir = scratch(t);
+  const elsewhere = scratch(t);
+  symlinkSync(elsewhere, join(dir, 'objects'));
+  const store = new ObjectStore(owner(dir));
+  assert.equal(await code(store.put(SOURCE)), 'sentinel.object.unsafePath');
+  assert.deepEqual(readdirSync(elsewhere), []);
+  assert.equal(await code(store.read({ rawDigest: identify(SOURCE).rawDigest, codec: 'gzip' })), 'sentinel.object.unsafePath');
+});
+
+test('concurrent writers in one process and across processes publish one winner and identical receipts', async t => {
+  const dir = scratch(t);
+  const bytes = Buffer.from('shared synthetic evidence\n'.repeat(4096));
+  const stores = Array.from({ length: 8 }, () => new ObjectStore(owner(dir)));
+  const receipts = await Promise.all(stores.map(s => s.put(bytes)));
+  assert.equal(receipts.filter(r => r.created).length, 1);
+  assert.equal(new Set(receipts.map(r => `${r.encodedDigest}:${r.encodedSize}:${r.relPath}`)).size, 1);
+
+  const fresh = Buffer.from('cross-process synthetic evidence\n'.repeat(4096));
+  const script = `
+    const { ObjectStore } = await import(${JSON.stringify(objectsModule)});
+    const store = new ObjectStore({ storePath: process.argv[1], storeId: 'store-test-1', assertHeld() {} });
+    const bytes = Buffer.from(process.argv[2], 'base64');
+    await new Promise(r => setTimeout(r, Number(process.argv[3]) - Date.now()));
+    process.stdout.write(JSON.stringify(await store.put(bytes)));`;
+  const start = Date.now() + 500;
+  const runs = await Promise.all(Array.from({ length: 6 }, () => new Promise<{ status: number | null; out: string; err: string }>(resolve => {
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script, dir, fresh.toString('base64'), String(start)]);
+    let out = '', err = '';
+    child.stdout.on('data', d => { out += d; });
+    child.stderr.on('data', d => { err += d; });
+    child.on('close', status => resolve({ status, out, err }));
+  })));
+  for (const r of runs) assert.equal(r.status, 0, r.err);
+  const cross = runs.map(r => JSON.parse(r.out));
+  assert.equal(cross.filter(r => r.created).length, 1, 'link(2) admits exactly one creator');
+  assert.equal(new Set(cross.map(r => r.encodedDigest)).size, 1);
+  assert.deepEqual(await new ObjectStore(owner(dir)).read(cross[0]), fresh);
+  assert.deepEqual(readdirSync(join(dir, 'objects/tmp')), []);
+});
+
+test('list() reports objects, staged leftovers and foreign entries without touching them', async t => {
+  const dir = scratch(t);
+  const store = new ObjectStore(owner(dir));
+  const a = await store.put(Buffer.from('a'));
+  const b = await store.put(Buffer.from('b'), { codec: 'raw' });
+  writeFileSync(join(dir, 'objects/tmp/leftover.partial'), 'x');
+  writeFileSync(join(dir, 'objects/stray.txt'), 'x');
+  writeFileSync(join(dir, a.relPath, '..', 'not-an-object'), 'x');
+  const listing = await store.list();
+  assert.deepEqual(listing.objects.map(o => o.relPath).sort(), [a.relPath, b.relPath].sort());
+  assert.deepEqual(listing.staging, ['objects/tmp/leftover.partial']);
+  assert.deepEqual([...listing.unexpected].sort(), [`objects/sha256/${a.rawDigest.slice(0, 2)}/not-an-object`, 'objects/stray.txt'].sort());
+  assert.deepEqual(await new ObjectStore(owner(join(dir, 'absent'))).list(), { objects: [], staging: [], unexpected: [] });
+});
