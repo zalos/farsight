@@ -13,8 +13,8 @@ import type {
 import { canonicalJson, digestOf } from './ledger-json.js';
 import { LEDGER_MIGRATIONS, migrateLedger, type LedgerGuard } from './migrations.js';
 import {
-  ARTIFACT_CODECS, ARTIFACT_PRIVACY, LedgerError, MAX_ARTIFACT_BYTES, MAX_EVENT_PAGE,
-  type ArtifactPrivacy, type EndAttemptInput, type EventPage, type GcSnapshot, type IdempotencyRef, type LedgerEvent,
+  ARTIFACT_CODECS, ARTIFACT_PRIVACY, LedgerError, MAX_ARTIFACT_BYTES, MAX_EVENT_PAGE, MAX_SNAPSHOT_ARTIFACTS,
+  type AdmitSnapshotInput, type SnapshotRecord, type ArtifactPrivacy, type EndAttemptInput, type EventPage, type GcSnapshot, type IdempotencyRef, type LedgerEvent,
   type LedgerEventKind, type LedgerFailpoint, type LedgerOwner, type MigrationReport, type ObjectVerifier,
   type ObjectReceipt, type OpenLedgerOptions, type PublicationReceipt, type PublishInput, type StageId,
   type StagedArtifact, type VerifiedObject,
@@ -502,9 +502,12 @@ export class Ledger {
       if (target) runId = this.#fenceAttempt(target.work, target.attemptId).runId;
       for (const a of artifacts) {
         for (const l of a.links ?? []) {
-          if (!ids.has(l) && !this.#get('SELECT 1 AS x FROM artifacts WHERE id = ?', l)) {
-            throw new LedgerError('sentinel.store.stagingMismatch', 'a link names an artifact that is neither staged nor stored');
-          }
+          if (ids.has(l) || this.#get('SELECT 1 AS x FROM artifacts WHERE id = ?', l)) continue;
+          // An unbound stage (a capture's) may link to an artifact another open unbound stage of this epoch holds:
+          // they are accepted together by admitSnapshot. An attempt's stage may not.
+          if (!target && this.#get(`SELECT 1 AS x FROM staging_artifacts sa JOIN staging s ON s.stage_id = sa.stage_id
+            WHERE sa.artifact_id = ? AND s.attempt_id IS NULL AND s.coordinator_epoch = ?`, l, this.epoch)) continue;
+          throw new LedgerError('sentinel.store.stagingMismatch', 'a link names an artifact that is neither staged nor stored');
         }
       }
       this.#run(`INSERT INTO staging (stage_id, coordinator_epoch, work_id, work_revision, attempt_id, created_at)
@@ -573,21 +576,7 @@ export class Ledger {
     // Verified before the transaction: each object is read and hashed by the object store, which can be slow, and
     // the stage registered before any byte was written keeps it pinned against collection until this commit.
     // The transaction then requires that same stage to still be open, so the verification still holds at commit.
-    const verifier = this.#objects;
-    if (!verifier) {
-      throw new LedgerError('sentinel.store.objectVerifierUnavailable',
-        'publication needs the object store verifier; none was configured');
-    }
-    for (const r of receipts) {
-      let seen: VerifiedObject | null;
-      try { seen = verifier.verify({ id: r.id, codec: r.codec }); } catch (cause) {
-        throw new LedgerError('sentinel.store.objectMissing', 'the object store could not verify a staged object', { cause });
-      }
-      if (!seen || seen.storeId !== this.storeId || seen.id !== r.id || seen.codec !== r.codec
-        || seen.storedDigest !== r.storedDigest || seen.rawSize !== r.rawSize || seen.storedSize !== r.storedSize) {
-        throw new LedgerError('sentinel.store.objectMissing', 'a staged object is absent or differs from its receipt');
-      }
-    }
+    this.#verifyReceipts(receipts, 'publication');
     return this.#mutate('publish', request, input.idempotency, () => {
       const { runId, runState } = this.#fenceAttempt(ref, input.attemptId);
       if (!PUBLISHING_RUN_STATES.includes(runState)) {
@@ -610,30 +599,7 @@ export class Ledger {
         throw new LedgerError('sentinel.store.stagingMismatch', 'an output was not staged');
       }
       const sequence = this.#event('work-published', runId, ref, { attemptId: input.attemptId, outputs: input.outputs.length });
-      for (const r of receipts) {
-        const s = staged.get(r.id)!;
-        const privacy = s.privacy as ArtifactPrivacy;
-        const existing = this.#get('SELECT raw_size, privacy_floor FROM artifacts WHERE id = ?', r.id);
-        if (!existing) {
-          this.#run('INSERT INTO artifacts (id, raw_size, privacy_floor, first_sequence) VALUES (?, ?, ?, ?)',
-            r.id, r.rawSize, privacy, sequence);
-        } else {
-          if (Number(existing.raw_size) !== r.rawSize) {
-            throw new LedgerError('sentinel.store.stagingMismatch', 'an artifact was stored before with another size');
-          }
-          if (privacyRank(privacy) > privacyRank(existing.privacy_floor as ArtifactPrivacy)) {
-            this.#run('UPDATE artifacts SET privacy_floor = ? WHERE id = ?', privacy, r.id);
-          }
-        }
-        const rep = this.#get('SELECT stored_digest, stored_size FROM artifact_objects WHERE artifact_id = ? AND codec = ?',
-          r.id, r.codec);
-        if (!rep) {
-          this.#run('INSERT INTO artifact_objects (artifact_id, codec, stored_digest, stored_size) VALUES (?, ?, ?, ?)',
-            r.id, r.codec, r.storedDigest, r.storedSize);
-        } else if (rep.stored_digest !== r.storedDigest || Number(rep.stored_size) !== r.storedSize) {
-          throw new LedgerError('sentinel.store.stagingMismatch', 'a representation was recorded before with other bytes');
-        }
-      }
+      this.#acceptArtifacts(receipts, staged, sequence);
       const resultDigest = digestOf({ work: ref, attemptId: input.attemptId, outputs: input.outputs,
         receipts: request.receipts });
       const acceptedAt = this.#now();
@@ -656,6 +622,128 @@ export class Ledger {
       this.#run('DELETE FROM staging WHERE stage_id = ?', input.stageId);
       return { work: ref, attemptId: input.attemptId, resultDigest, sequence, acceptedAt };
     }, 'publish:before-commit');
+  }
+
+  /** Inserts accepted artifacts and their representations; the privacy floor only ever rises. */
+  #acceptArtifacts(receipts: readonly ObjectReceipt[], staged: ReadonlyMap<string, Row>, sequence: number): void {
+    for (const r of receipts) {
+      const s = staged.get(r.id)!;
+      const privacy = s.privacy as ArtifactPrivacy;
+      const existing = this.#get('SELECT raw_size, privacy_floor FROM artifacts WHERE id = ?', r.id);
+      if (!existing) {
+        this.#run('INSERT INTO artifacts (id, raw_size, privacy_floor, first_sequence) VALUES (?, ?, ?, ?)',
+          r.id, r.rawSize, privacy, sequence);
+      } else {
+        if (Number(existing.raw_size) !== r.rawSize) {
+          throw new LedgerError('sentinel.store.stagingMismatch', 'an artifact was stored before with another size');
+        }
+        if (privacyRank(privacy) > privacyRank(existing.privacy_floor as ArtifactPrivacy)) {
+          this.#run('UPDATE artifacts SET privacy_floor = ? WHERE id = ?', privacy, r.id);
+        }
+      }
+      const rep = this.#get('SELECT stored_digest, stored_size FROM artifact_objects WHERE artifact_id = ? AND codec = ?',
+        r.id, r.codec);
+      if (!rep) {
+        this.#run('INSERT INTO artifact_objects (artifact_id, codec, stored_digest, stored_size) VALUES (?, ?, ?, ?)',
+          r.id, r.codec, r.storedDigest, r.storedSize);
+      } else if (rep.stored_digest !== r.storedDigest || Number(rep.stored_size) !== r.storedSize) {
+        throw new LedgerError('sentinel.store.stagingMismatch', 'a representation was recorded before with other bytes');
+      }
+    }
+  }
+
+  /** Every receipt re-read and hashed by this store's object verifier; refuses any that differs. */
+  #verifyReceipts(receipts: readonly ObjectReceipt[], what: string): void {
+    const verifier = this.#objects;
+    if (!verifier) {
+      throw new LedgerError('sentinel.store.objectVerifierUnavailable', `${what} needs the object store verifier; none was configured`);
+    }
+    for (const r of receipts) {
+      let seen: VerifiedObject | null;
+      try { seen = verifier.verify({ id: r.id, codec: r.codec }); } catch (cause) {
+        throw new LedgerError('sentinel.store.objectMissing', 'the object store could not verify a staged object', { cause });
+      }
+      if (!seen || seen.storeId !== this.storeId || seen.id !== r.id || seen.codec !== r.codec
+        || seen.storedDigest !== r.storedDigest || seen.rawSize !== r.rawSize || seen.storedSize !== r.storedSize) {
+        throw new LedgerError('sentinel.store.objectMissing', 'a staged object is absent or differs from its receipt');
+      }
+    }
+  }
+
+  /**
+   * Admits a captured snapshot in one transaction, without a run: every named stage is open, unbound and of this
+   * epoch; the receipts name exactly the artifacts they hold and each is durable in this store; then artifacts,
+   * representations, links, the snapshot row and its event are recorded and the stages released. The manifest and
+   * the materialization become collection roots; the content stays reachable through their links.
+   */
+  admitSnapshot(input: AdmitSnapshotInput): SnapshotRecord {
+    checkId(input.snapshotId, 'snapshot id');
+    checkDigest(input.manifest, 'snapshot manifest');
+    checkDigest(input.materialization, 'snapshot materialization');
+    checkDigest(input.inventoryDigest, 'inventory digest');
+    if (input.manifest === input.materialization) throw invalid('the manifest and the materialization are distinct artifacts');
+    if (!Array.isArray(input.stageIds) || input.stageIds.length === 0 || input.stageIds.length > MAX_SNAPSHOT_ARTIFACTS
+      || new Set(input.stageIds).size !== input.stageIds.length) throw invalid('stage ids');
+    input.stageIds.forEach(id => checkId(id, 'stage id'));
+    if (!Array.isArray(input.receipts) || input.receipts.length === 0 || input.receipts.length > MAX_SNAPSHOT_ARTIFACTS) {
+      throw invalid('receipts');
+    }
+    input.receipts.forEach(r => this.#checkReceipt(r));
+    const receipts = [...input.receipts].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : a.codec < b.codec ? -1 : 1));
+    const stageIds = [...input.stageIds].sort();
+    const request = { snapshotId: input.snapshotId, stageIds, manifest: input.manifest, materialization: input.materialization,
+      inventoryDigest: input.inventoryDigest, receipts: receipts.map(r => ({ ...r })) };
+    // Verified before the transaction (it reads every object); the open stages keep them pinned until the commit,
+    // which requires the same stages to be open still.
+    this.#verifyReceipts(receipts, 'snapshot admission');
+    return this.#mutate('admitSnapshot', request, input.idempotency, () => {
+      if (this.#get('SELECT 1 AS x FROM snapshots WHERE id = ?', input.snapshotId)) {
+        throw new LedgerError('sentinel.store.conflict', 'a snapshot with this id was already admitted');
+      }
+      const staged = new Map<string, Row>();
+      for (const stageId of stageIds) {
+        const stage = this.#get('SELECT coordinator_epoch, work_id, attempt_id FROM staging WHERE stage_id = ?', stageId);
+        if (!stage) throw new LedgerError('sentinel.store.stagingMismatch', 'no such stage');
+        if (stage.coordinator_epoch !== this.epoch || stage.work_id !== null || stage.attempt_id !== null) {
+          throw new LedgerError('sentinel.store.stagingMismatch', 'a snapshot is admitted only from unbound stages of this epoch');
+        }
+        for (const row of this.#all('SELECT artifact_id, schema, privacy FROM staging_artifacts WHERE stage_id = ?', stageId)) {
+          const id = String(row.artifact_id);
+          const prior = staged.get(id);
+          if (!prior || privacyRank(row.privacy as ArtifactPrivacy) > privacyRank(prior.privacy as ArtifactPrivacy)) staged.set(id, row);
+        }
+      }
+      const received = new Set(receipts.map(r => r.id));
+      if (received.size !== staged.size || [...received].some(id => !staged.has(id))) {
+        throw new LedgerError('sentinel.store.stagingMismatch', 'receipts do not match the staged artifacts');
+      }
+      if (!staged.has(input.manifest) || !staged.has(input.materialization)) {
+        throw new LedgerError('sentinel.store.stagingMismatch', 'the manifest and the materialization must be staged');
+      }
+      const sequence = this.#event('snapshot-admitted', null, null, { snapshotId: input.snapshotId, artifacts: staged.size });
+      this.#acceptArtifacts(receipts, staged, sequence);
+      for (const stageId of stageIds) {
+        for (const l of this.#all('SELECT parent_id, child_id FROM staging_links WHERE stage_id = ?', stageId)) {
+          this.#run('INSERT OR IGNORE INTO artifact_links (parent_id, child_id) VALUES (?, ?)', String(l.parent_id), String(l.child_id));
+        }
+      }
+      const admittedAt = this.#now();
+      this.#run(`INSERT INTO snapshots (id, manifest_id, materialization_id, inventory_digest, coordinator_epoch, sequence,
+        admitted_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, input.snapshotId, input.manifest, input.materialization,
+      input.inventoryDigest, this.epoch, sequence, admittedAt);
+      for (const stageId of stageIds) this.#run('DELETE FROM staging WHERE stage_id = ?', stageId);
+      return { snapshotId: input.snapshotId, manifest: input.manifest, materialization: input.materialization,
+        inventoryDigest: input.inventoryDigest, sequence, admittedAt };
+    }, 'snapshot:before-commit');
+  }
+
+  /** An admitted snapshot's record, or undefined. */
+  getSnapshot(snapshotId: Id): SnapshotRecord | undefined {
+    checkId(snapshotId, 'snapshot id');
+    const row = this.#read(() => this.#get('SELECT * FROM snapshots WHERE id = ?', snapshotId));
+    if (!row) return undefined;
+    return { snapshotId: String(row.id), manifest: String(row.manifest_id), materialization: String(row.materialization_id),
+      inventoryDigest: String(row.inventory_digest), sequence: Number(row.sequence), admittedAt: String(row.admitted_at) };
   }
 
   /** Pins a retained report's artifact closure roots. Every artifact must already be accepted. */
@@ -761,7 +849,9 @@ export class Ledger {
         storeId: this.storeId,
         complete: true as const,
         sequence,
-        referenced: col('SELECT DISTINCT artifact_id FROM artifact_refs ORDER BY artifact_id'),
+        // Accepted references: publication outputs and links, and every admitted snapshot's manifest and materialization.
+        referenced: col(`SELECT artifact_id FROM artifact_refs UNION SELECT manifest_id FROM snapshots
+          UNION SELECT materialization_id FROM snapshots ORDER BY 1`),
         staged: col('SELECT DISTINCT artifact_id FROM staging_artifacts ORDER BY artifact_id'),
         reports: col('SELECT DISTINCT artifact_id FROM report_artifacts ORDER BY artifact_id'),
         retained: [...retained].sort(),

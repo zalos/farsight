@@ -9,7 +9,9 @@ import { ARTIFACT_CODECS, ARTIFACT_PRIVACY, LEDGER_EVENT_KINDS, LedgerError } fr
 import { ATTEMPT_STATES, RUN_OUTCOMES, RUN_STATES, USAGE_CERTAINTIES, WORK_STATES } from '../dist/index.js';
 import { FakeOwner, runEnvelope, scratch } from './store-helpers.ts';
 
-const V2 = { version: 2, name: 'second', sql: 'CREATE TABLE later_projection (id TEXT PRIMARY KEY) STRICT;' };
+// The shipped list's length; the synthetic next step is numbered after it.
+const N = LEDGER_MIGRATIONS.length;
+const V2 = { version: N + 1, name: 'second', sql: 'CREATE TABLE later_projection (id TEXT PRIMARY KEY) STRICT;' };
 let epochs = 0;
 const owner = (dir: string) => new FakeOwner(dir, `epoch-${++epochs}`);
 const code = (c: string) => (e: unknown) => e instanceof LedgerError && e.code === c;
@@ -45,15 +47,15 @@ test('a new ledger is created at the newest schema with WAL, FULL sync, foreign 
   const one = (sql: string) => Object.values(db.prepare(sql).get() ?? {})[0];
   assert.equal(one('PRAGMA journal_mode'), 'wal');
   assert.equal(Number(one('PRAGMA application_id')), LEDGER_APPLICATION_ID);
-  assert.equal(Number(one('PRAGMA user_version')), 1);
+  assert.equal(Number(one('PRAGMA user_version')), N);
   assert.equal(statSync(ledger.path).mode & 0o777, 0o600);
   const m = db.prepare('SELECT version, name, checksum, build FROM schema_migrations').all() as Array<Record<string, unknown>>;
-  assert.equal(m.length, 1);
+  assert.equal(m.length, N);
   assert.equal(m[0]!.build, 'test-build');
   assert.match(String(m[0]!.checksum), /^sha256:[0-9a-f]{64}$/);
   db.close();
   const again = await openLedger(owner(dir));
-  assert.deepEqual(again.migration, { from: 1, to: 1, backupPath: null });
+  assert.deepEqual(again.migration, { from: N, to: N, backupPath: null });
   again.close();
 });
 
@@ -61,31 +63,31 @@ test('an upgrade takes a verified backup first, then applies every pending step'
   const dir = scratch(t);
   const path = await seeded(dir);
   const ledger = await openLedger(owner(dir), { migrations: [...LEDGER_MIGRATIONS, V2] });
-  assert.equal(ledger.migration.from, 1);
-  assert.equal(ledger.migration.to, 2);
+  assert.equal(ledger.migration.from, N);
+  assert.equal(ledger.migration.to, N + 1);
   const backup = ledger.migration.backupPath!;
   ledger.close();
   assert.ok(existsSync(backup));
   assert.equal(statSync(backup).mode & 0o777, 0o600);
-  assert.deepEqual(peek(backup), { version: 1, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 });
-  assert.deepEqual(peek(path), { version: 2, appId: LEDGER_APPLICATION_ID, runs: 1, later: 1 });
+  assert.deepEqual(peek(backup), { version: N, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 });
+  assert.deepEqual(peek(path), { version: N + 1, appId: LEDGER_APPLICATION_ID, runs: 1, later: 1 });
 });
 
 test('a failing migration rolls back to the prior schema and data', async t => {
   const dir = scratch(t);
   const path = await seeded(dir);
-  const broken = { version: 2, name: 'broken', sql: 'CREATE TABLE later_projection (id TEXT) STRICT; CREATE TABLE runs (x TEXT);' };
+  const broken = { version: N + 1, name: 'broken', sql: 'CREATE TABLE later_projection (id TEXT) STRICT; CREATE TABLE runs (x TEXT);' };
   await assert.rejects(openLedger(owner(dir), { migrations: [...LEDGER_MIGRATIONS, broken] }),
     code('sentinel.store.migrationFailed'));
-  assert.deepEqual(peek(path), { version: 1, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 });
+  assert.deepEqual(peek(path), { version: N, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 });
   // A failure after the step's SQL ran (here: before it is recorded) is rolled back too.
   await assert.rejects(openLedger(owner(dir), {
     migrations: [...LEDGER_MIGRATIONS, V2],
     failpoint: p => { if (p === 'migrate:after-sql') throw new Error('injected'); },
   }), code('sentinel.store.migrationFailed'));
-  assert.deepEqual(peek(path), { version: 1, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 });
+  assert.deepEqual(peek(path), { version: N, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 });
   const fixed = await openLedger(owner(dir), { migrations: [...LEDGER_MIGRATIONS, V2] });
-  assert.equal(fixed.migration.to, 2);
+  assert.equal(fixed.migration.to, N + 1);
   fixed.close();
 });
 
@@ -97,7 +99,7 @@ test('a failed backup refuses the upgrade and leaves no partial copy', async t =
       migrations: [...LEDGER_MIGRATIONS, V2],
       failpoint: p => { if (p === point) throw new Error('injected disk failure'); },
     }), code('sentinel.store.backupFailed'));
-    assert.deepEqual(peek(path), { version: 1, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 }, point);
+    assert.deepEqual(peek(path), { version: N, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 }, point);
     const backups = join(dir, 'backups');
     assert.deepEqual(existsSync(backups) ? readdirSync(backups) : [], [], point);
   }
@@ -108,13 +110,13 @@ test('a newer schema is refused without touching the file', async t => {
   const path = await seeded(dir);
   (await openLedger(owner(dir), { migrations: [...LEDGER_MIGRATIONS, V2] })).close();
   await assert.rejects(openLedger(owner(dir)), code('sentinel.store.newerSchema'));
-  assert.equal(peek(path).version, 2);
+  assert.equal(peek(path).version, N + 1);
 });
 
 test('a changed migration, a foreign database and an unsafe path are refused', async t => {
   const dir = scratch(t);
   await seeded(dir);
-  const edited = [{ ...LEDGER_MIGRATIONS[0]!, sql: `${LEDGER_MIGRATIONS[0]!.sql}\n-- edited` }];
+  const edited = [{ ...LEDGER_MIGRATIONS[0]!, sql: `${LEDGER_MIGRATIONS[0]!.sql}\n-- edited` }, ...LEDGER_MIGRATIONS.slice(1)];
   await assert.rejects(openLedger(owner(dir), { migrations: edited }), code('sentinel.store.migrationMismatch'));
   await assert.rejects(openLedger(owner(dir), { migrations: [V2] }), code('sentinel.store.migrationMismatch'));
 
@@ -165,9 +167,9 @@ test('losing the owner during an upgrade commits nothing, and a successor can st
       migrations: [...LEDGER_MIGRATIONS, V2],
       failpoint: p => { if (p === point) lost.release(); },
     }), code('sentinel.store.ownerNotHeld'), point);
-    assert.deepEqual(peek(path), { version: 1, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 }, point);
+    assert.deepEqual(peek(path), { version: N, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 }, point);
     const successor = await openLedger(owner(dir), { migrations: [...LEDGER_MIGRATIONS, V2] });
-    assert.equal(successor.migration.to, 2, point);
+    assert.equal(successor.migration.to, N + 1, point);
     successor.close();
   }
   const fresh = scratch(t);

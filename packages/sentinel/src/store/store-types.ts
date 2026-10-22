@@ -136,6 +136,34 @@ export interface PublishInput {
   idempotency?: IdempotencyRef;
 }
 
+/** The most artifacts one snapshot admission accepts across its stages. */
+export const MAX_SNAPSHOT_ARTIFACTS = 262_144;
+
+/**
+ * A captured snapshot, admitted without a run. Its stages were registered without an attempt before any byte was
+ * written; the receipts name every artifact they hold (content, manifest, materialization), each verified again.
+ */
+export interface AdmitSnapshotInput {
+  snapshotId: Id;
+  stageIds: StageId[];
+  /** The `sentinel-snapshot/draft-1` envelope's artifact. */
+  manifest: ArtifactId;
+  /** The capture's materialization sidecar. */
+  materialization: ArtifactId;
+  inventoryDigest: Digest;
+  receipts: ObjectReceipt[];
+  idempotency?: IdempotencyRef;
+}
+
+export interface SnapshotRecord {
+  snapshotId: Id;
+  manifest: ArtifactId;
+  materialization: ArtifactId;
+  inventoryDigest: Digest;
+  sequence: Count;
+  admittedAt: Timestamp;
+}
+
 export interface PublicationReceipt {
   work: WorkRef;
   attemptId: Id;
@@ -162,7 +190,7 @@ export interface EndAttemptInput {
 
 export const LEDGER_EVENT_KINDS = [
   'epoch-opened', 'run-created', 'run-state', 'work-created', 'attempt-started', 'attempt-ended',
-  'work-published', 'staging-registered', 'staging-aborted', 'report-pinned',
+  'work-published', 'staging-registered', 'staging-aborted', 'report-pinned', 'snapshot-admitted',
 ] as const;
 export type LedgerEventKind = (typeof LEDGER_EVENT_KINDS)[number];
 
@@ -196,7 +224,7 @@ export interface GcSnapshot {
   complete: true;
   /** The last event sequence; every change to a root appends an event, so an unchanged sequence means unchanged roots. */
   sequence: Count;
-  /** Artifacts with an accepted reference (publication outputs and their links' owners). */
+  /** Artifacts with an accepted reference: publication outputs and their links' owners, and admitted snapshots' roots. */
   referenced: ArtifactId[];
   /** Artifacts pinned by an open staging registration, accepted or not. */
   staged: ArtifactId[];
@@ -236,7 +264,8 @@ export interface OpenLedgerOptions {
 }
 
 export type LedgerFailpoint =
-  | 'backup:before' | 'backup:after-copy' | 'migrate:after-sql' | 'publish:before-commit' | 'staging:before-commit';
+  | 'backup:before' | 'backup:after-copy' | 'migrate:after-sql' | 'publish:before-commit' | 'staging:before-commit'
+  | 'snapshot:before-commit';
 
 export interface MigrationReport {
   from: Count;

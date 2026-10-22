@@ -267,9 +267,52 @@ CREATE TRIGGER staging_identity BEFORE UPDATE ON staging
   BEGIN SELECT RAISE(ABORT, 'sentinel.store.appendOnly: staging'); END;
 `;
 
+// Snapshot admission (PR 04). SQLite cannot change a CHECK in place, so the event log is rebuilt with the
+// documented procedure (new table, copy every row with its sequence, drop, rename, recreate its index and
+// triggers); the runner applies every step with foreign keys switched off and checks them before commit.
+const EVENT_KINDS_V2 = `'epoch-opened','run-created','run-state','work-created','attempt-started',
+    'attempt-ended','work-published','staging-registered','staging-aborted','report-pinned','snapshot-admitted'`;
+const V2 = `
+CREATE TABLE events_next (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL CHECK (kind IN (${EVENT_KINDS_V2})),
+  run_id TEXT REFERENCES runs(id),
+  work_id TEXT,
+  work_revision INTEGER,
+  coordinator_epoch TEXT NOT NULL REFERENCES epochs(epoch),
+  at TEXT NOT NULL,
+  payload TEXT NOT NULL CHECK (json_valid(payload) AND length(CAST(payload AS BLOB)) <= 16384),
+  FOREIGN KEY (work_id, work_revision) REFERENCES work_units(id, revision),
+  CHECK ((work_id IS NULL) = (work_revision IS NULL))
+) STRICT;
+INSERT INTO events_next (sequence, kind, run_id, work_id, work_revision, coordinator_epoch, at, payload)
+  SELECT sequence, kind, run_id, work_id, work_revision, coordinator_epoch, at, payload FROM events ORDER BY sequence;
+DROP TABLE events;
+ALTER TABLE events_next RENAME TO events;
+CREATE INDEX events_by_run ON events(run_id, sequence);
+${APPEND_ONLY('events', 'DELETE')}
+${APPEND_ONLY('events', 'UPDATE')}
+
+-- A captured snapshot, admitted without a run: its manifest and materialization are roots, its content is
+-- reachable through their links. Rows are immutable.
+CREATE TABLE snapshots (
+  id TEXT PRIMARY KEY,
+  manifest_id TEXT NOT NULL REFERENCES artifacts(id),
+  materialization_id TEXT NOT NULL REFERENCES artifacts(id),
+  inventory_digest TEXT NOT NULL CHECK (${DIGEST('inventory_digest')}),
+  coordinator_epoch TEXT NOT NULL REFERENCES epochs(epoch),
+  sequence INTEGER NOT NULL UNIQUE REFERENCES events(sequence),
+  admitted_at TEXT NOT NULL,
+  CHECK (manifest_id <> materialization_id)
+) STRICT;
+${APPEND_ONLY('snapshots', 'DELETE')}
+${APPEND_ONLY('snapshots', 'UPDATE')}
+`;
+
 /** The shipped migrations, in order. Never edit a released step: add the next number. */
 export const LEDGER_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: 'foundation', sql: V1 },
+  { version: 2, name: 'snapshot-admission', sql: V2 },
 ]);
 
 export const migrationChecksum = (m: Migration): string =>
@@ -413,27 +456,37 @@ export async function migrateLedger(db: DatabaseSync, path: string, options: {
   const backupPath = state.version > 0 ? await takeBackup(options.sqlite, db, path, state.version, options.backupTag, failpoint, guard) : null;
   guard.assertHeld();
   checkLedgerFile(db, migrations);
-  db.exec('BEGIN IMMEDIATE');
+  // Foreign keys are switched off for the upgrade, as SQLite's table-rebuild procedure requires (the pragma is a
+  // no-op inside a transaction), checked in full before commit, and switched back on whatever happens.
+  db.exec('PRAGMA foreign_keys = OFF');
   try {
-    guard.assertHeld();
-    if (state.version === 0) db.exec(`PRAGMA application_id = ${LEDGER_APPLICATION_ID}`);
-    const record = () => db.prepare(
-      'INSERT INTO schema_migrations (version, name, checksum, build, applied_at) VALUES (?, ?, ?, ?, ?)');
-    for (const m of migrations.slice(state.version)) {
-      db.exec(m.sql);
-      failpoint('migrate:after-sql');
-      record().run(m.version, m.name, migrationChecksum(m), build, now());
-      db.exec(`PRAGMA user_version = ${m.version}`);
+    db.exec('BEGIN IMMEDIATE');
+    try {
       guard.assertHeld();
+      if (state.version === 0) db.exec(`PRAGMA application_id = ${LEDGER_APPLICATION_ID}`);
+      const record = () => db.prepare(
+        'INSERT INTO schema_migrations (version, name, checksum, build, applied_at) VALUES (?, ?, ?, ?, ?)');
+      for (const m of migrations.slice(state.version)) {
+        db.exec(m.sql);
+        failpoint('migrate:after-sql');
+        record().run(m.version, m.name, migrationChecksum(m), build, now());
+        db.exec(`PRAGMA user_version = ${m.version}`);
+        guard.assertHeld();
+      }
+      if (db.prepare('PRAGMA foreign_key_check').all().length > 0) throw new Error('foreign key check failed');
+      guard.assertHeld();
+      db.exec('COMMIT');
+    } catch (error) {
+      if (db.isTransaction) db.exec('ROLLBACK');
+      if (error instanceof LedgerError && error.code === 'sentinel.store.ownerNotHeld') throw error;
+      throw new LedgerError('sentinel.store.migrationFailed',
+        `upgrade from schema ${state.version} to ${to} was rolled back`, { cause: error });
     }
-    if (db.prepare('PRAGMA foreign_key_check').all().length > 0) throw new Error('foreign key check failed');
-    guard.assertHeld();
-    db.exec('COMMIT');
-  } catch (error) {
-    if (db.isTransaction) db.exec('ROLLBACK');
-    if (error instanceof LedgerError && error.code === 'sentinel.store.ownerNotHeld') throw error;
-    throw new LedgerError('sentinel.store.migrationFailed',
-      `upgrade from schema ${state.version} to ${to} was rolled back`, { cause: error });
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+  if (Number(Object.values(db.prepare('PRAGMA foreign_keys').get() ?? {})[0]) !== 1) {
+    throw new LedgerError('sentinel.store.migrationFailed', 'foreign key enforcement did not come back on after the upgrade');
   }
   return { from: state.version, to, backupPath };
 }
