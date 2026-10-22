@@ -403,18 +403,24 @@ publication fails, the call aborts its own stage while the store is still held, 
 and reports the original error. Without the owner, the stage stays pinned for recovery. Parser words are
 catalog keys (`strings-sentinel-parser.ts`).
 
-21. **Sentinel's rule packs, rule lock and trusted policy are data and decisions, never pack code (2026-10-22).**
+23. **Sentinel's rule packs, rule lock and trusted policy are data and decisions, never pack code (2026-10-22).**
 
 `@farsight/sentinel` gains `./rules` and `./policy` exports (also re-exported from the root) and nine draft envelopes
 generated like the others: `sentinel-rulepack`, `sentinel-rulelock`, `sentinel-settings`, `sentinel-repoconfig`,
 `sentinel-policy`, `sentinel-adoption`, `sentinel-receipt`, `sentinel-admission` and `sentinel-controls`, all
-`draft-1`. **Rule packs** are read as plain files under one canonical folder (no link, device or escaping name;
-bounded file count and size), validated against their manifest, and digested: the pack digest covers the sorted
+`draft-1`. (Numbered 23 to leave 21 and 22 to the capture and parser decisions landing beside it.) **Rule packs** are
+read as plain files under one canonical folder (no link, device, FIFO or escaping name), within budgets on entries,
+files, depth, path length, file size and total size; listing is one entry at a time, and every folder's identity from
+the root down is checked before and after each listing and file read, so a swapped folder refuses the pack instead of
+being followed. `validatePack` enforces the same budgets on a map handed to it directly. Packs are validated against
+their manifest and digested: the pack digest covers the sorted
 inventory of every file, and each rule's definition digest covers its definition, rule file and fixtures. A rule
 implementation is declarative data for a registered adapter; one shaped like a script is refused, and nothing in a
-pack is imported, evaluated or spawned. **The lock** is immutable and content-addressed. Promoting a pack (`rule.promote`)
-or recording a tool or database digest (`tool.acquire`) needs the owner's spent receipt for exactly that candidate
-against exactly that lock revision, and returns a new revision naming its predecessor's digest; a plan pins a lock
+pack is imported, evaluated or spawned. **The lock** is immutable and content-addressed. A validated pack is deep-frozen and
+recognised only when `validatePack` produced it; a structural copy is refused. Promoting a pack (`rule.promote`) or
+recording a tool or database digest (`tool.acquire`) needs the owner's spent receipt for exactly the complete entry
+promotion writes (inventory, rights, rules and their digests, or the tool/database entry) against exactly that lock
+revision; promotion digests and writes its own private copy, and returns a new revision naming its predecessor's digest; a plan pins a lock
 digest, so a pack update never changes an existing plan. A rule family is locked by one pack. Rights (SPDX
 expression, origin, upstream for third-party content) travel with every pack, tool and database. Recording a tool
 digest authorizes no download and no execution. **Policy:** `.farsight/sentinel/settings.json` is the owner's file

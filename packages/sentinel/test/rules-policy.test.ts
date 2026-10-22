@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   validateEnvelope, schemaOf, readPackDirectory, validatePack, emptyLock, lockDigest, promote, promotionIntent,
-  verifyPinnedLock, candidateDigest, parseSettings, parseRepoConfig, effectivePolicy, DEFAULT_SETTINGS, ReceiptBook,
+  verifyPinnedLock, candidateDigest, isValidatedPack, parseSettings, parseRepoConfig, effectivePolicy, DEFAULT_SETTINGS, ReceiptBook,
   intentDigest, isConsumedReceipt, adoptSettings, adoptionIntent, loadPolicyInputs, trustDirectory, workspaceIdentity,
   admit, compareDecimal, PolicyError, SETTINGS_PATH, REPO_CONFIG_PATH, MAX_RECEIPT_TTL_MS,
   RULE_LANGUAGES, RULE_SCOPE_KINDS, RULE_CAPABILITIES, RULE_MEANINGS, SEVERITIES, RULE_EVIDENCE, FRAMEWORK_IDS, RULE_ORIGINS,
@@ -18,6 +18,8 @@ import {
 import type { ActionIntent, EffectivePolicy, PolicyInputs, RuleLockEnvelope, SettingsEnvelope } from '../dist/index.js';
 // The owner CLI's issuing module: reachable from this package's own tests, not through its exports.
 import { issueReceipt } from '../dist/policy/owner-receipts.js';
+import { readPackDirectoryWith } from '../dist/rules/pack.js';
+import { execFileSync } from 'node:child_process';
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const VALID = here('./contracts/valid/');
@@ -178,6 +180,102 @@ test('a pack cannot supply a script, a link or a path outside itself', t => {
   assert.equal(code(() => validatePack(new Map([['sentinel-pack.json', Buffer.from(JSON.stringify(escaping))]]))), 'sentinel.rules.manifestInvalid');
 });
 
+test('pack reading is bounded in entries, depth, path length, files and bytes, empty folders included', t => {
+  const dir = scratch(t);
+  writePack(dir);
+  for (let i = 0; i < 6; i++) mkdirSync(join(dir, `empty-${i}`));
+  assert.equal(code(() => readPackDirectory(dir, { entries: 8 })), 'sentinel.rules.packTooLarge', 'empty folders count');
+  assert.equal(readPackDirectory(dir).size, 4);
+  mkdirSync(join(dir, 'a/b/c'), { recursive: true });
+  assert.equal(code(() => readPackDirectory(dir, { depth: 2 })), 'sentinel.rules.packTooLarge');
+  assert.equal(code(() => readPackDirectory(dir, { pathBytes: 20 })), 'sentinel.rules.packTooLarge');
+  assert.equal(code(() => readPackDirectory(dir, { files: 3 })), 'sentinel.rules.packTooLarge');
+  assert.equal(code(() => readPackDirectory(dir, { fileBytes: 40 })), 'sentinel.rules.packTooLarge');
+  assert.equal(code(() => readPackDirectory(dir, { totalBytes: 100, fileBytes: 1_000_000 })), 'sentinel.rules.packTooLarge');
+  assert.equal(readPackDirectory(dir, { entries: 1_000_000 }).size, 4, 'a caller can lower a limit, never raise one');
+});
+
+test('validatePack applies the same bounds to a map it is handed, before decoding or hashing', () => {
+  const junk = Buffer.from('not json');
+  const many = new Map(Array.from({ length: 5 }, (_, i) => [`f${i}`, junk] as [string, Buffer]));
+  many.set('sentinel-pack.json', junk);
+  assert.equal(code(() => validatePack(many, { files: 5 })), 'sentinel.rules.packTooLarge', 'counted before the manifest is read');
+  assert.equal(code(() => validatePack(new Map([['sentinel-pack.json', Buffer.alloc(41)]]), { fileBytes: 40 })), 'sentinel.rules.packTooLarge');
+  assert.equal(code(() => validatePack(new Map([['a', Buffer.alloc(30)], ['b', Buffer.alloc(30)]]), { totalBytes: 50 })), 'sentinel.rules.packTooLarge');
+  assert.equal(code(() => validatePack(new Map([['x'.repeat(30), junk]]), { pathBytes: 20 })), 'sentinel.rules.packTooLarge');
+  assert.equal(code(() => validatePack(new Map([['a/b/c/d', junk]]), { depth: 2 })), 'sentinel.rules.packTooLarge');
+  assert.equal(code(() => validatePack(new Map([['../x', junk]]))), 'sentinel.rules.packUnsafe');
+});
+
+test('a folder swapped for a link, or a file swapped for a FIFO, mid-read refuses the pack', t => {
+  const outside = scratch(t);
+  mkdirSync(join(outside, 'detectors'));
+  writeFileSync(join(outside, 'detectors/dynamic-query.yml'), 'outside bytes\n');
+  const dir = scratch(t);
+  writePack(dir);
+  const swapFolder = (rel: string) => {
+    if (rel !== 'detectors/dynamic-query.yml') return;
+    renameSync(join(dir, 'detectors'), join(dir, 'moved'));
+    symlinkSync(join(outside, 'detectors'), join(dir, 'detectors'));
+  };
+  assert.equal(code(() => readPackDirectoryWith(dir, {}, { beforeRead: swapFolder })), 'sentinel.rules.packChanged');
+
+  const fifo = scratch(t);
+  writePack(fifo);
+  const swapFile = (rel: string) => {
+    if (rel !== 'fixtures/sql/parameterized.ts') return;
+    rmSync(join(fifo, rel));
+    execFileSync('mkfifo', [join(fifo, rel)]);
+  };
+  // Without O_NONBLOCK the open would wait for a writer forever; with it, the FIFO is seen and refused.
+  assert.equal(code(() => readPackDirectoryWith(fifo, {}, { beforeRead: swapFile })), 'sentinel.rules.packChanged');
+  assert.equal(code(() => readPackDirectory(fifo)), 'sentinel.rules.packUnsafe', 'a FIFO already in place is not a regular file');
+});
+
+test('a validated pack is deeply immutable, and only validatePack’s own object promotes', t => {
+  const dir = scratch(t);
+  writePack(dir);
+  const pack = validatePack(readPackDirectory(dir));
+  const p = pack as any;
+  assert.throws(() => { p.manifest.rights.spdx = 'Proprietary'; }, TypeError);
+  assert.throws(() => { p.manifest.rules[0].familyId = 'sentinel.other.rule'; }, TypeError);
+  assert.throws(() => { p.manifest.rules[0].implementation.rulePath = 'detectors/other.yml'; }, TypeError);
+  assert.throws(() => { p.files[0].digest = D('0'); }, TypeError);
+  assert.throws(() => { p.entry.rules[0].definitionDigest = D('0'); }, TypeError);
+  assert.throws(() => { p.entry.rights.origin = 'third-party'; }, TypeError);
+  assert.equal(pack.manifest.rights.spdx, 'MIT');
+  assert.equal(isValidatedPack(pack), true);
+
+  const book = owner(t);
+  const lock = emptyLock(NOW);
+  const real = confirm(book, promotionIntent(lock, { kind: 'pack', pack }), lockDigest(lock), D('0'));
+  // A structural copy carrying the real digests, then one with edited metadata, under the real confirmation.
+  const copy = JSON.parse(JSON.stringify(pack));
+  assert.equal(isValidatedPack(copy), false);
+  assert.equal(code(() => promote(lock, { kind: 'pack', pack: copy }, real, NOW)), 'sentinel.rules.promotionUnauthorized');
+  const edited = JSON.parse(JSON.stringify(pack));
+  edited.entry.rights = { spdx: 'Proprietary', origin: 'sentinel-original' };
+  edited.entry.rules[0].familyId = 'sentinel.other.rule';
+  assert.equal(code(() => promote(lock, { kind: 'pack', pack: edited }, real, NOW)), 'sentinel.rules.promotionUnauthorized');
+  assert.equal(code(() => promotionIntent(lock, { kind: 'pack', pack: edited })), 'sentinel.rules.promotionUnauthorized');
+
+  // The real pack still promotes with its receipt, and the written entry is exactly the confirmed one.
+  const next = promote(lock, { kind: 'pack', pack }, real, NOW);
+  assert.deepEqual({ ...next.packs[0], promotion: undefined }, { ...structuredClone(pack.entry), promotion: undefined });
+  assert.throws(() => { (next.packs[0] as any).rights.spdx = 'X'; }, TypeError, 'the new lock is deeply frozen');
+  assert.throws(() => { (lock as any).packs.push({}); }, TypeError, 'the old lock is deeply frozen');
+  assert.equal(lock.packs.length, 0);
+});
+
+test('a tool entry changed after the owner confirmed it is refused', t => {
+  const book = owner(t);
+  const lock = emptyLock(NOW);
+  const tool = { adapterId: 'pattern-engine', version: '1.2.3', artifactDigest: D('7'), platform: 'linux-x64', rights: { spdx: 'MIT', origin: 'third-party' as const, upstream: { name: 'engine', revision: '1.2.3' } } };
+  const r = confirm(book, promotionIntent(lock, { kind: 'tool', tool }), lockDigest(lock), D('0'));
+  tool.artifactDigest = D('8');
+  assert.equal(code(() => promote(lock, { kind: 'tool', tool }, r, NOW)), 'sentinel.rules.promotionUnauthorized');
+});
+
 function owner(t: { after(fn: () => void): void }) {
   const dir = join(scratch(t, 'sentinel-trust-'), 'receipts');
   return new ReceiptBook(dir);
@@ -197,7 +295,7 @@ test('promotion writes a new immutable lock; a plan pinned to the old lock is un
 
   const intent = promotionIntent(first, { kind: 'pack', pack });
   assert.equal(intent.action, 'rule.promote');
-  assert.equal(intent.input, pack.packDigest);
+  assert.equal(intent.input, candidateDigest({ kind: 'pack', pack }), 'the intent covers the complete entry, not only the inventory');
   const second = promote(first, { kind: 'pack', pack }, confirm(book, intent, pin, D('0')), NOW);
   assert.equal(second.revision, 2);
   assert.equal(second.previous, pin);

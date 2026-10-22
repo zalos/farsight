@@ -2,7 +2,7 @@
 // key (core strings-sentinel-policy.ts); the message is safe context, never a settings value or a secret.
 
 export const POLICY_ERROR_CODES = [
-  'sentinel.rules.packUnreadable', 'sentinel.rules.packUnsafe', 'sentinel.rules.packTooLarge',
+  'sentinel.rules.packUnreadable', 'sentinel.rules.packUnsafe', 'sentinel.rules.packChanged', 'sentinel.rules.packTooLarge',
   'sentinel.rules.manifestInvalid', 'sentinel.rules.fileMissing', 'sentinel.rules.executableRule',
   'sentinel.rules.promotionUnauthorized', 'sentinel.rules.lockInvalid', 'sentinel.rules.familyConflict',
   'sentinel.rules.candidateInvalid',

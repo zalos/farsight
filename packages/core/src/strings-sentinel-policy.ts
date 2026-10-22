@@ -1,6 +1,6 @@
 import type { StringEntry } from './strings.js';
 
-// Sentinel rule packs, the rule lock, trusted policy, adoption, receipts and admission (PR 06, ADR 21). Each key is
+// Sentinel rule packs, the rule lock, trusted policy, adoption, receipts and admission (PR 06, ADR 23). Each key is
 // a stable reason code; the professional text is its message. Both registers carry the same words until the PR 09
 // vocabulary freeze, as in strings-sentinel-cli.ts. No text here echoes a settings value or a secret.
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
@@ -8,7 +8,8 @@ const same = (text: string, define: string): StringEntry => ({ hud: text, profes
 export const SENTINEL_POLICY_STRINGS: Record<string, StringEntry> = {
   'sentinel.rules.packUnreadable': same('the rule pack could not be read', 'A file or folder of the candidate pack could not be listed or opened, so the pack was not staged.'),
   'sentinel.rules.packUnsafe': same('the rule pack contains a link, an unsafe name or a file that is not regular', 'A pack is read as plain files under one canonical folder. Links, devices and names that could escape the folder are refused rather than followed.'),
-  'sentinel.rules.packTooLarge': same('the rule pack is larger than the staging limit', 'Packs are bounded in file count, file size and total size, so staging a pack cannot exhaust memory.'),
+  'sentinel.rules.packChanged': same('the rule pack changed while it was read; stage it again', 'Every folder of the pack is checked before and after it is listed and around every file read. A folder or file replaced during the read refuses the pack instead of reading something outside it.'),
+  'sentinel.rules.packTooLarge': same('the rule pack is larger than the staging limit', 'Packs are bounded in entries, files, folder depth, path length, file size and total size, so staging a pack cannot exhaust memory or time.'),
   'sentinel.rules.manifestInvalid': same('the rule pack manifest is missing or invalid', 'Every pack carries a manifest file at its root, and it must validate as the draft rule-pack format before anything else is checked.'),
   'sentinel.rules.fileMissing': same('a file the rule pack names is not in the pack', 'Every rule file, fixture and license file a pack names must be inside that pack, so the digest covers everything the rule depends on.'),
   'sentinel.rules.executableRule': same('a rule implementation is a script', 'Rule implementations are declarative data that a registered adapter reads. A pack cannot supply code for Sentinel to run.'),

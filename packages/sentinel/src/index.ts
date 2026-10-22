@@ -28,7 +28,7 @@ export type {
   RestoreOptions, RestoredSnapshot, RestoredSource, RestoreStore, Materialization, MaterializedSource, MaterializedFile,
   Reconciliation, CapturePolicy, SnapshotErrorCode, CaptureReasonCode,
 } from './snapshot/index.js';
-// Rule packs, the rule lock and trusted policy (ADR 21). Pure or explicit-path calls; nothing runs at import.
+// Rule packs, the rule lock and trusted policy (ADR 23). Pure or explicit-path calls; nothing runs at import.
 export * from './rules/index.js';
 export * from './policy/index.js';
 export { MAX_RECEIPT_TTL_MS } from './validate.js';

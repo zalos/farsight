@@ -35,7 +35,7 @@ the ledger keeps schema, privacy class and links per reference, so shared bytes 
 Nothing is deleted automatically; the prune plan is a dry run, and never lists the provenance (manifest, invocation, outputs, diagnostics) of a retained work or attempt record. The store holds no credential and no settings, and
 durability is claimed against process death, not power loss (ADR 19).
 
-Trusted policy (ADR 21) reads `.farsight/sentinel/settings.json` and the repository's `sentinel.config.json` as data,
+Trusted policy (ADR 23) reads `.farsight/sentinel/settings.json` and the repository's `sentinel.config.json` as data,
 never following a link. The settings hold keychain references only (`keychain:farsight/<name>`); a value shaped like a
 credential anywhere else is refused and not repeated in the error. The file grants nothing until the owner adopts its
 exact bytes for the canonical workspace; the adoption record and every receipt are owner-only files in user state

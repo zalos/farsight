@@ -72,7 +72,7 @@ and `verifyPinnedLock` refuses any other revision. `./policy` parses settings an
 repository can only tighten (`effectivePolicy`, whose `view` is the only policy to serve), binds settings to a workspace
 through owner adoption in user state (`adoptionIntent`, `adoptSettings`, `loadPolicyInputs`), spends receipts once
 (`ReceiptBook.consume`) and records three-verdict admission (`admit`). Receipt issuing is internal to the owner CLI
-flow and is not exported. There is no planner yet (ADR 21).
+flow and is not exported. There is no planner yet (ADR 23).
 
 ## The local store (draft)
 

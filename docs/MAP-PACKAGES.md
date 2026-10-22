@@ -74,7 +74,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   without a run. `test/snapshot-*.test.ts` builds real Git
   fixtures with the git CLI; capture itself never runs it.
   Rule packs, the rule lock and
-  trusted policy (ADR 21): `src/rules/pack.ts` (read a candidate pack as data, validate it, digest every file it names),
+  trusted policy (ADR 23): `src/rules/pack.ts` (read a candidate pack as data, validate it, digest every file it names),
   `src/rules/lock.ts` (immutable lock revisions, receipt-confirmed promotion, `verifyPinnedLock`), `src/policy/settings.ts`
   (settings and repository intent, the stricter-wins merge and the redacted effective policy), `adoption.ts` (owner
   adoption bound to workspace identity and settings digest in user state), `receipts.ts` (spend a receipt once) beside
