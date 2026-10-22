@@ -79,7 +79,7 @@ try {
     const r = await runOsvAttempt(service, { attemptId: `att-qualify-${label}`, work: { id: 'work-qualify', revision: 1 }, targets, snapshots: loaded, scratch: work, policy: { now: new Date(), maxDatabaseAgeMs: 7 * 86_400_000 } });
     out.scans.push({
       label, ms: Date.now() - t1, attempt: r.attempt, platform: r.platform, engineExit: r.engineExit, engineFailure: r.engineFailure,
-      databases: r.databases.map((d) => ({ ecosystem: d.ecosystem, freshness: d.freshness, ageHours: Math.round(d.ageMs / 3_600_000) })),
+      databases: r.databases.map((d) => ({ ecosystem: d.ecosystem, freshness: d.freshness, ageHours: d.ageMs === null ? null : Math.round(d.ageMs / 3_600_000) })),
       coverage: r.coverage.map((c) => `${c.relativePath} ${c.status} ${c.limitations.map((l) => l.split('.').pop()).join(',')}`),
       components: r.components.length,
       findings: Object.entries(r.findings.reduce((m, f) => { const k = `${f.ecosystem}:${f.name}@${f.version} (${f.certainty})`; m[k] = (m[k] ?? 0) + 1; return m; }, {})).map(([k, v]) => `${k}: ${v} advisory groups`),

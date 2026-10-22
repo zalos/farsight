@@ -10,6 +10,7 @@ import type { ActionIntent } from '../../contracts/policy.js';
 import { canonicalDigest } from '../../policy/digest.js';
 import { intentDigest, receiptAuthority, stamp } from '../../policy/receipts.js';
 import { ensurePrivateDir, readPrivateFile, writePrivateFileAtomic } from '../../policy/user-state.js';
+import { snapshot } from '../../policy/immutable.js';
 import { osvFail } from './errors.js';
 import type { Ecosystem } from './job.js';
 
@@ -29,8 +30,11 @@ export interface AdvisorySnapshot {
   /** The origin's MD5 (base64), which the bytes were checked against. */
   readonly md5: string;
   readonly size: number;
-  /** When the origin last changed the archive: the age of the advisory data. */
-  readonly sourceLastModified: string;
+  /**
+   * When the origin last changed the archive (its strict HTTP Last-Modified date): the age of the advisory data.
+   * Null when the origin did not state one in that form; the age is then unknown, never assumed.
+   */
+  readonly sourceLastModified: string | null;
   readonly etag: string | null;
   readonly acquiredAt: string;
 }
@@ -60,6 +64,21 @@ function md5Of(header: string | null): string | null {
   return null;
 }
 
+/** An IMF-fixdate (RFC 9110), the only Last-Modified form accepted; anything else leaves the age unknown. */
+const IMF_FIXDATE = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), (\d{2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$/;
+export function strictHttpDate(header: string | null): Date | null {
+  const m = header ? IMF_FIXDATE.exec(header) : null;
+  if (!m) return null;
+  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(m[3]!);
+  const d = new Date(Date.UTC(Number(m[4]), month, Number(m[2]), Number(m[5]), Number(m[6]), Number(m[7])));
+  // Refuse a date the calendar does not have (Date.UTC would roll 31 Feb over into March).
+  return d.getUTCDate() === Number(m[2]) && d.getUTCMonth() === month && d.getUTCHours() === Number(m[5]) ? d : null;
+}
+
+/** Spent authorities already used for an acquisition: one owner confirmation admits one acquisition, once. */
+const used = new WeakSet<object>();
+const STAMP = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$/;
+
 function checkRequest(request: AcquisitionRequest): void {
   if (!request.ecosystems.length || new Set(request.ecosystems).size !== request.ecosystems.length) osvFail('sentinel.osv.acquisitionRefused', 'name each ecosystem once');
   for (const e of request.ecosystems) if (!ADVISORY_ECOSYSTEMS.includes(e)) osvFail('sentinel.osv.acquisitionRefused', `no allowlisted source for ${String(e)}`);
@@ -72,12 +91,22 @@ function checkRequest(request: AcquisitionRequest): void {
  * Fetches the requested archives. `receipt` must be the owner's spent receipt for `acquisitionIntent(request)`.
  * `transport` is the network seam (the platform fetch by default); it is called only with allowlisted URLs.
  */
-export async function acquireAdvisorySnapshots(request: AcquisitionRequest, options: { dir: string; receipt: unknown; transport?: Transport; now?: () => Date; signal?: AbortSignal }): Promise<readonly AdvisorySnapshot[]> {
+export async function acquireAdvisorySnapshots(given: AcquisitionRequest, options: { dir: string; receipt: unknown; transport?: Transport; now?: () => Date; signal?: AbortSignal }): Promise<readonly AdvisorySnapshot[]> {
+  // The exact request decided on: a private frozen copy, so nothing the caller changes afterwards (across the awaits
+  // below) widens what the owner confirmed.
+  let request: AcquisitionRequest;
+  try { request = snapshot({ ecosystems: [...given.ecosystems], maxBytesPerEcosystem: given.maxBytesPerEcosystem }); } catch {
+    return osvFail('sentinel.osv.acquisitionRefused', 'not an acquisition request');
+  }
   checkRequest(request);
   const authority = receiptAuthority(options.receipt);
   if (!authority || authority.action !== 'tool.acquire' || authority.intentDigest !== intentDigest(acquisitionIntent(request))) {
     osvFail('sentinel.osv.acquisitionUnauthorized', 'acquisition needs the owner’s spent receipt for exactly this request');
   }
+  // One confirmation, one acquisition: marked used before anything is fetched, so a second call (concurrent or a
+  // retry) is refused and needs a new confirmation. A failed acquisition stores nothing, so a retry duplicates nothing.
+  if (used.has(options.receipt as object)) osvFail('sentinel.osv.acquisitionUnauthorized', 'this confirmation was already used for an acquisition');
+  used.add(options.receipt as object);
   ensurePrivateDir(options.dir, 'sentinel.policy.trustDirUnsafe');
   const transport: Transport = options.transport ?? ((url, init) => fetch(url, init));
   const now = options.now ?? (() => new Date());
@@ -119,10 +148,10 @@ export async function acquireAdvisorySnapshots(request: AcquisitionRequest, opti
     if (m5.digest('base64') !== md5) { unlinkSync(tmp); osvFail('sentinel.osv.acquisitionFailed', `${ecosystem}: the bytes do not match the origin’s MD5`); }
     const hex = sha.digest('hex');
     renameSync(tmp, join(options.dir, `${hex}.zip`));
-    const lastModified = new Date(res.headers.get('last-modified') ?? '');
+    const lastModified = strictHttpDate(res.headers.get('last-modified'));
     const snapshot: AdvisorySnapshot = Object.freeze({
       schema: 'sentinel-advisory-snapshot/draft-1', ecosystem, source: url, sha256: `sha256:${hex}`, md5: md5!, size,
-      sourceLastModified: Number.isNaN(lastModified.getTime()) ? stamp(now()) : stamp(lastModified),
+      sourceLastModified: lastModified ? stamp(lastModified) : null,
       etag: res.headers.get('etag'), acquiredAt: stamp(now()),
     });
     writePrivateFileAtomic(options.dir, `${hex}.json`, Buffer.from(JSON.stringify(snapshot)), 'sentinel.policy.trustDirUnsafe');
@@ -139,7 +168,10 @@ export function loadAdvisorySnapshot(dir: string, sha256: string): { snapshot: A
   if (!bytes) return osvFail('sentinel.osv.snapshotInvalid', 'no such snapshot');
   let s: AdvisorySnapshot;
   try { s = JSON.parse(bytes.toString('utf8')); } catch { return osvFail('sentinel.osv.snapshotInvalid', 'the snapshot manifest is not JSON'); }
-  if (s?.schema !== 'sentinel-advisory-snapshot/draft-1' || s.sha256 !== sha256 || !ADVISORY_ECOSYSTEMS.includes(s.ecosystem)) osvFail('sentinel.osv.snapshotInvalid', 'the snapshot manifest does not describe this archive');
+  if (s?.schema !== 'sentinel-advisory-snapshot/draft-1' || s.sha256 !== sha256 || !ADVISORY_ECOSYSTEMS.includes(s.ecosystem)
+    || !(s.sourceLastModified === null || (typeof s.sourceLastModified === 'string' && STAMP.test(s.sourceLastModified)))) {
+    osvFail('sentinel.osv.snapshotInvalid', 'the snapshot manifest does not describe this archive');
+  }
   const path = join(dir, `${m[1]}.zip`);
   const fd = openSync(path, FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0));
   try {
