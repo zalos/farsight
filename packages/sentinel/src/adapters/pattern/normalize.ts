@@ -25,13 +25,14 @@ export const PATTERN_COVERAGE_REASONS = [
   'sentinel.pattern.coverage.noRuleLanguage', 'sentinel.pattern.coverage.ignoreFileExcluded',
   'sentinel.pattern.coverage.attemptFailed', 'sentinel.pattern.coverage.attemptTimedOut', 'sentinel.pattern.coverage.attemptCanceled',
   'sentinel.pattern.coverage.engineTimedOut', 'sentinel.pattern.coverage.outputTruncated', 'sentinel.pattern.coverage.engineFailed',
-  'sentinel.pattern.coverage.ruleNotRun', 'sentinel.pattern.coverage.ruleRunUnreported', 'sentinel.pattern.coverage.platformUnmeasured',
+  'sentinel.pattern.coverage.ruleNotRun', 'sentinel.pattern.coverage.ruleRunUnreported', 'sentinel.pattern.coverage.platformUnmeasured', 'sentinel.pattern.coverage.inputMismatch',
 ] as const;
 export type PatternCoverageReason = typeof PATTERN_COVERAGE_REASONS[number];
 
 export const PATTERN_REFUSAL_REASONS = [
   'sentinel.pattern.refused.unknownRule', 'sentinel.pattern.refused.unknownTarget', 'sentinel.pattern.refused.ruleLanguage',
   'sentinel.pattern.refused.spanInvalid', 'sentinel.pattern.refused.crossFile', 'sentinel.pattern.refused.malformed',
+  'sentinel.pattern.refused.inputMismatch',
 ] as const;
 export type PatternRefusalReason = typeof PATTERN_REFUSAL_REASONS[number];
 
@@ -84,8 +85,11 @@ export interface NormalizeInput {
   outcome: WorkerOutcome;
   /** The verified outputs' bytes by artifact id (the supervisor re-hashed them). */
   outputBytes: (id: ArtifactId) => Uint8Array;
-  /** The captured bytes of a job target. */
-  targetBytes: (relativePath: string) => Uint8Array;
+  /**
+   * The captured bytes of a job target, by its artifact id: the attempt's sealed input copy, never a live path.
+   * Each is re-hashed here against the job; a missing or different file earns no coverage and keeps no result.
+   */
+  targetBytes: (artifact: ArtifactId) => Uint8Array | undefined;
 }
 
 const TREE = '/tmp/sentinel-pattern/tree/';
@@ -175,6 +179,13 @@ export function normalizePatternRun(input: NormalizeInput): PatternRunResult {
   }
   const rel = (p: unknown): string | null => (typeof p === 'string' && p.startsWith(TREE) && targets.has(p.slice(TREE.length)) ? p.slice(TREE.length) : null);
 
+  // Every target's bytes, re-hashed against the job: what the engine scanned must be exactly what the job pinned.
+  const verified = new Map<string, Uint8Array>();
+  for (const t of job.targets) {
+    const bytes = input.targetBytes(t.artifact);
+    if (bytes && sha256(bytes) === t.artifact) verified.set(t.path, bytes);
+  }
+
   // Coverage, per file per rule.
   const scanned = new Set<string>(engine.paths.scanned.map(rel).filter(Boolean));
   const skipped = new Map<string, string>();
@@ -211,6 +222,7 @@ export function normalizePatternRun(input: NormalizeInput): PatternRunResult {
       return [{ relativePath: t.path, artifact: t.artifact, language: applicable(t.path).language, familyId: null, status: 'excluded' as const, reasonCode: 'sentinel.pattern.coverage.ignoreFileExcluded' as const }];
     }
     return rowsFor(t, familyId => {
+      if (!verified.has(t.path)) return ['error', 'sentinel.pattern.coverage.inputMismatch'];
       if (failed) return ['error', 'sentinel.pattern.coverage.engineFailed'];
       const skip = skipped.get(t.path);
       if (skip === 'exceeded_size_limit') return ['skipped', 'sentinel.pattern.coverage.tooLarge'];
@@ -234,7 +246,8 @@ export function normalizePatternRun(input: NormalizeInput): PatternRunResult {
     if (!path) { refuse('sentinel.pattern.refused.unknownTarget', familyId, null); continue; }
     const language = languageOf(path);
     if (!language || !rule.languages.includes(language)) { refuse('sentinel.pattern.refused.ruleLanguage', familyId, path); continue; }
-    const bytes = input.targetBytes(path);
+    const bytes = verified.get(path);
+    if (!bytes) { refuse('sentinel.pattern.refused.inputMismatch', familyId, path); continue; }
     const span = spanOf(bytes, r.start, r.end);
     if (!span) { refuse('sentinel.pattern.refused.spanInvalid', familyId, path); continue; }
     let evidence: PatternEvidence;
