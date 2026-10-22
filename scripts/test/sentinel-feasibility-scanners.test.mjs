@@ -57,7 +57,9 @@ test('missing or tampered binary is refused before Docker or output creation', a
   try {
     let calls = 0;
     const runner = async () => { calls++; throw new Error('must not run'); };
-    await assert.rejects(runProbe({ binary: join(root, 'missing'), out: join(root, 'out') }, { runner }), /ENOENT/);
+    await assert.rejects(verifyBinary(join(root, 'missing')), /ENOENT/);
+    const supportedHost = ['arm64', 'aarch64'].includes(process.arch) && ['darwin', 'linux'].includes(process.platform);
+    await assert.rejects(runProbe({ binary: join(root, 'missing'), out: join(root, 'out') }, { runner }), supportedHost ? /ENOENT/ : /native arm64/);
     const bad = join(root, 'bad'); await writeFile(bad, 'synthetic-not-a-binary');
     await assert.rejects(verifyBinary(bad), /checksum/);
     const link = join(root, 'link'); await symlink(bad, link);
@@ -373,4 +375,25 @@ test('pinned spans work across declarations and reject outside or unbounded find
   }
   const overlap = structuredClone(rule); overlap.noMatches[0].startLine = 3;
   assert.throws(() => validateSpans([overlap], texts), /Overlapping/);
+});
+
+
+test('unsupported runtime refuses before binary access, external commands or output creation', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'sentinel-unsupported-host-'));
+  try {
+    // Change only the child process metadata; the production preflight remains unconditional.
+    const program = `
+      import assert from 'node:assert/strict';
+      import { stat } from 'node:fs/promises';
+      import { runProbe } from ${JSON.stringify(new URL('../sentinel-feasibility-scanners.mjs', import.meta.url).href)};
+      Object.defineProperty(process, 'arch', { value: 'x64' });
+      let calls = 0;
+      await assert.rejects(runProbe({ binary: process.argv[1] + '/missing', out: process.argv[1] + '/out' }, {
+        runner: async () => { calls++; throw new Error('must not run'); }
+      }), /native arm64/);
+      assert.equal(calls, 0);
+      await assert.rejects(stat(process.argv[1] + '/out'), /ENOENT/);
+    `;
+    execFileSync(process.execPath, ['--input-type=module', '-e', program, root], { encoding: 'utf8' });
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
