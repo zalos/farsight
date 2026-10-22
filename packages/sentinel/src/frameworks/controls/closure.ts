@@ -44,7 +44,7 @@ export type ClosureEntry = readonly [path: string, kind: 'file' | 'link' | 'abse
 
 export interface WorkerClosure {
   readonly entries: readonly ClosureEntry[];
-  /** Over the entries with paths relative to the closure's own roots, so the same bytes installed elsewhere agree. */
+  /** Relative labels still carry absolute resolution and target-path values. This digest is bound to the installation, not invariant under relocation. */
   readonly digest: string;
 }
 

@@ -223,7 +223,7 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
   const inspections = input.inspections?.length ? structuredClone([...input.inspections]) : undefined;
   const answers = inspections?.flatMap(i => i.rows) ?? [];
   if (inspections) {
-    for(const key of ['reportHeading','libraryLine','checkLine','answerLine','frontierLine','noVersion'])used.add(`sentinel.controls.${key}`);
+    for(const key of ['reportHeading','libraryLine','versionItem','checkLine','answerLine','frontierLine','noVersion'])used.add(`sentinel.controls.${key}`);
     for (const i of inspections) {
       used.add(i.limitationKey);
       for (const r of i.rows) if (r.reasonCode) used.add(r.reasonCode);

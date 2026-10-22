@@ -824,20 +824,7 @@
           "$ref": "#/definitions/Id"
         },
         "work": {
-          "type": "object",
-          "properties": {
-            "id": {
-              "$ref": "#/definitions/Id"
-            },
-            "revision": {
-              "$ref": "#/definitions/Ordinal"
-            }
-          },
-          "required": [
-            "id",
-            "revision"
-          ],
-          "additionalProperties": false
+          "$ref": "#/definitions/WorkRef"
         },
         "analysis": {
           "type": "object",
@@ -1126,6 +1113,23 @@
       ],
       "additionalProperties": false,
       "description": "Accepted framework inspection answers. Applying or not applying a control is never an issue or an assessment."
+    },
+    "WorkRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false,
+      "description": "A logical work unit at one immutable revision; every reference to work names both."
     },
     "ReportGap": {
       "type": "object",

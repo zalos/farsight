@@ -32,6 +32,7 @@ export type FrameworkName = typeof FRAMEWORKS[number];
 export const CONTROLS_REASONS = Object.freeze([
   'sentinel.controls.unclaimed', 'sentinel.controls.propertyNotModeled', 'sentinel.controls.conflict',
   'sentinel.controls.analysisUnavailable', 'sentinel.controls.libraryRefused', 'sentinel.controls.familyUnsupported',
+  'sentinel.controls.surfaceExtentUnproven', 'sentinel.controls.surfaceOutsideExtent',
 ] as const);
 export type ControlsReason = typeof CONTROLS_REASONS[number];
 
@@ -106,6 +107,12 @@ export function inspect(checks: readonly InspectionCheck[], libraries: readonly 
   }
   const refused = libraries.filter(l => l.refused);
   const extent = [...new Set(surfaces)].sort();
+  const extentIds = new Set(extent);
+  // No trusted empty-surface proof exists in this slice. A recognised framework with no indexed route/page is
+  // unanswered, not vacuously complete; a library may also name facts the index did not classify as a surface.
+  // Keep either mismatch as one bounded source-wide reason rather than inventing rows or silently dropping it.
+  const emptyExtent = extent.length === 0 && libraries.some(libraryPresent);
+  const outsideExtent = libraries.some(l => l.envelopes.some(e => e.facts.some(f => !extentIds.has(f.surfaceId))));
   const rows: InspectedRow[] = [];
   const rowsFor = new Map<InspectedProperty, InspectedRow[]>();
   const rowsOf = (property: InspectedProperty): InspectedRow[] => {
@@ -150,7 +157,7 @@ export function inspect(checks: readonly InspectionCheck[], libraries: readonly 
     const mine = rowsOf(property);
     covered.add(check.id);
     scanned.add(check.scopeId);
-    const reasons = [...mine.filter(r => r.state !== 'established').map(r => r.reasonCode!), ...refused.map(l => l.refused!), ...[...frontiers.values()].map(f => f.reasonCode)];
+    const reasons = [...(emptyExtent ? ['sentinel.controls.surfaceExtentUnproven'] : []), ...(outsideExtent ? ['sentinel.controls.surfaceOutsideExtent'] : []), ...mine.filter(r => r.state !== 'established').map(r => r.reasonCode!), ...refused.map(l => l.refused!), ...[...frontiers.values()].map(f => f.reasonCode)];
     done(reasons.length ? 'partial' : 'complete', reasons);
   }
   const sort = <T>(xs: Iterable<T>, key: (x: T) => string) => [...xs].sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));

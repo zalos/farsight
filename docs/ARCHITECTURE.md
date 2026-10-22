@@ -1496,7 +1496,8 @@ nested dependency shadows there, and resolves all declared installed dependencie
 Generated require aliases are therefore not a completeness boundary. The own-package resolver starts from this
 module and walks a bounded number of parents; it never pins the consumer's tree. Private generated entries live
 under the owner's trust directory, outside dist, with full entry-source SHA-256 names. They are atomically published
-without replacement. A second installation has another identity; moving or changing an installation requires a new
+without replacement. Relative manifest labels still contain absolute resolution and target-path values: the closure digest and generated
+entry are both installation-bound. A second installation has another identity; moving or changing an installation requires a new
 plan. Root/store import and CLI help do not load the native parser; closure registration does. The installed npm-only
 consumer audits all emitted dist files and exercises real transitive dependency and chunk drift refusal before
 worker import. The dependency loader audit above still applies; this is no claim of arbitrary loader completeness.

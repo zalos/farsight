@@ -1,6 +1,6 @@
 import type {
   ArtifactId, BoundedText, CatalogKey, Count, Digest, Id, NodeId, Ordinal, RegisterText, RelativePath, SharedCatalogKey, ShortText,
-  Timestamp,
+  Timestamp, WorkRef,
 } from './common.js';
 import type { CoverageStatus } from './coverage.js';
 
@@ -180,7 +180,7 @@ export interface ReportControlInspection {
   sourceId: Id;
   artifact: ArtifactId;
   attemptId: Id;
-  work: { id: Id; revision: Ordinal };
+  work: WorkRef;
   analysis: { result: ArtifactId; index: ArtifactId; artifact: ArtifactId; manifest: ArtifactId };
   assessment: 'none';
   recognised: boolean;
