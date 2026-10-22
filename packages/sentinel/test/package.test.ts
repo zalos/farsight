@@ -52,6 +52,12 @@ test('no Farsight package depends on or imports Sentinel', () => {
 // added; nothing networked, no worker or cluster, and no static node:sqlite import anywhere.
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', 'node:fs'],
+  // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
+  'execution/errors.js': ['@farsight/core/dist/strings-sentinel-execution.js'],
+  'execution/isolation.js': ['node:crypto', 'node:fs', 'node:os', 'node:path'],
+  'execution/processes.js': ['node:child_process'],
+  'execution/registry.js': ['node:crypto', 'node:fs', 'node:path'],
+  'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
   'validate.js': ['ajv'],
   // The store's reason codes are catalog words; core's catalog is the only Farsight module the library reads.
   'store/errors.js': ['@farsight/core/dist/strings-sentinel-store.js'],
@@ -88,6 +94,10 @@ test('the library imports only its reviewed modules, and nothing that could star
   const paths = readFileSync(`${dist}store/paths.js`, 'utf8');
   const spawns = [...paths.matchAll(/(?<![.\w])(spawnSync|spawn|execFileSync|execFile|execSync|exec|fork)\s*\(([^,)]*)/g)].map(m => `${m[1]}(${m[2]!.trim()}`);
   assert.deepEqual(spawns, ["spawnSync('/sbin/mount'"], 'the only process the store may start is the macOS mount table');
+  // Worker execution starts processes in exactly one module, always with an argument list and never a shell.
+  const processes = readFileSync(`${dist}execution/processes.js`, 'utf8');
+  assert.equal([...processes.matchAll(/shell: false/g)].length, 3);
+  assert.doesNotMatch(processes, /shell: true|execSync|exec\(/);
 });
 
 /** Runs `code` in a fresh process that records every child spawn, then reports spawns, SQLite and new files. */

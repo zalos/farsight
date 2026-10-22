@@ -4,11 +4,11 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, renameSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { changedPaths, detectChecks, selectChecks, sentinelPackageInputs } from '../ci-changes.mjs';
+import { changedPaths, detectChecks, selectChecks, sentinelIsolationInputs, sentinelPackageInputs } from '../ci-changes.mjs';
 import { buildClosure } from '../pack-preflight.mjs';
 
-const none = { validate: false, e2e: false, echo: false, sentinel: false };
-const full = { validate: true, e2e: true, echo: true, sentinel: true };
+const none = { validate: false, e2e: false, echo: false, sentinel: false, isolation: false };
+const full = { validate: true, e2e: true, echo: true, sentinel: true, isolation: true };
 
 test('ordinary docs skip runtime checks; packaged docs still check their tarball', () => {
   assert.deepEqual(selectChecks(['README.md', 'docs/research/analysis-core-options-2026-10-17.md',
@@ -58,6 +58,19 @@ test("every package in farsight-cli's real build closure selects sentinel-packag
   assert.deepEqual(selectChecks(['docs/x.md'], { packageInputs: undefined }), none);
 });
 
+test('sentinel-isolation runs for Sentinel and its own build closure only', () => {
+  assert.deepEqual([...sentinelIsolationInputs()].sort(), ['core', 'graph']);
+  for (const path of ['packages/sentinel/src/execution/supervisor.ts', 'packages/sentinel/test/execution-isolation.test.ts',
+    'packages/sentinel/test/fixtures/workers/hostile-worker.mjs', 'packages/core/src/strings-sentinel-execution.ts']) {
+    assert.equal(selectChecks([path]).isolation, true, path);
+  }
+  for (const path of ['packages/parsers/src/tsjs.ts', 'packages/echo/src/cli.ts', 'e2e/tests/chrome.pw.spec.ts', 'docs/CI.md', 'packages/sentinel/README.md']) {
+    assert.equal(selectChecks([path]).isolation, false, path);
+  }
+  assert.equal(selectChecks(['packages/new-dep/src/x.ts'], { isolationInputs: new Set(['new-dep']) }).isolation, true);
+  assert.equal(selectChecks(['.github/workflows/ci.yml']).isolation, true, 'workflow edits run everything');
+});
+
 test('unreadable workspace manifests select every check', () => {
   const dir = mkdtempSync(join(tmpdir(), 'farsight-ci-manifests-'));
   try {
@@ -71,9 +84,9 @@ test('unreadable workspace manifests select every check', () => {
 test('Sentinel selects its package check without e2e; its build closure and the CLI layers select it too', () => {
   for (const path of ['packages/sentinel/src/index.ts', 'packages/sentinel/schemas/report.schema.json',
     'packages/sentinel/package.json', 'packages/sentinel/tsconfig.json']) {
-    assert.deepEqual(selectChecks([path]), { ...none, validate: true, sentinel: true }, path);
+    assert.deepEqual(selectChecks([path]), { ...none, validate: true, sentinel: true, isolation: true }, path);
   }
-  assert.deepEqual(selectChecks(['packages/sentinel/test/contracts.test.ts', 'packages/sentinel/test/fixtures/feasibility/a.ts']), { ...none, validate: true });
+  assert.deepEqual(selectChecks(['packages/sentinel/test/contracts.test.ts', 'packages/sentinel/test/fixtures/feasibility/a.ts']), { ...none, validate: true, isolation: true });
   assert.deepEqual(selectChecks(['packages/sentinel/README.md', 'scripts/pack-sentinel.mjs', 'scripts/test-sentinel-package.mjs']), { ...none, sentinel: true });
   assert.deepEqual(selectChecks(['packages/core/src/counts.ts']), full, 'core feeds Echo and Sentinel');
   assert.deepEqual(selectChecks(['packages/graph/src/graph.ts']), full);
@@ -125,8 +138,9 @@ test('real git ranges handle PR branch points, multiple push commits, deletion a
     execFileSync(process.execPath, [new URL('../ci-changes.mjs', import.meta.url).pathname], {
       cwd: dir, env: { ...process.env, BASE_SHA: base, HEAD_SHA: docs, GITHUB_EVENT_NAME: 'push', GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary },
     });
-    assert.equal(readFileSync(output, 'utf8'), 'validate=false\ne2e=false\necho=false\nsentinel=false\n');
+    assert.equal(readFileSync(output, 'utf8'), 'validate=false\ne2e=false\necho=false\nsentinel=false\nisolation=false\n');
     assert.match(readFileSync(summary, 'utf8'), /e2e: skip/);
     assert.match(readFileSync(summary, 'utf8'), /sentinel-package: skip/);
+    assert.match(readFileSync(summary, 'utf8'), /sentinel-isolation: skip/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

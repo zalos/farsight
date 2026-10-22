@@ -6,7 +6,7 @@ import { basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildClosure } from './pack-preflight.mjs';
 
-const all = () => ({ validate: true, e2e: true, echo: true, sentinel: true });
+const all = () => ({ validate: true, e2e: true, echo: true, sentinel: true, isolation: true });
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -26,10 +26,25 @@ export function sentinelPackageInputs(root = repoRoot) {
   return dirs;
 }
 
-export function selectChecks(paths, { packageInputs } = {}) {
-  let inputs;
-  try { inputs = packageInputs ?? sentinelPackageInputs(); } catch { return all(); } // unreadable manifests: everything
-  const checks = { validate: false, e2e: false, echo: false, sentinel: false };
+/**
+ * The package directories `sentinel-isolation` depends on: Sentinel's own workspace build closure (core and
+ * graph today), read from the manifests. Sentinel itself has its own rule below.
+ */
+export function sentinelIsolationInputs(root = repoRoot) {
+  const { closure, missing } = buildClosure(root, '@farsight/sentinel');
+  if (!closure.length || missing.length) throw new Error('Sentinel closure unreadable');
+  const dirs = new Set(closure.map(pkg => basename(pkg.dir)));
+  dirs.delete('sentinel');
+  return dirs;
+}
+
+export function selectChecks(paths, { packageInputs, isolationInputs } = {}) {
+  let inputs, isolation;
+  try {
+    inputs = packageInputs ?? sentinelPackageInputs();
+    isolation = isolationInputs ?? sentinelIsolationInputs();
+  } catch { return all(); } // unreadable manifests: everything
+  const checks = { validate: false, e2e: false, echo: false, sentinel: false, isolation: false };
   for (const path of paths) {
     // These Markdown files are shipped in the Echo tarball, so still check packaging.
     if (['docs/ECHO.md', 'packages/echo/README.md', 'scripts/pack-echo.mjs',
@@ -43,8 +58,11 @@ export function selectChecks(paths, { packageInputs } = {}) {
     } else if (path.startsWith('e2e/') || /^scripts\/(?:e2e|e2e-perf|synth-graph)\.mjs$/.test(path)) {
       checks.e2e = true;
     } else if (/^packages\/sentinel\/(?!test\/)/.test(path)) {
-      // Nothing in Farsight's application imports Sentinel, so its code needs no e2e run.
-      checks.validate = checks.sentinel = true;
+      // Nothing in Farsight's application imports Sentinel, so its code needs no e2e run. The isolation
+      // canaries exercise the execution code and everything it is built on, so any Sentinel code selects them.
+      checks.validate = checks.sentinel = checks.isolation = true;
+    } else if (path.startsWith('packages/sentinel/test/')) {
+      checks.validate = checks.isolation = true;
     } else if (/^packages\/[^/]+\/test\//.test(path) || path.startsWith('scripts/test/') ||
       /^scripts\/(?:changelog|release|install-hooks|lint-commits)\.mjs$/.test(path)) {
       checks.validate = true;
@@ -54,6 +72,7 @@ export function selectChecks(paths, { packageInputs } = {}) {
       // farsight-cli's closure (it must still pack and start without Sentinel) and Sentinel's own;
       // the package smoke also ingests the invoice example.
       if (inputs.has(/^packages\/([^/]+)\//.exec(path)?.[1]) || path.startsWith('examples/invoice-app/')) checks.sentinel = true;
+      if (isolation.has(/^packages\/([^/]+)\//.exec(path)?.[1])) checks.isolation = true;
     } else {
       return all(); // includes build/config/dependencies, workflows and this selector
     }
@@ -91,7 +110,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, output);
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Affected checks\n\n${reason}.\n\n` +
-      Object.entries(checks).map(([name, run]) => `- ${{ echo: 'echo-package', sentinel: 'sentinel-package' }[name] ?? name}: ${run ? 'run' : 'skip'}`).join('\n') +
+      Object.entries(checks).map(([name, run]) => `- ${{ echo: 'echo-package', sentinel: 'sentinel-package', isolation: 'sentinel-isolation' }[name] ?? name}: ${run ? 'run' : 'skip'}`).join('\n') +
       '\n\nSecret scanning and PR commit conventions run independently.\n');
   }
 }

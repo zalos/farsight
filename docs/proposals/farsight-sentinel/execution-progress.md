@@ -86,8 +86,8 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 | 04 | Immutable capture and security inventory | 03 | in progress | E1 reconciles all entries; unreadable scope stays unknown | — |
 | 05 | Parser integration and inventory reconciliation | 04 | in progress | TS/Java malformed, unsupported and limit cases reconciled; real-ingest comparison vs `main` | — |
 | 06 | Rules, policy merge, deterministic planning | 05 | in progress | Repository config cannot weaken mandatory rules | Shared matcher prerequisite [#137](https://github.com/zalos/farsight/pull/137), `2df3dc2`; rules/policy under implementation; planner remains pending |
-| 07 | Worker protocol and scanner isolation | 03, 01 isolation decision, 02 | in progress | Network, host-file, resource and malformed-output canaries fail safely; no host fallback | — |
-| 08 | Scheduler, resume, pause, cancellation | 03, 06, 07 | pending | E4 kills at every boundary, 20 repetitions, zero lost/duplicate outputs | — |
+| 07 | Worker protocol and scanner isolation | 03, 01 isolation decision, 02 | in progress | Network, host-file, resource and malformed-output canaries fail safely; no host fallback | [#139](https://github.com/zalos/farsight/pull/139); SOL approved, macOS real-container checks 92 passed, Linux qualification 82 passed/zero skipped; final CI and merge pending |
+| 08 | Scheduler, resume, pause, cancellation | 03, 06, 07 | in progress | E4 kills at every boundary, 20 repetitions, zero lost/duplicate outputs | — |
 | 09 | Standalone CLI and minimal report slice | 08 | pending | Duplicate starts return one run; disconnect does not stop work; bounded status | — |
 | 10 | Pattern scanner and original rules | 09, 01 engine decision | pending | Pinned engine matches known positives/negatives incl. exit-zero omissions | — |
 | 11 | Current-tree secrets | 09 | pending | Synthetic secrets never appear in output, export or logs | — |
