@@ -189,6 +189,7 @@ test('every projection carries the same counts and facts; SARIF validates; untru
   assert.ok(!('primaryLocationLineHash' in sarif.runs[0].results[0].partialFingerprints));
   // Escaping: no markup from source or messages survives into the HTML.
   assert.ok(!/<script/i.test(out.html) && out.html.includes('&lt;script&gt;'));
+  assert.doesNotMatch(out.html, /frame-ancestors|report-uri|sandbox/, 'no CSP directive a <meta> policy ignores (a console error on every open)');
   assert.ok(!out.html.includes('</pre> `code`'));
   // Every internal link has its target.
   for (const m of out.html.matchAll(/href="#([^"]+)"/g)) assert.ok(out.html.includes(`id="${m[1]}"`), m[1]);

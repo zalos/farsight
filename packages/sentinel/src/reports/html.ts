@@ -12,7 +12,9 @@ export function esc(text: string): string {
 }
 const anchor = (prefix: string, id: string) => `${prefix}-${id.replace(/[^A-Za-z0-9_-]/g, '-')}`;
 
-const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; script-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'";
+// Only directives a <meta> policy honours: frame-ancestors, report-uri and sandbox are ignored there and make the
+// browser log an error on every open, which a recipient would read as a broken file.
+const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; script-src 'none'; form-action 'none'; base-uri 'none'";
 
 const STYLE = `
 :root{--ink:#14181f;--muted:#5b6473;--line:#d7dce4;--panel:#f5f7fa;--accent:#0b6e8a;--warn:#9a5b00}
