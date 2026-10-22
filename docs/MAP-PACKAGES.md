@@ -199,12 +199,14 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   coordinator starts it), `src/cli/` (`args.ts` typed parsing, `outcome.ts` typed results and exit codes, `actor.ts`
   the entrypoint actor rule, `init.ts`), `src/service/local.ts` (adopt, plan, run, status, report in the owner's
   process), `src/service/canonical.ts` (plan and run through the canonical planner, admission and coordinator; results from the
-  ledger), `src/service/owner-service.ts` (the background service: socket, descriptor, receipts bound to their instance,
+  ledger; `selectedRerun` plans a strict-subset rerun, ADR 43), `src/execution/selection.ts` (the admitted
+  `sentinel-rerun-selection/draft-1` record and its check), `src/service/owner-service.ts` (the background service: socket, descriptor, receipts bound to their instance,
   one run at a time, pause/cancel/wait), `src/service/launch.ts` (the one process the CLI starts: its own `serve`),
   `src/service/rule-locks.ts` + `publish-once.ts` (the owner's lock revisions, packs and chain links, published whole),
   `src/service/trusted-profile.ts` (the shipped registry and execution profile), `src/service/package-paths.ts`, `src/adapters/preview-detector.ts`
   (the one original coded check), `src/transport/ipc.ts` (the owner socket and handshake) and `src/reports/preview.ts`;
-  `scripts/test-sentinel-preview-consumer.mjs` runs the npm-only path from the packed tarball.
+  `scripts/test-sentinel-preview-consumer.mjs` runs the npm-only path from the packed tarball, including a selected rerun
+  with the source gone; `test/selected-rerun.test.ts` and, with `SENTINEL_ISOLATION=1`, `test/selected-rerun-containers.test.ts`.
 
 - `packages/graph` — independently publishable canonical graph types (`graph.ts`, re-exported by core), generated v1 JSON schema, runtime validation, portable serialization, occurrence identities, pure indexing and traversal. The shared config-check predicates have an explicit `semantics` export. No application-package dependency.
 - `packages/code-parser` — independently publishable Oxc TS/JS and Tree-sitter Java extraction, per-instance adapter registration, bounded repository reads, exact input fingerprints, file diagnostics and immutable artifacts. `adapters/tsjs`, `adapters/java` and named `support` helpers are explicit exports. `packages/parsers` retains its enrichment orchestration and compatibility facades; see [PARSER-LIBRARIES.md](PARSER-LIBRARIES.md).

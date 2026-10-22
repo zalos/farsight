@@ -3,14 +3,16 @@
 // prefix and, with only Node and npm, initialize a synthetic workspace twice (keeping its settings), adopt them,
 // plan, run and read the report through the installed `farsight-sentinel` alone: no pnpm, no Farsight checkout. Then
 // a second plan is handed to the owner's background service (`run --detach --confirm`, started on demand), joined
-// by a duplicate start, waited for and reported through the service, which is then stopped.
+// by a duplicate start, waited for and reported through the service, which is then stopped. With the workspace's
+// source moved away, each of that run's units is rerun alone (`rerun --stage`) over the retained snapshot: the
+// selection is the preview's, the other unit is held, the parent's report is unchanged, and nothing is recaptured.
 // The run is the foundation preview: it must end required coverage incomplete (exit 2), never satisfied. No scanner,
 // container, model or network service is started; npm may fetch Sentinel's declared third-party dependencies.
 //
 //   pnpm pack:sentinel && node scripts/test-sentinel-preview-consumer.mjs [build/sentinel/farsight-sentinel-<v>.tgz]
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { npmConsumer } from './npm-consumer.mjs';
@@ -74,7 +76,8 @@ try {
 
   // In the background: new content, a new plan, handed to the service only with the owner's confirmation.
   writeFileSync(join(ws, 'src', 'accounts.ts'), 'export const q = (n: string) => `DELETE FROM accounts WHERE name = ${n}`;\n');
-  const second = (await sentinel('plan')).body.facts.planId;
+  const secondPlan = (await sentinel('plan')).body.facts;
+  const second = secondPlan.planId;
   assert.notEqual(second, planId);
   assert.equal((await sentinel('run', second, '--detach')).status, 4, 'a background run waits for the owner');
   const detached = await sentinel('run', second, '--detach', '--confirm');
@@ -90,6 +93,24 @@ try {
     process.kill(pid, 'SIGTERM');
     for (let i = 0; i < 200; i++) { try { process.kill(pid, 0); } catch { break; } await new Promise(r => setTimeout(r, 50)); }
   }
+  // A selected rerun of the background run, with its source gone: only the retained snapshot is read.
+  const units = secondPlan.unitIds;
+  assert.equal(units.length, 3, JSON.stringify(units)); // one check unit per source file
+  const reportBefore = (await sentinel('report', second)).body.facts.report;
+  renameSync(join(ws, 'src'), join(scratch, 'src-away'));
+  let found = 0;
+  for (const unit of units) {
+    const prepared = await sentinel('rerun', second, '--stage', unit);
+    assert.deepEqual([prepared.status, prepared.body.outcome, prepared.body.facts.parentId], [0, 'prepared', second], JSON.stringify(prepared.body));
+    const { preview } = prepared.body.facts;
+    assert.deepEqual([preview.selected, preview.all, preview.units.length, preview.held.length], [[unit], false, 1, units.length - 1]);
+    const ran = await sentinel('run', prepared.body.facts.runId);
+    assert.deepEqual([ran.status, ran.body.facts.state], [2, 'completed'], JSON.stringify(ran.body));
+    found += ran.body.facts.previewFindings;
+  }
+  assert.equal(found, 2, 'the selections between them find the parent\'s two findings');
+  assert.deepEqual({ ...(await sentinel('report', second)).body.facts.report, generatedAt: null }, { ...reportBefore, generatedAt: null }, 'the parent is unchanged');
+  renameSync(join(scratch, 'src-away'), join(ws, 'src'));
   // A pack the owner promotes that names the preview detector for another rule is refused before anything runs: the
   // detector implements exactly its own shipped rule, so a plan for anything else is never reported as covered.
   const custom = join(scratch, 'custom-pack');
@@ -105,7 +126,7 @@ try {
   assert.equal((await sentinel('rules', 'promote', custom, '--confirm')).status, 0);
   const refused = await sentinel('plan');
   assert.deepEqual([refused.status, refused.body.reasonCode], [3, 'sentinel.service.ruleUnsupported'], JSON.stringify(refused.body));
-  console.log(`sentinel preview consumer ok: npm-only install, init twice, adopt, promote the built-in pack, plan ${planId}, run (exit 2, preview), report; background run ${second} (detach, join, wait, report); a custom pack for the preview detector refused`);
+  console.log(`sentinel preview consumer ok: npm-only install, init twice, adopt, promote the built-in pack, plan ${planId}, run (exit 2, preview), report; background run ${second} (detach, join, wait, report); each of its units rerun alone with the source gone; a custom pack for the preview detector refused`);
 } finally {
   consumer.cleanup();
 }

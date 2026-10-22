@@ -23,6 +23,7 @@ import { result, type CommandResult, type PrintedVerdicts } from '../cli/outcome
 import { candidateDigest, emptyLock, lockDigest, promote, promotionIntent, readPackDirectory, validatePack } from '../rules/index.js';
 import { RuleLockBook } from './rule-locks.js';
 import { loadPlan } from '../execution/plans.js';
+import { unitsToRun } from '../execution/selection.js';
 import { ServiceError } from './owner-service.js';
 import { runFailureFacts } from './run-failure.js';
 import type { AdapterRegistry } from '../execution/registry.js';
@@ -216,11 +217,13 @@ export async function followWorkspaceRun(ws: Workspace, options: { mode: 'retry'
   return withStore(ws, async store => {
     let stages = [...(options.stages ?? [])];
     if (options.mode === 'retry') {
-      // The units that did not publish: what a retry runs again.
+      // The units that did not publish: what a retry runs again. A selected rerun's held units were never chosen, so
+      // a retry of it runs again only what it selected, never widening to them.
       const plan = await currentPlan(store, options.runId);
       if (plan?.kind === 'analysis') {
-        const { plan: revision } = await loadPlan(store, options.runId, plan.revision);
-        stages = revision.units.filter(u => !store.ledger.getPublication({ id: u.id, revision: u.revision })).map(u => u.id);
+        const { plan: revision, selection } = await loadPlan(store, options.runId, plan.revision);
+        const chosen = selection ? unitsToRun(selection) : null;
+        stages = revision.units.filter(u => (!chosen || chosen.has(u.id)) && !store.ledger.getPublication({ id: u.id, revision: u.revision })).map(u => u.id);
         if (!stages.length) return result('retry', 'refused', { verdicts, reasonCode: 'sentinel.service.nothingToRetry', facts: { runId: options.runId } });
       }
     }
@@ -417,7 +420,16 @@ export async function statusIn(store: SentinelStore, options: { runId: string; a
     const page = store.ledger.readEvents({ runId: options.runId, after: options.after ?? 0, limit });
     // The state is the last committed run event's; the whole history is read in bounded pages without keeping it.
     const state = runStateIn(store, options.runId);
-    if (state === null) return result('status', 'configuration-failure', { reasonCode: 'sentinel.service.runUnknown', facts: { runId: options.runId } });
+    if (state === null) {
+      // A selected rerun is admitted before it is first run: it waits for `run`, with exactly its selection.
+      const plan = await currentPlan(store, options.runId);
+      const admitted = plan ? await loadPlan(store, options.runId, plan.revision) : undefined;
+      if (admitted?.selection) {
+        return result('status', 'answered', { reasonCode: 'sentinel.service.runAwaiting', facts: { runId: options.runId, state: 'planned', revision: plan!.revision,
+          parentId: admitted.selection.parent.runId, units: unitsToRun(admitted.selection).size, held: admitted.selection.held.length, events: [], more: false } });
+      }
+      return result('status', 'configuration-failure', { reasonCode: 'sentinel.service.runUnknown', facts: { runId: options.runId } });
+    }
     // Not ended and not executing: a run this installation cannot execute says so here, not only once `run` is tried.
     const blocked = !options.executing && !isFinalRunState(state) ? await notExecutableHere(store, options.runId, options.registry) : undefined;
     return result('status', 'answered', { ...(blocked ? { reasonCode: 'sentinel.service.runNotExecutable' } : {}), facts: {
