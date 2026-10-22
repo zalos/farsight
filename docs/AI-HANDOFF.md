@@ -6,6 +6,49 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Selected reruns with retained reports — 2026-10-22
+
+Branch `codex/sentinel-rerun-integration` normally merges reviewed selected reruns `45d0aed1` with report integration
+and actual merged main `63ecf4f0` (#155). Runtime checkpoint `35302206` preserves the selection and generation
+implementation, all five scanner packs, framework/path/provider libraries, package exports, coarse report projection
+and owner-private key reader. The exact verified ancestor revision and digest travel into both privacy readers: an admitted but unexecuted future plan cannot erase the executed revision's accepted secret evidence. This corrects independent review's blocker on `48f8bb20`; that checkpoint was not approved. Subsequent handoff changes are documentation only. Strict-subset preview, admission and
+reporting now share one retained-bootstrap proof: exact selected parent revision/digest/snapshot, accepted inventory
+operation and retained invocation. Invalid ancestry refuses before any new child records are admitted. A selected
+child and grandchild can reconstruct full reports after the source is gone; held checks remain incomplete and no
+parent finding, coverage record or event becomes the child's.
+
+A Pattern-only selected child also retains proven same-capture privacy knowledge when its parent accepted secret
+matches. Full reports use the existing coarse projection even without an explicit comparison baseline; a selected
+baseline carries the same restriction into comparison. Minimal JSON reports inherit matched-name withholding through
+the existing secret-record validator. Clean accepted ancestry preserves excerpts, context labels and ordinary file
+names. Missing or corrupt accepted privacy evidence refuses. A canceled ancestor with an accepted secret publication
+conservatively refuses full reporting rather than widening completed-run eligibility.
+
+On `35302206`, Sentinel build and typecheck, schemas, catalog (4,405 entries), thirteen workflow controls and
+workflow lint pass. Eighteen selected execution/report/privacy controls pass with zero skips, including genuine
+future-revision admission, exact current/baseline privacy, clean ancestry and corrupt/missing evidence. A fresh
+npm-only consumer runs five existing pinned engines on two captures, removes the source, stops its service and
+reconstructs parent/child full reports and comparison with official SARIF validation. Another compiles sixteen
+exports and 21 contract types, checks 21 schemas and 56 fixtures, reopens the store and runs all installed library
+hooks; its SARIF also fits the official schema. Independent SOL review of `35302206` passes fifteen actual affected
+controls, including the unchanged original latest-revision repro and canceled-parent boundary, with zero skips.
+
+Broader unchanged paths were verified on the superseded `48f8bb20`: 44 publication/package/preview-CLI/store controls
+and two capability controls pass with zero skips. Its genuine service SIGKILL replay preserves the pending/running
+child, retains its interrupted attempt, leaves held units idle and creates new completed/canceled generations. Those
+identity, execution and packaging paths are unchanged by the three-file privacy revision correction. No scanner
+image, checks bundle or model was acquired. This scoped reuse does not declare the failed privacy checkpoint approved.
+
+Against a clean main `63ecf4f0` build, the corrected `35302206` runtime passes a fresh comparison: both builds ingest the same frozen 1,655-file repository into 9,492 nodes,
+19,539 edges and source digest prefix `729b63db7af7`; all node/edge values match. Both databases are 36,253,696 bytes. Graph
+JSON is 26,544,614 bytes on main and 26,544,620 on the candidate: six build/run-metadata bytes. Fresh front-door, Map
+and code-map screens were inspected with no page errors or failed requests; five known fixture image 404s and their
+console messages are unchanged. The comparison ran in isolated trees; the primary checkout and its server were not
+built or changed. Independent SOL review passed; final PR review, candidate CI and merge remain pending. PR 09/19, analysis-prerequisite reuse
+(PR 27), canonical framework/path/provider commands, model and release gates are not declared complete. SOL implements
+and independently reviews; Opus has one final completed-PR review. The separate end-of-plan product cleanup review
+remains required before release.
+
 ## Full owner report integration — 2026-10-22
 
 Branch `codex/sentinel-final-report-integration` combines reviewed report projection `ce9130b0` with the merged
@@ -35,7 +78,7 @@ accepted evidence. Its actual SARIF validates against the official schema; priva
 with JavaScript disabled, no external request or browser error, and print. The shareable screen was inspected.
 The initial pure pass deliberately excluded ten native controls; all ten then ran and passed separately.
 
-Selected CI, real-ingest/browser comparison against main and merge remain pending. No full-plan completion is
+All required and selected CI passed and this report slice merged as #155, `63ecf4f0`. No full-plan completion is
 claimed: canonical framework/path/provider commands, model evaluation, dispositions, selected-stage integration,
 MCP/host/GUI/bundle and release gates remain open. No source application, host scanner or hosted model is executed
 by this report integration. This is local macOS arm64 / Docker Desktop Linux arm64 acceptance, not a new host claim.

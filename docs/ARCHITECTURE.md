@@ -1427,7 +1427,7 @@ Existing report files remain unchanged; a store copy or bundle cannot restore th
 with the earlier identities. A report and a bundle together, with the store id, confirm no guessed path.
 The pinned worker reports only the rule, the lines and a file reference (template `RuleID`, `StartLine`, `EndLine`,
 `File`, with `--redact=100`), so a report sees whole matched lines, never the value's position, and cannot prove that any
-text a captured file or a confirmed graph supplied is free of a matched value. A report whose run or baseline has
+text a captured file or a confirmed graph supplied is free of a matched value. A report whose run, baseline or proven same-capture selected ancestor has
 accepted secret matches therefore fails closed (`withholdSecretRun`): every finding's title and explanation are rebuilt
 from the rule pack's catalog words only; every evidence item is withheld with no excerpt and no location; every other
 source- or context-controlled string (context ids, labels and references, node ids, count part labels) becomes one
@@ -1436,7 +1436,7 @@ opaque word per distinct original, so references still match and placement keeps
 position in the report contract, never by a key's name or a value's spelling: only positions whose value Sentinel
 generates (schema, enums, catalog keys, digests, content and artifact ids, generated run, check, finding, evidence and
 report ids, counts' words, a decision's and a definition's exact generated fields, a gap's catalog explanation) are
-kept. A run without secret matches reports as before, excerpts and labels included. The cost is availability: in a run
+kept. Without matches in those proven inputs, a report retains ordinary excerpts and labels. The cost is availability: in a run
 with any secret match no report shows source excerpts, locations or context names. The precise replacement is an exact
 value range: the pinned template would emit, as numbers only, the match's start column and the secret's offset and
 length within it (computed inside the container from the unredacted match; Gitleaks fills its match fields with the
