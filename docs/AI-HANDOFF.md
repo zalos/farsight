@@ -1923,3 +1923,20 @@ the exact supervisor outcome frozen in place, permits validated actual-read refi
 and preserves per-record privacy. Original rule assets are packaged with a digest manifest. Focused checks include
 real canonical plan/bootstrap/container/publication for all four engines, negative read-boundary tests, package import
 checks, typecheck, catalog and schema checks; detailed final evidence is kept privately with the implementation review.
+
+
+### Explicit public scanner command integration (2026-10-22)
+
+The separate scanner CLI branch composes the independently reviewed four-driver layer with the merged owner CLI.
+`init --profile scanners` selects the original Pattern/OSV/Trivy/zizmor families; default static preview behavior is
+preserved through an explicit trusted preview driver. Owner asset commands require exact installed image pins and
+separately named bounded database/checks provenance, bound with rights and the prior lock in spent receipts.
+Acquisition remains a separate explicit bounded owner action; plan/run never download or use host scanners.
+
+Actual public CLI and clean npm-only installed tests completed all four existing pinned Linux containers through
+canonical planning and accepted publications. Detached start/join/wait, report regeneration after service stop and
+source removal, missing archive refusal before attempts, source-copy independence, metadata/receipt tampering,
+bounds and preview compatibility were exercised. Required coverage remains honest and policy satisfaction is not
+claimed. The scanner report is a draft CLI slice; full report/policy/framework/model work remains open. Detailed
+final checks and immutable integration context are retained privately for independent SOL review. No primary build,
+ingest, dogfood graph or shared owner source tree was changed; no push or merge was performed.

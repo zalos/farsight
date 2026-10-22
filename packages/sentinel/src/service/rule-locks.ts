@@ -129,6 +129,11 @@ export class RuleLockBook {
 
   /** A stored pack, validated again from its bytes; refused unless it is exactly the pack that digest names. */
   readPack(packDigest: string): ValidatedPack {
+    return validatePack(this.readPackFiles(packDigest));
+  }
+
+  /** The exact validated file bytes, for the trusted driver; never a live pack folder. */
+  readPackFiles(packDigest: string): ReadonlyMap<string, Uint8Array> {
     if (!DIGEST.test(packDigest)) throw new ServiceError('sentinel.service.recordUnsafe');
     const bytes = safely(() => readPublished(join(this.#dir, 'packs'), `${packDigest.slice(7)}.json`, Math.ceil(MAX_PACK_BYTES * 1.4) + 65536));
     if (!bytes) throw new ServiceError('sentinel.service.packUnavailable');
@@ -142,7 +147,7 @@ export class RuleLockBook {
     }
     const pack = validatePack(files);
     if (pack.entry.packDigest !== packDigest) throw new ServiceError('sentinel.service.recordUnsafe');
-    return pack;
+    return files;
   }
 
   /** The validated packs the given lock names, from their stored bytes. */

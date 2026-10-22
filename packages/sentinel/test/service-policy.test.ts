@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { adoptedPolicy, adoptWorkspaceSettings, confirmForService, workspaceOf } from '../dist/service/local.js';
 import { OwnerService } from '../dist/service/owner-service.js';
 import { currentPlan } from '../dist/service/canonical.js';
-import { registryFor, syntheticPlan } from './coordinator-helpers.ts';
+import { registryFor, syntheticPlan, syntheticServiceDrivers } from './coordinator-helpers.ts';
 import { requestedByOf } from '../dist/cli/actor.js';
 import { DEFAULT_SETTINGS, SETTINGS_PATH } from '../dist/policy/index.js';
 import { openStore, qualificationFor, SQLITE_RELEASE_POLICY } from '../dist/store/index.js';
@@ -41,7 +41,7 @@ async function workspace(t: { after(fn: () => void | Promise<void>): void }, set
   const store = await openStore(ws.storePath);
   const registry = registryFor(root);
   for (const runId of [PLAN_A, PLAN_B]) await syntheticPlan(store, root, {}, { runId, policy, registry });
-  const service = new OwnerService(store, ws, { registry });
+  const service = new OwnerService(store, ws, { registry, drivers: await syntheticServiceDrivers(store, registry, PLAN_A) });
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
   const plan = (runId: string) => currentPlan(store, runId);
   const receipt = async (action: 'run.start' | 'run.pause' | 'run.cancel', planId: string, at = new Date()) => {

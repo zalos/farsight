@@ -175,3 +175,17 @@ export async function containerRegistry(behaviours: Record<string, string> = {})
 export function unitIdsOf(plan: { units: Array<{ id: string; scopes: string[] }> }): Record<string, string> {
   return Object.fromEntries(plan.units.map(u => [u.scopes[0]!.slice(`${SOURCE}:src/`.length, -3).toUpperCase(), u.id]));
 }
+
+/** Explicit trusted pass-through drivers for the synthetic service fixture, never a production fallback. */
+export async function syntheticServiceDrivers(store: any, registry: any, runId: string) {
+  const { loadPlan } = await import('../dist/execution/plans.js');
+  const { createCheckDriverRegistry } = await import('../dist/execution/check-drivers.js');
+  const latest = store.ledger.latestPlan(runId);
+  const { plan } = await loadPlan(store, runId, latest.revision);
+  return createCheckDriverRegistry(registry.ids.filter((id: string) => registry.get(id).kind !== 'operation').map((adapterId: string) => ({
+    adapterId, implementationDigest: registry.get(adapterId).digest,
+    supportedRules: () => plan.pins.rules.filter((r: any) => r.adapterId === adapterId),
+    async prepare() { return { job: null, auxiliary: [] }; },
+    async normalize(_ctx: any, v: any) { return { coverage: v.result, records: [] }; },
+  })), registry);
+}

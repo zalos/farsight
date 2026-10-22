@@ -72,7 +72,8 @@ export async function runPreviewWorker(): Promise<void> {
   const start = await next();
   if (start.type !== 'start') process.exit(9);
 
-  const inputs = (start.inputs ?? []) as string[];
+  // The canonical driver adds a sealed job. Only scoped captured inputs are source, never that auxiliary file.
+  const inputs = ((start.inputs ?? []) as string[]).filter(id => (start.inputScopes ?? []).some((i: any) => i.input === id && i.scopes.some((scope: string) => (start.scopes ?? []).includes(scope))));
   const scopes = (start.scopes ?? []) as string[];
   const checks = (start.checks ?? []) as string[];
   const findings: PreviewFinding[] = [];

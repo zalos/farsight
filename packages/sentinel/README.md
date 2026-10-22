@@ -1,11 +1,10 @@
 # @farsight/sentinel (draft)
 
-The optional Sentinel security-analysis boundary. **This package does not scan anything yet.** It defines the
-draft contracts the later implementation PRs build on, validates them, provides a draft local store for runs and
-evidence (below), and ships a placeholder `farsight-sentinel` executable that lists what is unavailable. Nothing in
-it captures source, starts a scanner or container, downloads a tool or contacts a model provider, and importing it
-opens nothing: a store is opened only by an explicit `openStore()` call. Farsight's own packages neither
-depend on it nor import it (a test checks this).
+The optional Sentinel security-analysis package. It captures immutable source, admits canonical plans, runs the
+four pinned scanners through isolated Linux containers, and regenerates observations and coverage from accepted
+publications. `static` keeps the original foundation preview; `scanners` selects Pattern, OSV, Trivy and zizmor.
+Importing the library starts nothing. Scans acquire no assets and execute no project scripts or package managers.
+Farsight's application packages neither depend on nor import this optional package.
 
 Plan: [`docs/proposals/farsight-sentinel/implementation-plan.md`](../../docs/proposals/farsight-sentinel/implementation-plan.md),
 PR 02 in [`implementation-prs.md`](../../docs/proposals/farsight-sentinel/implementation-prs.md).
@@ -189,18 +188,73 @@ farsight-sentinel retry <runId>            # the same, selecting the units that 
 `init` writes the settings file only when it is missing: PR 06's defaults plus one grant letting the owner (a
 person, never an agent) capture and run the `static` profile. Settings name credentials by keychain reference
 only (`keychain:farsight/<name>`). Nothing downloads a tool, installs a scanner, starts a container or contacts a
-model provider. The run is a **foundation preview**: one original coded check (SQL text assembled from strings in
+model provider. The default `static` preset is a **foundation preview**: one original coded check (SQL text assembled from strings in
 TypeScript, JavaScript and Java) shows the whole path working; it is not scanner or framework coverage, and its
 report says so. A background run survives the command that started it: the owner's service (`serve`, started on
 demand, stopping when idle) holds the store, a duplicate start joins the same run, and a run interrupted by the
 service stopping resumes with `resume <planId> --confirm`. Only the owner's `--confirm` hands a run over; another
-client of the service gets what the adopted grants give agents, which by default is nothing. `retry` and `rerun`
-say *unavailable* (exit 3) until plan revisions exist. With `--json`, every result carries its `outcome`, `exitCode`, the three
+client of the service gets what the adopted grants give agents, which by default is nothing. `retry` and full `rerun` prepare a child over the retained snapshot; strict stage selections remain disclosed and refused. With `--json`, every result carries its `outcome`, `exitCode`, the three
 admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR 37 in `docs/ARCHITECTURE.md`.
+
+## Explicit pinned scanner commands (draft)
+
+Install the standalone tarball with npm and use the installed executable. The scanner preset is separate from the
+preview and makes its seven shipped rule families mandatory. Initialization never overwrites existing settings;
+a second initialization keeps the existing preset until the owner edits and adopts those settings.
+
+```sh
+farsight-sentinel init --profile scanners
+farsight-sentinel settings adopt --confirm
+farsight-sentinel rules promote builtin:pattern --confirm
+farsight-sentinel rules promote builtin:advisories --confirm
+farsight-sentinel rules promote builtin:infrastructure --confirm
+farsight-sentinel rules promote builtin:ci --confirm
+farsight-sentinel assets adopt-tool pattern-semgrep --confirm
+farsight-sentinel assets adopt-tool advisories-osv --confirm
+farsight-sentinel assets adopt-tool iac-trivy --confirm
+farsight-sentinel assets adopt-tool ci-zizmor --confirm
+farsight-sentinel assets adopt-database osv:npm --manifest <snapshot.json> --archive <snapshot.zip> --license <published-SPDX-expression> --confirm
+farsight-sentinel assets adopt-database trivy-checks --manifest <checks.json> --archive <checks.tar.gz> --confirm
+farsight-sentinel plan --json
+farsight-sentinel run <runId> --detach --confirm --json
+farsight-sentinel wait <runId> --json
+farsight-sentinel report <runId> --json
+```
+
+Images must already be installed at the shipped immutable pins. `assets adopt-tool` inspects the qualified local
+runtime and exact image; it never pulls or starts a scanner. Database adoption reads the explicitly named archive
+and provenance through bounded descriptors, verifies their hashes and metadata, and retains independent private
+copies outside the checkout. OSV adoption requires the owner to state its published license expression; this command
+does not infer a blanket license for all advisory sources. The receipt binds the exact candidate, provenance, rights
+and previous lock revision. A scan uses the admitted lock, including older retained revisions, rather than whatever
+lock happens to be current. Missing or changed required assets refuse before any scanner attempt.
+
+For acquisition, `assets acquire-database osv:npm --max-bytes <limit> --confirm` (or `osv:Maven`) invokes the reviewed
+OSV allowlisted broker; `assets acquire-database trivy-checks --confirm` invokes the pinned checks broker. Both are
+separate, bounded owner actions with a deadline, no inherited login credentials, and a one-use receipt spent before
+network access. Acquisition prints the held archive/manifest paths with `--json`; it does not promote them. Adopt
+those explicit files separately. Nothing is downloaded during plan/run, and no database ships in the npm tarball.
+
+Production units batch at most 32 scopes so an applicable file and explicit skipped-file gaps can publish together.
+The preview keeps one scope per unit. A unit with nothing runnable refuses preparation and stays unpublished; failed,
+unreported, unsupported, offline-limited and stale/age-unknown assessments cannot become zero-clean coverage.
+
+The scanner report is the draft CLI slice `sentinel-scanner-report/draft-1`, distinct from the later full report
+contract. It reads only accepted publications of the exact admitted plan, includes normalized observations, pinned
+rule/tool/database identities and the canonical required-coverage fold, and carries scoped counts with recheck
+commands. It regenerates after the original checkout and service disappear. Finding policy, framework checks and
+model review remain outside this slice: even complete required coverage is not a satisfied policy result. The
+platform statement comes from each actual verified worker outcome, including its measured/unmeasured state.
+
+Qualification: `scripts/test-sentinel-scanner-consumer.mjs` exercises this installed npm-only command path with all
+four existing pinned images, original inert positive/negative files, a tiny synthetic advisory snapshot and held
+checks. `SENTINEL_ISOLATION=1` and `SENTINEL_TRIVY_CHECKS_DIR` select the explicit local prerequisites; no test pulls
+an image or downloads a database. Public CLI, profile and asset commands remain internal modules of the executable,
+not new JavaScript exports.
 
 ## Infrastructure configuration checks (draft)
 
-The Trivy adapter (internal, ADR 33) checks Dockerfiles, Kubernetes YAML and Terraform with Trivy 0.76.1's
+The Trivy adapter (ADR 33) checks Dockerfiles, Kubernetes YAML and Terraform with Trivy 0.76.1's
 misconfiguration scanner and the pinned trivy-checks 2.3.0 bundle, in an isolated container with no network. The
 owner acquires the bundle once (`node scripts/acquire-trivy-checks.mjs --dir <private folder>`); without it nothing
 runs and every configuration file is reported as `bundle-missing`. Coverage is per file and needs the engine's own scan
@@ -252,7 +306,7 @@ boundary, and the store: runtime gate, owner lock across real processes, ledger,
 facade end to end (`test/store-integration.test.ts`). They need no scanner, container, network or credential. `test/fixtures/` holds PR 01's feasibility
 inputs, which this package leaves untouched.
 
-## Pattern adapter (draft, not registered)
+## Pattern adapter (draft)
 
 `src/adapters/pattern/` runs Semgrep 1.181.0 (`semgrep/semgrep@sha256:81474464…304b`, installed ahead, never pulled)
 through the PR 07 execution service only. Semgrep cannot speak the worker protocol, so an original shim
@@ -279,7 +333,7 @@ only as a fixed category and its exit code; no engine text is forwarded. The tar
 `rules/pattern/` and the worker with a digest/rights manifest under `assets/pattern/`; nothing exported invokes the
 adapter, so the package gate is partial until the PR 09 command (ADR 26). Integration still open:
 registering the adapter, the planner supplying the shim, job, rules and targets as inputs, and the scan command (PR 09).
-## Dependency advisories (draft, not registered)
+## Dependency advisories (draft)
 
 `src/adapters/osv/` matches dependency files against pinned OSV advisory snapshots with OSV-Scanner 2.7.0, fully offline,
 through the PR 07 execution service. Inputs: `package-lock.json`, `pnpm-lock.yaml` (resolved, transitive as locked),
@@ -288,19 +342,18 @@ through the PR 07 execution service. Inputs: `package-lock.json`, `pnpm-lock.yam
 limit; findings are once per component and advisory group, keyed by the snapshot; coverage is per file (complete,
 partial, database-absent, database-stale, error, empty, not applicable).
 
-**Acquisition is a separate, owner-confirmed step** (the proposed PR 09 command):
+**Acquisition is a separate, owner-confirmed step**:
 
 ```sh
-farsight-sentinel advisories acquire --ecosystem npm --ecosystem Maven --max-bytes 536870912   # preview, then --confirm
+farsight-sentinel assets acquire-database osv:npm --max-bytes 536870912   # preview, then --confirm
 ```
 
 It fetches only `https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`, within the bound, checks the
-origin's MD5 and stores the archive by SHA-256 with its provenance. Until that command exists,
+origin's MD5 and stores the archive by SHA-256 with its provenance. Separately,
 `scripts/qualify-osv-database.mjs --acquire --dir <private folder>` is the owner-run qualification (real archives,
 synthetic fixtures and runtime-only positive controls). Measured on 2026-10-22 (darwin-arm64, Docker Desktop): npm
 218,843,332 bytes and Maven 10,427,762 bytes acquired in about 12.5 s; on the real databases the synthetic fixtures gave
 no finding, `lodash@4.17.11` (lockfile) 7 advisory groups and `jackson-databind@2.9.8` (POM, exact) 60; a scan with the
-npm archive took about 7–10 s. The adapter is not registered and nothing exported runs it: the package gate is partial
-until the planner and command integrate it.
+npm archive took about 7–10 s. The public scanner command layer now composes this adapter through the canonical coordinator; adoption and promotion remain explicit, and no JavaScript export starts work.
 
-The offline advisory adapter is measured on Linux arm64 and native Linux amd64. The [amd64 qualification](https://github.com/zalos/farsight/actions/runs/39788785215) passed 21 tests with zero skips and ran the installed worker against its original fixtures. Full installed CLI registration remains a separate integration gate.
+The offline advisory adapter is measured on Linux arm64 and native Linux amd64. The [amd64 qualification](https://github.com/zalos/farsight/actions/runs/39788785215) passed 21 tests with zero skips and ran the installed worker against its original fixtures. The public installed CLI path is qualified separately with the original synthetic corpus and held assets as described above.

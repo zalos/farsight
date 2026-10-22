@@ -101,7 +101,7 @@ test('init writes the private settings once and never again; it downloads and st
   assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), JSON.parse(JSON.stringify(initialSettings('static'))));
   assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')).grants, [
     { actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'], principals: ['human'], scope: { profiles: ['static'] } },
-    { actions: ['rule.promote'], principals: ['human'] },
+    { actions: ['rule.promote', 'tool.acquire'], principals: ['human'] },
   ], 'the owner only; never an agent');
   assert.equal(statSync(path).mode & 0o777, 0o600);
   assert.equal(statSync(join(ws, '.farsight/sentinel')).mode & 0o777, 0o700);

@@ -118,7 +118,9 @@ test('a selected rerun previews its consequences from the parent plan: downstrea
   const planned = await syntheticPlan(store, dir, {}, { runId: 'run-diamond' });
   const work = join(dir, 'work');
   mkdirSync(work, { mode: 0o700 });
-  const summary = await executeRun(store, 'run-diamond', { scratchRoot: work, registry: planned.registry, run: planned.run });
+  const { createCheckDriverRegistry } = await import('../dist/execution/check-drivers.js');
+  const drivers = createCheckDriverRegistry(planned.registry.ids.map(adapterId => ({ adapterId, implementationDigest: planned.registry.get(adapterId).digest, supportedRules: () => planned.plan.pins.rules.filter(r => r.adapterId === adapterId), async prepare() { return { job: null, auxiliary: [] }; }, async normalize(_ctx, v) { return { coverage: v.result, records: [] }; } })), planned.registry);
+  const summary = await executeRun(store, 'run-diamond', { scratchRoot: work, registry: planned.registry, run: planned.run, drivers });
   assert.equal(summary.state, 'completed', JSON.stringify(summary.failures));
   const id = unitIdsOf(planned.plan);
   const preview: any = await previewRerun(store, 'run-diamond', [id.B!]);
@@ -198,7 +200,10 @@ test('a run planned by another installation is refused at start, never submitted
   const adopted = adoptedPolicy(ws);
   assert.ok('policy' in adopted);
   // The same adapters, but the detector is another build's: its registered digest differs from the one planned under.
+  const { publicRegistry } = await import('../dist/service/scanner-profile.js');
+  const installed = publicRegistry();
   const other = createAdapterRegistry([
+    ...installed.ids.filter(id => id !== PREVIEW_DETECTOR_ID && !Object.values(OPERATIONS).includes(id)).map(id => installed.get(id)),
     { id: PREVIEW_DETECTOR_ID, version: 'preview-1-other-build', kind: 'built-in', isolation: 'child', module: ownExecutable(), coverage: 'per-file-per-rule' },
     { id: OPERATIONS.capture, version: '1', kind: 'operation', operation: 'capture' },
     { id: OPERATIONS.parse, version: '1', kind: 'operation', operation: 'parse' },
@@ -224,12 +229,12 @@ test('a run planned by another installation is refused at start, never submitted
     const started: any = await service.handle('run.start', { planId: runId, receiptId: confirmed.receiptId }, by);
     assert.equal(started.outcome, 'configuration-failure', `attempt ${attempt}: ${JSON.stringify(started)}`);
     assert.equal(started.reasonCode, 'sentinel.service.runNotExecutable');
-    assert.match(String(started.facts.reason), /another digest/);
+    assert.match(String(started.facts.reason), /another.*digest|implementation digest/);
     const waited: any = await service.handle('run.wait', { runId, timeoutMs: 300 }, by);
     assert.deepEqual([waited.outcome, waited.reasonCode], ['configuration-failure', 'sentinel.service.runNotExecutable'], 'never awaiting');
     const status: any = await service.handle('run.status', { runId }, by);
     assert.equal(status.reasonCode, 'sentinel.service.runNotExecutable');
-    assert.match(String(status.facts.notExecutable.reason), /another digest/);
+    assert.match(String(status.facts.notExecutable.reason), /another.*digest|implementation digest/);
     await service.stop();
   }
   // Nothing of the analysis started (awaiting means no unit has work), and the installation that planned it can still

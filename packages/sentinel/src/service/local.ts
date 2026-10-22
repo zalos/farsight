@@ -13,6 +13,7 @@ import {
 } from '../policy/index.js';
 import { issueReceipt } from '../policy/owner-receipts.js';
 import { checkPreviewReport, PREVIEW_LIMITATIONS, PREVIEW_REPORT_SCHEMA, type PreviewReport } from '../reports/preview.js';
+import { scannerReportOf, type ScannerReport } from '../reports/scanner.js';
 import { openSnapshot } from '../snapshot/materialize.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { openStore, type SentinelStore } from '../store/index.js';
@@ -258,7 +259,7 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
       // refused before anything starts; canonicalResult says why.
       if (await notExecutableHere(store, plan.runId)) return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts });
       const work = scratchUnder(ws);
-      try { await executeRun(store, plan.runId, { scratchRoot: work }); } finally { removeScratch(work); }
+      try { await executeRun(store, plan.runId, { scratchRoot: work, trustDir: ws.trustDir }); } finally { removeScratch(work); }
     }
     return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts });
   });
@@ -438,15 +439,17 @@ function lastRunSequence(store: SentinelStore, runId: string): number {
 }
 
 /** The preview report of a completed run, rendered from the ledger and the stored artifacts only; nothing executes. */
-export async function previewReport(ws: Workspace, options: { runId: string; now: Date }): Promise<PreviewReport | CommandResult> {
+export async function previewReport(ws: Workspace, options: { runId: string; now: Date }): Promise<PreviewReport | ScannerReport | CommandResult> {
   return withStore(ws, store => reportIn(store, ws, options));
 }
 
 /** `previewReport` against a store this process already holds (the background service's). */
-export async function reportIn(store: SentinelStore, ws: Workspace, options: { runId: string; now: Date }): Promise<PreviewReport | CommandResult> {
+export async function reportIn(store: SentinelStore, ws: Workspace, options: { runId: string; now: Date }): Promise<PreviewReport | ScannerReport | CommandResult> {
   void ws;
   const recorded = store.ledger.getRun(options.runId);
   if (!recorded) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.runUnknown', facts: { runId: options.runId } });
+  const scanner = await scannerReportOf(store, options.runId, options.now);
+  if (scanner) return scanner;
   const findings = recorded.state === 'completed' ? await previewFindingsOf(store, options.runId) : undefined;
   if (!findings) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.runNotCompleted', facts: { runId: options.runId, ...runFailureFacts(store, options.runId) } });
   const snapshotId = recorded.envelope.snapshotId;
