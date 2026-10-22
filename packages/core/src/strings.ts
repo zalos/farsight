@@ -62,6 +62,12 @@ import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
 import { SENTINEL_ANALYSIS_STRINGS } from './strings-sentinel-analysis.js';
 
+import { SENTINEL_NEXT_STRINGS } from './strings-sentinel-next.js';
+
+import { SENTINEL_SPRING_STRINGS } from './strings-sentinel-spring.js';
+
+import { SENTINEL_OSV_STRINGS } from './strings-sentinel-osv.js';
+
 import { SENTINEL_EXPRESS_STRINGS } from './strings-sentinel-express.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
@@ -203,6 +209,15 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_GLOSSARY_STRINGS,
   // Sentinel's bounded call paths and imported deep-analysis results (strings-sentinel-analysis.ts)
   ...SENTINEL_ANALYSIS_STRINGS,
+
+  ...SENTINEL_NEXT_STRINGS,
+
+  // Sentinel's Spring Security servlet pack: why a control fact is unknown (strings-sentinel-spring.ts)
+  ...SENTINEL_SPRING_STRINGS,
+
+
+  // Sentinel's OSV advisory adapter: coverage, refusals, engine failures and acquisition (strings-sentinel-osv.ts)
+  ...SENTINEL_OSV_STRINGS,
 
   // the Express framework pack: why a control fact about an Express route is unknown (strings-sentinel-express.ts)
   ...SENTINEL_EXPRESS_STRINGS,

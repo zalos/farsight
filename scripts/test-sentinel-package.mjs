@@ -6,9 +6,11 @@
 // package and a changed version is refused; the draft store (`farsight-sentinel/store`) opens, publishes
 // verified evidence in one process and reads it back in another; and no Farsight application package
 // arrives; the pattern rule pack and worker ship with exact digests and rights. No scanner, container, model or
-// network service is started, except that with SENTINEL_ISOLATION=1 the shipped pattern worker and pack run once in
+// network service is started, except that with SENTINEL_ISOLATION=1 the shipped Pattern and OSV workers run once in
 // the pinned engine image through the workspace's isolated execution service (never pulled; this checks the installed
-// assets, not an installed runtime); npm may fetch Sentinel's declared third-party dependencies.
+// assets, not an installed runtime). SENTINEL_PACKAGE_ENGINE=pattern|osv limits execution to the engine provisioned
+// by an individual native qualification job; asset validation still covers both. With no selector both engines run.
+// npm may fetch Sentinel's declared third-party dependencies.
 //
 //   pnpm test:sentinel:package        # builds Sentinel's closure, packs, then runs this
 //   node scripts/test-sentinel-package.mjs [build/sentinel/farsight-sentinel-<v>.tgz]
@@ -23,6 +25,9 @@ import { npmConsumer } from './npm-consumer.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const sourceDir = join(root, 'packages', 'sentinel');
+const selectedEngine = process.env.SENTINEL_PACKAGE_ENGINE;
+assert.ok(selectedEngine === undefined || ['pattern', 'osv'].includes(selectedEngine), 'SENTINEL_PACKAGE_ENGINE must be pattern or osv');
+const runEngine = (engine) => process.env.SENTINEL_ISOLATION === '1' && (selectedEngine === undefined || selectedEngine === engine);
 const artifact = resolve(process.argv[2] ?? (() => {
   const source = JSON.parse(readFileSync(join(sourceDir, 'package.json'), 'utf8'));
   return join(root, 'build', 'sentinel', `farsight-sentinel-${source.version}.tgz`);
@@ -87,6 +92,9 @@ try {
   assert.equal(subpaths.includes('./parser'), parserExported, 'the installed ./parser export matches the source package');
   const analysisExported = Object.hasOwn(sourceExports, './analysis');
   assert.equal(subpaths.includes('./analysis'), analysisExported, 'the installed ./analysis export matches the source package');
+  const springExported = Object.hasOwn(sourceExports, './frameworks/spring');
+  assert.equal(subpaths.includes('./frameworks/spring'), springExported, 'the installed ./frameworks/spring export matches the source package');
+
   const expressExported = Object.hasOwn(sourceExports, './frameworks/express');
   assert.equal(subpaths.includes('./frameworks/express'), expressExported, 'the installed ./frameworks/express export matches the source package');
 
@@ -169,6 +177,14 @@ try {
       "  const r: DeepImportResult = await importDeepAnalysis({ document: '{}', snapshot: { id: 'x', entries: [] }, authorization: null, readContent: async () => new Uint8Array(), importedAt: '2026-10-22T10:00:00Z' });",
       '  const doc: DeepImportEnvelope | undefined = undefined;',
       "  return [env.establishes, env.results[0]?.outcome, reason, r.status, DEEP_ANALYSIS_SUPPORT.engine, doc];",
+      '}',
+    ] : []),
+    ...(springExported ? [
+      "import { analyzeSpring, SPRING_PACK, SPRING_ORDER, SPRING_SUPPORT, SPRING_REASON_CODES, matchTemplate, type SpringPackInput, type SpringReason } from 'farsight-sentinel/frameworks/spring';",
+      'export function springFields(input: SpringPackInput): unknown[] {',
+      '  const reason: SpringReason = SPRING_REASON_CODES[0];',
+      '  const profiles: readonly string[] | null = input.environment.activeProfiles;',
+      "  return [SPRING_PACK.version, SPRING_ORDER.chain, SPRING_SUPPORT.stack, reason, profiles, matchTemplate('/a', '/a/**'), typeof analyzeSpring];",
       '}',
     ] : []),
     ...(expressExported ? [
@@ -293,6 +309,7 @@ try {
     assert.ok(read.ok && read.integrity === 'ok', 'reachability and SQLite integrity hold after the reopen');
     storeDemo = `store reopened across processes (${host} SQLite ${process.versions.sqlite}, ${pair?.status ?? 'unqualified on CI'})`;
     if (analysisExported) storeDemo += await analysisDemo();
+    if (springExported) storeDemo += await springDemo();
     if (expressExported) storeDemo += await expressDemo();
   } else {
     const refused = await node('store-write.mjs').then(() => null, (error) => `${error.stderr}`);
@@ -438,6 +455,116 @@ second.listen(3001);
     return ', Express pack analysed an installed fixture (before, after, conditional)';
   }
 
+  /**
+   * The installed Spring pack, run for real: an original fixture with a deliberately open route (the earlier, narrower
+   * chain), a protected one and one no chain matches is captured, parsed and analysed through the installed package
+   * alone, so the bundled parser, its native binding and the Java grammar all resolve from the consumer's own install.
+   * git builds the fixture's repository only; nothing from the checkout or pnpm is used.
+   */
+  async function springDemo() {
+    const appDir = join(storeRoot, 'spring-app');
+    const files = {
+      'pom.xml': `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.4.3</version>
+    <relativePath/>
+  </parent>
+  <groupId>example</groupId>
+  <artifactId>smoke</artifactId>
+  <version>0.0.0</version>
+  <dependencies>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>
+  </dependencies>
+</project>
+`,
+      'src/main/java/app/App.java': 'package app;\n\n@org.springframework.boot.autoconfigure.SpringBootApplication\npublic class App {}\n',
+      'src/main/java/app/SecurityConfig.java': `package app;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+public class SecurityConfig {
+  @Bean
+  @Order(1)
+  public SecurityFilterChain open(HttpSecurity http) throws Exception {
+    http.securityMatcher("/api/public/**").authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+    return http.build();
+  }
+
+  @Bean
+  @Order(2)
+  public SecurityFilterChain secure(HttpSecurity http) throws Exception {
+    http.securityMatcher("/api/**").authorizeHttpRequests(auth -> auth.anyRequest().authenticated());
+    return http.build();
+  }
+}
+`,
+      'src/main/java/app/Routes.java': `package app;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class Routes {
+  @GetMapping("/api/public/info")
+  public String open() { return "open"; }
+
+  @GetMapping("/api/data")
+  public String secure() { return "secure"; }
+
+  @GetMapping("/other")
+  public String other() { return "other"; }
+}
+`,
+    };
+    for (const [path, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(appDir, path)), { recursive: true });
+      writeFileSync(join(appDir, path), text);
+    }
+    const gitEnv = { PATH: process.env.PATH ?? '', HOME: appDir, LANG: 'C', LC_ALL: 'C', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'dev@example.com', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'dev@example.com' };
+    const gitRun = (args) => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'init.defaultBranch=main', ...args], { cwd: appDir, env: gitEnv, stdio: 'ignore' });
+    gitRun(['init', '--quiet']);
+    gitRun(['add', '--all']);
+    gitRun(['commit', '--quiet', '--no-verify', '-m', 'fixture']);
+    const workDir = join(storeRoot, 'spring-work');
+    mkdirSync(workDir, { mode: 0o700 });
+    writeFileSync(join(consumer.dir, 'spring-demo.mjs'), `
+      import { openStore } from 'farsight-sentinel/store';
+      import { captureSnapshot } from 'farsight-sentinel/snapshot';
+      import { parseSnapshot } from 'farsight-sentinel/parser';
+      import { analyzeSpring, SPRING_ORDER } from 'farsight-sentinel/frameworks/spring';
+      const store = await openStore(${JSON.stringify(join(storeRoot, 'spring-store'))});
+      try {
+        const { snapshot } = await captureSnapshot(store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'example/smoke', root: ${JSON.stringify(appDir)} }] });
+        const parsed = await parseSnapshot(store, { snapshotId: snapshot.id, workDir: ${JSON.stringify(workDir)},
+          selection: { gitignore: true, testFiles: 'include' },
+          limits: { maxFiles: 100, maxFileBytes: 1 << 20, maxTotalBytes: 1 << 24, maxEntries: 1000, maxDurationMs: 60000 } });
+        const facts = await analyzeSpring({ snapshot, sourceId: 'app', analysis: parsed.sources[0], readContent: id => store.readArtifact(id),
+          environment: { activeProfiles: [] } });
+        const out = {};
+        for (const f of facts.facts) if (f.property === 'authentication' && f.order === SPRING_ORDER.chain) out[f.surfaceId] = f.verdict === 'unknown' ? f.reasonCode : f.verdict;
+        console.log(JSON.stringify({ version: facts.framework.version, out }));
+      } finally { store.close(); }
+    `);
+    const result = JSON.parse((await node('spring-demo.mjs')).stdout.trim());
+    assert.equal(result.version, 'boot-3.4.3+security-6.4.3');
+    assert.deepEqual(result.out, {
+      'app::route::GET /api/public/info': 'does-not-apply',
+      'app::route::GET /api/data': 'applies',
+      'app::route::GET /other': 'sentinel.spring.noChainMatches',
+    }, 'open, protected and unmatched routes, from the installed package alone');
+    return ', Spring pack analysed an installed fixture (open, protected, unknown)';
+  }
+
   // Standalone: everything @farsight/* is inlined, and farsight-cli is not pulled in.
   const modules = readdirSync(join(consumer.dir, 'node_modules'));
   assert.ok(!modules.includes('farsight-cli'), 'farsight-cli is not installed with Sentinel');
@@ -470,7 +597,7 @@ second.listen(3001);
     // through the WORKSPACE's isolated execution service (internal by design; no host fallback). This proves the
     // installed assets, not the installed runtime: the package exposes no public way to invoke the adapter until the
     // PR 09 command, so installed-runtime acceptance remains open.
-    if (process.env.SENTINEL_ISOLATION === '1') {
+    if (runEngine('pattern')) {
       const dist = join(sourceDir, 'dist');
       const imp = (p) => import(new URL(`file://${join(dist, p)}`).href);
       const { PATTERN_ADAPTER, PATTERN_WORKER_DIGEST } = await imp('adapters/pattern/adapter.js');
@@ -505,7 +632,56 @@ second.listen(3001);
     }
   }
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}${analysisExported ? ', analysis types compiled' : ''}${expressExported ? ', Express pack types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}npm consumer`);
+  // OSV assets: the in-container worker ships with its exact digest and rights; no advisory database ships.
+  let osvDemo = '';
+  if (existsSync(join(sourceDir, 'scripts', 'package-assets-osv.mjs'))) {
+    const manifestPath = join(installed, 'assets', 'osv', 'manifest.json');
+    assert.ok(existsSync(manifestPath), 'the OSV asset manifest is packaged');
+    const resolved = await evalModule(`import { createRequire } from 'node:module'; const r = createRequire(process.cwd() + '/'); console.log(r.resolve('farsight-sentinel/assets/osv/manifest.json'));`);
+    assert.ok(resolved.trim().endsWith('assets/osv/manifest.json'), 'OSV assets resolve through the exports map');
+    const osv = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    const worker = readFileSync(join(installed, osv.worker.path));
+    assert.equal(`sha256:${createHash('sha256').update(worker).digest('hex')}`, osv.worker.digest, 'the OSV worker matches its digest');
+    assert.equal(osv.adapter.command.at(-1), `/input/${osv.worker.digest.slice(7)}`, 'the fixed command names the shipped worker');
+    assert.match(osv.adapter.image, /^ghcr\.io\/google\/osv-scanner@sha256:[0-9a-f]{64}$/);
+    assert.equal(osv.registered, false);
+    assert.ok(!readdirSync(installed, { recursive: true }).map(String).some((f) => /\.zip$|all\.zip|advisories\/SENTINEL/.test(f)), 'no advisory database or fixture ships');
+    osvDemo = `osv assets (worker ${osv.worker.digest.slice(7, 19)}, no database), `;
+    // With SENTINEL_ISOLATION=1 and the pinned image installed, the shipped worker bytes run in the real engine through
+    // the WORKSPACE's isolated execution service, against a synthetic snapshot. This checks the installed asset, not an
+    // installed runtime: nothing exported invokes the adapter until the PR 09 command.
+    if (runEngine('osv')) {
+      const imp = (p) => import(new URL(`file://${join(sourceDir, 'dist', p)}`).href);
+      const { OSV_ADAPTER, OSV_WORKER_DIGEST, runOsvAttempt } = await imp('adapters/osv/index.js');
+      assert.deepEqual(osv.adapter.command, [...OSV_ADAPTER.command], 'the shipped adapter is the workspace adapter');
+      assert.equal(osv.worker.digest, OSV_WORKER_DIGEST);
+      const { createAdapterRegistry } = await imp('execution/registry.js');
+      const { createExecutionService } = await imp('execution/service.js');
+      const { openStore } = await imp('store/index.js');
+      const helpers = await import(new URL(`file://${join(sourceDir, 'test', 'osv-helpers.ts')}`).href);
+      const scratch = realpathSync(consumer.dir);
+      const work = join(scratch, 'osv-work');
+      mkdirSync(work, { mode: 0o700 });
+      const store = await openStore(join(scratch, 'osv-store'));
+      try {
+        const service = await createExecutionService(store, { scratchRoot: work, registry: createAdapterRegistry([OSV_ADAPTER]), containers: true });
+        const snapshots = [helpers.syntheticSnapshot(join(scratch, 'osv-db'), 'npm', [1], '2026-10-21T00:00:00.000000000Z')];
+        const qualify = process.env.SENTINEL_OSV_QUALIFY?.replace(/^linux\//, '');
+        const r = await runOsvAttempt(service, {
+          attemptId: 'att-package-osv', work: { id: 'work-package', revision: 1 }, scratch,
+          targets: helpers.capturedTree(join(scratch, 'osv-tree'), { 'web/package-lock.json': 'package-lock-json.fixture' }),
+          snapshots, policy: { now: new Date(), maxDatabaseAgeMs: 3650 * 86_400_000 }, ...(qualify ? { qualifyingArchitecture: qualify } : {}),
+        });
+        assert.equal(r.attempt, 'succeeded');
+        assert.deepEqual(r.findings.map((f) => f.name), ['sentinel-fixture-alpha']);
+        osvDemo += `installed osv worker run by the workspace service: ${r.findings.length} finding (${r.platform.architecture} ${r.platform.state}; installed-runtime acceptance open), `;
+      } finally {
+        await store.close();
+      }
+    }
+  }
+
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}${analysisExported ? ', analysis types compiled' : ''}${springExported ? ', Spring pack types compiled' : ''}${expressExported ? ', Express pack types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}${osvDemo}npm consumer`);
 } finally {
   consumer.cleanup();
 }

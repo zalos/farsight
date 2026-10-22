@@ -31,7 +31,7 @@ export const CAPABILITIES: readonly Capability[] = Object.freeze([
   { id: 'framework-next', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 14' },
   { id: 'framework-express', state: 'available-draft', reasonCode: 'sentinel.capability.draftExpress', plannedIn: 'PR 15' },
   { id: 'framework-nest', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 16' },
-  { id: 'framework-spring', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 17' },
+  { id: 'framework-spring', state: 'available-draft', reasonCode: 'sentinel.capability.draftSpring', plannedIn: 'PR 17' },
   // Bounded static call paths and the attested import contract are drafts; neither is data flow.
   { id: 'bounded-call-paths', state: 'available-draft', reasonCode: 'sentinel.capability.draftPaths', plannedIn: 'PR 18' },
   { id: 'deep-import', state: 'available-draft', reasonCode: 'sentinel.capability.draftDeepImport', plannedIn: 'PR 18' },
