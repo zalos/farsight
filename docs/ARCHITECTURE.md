@@ -412,7 +412,7 @@ generated like the others: `sentinel-rulepack`, `sentinel-rulelock`, `sentinel-s
 read as plain files under one canonical folder (no link, device, FIFO or escaping name), within budgets on entries,
 files, depth, path length, file size and total size; listing is one entry at a time, and every folder's identity from
 the root down is checked before and after each listing and file read, so a swapped folder refuses the pack instead of
-being followed. `validatePack` enforces the same budgets on a map handed to it directly. Packs are validated against
+being followed. `validatePack` enforces the same budgets on a map handed to it directly, counting each implied folder and each file once, as the directory walk does, and refusing a path that is both a file and a folder. Packs are validated against
 their manifest and digested: the pack digest covers the sorted
 inventory of every file, and each rule's definition digest covers its definition, rule file and fixtures. A rule
 implementation is declarative data for a registered adapter; one shaped like a script is refused, and nothing in a

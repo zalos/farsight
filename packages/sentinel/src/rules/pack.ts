@@ -181,11 +181,23 @@ export function validatePack(files: ReadonlyMap<string, Uint8Array>, limits: Par
   if (files.size > L.files) policyFail('sentinel.rules.packTooLarge', `a pack holds at most ${L.files} files`);
   const copy = new Map<string, Buffer>();
   let total = 0;
+  // The same entry accounting as readPackDirectory: every implied folder and every file counts once.
+  const folders = new Set<string>();
+  let entries = 0;
+  const count = () => { if (++entries > L.entries) policyFail('sentinel.rules.packTooLarge', `a pack holds at most ${L.entries} entries`); };
   for (const [path, bytes] of files) {
     if (typeof path !== 'string' || !(bytes instanceof Uint8Array)) policyFail('sentinel.rules.manifestInvalid', 'a pack is a map of relative paths to bytes');
     if (Buffer.byteLength(path) > L.pathBytes) policyFail('sentinel.rules.packTooLarge', `a pack path is at most ${L.pathBytes} bytes`);
     if (!isSafeRelativePath(path)) policyFail('sentinel.rules.packUnsafe', 'a pack file has an unsafe name');
-    if (path.split('/').length - 1 > L.depth) policyFail('sentinel.rules.packTooLarge', `a pack nests at most ${L.depth} folders deep`);
+    const segments = path.split('/');
+    if (segments.length - 1 > L.depth) policyFail('sentinel.rules.packTooLarge', `a pack nests at most ${L.depth} folders deep`);
+    for (let i = 1; i < segments.length; i++) {
+      const folder = segments.slice(0, i).join('/');
+      if (files.has(folder)) policyFail('sentinel.rules.packUnsafe', `${folder} is both a file and a folder`);
+      if (!folders.has(folder)) { folders.add(folder); count(); }
+    }
+    if (folders.has(path)) policyFail('sentinel.rules.packUnsafe', `${path} is both a file and a folder`);
+    count();
     if (bytes.byteLength > L.fileBytes) policyFail('sentinel.rules.packTooLarge', `${path} is larger than ${L.fileBytes} bytes`);
     total += bytes.byteLength;
     if (total > L.totalBytes) policyFail('sentinel.rules.packTooLarge', `a pack holds at most ${L.totalBytes} bytes`);

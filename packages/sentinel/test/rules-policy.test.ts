@@ -193,6 +193,14 @@ test('pack reading is bounded in entries, depth, path length, files and bytes, e
   assert.equal(code(() => readPackDirectory(dir, { fileBytes: 40 })), 'sentinel.rules.packTooLarge');
   assert.equal(code(() => readPackDirectory(dir, { totalBytes: 100, fileBytes: 1_000_000 })), 'sentinel.rules.packTooLarge');
   assert.equal(readPackDirectory(dir, { entries: 1_000_000 }).size, 4, 'a caller can lower a limit, never raise one');
+
+  // The same files as a directory read and as a map meet the same entry budget: 3 folders + 4 files = 7.
+  const plain = scratch(t);
+  writePack(plain);
+  assert.equal(code(() => readPackDirectory(plain, { entries: 6 })), 'sentinel.rules.packTooLarge');
+  const map = readPackDirectory(plain, { entries: 7 });
+  assert.equal(code(() => validatePack(map, { entries: 6 })), 'sentinel.rules.packTooLarge');
+  assert.equal(validatePack(map, { entries: 7 }).files.length, 4);
 });
 
 test('validatePack applies the same bounds to a map it is handed, before decoding or hashing', () => {
@@ -205,6 +213,21 @@ test('validatePack applies the same bounds to a map it is handed, before decodin
   assert.equal(code(() => validatePack(new Map([['x'.repeat(30), junk]]), { pathBytes: 20 })), 'sentinel.rules.packTooLarge');
   assert.equal(code(() => validatePack(new Map([['a/b/c/d', junk]]), { depth: 2 })), 'sentinel.rules.packTooLarge');
   assert.equal(code(() => validatePack(new Map([['../x', junk]]))), 'sentinel.rules.packUnsafe');
+  // Entries count implied folders as readPackDirectory does: a/1, b/1, c/1 are 3 files + 3 folders = 6.
+  const spread = new Map([['a/1', junk], ['b/1', junk], ['c/1', junk]]);
+  assert.equal(code(() => validatePack(spread, { entries: 5 })), 'sentinel.rules.packTooLarge');
+  // Shared prefixes count once: d/e/1, d/e/2, d/e/3 are 3 files + 2 folders = 5, so the limit is not reached and
+  // validation goes on to the (missing) manifest.
+  const shared = new Map([['d/e/1', junk], ['d/e/2', junk], ['d/e/3', junk]]);
+  assert.equal(code(() => validatePack(shared, { entries: 5 })), 'sentinel.rules.manifestInvalid');
+  assert.equal(code(() => validatePack(shared, { entries: 4 })), 'sentinel.rules.packTooLarge');
+  // Deep unique prefixes with few files: two files, eight implied folders.
+  const deep = new Map([['p/q/r/s/1', junk], ['w/x/y/z/2', junk]]);
+  assert.equal(code(() => validatePack(deep, { entries: 9 })), 'sentinel.rules.packTooLarge');
+  // One path cannot be both a file and a folder, in either order.
+  assert.equal(code(() => validatePack(new Map([['f', junk], ['f/g', junk]]))), 'sentinel.rules.packUnsafe');
+  assert.equal(code(() => validatePack(new Map([['f/g', junk], ['f', junk]]))), 'sentinel.rules.packUnsafe');
+
 });
 
 test('a folder swapped for a link, or a file swapped for a FIFO, mid-read refuses the pack', t => {
