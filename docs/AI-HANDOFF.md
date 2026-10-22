@@ -41,6 +41,15 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel sampled-memory test — 2026-10-22
+
+Branch `codex/sol-memory-test` changes only the bootstrap resource regression: the real parse and store now receive
+controlled resident-memory samples just above and below the recorded grant. This avoids assuming a small parse
+must grow process memory after allocation reuse or garbage collection. The refusal still checks the exact memory
+error and absence of a publication; the neighbor checks successful publication. Runtime grants are unchanged.
+Validation: dependency-closure build and all 10 bootstrap tests passed with no skips. Native platform metadata is
+reviewed separately against the native CI evidence.
+
 ## Sentinel scheduler merged; CLI integration — 2026-10-22
 
 The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`, and scheduler as
