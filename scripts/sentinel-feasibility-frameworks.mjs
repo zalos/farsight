@@ -408,25 +408,62 @@ export async function runRun(options, { runner = execute, signal, host } = {}) {
   return envelope;
 }
 
-// Removes exactly the images this acquisition built, each verified present by its own exact
-// content-addressed ID before removal; never a broader `docker image prune` or tag-based match.
-export async function runDispose(options, runner = execute) {
-  const manifest = JSON.parse(await readBoundedPlain(options.acquired, 'acquisition.json', MAX_MANIFEST_BYTES));
-  if (manifest.format !== ACQUISITION_FORMAT) throw new Error('Unsupported acquisition manifest format');
-  const selected = options.cases.length ? options.cases : Object.keys(FRAMEWORKS);
+// Remove only this acquisition's generated tag, never an image ID or another cached/shared tag.
+export function validateDisposalIdentity(acquired) {
+  const id = acquired?.imageId, caseId = acquired?.caseId;
+  if (!Object.hasOwn(FRAMEWORKS, caseId) || !/^sha256:[a-f0-9]{64}$/.test(id ?? '') ||
+      typeof acquired.tag !== 'string' || !new RegExp(`^sentinel-feasibility-frameworks-${caseId}-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$`).test(acquired.tag) ||
+      acquired.state !== 'acquired' || acquired.build?.tag !== acquired.tag || acquired.build?.imageId !== id || acquired.build?.ok !== true || !cleanCommand(acquired.build?.build) ||
+      !cleanCommand(acquired.build?.inspection) || acquired.build.inspection.stdout.trim().split('|')[0] !== id) throw new Error('DISPOSAL_ACQUISITION_IDENTITY_INVALID');
+  return `${acquired.tag}:latest`;
+}
+export function exactImageAbsent(result, identity) {
+  if (!Number.isInteger(result?.exitCode) || result.exitCode === 0 || result.spawnError || result.timedOut || result.cancelled || result.outputExceeded || result.exitSignal) return false;
+  const match = /^(?:Error response from daemon:\s*)?No such image:\s*(\S+)$/.exec((result.stderr ?? '').trim());
+  return match?.[1] === identity;
+}
+function inspectedImage(result, expectedId, expectedTag) {
+  if (!cleanCommand(result)) throw new Error('DISPOSAL_IMAGE_INSPECTION_UNAVAILABLE');
+  let values; try { values = JSON.parse(result.stdout); } catch { throw new Error('DISPOSAL_IMAGE_INSPECTION_INVALID'); }
+  if (!Array.isArray(values) || values.length !== 1 || values[0]?.Id !== expectedId || !Array.isArray(values[0].RepoTags) || values[0].RepoTags.some(tag => typeof tag !== 'string') ||
+      (expectedTag && !values[0].RepoTags.includes(expectedTag))) throw new Error('DISPOSAL_IMAGE_OR_TAG_MISMATCH');
+  return values[0];
+}
+export async function runDispose(options, runner = execute, { signal } = {}) {
+  abortCheck(signal);
+  const bytes = await readBoundedPlain(options.acquired, 'acquisition.json', MAX_MANIFEST_BYTES), manifest = JSON.parse(bytes);
+  const corpus = await loadCorpus(CORPUS), harness = await harnessFileHashes();
+  const selected = validateAcquisitionManifest(manifest, { indexSha256: corpus.indexSha256, harness }, options.cases);
+  const targets = selected.map(caseId => { const acquired = manifest.cases.find(c => c.caseId === caseId); return { caseId, acquired, tag: validateDisposalIdentity(acquired) }; });
   const results = [];
-  for (const caseId of selected) {
-    const acquired = manifest.cases.find(c => c.caseId === caseId);
-    if (!acquired?.imageId) { results.push({ caseId, state: 'nothing-to-dispose' }); continue; }
-    const inspect = await runner('docker', ['image', 'inspect', '--format', '{{.Id}}', acquired.imageId], { timeout: 30_000 });
-    if (!(Number.isInteger(inspect.exitCode) && inspect.exitCode === 0 && inspect.stdout.trim() === acquired.imageId)) { results.push({ caseId, state: 'already-absent', imageId: acquired.imageId }); continue; }
-    const removed = await runner('docker', ['rmi', '--force', acquired.imageId], { timeout: 60_000 });
-    const ok = Number.isInteger(removed.exitCode) && removed.exitCode === 0;
-    const verify = await runner('docker', ['image', 'inspect', '--format', '{{.Id}}', acquired.imageId], { timeout: 30_000 });
-    const verifiedAbsent = !(Number.isInteger(verify.exitCode) && verify.exitCode === 0);
-    results.push({ caseId, imageId: acquired.imageId, state: ok && verifiedAbsent ? 'disposed' : 'dispose-failed' });
+  for (const { caseId, acquired, tag } of targets) {
+    const record = { caseId, imageId: acquired.imageId, tag, state: 'dispose-failed', imageState: 'unknown' }; results.push(record);
+    try {
+      record.inspect = await command(runner, 'docker', ['image', 'inspect', tag], signal);
+      if (exactImageAbsent(record.inspect, tag)) { record.state = 'acquisition-tag-already-absent'; record.imageState = 'not-checked'; continue; }
+      const before = inspectedImage(record.inspect, acquired.imageId, tag);
+      const otherTags = before.RepoTags.filter(reference => reference !== tag);
+      record.otherTagsBefore = otherTags;
+      record.removal = await command(runner, 'docker', ['rmi', tag], signal, { timeout: 60_000 });
+      if (!cleanCommand(record.removal)) throw new Error('ACQUISITION_TAG_REMOVAL_FAILED');
+      record.verification = await command(runner, 'docker', ['image', 'inspect', tag], signal);
+      if (!exactImageAbsent(record.verification, tag)) throw new Error('ACQUISITION_TAG_ABSENCE_UNVERIFIED');
+      record.tagRemoved = true;
+      // Tag absence is not image absence. Inspect the exact ID separately and preserve every other tag.
+      record.imageVerification = await command(runner, 'docker', ['image', 'inspect', acquired.imageId], signal);
+      if (exactImageAbsent(record.imageVerification, acquired.imageId)) {
+        if (otherTags.length) throw new Error('SHARED_IMAGE_UNEXPECTEDLY_ABSENT');
+        record.imageState = 'confirmed-absent-by-id';
+      } else {
+        const after = inspectedImage(record.imageVerification, acquired.imageId);
+        if (after.RepoTags.includes(tag) || otherTags.some(reference => !after.RepoTags.includes(reference))) throw new Error('OTHER_IMAGE_TAGS_NOT_PRESERVED');
+        record.otherTagsAfter = after.RepoTags;
+        record.imageState = after.RepoTags.length ? 'image-retained/shared' : 'image-retained';
+      }
+      record.state = 'removed-acquisition-tag';
+    } catch (error) { record.reason = scrub(error.message); }
   }
-  return { format: 'sentinel-feasibility-frameworks-dispose/draft-1', cases: results };
+  return { format: 'sentinel-feasibility-frameworks-dispose/draft-1', acquisition: { sha256: digest(bytes), bytes: bytes.length }, selectedCases: selected, cases: results };
 }
 
 export function runHasFailures(result) {

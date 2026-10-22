@@ -5,7 +5,7 @@ import { mkdtemp, readFile, writeFile, symlink, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { runAcquire, runRun, gitProvenance, runtimePlatform, harnessFileHashes, validateAcquisitionManifest, validateAcquiredEvidence, readBoundedPlain, validateMavenVersions, expectedVersions, runHasFailures } from '../sentinel-feasibility-frameworks.mjs';
+import { runAcquire, runRun, runDispose, validateDisposalIdentity, exactImageAbsent, gitProvenance, runtimePlatform, harnessFileHashes, validateAcquisitionManifest, validateAcquiredEvidence, readBoundedPlain, validateMavenVersions, expectedVersions, runHasFailures } from '../sentinel-feasibility-frameworks.mjs';
 import { loadCorpus, CORPUS } from '../sentinel-feasibility/frameworks/runtime.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const corpus = await loadCorpus(CORPUS);
@@ -36,8 +36,8 @@ function fakeRunner(settings = {}) {
       const id = (++counter).toString(16).padStart(64, '0'), value = flag => args[args.indexOf(flag) + 1];
       const labels = Object.fromEntries(args.flatMap((entry, i) => entry === '--label' ? [args[i + 1].split('=')] : []));
       const index = args.indexOf(imageId);
-      const container = { Id: id, Image: imageId, Config: { Image: imageId, User: value('--user'), Labels: labels },
-        HostConfig: { NetworkMode: 'none', ReadonlyRootfs: true, CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], Memory: 1073741824, MemorySwap: 1073741824, NanoCpus: 1e9, PidsLimit: 256, Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=128m,mode=1777' } }, Mounts: [],
+      const container = { Id: id, Image: imageId, Platform: 'linux', Config: { Image: imageId, User: value('--user'), Labels: labels },
+        HostConfig: { NetworkMode: 'none', ReadonlyRootfs: true, CapDrop: ['ALL'], CapAdd: null, Privileged: false, SecurityOpt: ['no-new-privileges:true'], Memory: 1073741824, MemorySwap: 1073741824, NanoCpus: 1e9, PidsLimit: 256, Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=128m,mode=1777' } }, Mounts: [],
         State: { Status: 'created', Running: false, OOMKilled: false, Dead: false, ExitCode: 0 },
         evidence: args.includes('--entrypoint') ? args[index + 1] : null };
       containers.set(id, container); return response(id + '\n');
@@ -185,4 +185,74 @@ test('Spring validates exact managed Security and retained parent POM versions, 
   assert.equal(validateMavenVersions('org.springframework.security:spring-security-core:jar:6.4.2:compile', expected, pom).valid, false);
   assert.equal(validateMavenVersions('org.springframework.security:spring-security-core:jar:6.4.3:compile', expected, pom.replace('3.4.3', '3.4.2')).valid, false);
   assert.throws(() => expectedVersions({ candidates: [{ id: 'security', case: 'spring-chains', version: 'resolved-by-boot' }] }, 'spring-chains'), /EXACT/);
+});
+function disposalRunner(tag, { shared = true, firstInspection, tagVerification, imageVerification, removal } = {}) {
+  const commands = []; let removed = false;
+  const sharedTag = 'separate-acquisition:latest';
+  const absent = identity => response('[]\n', 1, `Error response from daemon: No such image: ${identity}\n`);
+  const runner = async (program, args, options) => {
+    commands.push({ program, args, options }); assert.equal(program, 'docker');
+    if (args[0] === 'rmi') { removed = true; return removal ?? response(`Untagged: ${tag}\n`); }
+    assert.deepEqual(args.slice(0, 2), ['image', 'inspect']);
+    if (args[2] === tag) {
+      if (!removed) return firstInspection ?? response(JSON.stringify([{ Id: imageId, RepoTags: [tag, ...(shared ? [sharedTag] : [])] }]));
+      return tagVerification ?? absent(tag);
+    }
+    assert.equal(args[2], imageId);
+    return imageVerification ?? (shared ? response(JSON.stringify([{ Id: imageId, RepoTags: [sharedTag] }])) : absent(imageId));
+  };
+  return { runner, commands, sharedTag };
+}
+test('disposal removes only the acquisition tag without force and explicitly preserves a shared cached image', async t => {
+  const f = await fixture(t), tag = validateDisposalIdentity(f.manifest.cases[0]), disposal = disposalRunner(tag);
+  const result = await runDispose({ acquired: f.acquired, cases: ['express-order'] }, disposal.runner);
+  const entry = result.cases[0]; assert.equal(entry.state, 'removed-acquisition-tag');
+  assert.equal(entry.imageState, 'image-retained/shared'); assert.equal(entry.tagRemoved, true);
+  assert.deepEqual(entry.otherTagsBefore, [disposal.sharedTag]); assert.deepEqual(entry.otherTagsAfter, [disposal.sharedTag]);
+  assert.deepEqual(disposal.commands.find(c => c.args[0] === 'rmi').args, ['rmi', tag]);
+  assert.ok(disposal.commands.every(c => !c.args.includes('--force')));
+  assert.ok(entry.inspect && entry.removal && entry.verification && entry.imageVerification);
+  const exclusive = disposalRunner(tag, { shared: false });
+  const lastTag = await runDispose({ acquired: f.acquired, cases: ['express-order'] }, exclusive.runner);
+  assert.equal(lastTag.cases[0].imageState, 'confirmed-absent-by-id');
+});
+test('disposal never substitutes interrupted or unrelated absence diagnostics for exact tag absence', async t => {
+  const f = await fixture(t), tag = validateDisposalIdentity(f.manifest.cases[0]);
+  const exact = response('[]\n', 1, `Error response from daemon: No such image: ${tag}\n`);
+  assert.equal(exactImageAbsent(exact, tag), true);
+  for (const changed of [{ exitCode: 0 }, { exitCode: null }, { timedOut: true }, { cancelled: true }, { outputExceeded: true }, { spawnError: 'ENOENT' }, { exitSignal: 'SIGKILL' }, { stderr: 'Error response from daemon: No such image: unrelated:latest\n' }]) {
+    const observation = { ...exact, ...changed }; assert.equal(exactImageAbsent(observation, tag), false);
+    const before = disposalRunner(tag, { firstInspection: observation });
+    const failedBefore = await runDispose({ acquired: f.acquired, cases: ['express-order'] }, before.runner);
+    assert.equal(failedBefore.cases[0].state, 'dispose-failed'); assert.equal(failedBefore.cases[0].imageState, 'unknown');
+    assert.ok(before.commands.every(c => c.args[0] !== 'rmi'));
+    const after = disposalRunner(tag, { tagVerification: observation });
+    const failedAfter = await runDispose({ acquired: f.acquired, cases: ['express-order'] }, after.runner);
+    assert.equal(failedAfter.cases[0].state, 'dispose-failed'); assert.ok(failedAfter.cases[0].verification);
+  }
+  const absentAlready = disposalRunner(tag, { firstInspection: exact });
+  const result = await runDispose({ acquired: f.acquired, cases: ['express-order'] }, absentAlready.runner);
+  assert.equal(result.cases[0].state, 'acquisition-tag-already-absent'); assert.equal(result.cases[0].imageState, 'not-checked');
+  assert.ok(absentAlready.commands.every(c => c.args[0] !== 'rmi'));
+});
+test('disposal validates exact unique new-manifest targets before mutation and rejects malformed identity or tag', async t => {
+  const f = await fixture(t), tag = validateDisposalIdentity(f.manifest.cases[0]);
+  for (const change of [m => m.cases.push(m.cases[0]), m => m.cases[0].imageId = 'not-a-content-addressed-id',
+    m => m.cases[0].tag = 'unrelated:latest', m => m.cases[0].tag += ':alternate', m => m.cases[0].build.imageId = 'sha256:' + '2'.repeat(64),
+    m => m.cases[0].build.inspection.timedOut = true, m => delete m.selectedCases]) {
+    const malformed = structuredClone(f.manifest); change(malformed);
+    await writeFile(join(f.acquired, 'acquisition.json'), JSON.stringify(malformed));
+    const fake = disposalRunner(tag); await assert.rejects(runDispose({ acquired: f.acquired, cases: ['express-order'] }, fake.runner));
+    assert.equal(fake.commands.length, 0);
+  }
+});
+test('tag cleanup cannot claim shared image retention or ID absence without its own completed inspection', async t => {
+  const f = await fixture(t), tag = validateDisposalIdentity(f.manifest.cases[0]);
+  for (const imageVerification of [{ ...response(''), timedOut: true }, response('[]', 1, 'No such image: unrelated:latest'),
+    response(JSON.stringify([{ Id: imageId, RepoTags: [] }])), response('[]', 1, `No such image: ${imageId}`)]) {
+    const fake = disposalRunner(tag, { imageVerification });
+    const result = await runDispose({ acquired: f.acquired, cases: ['express-order'] }, fake.runner);
+    assert.equal(result.cases[0].state, 'dispose-failed'); assert.equal(result.cases[0].imageState, 'unknown');
+    assert.equal(result.cases[0].tagRemoved, true); assert.ok(result.cases[0].imageVerification);
+  }
 });
