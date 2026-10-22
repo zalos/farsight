@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SENTINEL_STORE_STRINGS } from '@farsight/core/dist/strings-sentinel-store.js';
-import { checkSqliteRuntime, SQLITE_RELEASE_POLICY } from '../dist/store/runtime.js';
+import { checkSqliteRuntime, currentHost, SQLITE_RELEASE_POLICY } from '../dist/store/runtime.js';
 import { STORE_ERROR_CODES, StoreError, isStoreError } from '../dist/store/errors.js';
 import { acquireStoreOwner } from '../dist/store/owner.js';
 import { measureFilesystem, prepareStoreRoot, preparePrivateFile, canonicalSpelling, storeLayout } from '../dist/store/paths.js';
@@ -19,6 +19,11 @@ after(() => rmSync(scratch, { recursive: true, force: true }));
 let n = 0;
 const fresh = () => join(scratch, `case-${++n}`);
 const is = (code: string) => (e: unknown) => isStoreError(e) && e.code === code;
+const qualifiedHost = SQLITE_RELEASE_POLICY.hosts.includes(currentHost());
+const onQualifiedHost = { skip: !qualifiedHost && `host ${currentHost()} is not in SQLITE_RELEASE_POLICY.hosts` };
+// The path checks need no SQLite, so they run (and gather evidence) on a host before it is qualified.
+const checkStore = (root: string) => { prepareStoreRoot(root); return preparePrivateFile(storeLayout(root).owner); };
+const refuses = (code: string, root: string) => assert.throws(() => checkStore(root), is(code));
 
 test('every store error code is a catalog entry and every store catalog entry is a code', () => {
   assert.deepEqual([...STORE_ERROR_CODES].sort(), Object.keys(SENTINEL_STORE_STRINGS).sort());
@@ -27,7 +32,12 @@ test('every store error code is a catalog entry and every store catalog entry is
   assert.ok(Object.isFrozen(e.detail));
 });
 
-test('the gate passes the qualified runtime and names every behaviour it checked', async () => {
+test('an unqualified host is refused by the default gate before node:sqlite is used', { skip: qualifiedHost }, async () => {
+  await assert.rejects(checkSqliteRuntime(), (e: unknown) => is('sentinel.store.platformUnqualified')(e)
+    && (e as StoreError).detail.platform === currentHost());
+});
+
+test('the gate passes the qualified runtime and names every behaviour it checked', onQualifiedHost, async () => {
   const rt = await checkSqliteRuntime();
   assert.equal(rt.sqliteVersion, process.versions.sqlite);
   assert.ok(SQLITE_RELEASE_POLICY.qualifiedSqlite.includes(rt.sqliteVersion));
@@ -38,12 +48,12 @@ test('the gate passes the qualified runtime and names every behaviour it checked
 });
 
 test('an unqualified SQLite release or host is refused, and a refusal is not cached', async () => {
-  const unqualified = { ...SQLITE_RELEASE_POLICY, qualifiedSqlite: ['0.0.1'] };
+  const unqualified = { ...SQLITE_RELEASE_POLICY, hosts: [currentHost()], qualifiedSqlite: ['0.0.1'] };
   await assert.rejects(checkSqliteRuntime(unqualified), (e: unknown) => is('sentinel.store.runtimeUnqualified')(e)
     && (e as StoreError).detail.found === process.versions.sqlite);
-  const host = { ...SQLITE_RELEASE_POLICY, platforms: ['aix' as NodeJS.Platform] };
+  const host = { ...SQLITE_RELEASE_POLICY, hosts: ['aix-ppc64'] };
   await assert.rejects(checkSqliteRuntime(host), is('sentinel.store.platformUnqualified'));
-  assert.ok((await checkSqliteRuntime()).checks.length > 0);
+  if (qualifiedHost) assert.ok((await checkSqliteRuntime()).checks.length > 0);
 });
 
 test('loading the store modules imports neither node:sqlite nor anything else with effects', () => {
@@ -78,93 +88,99 @@ test('a file system not known to be local is refused', { skip: !['darwin', 'linu
   assert.throws(() => measureFilesystem(process.platform === 'darwin' ? '/dev' : '/proc'), is('sentinel.store.filesystemUnsupported'));
 });
 
-test('relative, dotted and trailing-separator paths are refused', async () => {
-  await assert.rejects(acquireStoreOwner('relative/store'), is('sentinel.store.pathNotAbsolute'));
-  await assert.rejects(acquireStoreOwner(`${fresh()}/./store`), is('sentinel.store.pathNotCanonical'));
-  await assert.rejects(acquireStoreOwner(`${fresh()}/x/../store`), is('sentinel.store.pathNotCanonical'));
-  await assert.rejects(acquireStoreOwner(`${fresh()}/store/`), is('sentinel.store.pathNotCanonical'));
-  await assert.rejects(acquireStoreOwner('/'), is('sentinel.store.pathNotCanonical'));
+test('relative, dotted and trailing-separator paths are refused', () => {
+  refuses('sentinel.store.pathNotAbsolute', 'relative/store');
+  refuses('sentinel.store.pathNotCanonical', `${fresh()}/./store`);
+  refuses('sentinel.store.pathNotCanonical', `${fresh()}/x/../store`);
+  refuses('sentinel.store.pathNotCanonical', `${fresh()}/store/`);
+  refuses('sentinel.store.pathNotCanonical', '/');
 });
 
-test('an alias through a linked folder is refused with the canonical spelling, never followed', async () => {
+test('acquisition runs the path checks before it creates anything', onQualifiedHost, async () => {
+  const base = fresh();
+  await assert.rejects(acquireStoreOwner(`${base}/x/../store`), is('sentinel.store.pathNotCanonical'));
+  assert.ok(!existsSync(base));
+});
+
+test('an alias through a linked folder is refused with the canonical spelling, never followed', () => {
   const base = fresh();
   mkdirSync(join(base, 'real'), { recursive: true, mode: 0o700 });
   symlinkSync(join(base, 'real'), join(base, 'alias'));
-  await assert.rejects(acquireStoreOwner(join(base, 'alias', 'store')), (e: unknown) => is('sentinel.store.pathNotCanonical')(e)
+  assert.throws(() => checkStore(join(base, 'alias', 'store')), (e: unknown) => is('sentinel.store.pathNotCanonical')(e)
     && (e as StoreError).detail.canonical === join(base, 'real', 'store'));
   assert.ok(!existsSync(join(base, 'real', 'store')), 'nothing was created through the alias');
 });
 
-test('macOS temp and letter-case aliases are refused', { skip: process.platform !== 'darwin' }, async () => {
+test('macOS temp and letter-case aliases are refused', { skip: process.platform !== 'darwin' }, () => {
   // tmpdir() is /var/folders/..., a link to /private/var/folders/...
   const viaVar = join(tmpdir(), 'sentinel-never-created');
   assert.notEqual(viaVar, canonicalSpelling(viaVar));
-  await assert.rejects(acquireStoreOwner(viaVar), (e: unknown) => is('sentinel.store.pathNotCanonical')(e)
+  assert.throws(() => checkStore(viaVar), (e: unknown) => is('sentinel.store.pathNotCanonical')(e)
     && (e as StoreError).detail.canonical === join(realpathSync(tmpdir()), 'sentinel-never-created'));
   const base = fresh();
   mkdirSync(join(base, 'Store'), { recursive: true, mode: 0o700 });
   if (existsSync(join(base, 'STORE'))) { // a case-insensitive volume, the macOS default
-    await assert.rejects(acquireStoreOwner(join(base, 'STORE')), (e: unknown) => is('sentinel.store.pathNotCanonical')(e)
+    assert.throws(() => checkStore(join(base, 'STORE')), (e: unknown) => is('sentinel.store.pathNotCanonical')(e)
       && (e as StoreError).detail.canonical === join(base, 'Store'));
   }
 });
 
-test('a linked store folder or lock file is refused', async () => {
+test('a linked store folder or lock file is refused', () => {
   const base = fresh();
   mkdirSync(join(base, 'target'), { recursive: true, mode: 0o700 });
   symlinkSync(join(base, 'target'), join(base, 'store'));
-  await assert.rejects(acquireStoreOwner(join(base, 'store')), is('sentinel.store.pathSymlink'));
+  refuses('sentinel.store.pathSymlink', join(base, 'store'));
 
   const store = join(fresh(), 'store');
   mkdirSync(store, { recursive: true, mode: 0o700 });
   writeFileSync(join(store, 'elsewhere.sqlite'), '', { mode: 0o600 });
   symlinkSync(join(store, 'elsewhere.sqlite'), join(store, 'owner.sqlite'));
-  await assert.rejects(acquireStoreOwner(store), is('sentinel.store.pathSymlink'));
+  refuses('sentinel.store.pathSymlink', store);
 });
 
-test('a hard-linked lock file is refused: a second name could be locked separately', async () => {
+test('a hard-linked lock file is refused: a second name could be locked separately', () => {
   const store = join(fresh(), 'store');
-  (await acquireStoreOwner(store)).close();
+  checkStore(store);
   linkSync(join(store, 'owner.sqlite'), join(store, 'second-name.sqlite'));
-  await assert.rejects(acquireStoreOwner(store), is('sentinel.store.fileUnsafe'));
+  refuses('sentinel.store.fileUnsafe', store);
 });
 
-test('a file where the store folder should be is refused and left alone', async () => {
+test('a file where the store folder should be is refused and left alone', () => {
   const base = fresh();
   mkdirSync(base, { mode: 0o700 });
   writeFileSync(join(base, 'store'), 'synthetic');
-  await assert.rejects(acquireStoreOwner(join(base, 'store')), is('sentinel.store.pathNotDirectory'));
+  refuses('sentinel.store.pathNotDirectory', join(base, 'store'));
   assert.ok(lstatSync(join(base, 'store')).isFile());
 });
 
-test('broader existing permissions are refused, never widened or narrowed', async () => {
+test('broader existing permissions are refused, never widened or narrowed', () => {
   const store = join(fresh(), 'store');
   mkdirSync(store, { recursive: true, mode: 0o700 });
   chmodSync(store, 0o750);
-  await assert.rejects(acquireStoreOwner(store), is('sentinel.store.pathPermissions'));
+  refuses('sentinel.store.pathPermissions', store);
   assert.equal(statSync(store).mode & 0o777, 0o750);
 
   chmodSync(store, 0o700);
   writeFileSync(join(store, 'owner.sqlite'), '', { mode: 0o600 });
   chmodSync(join(store, 'owner.sqlite'), 0o644);
-  await assert.rejects(acquireStoreOwner(store), is('sentinel.store.pathPermissions'));
+  refuses('sentinel.store.pathPermissions', store);
   assert.equal(statSync(join(store, 'owner.sqlite')).mode & 0o777, 0o644);
 });
 
-test('a folder above the store that others can rename into is refused; a sticky one is accepted', async () => {
+test('a folder above the store that others can rename into is refused; a sticky one is accepted', () => {
   const base = fresh();
   mkdirSync(join(base, 'shared'), { recursive: true, mode: 0o700 });
   chmodSync(join(base, 'shared'), 0o777);
-  await assert.rejects(acquireStoreOwner(join(base, 'shared', 'store')), (e: unknown) => is('sentinel.store.ancestorUnsafe')(e)
+  assert.throws(() => checkStore(join(base, 'shared', 'store')), (e: unknown) => is('sentinel.store.ancestorUnsafe')(e)
     && (e as StoreError).detail.path === join(base, 'shared'));
   chmodSync(join(base, 'shared'), 0o1777);
-  (await acquireStoreOwner(join(base, 'shared', 'store'))).close();
+  checkStore(join(base, 'shared', 'store'));
   chmodSync(join(base, 'shared'), 0o700);
 });
 
-test('a store belonging to another user is refused', { skip: process.getuid?.() !== 0 && 'needs root to create another user\'s folder' }, async () => {
+test('a store belonging to another user is refused', { skip: process.getuid?.() !== 0 && 'needs root to create another user\'s folder' }, () => {
   const store = join(fresh(), 'store');
   mkdirSync(store, { recursive: true, mode: 0o700 });
   spawnSync('chown', ['1', store]);
-  await assert.rejects(acquireStoreOwner(store), is('sentinel.store.pathWrongOwner'));
+  refuses('sentinel.store.pathWrongOwner', store);
 });

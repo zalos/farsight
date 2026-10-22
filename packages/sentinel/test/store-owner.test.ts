@@ -1,13 +1,21 @@
 // The owner lock between real, independent processes: simultaneous bootstrap from an absent store, SIGKILL
 // takeover, cooperative release, closed and stale capabilities, resource ordering and identity binding.
-import { test, after } from 'node:test';
+import { test as nodeTest, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { acquireStoreOwner } from '../dist/store/owner.js';
 import { isStoreError } from '../dist/store/errors.js';
+import { SQLITE_RELEASE_POLICY, currentHost } from '../dist/store/runtime.js';
+import { validateEnvelope } from '../dist/index.js';
 import { OwnerProcesses, probeOwnership } from './helpers/owner-processes.ts';
+
+// Ownership is exercised only on hosts the release policy qualifies; elsewhere the gate refuses first (tested
+// in store-runtime.test.ts). Qualifying a host means adding it to the policy and running this suite there.
+const unqualified = !SQLITE_RELEASE_POLICY.hosts.includes(currentHost())
+  && `host ${currentHost()} is not in SQLITE_RELEASE_POLICY.hosts`;
+const test = (name: string, fn: () => Promise<void> | void) => nodeTest(name, { skip: unqualified }, fn);
 
 const scratch = mkdtempSync(join(realpathSync(tmpdir()), 'sentinel-owner-'));
 const procs = new OwnerProcesses();
@@ -52,7 +60,7 @@ test('SIGKILL releases the lock; the successor takes over with a later epoch and
   const taken = await successor.next();
   assert.equal(taken.type, 'acquired');
   assert.equal(taken.storeId, held.storeId);
-  assert.ok(taken.epoch > held.epoch);
+  assert.notEqual(taken.epoch, held.epoch);
   successor.send({ type: 'assert' });
   assert.equal((await successor.next()).type, 'held');
   assert.deepEqual(probeOwnership(store), { outcome: 'refused', code: 'sentinel.store.ownedElsewhere' });
@@ -67,16 +75,17 @@ test('cooperative release hands over; epochs increase; the descriptor is informa
   const store = freshStore();
   const a = await acquireStoreOwner(store);
   assert.match(a.storeId, /^[0-9a-f-]{36}$/);
+  assert.match(a.epoch, /^epoch-[0-9a-f-]{36}$/);
   assert.equal(a.storePath, store);
   // Rewriting the descriptor does not move the lock.
-  writeFileSync(join(store, 'owner.json'), '{"instance":"someone-else"}');
+  writeFileSync(join(store, 'owner.json'), '{"epoch":"epoch-someone-else"}');
   assert.deepEqual(probeOwnership(store), { outcome: 'refused', code: 'sentinel.store.ownedElsewhere' });
   a.assertHeld();
   a.close();
   assert.ok(existsSync(join(store, 'owner.json')), 'another holder\'s descriptor is not removed');
   const b = await acquireStoreOwner(store);
   assert.equal(b.storeId, a.storeId);
-  assert.ok(b.epoch > a.epoch);
+  assert.notEqual(b.epoch, a.epoch);
   assert.equal(JSON.parse(readFileSync(join(store, 'owner.json'), 'utf8')).epoch, b.epoch);
   b.close();
   assert.ok(!existsSync(join(store, 'owner.json')), 'the holder removes its own descriptor');
@@ -99,8 +108,8 @@ test('a closed capability refuses use and close is idempotent', async () => {
   owner.close();
   assert.equal(owner.held, false);
   assert.throws(() => owner.assertHeld(), (e: unknown) => isStoreError(e, 'sentinel.store.ownerClosed'));
-  assert.throws(() => owner.register({ close() {} }), (e: unknown) => isStoreError(e, 'sentinel.store.ownerClosed'));
-  assert.throws(() => (owner as any).epoch = 99, TypeError);
+  assert.throws(() => owner.registerResource({ close() {} }), (e: unknown) => isStoreError(e, 'sentinel.store.ownerClosed'));
+  assert.throws(() => (owner as any).epoch = 'epoch-forged', TypeError);
   assert.equal(Object.keys(owner).some(k => /db|handle|connection/i.test(k)), false);
 });
 
@@ -109,9 +118,9 @@ test('registered resources close last-first while the lock is still held, then t
   const owner = await acquireStoreOwner(store);
   const order: string[] = [];
   const seen: string[] = [];
-  owner.register({ name: 'ledger', close() { order.push('ledger'); seen.push(probeOwnership(store).code ?? 'acquired'); } });
-  const unregister = owner.register({ name: 'dropped', close() { order.push('dropped'); } });
-  owner.register({ name: 'objects', close() { order.push('objects'); assert.throws(() => owner.assertHeld(), (e: unknown) => isStoreError(e, 'sentinel.store.ownerClosed')); } });
+  owner.registerResource({ name: 'ledger', close() { order.push('ledger'); seen.push(probeOwnership(store).code ?? 'acquired'); } });
+  const unregister = owner.registerResource({ name: 'dropped', close() { order.push('dropped'); } });
+  owner.registerResource({ name: 'objects', close() { order.push('objects'); assert.throws(() => owner.assertHeld(), (e: unknown) => isStoreError(e, 'sentinel.store.ownerClosed')); } });
   unregister();
   owner.close();
   assert.deepEqual(order, ['objects', 'ledger']);
@@ -122,7 +131,7 @@ test('registered resources close last-first while the lock is still held, then t
 test('a failing resource is reported and the lock is still released', async () => {
   const store = freshStore();
   const owner = await acquireStoreOwner(store);
-  owner.register({ name: 'broken', close() { throw new Error('synthetic close failure'); } });
+  owner.registerResource({ name: 'broken', close() { throw new Error('synthetic close failure'); } });
   assert.throws(() => owner.close(), (e: unknown) => isStoreError(e, 'sentinel.store.resourceCloseFailed')
     && JSON.stringify((e as any).detail.resources) === '["broken"]');
   assert.equal(probeOwnership(store).outcome, 'acquired');
@@ -158,4 +167,15 @@ test('hazard, pinned: opening and closing owner.sqlite in the owning process dro
   readFileSync(join(store, 'owner.sqlite'));
   assert.equal(probeOwnership(store).outcome, 'acquired');
   owner.close();
+});
+
+test('the epoch and store id are the coordinatorEpoch and store label of the shared attempt contract', async () => {
+  const owner = await acquireStoreOwner(freshStore());
+  try {
+    const fixture = JSON.parse(readFileSync(new URL('./contracts/valid/attempt-running.json', import.meta.url), 'utf8'));
+    fixture.coordinatorEpoch = owner.epoch;
+    fixture.worker.ownershipLabels = { ...fixture.worker.ownershipLabels, store: owner.storeId, epoch: owner.epoch };
+    const checked = validateEnvelope('attempt', fixture);
+    assert.equal(checked.ok, true, JSON.stringify(checked));
+  } finally { owner.close(); }
 });

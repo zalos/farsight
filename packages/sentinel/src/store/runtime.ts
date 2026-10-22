@@ -13,21 +13,28 @@ type SqliteModule = typeof import('node:sqlite');
 export interface SqliteReleasePolicy {
   /** SQLite releases that passed the PR 01 storage probe and this package's store tests. */
   readonly qualifiedSqlite: readonly string[];
-  /** Hosts whose file locking was exercised (POSIX advisory locks through SQLite's default unix VFS). */
-  readonly platforms: readonly NodeJS.Platform[];
+  /**
+   * Hosts (`platform-arch`) where this release and the store's lock protocol were measured: POSIX advisory locks
+   * through SQLite's default unix VFS. A host is added only after the store tests have run on it.
+   */
+  readonly hosts: readonly string[];
   /** Where the qualification came from, for reports and error detail. */
   readonly evidence: string;
 }
 
 /**
- * PR 01's E4 probe measured SQLite 3.53.3 (linked by Node 24.19.0) on darwin-arm64; the store tests in this
- * package run the same lock protocol on every host CI runs. Add a release only with that evidence.
+ * Measured: PR 01's E4 probe and the PR 03 store tests, SQLite 3.53.3 linked by Node 24.19.0, on darwin-arm64
+ * only. Linux (for example linux-x64 on CI) is not qualified until the store tests have passed there; the
+ * Linux file-system checks in paths.ts exist for that run. Add a release or host only with that evidence.
  */
 export const SQLITE_RELEASE_POLICY: SqliteReleasePolicy = Object.freeze({
   qualifiedSqlite: Object.freeze(['3.53.3']),
-  platforms: Object.freeze(['darwin', 'linux'] as NodeJS.Platform[]),
-  evidence: 'PR 01 E4 storage probe (SQLite 3.53.3, Node 24.19.0, darwin-arm64) and the PR 03 store tests',
+  hosts: Object.freeze(['darwin-arm64']),
+  evidence: 'PR 01 E4 storage probe and PR 03 store tests: SQLite 3.53.3, Node 24.19.0, darwin-arm64',
 });
+
+/** This process's host in policy form, `platform-arch`. */
+export const currentHost = (): string => `${process.platform}-${process.arch}`;
 
 export interface SqliteRuntime {
   /** The lazily imported module; store code opens connections through this, never by importing it again. */
@@ -56,8 +63,8 @@ export function checkSqliteRuntime(policy: SqliteReleasePolicy = SQLITE_RELEASE_
 }
 
 async function runGate(policy: SqliteReleasePolicy): Promise<SqliteRuntime> {
-  if (!policy.platforms.includes(process.platform)) {
-    throw new StoreError('sentinel.store.platformUnqualified', { platform: process.platform, qualified: policy.platforms });
+  if (!policy.hosts.includes(currentHost())) {
+    throw new StoreError('sentinel.store.platformUnqualified', { platform: currentHost(), qualified: policy.hosts });
   }
   let sqlite: SqliteModule;
   try {
