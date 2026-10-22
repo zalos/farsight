@@ -84,8 +84,13 @@ process.stdin.on('data', b => {
   buffered += b.toString('utf8');
   for (let nl; (nl = buffered.indexOf('\n')) >= 0;) { lines.push(JSON.parse(buffered.slice(0, nl))); buffered = buffered.slice(nl + 1); wake?.(); }
 });
+// The worker contract: a worker whose stdin ends before its start has lost its coordinator and exits, having read
+// and written nothing (only the deliberate outlier, linger-ok, breaks it).
+let started = false;
+process.stdin.on('end', () => { if (!started && behavior !== 'linger-ok') process.exit(0); });
+process.stdout.on('error', () => { if (!started && behavior !== 'linger-ok') process.exit(0); });
 const next = async () => { while (!lines.length) await new Promise(r => { wake = r; }); return lines.shift(); };
-const awaitStart = async () => { const w = await next(); if (w.type !== 'welcome') process.exit(9); return next(); };
+const awaitStart = async () => { const w = await next(); if (w.type !== 'welcome') process.exit(9); const s = await next(); started = true; return s; };
 
 // A worker that outlives a dead coordinator: a timer keeps it alive after its stdin closes.
 // It also ignores the broken pipe it meets once the coordinator is gone, so only recovery can stop it.

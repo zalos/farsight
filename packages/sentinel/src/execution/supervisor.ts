@@ -8,6 +8,14 @@
 // input fingerprint, and every artifact it lists is re-read and hashed from the output folder, with nothing
 // unlisted, linked or oversized there.
 //
+// Authorization is the start message, never time. The coordinator sends it only in answer to the worker's hello,
+// which it reads only after the attempt is durable in the ledger (onWorker) and the worker's identity, with its
+// process id, is durable in the worker journal. A worker launched by a coordinator that died earlier therefore never
+// receives a start; its stdin's only write end died with that coordinator (libuv opens the parent's end close-on-
+// exec), so the worker reads end of stream, and the worker contract (StartMessage) makes it exit. Even a worker that
+// broke that contract holds no binding: the ledger has no attempt for it to publish under, and the new owner's epoch
+// fences any it had.
+//
 // Ending: a result, an acknowledged cancel, the deadline, a cancel the worker ignores past its grace, a protocol
 // or framing error, an output or stdout budget, or the worker exiting. Every path stops the worker, removes its
 // container by exact identity and confirms the removal; the owner's close path does the same synchronously.
