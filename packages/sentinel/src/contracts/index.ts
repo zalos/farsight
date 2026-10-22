@@ -78,7 +78,7 @@ export const PROTOCOL_MESSAGE_TYPES = [
 ] as const;
 
 export const RULE_LANGUAGES = ['typescript', 'javascript', 'java'] as const;
-export const RULE_SCOPE_KINDS = ['source-file', 'surface', 'dependency-manifest', 'ci-config', 'repository'] as const;
+export const RULE_SCOPE_KINDS = ['source-file', 'surface', 'dependency-manifest', 'ci-config', 'infrastructure-config', 'repository'] as const;
 export const RULE_CAPABILITIES = [
   'source-bytes', 'pattern-match', 'source-span', 'call-occurrence', 'resolved-receiver-type',
   'framework-order', 'interprocedural-flow', 'runtime-observation', 'dependency-manifest', 'advisory-database',

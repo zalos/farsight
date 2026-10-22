@@ -138,6 +138,26 @@ trials pass. Native inspect diagnostics retain at most 16 bounded state/timing r
 The original Linux CI failure lacked raw inspect observations, so its exact daemon sequence remains unproven;
 required native CI on the corrected head must pass before integration.
 
+## Combined scanner foundations — 2026-10-22
+
+Branch `codex/sentinel-scanner-integration` combines reviewed scanner integration `44ff7fae` with foundation
+head `7d392239` in one feature merge. Scanner, driver, scheduler, policy and report implementation bytes remain
+identical to `44ff7fae`; the incoming Express implementation and corrected bounded OOM visibility controls are
+retained. The pre-start confirmed-cleanup regression and scoped invocation inputs also remain intact. Catalogs,
+ADRs, README, import audits, exports and package consumers retain all four scanner asset sets and the source-only
+Express library. Express is available as a draft library; no framework scanner driver or public framework command
+acceptance is claimed. The IaC package selector and no-selector four-engine behavior are unchanged.
+
+Validation: Sentinel dependency-closure build, typecheck, generated schemas and catalog lint passed. Four pure
+OOM-state controls and ten package controls, plus two capability-union controls, passed with zero skips. The fresh
+npm-only package consumer compiled nine exports and 19 contract types, validated 19 schemas and 53 fixtures,
+reopened the store across processes, analyzed the installed Express before/after/conditional fixture and verified
+all four scanner asset sets. A separate installed public CLI consumer passed owner adoption, missing-asset refusal,
+exact tool/database promotion, plan and detached/joined execution through all four existing pinned containers;
+its report survived service restart and source removal, and incomplete required coverage remained exit 2. No target
+code or host scanner ran; no scanner assets were downloaded and no hosted model was called. This is local arm64 evidence; combined native CI remains an
+integration gate. The earlier 576-test broad suite belongs to `44ff7fae` and was not repeated for this source-preserving merge.
+
 ## Start here
 
 Read `AGENTS.md` for project rules and architecture. Codex loads it as project instructions; `CLAUDE.md` imports it and this handoff. Keep durable facts in those repository files so both providers receive updates. This is project memory, not ChatGPT account memory or a synchronization of private conversation histories.
@@ -213,6 +233,37 @@ catalog and exact subject lint passed. No target application code was executed. 
 - Preserve the multi-source dogfood graph: use the workspace server's `POST /api/sync` after restart. Bare CLI ingest replaces it and ignores workspace source excludes. Smoke-test ingest from a temporary cwd with an explicit output path instead; SQLite history is cwd-relative too.
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
+
+## Sentinel scanner/library integration — 2026-10-22
+
+The final `codex/sentinel-scanner-integration` aggregate normally merges the reviewed Nest/provider/path/Next/Spring
+foundations into `a26ca4a4`. All 85 recorded scanner/execution/driver/service/planner implementation files remain
+exactly that candidate's bytes, and all 42 incoming framework/path/provider implementation files match the supplied
+aggregate. The package retains every asset hook, now invoked once; public exports, catalogs, schema registrations,
+dependencies, import audits and capability assertions combine both sides. Capability words remain scoped to proved
+library or explicit four-scanner command behavior; full framework/model/policy/report integration is still open.
+
+The package consumer now permanently checks Next peer identity, patched/unsupported identity and dynamic matchers
+from retained capture after source removal, plus offline provider budget reservation, overspend refusal and reopen.
+These child probes import only installed public exports, use original inert fixtures and contact no provider.
+Fresh npm validation compiles 14 exports and 21 contract types, checks 21 schemas and 55 fixtures, exercises installed
+Nest/Spring/Express/paths/Next/provider behavior, and verifies all four scanner asset sets. A separate true installed
+four-scanner CLI consumer passes owner adoption, missing-asset refusal, plan/detach/join/wait and report replay after
+service restart/source removal; incomplete coverage stays exit 2. Build/types/schema/catalog and focused
+package/contract/capability/workflow checks pass. Prior native CI and 20-repetition recovery results belong to exact
+`a26ca4a4`; the new integration still needs its own selected CI. No primary build, push or merge into main.
+
+## Sentinel Trivy/zizmor native qualification — 2026-10-22
+
+A separate follow-on records Linux amd64 as measured for the existing pinned Trivy and zizmor workers only.
+[Native CI job 119958735627](https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627) checked out merge
+`0d6daa8cd369835fe6ec8ec5a89b4d25cb23edc5` (PR head `454667ed8f254ac11b6e030b1ad9e44dcd333b8b` onto
+`e25424fb637e5491e307a2be8d9124af2463450d`): all 33 adapter/conformance tests passed with zero skips, then both
+installed workers produced the expected findings. The sanitized evidence record binds image manifests, worker
+bytes, source digests and the exact job. No broader engine, runtime, architecture, CLI or coverage qualification is
+implied; zizmor's offline limits still apply. The workflow now expects the measured platform word.
+Local follow-on validation: build and typecheck passed, all 35 unit/container conformance cases passed with zero
+skips on the existing arm64 runtime, and the installed package ran both unchanged workers successfully.
 
 ## Next fix-stack integration with merged foundations — 2026-10-22
 
@@ -474,6 +525,21 @@ failure diagnostics passed independent real-container review; secrets and offlin
 implementation/review. Spring registration, callback and inheritance edge cases remain under correction.
 These later packages are not complete. The computer restart removed temporary validation artifacts; the
 planner's comparison and checks above were recreated afterward. No primary build or dogfood refresh occurred.
+## Sentinel driver boundaries — 2026-10-22
+
+Branch `codex/sentinel-driver-fixes` starts from the scheduler's acknowledged-unknown scratch fix. The execution
+coordinator now checks a selected driver's implementation digest against the executing registry and admitted unit
+at open. One absolute unit deadline covers prepare, worker launch/run, normalize and durable publication; drivers
+receive the combined cancellation/deadline signal and workers get only the remaining grant. Deadline refusal during
+attempt-start storage releases a confirmed-stopped worker's scratch while a fenced epoch leaves recovery in charge.
+The implementation is in `execution/check-drivers.ts`, `coordinator.ts`, `publication.ts` and `supervisor.ts`;
+`execution-driver-boundaries.test.ts` and a focused container case cover the new boundaries.
+
+Validated with Node 24 and pnpm 9: the four-package Sentinel closure build, 55 focused driver/coordinator/scratch
+checks, 66 protocol/journal/native recovery smoke checks, and the focused pinned-container cleanup case pass with
+zero skips. The 15 new native behavioral cases fail nine checks on the unchanged baseline and all pass with the fix.
+The broader recovery matrix was not repeated. Independent review is still required; no selected-stage planning,
+publication, push or merge is part of this change.
 
 ## Sentinel parser merged; rules and policy integration — 2026-10-22
 
@@ -2233,6 +2299,72 @@ show a pinned GitHub tarball install for CI and distinguish a release commit fro
 MCP already reports its running build in `graph_overview`; `refresh_graph` already re-ingests and reloads,
 so upgrading the process still requires reconnecting it.
 
+
+### Canonical scanner drivers (2026-10-22)
+
+The internal Pattern, OSV, Trivy and zizmor drivers now use the coordinator's existing trusted driver registry.
+They require exact shipped rule definitions, engine pins, captured input scopes and explicitly held database/checks
+provenance. No driver acquires assets or starts an engine directly. Missing assets refuse preparation and cannot
+produce clean coverage; the public CLI and capability manager remain integration work. Normalized findings/reports
+are source-derived and publish with per-check coverage in the accepted worker attempt. The small seam delta exposes
+the exact supervisor outcome frozen in place, permits validated actual-read refinement within sealed captured scopes,
+and preserves per-record privacy. Original rule assets are packaged with a digest manifest. Focused checks include
+real canonical plan/bootstrap/container/publication for all four engines, negative read-boundary tests, package import
+checks, typecheck, catalog and schema checks; detailed final evidence is kept privately with the implementation review.
+
+
+### Explicit public scanner command integration (2026-10-22)
+
+The separate scanner CLI branch composes the independently reviewed four-driver layer with the merged owner CLI.
+`init --profile scanners` selects the original Pattern/OSV/Trivy/zizmor families; default static preview behavior is
+preserved through an explicit trusted preview driver. Owner asset commands require exact installed image pins and
+separately named bounded database/checks provenance, bound with rights and the prior lock in spent receipts.
+Acquisition remains a separate explicit bounded owner action; plan/run never download or use host scanners.
+
+Actual public CLI and clean npm-only installed tests completed all four existing pinned Linux containers through
+canonical planning and accepted publications. Detached start/join/wait, report regeneration after service stop and
+source removal, missing archive refusal before attempts, source-copy independence, metadata/receipt tampering,
+bounds and preview compatibility were exercised. Required coverage remains honest and policy satisfaction is not
+claimed. The scanner report is a draft CLI slice; full report/policy/framework/model work remains open. Detailed
+final checks and immutable integration context are retained privately for independent SOL review. No primary build,
+ingest, dogfood graph or shared owner source tree was changed; no push or merge was performed.
+
+## Sentinel checks-bundle rights correction — 2026-10-22
+
+The public scanner integration now takes the checks bundle's rights directly from the pinned bundle metadata
+(MIT), independently of the Trivy engine's Apache-2.0 license. An explicit conflicting override is refused. Public
+and installed CLI tests assert the disclosed candidate rights before the exact candidate is receipt-bound and
+promoted. No scanner input, worker or coverage behavior changes.
+
+## Sentinel scanner admission corrections — 2026-10-22
+
+The public CLI derives `tool-execution` from the admitted executable check units, apart from the exact shipped
+local preview detector. Disclosure, foreground admission, detached owner receipts, direct agent service admission
+and rerun previews use the same effect derivation; pause/cancel remain local control actions. Default and repository
+grants are unchanged. Asset adoption now asks shared admission policy before inspecting Docker or reading caller
+archives, then still requires final exact candidate/provenance receipt admission before promotion. The stale ADR
+checks-bundle rights sentence now names MIT. Focused coverage includes restricted grants refusing before scanner
+attempts, a sufficient grant running the real pinned scanner, rerun refusal, direct service/receipt denial, no daemon
+contact on asset-policy denial, and preview/lifecycle/receipt regressions.
+
+## Native installed scanner CLI gate — 2026-10-22
+
+Branch `codex/sol-scanner-native-ci` adds the separate `sentinel-scanner-cli` workflow over the reviewed four-engine
+CLI and native IaC metadata context. It verifies source/image/amd64-manifest pins, explicitly provisions four images
+and the bounded checks bundle, requires zero-skip actual canonical CLI/driver/admission tests, and runs the npm-only
+installed detached lifecycle and retained-report consumer. Selection uses the existing package/isolation dependency
+union and fails closed; test files run sequentially. No scanner, policy, grant or authority logic changes. Local
+validation replays the selected commands on the existing arm64 container runtime; it is not native amd64 CI evidence.
+The native job must pass after integration before its installed-command gate is claimed.
+
+## Combined scanner test assertions — 2026-10-22
+
+Branch `codex/sol-scanner-suite-tests` updates two older capability assertions to the exact reviewed four-engine
+draft slice while retaining the explicit unavailable feature list. The bootstrap publication-window regression
+now accepts an unstarted parse only when the coordinator records a run-deadline refusal on that work or its exact
+ancestor chain; a dependency hold specifically needs an ancestor cause. A delayed-capture case exercises the
+ancestor path directly. Runtime code, grants and resource limits are unchanged. Dependency-closure build passed;
+the three affected suites passed 47 cases with one existing qualified-host-only negative-case skip and no failures.
 
 ## Nest built-in module loader follow-up (2026-10-22)
 

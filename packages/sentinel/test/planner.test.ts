@@ -240,3 +240,14 @@ test('every planner code and check state has catalog words in both registers wit
     assert.ok(e?.hud && e.professional && e.define, key);
   }
 });
+
+test('an infrastructure-configuration rule scopes Dockerfiles, Terraform and YAML, each by file, and nothing else', () => {
+  const iac = rule('sentinel.iac.misconfiguration', { scopeKind: 'infrastructure-config', adapterId: 'zizmor' });
+  const entries = [...ENTRIES, file('web', 'deploy/Dockerfile'), file('web', 'deploy/app.dockerfile'), file('web', 'deploy/Containerfile.prod'),
+    file('web', 'k8s/pod.yaml'), file('web', 'infra/main.tf'), file('web', 'infra/vars.tf.json'), file('web', 'infra/terraform.tfvars')];
+  const plan = analysis([iac], { snapshot: snap(SPRING, entries) });
+  assert.deepEqual(checksOf(plan, iac.familyId).map(c => c.scopeId).sort(), [
+    'web:.github/workflows/ci.yml', 'web:deploy/Containerfile.prod', 'web:deploy/Dockerfile', 'web:deploy/app.dockerfile',
+    'web:infra/main.tf', 'web:infra/vars.tf.json', 'web:k8s/pod.yaml', 'web:locked/',
+  ], 'every candidate file is a check; the engine decides which YAML is a manifest, and says so');
+});

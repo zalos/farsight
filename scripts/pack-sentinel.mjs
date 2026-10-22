@@ -233,7 +233,7 @@ try {
     exportsMap['./schemas/*'] = './schemas/*';
   }
   // The rule packs Sentinel ships (data only: a manifest, detector descriptions, fixtures), promoted by the owner.
-  if (existsSync(join(dir, 'rules'))) { cpSync(join(dir, 'rules'), join(out, 'rules'), { recursive: true }); files.push('rules'); }
+  if (existsSync(join(dir, 'rules'))) { cpSync(join(dir, 'rules'), join(out, 'rules'), { recursive: true }); if (!files.includes('rules')) files.push('rules'); }
   // Provenance of the files the package starts by path rather than imports (the launch gate): where and which bytes.
   const assets = {};
   for (const [asset] of ASSETS) {

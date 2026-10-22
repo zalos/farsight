@@ -1,0 +1,36 @@
+{
+  "schema": "sentinel-rulepack/draft-1",
+  "packId": "sentinel-infrastructure",
+  "version": "0.1.0",
+  "rights": {
+    "spdx": "MIT",
+    "origin": "sentinel-original"
+  },
+  "rules": [
+    {
+      "familyId": "sentinel.iac.misconfiguration",
+      "revision": 1,
+      "titleKey": "sentinel.drivers.rule.misconfiguration",
+      "applicability": {
+        "languages": ["typescript", "javascript", "java"],
+        "scopeKind": "infrastructure-config"
+      },
+      "requires": ["source-bytes"],
+      "implementation": {
+        "adapterId": "iac-trivy",
+        "rulePath": "detectors/trivy-misconfiguration.json"
+      },
+      "meaning": "candidate",
+      "severity": "medium",
+      "evidenceRequired": ["source-span"],
+      "limitationKeys": ["sentinel.drivers.limitation.checksBundle"],
+      "mappings": {
+        "cwe": []
+      },
+      "fixtures": {
+        "positive": ["fixtures/root-dockerfile.fixture"],
+        "negative": ["fixtures/hardened-dockerfile.fixture"]
+      }
+    }
+  ]
+}

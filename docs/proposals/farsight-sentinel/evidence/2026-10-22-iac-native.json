@@ -1,0 +1,68 @@
+{
+  "evidence": "sentinel-iac-native-qualification",
+  "date": "2026-10-22",
+  "workflow": ".github/workflows/sentinel-iac-qualification.yml",
+  "job": "https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627",
+  "testedMerge": "0d6daa8cd369835fe6ec8ec5a89b4d25cb23edc5",
+  "pullRequestHead": "454667ed8f254ac11b6e030b1ad9e44dcd333b8b",
+  "mergeBase": "e25424fb637e5491e307a2be8d9124af2463450d",
+  "host": {
+    "os": "Ubuntu 24.04.5",
+    "architecture": "x86_64",
+    "dockerEngine": "28.0.4 linux/amd64"
+  },
+  "tests": {
+    "passed": 33,
+    "failed": 0,
+    "skipped": 0,
+    "canceled": 0
+  },
+  "installedWorkers": {
+    "trivyFindings": 3,
+    "zizmorFindings": 5,
+    "platformAtMeasurement": "amd64 candidate",
+    "scope": "packed workers run by workspace execution service; full installed public CLI integration not measured by this job"
+  },
+  "engines": {
+    "trivy": {
+      "version": "0.76.1",
+      "imageIndex": "ghcr.io/aquasecurity/trivy@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c",
+      "amd64Manifest": "sha256:2e6c00d711ab4ae41d8a30c2c1fd3bd3b62704c177bb120f95012e939edfb3df",
+      "workerDigest": "sha256:7d8557f74acc633884af8aaf75cb21de0e60522fdeb7fb95f4fa9982417d1dd5",
+      "checksBundle": {
+        "version": "2.3.0",
+        "manifest": "sha256:3eae4436560566e77115396d0221a64e0cd86d94a3b45203f8ae3f9a85c027cd",
+        "layer": "sha256:4bf8ba41d342b378e63707561806d7784373ddd6cc04fdaf085ec7f38a19ec9d",
+        "size": 240203
+      }
+    },
+    "zizmor": {
+      "version": "1.31.1",
+      "imageIndex": "ghcr.io/zizmorcore/zizmor@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9",
+      "amd64Manifest": "sha256:cfc533b8fa781c51c6fb4085057945bc3eebb6b6e8a25ab7daa85c885f071269",
+      "workerDigest": "sha256:d6a970fd0254c68890d8242a913506960142122a57631871dfe38fae2937d9d0"
+    }
+  },
+  "measuredSourceDigests": {
+    ".github/workflows/sentinel-iac-qualification.yml": "sha256:5d35e9ed557bba8c0e4e1fe6e11fd23184faf4206c9901ccd05658c4d6e3ae65",
+    "packages/sentinel/src/adapters/trivy/adapter.ts": "sha256:4436fcde4482e790c3114dbe2277103499fb2e8d0b5ab30bcbcd6bc2dde9ffb7",
+    "packages/sentinel/src/adapters/trivy/worker-source.ts": "sha256:62d0b43a2f81b890514739f94c1535c2af6ae6a7b6927f0b9023e069653487de",
+    "packages/sentinel/src/adapters/trivy/normalize.ts": "sha256:fc69484023bebf26c650882f794379575d1135c6435794f62ea389ab40a17dae",
+    "packages/sentinel/test/trivy-adapter.test.ts": "sha256:4007d9d8ef27e924cbee1f0cfd3b5bd318113f95cb5fda358f66e97d8dae7709",
+    "packages/sentinel/test/trivy-conformance.test.ts": "sha256:6c772e486c5c2cb82a999a0841628801902b71eb3365a2bb2b5ec169bea56a9d",
+    "packages/sentinel/src/adapters/zizmor/adapter.ts": "sha256:e1c5671de36f0a8d490771b03053c9f88768f0e9abf94959a0d3c37ff0a0528e",
+    "packages/sentinel/src/adapters/zizmor/worker-source.ts": "sha256:3c21e9ef586fe65031c589a0f6b66aa0430c51c47e7b9f2b245632769433edef",
+    "packages/sentinel/src/adapters/zizmor/normalize.ts": "sha256:8bcb15864fde912aca693b2f6c6910d73a7af9832ee0b805c00221a19edd5137",
+    "packages/sentinel/test/zizmor-adapter.test.ts": "sha256:36c2881aafc4fac8348319895a2e98cb345707e258142241a3e6d3699df60d28",
+    "packages/sentinel/test/zizmor-conformance.test.ts": "sha256:6401d5ad6bfa11ff7370751fa125ee453c38233aa6f78d7e707426cbac3063ae",
+    "packages/sentinel/test/iac-helpers.ts": "sha256:caf2df5937e87b736f0a3934773dbbc87fae1d47937420e79d165cf186220a89",
+    "scripts/test-sentinel-package.mjs": "sha256:bc68982f34525e7d4a666891285ed5807376a7d4eef15925b06567c33d5648a6"
+  },
+  "jobLogDigest": "sha256:27ad68705cd1ac1edd9faea17d097758a77dbdf7e24dcf560007e19504e09e40",
+  "limits": [
+    "Existing pinned engines, worker bytes, checks bundle and synthetic corpus only",
+    "No runtime, image, or architecture beyond the recorded combination is newly measured",
+    "zizmor online audits remain skipped and degraded offline audits remain partial",
+    "No source target execution or network-enabled scans"
+  ]
+}

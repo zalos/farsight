@@ -2,7 +2,7 @@
   "name": "@farsight/sentinel",
   "version": "0.0.0-draft.1",
   "private": true,
-  "description": "Optional Sentinel security-analysis boundary: draft contracts and a draft local store, no scanner yet",
+  "description": "Optional isolated security analysis with explicitly adopted pinned scanner assets",
   "type": "module",
   "license": "MIT",
   "engines": {

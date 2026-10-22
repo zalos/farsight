@@ -12,6 +12,7 @@
 // that rests on the foundation-preview rule is required coverage incomplete whatever it records, and this build
 // never prints a satisfied result (findings are not judged against the policy until the full report exists).
 import { createHash } from 'node:crypto';
+import type { ActionEffect } from '../contracts/policy.js';
 import type { RunEnvelope } from '../contracts/run.js';
 import type { PlanRevision } from '../planner/types.js';
 import { Coordinator, type RunSummary } from '../execution/coordinator.js';
@@ -28,8 +29,11 @@ import type { SentinelStore } from '../store/index.js';
 import { PREVIEW_DETECTOR_ID, PREVIEW_FINDINGS_SCHEMA, PREVIEW_RULE } from '../adapters/preview-detector.js';
 import { result, type CommandResult, type PrintedVerdicts } from '../cli/outcome.js';
 import { RuleLockBook } from './rule-locks.js';
-import { foundationProfile, foundationRegistry, unsupportedRules, type TrustedProfile } from './trusted-profile.js';
+import { foundationProfile, unsupportedRules, type TrustedProfile } from './trusted-profile.js';
 import { ServiceError } from './owner-service.js';
+import { scannerReportOf } from '../reports/scanner.js';
+import { publicRegistry, publicProfile, scannerExecution, externalDrivers } from './scanner-profile.js';
+import { heldDatabases, installedAdapters, checkPlanDatabases } from './scanner-assets.js';
 import { recordRunFailure, runFailureFacts } from './run-failure.js';
 
 const digest = (v: unknown) => `sha256:${createHash('sha256').update(canonicalJsonBytes(v)).digest('hex')}`;
@@ -44,7 +48,7 @@ export interface CanonicalDisclosure {
   readonly revision: number;
   readonly planDigest: string;
   readonly snapshotId: string;
-  readonly effects: readonly ['local-artifacts'];
+  readonly effects: readonly ActionEffect[];
   readonly checks: Readonly<Record<string, number>>;
   readonly units: number;
   /** The analysis units, by id: what `rerun --stage` selects from. */
@@ -61,10 +65,11 @@ export interface CurrentPlan {
   readonly planDigest: string;
   readonly policyRevision: string;
   readonly kind: 'bootstrap' | 'analysis';
+  readonly effects: readonly ActionEffect[];
 }
 
 /** A plan resting on the foundation-preview detector, whatever its rules are called. */
-const isPreview = (plan: PlanRevision) => plan.pins.rules.some(r => r.adapterId === PREVIEW_DETECTOR_ID || r.familyId === PREVIEW_RULE);
+const isPreview = (plan: PlanRevision) => !plan.pins.rules.some(r => externalDrivers().has(r.adapterId)) && plan.pins.rules.some(r => r.adapterId === PREVIEW_DETECTOR_ID || r.familyId === PREVIEW_RULE);
 
 /** Refuses a plan that would ask a shipped check adapter to run a rule it does not implement exactly. */
 export function assertSupportedRules(plan: Pick<PlanRevision, 'pins'>): void {
@@ -72,10 +77,17 @@ export function assertSupportedRules(plan: Pick<PlanRevision, 'pins'>): void {
   if (unsupported.length) throw new ServiceError('sentinel.service.ruleUnsupported', { unsupported });
 }
 
+/** Effects follow executable admitted units; only the exact package preview is a local artifact operation. */
+export function planEffects(plan: Pick<PlanRevision, 'units'>): readonly ActionEffect[] {
+  const preview = publicRegistry().get(PREVIEW_DETECTOR_ID).digest;
+  const tool = plan.units.some(unit => unit.stage === 'check' && (unit.adapterId !== PREVIEW_DETECTOR_ID || unit.implementationDigest !== preview));
+  return Object.freeze(tool ? ['local-artifacts', 'tool-execution'] as const : ['local-artifacts'] as const);
+}
+
 function disclose(plan: PlanRevision): CanonicalDisclosure {
   return Object.freeze({
     planId: plan.runId, runId: plan.runId, revision: plan.revision, planDigest: plan.digest, snapshotId: plan.pins.snapshotId!,
-    effects: Object.freeze(['local-artifacts'] as const), checks: Object.freeze({ ...plan.tallies.checks }), units: plan.units.length,
+    effects: planEffects(plan), checks: Object.freeze({ ...plan.tallies.checks }), units: plan.units.length,
     unitIds: Object.freeze(plan.units.map(u => u.id).sort()),
     ruleGaps: plan.ruleGaps.length, requiredCoverageAchievable: plan.requiredCoverageAchievable,
     label: isPreview(plan) ? 'foundation-preview' as const : 'deterministic' as const,
@@ -88,7 +100,7 @@ export async function currentPlan(store: SentinelStore, runId: string): Promise<
   const revision = store.ledger.getRun(runId)?.planRevision ?? store.ledger.latestPlan(runId)?.revision;
   if (revision === undefined) return undefined;
   const admitted = await loadPlan(store, runId, revision);
-  return Object.freeze({ runId, revision, planDigest: admitted.plan.digest, policyRevision: admitted.plan.pins.policyDigest ?? '', kind: admitted.plan.kind });
+  return Object.freeze({ runId, revision, planDigest: admitted.plan.digest, policyRevision: admitted.plan.pins.policyDigest ?? '', kind: admitted.plan.kind, effects: planEffects(admitted.plan) });
 }
 
 /**
@@ -106,8 +118,11 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   const current = book.current();
   if (!current) throw new ServiceError('sentinel.service.noRuleLock');
   const packs = book.packsOf(current.lock);
-  const registry = options.registry ?? foundationRegistry();
-  const profile = options.profile ?? foundationProfile(registry);
+  const registry = options.registry ?? publicRegistry();
+  const ids = [...new Set(packs.flatMap(p => p.manifest.rules.filter(r => options.policy.rules.includes(r.familyId)).map(r => r.implementation.adapterId)))].filter(id => externalDrivers().has(id));
+  const available = options.profile ? new Set<string>() : await installedAdapters(options.trustDir, current.lock, ids, options.scratchRoot);
+  if (!options.profile && ids.length) heldDatabases(options.trustDir, current.lock);
+  const profile = options.profile ?? publicProfile(registry, available, packs);
   const snapshot = options.snapshotId !== undefined
     ? (await openSnapshot(store, options.snapshotId)).snapshot
     : (await captureSnapshot(store, {
@@ -140,21 +155,24 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   const analysis = planAnalysis({
     runId, revision: 2, previous: boot, bootstrap: [{ id: inventory.id, revision: inventory.revision }], profile: profile.planner,
     snapshot: plannerSnapshotFrom(evidence.snapshot), analyses: evidence.analyses.map(a => plannerAnalysisFrom(a as never)),
-    lock: plannerLockFrom(current.lock, packs, current.digest), policy: plannerPolicyFrom(options.policy), limits: ANALYSIS_LIMITS,
+    lock: plannerLockFrom(current.lock, packs, current.digest), policy: plannerPolicyFrom(options.policy), limits: options.policy.rules.includes(PREVIEW_RULE) ? ANALYSIS_LIMITS : { maxScopesPerWork: 32 },
   });
   // Before admission: a shipped check adapter runs only the exact rules it implements.
   assertSupportedRules(analysis);
+  if (!options.profile) checkPlanDatabases(analysis, current.lock);
   await admitPlan(store, { plan: analysis, ruleLock: current.lock, policy: options.policy, profile: profile.record });
   store.ledger.advanceRunPlan(runId, analysis.revision);
   return { outcome: 'prepared', disclosure: disclose(analysis) };
 }
 
 /** Executes the run's current admitted revision. The coordinator records coverage and the outcome. */
-export async function executeRun(store: SentinelStore, runId: string, options: { scratchRoot: string; registry?: AdapterRegistry; run?: RunEnvelope }): Promise<RunSummary> {
+export async function executeRun(store: SentinelStore, runId: string, options: { scratchRoot: string; registry?: AdapterRegistry; run?: RunEnvelope; trustDir?: string; drivers?: import('../execution/check-drivers.js').CheckDriverRegistry }): Promise<RunSummary> {
   // Again before anything runs: an admitted plan from elsewhere is held to the same exact rules.
   const plan = await currentPlan(store, runId);
   if (plan) assertSupportedRules((await loadPlan(store, runId, plan.revision)).plan);
-  const coordinator = await Coordinator.open({ store, runId, registry: options.registry ?? foundationRegistry(), scratchRoot: options.scratchRoot, ...(options.run ? { run: options.run } : {}) });
+  const registry = options.registry ?? publicRegistry();
+  const assets = options.drivers ? { drivers: options.drivers } : await scannerExecution(store, runId, options.trustDir, options.scratchRoot, registry);
+  const coordinator = await Coordinator.open({ ...assets, store, runId, registry, scratchRoot: options.scratchRoot, ...(options.run ? { run: options.run } : {}) });
   try { return await coordinator.run(); } catch (error) {
     try { recordRunFailure(store, runId, error); } catch { /* preserve the original error when the store cannot retain it */ }
     throw error;
@@ -197,7 +215,7 @@ export async function previewFindingsOf(store: SentinelStore, runId: string): Pr
  * from the store and this installation alone, so it reads the same after a disconnect or a restart. Undefined when it
  * can; otherwise why not, as the refusal a start would meet.
  */
-export async function notExecutableHere(store: SentinelStore, runId: string, registry: AdapterRegistry = foundationRegistry()):
+export async function notExecutableHere(store: SentinelStore, runId: string, registry: AdapterRegistry = publicRegistry()):
   Promise<{ error: string; reason?: string } | undefined> {
   const plan = await currentPlan(store, runId);
   if (!plan) return undefined;
@@ -224,9 +242,10 @@ export async function canonicalResult(store: SentinelStore, command: string, run
   const admitted = await loadPlan(store, runId, plan.revision);
   const preview = isPreview(admitted.plan);
   const findings = state === 'completed' ? await previewFindingsOf(store, runId) : undefined;
+  const scanner = state === 'completed' ? await scannerReportOf(store, runId, new Date()) : undefined;
   const diagnostic = runFailureFacts(store, runId);
   const facts = { ...(options.facts ?? {}), ...diagnostic, runId, state, revision: plan.revision, runOutcome: recorded.outcome ?? null,
-    previewFindings: findings?.findings.length ?? null, label: preview ? 'foundation-preview' : 'deterministic' };
+    previewFindings: findings?.findings.length ?? null, ...(scanner ? { observations: scanner.observations.length, requiredChecks: scanner.coverage.required, requiredComplete: scanner.coverage.requiredComplete, requiredCoverageComplete: scanner.coverage.complete } : {}), label: preview ? 'foundation-preview' : 'deterministic' };
   if (state === 'completed') {
     if (recorded.outcome === 'execution-failure') return result(command, 'configuration-failure', { ...base, facts, reasonCode: 'sentinel.service.executionFailed' });
     if (preview) return result(command, 'required-coverage-incomplete', { ...base, facts, reasonCode: 'sentinel.service.previewNotCoverage' });
@@ -260,7 +279,7 @@ export interface RerunPreview {
   readonly checks: number;
   /** The whole analysis is selected: the rerun re-plans every unit over the retained snapshot. */
   readonly all: boolean;
-  readonly effects: readonly ['local-artifacts'];
+  readonly effects: readonly ActionEffect[];
 }
 
 /**
@@ -294,7 +313,7 @@ export async function previewRerun(store: SentinelStore, parentId: string, selec
   return Object.freeze({
     parentId, snapshotId: parent.envelope.snapshotId, selected: sorted(chosen), downstream: sorted(downstream), prerequisites: sorted(prerequisites),
     checks: [...rerun].reduce((n, id) => n + (units.get(id)?.checks.length ?? 0), 0), all: rerun.size === units.size,
-    effects: Object.freeze(['local-artifacts'] as const),
+    effects: planEffects({ units: revision.units.filter(unit => rerun.has(unit.id)) }),
   });
 }
 

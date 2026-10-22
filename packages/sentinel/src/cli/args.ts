@@ -7,7 +7,7 @@ export const COMMANDS = {
   help: null, version: null, capabilities: null, validate: null, init: null, settings: null,
   plan: null, run: null, status: null, report: null, wait: null, pause: null, resume: null, cancel: null, serve: null,
   retry: null, rerun: null,
-  rules: null,
+  rules: null, assets: null,
   compare: 'PR 19', bundle: 'PR 26',
 } as const satisfies Record<string, string | null>;
 export type CommandName = keyof typeof COMMANDS;
@@ -44,6 +44,7 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   serve: { flags: { ...COMMON, ...STORE, '--idle-ms': 'value' }, positional: [], min: 0 },
   compare: { flags: COMMON, positional: [], min: 0 },
   rules: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['action', 'packDir'], min: 1 },
+  assets: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--archive': 'value', '--manifest': 'value', '--max-bytes': 'value', '--license': 'value' }, positional: ['action', 'assetId'], min: 2 },
   bundle: { flags: COMMON, positional: [], min: 0 },
 };
 

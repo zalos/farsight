@@ -6,10 +6,10 @@
 // package and a changed version is refused; the draft store (`farsight-sentinel/store`) opens, publishes
 // verified evidence in one process and reads it back in another; and no Farsight application package
 // arrives; the pattern rule pack and worker ship with exact digests and rights. No scanner, container, model or
-// network service is started, except that with SENTINEL_ISOLATION=1 the shipped Pattern and OSV workers run once in
+// network service is started, except that with SENTINEL_ISOLATION=1 the shipped Pattern, OSV, Trivy and zizmor workers run once in
 // the pinned engine image through the workspace's isolated execution service (never pulled; this checks the installed
-// assets, not an installed runtime). SENTINEL_PACKAGE_ENGINE=pattern|osv limits execution to the engine provisioned
-// by an individual native qualification job; asset validation still covers both. With no selector both engines run.
+// assets, not an installed runtime). SENTINEL_PACKAGE_ENGINE=pattern|osv|iac limits execution to the engine provisioned
+// by an individual native qualification job; asset validation still covers all four. With no selector all four engines run.
 // npm may fetch Sentinel's declared third-party dependencies.
 //
 //   pnpm test:sentinel:package        # builds Sentinel's closure, packs, then runs this
@@ -26,7 +26,7 @@ import { npmConsumer } from './npm-consumer.mjs';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const sourceDir = join(root, 'packages', 'sentinel');
 const selectedEngine = process.env.SENTINEL_PACKAGE_ENGINE;
-assert.ok(selectedEngine === undefined || ['pattern', 'osv'].includes(selectedEngine), 'SENTINEL_PACKAGE_ENGINE must be pattern or osv');
+assert.ok(selectedEngine === undefined || ['pattern', 'osv', 'iac'].includes(selectedEngine), 'SENTINEL_PACKAGE_ENGINE must be pattern, osv or iac');
 const runEngine = (engine) => process.env.SENTINEL_ISOLATION === '1' && (selectedEngine === undefined || selectedEngine === engine);
 const artifact = resolve(process.argv[2] ?? (() => {
   const source = JSON.parse(readFileSync(join(sourceDir, 'package.json'), 'utf8'));
@@ -97,6 +97,11 @@ try {
 
   const expressExported = Object.hasOwn(sourceExports, './frameworks/express');
   assert.equal(subpaths.includes('./frameworks/express'), expressExported, 'the installed ./frameworks/express export matches the source package');
+
+  const nextExported = Object.hasOwn(sourceExports, './frameworks/next');
+  assert.equal(subpaths.includes('./frameworks/next'), nextExported, 'the installed Next export matches the source package');
+  const providersExported = Object.hasOwn(sourceExports, './review/providers');
+  assert.equal(subpaths.includes('./review/providers'), providersExported, 'the installed provider export matches the source package');
 
   // The Nest pack (ADR 32), when the source package exports it: the installed API analyses a tiny synthetic tree from
   // memory, loading the pinned oxc-parser from the consumer's own install. No store and no target code are involved.
@@ -214,6 +219,18 @@ try {
       '  const reason: SpringReason = SPRING_REASON_CODES[0];',
       '  const profiles: readonly string[] | null = input.environment.activeProfiles;',
       "  return [SPRING_PACK.version, SPRING_ORDER.chain, SPRING_SUPPORT.stack, reason, profiles, matchTemplate('/a', '/a/**'), typeof analyzeSpring];",
+      '}',
+    ] : []),
+    ...(nextExported ? [
+      "import { analyzeNext, NEXT_PACK_REVISION, type NextPackInput, type NextPackResult } from 'farsight-sentinel/frameworks/next';",
+      'export const nextRevision: number = NEXT_PACK_REVISION;',
+      'export const nextCheck = (input: NextPackInput): Promise<NextPackResult> => analyzeNext(input);',
+    ] : []),
+    ...(providersExported ? [
+      "import { BudgetLedger, toNanos, type EnvelopeTotals } from 'farsight-sentinel/review/providers';",
+      'export async function providerFields(path: string): Promise<EnvelopeTotals> {',
+      '  const ledger: BudgetLedger = await BudgetLedger.open(path);',
+      "  try { const cost: bigint | null = toNanos('0.125'); void cost; return ledger.totals('fixture'); } finally { ledger.close(); }",
       '}',
     ] : []),
     ...(expressExported ? [
@@ -340,6 +357,8 @@ try {
     if (analysisExported) storeDemo += await analysisDemo();
     if (springExported) storeDemo += await springDemo();
     if (expressExported) storeDemo += await expressDemo();
+    if (nextExported) storeDemo += await nextDemo();
+    if (providersExported) storeDemo += await providersDemo();
   } else {
     const refused = await node('store-write.mjs').then(() => null, (error) => `${error.stderr}`);
     assert.match(refused ?? '', /sentinel\.store\.(platformUnqualified|runtimeUnqualified)/, `an unqualified pair (${host}, SQLite ${process.versions.sqlite}) is refused`);
@@ -415,6 +434,97 @@ try {
    * it and one behind a conditional registration in a second application is captured, parsed and analysed through the
    * installed package alone. git builds the fixture's repository only; nothing in it is installed or run.
    */
+
+  // Original Next fixtures, now exercised by the installed package only. The lock is inert fixture data, not a
+  // fetched dependency. Every parse and analysis happens after that fixture's checkout has been removed.
+  async function nextDemo() {
+    const lock = "lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: true\n\nimporters:\n\n  .:\n    dependencies:\n      next:\n        specifier: 14.2.25\n        version: 14.2.25(react-dom@18.3.1(react@18.3.1))(react@18.3.1)\n      react:\n        specifier: 18.3.1\n        version: 18.3.1\n      react-dom:\n        specifier: 18.3.1\n        version: 18.3.1(react@18.3.1)\n\npackages:\n\n  next@14.2.25:\n    resolution: {integrity: sha512-N5M7xMc4wSb4IkPvEV5X2BRRXUmhVHNyaXwEM86+voXthSZz8ZiRyQW4p9mwAoAPIm6OzuVZtn7idgEJeAJN3Q==}\n\n  react-dom@18.3.1:\n    resolution: {integrity: sha512-5m4nQKp+rZRb09LNH59GM4BxTh9251/ylbKIbpe7TpGxfJ+9kv6BLkLBXIjjspbgbnIBNqlI23tRnTWT0snUIw==}\n\n  react@18.3.1:\n    resolution: {integrity: sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==}\n";
+    const patch = 'patchedDependencies:\n# Original inert column-zero comment\n    next@14.2.25:\n        path: patches/next.patch\n        hash: fixture\n\n';
+    const cases = [
+      { label: 'peer-positive', lock, supported: true },
+      { label: 'tagged-patch', lock: lock.replace('importers:', '!!str ' + patch + 'importers:'), supported: false },
+      { label: 'comment-patch', lock: lock.replace('importers:', patch + 'importers:'), supported: false },
+      { label: 'quoted-patch', lock: lock.replace('  next@14.2.25:\n', '  next@14.2.25:\n    "patched": true\n'), supported: false },
+      { label: 'dynamic', lock, supported: true, dynamic: true },
+    ];
+    writeFileSync(join(consumer.dir, 'next-demo.mjs'), `
+      import assert from 'node:assert/strict';
+      import { mkdirSync, writeFileSync, rmSync, readdirSync } from 'node:fs';
+      import { join } from 'node:path';
+      import { execFileSync } from 'node:child_process';
+      import { openStore } from 'farsight-sentinel/store';
+      import { captureSnapshot } from 'farsight-sentinel/snapshot';
+      import { parseSnapshot } from 'farsight-sentinel/parser';
+      import { analyzeNext } from 'farsight-sentinel/frameworks/next';
+      assert.ok(!readdirSync('node_modules').includes('@farsight'), 'no workspace packages in this consumer');
+      const root = ${JSON.stringify(join(storeRoot, 'next'))};
+      for (const c of ${JSON.stringify(cases)}) {
+        const dir = join(root, c.label), repo = join(dir, 'repo'), work = join(dir, 'work');
+        mkdirSync(repo, { recursive: true }); mkdirSync(work);
+        const files = {
+          'package.json': JSON.stringify({ name: 'original-next-fixture', private: true, dependencies: { next: '14.2.25', react: '18.3.1', 'react-dom': '18.3.1' } }),
+          'pnpm-lock.yaml': c.lock,
+          'middleware.ts': c.dynamic ? "const matcher = process.env.ROUTES; export function middleware() {}\\nexport const config = { matcher };\\n" : "export function middleware() {}\\nexport const config = { matcher: '/private/:path*' };\\n",
+          'app/private/route.ts': 'export function GET() { return new Response(null); }\\n',
+          'app/public/route.ts': 'export function GET() { return new Response(null); }\\n',
+          'patches/next.patch': '# Original inert patch\\n',
+        };
+        for (const [path, text] of Object.entries(files)) { mkdirSync(join(repo, path, '..'), { recursive: true }); writeFileSync(join(repo, path), text); }
+        const env = { PATH: process.env.PATH, HOME: dir, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
+          GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'dev@example.com', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'dev@example.com' };
+        for (const args of [['init', '--quiet'], ['add', '--all'], ['commit', '--quiet', '-m', 'fixture']]) execFileSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd: repo, env, stdio: 'ignore' });
+        const store = await openStore(join(dir, 'store'));
+        try {
+          const { snapshot } = await captureSnapshot(store, { mode: 'working-copy', sources: [{ sourceId: 'web', repositoryId: 'example/web', root: repo }] });
+          rmSync(repo, { recursive: true, force: true });
+          const analysis = await parseSnapshot(store, { snapshotId: snapshot.id, workDir: work, selection: { gitignore: true, testFiles: 'include' },
+            limits: { maxFiles: 100, maxFileBytes: 65536, maxTotalBytes: 1048576, maxEntries: 1000, maxDurationMs: 60000 } });
+          const result = await analyzeNext({ snapshot, analysis: analysis.sources[0], read: id => store.readArtifact(id) });
+          assert.equal(result.projects[0].supported, c.supported, c.label);
+          const facts = result.envelopes[0].facts.filter(f => f.surfaceId === 'web::route::GET /public');
+          assert.ok(facts.length > 0, c.label);
+          assert.ok(facts.every(f => f.verdict === (c.supported && !c.dynamic ? 'does-not-apply' : 'unknown')), c.label);
+        } finally { store.close(); }
+      }
+      console.log('Next peer-positive, modified identity and dynamic matcher after checkout removal');
+    `);
+    const r = await node('next-demo.mjs');
+    assert.match(r.stdout, /Next peer-positive, modified identity and dynamic matcher after checkout removal/);
+    return ', Next retained-byte peer/patch/dynamic checks';
+  }
+
+  // The provider library's offline budget seam only: no provider profile, credential, endpoint or request exists.
+  // Direct ledger calls here are a trusted fixture, not a claim that an imported digest grants owner authority.
+  async function providersDemo() {
+    const path = join(storeRoot, 'provider-budget.db');
+    writeFileSync(join(consumer.dir, 'provider-demo.mjs'), `
+      import assert from 'node:assert/strict';
+      import { BudgetLedger, toNanos } from 'farsight-sentinel/review/providers';
+      assert.equal(toNanos('0.125'), 125000000n);
+      const path = ${JSON.stringify(path)}, at = '2026-10-22T12:00:00.000000000Z';
+      const ledger = await BudgetLedger.open(path);
+      try {
+        ledger.createEnvelope({ id: 'fixture', runId: 'fixture-run', bindingDigest: 'sha256:' + '1'.repeat(64), admissionDigest: 'sha256:' + '2'.repeat(64), receiptDigest: null,
+          maxTokens: 10, maxCostNanos: 0n, currency: 'USD', createdAt: at });
+        const held = ledger.reserve({ envelopeId: 'fixture', operationId: 'first', tokens: 6, costNanos: 0n, epoch: 'fixture-epoch', at });
+        assert.equal(ledger.reserve({ envelopeId: 'fixture', operationId: 'first', tokens: 6, costNanos: 0n, epoch: 'fixture-epoch', at }).id, held.id);
+        assert.throws(() => ledger.reserve({ envelopeId: 'fixture', operationId: 'overspend', tokens: 5, costNanos: 0n, epoch: 'fixture-epoch', at }), e => e.code === 'sentinel.provider.budgetExhausted');
+        assert.equal(ledger.totals('fixture').chargedTokens, 6);
+      } finally { ledger.close(); }
+    `);
+    await node('provider-demo.mjs');
+    writeFileSync(join(consumer.dir, 'provider-reopen.mjs'), `
+      import assert from 'node:assert/strict';
+      import { BudgetLedger } from 'farsight-sentinel/review/providers';
+      const ledger = await BudgetLedger.open(${JSON.stringify(path)});
+      try { assert.equal(ledger.totals('fixture').chargedTokens, 6); assert.equal(ledger.totals('fixture').byState.held, 1); }
+      finally { ledger.close(); }
+      console.log('provider offline budget reservation, overspend refusal and cross-process reopen');
+    `);
+    assert.match((await node('provider-reopen.mjs')).stdout, /provider offline budget reservation, overspend refusal and cross-process reopen/);
+    return ', provider offline budget checks';
+  }
+
   async function expressDemo() {
     const appDir = join(storeRoot, 'express-app');
     const files = {
@@ -661,6 +771,33 @@ public class Routes {
     }
   }
 
+  // Production rule packs are data, with no scanner activation, engine, database or permission bundled.
+  if (existsSync(join(sourceDir, 'scripts', 'package-assets-drivers.mjs'))) {
+    const manifest = JSON.parse(readFileSync(join(installed, 'assets', 'drivers', 'manifest.json'), 'utf8'));
+    assert.equal(manifest.schema, 'sentinel-driver-assets/draft-1');
+    assert.equal(manifest.registered, false);
+    assert.deepEqual(manifest.packs.map(p => p.path).sort(), ['rules/advisories', 'rules/ci', 'rules/infrastructure']);
+    for (const pack of manifest.packs) {
+      assert.deepEqual(pack.rights, { spdx: 'MIT', origin: 'sentinel-original' });
+      for (const file of pack.files) {
+        const bytes = readFileSync(join(installed, pack.path, file.path));
+        assert.equal(bytes.length, file.size);
+        assert.equal(`sha256:${createHash('sha256').update(bytes).digest('hex')}`, file.digest);
+        assert.equal(digest(join(installed, pack.path, file.path)), digest(join(sourceDir, pack.path, file.path)));
+      }
+      const validated = JSON.parse(await evalModule(`
+        import { createRequire } from 'node:module';
+        import { dirname } from 'node:path';
+        import { readPackDirectory, validatePack } from 'farsight-sentinel/rules';
+        const r = createRequire(process.cwd() + '/');
+        const dir = dirname(r.resolve(${JSON.stringify('farsight-sentinel/' + pack.path + '/sentinel-pack.json')}));
+        const p = validatePack(readPackDirectory(dir));
+        console.log(JSON.stringify({packId: p.entry.packId, packDigest: p.entry.packDigest, rules: p.entry.rules}));
+      `));
+      assert.deepEqual(validated, {packId: pack.packId, packDigest: pack.packDigest, rules: pack.rules});
+    }
+  }
+
   // OSV assets: the in-container worker ships with its exact digest and rights; no advisory database ships.
   let osvDemo = '';
   if (existsSync(join(sourceDir, 'scripts', 'package-assets-osv.mjs'))) {
@@ -710,7 +847,102 @@ public class Routes {
     }
   }
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}${analysisExported ? ', analysis types compiled' : ''}${springExported ? ', Spring pack types compiled' : ''}${expressExported ? ', Express pack types compiled' : ''}${nestExported ? ', Nest pack analysed' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}${osvDemo}npm consumer`);
+  // Trivy assets: the in-container worker ships with its exact digest and rights; no checks bundle or fixture ships.
+  let trivyDemo = '';
+  if (existsSync(join(sourceDir, 'scripts', 'package-assets-trivy.mjs'))) {
+    const manifestPath = join(installed, 'assets', 'trivy', 'manifest.json');
+    assert.ok(existsSync(manifestPath), 'the Trivy asset manifest is packaged');
+    const resolved = await evalModule(`import { createRequire } from 'node:module'; const r = createRequire(process.cwd() + '/'); console.log(r.resolve('farsight-sentinel/assets/trivy/manifest.json'));`);
+    assert.ok(resolved.trim().endsWith('assets/trivy/manifest.json'), 'Trivy assets resolve through the exports map');
+    const trivy = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    const worker = readFileSync(join(installed, trivy.worker.path));
+    assert.equal(`sha256:${createHash('sha256').update(worker).digest('hex')}`, trivy.worker.digest, 'the Trivy worker matches its digest');
+    assert.equal(trivy.adapter.command.at(-1), `/input/${trivy.worker.digest.slice(7)}`, 'the fixed command names the shipped worker');
+    assert.match(trivy.adapter.image, /^ghcr\.io\/aquasecurity\/trivy@sha256:[0-9a-f]{64}$/);
+    assert.equal(trivy.checks.shipped, false);
+    assert.equal(trivy.registered, false);
+    assert.ok(!readdirSync(installed, { recursive: true }).map(String).some((f) => /\.tar\.gz$|fixtures\/iac/.test(f)), 'no checks bundle or fixture ships');
+    trivyDemo = `trivy assets (worker ${trivy.worker.digest.slice(7, 19)}, no bundle), `;
+    // With SENTINEL_ISOLATION=1, the pinned image installed and SENTINEL_TRIVY_CHECKS_DIR naming the owner-acquired
+    // bundle, the shipped worker bytes run in the real engine through the WORKSPACE's isolated execution service. This
+    // checks the installed asset, not an installed runtime: nothing exported invokes the adapter until the PR 09 command.
+    if (runEngine('iac')) {
+      const imp = (p) => import(new URL(`file://${join(sourceDir, 'dist', p)}`).href);
+      const { TRIVY_ADAPTER, TRIVY_WORKER_DIGEST, loadChecksBundle, runTrivyAttempt } = await imp('adapters/trivy/index.js');
+      assert.deepEqual(trivy.adapter.command, [...TRIVY_ADAPTER.command], 'the shipped adapter is the workspace adapter');
+      assert.equal(trivy.worker.digest, TRIVY_WORKER_DIGEST);
+      assert.ok(process.env.SENTINEL_TRIVY_CHECKS_DIR, 'SENTINEL_TRIVY_CHECKS_DIR names the owner-acquired bundle');
+      const bundle = loadChecksBundle(join(process.env.SENTINEL_TRIVY_CHECKS_DIR, 'checks'));
+      assert.ok(bundle, 'the pinned checks bundle has been acquired');
+      const { createAdapterRegistry } = await imp('execution/registry.js');
+      const { createExecutionService } = await imp('execution/service.js');
+      const { openStore } = await imp('store/index.js');
+      const helpers = await import(new URL(`file://${join(sourceDir, 'test', 'iac-helpers.ts')}`).href);
+      const scratch = realpathSync(consumer.dir);
+      const work = join(scratch, 'trivy-work');
+      mkdirSync(work, { mode: 0o700 });
+      const store = await openStore(join(scratch, 'trivy-store'));
+      try {
+        const service = await createExecutionService(store, { scratchRoot: work, registry: createAdapterRegistry([TRIVY_ADAPTER]), containers: true });
+        const qualify = process.env.SENTINEL_IAC_QUALIFY?.replace(/^linux\//, '');
+        const r = await runTrivyAttempt(service, {
+          attemptId: 'att-package-trivy', work: { id: 'work-package', revision: 1 }, scratch, bundle,
+          targets: helpers.capturedTree(join(scratch, 'trivy-tree'), { 'services/api/Dockerfile': 'trivy/dockerfile-root.fixture' }),
+          ...(qualify ? { qualifyingArchitecture: qualify } : {}),
+        });
+        assert.equal(r.attempt, 'succeeded');
+        assert.ok(r.findings.some((f) => f.checkId === 'DS-0002'));
+        trivyDemo += `installed trivy worker run by the workspace service: ${r.findings.length} findings (${r.platform.architecture} ${r.platform.state}; installed-runtime acceptance open), `;
+      } finally {
+        await store.close();
+      }
+    }
+  }
+
+  // zizmor assets: the in-container worker ships with its exact digest and rights; no fixture ships.
+  let zizmorDemo = '';
+  if (existsSync(join(sourceDir, 'scripts', 'package-assets-zizmor.mjs'))) {
+    const manifestPath = join(installed, 'assets', 'zizmor', 'manifest.json');
+    assert.ok(existsSync(manifestPath), 'the zizmor asset manifest is packaged');
+    const zizmor = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    const worker = readFileSync(join(installed, zizmor.worker.path));
+    assert.equal(`sha256:${createHash('sha256').update(worker).digest('hex')}`, zizmor.worker.digest, 'the zizmor worker matches its digest');
+    assert.equal(zizmor.adapter.command.at(-1), `/input/${zizmor.worker.digest.slice(7)}`, 'the fixed command names the shipped worker');
+    assert.match(zizmor.adapter.image, /^ghcr\.io\/zizmorcore\/zizmor@sha256:[0-9a-f]{64}$/);
+    assert.ok(zizmor.adapter.engineArgs.includes('--offline') && zizmor.adapter.engineArgs.includes('--no-ignores'));
+    assert.equal(zizmor.registered, false);
+    zizmorDemo = `zizmor assets (worker ${zizmor.worker.digest.slice(7, 19)}), `;
+    if (runEngine('iac')) {
+      const imp = (p) => import(new URL(`file://${join(sourceDir, 'dist', p)}`).href);
+      const { ZIZMOR_ADAPTER, ZIZMOR_WORKER_DIGEST, runZizmorAttempt } = await imp('adapters/zizmor/index.js');
+      assert.deepEqual(zizmor.adapter.command, [...ZIZMOR_ADAPTER.command], 'the shipped adapter is the workspace adapter');
+      assert.equal(zizmor.worker.digest, ZIZMOR_WORKER_DIGEST);
+      const { createAdapterRegistry } = await imp('execution/registry.js');
+      const { createExecutionService } = await imp('execution/service.js');
+      const { openStore } = await imp('store/index.js');
+      const helpers = await import(new URL(`file://${join(sourceDir, 'test', 'iac-helpers.ts')}`).href);
+      const scratch = realpathSync(consumer.dir);
+      const work = join(scratch, 'zizmor-work');
+      mkdirSync(work, { mode: 0o700 });
+      const store = await openStore(join(scratch, 'zizmor-store'));
+      try {
+        const service = await createExecutionService(store, { scratchRoot: work, registry: createAdapterRegistry([ZIZMOR_ADAPTER]), containers: true });
+        const qualify = process.env.SENTINEL_IAC_QUALIFY?.replace(/^linux\//, '');
+        const r = await runZizmorAttempt(service, {
+          attemptId: 'att-package-zizmor', work: { id: 'work-package', revision: 1 }, scratch,
+          targets: helpers.capturedTree(join(scratch, 'zizmor-tree'), { '.github/workflows/triage.yml': 'zizmor/workflow-injection.fixture' }),
+          ...(qualify ? { qualifyingArchitecture: qualify } : {}),
+        });
+        assert.equal(r.attempt, 'succeeded');
+        assert.ok(r.findings.some((f) => f.audit === 'template-injection'));
+        zizmorDemo += `installed zizmor worker run by the workspace service: ${r.findings.length} findings (${r.platform.architecture} ${r.platform.state}; installed-runtime acceptance open), `;
+      } finally {
+        await store.close();
+      }
+    }
+  }
+
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}${analysisExported ? ', analysis types compiled' : ''}${springExported ? ', Spring pack types compiled' : ''}${expressExported ? ', Express pack types compiled' : ''}${nestExported ? ', Nest pack analysed' : ''}${nextExported ? ', Next types compiled' : ''}${providersExported ? ', provider types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}${osvDemo}${trivyDemo}${zizmorDemo}npm consumer`);
 } finally {
   consumer.cleanup();
 }

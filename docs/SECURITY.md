@@ -48,7 +48,14 @@ human receipt is bound to one exact action, input, effect set, budget, scope, st
 most an hour and is spent once; no package export can issue one, so agent-facing surfaces can only ask. Rule packs
 are data: a script-shaped rule implementation, a link or an escaping path is refused, nothing in a pack is executed,
 and recording a tool digest in the lock authorizes no download or execution. As with the store, code running as the
-owner's own account is outside this boundary. The Nest framework pack (ADR 32) reads only captured bytes from the store and the parser's artifact; it parses them
+owner's own account is outside this boundary. The Trivy adapter (ADR 33) runs the pinned
+image only through the isolated execution service, with no network, and reads no repository ignore file. Its checks
+bundle is fetched only by the owner's confirmed acquisition, by digest, from the allowlisted registry, with no inherited
+login (an anonymous pull token that is never sent to the blob host); scans never download. The engine's log stays in
+the container: only fixed words, digits and the job's own paths leave it. The zizmor adapter (ADR 34) runs offline
+with no token, no repository configuration and no ignore comments; the audits that would need the GitHub API are
+reported as skipped, never as passed.
+The Nest framework pack (ADR 32) reads only captured bytes from the store and the parser's artifact; it parses them
 as data and never imports, installs or runs the target or its package manager. Guard and pipe names are never read
 as protection, and a registration it cannot follow is reported as a frontier, not resolved. The local runtime folder
 (`.farsight/sentinel/*`) is ignored by git. Later scanner, container and model work arrives with its

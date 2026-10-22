@@ -67,12 +67,25 @@ const MANIFESTS: Readonly<Record<string, readonly PlannerLanguage[]>> = Object.f
 
 const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 const isCiConfig = (path: string) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(path) || path === '.gitlab-ci.yml';
+/**
+ * Infrastructure configuration by file name: Dockerfiles and Containerfiles (with or without an extension, or as the
+ * extension), Terraform (.tf, .tf.json) and YAML that may be a Kubernetes manifest. Whether a YAML file is one is the
+ * engine's decision; a file it does not recognize is reported, not dropped.
+ */
+const isInfrastructureConfig = (path: string) => {
+  const base = baseName(path).toLowerCase();
+  const dot = base.lastIndexOf('.');
+  const ext = dot > 0 ? base.slice(dot) : '';
+  if (['dockerfile', 'containerfile'].some(w => base === w + ext || ext === `.${w}`)) return true;
+  return base.endsWith('.tf') || base.endsWith('.tf.json') || /\.ya?ml$/.test(base);
+};
 
 /** Whether a captured path is a scope of the given kind for a rule with these languages. */
 function scopeOfKind(kind: PlannerScopeKind, path: string, languages: readonly PlannerLanguage[]): boolean {
   if (kind === 'source-file') { const l = languageOf(path); return l !== undefined && languages.includes(l); }
   if (kind === 'dependency-manifest') { const m = MANIFESTS[baseName(path)]; return m !== undefined && m.some(l => languages.includes(l)); }
   if (kind === 'ci-config') return isCiConfig(path);
+  if (kind === 'infrastructure-config') return isInfrastructureConfig(path);
   return false;
 }
 

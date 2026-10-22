@@ -1,0 +1,11 @@
+name: sentinel fixture — triage
+on: pull_request_target
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      # zizmor: ignore[template-injection]
+      - run: echo "${{ github.event.pull_request.title }}"

@@ -1,0 +1,8 @@
+resource "aws_s3_bucket" "reports" {
+  bucket = "sentinel-fixture-reports"
+}
+
+resource "aws_s3_bucket_public_access_block" "reports" {
+  bucket            = aws_s3_bucket.reports.id
+  block_public_acls = false
+}

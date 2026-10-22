@@ -18,7 +18,20 @@ identifiers, not GitHub PR numbers.
   The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`.
   The scheduler merged as [#147](https://github.com/zalos/farsight/pull/147), `2587eb16`, after independent SOL review,
   421 local tests and the full native Linux process/container crash matrix at 20 repetitions with zero failures or skips.
-  CLI and scanner integration continue.
+  The Pattern and offline-advisory adapter foundations merged as [#145](https://github.com/zalos/farsight/pull/145)
+  (`5196dc70`) and [#146](https://github.com/zalos/farsight/pull/146) (`6bf00a7d`). Express and Spring library
+  foundations merged as [#152](https://github.com/zalos/farsight/pull/152) (`95387a4e`) and
+  [#149](https://github.com/zalos/farsight/pull/149) (`c3e5414b`). These merges do not close framework command
+  dispatch or the packages' remaining end gates. PR [#148](https://github.com/zalos/farsight/pull/148) combines
+  the reviewed four-scanner coordinator/owner-command path with the infrastructure adapters. Its earlier exact
+  candidate `a26ca4a4` passed all sixteen selected CI gates, including native four-engine installed acceptance and
+  the twenty-repetition recovery matrix. The additive library integration preserves that candidate's scanner and
+  execution implementations; its final commit requires its own selected CI results before merge.
+  Local integration checks compile the installed union of public library types and run the installed
+  Express/Spring/Nest/paths APIs, Next peer/modified/dynamic cases from retained bytes after source removal, and
+  provider budget reservation/overspend/reopen checks with no endpoint. A separate npm-only four-scanner
+  consumer passes owner adoption, missing-asset refusal, detach/join/wait and retained reporting after service
+  restart and source removal. This is a scoped command gate, not full-plan completion.
   A Git header capture correction merged as [#143](https://github.com/zalos/farsight/pull/143), `9a0fd21`.
 - PR 02 merged as [#134](https://github.com/zalos/farsight/pull/134), `269c3bc`, after contract/packaging
   review and all nine CI checks.
@@ -94,15 +107,15 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 | 06 | Rules, policy merge, deterministic planning | 05 | done | Repository config cannot weaken mandatory rules | Shared matcher [#137](https://github.com/zalos/farsight/pull/137), rules/policy [#142](https://github.com/zalos/farsight/pull/142), canonical planner [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`; independent review, 336 local tests, clean npm consumer, identical real ingests and final CI passed |
 | 07 | Worker protocol and scanner isolation | 03, 01 isolation decision, 02 | done | Network, host-file, resource and malformed-output canaries fail safely; no host fallback | [#139](https://github.com/zalos/farsight/pull/139), `625a920`; SOL approved, macOS real-container checks 92 passed, Linux qualification 82 passed/zero skipped, all eight final CI checks |
 | 08 | Scheduler, resume, pause, cancellation | 03, 06, 07 | done | E4 kills at every boundary, 20 repetitions, zero lost/duplicate outputs | [#147](https://github.com/zalos/farsight/pull/147), `2587eb16`; SOL reviewed, 421 local tests, clean npm consumer, identical real ingests, final CI and native [20-repetition recovery](https://github.com/zalos/farsight/actions/runs/39803836156) passed |
-| 09 | Standalone CLI and minimal report slice | 08 | in progress | Duplicate starts return one run; disconnect does not stop work; bounded status | — |
-| 10 | Pattern scanner and original rules | 09, 01 engine decision | in progress | Pinned engine matches known positives/negatives incl. exit-zero omissions | Adapter draft [#145](https://github.com/zalos/farsight/pull/145); native qualification passed; canonical public command integration open |
+| 09 | Standalone CLI and minimal report slice | 08 | in progress | Duplicate starts return one run; disconnect does not stop work; bounded status | Four-scanner owner CLI and retained minimal-report acceptance in [#148](https://github.com/zalos/farsight/pull/148); selected-stage retained-input rerun and later command gates remain open |
+| 10 | Pattern scanner and original rules | 09, 01 engine decision | in progress | Pinned engine matches known positives/negatives incl. exit-zero omissions | Adapter foundation merged [#145](https://github.com/zalos/farsight/pull/145); native qualification passed; canonical public command acceptance in #148 awaits final integration merge |
 | 11 | Current-tree secrets | 09 | in progress | Synthetic secrets never appear in output, export or logs | Adapter draft [#150](https://github.com/zalos/farsight/pull/150); native ARM64/AMD64 conformance and independent review passed; command integration open |
-| 12 | Offline dependency advisories | 09 | in progress | Lockfile/Maven complete vs partial matching distinguished; advisory DB gate measured | Adapter draft [#146](https://github.com/zalos/farsight/pull/146); native ARM64/AMD64 offline qualification passed; command integration open |
-| 13 | Infrastructure and CI checks | 09, 12 | in progress | Workflow/Dockerfile/IaC positives and negatives against installed tools | Adapter draft [#148](https://github.com/zalos/farsight/pull/148); omission corrections independently reviewed; command integration open |
+| 12 | Offline dependency advisories | 09 | in progress | Lockfile/Maven complete vs partial matching distinguished; advisory DB gate measured | Adapter foundation merged [#146](https://github.com/zalos/farsight/pull/146); native ARM64/AMD64 offline qualification passed; canonical public command acceptance in #148 awaits final integration merge |
+| 13 | Infrastructure and CI checks | 09, 12 | in progress | Workflow/Dockerfile/IaC positives and negatives against installed tools | Reviewed adapters and four-scanner command acceptance in [#148](https://github.com/zalos/farsight/pull/148); final integration CI and merge remain open |
 | 14 | Next matcher semantics | 05, 06, 09 | in progress | Matching, excluded, dynamic and version-mismatch cases correct | Framework draft [#151](https://github.com/zalos/farsight/pull/151); reviewed package API and installed consumer pass; command integration open |
-| 15 | Express order and mounts | 05, 06, 09 | in progress | Auth before/after route, nested mounts and bypass fixtures | Framework draft [#152](https://github.com/zalos/farsight/pull/152); reviewed package API and installed consumer pass; command integration open |
+| 15 | Express order and mounts | 05, 06, 09 | in progress | Auth before/after route, nested mounts and bypass fixtures | Library foundation merged [#152](https://github.com/zalos/farsight/pull/152); reviewed package API and installed consumer pass; canonical framework dispatch remains open |
 | 16 | Nest guards, pipes, interceptors | 05, 06, 09 | in progress | Direct providers pass; dynamic/unresolved stay unknown | Captured-registration implementation and correction under independent review; command integration open |
-| 17 | Spring servlet security | 05, 06, 09 | in progress | E2 six review cases plus bypass negatives; no false protected verdict | Framework draft [#149](https://github.com/zalos/farsight/pull/149); reviewed package API and installed consumer pass; sample application and command integration open |
+| 17 | Spring servlet security | 05, 06, 09 | in progress | E2 six review cases plus bypass negatives; no false protected verdict | Library foundation merged [#149](https://github.com/zalos/farsight/pull/149); reviewed package API and installed consumer pass; sample application and canonical framework dispatch remain open |
 | 18 | Bounded paths, optional deep engine | 10, 14–17, E3 | in progress | Cross-file distinguished from a call path; no invented deep backend | Analysis draft [#153](https://github.com/zalos/farsight/pull/153); reviewed static paths and owner-approved import; command integration open |
 | 19 | Finding identity, comparison, standalone report | 10–18 | in progress | Identity stable under movement; standalone HTML/Markdown/JSON readable offline | Report identity, offline outputs and context placement implemented; context authority corrections under review |
 | 20 | Dispositions, assertions, runtime-evidence import | 19 | pending | Decisions bound to scoped evidence and expiry | — |

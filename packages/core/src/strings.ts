@@ -71,6 +71,10 @@ import { SENTINEL_NEXT_STRINGS } from './strings-sentinel-next.js';
 import { SENTINEL_SPRING_STRINGS } from './strings-sentinel-spring.js';
 
 import { SENTINEL_OSV_STRINGS } from './strings-sentinel-osv.js';
+import { SENTINEL_TRIVY_STRINGS } from './strings-sentinel-trivy.js';
+import { SENTINEL_ZIZMOR_STRINGS } from './strings-sentinel-zizmor.js';
+import { SENTINEL_DRIVERS_STRINGS } from './strings-sentinel-drivers.js';
+
 
 import { SENTINEL_EXPRESS_STRINGS } from './strings-sentinel-express.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
@@ -206,6 +210,15 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_PARSER_STRINGS,
   // Sentinel rule packs, the rule lock, trusted policy, adoption, receipts and admission (strings-sentinel-policy.ts)
   ...SENTINEL_POLICY_STRINGS,
+  // Sentinel's OSV advisory adapter: coverage, refusals, engine failures and acquisition (strings-sentinel-osv.ts)
+  ...SENTINEL_OSV_STRINGS,
+  // Sentinel's Trivy misconfiguration adapter: coverage, refused results, failures and acquisition (strings-sentinel-trivy.ts)
+  ...SENTINEL_TRIVY_STRINGS,
+  // Sentinel's zizmor CI-configuration adapter: coverage, refused findings, failures and job refusals (strings-sentinel-zizmor.ts)
+  ...SENTINEL_ZIZMOR_STRINGS,
+  // Sentinel's production check drivers: why a planned check was not run, and the original rules' words (strings-sentinel-drivers.ts)
+  ...SENTINEL_DRIVERS_STRINGS,
+
   // Sentinel's command line and local service: arguments, outcomes, verdicts, actors, socket, init, preview report
   // (strings-sentinel-service.ts)
   ...SENTINEL_SERVICE_STRINGS,

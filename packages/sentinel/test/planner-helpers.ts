@@ -72,7 +72,7 @@ export function lockedRules(rules: RuleSpec[], tools: { adapterId: string; versi
     packs: [{ ...structuredClone((pack as any).entry), promotion: { receipt: D('receipt'), at } }],
     databases: [{ databaseId: 'osv-db', snapshotDigest: D('osv db snapshot'), capturedAt: '2026-10-22T00:00:00Z', rights: { spdx: 'CC-BY-4.0', origin: 'third-party' as const, upstream: { name: 'osv', revision: '2026-10-22' } }, promotion: { receipt: D('receipt'), at } }],
     tools: tools.map(t => ({ platform: 'linux-x64', ...t, rights: { spdx: 'Apache-2.0', origin: 'third-party' as const, upstream: { name: t.adapterId, revision: t.version } }, promotion: { receipt: D('receipt'), at } })) };
-  return { pack, lock, pin: lockDigest(lock as never), view: plannerLockFrom(lock as never, [pack], lockDigest(lock as never)) };
+  return { pack, files, lock, pin: lockDigest(lock as never), view: plannerLockFrom(lock as never, [pack], lockDigest(lock as never)) };
 }
 
 /** The effective policy: `mandatory` families from adopted settings, `requested` from the repository's config. */

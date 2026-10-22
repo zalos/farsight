@@ -13,6 +13,7 @@ import {
 } from '../policy/index.js';
 import { issueReceipt } from '../policy/owner-receipts.js';
 import { checkPreviewReport, PREVIEW_LIMITATIONS, PREVIEW_REPORT_SCHEMA, type PreviewReport } from '../reports/preview.js';
+import { scannerReportOf, type ScannerReport } from '../reports/scanner.js';
 import { openSnapshot } from '../snapshot/materialize.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { openStore, type SentinelStore } from '../store/index.js';
@@ -92,7 +93,7 @@ function decide(ws: Workspace, policy: EffectivePolicy, intent: ActionIntent, st
   }
   const r = decision.record;
   if (r.outcome === 'admitted') return { admitted: true, record: r };
-  const facts = { action: intent.action, intentDigest: r.intentDigest };
+  const facts = { action: intent.action, effects: intent.effects, intentDigest: r.intentDigest };
   return {
     admitted: false,
     result: r.outcome === 'awaiting-confirmation'
@@ -116,11 +117,11 @@ export interface RunInstance { readonly storeId: string; readonly runId: string 
  * A write on a run, bound to the instance it acts on. Two workspaces with the same content, settings and plan digest
  * still differ in workspace identity and store: a receipt confirmed for one is a mismatch in the other.
  */
-export function runWriteBinding(ws: Workspace, action: 'run.start' | 'run.pause' | 'run.cancel', planDigest: string, instance: RunInstance):
+export function runWriteBinding(ws: Workspace, action: 'run.start' | 'run.pause' | 'run.cancel', plan: CurrentPlan, instance: RunInstance):
   { intent: ActionIntent; stateDigest: string } {
   const workspace = workspaceIdentity(ws.path).digest;
-  const intent = intentOf(action, planDigest, ['local-artifacts'], [`sentinel.workspace:${workspace}`, `sentinel.store:${instance.storeId}`, `sentinel.run:${instance.runId}`]);
-  return { intent, stateDigest: sha(canonicalJsonBytes({ kind: 'sentinel-run-write/1', plan: planDigest, workspace, store: instance.storeId, run: instance.runId })) };
+  const intent = intentOf(action, plan.planDigest, action === 'run.start' ? [...plan.effects] : ['local-artifacts'], [`sentinel.workspace:${workspace}`, `sentinel.store:${instance.storeId}`, `sentinel.run:${instance.runId}`]);
+  return { intent, stateDigest: sha(canonicalJsonBytes({ kind: 'sentinel-run-write/1', plan: plan.planDigest, workspace, store: instance.storeId, run: instance.runId })) };
 }
 
 // ---- settings adoption (an owner action) ----
@@ -250,7 +251,8 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
     const plan = await currentPlan(store, options.planId);
     if (!plan || plan.kind !== 'analysis') return result('run', 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts: { planId: options.planId } });
     if (policy.revision !== plan.policyRevision) return result('run', 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts: { planId: plan.runId } });
-    const decided = decide(ws, policy, intentOf('run.start', plan.planDigest, ['local-artifacts']), plan.planDigest, options.confirm, options.now);
+    const binding = runWriteBinding(ws, 'run.start', plan, { storeId: store.storeId, runId: plan.runId });
+    const decided = decide(ws, policy, binding.intent, binding.stateDigest, options.confirm, options.now);
     if (!decided.admitted) return decided.result;
     const verdicts = printed(decided.record);
     if (!isFinalRunState(runStateIn(store, plan.runId))) {
@@ -258,7 +260,7 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
       // refused before anything starts; canonicalResult says why.
       if (await notExecutableHere(store, plan.runId)) return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts });
       const work = scratchUnder(ws);
-      try { await executeRun(store, plan.runId, { scratchRoot: work }); } finally { removeScratch(work); }
+      try { await executeRun(store, plan.runId, { scratchRoot: work, trustDir: ws.trustDir }); } finally { removeScratch(work); }
     }
     return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts });
   });
@@ -288,15 +290,15 @@ export function confirmForService(ws: Workspace, options: { command: string; act
   // Bound to this workspace, this run and, once a service answered, its store; without a store yet the decision is
   // shown against the unbound intent and nothing is issued.
   const { intent, stateDigest } = options.storeId === undefined
-    ? { intent: intentOf(options.action, record.planDigest, ['local-artifacts']), stateDigest: record.planDigest }
-    : runWriteBinding(ws, options.action, record.planDigest, { storeId: options.storeId, runId: record.runId });
+    ? { intent: intentOf(options.action, record.planDigest, options.action === 'run.start' ? [...record.effects] : ['local-artifacts']), stateDigest: record.planDigest }
+    : runWriteBinding(ws, options.action, record, { storeId: options.storeId, runId: record.runId });
   const decision = admit({
     intent, requestedBy: OWNER as { principal: 'human'; channel: 'owner-cli' }, policy, stateDigest, now: options.now,
     capability: () => ({ available: true, detail: 'built into this installation; runs locally' }),
     credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
   }).record;
   const verdicts = printed(decision);
-  const facts = { planId: record.runId, action: intent.action, intentDigest: decision.intentDigest };
+  const facts = { planId: record.runId, action: intent.action, effects: intent.effects, intentDigest: decision.intentDigest };
   if (decision.outcome === 'denied') {
     const v = decision.verdicts;
     return { result: result(options.command, 'configuration-failure', { verdicts, facts,
@@ -438,15 +440,17 @@ function lastRunSequence(store: SentinelStore, runId: string): number {
 }
 
 /** The preview report of a completed run, rendered from the ledger and the stored artifacts only; nothing executes. */
-export async function previewReport(ws: Workspace, options: { runId: string; now: Date }): Promise<PreviewReport | CommandResult> {
+export async function previewReport(ws: Workspace, options: { runId: string; now: Date }): Promise<PreviewReport | ScannerReport | CommandResult> {
   return withStore(ws, store => reportIn(store, ws, options));
 }
 
 /** `previewReport` against a store this process already holds (the background service's). */
-export async function reportIn(store: SentinelStore, ws: Workspace, options: { runId: string; now: Date }): Promise<PreviewReport | CommandResult> {
+export async function reportIn(store: SentinelStore, ws: Workspace, options: { runId: string; now: Date }): Promise<PreviewReport | ScannerReport | CommandResult> {
   void ws;
   const recorded = store.ledger.getRun(options.runId);
   if (!recorded) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.runUnknown', facts: { runId: options.runId } });
+  const scanner = await scannerReportOf(store, options.runId, options.now);
+  if (scanner) return scanner;
   const findings = recorded.state === 'completed' ? await previewFindingsOf(store, options.runId) : undefined;
   if (!findings) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.runNotCompleted', facts: { runId: options.runId, ...runFailureFacts(store, options.runId) } });
   const snapshotId = recorded.envelope.snapshotId;

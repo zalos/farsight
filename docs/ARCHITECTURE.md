@@ -546,6 +546,26 @@ protocol fingerprint, beside the plan's wider input fingerprint. The two fingerp
 attempt's invocation record links its binding and is accepted with the attempt's start, so failed, canceled and
 interrupted attempts keep both. The start message carries the unit's assigned checks and scopes.
 
+Trusted check drivers prepare the scanner job and normalize verified outputs under the same absolute unit deadline
+as the worker and its publication. Drivers receive the combined unit/run/cancel signal; every awaited preparation,
+execution, normalization and object write is checked again before continuing. The worker receives only the budget
+left after preparation, and durable acceptance rechecks both unit and run deadlines without an intervening await.
+Opening the coordinator checks each selected driver's implementation digest against both the live executing
+adapter and the admitted unit, even when its driver registry was constructed against another adapter registry.
+
+
+The internal production drivers bind Pattern, OSV, Trivy and zizmor to this one seam. Each accepts only its original
+shipped rule families, revisions and definition digests, plus the exact pinned engine image and the assigned
+snapshot inputs. Required database/checks provenance is supplied explicitly from owner-held acquisition records;
+a path or adjacent file grants no trust and no driver downloads anything. Missing assets refuse preparation and
+leave the unit unpublished; public scanner capability registration and acquisition remain separate integration work.
+The bridge seals its job with the plan/unit/check binding, normalizes the exact supervisor outcome frozen in place,
+and publishes source-derived reports and findings beside per-check coverage in the same accepted attempt. A trusted
+normalizer can refine the actual read set only to sealed captured input scopes; scanned scopes must also have been
+read. Expected scopes remain the admitted plan's scopes. The verified worker result stays unchanged as audit evidence.
+Original rule packs and their digest manifest ship as data assets; they contain no engine, database or execution grant.
+
+
 **Coverage.** Each assigned check gets one `sentinel-coverage/draft-1` record per attempt that published:
 `complete`, `partial` (scope skipped, unresolved or not scanned) or `not-run`. The record is never finer than the
 trusted adapter's registered `coverage` granularity (default `aggregate`); a result cannot claim finer coverage.
@@ -938,6 +958,101 @@ reachability. **Not decided here:** registering the adapter, the planner's sched
 command (PR 09). No database ships in the package. Native linux/amd64 qualification passed
 [21 tests with zero skips and the installed worker](https://github.com/zalos/farsight/actions/runs/39788785215);
 the adapter records that evidence, and the workflow rechecks the pinned image on affected changes.
+
+33. **Sentinel checks infrastructure configuration with Trivy's misconfiguration scanner only, against one pinned checks
+    bundle, and needs the engine's own evidence for every covered file (2026-10-22).** `src/adapters/trivy/` (PR 13)
+    runs `trivy config` from the official Trivy 0.76.1 image index (tag commit e713f67; the image's revision label names
+    it), behind an original POSIX shell worker, only through PR 07's isolated execution service: no pull, no network,
+    no host fallback. Only the configuration scanner runs, so nothing duplicates the OSV adapter's dependency results;
+    the selected types are Dockerfiles, Kubernetes YAML and Terraform (`.tf`, `.tf.json`, local modules). Helm,
+    CloudFormation, Azure ARM, Ansible, plans and Kubernetes JSON are listed as unsupported, not silently skipped.
+
+    - **Checks are data the owner acquires once.** The trivy-checks 2.3.0 OCI manifest and its one layer are pinned by
+      digest (the manifest's revision names the release tag commit; MIT). `acquireChecksBundle` is an owner action
+      (`tool.acquire`) admitted only by a spent receipt for exactly that bundle, used once; it fetches the anonymous
+      pull token, the manifest and the layer from `ghcr.io`, follows only the registry's redirect to its blob host
+      without the token, checks every byte against the pins and stores the archive privately. Because the request
+      names digests it is immutable. Without it nothing runs: every configuration file is `bundle-missing`.
+    - **The engine's silent fallback is refused.** Trivy uses the checks compiled into its binary when its cache is
+      missing, and says so only in its log. The worker unpacks the pinned bundle into the cache layout, skips updates,
+      telemetry and version checks, disables `.trivyignore`, and reports the engine's own "loaded from disk" evidence
+      and check count as fixed words and digits. A run without it counts nothing (`bundleNotLoaded`).
+    - **Coverage needs positive evidence.** The worker also reports, from the engine's log and filtered to the job's
+      own paths, which files and Terraform module folders were scanned, which failed to parse and where a remote module
+      failed to load. At exit 0, a Dockerfile or Terraform file the engine never logged is `notReported`, a gap, never
+      a pass (the engine silently skips `.git` folders, for one). Files are scanned below one fixed folder so the engine's
+      root-relative `proc`, `sys` and `dev` skips cannot hide a captured folder of that name. YAML the engine did not log
+      is not applicable only when its bytes prove the engine's Kubernetes rule (a document with apiVersion, kind and
+      metadata) cannot match; otherwise it is `notReported`. Inline
+      `trivy:`/`tfsec:` ignore comments, which the engine honours with no switch to disable them, a remote module
+      (scans have no network, so modules are never fetched) and unread variable files leave a file `partial`.
+    - **Findings are configuration facts at captured paths.** A finding keeps the check id, the bundle's severity,
+      the configuration type, the captured path and artifact (a module folder has none) and lines validated against
+      the captured bytes; never the engine's message, which quotes the file, and never a new graph node. Checks outside
+      the pinned bundle's `builtin.` namespace, unknown targets and impossible lines are refused, with a reason.
+    - **Platforms.** linux/arm64 is measured on a darwin-arm64 Docker Desktop host; linux/amd64 is measured on
+      native Ubuntu 24.04.5 with Docker Engine 28.0.4 by [CI run 39817213827](https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627) (33 tests, zero skips, and both installed workers).
+      The exact tested revision and pins are in [the evidence record](proposals/farsight-sentinel/evidence/2026-10-22-iac-native.json).
+
+    Not decided here: registering the adapter in the production registry and planning its checks (PR 08/09),
+    Terraform variable files and plans, Helm rendering, and any additional configuration type.
+
+34. **Sentinel audits CI configuration with zizmor offline, and the audits that need the network are a stated gap
+    (2026-10-22).** `src/adapters/zizmor/` (PR 13) runs the official zizmor 1.31.1 image index (its build provenance
+    names `refs/tags/v1.31.1` at commit effdb35; MIT) behind an original POSIX shell worker, only through PR 07's
+    isolated execution service: no pull, no network, no token (the GitHub token variables are unset as well).
+
+    - **Inputs.** GitHub Actions workflows directly in any `.github/workflows` folder, `action.yml`/`action.yaml`, and
+      `.github/dependabot.yml`; files keep their paths so zizmor collects them by its own layout. Pre-commit
+      configuration, remote repositories and other CI systems are listed as unsupported.
+    - **The repository cannot suppress a finding.** `--no-config` and `--no-ignores`: neither a repository
+      `zizmor.yml` nor an ignore comment changes what is reported. The regular persona is selected and recorded.
+    - **Offline is explicit.** zizmor 1.31.1 skips five audits without the GitHub API (impostor-commit,
+      known-vulnerable-actions, ref-confusion, ref-version-mismatch, stale-action-refs) and runs three with less
+      information (artipacked, typosquat-uses, unpinned-uses). The worker reports the engine's own "skipping" lines; the
+      coordinator requires exactly the pinned online set, so every workflow and action is `partial` with
+      `onlineAuditsSkipped` and `offlineDegraded`, never complete; any other audit failing to load is `auditNotLoaded`.
+    - **Coverage and consistency need the engine's own evidence.** A file the engine reported completing is covered; one
+      it collected but did not audit (unparseable, schema-invalid or empty, all at exit 0) is `notAudited`; one it
+      never collected is `notCollected`. The exit code is zizmor's own summary of its highest finding (11–14, or 0 with
+      none): a report that disagrees with it, or a run where an online audit loaded, counts nothing.
+    - **Findings are CI configuration facts at captured paths.** A finding keeps the audit, severity, confidence and
+      its primary and related locations as UTF-8 byte spans checked against the captured bytes; never the engine's
+      annotations, quoted features, descriptions or fixes, and never a new graph node.
+    - **Platforms.** linux/arm64 is measured; linux/amd64 is measured on native Ubuntu 24.04.5 with
+      Docker Engine 28.0.4 by [the same native CI job](https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627); its offline gaps remain unchanged.
+
+    The worker change found here applies to every shell worker: a frame binding built in a command substitution never
+    advances the sequence number, so a diagnostic followed by a result repeats it and PR 07 refuses the attempt. Both
+    PR 13 workers build it in their own shell.
+
+    Not decided here: online audits with an owner-supplied token, pre-commit inputs, other personas, registration and
+    planning (PR 08/09).
+
+
+**ADR 37 extension — explicit scanner command dispatch (2026-10-22).** The owner CLI composes the four reviewed
+production drivers through the canonical coordinator; the preview also has an exact-rule trusted driver and its
+worker distinguishes captured scoped inputs from the sealed auxiliary job. The `scanners` initialization preset
+selects seven original families; the default `static` preset preserves preview compatibility. A shipped adapter
+registry entry does not grant an installed capability: selected external rules need exact owner-promoted tool pins,
+a qualified existing local image and required held databases/checks. Plan and execution verify these prerequisites,
+including databases removed after planning, before scanner attempts. Production jobs batch at most 32 scopes;
+preview jobs retain one scope. Skips and omitted files remain explicit coverage gaps.
+
+`assets adopt-tool` and `assets adopt-database` are owner-only receipt-confirmed promotions, with no network. The
+owner names both archive and provenance; metadata never gains trust because it is beside a file. The spent receipt
+state digest binds provenance in addition to the candidate and previous lock. Private immutable records are keyed
+by that receipt and verified against the admitted lock entry, while archives are held by content digest. OSV imports
+require an explicitly stated published SPDX expression; Trivy checks retain their pinned MIT provenance, independently of the engine's Apache-2.0 license.
+Separate `assets acquire-database` actions call the existing bounded allowlisted brokers under a one-use receipt,
+with a deadline; acquisition never silently promotes or runs an asset. Plans and scanners never autoacquire.
+
+The initial public scanner report is an internal draft document in CLI `facts.report`, not the full report envelope
+or a new package export. It reads only accepted same-attempt publications of the exact admitted plan and uses the
+shared required-coverage evaluator. Normalized observations and per-check coverage remain separate, with pinned
+provenance and shared scoped counts. Regeneration needs neither source checkout nor scanner assets. Full finding
+policy, placement, framework/model integration and complete reports remain subsequent work; no command in this
+slice declares policy satisfaction. Actual verified worker outcomes retain architecture qualification authority.
 
 31. **Sentinel's Express pack reads registration order from source and never credits a refusal as authentication or authorization (2026-10-22).**
 `farsight-sentinel/frameworks/express` (PR 15) answers, for each Express route the public parser found, what runs

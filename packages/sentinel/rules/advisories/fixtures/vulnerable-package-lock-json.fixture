@@ -1,0 +1,12 @@
+{
+  "name": "sentinel-fixture-app",
+  "version": "1.0.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": { "name": "sentinel-fixture-app", "version": "1.0.0", "dependencies": { "sentinel-fixture-alpha": "1.0.0", "sentinel-fixture-beta": "2.1.0" } },
+    "node_modules/sentinel-fixture-alpha": { "version": "1.0.0", "resolved": "https://registry.example.invalid/sentinel-fixture-alpha-1.0.0.tgz", "integrity": "sha512-AAAA", "dependencies": { "sentinel-fixture-gamma": "0.3.0" } },
+    "node_modules/sentinel-fixture-beta": { "version": "2.1.0", "resolved": "https://registry.example.invalid/sentinel-fixture-beta-2.1.0.tgz", "integrity": "sha512-BBBB" },
+    "node_modules/sentinel-fixture-gamma": { "version": "0.3.0", "resolved": "https://registry.example.invalid/sentinel-fixture-gamma-0.3.0.tgz", "integrity": "sha512-CCCC" }
+  }
+}

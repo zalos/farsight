@@ -54,13 +54,16 @@ test('no Farsight package depends on or imports Sentinel', () => {
 // Every module import outside the package, per built file. A new import fails here until it is reviewed and
 // added; nothing networked, no worker or cluster, and no static node:sqlite import anywhere.
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
+  'service/scanner-assets.js': ['node:crypto', 'node:fs', 'node:path'],
+  'reports/scanner.js': ['@farsight/core/dist/counts.js', '@farsight/core/dist/strings.js'],
   // The pattern adapter (PR 10): hashing and its own job files only; the engine runs through execution/ in a container.
+  'adapters/drivers/canonical.js': ['node:fs'],
+  'adapters/drivers/common.js': ['node:crypto'],
   'adapters/pattern/adapter.js': ['node:crypto'],
   'adapters/pattern/job.js': ['node:crypto', 'node:fs', 'node:path'],
   'adapters/pattern/normalize.js': ['node:crypto'],
   'adapters/pattern/resolved.js': ['node:crypto'],
   'adapters/pattern/run.js': ['node:fs', 'node:path'],
-
   // The OSV advisory adapter (PR 12): hashing, its own job and snapshot files; the engine runs through execution/.
   'adapters/osv/acquire.js': ['node:crypto', 'node:fs', 'node:path'],
   'adapters/osv/adapter.js': ['node:crypto'],
@@ -68,10 +71,22 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/osv/normalize.js': ['node:crypto'],
   'adapters/osv/run.js': ['node:fs', 'node:path'],
   'adapters/sealed-input.js': ['node:fs', 'node:path'],
+  // The Trivy misconfiguration adapter (PR 13): its job and bundle files and hashing; the engine runs through execution/.
+  'adapters/trivy/adapter.js': ['node:crypto'],
+  'adapters/trivy/bundle.js': ['node:crypto', 'node:fs', 'node:path'],
+  'adapters/trivy/job.js': ['node:crypto', 'node:fs', 'node:path'],
+  'adapters/trivy/normalize.js': ['node:crypto'],
+  'adapters/trivy/run.js': ['node:fs', 'node:path'],
+  // The zizmor CI-configuration adapter (PR 13): its job file and hashing; the engine runs through execution/.
+  'adapters/zizmor/adapter.js': ['node:crypto'],
+  'adapters/zizmor/job.js': ['node:crypto', 'node:fs', 'node:path'],
+  'adapters/zizmor/normalize.js': ['node:crypto'],
+  'adapters/zizmor/run.js': ['node:fs', 'node:path'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/assets.js': ['node:fs', 'node:path', 'node:url'],
   'execution/bootstrap.js': ['node:fs', 'node:path'],
-  'execution/coordinator.js': ['node:crypto', 'node:fs'],
+  'execution/check-drivers.js': ['node:crypto', 'node:fs'],
+  'execution/coordinator.js': ['node:crypto', 'node:fs', 'node:path'],
   'execution/coverage.js': ['node:crypto'],
   'execution/durability.js': ['node:fs'],
   'execution/plan.js': ['node:crypto', 'node:path'],
@@ -245,35 +260,35 @@ test('importing the root and the store, and asking the CLI for help, start nothi
   assert.deepEqual(help.spawns, []);
   assert.equal(help.sqlite, false);
   assert.deepEqual(help.files, []);
-  assert.match(help.stdout, /no scanner yet/);
+  assert.match(help.stdout, /pinned scanners/);
   // Positive controls: the probe sees SQLite once loaded, and a spawn made through a named import.
   assert.equal(probe(`await import('node:sqlite');`).sqlite, true);
   assert.deepEqual(probe(`const { spawnSync } = await import('node:child_process'); spawnSync(process.execPath, ['-e', '0']);`).spawns,
     [`spawnSync ${process.execPath}`]);
 });
 
-test('help and version say plainly that no scanner exists', () => {
+test('help and version describe explicit pinned scanner execution', () => {
   const help = cli('--help');
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /no scanner yet/);
-  assert.match(help.stdout, /never downloads a tool, starts a container or contacts a model provider/);
+  assert.match(help.stdout, /pinned scanners/);
+  assert.match(help.stdout, /Scans never acquire assets/);
   assert.match(help.stdout, /4 awaiting owner confirmation/);
   const version = cli('--version');
   assert.equal(version.status, 0);
   assert.equal(version.stdout.trim(), `farsight-sentinel ${manifest.version}, contracts draft-1`);
 });
 
-test('draft contracts, store, capture, parser, policy, planner and Spring pack are available; scanners remain unavailable', () => {
+test('public scanner command support is conditional on explicit adopted pinned assets', () => {
   const r = cli('capabilities', '--json');
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import']);
-  assert.equal(listed.find(c => c.id === 'interprocedural-flow')?.state, 'unavailable', 'no deep engine is claimed');
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import']);
   assert.equal(listed.find(c => c.id === 'framework-express')?.reasonCode, 'sentinel.capability.draftExpress');
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
+  for (const id of ['secrets-scan', 'reports']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
+  assert.equal(listed.find(c => c.id === 'interprocedural-flow')?.state, 'unavailable', 'no deep engine is claimed');
   assert.equal(listed.find(c => c.id === 'framework-spring')?.reasonCode, 'sentinel.capability.draftSpring');
-  for (const id of ['pattern-scan', 'coordinator', 'reports']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
   assert.equal(listed.find(c => c.id === 'rules-and-planning')?.state, 'available-draft');
   assert.ok(listed.filter(c => c.state !== 'unavailable').every(c => c.state === 'available-draft'));
   for (const c of listed) assert.match(c.reasonCode, /^sentinel\.capability\./);

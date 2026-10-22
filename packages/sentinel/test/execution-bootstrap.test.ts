@@ -304,16 +304,17 @@ test('maxOutputBytes bounds process output, which an operation does not produce:
   assert.equal(summary.published, boot.units.length, JSON.stringify(summary.failures));
 });
 
-/** Hold the analysis artifact's object write for `ms`: the window between the grant check and acceptance. */
-async function slowAnalysisWrites(t: any, ms: number) {
+/** Hold one operation's object write for `ms`: the window between the grant check and acceptance. */
+async function slowBootstrapWrites(t: any, ms: number, stage: 'parse' | 'capture') {
   const { bootstrapIo } = await import('../dist/execution/bootstrap.js');
-  bootstrapIo.beforeWrite = async (value: any) => { if (value?.analysis?.fingerprint) await new Promise(r => setTimeout(r, ms)); };
+  bootstrapIo.beforeWrite = async (value: any) => { if (stage === 'parse' ? value?.analysis?.fingerprint : value?.schema === 'sentinel-bootstrap-capture/draft-1') await new Promise(r => setTimeout(r, ms)); };
   t.after(() => { bootstrapIo.beforeWrite = undefined; });
 }
 
-for (const [label, grant, budget, code] of [
-  ['the unit deadline', { deadlineMs: 1_000 }, 600_000, 'sentinel.execution.deadlineExceeded'],
-  ['the run deadline', {}, 1_000, 'sentinel.execution.runDeadline'],
+for (const [label, grant, budget, code, slowAt] of [
+  ['the unit deadline', { deadlineMs: 1_000 }, 600_000, 'sentinel.execution.deadlineExceeded', 'parse'],
+  ['the run deadline', {}, 1_000, 'sentinel.execution.runDeadline', 'parse'],
+  ['the run deadline in an ancestor', {}, 1_000, 'sentinel.execution.runDeadline', 'capture'],
 ] as const) {
   test(`${label} passing while a bootstrap operation's objects are written refuses its publication`, needsStore, async t => {
     const dir = scratch(t, 'sentinel-exec-boot-window-');
@@ -327,12 +328,32 @@ for (const [label, grant, budget, code] of [
     const boot = planBootstrap({ runId: 'run-boot', sourceIds: ['app'], profile: profile as any });
     await admitPlan(store, { plan: boot, ruleLock: null, policy: null, profile: record });
     const run = { ...runEnvelope(snapshot.id, pin, policy.revision, profile.id), budgets: { maxTokens: null, maxCost: null, deadlineMs: budget } };
-    await slowAnalysisWrites(t, 1_200);
-    await (await Coordinator.open({ store, runId: 'run-boot', run, registry, scratchRoot: work, retry: { maxAttempts: 1 } })).run();
+    await slowBootstrapWrites(t, 1_200, slowAt);
+    const summary = await (await Coordinator.open({ store, runId: 'run-boot', run, registry, scratchRoot: work, retry: { maxAttempts: 1 } })).run();
     const parseUnit = boot.units.find(u => u.stage === 'parse')!;
     assert.equal(store.ledger.getPublication({ id: parseUnit.id, revision: 1 }), null, 'nothing accepted after the deadline');
     const [a] = store.ledger.listAttempts({ id: parseUnit.id, revision: 1 });
-    assert.equal(store.ledger.getAttempt(a!.id)!.envelope.error?.code, code);
+    if (slowAt === 'capture') assert.equal(a, undefined, 'a capture that could not publish cannot start its dependent parse');
+    // The run budget can expire in an ancestor before parse starts. A dependency hold is valid only with a
+    // recorded run-deadline refusal in that ancestor chain; never infer a deadline from a missing work record.
+    if (a || code !== 'sentinel.execution.runDeadline') assert.equal(store.ledger.getAttempt(a!.id)!.envelope.error?.code, code);
+    else {
+      const ancestors = new Set<string>();
+      const visit = (id: string) => { for (const parent of boot.units.find(unit => unit.id === id)?.dependencies ?? []) {
+        if (!ancestors.has(parent.id)) { ancestors.add(parent.id); visit(parent.id); }
+      } };
+      visit(parseUnit.id);
+      const held = store.ledger.getWork({ id: parseUnit.id, revision: 1 });
+      if (held) assert.ok(['sentinel.execution.runDeadline', 'sentinel.execution.dependencyFailed'].includes(held.reason!), `unexpected hold: ${held.reason}`);
+      const causes = summary.failures.filter(failure => failure.code === code && (ancestors.has(failure.work.id)
+        || (held?.reason !== 'sentinel.execution.dependencyFailed' && failure.work.id === parseUnit.id)));
+      assert.ok(causes.length > 0, 'the unstarted parse needs an actual run-deadline refusal in its dependency chain');
+      for (const cause of causes) if (cause.attemptId !== null) {
+        const ended = store.ledger.getAttempt(cause.attemptId)!;
+        assert.equal(ended.state, 'failed');assert.equal(ended.envelope.error?.code, code);
+        assert.equal(store.ledger.getPublication(cause.work), null, 'the failed deadline ancestor published nothing');
+      }
+    }
     assert.deepEqual(store.ledger.listOpenStages(500), [], 'its stage was aborted');
     assert.equal(store.ledger.getPublication({ id: boot.units.find(u => u.stage === 'inventory')!.id, revision: 1 }), null);
   });
