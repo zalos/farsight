@@ -250,7 +250,7 @@ suites with `SENTINEL_OSV_QUALIFY=linux/amd64` (results accepted as candidate, n
 shipped worker; any skipped, failed or cancelled test, a container left behind or a daemon that cannot be asked fails it.
 A green run is the evidence for marking linux/amd64 measured in `src/adapters/osv/adapter.ts` (ADR 29).
 
-The individual Pattern and OSV qualification jobs select their own installed worker with
-`SENTINEL_PACKAGE_ENGINE`; both asset manifests and their exact bytes are still checked. A local package smoke
-with `SENTINEL_ISOLATION=1` and no selector executes both workers. Each native job must observe its own worker
+The individual Pattern, OSV and IaC qualification jobs select their own installed workers with
+`SENTINEL_PACKAGE_ENGINE=pattern|osv|iac`; all four asset manifests and their exact bytes are still checked. A local package smoke
+with `SENTINEL_ISOLATION=1` and no selector executes all four workers. Each native job must observe its own worker
 success marker, so a missing or failed selected engine cannot pass as an asset-only check.

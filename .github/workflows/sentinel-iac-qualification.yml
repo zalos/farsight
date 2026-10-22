@@ -86,6 +86,7 @@ jobs:
         env:
           SENTINEL_ISOLATION: '1'
           SENTINEL_IAC_QUALIFY: linux/amd64
+          SENTINEL_PACKAGE_ENGINE: iac
         run: |
           set -o pipefail
           export SENTINEL_TRIVY_CHECKS_DIR="$RUNNER_TEMP/iac-owner"
@@ -98,6 +99,7 @@ jobs:
         env:
           SENTINEL_ISOLATION: '1'
           SENTINEL_IAC_QUALIFY: linux/amd64
+          SENTINEL_PACKAGE_ENGINE: iac
         run: |
           set -o pipefail
           export SENTINEL_TRIVY_CHECKS_DIR="$RUNNER_TEMP/iac-owner"

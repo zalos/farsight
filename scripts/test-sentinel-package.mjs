@@ -6,10 +6,10 @@
 // package and a changed version is refused; the draft store (`farsight-sentinel/store`) opens, publishes
 // verified evidence in one process and reads it back in another; and no Farsight application package
 // arrives; the pattern rule pack and worker ship with exact digests and rights. No scanner, container, model or
-// network service is started, except that with SENTINEL_ISOLATION=1 the shipped Pattern and OSV workers run once in
+// network service is started, except that with SENTINEL_ISOLATION=1 the shipped Pattern, OSV, Trivy and zizmor workers run once in
 // the pinned engine image through the workspace's isolated execution service (never pulled; this checks the installed
-// assets, not an installed runtime). SENTINEL_PACKAGE_ENGINE=pattern|osv limits execution to the engine provisioned
-// by an individual native qualification job; asset validation still covers both. With no selector both engines run.
+// assets, not an installed runtime). SENTINEL_PACKAGE_ENGINE=pattern|osv|iac limits execution to the engine provisioned
+// by an individual native qualification job; asset validation still covers all four. With no selector all four engines run.
 // npm may fetch Sentinel's declared third-party dependencies.
 //
 //   pnpm test:sentinel:package        # builds Sentinel's closure, packs, then runs this
@@ -25,7 +25,7 @@ import { npmConsumer } from './npm-consumer.mjs';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const sourceDir = join(root, 'packages', 'sentinel');
 const selectedEngine = process.env.SENTINEL_PACKAGE_ENGINE;
-assert.ok(selectedEngine === undefined || ['pattern', 'osv'].includes(selectedEngine), 'SENTINEL_PACKAGE_ENGINE must be pattern or osv');
+assert.ok(selectedEngine === undefined || ['pattern', 'osv', 'iac'].includes(selectedEngine), 'SENTINEL_PACKAGE_ENGINE must be pattern, osv or iac');
 const runEngine = (engine) => process.env.SENTINEL_ISOLATION === '1' && (selectedEngine === undefined || selectedEngine === engine);
 const artifact = resolve(process.argv[2] ?? (() => {
   const source = JSON.parse(readFileSync(join(sourceDir, 'package.json'), 'utf8'));
@@ -443,7 +443,7 @@ try {
     // With SENTINEL_ISOLATION=1, the pinned image installed and SENTINEL_TRIVY_CHECKS_DIR naming the owner-acquired
     // bundle, the shipped worker bytes run in the real engine through the WORKSPACE's isolated execution service. This
     // checks the installed asset, not an installed runtime: nothing exported invokes the adapter until the PR 09 command.
-    if (process.env.SENTINEL_ISOLATION === '1') {
+    if (runEngine('iac')) {
       const imp = (p) => import(new URL(`file://${join(sourceDir, 'dist', p)}`).href);
       const { TRIVY_ADAPTER, TRIVY_WORKER_DIGEST, loadChecksBundle, runTrivyAttempt } = await imp('adapters/trivy/index.js');
       assert.deepEqual(trivy.adapter.command, [...TRIVY_ADAPTER.command], 'the shipped adapter is the workspace adapter');
@@ -489,7 +489,7 @@ try {
     assert.ok(zizmor.adapter.engineArgs.includes('--offline') && zizmor.adapter.engineArgs.includes('--no-ignores'));
     assert.equal(zizmor.registered, false);
     zizmorDemo = `zizmor assets (worker ${zizmor.worker.digest.slice(7, 19)}), `;
-    if (process.env.SENTINEL_ISOLATION === '1') {
+    if (runEngine('iac')) {
       const imp = (p) => import(new URL(`file://${join(sourceDir, 'dist', p)}`).href);
       const { ZIZMOR_ADAPTER, ZIZMOR_WORKER_DIGEST, runZizmorAttempt } = await imp('adapters/zizmor/index.js');
       assert.deepEqual(zizmor.adapter.command, [...ZIZMOR_ADAPTER.command], 'the shipped adapter is the workspace adapter');
