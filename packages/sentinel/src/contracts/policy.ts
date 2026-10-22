@@ -8,7 +8,11 @@ import type { RuleCapability, RuleFamilyId, Severity } from './rules.js';
 /** Every action the Sentinel gate decides. */
 export type SentinelAction =
   | 'run.start' | 'capture.source' | 'disposition.propose' | 'disposition.approve' | 'rule.promote'
-  | 'tool.acquire' | 'paid.admit' | 'disclosure.send' | 'settings.adopt';
+  | 'tool.acquire' | 'paid.admit' | 'disclosure.send' | 'settings.adopt'
+  /** Stop starting new work in a run; work in flight may finish. A write: decided like any other action. */
+  | 'run.pause'
+  /** Stop a run's workers; the ledger then refuses its publications. */
+  | 'run.cancel';
 
 /** What an admitted action may do beyond reading captured artifacts. */
 export type ActionEffect = 'local-artifacts' | 'source-disclosure' | 'paid-inference' | 'network' | 'tool-execution';
@@ -46,7 +50,7 @@ export type EndpointOrigin = string;
 export interface SentinelGrant {
   /**
    * @minItems 1
-   * @maxItems 9
+   * @maxItems 11
    */
   actions: SentinelAction[];
   /** @maxItems 2 */

@@ -3,11 +3,12 @@
 // or `run --detach` starting it on demand) and runs as the owner's own account, but it grants nothing to the
 // connections it answers: every client, the owner's own CLI included, is an agent on a service channel (actor.ts).
 //
-// Authority to start or resume a run reaches the service in exactly two ways:
-//   - an owner receipt, issued by the owner's own CLI process after its --confirm (local.ts confirmRunForService),
-//     bound to `run.start`, the plan's digest and the adopted policy revision, and spent here once;
+// Authority to start, resume, pause or cancel a run reaches the service in exactly two ways:
+//   - an owner receipt, issued by the owner's own CLI process after its --confirm (local.ts confirmForService),
+//     bound to that action, the plan's digest and the adopted policy revision, and spent here once;
 //   - the adopted grants, through admission with the connection's own requester: an agent gets what they give agents.
-// Pause and cancel only stop work and are answered for any client of the socket. Status, wait and report read.
+// Pause and cancel are writes too, decided the same way with their own actions (`run.pause`, `run.cancel`): a
+// receipt for one is never a receipt for another. Status, wait and report read.
 //
 // One run executes at a time. A second start for the plan being run joins it (one run, never two); a start for a run
 // that already finished prints its result again without executing anything. A run interrupted by the service
@@ -35,7 +36,8 @@ import { PREVIEW_ADAPTERS, previewPlan } from './preview-plan.js';
 
 export type ServiceErrorCode =
   | 'sentinel.service.unknownOperation' | 'sentinel.service.requestInvalid' | 'sentinel.service.planUnknown'
-  | 'sentinel.service.planChanged' | 'sentinel.service.alreadyServing' | 'sentinel.service.startFailed';
+  | 'sentinel.service.planChanged' | 'sentinel.service.alreadyServing' | 'sentinel.service.startFailed'
+  | 'sentinel.service.recordUnsafe';
 
 export class ServiceError extends Error {
   constructor(readonly code: ServiceErrorCode) { super(code); this.name = 'ServiceError'; }
@@ -148,49 +150,64 @@ export class OwnerService {
         const f = fields(body, ['runId'], ['timeoutMs']);
         return this.#wait(f.runId as string, Math.min(typeof f.timeoutMs === 'number' ? f.timeoutMs : MAX_WAIT_MS, MAX_WAIT_MS));
       }
-      case 'run.pause': return this.#pause(fields(body, ['runId']).runId as string);
-      case 'run.cancel': return this.#cancel(fields(body, ['runId']).runId as string);
+      case 'run.pause': {
+        const f = fields(body, ['runId'], ['receiptId']);
+        return this.#pause(f.runId as string, f.receiptId as string | undefined, by);
+      }
+      case 'run.cancel': {
+        const f = fields(body, ['runId'], ['receiptId']);
+        return this.#cancel(f.runId as string, f.receiptId as string | undefined, by);
+      }
       case 'report': return reportIn(this.#store, this.#ws, { runId: fields(body, ['runId']).runId as string, now: this.#now() });
       default: throw new ServiceError('sentinel.service.unknownOperation');
     }
   }
 
-  async #start(planId: string, receiptId: string | undefined, by: RequestedBy): Promise<CommandResult> {
-    const record = this.#plans.record(planId);
-    if (!record) return result('run', 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts: { planId } });
-    const adopted = adoptedPolicy(this.#ws);
-    if ('refusal' in adopted) return adopted.refusal;
-    const { policy } = adopted;
-    if (policy.revision !== record.policyRevision) return result('run', 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts: { planId } });
-    const intent = intentOf('run.start', record.planDigest, ['local-artifacts']);
-    const now = this.#now();
-    let verdicts: PrintedVerdicts;
+  /**
+   * Decides one write on a plan's run: the owner's receipt for exactly this action, plan digest and policy revision,
+   * spent once, or else admission with the connection's own requester under the adopted grants. Being connected
+   * grants nothing; there is no service bypass.
+   */
+  #authorize(command: string, action: 'run.start' | 'run.pause' | 'run.cancel', planId: string, receiptId: string | undefined, by: RequestedBy):
+    { verdicts: PrintedVerdicts; facts: Record<string, unknown> } | { refusal: CommandResult } {
     const facts: Record<string, unknown> = { planId };
+    const record = this.#plans.record(planId);
+    if (!record) return { refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts }) };
+    const adopted = adoptedPolicy(this.#ws);
+    if ('refusal' in adopted) return { refusal: adopted.refusal };
+    const { policy } = adopted;
+    if (policy.revision !== record.policyRevision) return { refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts }) };
+    const intent = intentOf(action, record.planDigest, ['local-artifacts']);
+    const now = this.#now();
     if (receiptId !== undefined) {
       // The owner's receipt: checked against exactly this action, plan digest and policy revision, and spent once.
       // What the connection said about itself plays no part; an unknown, spent, expired or mismatched one refuses.
-      let spent;
       try {
-        spent = receiptBook(this.#ws).consume(receiptId, { intent, stateDigest: record.planDigest, policyRevision: policy.revision }, now);
+        const spent = receiptBook(this.#ws).consume(receiptId, { intent, stateDigest: record.planDigest, policyRevision: policy.revision }, now);
+        return { verdicts: RECEIPT_VERDICTS, facts: { ...facts, receipt: spent.digest } };
       } catch (e) {
         if (!(e instanceof PolicyError)) throw e;
-        return result('run', 'configuration-failure', { reasonCode: e.code, facts });
-      }
-      verdicts = RECEIPT_VERDICTS;
-      facts.receipt = spent.digest;
-    } else {
-      const decision = admit({
-        intent, requestedBy: by, policy, stateDigest: record.planDigest, now,
-        capability: () => ({ available: true, detail: 'built into this installation; runs locally' }),
-        credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
-      }).record;
-      verdicts = printed(decision);
-      if (decision.outcome === 'awaiting-confirmation') return result('run', 'awaiting-confirmation', { verdicts, facts });
-      if (decision.outcome !== 'admitted') {
-        const v = decision.verdicts;
-        return result('run', 'configuration-failure', { verdicts, facts, reasonCode: v.policy.allowed ? (v.capability.allowed ? v.credential.reasonCode : v.capability.reasonCode) : v.policy.reasonCode });
+        return { refusal: result(command, 'configuration-failure', { reasonCode: e.code, facts }) };
       }
     }
+    const decision = admit({
+      intent, requestedBy: by, policy, stateDigest: record.planDigest, now,
+      capability: () => ({ available: true, detail: 'built into this installation; runs locally' }),
+      credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
+    }).record;
+    const verdicts = printed(decision);
+    if (decision.outcome === 'awaiting-confirmation') return { refusal: result(command, 'awaiting-confirmation', { verdicts, facts }) };
+    if (decision.outcome !== 'admitted') {
+      const v = decision.verdicts;
+      return { refusal: result(command, 'configuration-failure', { verdicts, facts, reasonCode: v.policy.allowed ? (v.capability.allowed ? v.credential.reasonCode : v.capability.reasonCode) : v.policy.reasonCode }) };
+    }
+    return { verdicts, facts };
+  }
+
+  async #start(planId: string, receiptId: string | undefined, by: RequestedBy): Promise<CommandResult> {
+    const decided = this.#authorize('run', 'run.start', planId, receiptId, by);
+    if ('refusal' in decided) return decided.refusal;
+    const { verdicts, facts } = decided;
     // One run per plan: a second start joins the run already executing.
     if (this.#active.has(planId)) return result('run', 'submitted', { verdicts, facts: { ...facts, runId: planId, joined: true, state: runStateIn(this.#store, planId) } });
     if (this.#stopping || this.#active.size > 0) return result('run', 'configuration-failure', { verdicts, facts, reasonCode: 'sentinel.service.anotherRunActive' });
@@ -236,29 +253,34 @@ export class OwnerService {
     return executing ? result('wait', 'submitted', { facts: r.facts, reasonCode: 'sentinel.service.waitTimedOut' }) : r;
   }
 
-  #pause(runId: string): CommandResult {
+  #pause(runId: string, receiptId: string | undefined, by: RequestedBy): CommandResult {
+    const decided = this.#authorize('pause', 'run.pause', runId, receiptId, by);
+    if ('refusal' in decided) return decided.refusal;
+    const { verdicts, facts } = decided;
     const run = this.#active.get(runId);
-    if (!run) return result('pause', 'refused', { reasonCode: 'sentinel.service.runNotActive', facts: { runId, state: runStateIn(this.#store, runId) } });
+    if (!run) return result('pause', 'refused', { verdicts, reasonCode: 'sentinel.service.runNotActive', facts: { ...facts, runId, state: runStateIn(this.#store, runId) } });
     run.pause = true;
     run.coordinator?.pause();
-    return result('pause', 'requested', { facts: { runId, state: runStateIn(this.#store, runId) } });
+    return result('pause', 'requested', { verdicts, facts: { ...facts, runId, state: runStateIn(this.#store, runId) } });
   }
 
-  #cancel(runId: string): CommandResult {
+  #cancel(runId: string, receiptId: string | undefined, by: RequestedBy): CommandResult {
+    const decided = this.#authorize('cancel', 'run.cancel', runId, receiptId, by);
+    if ('refusal' in decided) return decided.refusal;
+    const { verdicts } = decided;
     const state = runStateIn(this.#store, runId);
-    if (state === null) return result('cancel', 'configuration-failure', { reasonCode: 'sentinel.service.runUnknown', facts: { runId } });
-    if (isFinalRunState(state)) return result('cancel', 'refused', { reasonCode: 'sentinel.service.runNotActive', facts: { runId, state } });
+    if (state === null) return result('cancel', 'configuration-failure', { verdicts, reasonCode: 'sentinel.service.runUnknown', facts: { runId } });
+    if (isFinalRunState(state)) return result('cancel', 'refused', { verdicts, reasonCode: 'sentinel.service.runNotActive', facts: { runId, state } });
     const run = this.#active.get(runId);
     if (run) {
       run.cancel = true;
       run.coordinator?.cancel();
     } else {
       // A paused or interrupted run: canceled through a coordinator so its ledger fences any late publication.
-      if (this.#stopping || this.#active.size > 0) return result('cancel', 'configuration-failure', { reasonCode: 'sentinel.service.anotherRunActive', facts: { runId } });
-      if (!this.#plans.record(runId)) return result('cancel', 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts: { runId } });
+      if (this.#stopping || this.#active.size > 0) return result('cancel', 'configuration-failure', { verdicts, reasonCode: 'sentinel.service.anotherRunActive', facts: { runId } });
       this.#launch(runId, { pause: false, cancel: true });
     }
-    return result('cancel', 'requested', { facts: { runId, state: runStateIn(this.#store, runId) } });
+    return result('cancel', 'requested', { verdicts, facts: { ...decided.facts, runId, state: runStateIn(this.#store, runId) } });
   }
 
   /** Pauses every executing run and waits for its work in flight to end. Starts nothing afterwards. */
@@ -290,8 +312,16 @@ const MAX_DESCRIPTOR_BYTES = 8 * 1024;
 const servicesDir = (ws: Workspace) => join(ws.trustDir, 'services');
 const descriptorName = (ws: Workspace) => `${createHash('sha256').update(ws.storePath).digest('hex').slice(0, 32)}.json`;
 
+/** The owner-private files below: any unsafe one (a link, another account's, open to others) is this one error. */
+function recordSafely<T>(fn: () => T): T {
+  try { return fn(); } catch (e) {
+    if (e instanceof PolicyError) throw new ServiceError('sentinel.service.recordUnsafe');
+    throw e;
+  }
+}
+
 export function readServiceDescriptor(ws: Workspace): ServiceDescriptor | undefined {
-  const bytes = readPrivateFile(join(servicesDir(ws), descriptorName(ws)), MAX_DESCRIPTOR_BYTES, 'sentinel.receipt.storeUnsafe');
+  const bytes = recordSafely(() => readPrivateFile(join(servicesDir(ws), descriptorName(ws)), MAX_DESCRIPTOR_BYTES, 'sentinel.receipt.storeUnsafe'));
   if (!bytes) return undefined;
   let v: unknown;
   try { v = JSON.parse(bytes.toString('utf8')); } catch { return undefined; }
@@ -303,8 +333,9 @@ export function readServiceDescriptor(ws: Workspace): ServiceDescriptor | undefi
 }
 
 function removeServiceDescriptor(ws: Workspace, ownerNonce: string): void {
-  // Only our own record: a later service may already have replaced it.
-  if (readServiceDescriptor(ws)?.ownerNonce !== ownerNonce) return;
+  // Only our own record, by this process and this acquisition's nonce: a later service may already have replaced it.
+  const d = readServiceDescriptor(ws);
+  if (d?.ownerNonce !== ownerNonce || d.pid !== process.pid) return;
   try { unlinkSync(join(servicesDir(ws), descriptorName(ws))); } catch { /* already gone */ }
 }
 
@@ -355,7 +386,7 @@ export async function serveWorkspace(ws: Workspace, options: ServeOptions): Prom
         schema: 'sentinel-service/draft-1', storePath: ws.storePath, storeId: store.storeId, ownerNonce, address,
         pid: process.pid, startedAt: new Date().toISOString(),
       });
-      writePrivateFileAtomic(servicesDir(ws), descriptorName(ws), Buffer.from(JSON.stringify(descriptor)), 'sentinel.receipt.storeUnsafe');
+      recordSafely(() => writePrivateFileAtomic(servicesDir(ws), descriptorName(ws), Buffer.from(JSON.stringify(descriptor)), 'sentinel.receipt.storeUnsafe'));
       options.onListening?.(descriptor);
       await new Promise<void>(resolve => {
         if (options.signal?.aborted) { resolve(); return; }

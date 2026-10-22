@@ -236,12 +236,12 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
 // ---- the owner's confirmation, carried to the background service ----
 
 /**
- * Confirms one run for the background service, as the owner, in this process: the plan's run is admitted here (three
- * verdicts, the owner as requester), then, only with `confirm`, a receipt bound to `run.start`, this plan's digest
- * and the adopted policy revision is issued and not spent. The service spends it once when it starts the run; a
+ * Confirms one write on a plan's run for the background service, as the owner, in this process: the action is
+ * admitted here (three verdicts, the owner as requester), then, only with `confirm`, a receipt bound to exactly that
+ * action, this plan's digest and the adopted policy revision is issued and not spent. The service spends it once; a
  * connection without one is an agent and gets what the adopted grants give agents, nothing implicit.
  */
-export function confirmRunForService(ws: Workspace, options: { command: string; planId: string; confirm: boolean; now: Date }):
+export function confirmForService(ws: Workspace, options: { command: string; action: 'run.start' | 'run.pause' | 'run.cancel'; planId: string; confirm: boolean; now: Date }):
   { receiptId: string; verdicts: PrintedVerdicts } | { result: CommandResult } {
   const record = readPlanRecord(ws, options.planId);
   if (!record) return { result: result(options.command, 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts: { planId: options.planId } }) };
@@ -251,7 +251,7 @@ export function confirmRunForService(ws: Workspace, options: { command: string; 
   if (policy.revision !== record.policyRevision) {
     return { result: result(options.command, 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts: { planId: record.planId } }) };
   }
-  const intent = intentOf('run.start', record.planDigest, ['local-artifacts']);
+  const intent = intentOf(options.action, record.planDigest, ['local-artifacts']);
   const decision = admit({
     intent, requestedBy: OWNER as { principal: 'human'; channel: 'owner-cli' }, policy, stateDigest: record.planDigest, now: options.now,
     capability: () => ({ available: true, detail: 'built into this installation; runs locally' }),
@@ -264,7 +264,7 @@ export function confirmRunForService(ws: Workspace, options: { command: string; 
     return { result: result(options.command, 'configuration-failure', { verdicts, facts,
       reasonCode: v.policy.allowed ? (v.capability.allowed ? v.credential.reasonCode : v.capability.reasonCode) : v.policy.reasonCode }) };
   }
-  if (!options.confirm) return { result: result(options.command, 'awaiting-confirmation', { verdicts, facts, reasonCode: 'sentinel.service.detachNeedsConfirm' }) };
+  if (!options.confirm) return { result: result(options.command, 'awaiting-confirmation', { verdicts, facts, reasonCode: 'sentinel.service.needsOwnerConfirm' }) };
   assertMayConfirm(OWNER);
   const receipt = issueReceipt(receiptBook(ws), OWNER, { intent, stateDigest: record.planDigest, policyRevision: policy.revision }, { now: options.now, ttlMs: RECEIPT_TTL_MS });
   return { receiptId: receipt.id, verdicts };

@@ -6,12 +6,11 @@
 // (cli/outcome.ts); `--json` prints it whole, with the three verdicts.
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import {
-  adoptWorkspaceSettings, confirmRunForService, planWorkspace, previewReport, runPlan, runResultIn, runStatus, workspaceOf, PolicyError,
+  adoptWorkspaceSettings, confirmForService, planWorkspace, previewReport, runPlan, runResultIn, runStatus, workspaceOf, PolicyError,
   type Workspace,
 } from './service/local.js';
 import { connectService, serveWorkspace } from './service/owner-service.js';
 import { launchService } from './service/launch.js';
-import { ownExecutable } from './service/preview-plan.js';
 import { openStore } from './store/index.js';
 import type { ServiceClient } from './transport/ipc.js';
 import type { PreviewReport } from './reports/preview.js';
@@ -167,13 +166,20 @@ const DEFAULT_WAIT_MS = 600_000;
 async function ensureService(ws: Workspace): Promise<ServiceClient | undefined> {
   const live = await connectService(ws);
   if (live) return live;
-  launchService(ownExecutable(), ws.path, DETACHED_IDLE_MS);
+  const launched = launchService(ws.path, DETACHED_IDLE_MS);
   // Two commands may start a service at once; the loser cannot open the store and exits, and both reach the winner.
-  for (const end = Date.now() + SERVICE_START_MS; Date.now() < end;) {
-    await new Promise(r => setTimeout(r, 100));
-    const c = await connectService(ws);
-    if (c) return c;
+  try {
+    for (const end = Date.now() + SERVICE_START_MS; Date.now() < end;) {
+      await new Promise(r => setTimeout(r, 100));
+      const c = await connectService(ws);
+      if (c) return c;
+    }
+  } catch (e) {
+    launched.stop();
+    throw e;
   }
+  // Nothing answered in time: stop exactly the process this command started, by its own handle.
+  launched.stop();
   return undefined;
 }
 
@@ -196,7 +202,7 @@ async function owner(p: ParsedCommand): Promise<number> {
     if (p.command === 'wait') return await waitFor(p, ws);
     if ((p.command === 'run' && p.flags['--detach'] === true) || p.command === 'resume') {
       const planId = (p.args.planId ?? p.args.runId)!;
-      const confirmed = confirmRunForService(ws, { command: p.command, planId, confirm, now });
+      const confirmed = confirmForService(ws, { command: p.command, action: 'run.start', planId, confirm, now });
       if ('result' in confirmed) return serviceOut(confirmed.result);
       const client = await ensureService(ws);
       if (!client) return serviceOut(result(p.command, 'configuration-failure', { verdicts: confirmed.verdicts, reasonCode: 'sentinel.service.startFailed', facts: { planId } }));
@@ -204,10 +210,14 @@ async function owner(p: ParsedCommand): Promise<number> {
       return serviceOut(r, r.facts.runId ? [`run ${String(r.facts.runId)} · ${String(r.facts.state)}${r.facts.joined === true ? ' · joined' : ''}`] : []);
     }
     if (p.command === 'pause' || p.command === 'cancel') {
-      // Pause needs a run the service is executing; cancel may also stop a paused or interrupted one.
+      // Writes like starting: the owner confirms here and the service spends that one receipt. Pause needs a run the
+      // service is executing; cancel may also stop a paused or interrupted one.
+      const runId = p.args.runId!;
+      const confirmed = confirmForService(ws, { command: p.command, action: p.command === 'pause' ? 'run.pause' : 'run.cancel', planId: runId, confirm, now });
+      if ('result' in confirmed) return serviceOut(confirmed.result);
       const client = p.command === 'cancel' ? await ensureService(ws) : await connectService(ws);
-      if (!client) return serviceOut(result(p.command, 'refused', { reasonCode: p.command === 'cancel' ? 'sentinel.service.startFailed' : 'sentinel.service.notRunning', facts: { runId: p.args.runId } }));
-      const r = await ask(client, p.command === 'pause' ? 'run.pause' : 'run.cancel', { runId: p.args.runId! });
+      if (!client) return serviceOut(result(p.command, 'refused', { verdicts: confirmed.verdicts, reasonCode: p.command === 'cancel' ? 'sentinel.service.startFailed' : 'sentinel.service.notRunning', facts: { runId } }));
+      const r = await ask(client, p.command === 'pause' ? 'run.pause' : 'run.cancel', { runId, receiptId: confirmed.receiptId });
       return serviceOut(r, r.facts.state ? [`run ${p.args.runId} · ${String(r.facts.state)}`] : []);
     }
     // While the service runs it alone holds the store: reads go through it, and nothing new is planned or run here.

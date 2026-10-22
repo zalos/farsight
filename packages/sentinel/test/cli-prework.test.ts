@@ -48,7 +48,8 @@ test('arguments: each command takes only its own flags; typos and repeats are re
   assert.equal(ok(['rerun']).command, 'rerun');
   no(['wait'], 'sentinel.args.missingArgument');
   no(['serve', '--idle-ms'], 'sentinel.args.missingValue');
-  no(['pause', 'r', '--confirm'], 'sentinel.args.unknownFlag');
+  no(['pause', 'r', '--detach'], 'sentinel.args.unknownFlag');
+  assert.equal(ok(['cancel', 'r', '--confirm']).flags['--confirm'], true);
   assert.equal(ok(['resume', 'r', '--confirm']).flags['--confirm'], true);
   no(['run'], 'sentinel.args.missingArgument');
   assert.ok(parseArgs(['nonsense', '--json']).ok === false && (parseArgs(['nonsense', '--json']) as { json: boolean }).json);
@@ -96,7 +97,10 @@ test('init writes the private settings once and never again; it downloads and st
   const path = join(ws, '.farsight/sentinel/settings.json');
   assert.equal(first.path, path);
   assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), JSON.parse(JSON.stringify(initialSettings('static'))));
-  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')).grants, [{ actions: ['capture.source', 'run.start'], principals: ['human'], scope: { profiles: ['static'] } }], 'the owner only; never an agent');
+  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')).grants, [
+    { actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'], principals: ['human'], scope: { profiles: ['static'] } },
+    { actions: ['rule.promote'], principals: ['human'] },
+  ], 'the owner only; never an agent');
   assert.equal(statSync(path).mode & 0o777, 0o600);
   assert.equal(statSync(join(ws, '.farsight/sentinel')).mode & 0o777, 0o700);
   // Twice: the owner's edits survive byte for byte.

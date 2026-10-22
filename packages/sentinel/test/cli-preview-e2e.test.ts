@@ -88,7 +88,7 @@ test('init → adopt → plan → run → status → report, twice where it matt
 
   // In the background: only the owner's confirmation hands a run over; a finished run prints its result again.
   const unconfirmed = run('run', planId, '--detach');
-  assert.deepEqual([unconfirmed.status, unconfirmed.body.reasonCode], [4, 'sentinel.service.detachNeedsConfirm']);
+  assert.deepEqual([unconfirmed.status, unconfirmed.body.reasonCode], [4, 'sentinel.service.needsOwnerConfirm']);
   const detached = run('run', planId, '--detach', '--confirm');
   assert.deepEqual([detached.status, detached.body.facts.state, detached.body.verdicts.policy.reasonCode], [2, 'completed', 'sentinel.service.ownerReceipt']);
   assert.equal(run('plan').body.reasonCode, 'sentinel.service.ownerServiceRunning', 'the service alone holds the store while it runs');
@@ -119,7 +119,8 @@ test('run --detach: the service starts on demand, a duplicate joins, callers lea
   run('init');
   run('settings', 'adopt', '--confirm');
   const planId = run('plan').body.facts.planId;
-  assert.equal(run('pause', planId).body.reasonCode, 'sentinel.service.notRunning', 'no service, nothing to pause');
+  assert.deepEqual([run('pause', planId).status, run('pause', planId).body.reasonCode], [4, 'sentinel.service.needsOwnerConfirm'], 'pausing is a write: it waits for the owner');
+  assert.equal(run('pause', planId, '--confirm').body.reasonCode, 'sentinel.service.notRunning', 'no service, nothing to pause');
 
   const first = run('run', planId, '--detach', '--confirm');
   assert.deepEqual([first.status, first.body.outcome, first.body.facts.runId], [0, 'submitted', planId], first.stderr);

@@ -87,7 +87,7 @@ export const FRAMEWORK_IDS = ['next', 'express', 'nest', 'spring'] as const;
 export const RULE_ORIGINS = ['sentinel-original', 'third-party'] as const;
 export const SENTINEL_ACTIONS = [
   'run.start', 'capture.source', 'disposition.propose', 'disposition.approve', 'rule.promote',
-  'tool.acquire', 'paid.admit', 'disclosure.send', 'settings.adopt',
+  'tool.acquire', 'paid.admit', 'disclosure.send', 'settings.adopt', 'run.pause', 'run.cancel',
 ] as const;
 /** Owner actions: an agent can never be granted them, and a person always confirms them with a receipt. */
 export const OWNER_ACTIONS = ['disposition.approve', 'rule.promote', 'tool.acquire', 'settings.adopt'] as const;

@@ -11,11 +11,15 @@ import { DEFAULT_SETTINGS, MAX_SETTINGS_BYTES, parseSettings, SETTINGS_PATH } fr
 export { SETTINGS_PATH, DEFAULT_SETTINGS };
 
 /**
- * What init writes for a profile: PR 06's defaults plus one grant letting the owner (a human, never an agent) capture
- * and run that profile. No provider, no budget, no agent action; the file grants nothing until it is adopted.
+ * What init writes for a profile: PR 06's defaults plus two grants for the owner (a human, never an agent): capture,
+ * run, pause and cancel that profile, and promote rule packs (an owner action, which still needs the owner's own
+ * confirmation every time). No provider, no budget, no agent action; the file grants nothing until it is adopted.
  */
 export function initialSettings(profile: string) {
-  return { ...DEFAULT_SETTINGS, grants: [{ actions: ['capture.source', 'run.start'], principals: ['human'], scope: { profiles: [profile] } }] };
+  return { ...DEFAULT_SETTINGS, grants: [
+    { actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'], principals: ['human'], scope: { profiles: [profile] } },
+    { actions: ['rule.promote'], principals: ['human'] },
+  ] };
 }
 
 /** The one scan profile this build can describe; scanner coverage arrives with later packages. */
