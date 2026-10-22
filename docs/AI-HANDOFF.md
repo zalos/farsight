@@ -6,6 +6,43 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Bounded paths with Next and Spring integration — 2026-10-22
+
+Branch `codex/sentinel-paths-integration` combines the reviewed paths/import foundation `41de557d` with frozen
+Next/Spring integration `467a13b1`. The paths implementation, contracts, schemas and schema generator (45 files)
+remain byte-identical to `41de557d`; Next, Spring, Express, OSV, execution, capture and asset implementations
+(71 files), plus the delayed-OOM controls, retain the incoming bytes. Both catalogs and export maps are preserved.
+The package consumer retains the actual path query/import refusal and both Spring and Express source fixtures.
+Capabilities list the exact available drafts while deep flow and unintegrated commands remain unavailable.
+
+Validation: Sentinel dependency-closure build and typecheck, generated-schema check and catalog lint (4,130
+entries); 48 paths/contracts/package cases and two capability-union controls pass with zero skips. A clean
+npm-only consumer compiles 12 typed exports and 21 contract types, validates 21 schemas and 55 fixtures, verifies
+17 Pattern assets and the OSV worker, reopens the store across processes, runs the installed path query/import
+refusal, and analyzes the installed Spring (open, protected, unknown) and Express (before, after, conditional)
+fixtures. No advisory database ships. The prior
+full-suite, ingest and browser measurements below remain bound to their named historical candidates. No scanner,
+deep engine or target application code is run for this integration. Full PR 18 public command/deep qualification
+remains open.
+
+## Bounded paths integration on merged foundations — 2026-10-22
+
+Branch `codex/sentinel-paths-integration` rebases the five reviewed path/import commits ending at `09bd0b64`
+onto merged Pattern main `5196dc70`, then includes merged Express main `95387a4e` with a feature-branch merge.
+The path implementation and its two contracts are byte-identical to `09bd0b64`; merged Pattern rules/adapter and
+Express implementation bytes are retained unchanged. Catalogs, ADRs, exports, precise import-audit entries,
+capability assertions and the clean npm consumer retain all three boundaries. `evidence.import` remains an
+owner-only verb, imported observations remain imported, and no qualified deep engine or public command wiring is
+claimed. The consumer runs both the installed path query/import refusal and Express source-only fixture analysis.
+
+Validation on the combined candidate: Sentinel dependency-closure build and typecheck, generated schemas and
+catalog lint; 110 affected path/contract/policy/package/Pattern/Express tests plus two capability-union controls
+passed, zero skips. A fresh npm-only consumer compiled ten typed exports and 21 contract types, checked 21 schemas,
+55 fixtures and all 17 Pattern assets, reopened the store across processes, ran a captured cross-file call query,
+refused import without an owner receipt, and analyzed the Express before/after/conditional fixture. No target code,
+scanner or deep engine ran. Earlier full-suite, fixed-source ingest and browser results belong to `09bd0b64` against
+`e25424fb`, not this merged candidate. Full PR 18 command/deep qualification remains open.
+
 ## Next patch identity correction — 2026-10-22
 
 Branch `codex/sentinel-next-patched-identity` refuses recorded pnpm patches for Next, React and React DOM,

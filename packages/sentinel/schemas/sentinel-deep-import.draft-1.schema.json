@@ -1,0 +1,283 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/DeepImportEnvelope",
+  "definitions": {
+    "DeepImportEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-deep-import/draft-1"
+        },
+        "tool": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "$ref": "#/definitions/ShortText"
+            },
+            "version": {
+              "$ref": "#/definitions/ShortText"
+            },
+            "distributionDigest": {
+              "$ref": "#/definitions/Digest",
+              "description": "Digest of the analyzer executable or distribution the customer ran."
+            }
+          },
+          "required": [
+            "name",
+            "version",
+            "distributionDigest"
+          ],
+          "additionalProperties": false
+        },
+        "attestation": {
+          "type": "object",
+          "properties": {
+            "license": {
+              "type": "object",
+              "properties": {
+                "identifier": {
+                  "$ref": "#/definitions/ShortText"
+                },
+                "termsDigest": {
+                  "$ref": "#/definitions/Digest"
+                },
+                "acceptedBy": {
+                  "$ref": "#/definitions/ShortText"
+                },
+                "acceptedAt": {
+                  "$ref": "#/definitions/Timestamp"
+                }
+              },
+              "required": [
+                "identifier",
+                "termsDigest",
+                "acceptedBy",
+                "acceptedAt"
+              ],
+              "additionalProperties": false,
+              "description": "The terms the tool was used under: their digest is what the owner's policy accepts."
+            },
+            "provenance": {
+              "type": "object",
+              "properties": {
+                "obtainedFrom": {
+                  "$ref": "#/definitions/ShortText"
+                },
+                "attestedBy": {
+                  "$ref": "#/definitions/ShortText"
+                },
+                "attestedAt": {
+                  "$ref": "#/definitions/Timestamp"
+                }
+              },
+              "required": [
+                "obtainedFrom",
+                "attestedBy",
+                "attestedAt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "license",
+            "provenance"
+          ],
+          "additionalProperties": false
+        },
+        "binding": {
+          "type": "object",
+          "properties": {
+            "snapshotId": {
+              "$ref": "#/definitions/Id"
+            },
+            "sourceId": {
+              "$ref": "#/definitions/Id"
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/DeepImportFile"
+              },
+              "description": "Every file the analyzer read, with the captured content id it read.",
+              "minItems": 1,
+              "maxItems": 100000
+            },
+            "configurationDigest": {
+              "$ref": "#/definitions/Digest",
+              "description": "Digest of the analyzer's configuration and query or rule set."
+            },
+            "mode": {
+              "$ref": "#/definitions/ShortText",
+              "description": "The analyzer's own name for how it ran; recorded, never interpreted as a capability."
+            },
+            "buildPerformed": {
+              "type": "boolean",
+              "description": "Whether the analyzer built or ran the project; recorded as stated."
+            }
+          },
+          "required": [
+            "snapshotId",
+            "sourceId",
+            "files",
+            "configurationDigest",
+            "mode",
+            "buildPerformed"
+          ],
+          "additionalProperties": false
+        },
+        "flows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DeepImportFlow"
+          },
+          "maxItems": 10000
+        }
+      },
+      "required": [
+        "schema",
+        "tool",
+        "attestation",
+        "binding",
+        "flows"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-deep-import/draft-1 — a customer-supplied deep-analysis result with its attestation and source binding."
+    },
+    "ShortText": {
+      "type": "string",
+      "description": "A short label (a severity as supplied, a framework name).",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "A UTC RFC 3339 timestamp with an explicit Z offset and a real calendar date (no leap second), years 0000–9999 proleptic Gregorian, up to nine fractional digits. The pattern bounds each field; the `date-time` format check refuses a day the month does not have. Comparisons keep all nine digits.",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$",
+      "format": "date-time"
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "DeepImportFile": {
+      "type": "object",
+      "properties": {
+        "relativePath": {
+          "$ref": "#/definitions/RelativePath"
+        },
+        "content": {
+          "$ref": "#/definitions/ArtifactId"
+        }
+      },
+      "required": [
+        "relativePath",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "RelativePath": {
+      "type": "string",
+      "description": "A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL. A newline or other line break inside a name is a legal POSIX name and is kept as captured; the checks use `[\\s\\S]`, never `.`, so a line break cannot hide a `..` segment from them.",
+      "pattern": "^(?![/])(?![\\s\\S]*[/]$)(?!([\\s\\S]*[/])?\\.{1,2}([/]|$))(?![\\s\\S]*[/][/])[^\\\\\\u0000]+$",
+      "maxLength": 4096
+    },
+    "ArtifactId": {
+      "$ref": "#/definitions/Digest",
+      "description": "An immutable object-store identity: the digest of canonical uncompressed bytes."
+    },
+    "DeepImportFlow": {
+      "type": "object",
+      "properties": {
+        "toolRuleId": {
+          "type": "string",
+          "description": "The tool's own rule id, as supplied.",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "originalSeverity": {
+          "$ref": "#/definitions/ShortText"
+        },
+        "source": {
+          "$ref": "#/definitions/DeepImportLocation"
+        },
+        "sink": {
+          "$ref": "#/definitions/DeepImportLocation"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DeepImportLocation"
+          },
+          "maxItems": 254
+        }
+      },
+      "required": [
+        "toolRuleId",
+        "message",
+        "originalSeverity",
+        "source",
+        "sink",
+        "steps"
+      ],
+      "additionalProperties": false
+    },
+    "DeepImportLocation": {
+      "type": "object",
+      "properties": {
+        "relativePath": {
+          "$ref": "#/definitions/RelativePath"
+        },
+        "content": {
+          "$ref": "#/definitions/ArtifactId",
+          "description": "The captured content id of the file the analyzer read; it must equal the snapshot's."
+        },
+        "span": {
+          "$ref": "#/definitions/ByteSpan"
+        }
+      },
+      "required": [
+        "relativePath",
+        "content",
+        "span"
+      ],
+      "additionalProperties": false
+    },
+    "ByteSpan": {
+      "type": "object",
+      "properties": {
+        "startByte": {
+          "$ref": "#/definitions/Count"
+        },
+        "endByte": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "required": [
+        "startByte",
+        "endByte"
+      ],
+      "additionalProperties": false,
+      "description": "Zero-based, half-open UTF-8 byte offsets."
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-deep-import.draft-1.schema.json",
+  "title": "sentinel-deep-import/draft-1"
+}

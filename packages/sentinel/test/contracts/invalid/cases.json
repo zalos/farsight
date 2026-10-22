@@ -1787,5 +1787,78 @@
     ],
     "expect": "sentinel.contract.invariant",
     "path": "/pins/ruleLockDigest"
+  },
+  {
+    "name": "a path never drops the statement that it is not a data flow",
+    "base": "paths",
+    "ops": [
+      {
+        "set": "/limitationKeys",
+        "value": [
+          "sentinel.paths.graphOnly"
+        ]
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/limitationKeys"
+  },
+  {
+    "name": "a path cannot claim data flow",
+    "base": "paths",
+    "ops": [
+      {
+        "set": "/establishes",
+        "value": "data-flow"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/establishes"
+  },
+  {
+    "name": "a reached query carries its path",
+    "base": "paths",
+    "ops": [
+      {
+        "set": "/results/0/paths",
+        "value": []
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/results/0/paths"
+  },
+  {
+    "name": "a bounded search names its frontier",
+    "base": "paths",
+    "ops": [
+      {
+        "set": "/results/1/outcome",
+        "value": "not-reached-bounded"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/results/1/frontierReasons"
+  },
+  {
+    "name": "an imported flow points only into a file the tool read",
+    "base": "deepimport",
+    "ops": [
+      {
+        "set": "/flows/0/sink/relativePath",
+        "value": "src/other.ts"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/flows/0/locations/1"
+  },
+  {
+    "name": "an import without an attested licence is refused",
+    "base": "deepimport",
+    "ops": [
+      {
+        "delete": "/attestation/license"
+      }
+    ],
+    "expect": "sentinel.contract.invalid",
+    "path": "/attestation"
   }
 ]
