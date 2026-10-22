@@ -95,7 +95,10 @@ The pinned scanner experiment is limited to an ARM64 host, Linux ARM64 Docker se
 Other or unknown architectures are refused before materialization or container creation. This prevents
 unrecorded emulation; it does not add AMD64 binaries or establish a portable runtime matrix. A network
 control passes only for an inspected `none` network and Linux `OSError`/`ENETUNREACH` (101), not a timeout
-or a refused connection. Temporary filesystem execution policy is recorded per measured run.
+or a refused connection. Temporary filesystem execution policy is recorded per measured run. Semgrep
+uses `noexec`; the pinned Opengrep binary has a fixed `exec` exception after its version command failed
+under `noexec` with a child-launch permission error. The internal cause is unverified. This weakens that
+control for Opengrep and remains an experiment limitation; there is no automatic retry or host fallback.
 
 E1's expected parser omissions are observations of parser selection. A `not-analyzed` control records
 whether the path was unreported or reported without analysis, and whether a diagnostic exists. A silent
