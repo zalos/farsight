@@ -51,7 +51,12 @@ and recording a tool digest in the lock authorizes no download or execution. As 
 owner's own account is outside this boundary. The local runtime folder
 (`.farsight/sentinel/*`) is ignored by git. Later scanner, container and model work arrives with its
 own trust-boundary section here: external scanners run only in containers, with no host fallback, and model
-providers are opt-in per run. The package smokes install from npm into temporary directories with their own npm
+providers are opt-in per run. Dependency advisories (PR 12): the advisory database is downloaded only by an explicit,
+owner-confirmed acquisition, from one allowlisted origin (the OSV project's published archives), size-bounded, with the
+origin's MD5 checked and the archive stored by digest in an owner-only folder; scans run OSV-Scanner fully offline with
+no network and never download, and no project package manager runs. Engine stderr never leaves its container; the
+dependency fixtures are original synthetic files under non-manifest names, and no database ships in the package. The
+package smokes install from npm into temporary directories with their own npm
 cache and user config/state, and start nothing beyond the packaged command and a read-only Farsight server on a
 free loopback port.
 
