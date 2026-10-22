@@ -9,3 +9,5 @@ export type {
   PlanRevision, PlannedCheck, PlannedWork, PlanPins, RuleGap, PlanTallies, CheckState, PlanStage, PlannerRule, PlannerRuleLock,
   PlannerPolicy, PlannerSnapshot, PlannerAnalysis, PlannerProfile, PlannerLimits, PlannerLanguage, PlannerScopeKind, CapabilityEntry,
 } from './types.js';
+export { plannerLockFrom, plannerPolicyFrom, plannerAnalysisFrom, ruleLockDigest } from './adapters.js';
+export type { RuleLockShape, PackManifestShape, RuleDefinitionShape, EffectivePolicyShape, SourceAnalysisShape } from './adapters.js';

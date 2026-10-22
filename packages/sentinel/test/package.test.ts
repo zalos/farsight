@@ -71,6 +71,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'validate.js': ['ajv'],
   // The planner's reason codes are catalog words.
   'planner/errors.js': ['@farsight/core/dist/strings-sentinel-plan.js'],
+  'planner/adapters.js': ['node:crypto'],
   // The store's reason codes are catalog words; core's catalog is the only Farsight module the library reads.
   'store/errors.js': ['@farsight/core/dist/strings-sentinel-store.js'],
   'store/ledger-json.js': ['node:crypto'],
