@@ -1384,5 +1384,5 @@ the private snapshot at render time. That changes the pinned template and worker
 requalification on both measured platforms and a check of the engine's column semantics for multibyte and multiline
 matches, and adds a private publication field; it is not part of this change. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
 its entry, without a symbol, never used to place a gap), and the minimal scanner report replaces such a name wherever it
-appears. Refusal reasons never name a path. Names the scan did not match are not withheld; the context-graph
-attestation limitation above is unchanged.
+appears. Refusal reasons never name a path. The minimal scanner report's other names are unchanged; the full report
+uses the conservative projection above. The context-graph attestation limitation above is unchanged.

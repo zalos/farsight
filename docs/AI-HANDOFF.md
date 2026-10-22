@@ -6,6 +6,30 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Full owner report integration — 2026-10-22
+
+Branch `codex/sentinel-final-report-integration` combines reviewed report projection `ce9130b0` with the merged
+scanner/library tree `34ca02b5` (exactly the reviewed `7ee256a2` tree), retaining the separately reviewed
+`7f8dd217` nonblocking owner-record read and its private-key-loss identity boundary. The report/CLI/scanner
+implementation remains the reviewed report source; incoming framework, bounded-path and provider implementations
+remain the reviewed library bytes. Catalog, contracts, owner-only actions, schemas and exports are additive unions;
+all five scanner asset sets use one packaging hook loop. The eleven recent foundation merge IDs and their scoped
+acceptance are listed in `docs/proposals/farsight-sentinel/execution-progress.md`.
+
+An accepted secret match in the run or its baseline makes every source/context-controlled detail opaque in the full
+report, including ordinary excerpts, locations and context names, in both private and shareable profiles. Trusted
+catalog words, generated identities and counts remain. This deliberately reduces report detail because the current
+worker publishes whole-line citations and cannot prove every value's exact range. No-match reports retain their
+ordinary placement and excerpts. The graph is owner-attested and bound to current captured bytes; this does not
+independently verify the graph producer or semantics. A missing private key creates new withheld-location identities;
+old delivered files remain unchanged and a store/bundle copy cannot restore that key.
+
+The source integration and independent correction reviews are complete. Final affected/package/native installed
+five-engine two-capture comparison, official SARIF and offline-browser acceptance are being recorded separately;
+selected CI and merge remain pending. No full-plan completion is claimed: canonical framework/path/provider
+commands, model evaluation, dispositions, selected-stage integration, MCP/host/GUI/bundle and release gates remain
+open. No source application, host scanner or hosted model is executed by this report integration.
+
 ## Owner-private record FIFO refusal — 2026-10-22
 
 Branch `codex/sentinel-published-record-fifo`, based on the private report-key correction, opens published records
