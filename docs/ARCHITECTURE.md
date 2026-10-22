@@ -683,6 +683,25 @@ resolves each against the snapshot and fails closed when it cannot. `partitionIn
 structural view is replaced by the contract import when PR 11 integrates.
 
 
+**Update — the agentic operation (2026-10-22).** Model review is planned and run as its own stage.
+- `planReviewWork` emits `sentinel-work/draft-1` units with `stage.kind: 'agentic'` (`sentinel.stage.review.guided`
+  and `.general`). They depend on the deterministic work they read and carry no checks. `assertAgenticOnly`
+  refuses any coverage record that names such a unit.
+- `createModelReviewOperation` is the trusted in-process driver. It runs a unit's session through the broker under
+  the run's envelope and returns the review record and observations to publish, the attempt usage from the ledger
+  (`confirmed` only when every call settled) and no coverage.
+- The model ledger is the provider budget's SQLite file, which now also holds review checkpoints
+  (`LedgerCheckpointStore`), written in one transaction under the coordinator epoch.
+  `recoverModelWork(staleEpochs)` fences those epochs: their unsent reservations are released, their sent ones stay
+  charged as uncertain, and a process still running under a fenced epoch can no longer reserve, dispatch or
+  checkpoint.
+- A session belongs to its work unit, not its attempt, so the next attempt resumes the last checkpoint. An operation
+  is sent at most once in the ledger, under whichever envelope, so a crash between a call and its checkpoint leaves
+  the session stopped as uncertain usage, never silently re-sent.
+- Owner helpers (`probeIntent`/`probeModel`, `reconcileIntent`/`reconcileReservation`, `inspectEnvelopes`) are for
+  the CLI, which owns dispatch and admission. Probing is an owner action (`tool.acquire`, network effect).
+  Reconciling lowers charged spend, so it always needs a spent owner receipt, whatever the grants say.
+
 28. **Sentinel's secret scan keeps the detector and whole lines, never the value, and a failed scan is never clean (2026-10-22).**
 PR 11 scans captured current-tree bytes with Gitleaks 8.30.1 (MIT) through the PR 07 execution service only: an
 external adapter, the official multi-platform image index pinned by digest (`ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0…`),
