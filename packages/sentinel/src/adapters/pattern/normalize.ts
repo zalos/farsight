@@ -36,6 +36,14 @@ export const PATTERN_REFUSAL_REASONS = [
 ] as const;
 export type PatternRefusalReason = typeof PATTERN_REFUSAL_REASONS[number];
 
+/** The fixed categories a failed engine run is reported as; its messages are never kept. */
+export const PATTERN_ENGINE_FAILURES = [
+  'sentinel.pattern.engine.invalidPattern', 'sentinel.pattern.engine.unparseableConfig', 'sentinel.pattern.engine.missingConfig',
+  'sentinel.pattern.engine.invalidLanguage', 'sentinel.pattern.engine.invalidArgument', 'sentinel.pattern.engine.killed',
+  'sentinel.pattern.engine.unknown',
+] as const;
+export type PatternEngineFailure = typeof PATTERN_ENGINE_FAILURES[number];
+
 export type CoverageStatus = 'complete' | 'partial' | 'not-run' | 'not-established' | 'skipped' | 'omitted' | 'error' | 'not-applicable' | 'excluded';
 
 /** One target and one rule; `familyId` is null for a file no rule applies to, or one that was excluded. */
@@ -78,6 +86,8 @@ export interface PatternRunResult {
    */
   readonly platform: { readonly architecture: string | null; readonly state: 'measured' | 'candidate' | 'refused' };
   readonly engineExit: number | null;
+  /** When the engine failed: its fixed category. An unrecognized failure is `unknown`, never raw text. */
+  readonly engineFailure: PatternEngineFailure | null;
   readonly findings: readonly PatternFinding[];
   readonly coverage: readonly PatternCoverage[];
   readonly refused: readonly PatternRefusal[];
@@ -157,7 +167,7 @@ export function normalizePatternRun(input: NormalizeInput): PatternRunResult {
   };
   const everyTarget = (status: CoverageStatus, reasonCode: PatternCoverageReason): PatternCoverage[] =>
     job.targets.flatMap(t => rowsFor(t, () => [status, reasonCode]));
-  const base = { adapter: outcome.adapter.id, engine: `${PATTERN_ENGINE.name} ${PATTERN_ENGINE.version}`, granularity: 'per-file-per-rule' as const, attempt: outcome.state };
+  const base = { adapter: outcome.adapter.id, engine: `${PATTERN_ENGINE.name} ${PATTERN_ENGINE.version}`, granularity: 'per-file-per-rule' as const, attempt: outcome.state, engineFailure: null as PatternEngineFailure | null };
 
   if (outcome.state !== 'succeeded') {
     const reason: PatternCoverageReason = outcome.state === 'timed-out' ? 'sentinel.pattern.coverage.attemptTimedOut'
@@ -180,8 +190,16 @@ export function normalizePatternRun(input: NormalizeInput): PatternRunResult {
   if (record?.schema !== 'sentinel-pattern-run/draft-1' || record.job !== input.jobDigest) patternFail('sentinel.pattern.outputInvalid', 'the run record names another job');
   const engineOut = outcome.outputs.find(o => o.mediaType === 'application/vnd.semgrep.result+json');
   if (!engineOut || engineOut.id !== record.engineOutput) return patternFail('sentinel.pattern.outputInvalid', 'the engine output is not the one the run record names');
-  const exit = int(record.exitCode) ? record.exitCode : null;
+  const exit = Number.isSafeInteger(record.exitCode) ? record.exitCode as number : null;
+  if (exit !== 0) {
+    const category = `sentinel.pattern.engine.${typeof record.failure?.category === 'string' ? record.failure.category : 'unknown'}`;
+    base.engineFailure = (PATTERN_ENGINE_FAILURES as readonly string[]).includes(category) ? category as PatternEngineFailure : 'sentinel.pattern.engine.unknown';
+  }
   const excluded = new Set<string>(Array.isArray(record.excluded) ? record.excluded.filter((p: unknown) => typeof p === 'string') : []);
+  // A failed engine counts nothing: every rule of every applicable file is in error, under its fixed category.
+  if (exit !== 0 && record.timedOut !== true && record.stdoutTruncated !== true) {
+    return deepFreeze({ ...base, platform, engineExit: exit, findings: [], coverage: everyTarget('error', 'sentinel.pattern.coverage.engineFailed'), refused: [] });
+  }
   if (record.timedOut === true) return deepFreeze({ ...base, platform, engineExit: exit, findings: [], coverage: everyTarget('error', 'sentinel.pattern.coverage.engineTimedOut'), refused: [] });
   if (record.stdoutTruncated === true) return deepFreeze({ ...base, platform, engineExit: exit, findings: [], coverage: everyTarget('error', 'sentinel.pattern.coverage.outputTruncated'), refused: [] });
 

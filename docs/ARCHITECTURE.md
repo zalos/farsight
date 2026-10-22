@@ -542,9 +542,11 @@ rule is `complete` on a file only with a non-zero match time, `not-run` with zer
 timeout names that rule, and `not-established` when timing is missing; a requested file neither scanned nor skipped is
 `omitted` even on exit zero. A zero match time stays a required-coverage gap: no policy option turns absence of execution evidence
 into completion, and accepting a prefilter as proof would need its exact qualified semantics and independent fixtures.
-**Diagnostics:** engine stderr can quote arguments, paths and source text, so the shim forwards it only when the engine
-fails, keeping usage/error lines with quoted spans, target paths and every non-word token replaced, printable ASCII,
-eight lines and 512 bytes at most. **Platforms:** the pinned reference is a multi-platform index; only linux/arm64 is
+**Diagnostics:** engine stderr can quote arguments, paths and source text, and a sensitive value
+can be a plain lowercase word, so no engine text is ever forwarded or stored. A failed run is reported as one fixed
+catalog category (invalid pattern, unparseable or missing config, invalid language, invalid argument, killed, or
+unknown) and its exact exit code, as a protocol diagnostic and in the run record; the stderr digest is kept for
+provenance. **Platforms:** the pinned reference is a multi-platform index; only linux/arm64 is
 measured (darwin-arm64, Docker Desktop), and results from another image architecture are refused. The opt-in
 `sentinel-pattern-qualification` workflow measures linux/amd64 on a native runner, where results are accepted only as
 `candidate`; a green run is the evidence for marking it measured. **Package:** the tarball ships the pack and the worker
