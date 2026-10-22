@@ -403,3 +403,64 @@ test('importing the providers loads no SQLite, starts no process and opens no co
   assert.deepEqual(JSON.parse(r.stdout), { events: [], sqlite: false });
   assert.deepEqual(readdirSync(dir), ['probe.mjs']);
 });
+
+// ---- review regressions (SOL, provider 43930a84) ----
+
+test('the budget, run and state confirmed are the ones recorded, even if the caller changes them during the keychain read', needsStore, async t => {
+  const ep = await mockEndpoint(t, (req, res) => json(res, 200, openaiReply()));
+  const policy = trustedPolicy({ openai: ep.origin });
+  const binding = bindProvider(policy, openaiProfile(ep.origin));
+  let release!: () => void; const gate = new Promise<void>(r => { release = r; });
+  let started!: () => void; const lookup = new Promise<void>(r => { started = r; });
+  const s = await setup(t, { credentials: async () => { started(); await gate; return SECRET; } });
+  const budget = { maxTokens: 300, maxCost: '0.01', currency: 'USD' };
+  const book = new ReceiptBook(join(s.dir, 'receipts'));
+  const r = issueReceipt(book, { channel: 'owner-cli', principal: 'owner' }, { intent: envelopeIntent(binding, 'run-1', budget), stateDigest: D('plan'), policyRevision: policy.revision }, { now: NOW, ttlMs: 600_000 });
+  const req = { binding, policy, runId: 'run-1', budget, requestedBy: { ...HUMAN }, stateDigest: D('plan'), receipt: { book, id: r.id } };
+  const pending = s.broker.openEnvelope(req);
+  await lookup;
+  budget.maxTokens = 100000; budget.maxCost = '1.00'; req.runId = 'run-2'; (req.requestedBy as any).principal = 'agent'; req.stateDigest = D('other');
+  release();
+  const env = await pending;
+  const totals = s.ledger.totals(env.id);
+  assert.deepEqual([totals.maxTokens, totals.maxCostNanos, env.runId], [300, 10_000_000n, 'run-1']);
+  await assert.rejects(s.broker.generate(env, binding, ask('op-big', { messages: [{ role: 'user', content: 'x'.repeat(1000) }] })), code('sentinel.provider.budgetExhausted'));
+  assert.equal(ep.seen.length, 0);
+});
+
+test('a model name the provider returns never reaches a public error', needsStore, async t => {
+  const ep = await mockEndpoint(t, (req, res) => json(res, 200, openaiReply({ model: SECRET })));
+  const policy = trustedPolicy({ openai: ep.origin });
+  const binding = bindProvider(policy, openaiProfile(ep.origin));
+  const s = await setup(t);
+  const budget = { maxTokens: 1000, maxCost: '0.01', currency: 'USD' };
+  const book = new ReceiptBook(join(s.dir, 'receipts'));
+  const r = issueReceipt(book, { channel: 'owner-cli', principal: 'owner' }, { intent: envelopeIntent(binding, 'run-1', budget), stateDigest: D('plan'), policyRevision: policy.revision }, { now: NOW, ttlMs: 600_000 });
+  const env = await s.broker.openEnvelope({ binding, policy, runId: 'run-1', budget, requestedBy: HUMAN, stateDigest: D('plan'), receipt: { book, id: r.id } });
+  await assert.rejects(s.broker.generate(env, binding, ask()), (e: any) => e.code === 'sentinel.provider.identityMismatch' && !e.message.includes(SECRET) && !inspect(e).includes(SECRET));
+});
+
+test('one call above its own reservation freezes the envelope even when the envelope has room', needsStore, async t => {
+  const { ep, broker, ledger, env, binding } = await ollamaEnvelope(t, (req, res) => json(res, 200, ollamaReply({ prompt_eval_count: 900, eval_count: 50 })),
+    { maxTokens: 20000, maxCost: '0', currency: 'USD' });
+  const reply = await broker.generate(env, binding, ask('op-1'));
+  assert.ok(reply.reservation.usedInputTokens! + reply.reservation.usedOutputTokens! > reply.reservation.tokens);
+  const totals = ledger.totals(env.id);
+  assert.ok(totals.chargedTokens < totals.maxTokens, 'the envelope as a whole still has room');
+  assert.equal(totals.overdrawn, true);
+  await assert.rejects(broker.generate(env, binding, ask('op-2')), code('sentinel.provider.envelopeOverdrawn'));
+  assert.equal(ep.seen.length, 1);
+});
+
+test('long operation ids never collide: each distinct id has its own reservation', needsStore, async t => {
+  const ledger = await BudgetLedger.open(join(scratchDir(t), 'b.db'));
+  t.after(() => ledger.close());
+  const at = '2026-10-22T12:00:00.000000000Z';
+  ledger.createEnvelope({ id: 'env', runId: 'run', bindingDigest: D('b'), admissionDigest: D('a'), receiptDigest: null, maxTokens: 1000, maxCostNanos: 0n, currency: 'USD', createdAt: at });
+  const long = 'o'.repeat(127);
+  const ids = ['o'.repeat(60) + 'a', 'o'.repeat(60) + 'b', long.slice(0, 126) + 'a', long.slice(0, 126) + 'b'].map(op =>
+    ledger.reserve({ envelopeId: 'env', operationId: op, tokens: 1, costNanos: 0n, epoch: 'epoch-a', at }).id);
+  assert.equal(new Set(ids).size, 4);
+  assert.equal(ledger.totals('env').byState.held, 4);
+  assert.throws(() => ledger.reserve({ envelopeId: 'env', operationId: 'o'.repeat(129), tokens: 1, costNanos: 0n, epoch: 'epoch-a', at }), code('sentinel.provider.ledgerInvalid'));
+});
