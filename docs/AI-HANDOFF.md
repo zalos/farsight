@@ -1990,3 +1990,12 @@ installed detached lifecycle and retained-report consumer. Selection uses the ex
 union and fails closed; test files run sequentially. No scanner, policy, grant or authority logic changes. Local
 validation replays the selected commands on the existing arm64 container runtime; it is not native amd64 CI evidence.
 The native job must pass after integration before its installed-command gate is claimed.
+
+## Combined scanner test assertions — 2026-10-22
+
+Branch `codex/sol-scanner-suite-tests` updates two older capability assertions to the exact reviewed four-engine
+draft slice while retaining the explicit unavailable feature list. The bootstrap publication-window regression
+now accepts an unstarted parse only when the coordinator records a run-deadline refusal on that work or its exact
+ancestor chain; a dependency hold specifically needs an ancestor cause. A delayed-capture case exercises the
+ancestor path directly. Runtime code, grants and resource limits are unchanged. Dependency-closure build passed;
+the three affected suites passed 47 cases with one existing qualified-host-only negative-case skip and no failures.
