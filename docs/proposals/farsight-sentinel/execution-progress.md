@@ -108,20 +108,20 @@ skipped with its reason, never as passed.
 | Gate | Status | Acceptance test |
 |---|---|---|
 | Final Fable review | pending | Claude Fable (`fable`) reviews the delivered CLI, MCP, GUI, reports and docs for cleanup/touch-up; findings fixed by Opus; SOL verifies each fix |
-| Java + Spring sample application | pending | A real Java/Spring Boot sample builds and runs in a Linux container (never on the host; source-only scanning does not execute its build). Sentinel scans it and the report shows: a known-vulnerable case found, its safe sibling not flagged, and an unknown/unsupported case reported as unknown, not as protected or clean |
-| npm-only consumer install | pending | On a clean machine or prefix with only Node 24 and npm (no pnpm, no checkout): install the published package, then `--help`, `init`, a scan, and a report all succeed; the report opens offline. Matches [RELEASING.md](../../RELEASING.md) § *Install a release (consumers)* |
+| Java + Spring sample application | pending | An **original** Java/Spring Boot sample written for this gate (no external benchmark acquisition) builds and runs in a Linux container (never on the host; source-only scanning does not execute its build). Sentinel scans it and the report shows: a known-vulnerable case found, its safe sibling not flagged, and an unknown/unsupported case reported as unknown, not as protected or clean |
+| npm-only consumer install | pending | On a clean machine or prefix with only Node 24 and npm (no pnpm, no checkout): `npm install -g <GitHub Release tarball URL>`, then `--help`; the existing Farsight path (install → `farsight.config.json`/settings → ingest → serve) works as [GETTING-STARTED.md](../../GETTING-STARTED.md) documents; Sentinel's initialization flow, a scan and a report succeed; the report opens offline. Written as initialization instructions for npm-only users |
 | Release | pending | The release PR flow in [RELEASING.md](../../RELEASING.md): gates, tarball smoke test, squash-merge, publish, then the consumer install from a clean prefix printing the release commit |
 
-**What the existing release docs give and do not give** (read 2026-10-21): Farsight releases a GitHub Release
-tarball installable with `npm install -g <release URL>`; npm registry publication of `farsight-cli` is optional
-and waits on an `NPM_TOKEN`. The CLI has no `init` command today, and Sentinel's own package and pack script do
-not exist until PR 02/26. The npm-only gate therefore needs the owner's choice of distribution (below) and an
-`init` command delivered by an owning package before it can pass.
+## Settled execution choices (lead decisions, 2026-10-21)
 
-## Open owner choices
+- **npm-only distribution:** the GitHub Release tarball URL, which npm installs directly
+  ([RELEASING.md](../../RELEASING.md) § *Install a release (consumers)*). Registry publication is added only if
+  it is configured at final release; its configuration is checked then, not inferred from the docs.
+- **Initialization:** the owner asked for initialization *instructions*, not necessarily a new Farsight `init`
+  command. Verify Farsight's existing install → config → ingest → serve path under npm alone, and design
+  Sentinel's own initialization flow in PR 09 with its CLI.
+- **Java + Spring sample:** written originally for the gate (the owner asked for one to be created); no external
+  benchmark acquisition.
 
-- **Distribution for the npm-only gate:** registry publication (`farsight-cli` and a Sentinel package, which
-  needs the npm token and scope setup in RELEASING.md) or the GitHub Release tarball URL. Needed by PR 26.
-- **Where `init` lives:** Farsight's CLI, Sentinel's CLI, or both. Needed when PR 09 defines the CLI surface.
-- **Java + Spring sample:** a public sample application to acquire (rights recorded as in PR 01) or an original
-  sample written for the gate. Needed before the end gate; does not block PR 02–25.
+Still pending, configuration only: the second model or hosted endpoint with a spend cap for PR 22's live
+evaluation (see *Resolutions and scope notes*).
