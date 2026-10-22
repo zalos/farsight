@@ -20,3 +20,10 @@ description = "Jira response shapes (recorded fixtures): search cursors and the 
 # files through in gitleaks 8.30 — checked with a planted token.)
 regexTarget = "line"
 regexes = ['''"nextPageToken":\s*"''', '''atl_token=[0-9a-f]{40}_lin''']
+
+[[allowlists]]
+description = "Public upstream Gitleaks release commit in the generated rules provenance, not a Sourcegraph credential"
+# This exact 40-character value is the public v8.30.1 source commit, also pinned
+# in the adapter manifest. Keep the exception to this generated provenance line.
+regexTarget = "line"
+regexes = ['''^// 83d9cd684c87d95d656c1458ef04895a7f1cbd8e; the file the binary embeds as its default rules\) by scripts/generate-gitleaks-rules\.mjs\.$''']
