@@ -5,7 +5,7 @@
 // kind against that tree and the captured inventory. File outcomes are joined to the capture separately; the
 // capture is never changed. No application ingestion, configuration enrichment, network or executable input.
 import { canonicalJson } from '@farsight/graph';
-import type { AnalysisArtifact, InputFingerprint, ParserLimits } from '@farsight/code-parser';
+import type * as CodeParser from '@farsight/code-parser';
 import { createHash } from 'node:crypto';
 import { chmodSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
@@ -66,7 +66,7 @@ export interface ParseSnapshotRequest {
   readonly sources?: readonly string[];
   readonly selection: ParserSelection;
   /** Every limit, explicitly. */
-  readonly limits: Required<ParserLimits>;
+  readonly limits: ParserLimits;
   readonly signal?: AbortSignal;
 }
 
@@ -146,7 +146,7 @@ export interface ParserResult {
   readonly parser: AnalysisArtifact['analysis']['parser'];
   readonly adapters: AnalysisArtifact['analysis']['adapters'];
   readonly selection: ParserSelection;
-  readonly limits: Required<ParserLimits>;
+  readonly limits: ParserLimits;
   readonly analysisFingerprint: string;
   /** The parser's own flag: its selection completed. Never security coverage. */
   readonly parserComplete: boolean;
@@ -170,6 +170,65 @@ export interface SnapshotAnalysis {
   readonly snapshotId: string;
   readonly sources: readonly SourceAnalysis[];
 }
+
+// ---- the public parser's artifact, as Sentinel exposes it ----
+// Declared here so the published declarations name no workspace package. The assignment below fails to compile if
+// the parser's own types ever stop fitting these shapes.
+
+/** One recorded read: a file's bytes, a folder listing, a kind, or an unavailable path (hex SHA-256 digests). */
+export interface InputFingerprint {
+  readonly path: string;
+  readonly kind: 'content' | 'directory' | 'metadata' | 'missing';
+  readonly digest: string;
+}
+
+export interface ParserLimits {
+  readonly maxFiles: number;
+  readonly maxFileBytes: number;
+  readonly maxTotalBytes: number;
+  readonly maxEntries: number;
+  readonly maxDurationMs: number;
+}
+
+export interface ParserLocation {
+  readonly repo: string;
+  readonly path: string;
+  readonly line: number;
+  readonly col?: number;
+  readonly endLine?: number;
+}
+
+/** The portable graph, with the fields Sentinel reads named; every other field is kept verbatim at run time. */
+export interface AnalysisGraph {
+  readonly nodes: readonly ({ readonly id: string; readonly kind: string; readonly loc?: ParserLocation })[];
+  readonly edges: readonly ({
+    readonly id: string; readonly kind: string; readonly from: string; readonly to: string;
+    readonly occurrences?: readonly ({ readonly id: string; readonly loc: ParserLocation; readonly span?: { readonly start: number; readonly end: number } })[];
+  })[];
+}
+
+/** `farsight-analysis` from `@farsight/code-parser`, kept complete (occurrences included). */
+export interface AnalysisArtifact {
+  readonly format: 'farsight-analysis';
+  readonly schemaVersion: number;
+  readonly graph: AnalysisGraph;
+  readonly analysis: {
+    readonly fingerprint: string;
+    readonly parser: { readonly name: '@farsight/code-parser'; readonly version: string };
+    readonly adapters: readonly { readonly id: string; readonly version: string }[];
+    readonly inputs: readonly InputFingerprint[];
+    readonly files: readonly { readonly path: string; readonly status: 'analyzed' | 'skipped' | 'failed'; readonly reason?: string; readonly adapter?: string; readonly digest?: string }[];
+    readonly diagnostics: readonly { readonly code: string; readonly severity: 'error' | 'warning'; readonly message: string; readonly path?: string; readonly adapter?: string; readonly line?: number; readonly nodeId?: string; readonly reason?: string }[];
+    readonly complete: boolean;
+    readonly capabilities: readonly string[];
+    readonly limits: readonly string[];
+  };
+}
+
+// Compile-time drift guards (not exported, so not in the published declarations).
+const fitsArtifact = (a: CodeParser.AnalysisArtifact): AnalysisArtifact => a;
+const fitsLimits = (l: ParserLimits): CodeParser.ParserLimits => l;
+void fitsArtifact; void fitsLimits;
 
 const sha256hex = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const UNAVAILABLE = sha256hex('unavailable');
