@@ -318,8 +318,8 @@ export interface AdvisoryChange {
 /**
  * Explains how findings moved between two assessments. A change is reported only where it is comparable: both sides
  * assessed the component (then the snapshot or the source explains it), or the files that named it on one side were
- * assessed successfully on the other and no longer name it at all (a dependency added or removed). Anything else, a
- * failed, partial or unversioned side, is `unknown`.
+ * fully listed on the other (nothing refused, skipped or unresolved) and no longer name it at all (a dependency added
+ * or removed). Anything else, a failed, partial or unversioned side, is `unknown`.
  */
 export function explainAdvisoryChanges(previous: OsvRunResult, next: OsvRunResult): readonly AdvisoryChange[] {
   const keyed = (r: OsvRunResult) => new Map(r.findings.map(f => [f.key, f]));
@@ -330,9 +330,18 @@ export function explainAdvisoryChanges(previous: OsvRunResult, next: OsvRunResul
     const ok = usable(r);
     return r.components.filter(c => c.assessed && ok.has(c.relativePath) && same(c, f)).map(c => c.artifact).sort();
   };
-  /** The other side assessed every file where `f` was found, and none of them names the component any more. */
+  /**
+   * Files whose component list is complete: every component in them was read and none was refused, skipped or left
+   * unresolved. An advisory snapshot's age is the only limit allowed; it bounds what was matched, not what was listed.
+   * A partial file (a refused or skipped component, unresolved transitives) can hide the very component sought.
+   */
+  const LISTING_INTACT = new Set<OsvCoverageReason>(['sentinel.osv.coverage.databaseAgeUnknown', 'sentinel.osv.coverage.databaseStale']);
+  const fullyListed = (r: OsvRunResult) => new Set(r.coverage.filter(c =>
+    (c.status === 'complete' || c.status === 'empty' || c.status === 'database-age-unknown' || c.status === 'database-stale')
+    && c.limitations.every(l => LISTING_INTACT.has(l))).map(c => c.relativePath));
+  /** The other side fully listed every file where `f` was found, and none of them names the component any more. */
   const absentFrom = (other: OsvRunResult, f: OsvFinding) => {
-    const ok = usable(other);
+    const ok = fullyListed(other);
     const paths = f.occurrences.map(o => o.relativePath);
     return paths.every(p => ok.has(p)) && !other.components.some(c => paths.includes(c.relativePath) && c.ecosystem === f.ecosystem && c.name === f.name);
   };
