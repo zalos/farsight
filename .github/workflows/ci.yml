@@ -173,7 +173,7 @@ jobs:
           set -o pipefail
           node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=300000 \
             --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=isolation.tap \
-            test/execution-isolation.test.ts test/execution-protocol.test.ts test/execution-container-faults.test.ts test/execution-framing-budget.test.ts
+            test/execution-isolation.test.ts test/execution-protocol.test.ts test/execution-container-faults.test.ts test/execution-framing-budget.test.ts test/execution-container-recovery.test.ts
           grep -qx '# skipped 0' isolation.tap || { echo "::error::an isolation test was skipped"; exit 1; }
           grep -qx '# fail 0' isolation.tap && grep -qx '# cancelled 0' isolation.tap
 
