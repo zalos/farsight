@@ -18,6 +18,7 @@ import { build } from 'esbuild';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertTarball, buildClosure, missingBuildOutputs, npmPackEnv } from './pack-preflight.mjs';
@@ -81,6 +82,22 @@ for (const [asset, needs] of [['execution/launch-gate', 'execution/supervisor']]
   if (!existsSync(source)) fail(`packages/sentinel/src/${asset}.ts is missing; the launch gate must ship with the package.`);
   entries.set(asset, source);
 }
+// Runtime sidecars: modules the code names by file URL rather than import (so the bundler does not follow them), each
+// emitted as an entry of its own. The built-in worker's launch gate is run as `node --import <gate> <adapter>`; the
+// supervisor names it relative to itself, and the bundle moves the supervisor, so every reference is rewritten below
+// to the emitted gate's exact relative path, and the pack fails if none or a stale one remains.
+// The coordinator's bootstrap operations are bound by the digest of the module that implements each; in the bundle
+// that module is its emitted entry, which imports the implementation by content-hashed chunk name, so its bytes
+// change whenever the implementation does.
+const SIDECARS = [
+  { name: 'execution/launch-gate', reference: './launch-gate.js' },
+  { name: 'snapshot/capture', reference: '../snapshot/capture.js' },
+  { name: 'snapshot/parser', reference: '../snapshot/parser.js' },
+  { name: 'execution/bootstrap', reference: './bootstrap.js' },
+];
+// A sidecar applies when its source exists; a reference to one whose source is missing fails after the build.
+const sidecarSources = new Map(SIDECARS.map((s) => [s.name, join(dir, 'src', `${s.name}.ts`)]));
+for (const sidecar of SIDECARS) if (existsSync(sidecarSources.get(sidecar.name))) entries.set(sidecar.name, sidecarSources.get(sidecar.name));
 // `types` first: TypeScript takes the first condition that matches.
 const exportsMap = Object.fromEntries(jsExports.map(([subpath, file, types]) => [subpath, { types: `./${rel(types)}`, import: `./${entryFor(file)}` }]));
 exportsMap['./package.json'] = './package.json';
@@ -213,6 +230,33 @@ try {
     // inlined CommonJS dependencies call require() for builtins; an ESM bundle has none
     banner: { js: "import { createRequire as __sentinelCreateRequire } from 'node:module';\nconst require = __sentinelCreateRequire(import.meta.url);" },
   });
+  // Point every reference to a sidecar at its emitted file, relative to the file that holds the reference.
+  const sidecars = {};
+  const emitted = readdirSync(join(out, 'dist'), { recursive: true }).map(String).filter((f) => f.endsWith('.mjs'));
+  for (const sidecar of SIDECARS) {
+    const target = join(out, 'dist', `${sidecar.name}.mjs`);
+    const literal = `new URL(${JSON.stringify(sidecar.reference)}, import.meta.url)`;
+    if (!existsSync(sidecarSources.get(sidecar.name))) {
+      const dangling = emitted.filter((file) => readFileSync(join(out, 'dist', file), 'utf8').includes(literal));
+      if (dangling.length) fail(`the bundle references ${sidecar.reference}, but packages/sentinel/src/${sidecar.name}.ts is missing.`, dangling);
+      continue;
+    }
+    if (!existsSync(target)) fail(`the bundle did not emit dist/${sidecar.name}.mjs.`);
+    let rewritten = 0;
+    for (const file of emitted) {
+      const path = join(out, 'dist', file);
+      const text = readFileSync(path, 'utf8');
+      if (!text.includes(literal)) continue;
+      let to = relative(dirname(path), target);
+      if (!to.startsWith('.')) to = `./${to}`;
+      writeFileSync(path, text.split(literal).join(`new URL(${JSON.stringify(to)}, import.meta.url)`));
+      rewritten++;
+    }
+    if (!rewritten) fail(`no bundled file references ${sidecar.reference}; the sidecar ${sidecar.name} would be unused.`);
+    const stale = emitted.filter((file) => readFileSync(join(out, 'dist', file), 'utf8').includes(literal));
+    if (stale.length) fail(`a stale reference to ${sidecar.reference} remains.`, stale);
+    sidecars[sidecar.name] = { path: `dist/${sidecar.name}.mjs`, sha256: createHash('sha256').update(readFileSync(target)).digest('hex') };
+  }
   // esbuild keeps an entry's own shebang; a bin without one still has to run from npm's .bin link.
   for (const target of new Set(Object.values(bins))) {
     const path = join(out, target);
@@ -239,6 +283,8 @@ try {
     description: sentinel.description ?? 'Optional Sentinel package for Farsight, installed and run separately from farsight-cli.',
     license: 'MIT', ...(pkg.repository ? { repository: pkg.repository } : {}), type: 'module',
     bin: bins, types: exportsMap['.'].types, exports: exportsMap, files,
+    // Provenance of the runtime sidecars this package loads by file URL: where each is and its exact bytes.
+    sentinel: { sidecars },
     ...(Object.keys(dependencies).length ? { dependencies } : {}),
     engines: { node: sentinel.engines?.node ?? pkg.engines?.node ?? '>=24' },
   }, null, 2) + '\n');

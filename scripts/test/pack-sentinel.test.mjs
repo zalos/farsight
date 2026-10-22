@@ -439,3 +439,43 @@ test("a publishable workspace library's declarations are vendored; a string lite
     assert.equal(packedManifest(root).dependencies?.['@farsight/lib'], undefined, 'a vendored library is never a dependency');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('a runtime sidecar named by file URL is emitted, its reference rewritten to resolve, and its bytes recorded', async () => {
+  const { createHash } = await import('node:crypto');
+  const { fileURLToPath } = await import('node:url');
+  const root = workspace({ build: false });
+  try {
+    write(root, 'packages/sentinel/src/execution/launch-gate.ts', "export const LAUNCH_GATE_READY = 'gate';\n");
+    write(root, 'packages/sentinel/src/execution/uses-gate.ts', "export const GATE = new URL('./launch-gate.js', import.meta.url).href;\n");
+    write(root, 'packages/sentinel/src/cli.ts', "import { GATE } from './execution/uses-gate.js';\nconsole.log(GATE);\nexport {};\n");
+    const built = tsc(root);
+    assert.equal(built.status, 0, built.stdout);
+    const packed = node(root, 'pack-sentinel.mjs');
+    assert.equal(packed.status, 0, packed.stderr);
+    const out = join(root, 'build/sentinel/package');
+    const recorded = packedManifest(root).sentinel.sidecars['execution/launch-gate'];
+    assert.equal(recorded.path, 'dist/execution/launch-gate.mjs');
+    assert.equal(createHash('sha256').update(readFileSync(join(out, recorded.path))).digest('hex'), recorded.sha256);
+    // The bundled reference now names the emitted gate, from wherever the bundler put the code that names it.
+    const cli = join(out, 'dist/cli.mjs');
+    const ran = spawnSync(process.execPath, [cli], { encoding: 'utf8' });
+    assert.equal(ran.status, 0, ran.stderr);
+    const { realpathSync } = await import('node:fs');
+    assert.equal(realpathSync(fileURLToPath(ran.stdout.trim())), realpathSync(join(out, recorded.path)));
+    assert.ok(!readFileSync(cli, 'utf8').includes("\"./launch-gate.js\""), 'no stale reference');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a bundle that names a sidecar whose source is missing fails, and build/sentinel is kept', () => {
+  const root = workspace({ build: false });
+  try {
+    write(root, 'packages/sentinel/src/execution/uses-gate.ts', "export const GATE = new URL('./launch-gate.js', import.meta.url).href;\n");
+    write(root, 'packages/sentinel/src/cli.ts', "import { GATE } from './execution/uses-gate.js';\nconsole.log(GATE);\nexport {};\n");
+    const built = tsc(root);
+    assert.equal(built.status, 0, built.stdout);
+    const packed = node(root, 'pack-sentinel.mjs');
+    assert.equal(packed.status, 1);
+    assert.match(packed.stderr, /references \.\/launch-gate\.js, but packages\/sentinel\/src\/execution\/launch-gate\.ts is missing/);
+    assert.equal(readFileSync(join(root, 'build/sentinel/keep.txt'), 'utf8'), 'prior artifact');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
