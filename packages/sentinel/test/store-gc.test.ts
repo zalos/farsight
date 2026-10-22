@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, readdirSync, lstatSync, chmodSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, readdirSync, lstatSync, chmodSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -9,8 +9,10 @@ import { inspectReachability, planPrune, type ReachabilitySnapshot } from '../di
 import { ledgerObjectPresence, reachabilityFromLedger, toLedgerReceipt, refFromLedgerReceipt } from '../dist/store/objects-ledger.js';
 
 const STORE = 'store-gc-1';
+/** The ledger's committed sequence did not move. */
+const at = (sequence: number) => ({ readSequence: () => sequence });
 function scratch(t: { after(fn: () => void): void }): string {
-  const dir = mkdtempSync(join(tmpdir(), 'sentinel-gc-'));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-gc-')));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
@@ -77,7 +79,7 @@ async function fixture(t: { after(fn: () => void): void }) {
 
 test('reachability follows links transitively through cycles and shared children, in every codec', async t => {
   const { r, id, snapshot, store } = await fixture(t);
-  const report = await inspectReachability(store, snapshot);
+  const report = await inspectReachability(store, snapshot, at(42));
   assert.equal(report.ok, true, JSON.stringify(report.errors));
   assert.equal(report.sequence, 42);
   const expected = ['report', 'finding', 'evidence', 'shared', 'cycleA', 'cycleB', 'active', 'pinned', 'staged'].map(id);
@@ -95,7 +97,7 @@ test('reachability follows links transitively through cycles and shared children
 test('a dry-run prune lists only unreachable published objects and changes nothing on disk', async t => {
   const { dir, r, snapshot, store } = await fixture(t);
   const before = fingerprint(dir);
-  const plan = await planPrune(store, snapshot);
+  const plan = await planPrune(store, snapshot, at(42));
   assert.equal(plan.ok, true);
   assert.equal(plan.dryRun, true);
   assert.equal(plan.deleted, 0);
@@ -124,11 +126,18 @@ test('a snapshot that is incomplete, foreign, malformed, moving or missing an ac
     ['accepted root missing', { ...snapshot, roots: [...snapshot.roots, { kind: 'report', id: 'r2', artifacts: [missing] }] }, 'sentinel.gc.missingReachable'],
     ['linked child missing', { ...snapshot, links: [...snapshot.links, { from: id('finding'), to: missing }] }, 'sentinel.gc.missingReachable'],
     ['sequence moved', snapshot, 'sentinel.gc.snapshotMoved', { readSequence: () => 43 }],
-    ['sequence unreadable', snapshot, 'sentinel.gc.snapshotMoved', { readSequence: () => { throw new Error('ledger closed'); } }],
+    ['sequence unreadable', snapshot, 'sentinel.gc.sequenceUnverified', { readSequence: () => { throw new Error('ledger closed'); } }],
+    ['sequence check omitted', snapshot, 'sentinel.gc.sequenceUnverified', {}],
+    ['sequence re-read as undefined', snapshot, 'sentinel.gc.sequenceUnverified', { readSequence: () => undefined }],
+    ['sequence re-read as a string', snapshot, 'sentinel.gc.sequenceUnverified', { readSequence: () => '42' }],
+    ['sparse roots', { ...snapshot, roots: Object.assign([...snapshot.roots], { length: snapshot.roots.length + 2 }) }, 'sentinel.gc.invalidSnapshot'],
+    ['sparse artifacts', { ...snapshot, roots: [{ kind: 'report', id: 'r', artifacts: new Array(3) }] }, 'sentinel.gc.invalidSnapshot'],
+    ['sparse links', { ...snapshot, links: Object.assign([...snapshot.links], { length: snapshot.links.length + 1 }) }, 'sentinel.gc.invalidSnapshot'],
+    ['sparse recorded', { ...snapshot, recorded: new Array(2) }, 'sentinel.gc.invalidSnapshot'],
     ['no snapshot', null, 'sentinel.gc.invalidSnapshot'],
   ];
   for (const [name, snap, code, options] of cases) {
-    const plan = await planPrune(store, snap, options);
+    const plan = await planPrune(store, snap, options ?? at(42));
     assert.equal(plan.ok, false, name);
     assert.deepEqual(plan.candidates, [], `${name}: no candidate when the graph cannot be trusted`);
     assert.equal(plan.deleted, 0);
@@ -136,7 +145,7 @@ test('a snapshot that is incomplete, foreign, malformed, moving or missing an ac
   }
   // A staged artifact that a later accepted link also names is no longer excused from existing.
   const stagedMissing = identify(Buffer.from('not written yet')).artifactId;
-  const promoted = await planPrune(store, { ...snapshot, links: [...snapshot.links, { from: id('report'), to: stagedMissing }] });
+  const promoted = await planPrune(store, { ...snapshot, links: [...snapshot.links, { from: id('report'), to: stagedMissing }] }, at(42));
   assert.ok(promoted.errors.some(e => e.code === 'sentinel.gc.missingReachable'));
   // The unchanged sequence passes.
   assert.equal((await planPrune(store, snapshot, { readSequence: async () => 42 })).ok, true);
@@ -148,7 +157,7 @@ test('an unreadable store fails closed', async t => {
   const broken = new ObjectStore({ storePath: dir, storeId: STORE, assertHeld() {} }, {
     io: { ...readOnlyIo, readdir: async () => { throw Object.assign(new Error('EACCES'), { code: 'EACCES' }); } },
   });
-  const plan = await planPrune(broken, snapshot);
+  const plan = await planPrune(broken, snapshot, at(42));
   assert.equal(plan.ok, false);
   assert.deepEqual(plan.candidates, []);
   assert.ok(plan.errors.some(e => e.code === 'sentinel.gc.unreadableStore'));
@@ -157,7 +166,7 @@ test('an unreadable store fails closed', async t => {
 test('an empty store with an empty snapshot plans nothing', async t => {
   const dir = scratch(t);
   const store = new ObjectStore({ storePath: dir, storeId: STORE, assertHeld() {} }, { io: readOnlyIo });
-  const plan = await planPrune(store, { storeId: STORE, sequence: 0, complete: true, roots: [], links: [] });
+  const plan = await planPrune(store, { storeId: STORE, sequence: 0, complete: true, roots: [], links: [] }, at(0));
   assert.equal(plan.ok, true);
   assert.deepEqual(plan.candidates, []);
   assert.deepEqual(readdirSync(dir), [], 'inspection created no directory');
@@ -167,24 +176,22 @@ test('a corrupt protected object or a recorded object that is absent or altered 
   const { dir, r, snapshot, store } = await fixture(t);
   const before = fingerprint(dir);
   // Recorded and present: fine.
-  assert.equal((await planPrune(store, { ...snapshot, recorded: [r.report!, r.orphan!] })).ok, true);
+  assert.equal((await planPrune(store, { ...snapshot, recorded: [r.report!, r.orphan!] }, at(42))).ok, true);
   const absent = { rawDigest: identify(Buffer.from('recorded, never stored')).rawDigest, codec: 'gzip' as const };
-  const missing = await planPrune(store, { ...snapshot, recorded: [absent] });
+  const missing = await planPrune(store, { ...snapshot, recorded: [absent] }, at(42));
   assert.equal(missing.ok, false);
   assert.ok(missing.errors.some(e => e.code === 'sentinel.gc.missingRecorded'));
   assert.deepEqual(missing.candidates, []);
-  const wrongSize = await planPrune(store, { ...snapshot, recorded: [{ ...r.orphan!, encodedSize: r.orphan!.encodedSize + 1 }] });
+  const wrongSize = await planPrune(store, { ...snapshot, recorded: [{ ...r.orphan!, encodedSize: r.orphan!.encodedSize + 1 }] }, at(42));
   assert.ok(wrongSize.errors.some(e => e.code === 'sentinel.gc.corruptObject'), 'an unreachable recorded object must still verify');
   assert.deepEqual(fingerprint(dir), before);
 
   chmodSync(join(dir, r.evidence!.relPath), 0o600);
   writeFileSync(join(dir, r.evidence!.relPath), 'rot');
-  const plan = await planPrune(store, snapshot);
+  const plan = await planPrune(store, snapshot, at(42));
   assert.equal(plan.ok, false);
   assert.ok(plan.errors.some(e => e.code === 'sentinel.gc.corruptObject' && e.detail.includes(r.evidence!.relPath)));
   assert.deepEqual(plan.candidates, []);
-  // Presence-only mode is explicit and does not hash.
-  assert.equal((await planPrune(store, snapshot, { verify: false })).ok, true);
 });
 
 test('the ledger adapter converts receipts, verifies durability against disk and fails closed on bad snapshots', async t => {
@@ -214,7 +221,7 @@ test('the ledger adapter converts receipts, verifies durability against disk and
     links: [[id('finding'), id('evidence')], [id('active'), id('shared')]] as [string, string][],
     objects: [toLedgerReceipt(r.finding!), toLedgerReceipt(r.evidence!)],
   };
-  const plan = await planPrune(store, reachabilityFromLedger(ledgerSnapshot, STORE));
+  const plan = await planPrune(store, reachabilityFromLedger(ledgerSnapshot, STORE), at(7));
   assert.equal(plan.ok, true, JSON.stringify(plan.errors));
   assert.deepEqual(plan.validFor, { storeId: STORE, sequence: 7 });
   assert.deepEqual(plan.report.rootCounts, { referenced: 1, active: 1, staged: 1, report: 1, pinned: 0 });
@@ -225,9 +232,27 @@ test('the ledger adapter converts receipts, verifies durability against disk and
     ['malformed receipt', { ...ledgerSnapshot, objects: [{ ...toLedgerReceipt(r.finding!), codec: 'zstd' }] }],
     ['missing sequence', { ...ledgerSnapshot, sequence: undefined }],
     ['dangling link', { ...ledgerSnapshot, links: [[id('finding'), identify(Buffer.from('gone')).artifactId]] }],
+    ['sparse referenced', { ...ledgerSnapshot, referenced: new Array(2) }],
+    ['sparse objects', { ...ledgerSnapshot, objects: new Array(1) }],
   ] as const) {
-    const p = await planPrune(store, reachabilityFromLedger(snap as any, STORE));
+    const p = await planPrune(store, reachabilityFromLedger(snap as any, STORE), at(7));
     assert.equal(p.ok, false, name);
     assert.deepEqual(p.candidates, [], name);
   }
+});
+
+test('an object staged after the snapshot is never a candidate: the moved sequence fails the plan closed', async t => {
+  const { dir, snapshot } = await fixture(t);
+  let sequence = 42;
+  const writer = new ObjectStore({ storePath: dir, storeId: STORE, assertHeld() {} });
+  const store = new ObjectStore({ storePath: dir, storeId: STORE, assertHeld() {} }, {
+    io: { ...readOnlyIo, readdir: async path => {
+      if (path.endsWith('sha256') && sequence === 42) { sequence = 43; await writer.put(Buffer.from('registered after the snapshot')); }
+      return NODE_OBJECT_IO.readdir(path);
+    } },
+  });
+  const plan = await planPrune(store, snapshot, { readSequence: () => sequence });
+  assert.equal(plan.ok, false);
+  assert.ok(plan.errors.some(e => e.code === 'sentinel.gc.snapshotMoved'));
+  assert.deepEqual(plan.candidates, []);
 });

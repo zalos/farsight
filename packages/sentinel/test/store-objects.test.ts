@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync, mkdirSync, symlinkSync, chmodSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync, mkdirSync, symlinkSync, chmodSync, realpathSync, renameSync, linkSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,7 +15,8 @@ const objectsModule = new URL('../dist/store/objects.js', import.meta.url).href;
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 
 function scratch(t: { after(fn: () => void): void }): string {
-  const dir = mkdtempSync(join(tmpdir(), 'sentinel-os-'));
+  // The store root must be canonical: on macOS tmpdir() passes through the /var symbolic link.
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-os-')));
   t.after(() => { chmodTree(dir); rmSync(dir, { recursive: true, force: true }); });
   return dir;
 }
@@ -167,9 +168,9 @@ test('an existing valid winner with another encoding is accepted and reported as
   const store = new ObjectStore(owner(dir));
   const id = identify(SOURCE);
   const rel = objectRelPath(id.rawDigest, 'gzip');
-  mkdirSync(join(dir, rel, '..'), { recursive: true });
+  mkdirSync(join(dir, rel, '..'), { recursive: true, mode: 0o700 });
   const level9 = gzipSync(SOURCE, { level: 9, memLevel: 9, windowBits: 10 });
-  writeFileSync(join(dir, rel), level9);
+  writeFileSync(join(dir, rel), level9, { mode: 0o600 });
   const receipt = await store.put(SOURCE);
   assert.equal(receipt.created, false);
   assert.equal(receipt.encodedDigest, sha(level9));
@@ -183,8 +184,8 @@ test('a corrupt existing object is never overwritten', async t => {
   const id = identify(SOURCE);
   for (const codec of ['gzip', 'raw'] as const) {
     const rel = objectRelPath(id.rawDigest, codec);
-    mkdirSync(join(dir, rel, '..'), { recursive: true });
-    writeFileSync(join(dir, rel), 'garbage');
+    mkdirSync(join(dir, rel, '..'), { recursive: true, mode: 0o700 });
+    writeFileSync(join(dir, rel), 'garbage', { mode: 0o600 });
     assert.equal(await code(store.put(SOURCE, { codec })), 'sentinel.object.corruptExisting');
     assert.equal(readFileSync(join(dir, rel), 'utf8'), 'garbage');
   }
@@ -297,4 +298,87 @@ test('list() reports objects, staged leftovers and foreign entries without touch
   assert.deepEqual(listing.staging, ['objects/tmp/leftover.partial']);
   assert.deepEqual([...listing.unexpected].sort(), [`objects/sha256/${a.rawDigest.slice(0, 2)}/not-an-object`, 'objects/stray.txt'].sort());
   assert.deepEqual(await new ObjectStore(owner(join(dir, 'absent'))).list(), { objects: [], staging: [], unexpected: [] });
+});
+
+test('a non-canonical or shared store root is refused before anything is written', async t => {
+  const dir = scratch(t);
+  const alias = join(scratch(t), 'alias');
+  symlinkSync(dir, alias);
+  assert.equal(await code(new ObjectStore(owner(alias)).put(SOURCE)), 'sentinel.object.unsafePath');
+  assert.equal(new ObjectStore(owner(alias)).checkSync({ rawDigest: identify(SOURCE).rawDigest, codec: 'gzip' }).status, 'unsafe');
+  assert.throws(() => new ObjectStore(owner('relative/store')), (e: any) => e.code === 'sentinel.object.unsafePath');
+  chmodSync(dir, 0o755);
+  assert.equal(await code(new ObjectStore(owner(dir)).put(SOURCE)), 'sentinel.object.unsafePath');
+  assert.deepEqual(readdirSync(dir), []);
+  chmodSync(dir, 0o700);
+  const receipt = await new ObjectStore(owner(dir)).put(SOURCE);
+  chmodSync(join(dir, 'objects/sha256'), 0o755);
+  assert.equal(new ObjectStore(owner(dir)).checkSync(receipt).status, 'unsafe', 'a directory open to others is refused');
+  chmodSync(join(dir, 'objects/sha256'), 0o700);
+  chmodSync(join(dir, receipt.relPath), 0o644);
+  assert.equal(new ObjectStore(owner(dir)).checkSync(receipt).status, 'unsafe', 'an object readable by others is refused');
+});
+
+test('a shard directory swapped for a symbolic link just before link(2) yields no receipt', async t => {
+  const dir = scratch(t);
+  const outside = scratch(t);
+  const id = identify(SOURCE);
+  const shard = join(dir, 'objects/sha256', id.rawDigest.slice(0, 2));
+  const io: ObjectStoreIo = {
+    ...NODE_OBJECT_IO,
+    link: async (a, b) => {
+      renameSync(shard, join(dir, 'moved-shard'));
+      symlinkSync(outside, shard);
+      return NODE_OBJECT_IO.link(a, b);
+    },
+  };
+  assert.equal(await code(new ObjectStore(owner(dir), { io }).put(SOURCE)), 'sentinel.object.unsafePath');
+  // Node cannot pin link(2) to a directory handle, so the name may be created outside before detection;
+  // it is detected, no receipt is issued, and nothing outside the store is removed.
+  assert.deepEqual(readdirSync(outside), [`${id.rawDigest}.gzip`]);
+  assert.equal(new ObjectStore(owner(dir)).checkSync({ rawDigest: id.rawDigest, codec: 'gzip' }).status, 'unsafe');
+});
+
+test('a directory swapped between staging and the directory fsync yields no receipt', async t => {
+  const dir = scratch(t);
+  const id = identify(SOURCE);
+  const shard = join(dir, 'objects/sha256', id.rawDigest.slice(0, 2));
+  let swapped = false;
+  const io: ObjectStoreIo = {
+    ...NODE_OBJECT_IO,
+    open: async (path, flags, mode) => {
+      if (!swapped && path === shard) {
+        swapped = true;
+        renameSync(shard, `${shard}.old`);
+        mkdirSync(shard, { mode: 0o700 });
+      }
+      return NODE_OBJECT_IO.open(path, flags, mode);
+    },
+  };
+  assert.equal(await code(new ObjectStore(owner(dir), { io }).put(SOURCE)), 'sentinel.object.unsafePath');
+});
+
+test('an object with a hard-link alias outside the store is never trusted', async t => {
+  const dir = scratch(t);
+  const outside = scratch(t);
+  const id = identify(SOURCE);
+  const rel = objectRelPath(id.rawDigest, 'gzip');
+  const foreign = join(outside, 'valid.gz');
+  writeFileSync(foreign, gzipSync(SOURCE), { mode: 0o600 });
+  mkdirSync(join(dir, rel, '..'), { recursive: true, mode: 0o700 });
+  linkSync(foreign, join(dir, rel));
+  const store = new ObjectStore(owner(dir));
+  assert.equal(await code(store.put(SOURCE)), 'sentinel.object.unsafePath', 'an aliased winner is refused, not accepted');
+  assert.equal(store.checkSync({ rawDigest: id.rawDigest, codec: 'gzip' }).status, 'unsafe');
+  assert.equal(await code(store.read({ rawDigest: id.rawDigest, codec: 'gzip' })), 'sentinel.object.unsafePath');
+  assert.ok(existsSync(foreign) && existsSync(join(dir, rel)), 'neither name is removed');
+});
+
+test('an extra name inside objects/tmp (a writer between link and unlink) is tolerated', async t => {
+  const dir = scratch(t);
+  const store = new ObjectStore(owner(dir));
+  const receipt = await store.put(SOURCE);
+  linkSync(join(dir, receipt.relPath), join(dir, 'objects/tmp', `${receipt.rawDigest}.gzip.0000.partial`));
+  assert.deepEqual(store.checkSync(receipt), { status: 'ok' });
+  assert.equal((await store.put(SOURCE)).created, false);
 });

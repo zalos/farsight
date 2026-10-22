@@ -27,7 +27,7 @@ export interface ReachabilitySnapshot {
 export type GcErrorCode =
   | 'sentinel.gc.incompleteSnapshot' | 'sentinel.gc.wrongStore' | 'sentinel.gc.invalidSnapshot'
   | 'sentinel.gc.missingReachable' | 'sentinel.gc.missingRecorded' | 'sentinel.gc.corruptObject'
-  | 'sentinel.gc.snapshotMoved' | 'sentinel.gc.unreadableStore';
+  | 'sentinel.gc.snapshotMoved' | 'sentinel.gc.sequenceUnverified' | 'sentinel.gc.unreadableStore';
 
 export interface GcError { readonly code: GcErrorCode; readonly detail: string }
 
@@ -67,13 +67,22 @@ export interface PrunePlan {
 }
 
 export interface InspectOptions {
-  /** Re-reads the ledger's committed sequence after enumeration; a change fails the inspection closed. */
-  readonly readSequence?: () => number | Promise<number>;
-  /** Read and hash every reachable and recorded object (default true). False checks presence only. */
-  readonly verify?: boolean;
+  /**
+   * Required. Re-reads the ledger's committed sequence after the store was listed. Every staging registration
+   * advances the sequence before its bytes are written, so an unchanged sequence proves no object in the listing
+   * was registered after the snapshot; a different, unreadable or non-integer answer fails the inspection closed.
+   */
+  readonly readSequence: () => number | Promise<number>;
 }
 
 const ARTIFACT_ID = /^sha256:[0-9a-f]{64}$/;
+
+/** A real array with every index present: a sparse list could hide a root from the walk. */
+function isDenseList(v: unknown): v is readonly unknown[] {
+  if (!Array.isArray(v)) return false;
+  for (let i = 0; i < v.length; i++) if (!Object.hasOwn(v, i)) return false;
+  return true;
+}
 
 function validate(store: ObjectStore, snapshot: ReachabilitySnapshot, errors: GcError[]): boolean {
   if (!snapshot || typeof snapshot !== 'object') {
@@ -83,14 +92,14 @@ function validate(store: ObjectStore, snapshot: ReachabilitySnapshot, errors: Gc
   if (snapshot.storeId !== store.storeId) errors.push({ code: 'sentinel.gc.wrongStore', detail: 'the snapshot names another store' });
   if (!Number.isSafeInteger(snapshot.sequence) || snapshot.sequence < 0) errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: 'sequence is not a non-negative integer' });
   if (snapshot.complete !== true) errors.push({ code: 'sentinel.gc.incompleteSnapshot', detail: 'the ledger did not enumerate every root and link' });
-  if (!Array.isArray(snapshot.roots) || !Array.isArray(snapshot.links)) {
-    errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: 'roots and links must be lists' });
+  if (!isDenseList(snapshot.roots) || !isDenseList(snapshot.links)) {
+    errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: 'roots and links must be dense lists' });
     return false;
   }
   snapshot.roots.forEach((root, i) => {
     if (!root || !GC_ROOT_KINDS.includes(root.kind)) errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: `root ${i} has an unknown kind` });
     if (!root || typeof root.id !== 'string' || !root.id) errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: `root ${i} has no id` });
-    if (!root || !Array.isArray(root.artifacts)) { errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: `root ${i} has no artifact list` }); return; }
+    if (!root || !isDenseList(root.artifacts)) { errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: `root ${i} has no dense artifact list` }); return; }
     for (const a of root.artifacts) if (typeof a !== 'string' || !ARTIFACT_ID.test(a)) errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: `root ${i} names an invalid artifact id` });
   });
   snapshot.links.forEach((link, i) => {
@@ -98,14 +107,14 @@ function validate(store: ObjectStore, snapshot: ReachabilitySnapshot, errors: Gc
       errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: `link ${i} names an invalid artifact id` });
     }
   });
-  if (snapshot.recorded !== undefined && !Array.isArray(snapshot.recorded)) {
-    errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: 'recorded must be a list' });
+  if (snapshot.recorded !== undefined && !isDenseList(snapshot.recorded)) {
+    errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: 'recorded must be a dense list' });
   }
   return true;
 }
 
 /** Walks the snapshot against what is on disk. Never writes. */
-export async function inspectReachability(store: ObjectStore, snapshot: ReachabilitySnapshot, options: InspectOptions = {}): Promise<ReachabilityReport> {
+export async function inspectReachability(store: ObjectStore, snapshot: ReachabilitySnapshot, options: InspectOptions): Promise<ReachabilityReport> {
   return (await inspect(store, snapshot, options)).report;
 }
 
@@ -167,18 +176,16 @@ async function inspect(store: ObjectStore, snapshot: ReachabilitySnapshot, optio
   }
 
   if (listing && structured) {
-    const verify = options.verify !== false;
-    // Every physical file of a reachable artifact must verify: a corrupt protected object is an integrity failure.
-    if (verify) {
-      for (const obj of listing.objects) {
-        if (!reachable.has(artifactIdOf(obj.rawDigest))) continue;
-        const c = await checkOrError(store, { rawDigest: obj.rawDigest, codec: obj.codec, encodedSize: obj.encodedSize });
-        if (c) errors.push({ code: c.status === 'missing' ? 'sentinel.gc.missingReachable' : 'sentinel.gc.corruptObject', detail: `${obj.relPath}: ${c.detail}` });
-      }
+    // Every physical file of a reachable artifact must verify: a corrupt or aliased protected object is an
+    // integrity failure.
+    for (const obj of listing.objects) {
+      if (!reachable.has(artifactIdOf(obj.rawDigest))) continue;
+      const c = await checkOrError(store, { rawDigest: obj.rawDigest, codec: obj.codec, encodedSize: obj.encodedSize });
+      if (c) errors.push({ code: c.status === 'missing' ? 'sentinel.gc.missingReachable' : 'sentinel.gc.corruptObject', detail: `${obj.relPath}: ${c.detail}` });
     }
     // What the ledger says is stored must be stored, as recorded.
     const files = new Set(listing.objects.map(o => `${o.rawDigest}.${o.codec}`));
-    for (const [i, ref] of (Array.isArray(snapshot.recorded) ? snapshot.recorded : []).entries()) {
+    for (const [i, ref] of (isDenseList(snapshot.recorded) ? snapshot.recorded as readonly ObjectRef[] : []).entries()) {
       if (!ref || typeof ref.rawDigest !== 'string' || !/^[0-9a-f]{64}$/.test(ref.rawDigest)) {
         errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: `recorded object ${i} has no valid digest` });
         continue;
@@ -187,19 +194,23 @@ async function inspect(store: ObjectStore, snapshot: ReachabilitySnapshot, optio
         errors.push({ code: 'sentinel.gc.missingRecorded', detail: `${artifactIdOf(ref.rawDigest)} (${String(ref.codec)}) is recorded but not stored` });
         continue;
       }
-      if (!verify) continue;
       const c = await checkOrError(store, ref);
       if (c) errors.push({ code: 'sentinel.gc.corruptObject', detail: `${artifactIdOf(ref.rawDigest)} (${ref.codec}): ${c.detail}` });
     }
   }
 
-  if (options.readSequence && structured) {
-    let after: number | undefined;
-    try { after = await options.readSequence(); } catch (e) {
-      errors.push({ code: 'sentinel.gc.snapshotMoved', detail: `the committed sequence could not be re-read: ${(e as Error).message}` });
+  if (typeof options?.readSequence !== 'function') {
+    errors.push({ code: 'sentinel.gc.sequenceUnverified', detail: 'no way to re-read the committed sequence was given' });
+  } else if (structured) {
+    let after: unknown;
+    let read = false;
+    try { after = await options.readSequence(); read = true; } catch (e) {
+      errors.push({ code: 'sentinel.gc.sequenceUnverified', detail: `the committed sequence could not be re-read: ${(e as Error).message}` });
     }
-    if (after !== undefined && after !== snapshot.sequence) {
-      errors.push({ code: 'sentinel.gc.snapshotMoved', detail: `the ledger moved from sequence ${snapshot.sequence} to ${after} during inspection` });
+    if (read && (typeof after !== 'number' || !Number.isSafeInteger(after) || after < 0)) {
+      errors.push({ code: 'sentinel.gc.sequenceUnverified', detail: 'the re-read sequence is not a non-negative integer' });
+    } else if (read && after !== snapshot.sequence) {
+      errors.push({ code: 'sentinel.gc.snapshotMoved', detail: `the ledger moved from sequence ${snapshot.sequence} to ${String(after)} during inspection` });
     }
   }
 
@@ -234,7 +245,7 @@ async function checkOrError(store: ObjectStore, ref: ObjectRef): Promise<{ statu
 }
 
 /** Lists what a prune would remove at this snapshot, and removes nothing. */
-export async function planPrune(store: ObjectStore, snapshot: ReachabilitySnapshot, options: InspectOptions = {}): Promise<PrunePlan> {
+export async function planPrune(store: ObjectStore, snapshot: ReachabilitySnapshot, options: InspectOptions): Promise<PrunePlan> {
   const { report, objects } = await inspect(store, snapshot, options);
   const reachable = new Set(report.reachable);
   // One listing, taken after the snapshot was read. An object published after the snapshot is registered as a

@@ -5,10 +5,19 @@
 // share bytes cannot downgrade one another through deduplication. Publication is write → fsync → verify →
 // link(2) (which refuses to overwrite) → fsync of every directory on the path; a receipt is returned only after
 // all of it succeeded. Nothing here deletes a published object.
+//
+// Filesystem identity. The store root must be canonical (its real path, no symbolic link anywhere) and owner-only;
+// every directory under it and every object file must be owned by this account, closed to other accounts, and not
+// a symbolic link; an object file must have exactly one name (or extra names only inside `objects/tmp/`, the
+// window between a writer's link and its unlink). Node exposes no openat/linkat, so a path cannot be pinned to a
+// directory handle: these checks DETECT a swap, they cannot prevent one. Directory identities (device, inode) are
+// captured before a write and compared after the link, at each directory fsync and before the receipt; any change
+// refuses the receipt. A swap can still make link(2) create a name outside the store before it is detected; that
+// name is reported, never removed. Same-account compromise is outside the threat model.
 import { createHash, randomBytes } from 'node:crypto';
-import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readSync } from 'node:fs';
+import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readdirSync, readSync, realpathSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import * as zlib from 'node:zlib';
 
@@ -105,11 +114,14 @@ export interface ObjectListing {
 export interface ObjectFileHandle {
   write(buffer: Uint8Array, offset: number, length: number, position: number): Promise<{ bytesWritten: number }>;
   read(buffer: Uint8Array, offset: number, length: number, position: number): Promise<{ bytesRead: number }>;
-  stat(): Promise<{ size: number; isFile(): boolean }>;
+  stat(): Promise<ObjectStat>;
   sync(): Promise<void>;
   close(): Promise<void>;
 }
-export interface ObjectStat { isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean; size: number }
+export interface ObjectStat {
+  isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean;
+  size: number; dev: number; ino: number; nlink: number; uid: number; mode: number;
+}
 export interface ObjectStoreIo {
   open(path: string, flags: number, mode?: number): Promise<ObjectFileHandle>;
   mkdir(path: string, mode: number): Promise<void>;
@@ -117,6 +129,7 @@ export interface ObjectStoreIo {
   link(existing: string, newPath: string): Promise<void>;
   unlink(path: string): Promise<void>;
   readdir(path: string): Promise<string[]>;
+  realpath(path: string): Promise<string>;
 }
 
 export const NODE_OBJECT_IO: ObjectStoreIo = {
@@ -126,6 +139,7 @@ export const NODE_OBJECT_IO: ObjectStoreIo = {
   link: (a, b) => fsp.link(a, b),
   unlink: path => fsp.unlink(path),
   readdir: path => fsp.readdir(path),
+  realpath: path => fsp.realpath(path),
 };
 
 const NOFOLLOW = FS.O_NOFOLLOW ?? 0;
@@ -133,6 +147,8 @@ const DIRECTORY = FS.O_DIRECTORY ?? 0;
 const HEX64 = /^[0-9a-f]{64}$/;
 const OBJECT_FILE = /^([0-9a-f]{64})\.(raw|gzip)$/;
 const SHARD = /^[0-9a-f]{2}$/;
+
+const UID = typeof process.getuid === 'function' ? process.getuid() : undefined;
 
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const errno = (e: unknown) => (e as NodeJS.ErrnoException | undefined)?.code;
@@ -259,6 +275,27 @@ export interface PutOptions {
   readonly expect?: ObjectIdentity;
 }
 
+interface Ident { readonly dev: number; readonly ino: number }
+/** Relative directory → identity captured when it was checked. '.' is the store root. */
+type Chain = Map<string, Ident>;
+const sameIdent = (a: Ident | undefined, b: { dev: number; ino: number }) => !!a && a.dev === b.dev && a.ino === b.ino;
+
+/** Owned by this account and closed to every other one. */
+function assertOwnerOnly(st: ObjectStat, what: string): void {
+  if (UID !== undefined && st.uid !== UID) fail('sentinel.object.unsafePath', `${what} is not owned by this account`);
+  if ((st.mode & 0o077) !== 0) fail('sentinel.object.unsafePath', `${what} is accessible to other accounts`);
+}
+
+function assertSafeDir(st: ObjectStat, rel: string): void {
+  if (st.isSymbolicLink() || !st.isDirectory()) fail('sentinel.object.unsafePath', `${rel} is not a directory`);
+  assertOwnerOnly(st, rel);
+}
+
+const shardOf = (rawDigest: string) => `objects/sha256/${rawDigest.slice(0, 2)}`;
+const readChain = (rawDigest: string) => ['.', 'objects', 'objects/sha256', shardOf(rawDigest)];
+
+interface Verified { readonly decoded: Buffer; readonly encodedDigest: string; readonly encodedSize: number; readonly ident: Ident }
+
 export class ObjectStore {
   readonly #owner: ObjectStoreOwner;
   readonly #io: ObjectStoreIo;
@@ -269,6 +306,7 @@ export class ObjectStore {
       || typeof owner.assertHeld !== 'function') {
       fail('sentinel.object.invalidInput', 'an object store needs an owner with storePath, storeId and assertHeld');
     }
+    if (!isAbsolute(owner.storePath)) fail('sentinel.object.unsafePath', 'the store path must be absolute');
     this.#owner = owner;
     this.#io = { ...NODE_OBJECT_IO, ...options.io };
     this.#root = owner.storePath;
@@ -276,7 +314,7 @@ export class ObjectStore {
 
   get storeId(): string { return this.#owner.storeId; }
 
-  #abs(rel: string): string { return join(this.#root, ...rel.split('/')); }
+  #abs(rel: string): string { return rel === '.' ? this.#root : join(this.#root, ...rel.split('/')); }
 
   /** Publishes verbatim bytes (source files and other raw evidence). */
   put(bytes: Uint8Array, options: PutOptions = {}): Promise<ObjectReceipt> {
@@ -303,39 +341,49 @@ export class ObjectStore {
     const encodedDigest = sha256(encoded);
 
     const rel = objectRelPath(id.rawDigest, codec);
-    const shardRel = `objects/sha256/${id.rawDigest.slice(0, 2)}`;
-    await this.#ensureDir('objects');
-    await this.#ensureDir('objects/sha256');
-    await this.#ensureDir(shardRel);
-    await this.#ensureDir('objects/tmp');
-
     const finalPath = this.#abs(rel);
-    let winner = await this.#existing(finalPath, codec, id);
+    const chain = await this.#ensureChain([...readChain(id.rawDigest), 'objects/tmp']);
+
+    let winner: Omit<Verified, 'decoded'> | undefined = this.#existing(rel, codec, id);
     let created = false;
     if (!winner) {
       const tmpPath = this.#abs(`objects/tmp/${id.rawDigest}.${codec}.${randomBytes(8).toString('hex')}.partial`);
       try {
-        await this.#writeStaged(tmpPath, encoded, encodedDigest);
+        const staged = await this.#writeStaged(tmpPath, encoded, encodedDigest);
+        await this.#recheck(chain);
         try {
           await this.#io.link(tmpPath, finalPath); // link(2) never replaces an existing name.
           created = true;
-          winner = { encodedDigest, encodedSize: encoded.length };
         } catch (e) {
           if (errno(e) !== 'EEXIST') ioFail('publishing the object', e);
-          winner = await this.#existing(finalPath, codec, id);
+        }
+        // Whatever happened, the directories must still be the ones checked, or the name may be elsewhere.
+        await this.#recheck(chain);
+        if (created) {
+          const st = await this.#lstatOrFail(rel);
+          if (st.isSymbolicLink() || !st.isFile() || !sameIdent(staged, st)) {
+            fail('sentinel.object.unsafePath', 'the published name does not refer to the staged file');
+          }
+          winner = { encodedDigest, encodedSize: encoded.length, ident: staged };
+        } else {
+          winner = this.#existing(rel, codec, id);
           if (!winner) fail('sentinel.object.io', 'the object name existed and then vanished during publication');
         }
       } finally {
-        try { await this.#io.unlink(tmpPath); } catch { /* the staged copy is inert; listObjects() reports it */ }
+        try { await this.#io.unlink(tmpPath); } catch { /* an inert staged copy; listObjects() reports it */ }
       }
     }
     if (!winner) return fail('sentinel.object.io', 'publication produced no verified object');
-    // Make the name durable: the file itself (a no-op for our own fsynced inode), then every directory on its path.
-    if (!created) await this.#syncFile(finalPath);
-    await this.#syncDir(shardRel);
-    await this.#syncDir('objects/sha256');
-    await this.#syncDir('objects');
-    await this.#syncDir('.');
+    // Make the name durable: the file (a no-op for our own fsynced inode), then every directory on its path,
+    // each opened without following a link and compared with the identity checked before the write.
+    await this.#syncFile(rel, winner.ident);
+    for (const dir of [shardOf(id.rawDigest), 'objects/sha256', 'objects', '.']) await this.#syncDir(dir, chain);
+    await this.#recheck(chain);
+    let real: string;
+    try { real = await this.#io.realpath(finalPath); } catch (e) { return ioFail('resolving the published object', e); }
+    if (real !== finalPath) fail('sentinel.object.unsafePath', 'the published object no longer resolves inside the store');
+    const last = await this.#lstatOrFail(rel);
+    if (!sameIdent(winner.ident, last)) fail('sentinel.object.unsafePath', 'the published name changed before the receipt');
     await this.#owner.assertHeld();
     return Object.freeze({
       kind: 'sentinel-object-receipt', version: 1, storeId: this.#owner.storeId,
@@ -344,19 +392,40 @@ export class ObjectStore {
     } satisfies ObjectReceipt);
   }
 
-  async #ensureDir(rel: string): Promise<void> {
-    const path = this.#abs(rel);
-    try {
-      await this.#io.mkdir(path, 0o700);
-    } catch (e) {
-      if (errno(e) !== 'EEXIST') ioFail(`creating ${rel}`, e);
-    }
-    let st: ObjectStat;
-    try { st = await this.#io.lstat(path); } catch (e) { return ioFail(`inspecting ${rel}`, e); }
-    if (st.isSymbolicLink() || !st.isDirectory()) fail('sentinel.object.unsafePath', `${rel} is not a directory`);
+  async #lstatOrFail(rel: string): Promise<ObjectStat> {
+    try { return await this.#io.lstat(this.#abs(rel)); } catch (e) { return ioFail(`inspecting ${rel}`, e); }
   }
 
-  async #writeStaged(path: string, encoded: Buffer, encodedDigest: string): Promise<void> {
+  /** Checks the root, then creates (0700) and checks each directory, recording its identity. */
+  async #ensureChain(rels: readonly string[]): Promise<Chain> {
+    let real: string;
+    try { real = await this.#io.realpath(this.#root); } catch (e) { return ioFail('resolving the store path', e); }
+    if (real !== this.#root) fail('sentinel.object.unsafePath', 'the store path is not canonical (it passes through a symbolic link or is not its real path)');
+    const chain: Chain = new Map();
+    for (const rel of rels) {
+      if (rel !== '.') {
+        try { await this.#io.mkdir(this.#abs(rel), 0o700); } catch (e) {
+          if (errno(e) !== 'EEXIST') ioFail(`creating ${rel}`, e);
+        }
+      }
+      const st = await this.#lstatOrFail(rel);
+      assertSafeDir(st, rel === '.' ? 'the store directory' : rel);
+      chain.set(rel, { dev: st.dev, ino: st.ino });
+    }
+    return chain;
+  }
+
+  async #recheck(chain: Chain): Promise<void> {
+    for (const [rel, ident] of chain) {
+      let st: ObjectStat;
+      try { st = await this.#io.lstat(this.#abs(rel)); } catch (e) {
+        return fail('sentinel.object.unsafePath', `${rel} disappeared during the operation`, e);
+      }
+      if (st.isSymbolicLink() || !st.isDirectory() || !sameIdent(ident, st)) fail('sentinel.object.unsafePath', `${rel} was replaced during the operation`);
+    }
+  }
+
+  async #writeStaged(path: string, encoded: Buffer, encodedDigest: string): Promise<Ident> {
     let fh: ObjectFileHandle;
     try {
       fh = await this.#io.open(path, FS.O_RDWR | FS.O_CREAT | FS.O_EXCL | NOFOLLOW, 0o600);
@@ -371,72 +440,58 @@ export class ObjectStore {
       await fh.sync();
       const back = await readAll(fh, encoded.length, MAX_ENCODED_BYTES);
       if (back.length !== encoded.length || sha256(back) !== encodedDigest) fail('sentinel.object.io', 'the staged object did not read back as written');
+      const st = await fh.stat();
+      assertOwnerOnly(st, 'the staged object');
+      if (!st.isFile() || st.nlink !== 1) fail('sentinel.object.unsafePath', 'the staged object is not a single-link regular file');
+      return { dev: st.dev, ino: st.ino };
     } catch (e) {
       if (e instanceof ObjectStoreError) throw e;
-      ioFail('writing the staged object', e);
+      return ioFail('writing the staged object', e);
     } finally {
       await fh.close().catch(() => {});
     }
   }
 
-  /** The existing representation, verified; undefined when absent; throws when it is anything else. */
-  async #existing(path: string, codec: ObjectCodec, id: ObjectIdentity): Promise<{ encodedDigest: string; encodedSize: number } | undefined> {
-    let encoded: Buffer;
+  /** The existing representation, verified; undefined when absent; throws (never overwrites) otherwise. */
+  #existing(rel: string, codec: ObjectCodec, id: ObjectIdentity): Verified | undefined {
     try {
-      encoded = await this.#readEncoded(path, undefined);
+      return this.#readVerifiedSync({ rawDigest: id.rawDigest, codec, rawSize: id.rawSize });
     } catch (e) {
       if (e instanceof ObjectStoreError && e.code === 'sentinel.object.missing') return undefined;
-      if (e instanceof ObjectStoreError && (e.code === 'sentinel.object.corrupt' || e.code === 'sentinel.object.unsafePath')) {
-        fail('sentinel.object.corruptExisting', `an object already published under this name is invalid: ${e.message}; it was left in place`, e);
+      if (e instanceof ObjectStoreError && e.code === 'sentinel.object.corrupt') {
+        fail('sentinel.object.corruptExisting', `an object already published as ${rel} is invalid: ${e.message}; it was left in place`, e);
       }
       throw e;
     }
+  }
+
+  async #syncFile(rel: string, ident: Ident): Promise<void> {
+    let fh: ObjectFileHandle;
+    try { fh = await this.#io.open(this.#abs(rel), FS.O_RDONLY | NOFOLLOW); } catch (e) { return ioFail('opening the object for fsync', e); }
     try {
-      await decode(encoded, codec, id.rawDigest, id.rawSize);
+      const st = await fh.stat();
+      if (!sameIdent(ident, st)) fail('sentinel.object.unsafePath', 'the object was replaced before its fsync');
+      await fh.sync();
     } catch (e) {
-      return fail('sentinel.object.corruptExisting', `an object already published under this name is invalid: ${(e as Error).message}; it was left in place`, e);
-    }
-    return { encodedDigest: sha256(encoded), encodedSize: encoded.length };
+      if (e instanceof ObjectStoreError) throw e;
+      ioFail('fsync of the object', e);
+    } finally { await fh.close().catch(() => {}); }
   }
 
-  async #readEncoded(path: string, expectedSize: number | undefined): Promise<Buffer> {
+  async #syncDir(rel: string, chain: Chain): Promise<void> {
     let fh: ObjectFileHandle;
+    try { fh = await this.#io.open(this.#abs(rel), FS.O_RDONLY | DIRECTORY | NOFOLLOW); } catch (e) {
+      if (errno(e) === 'ELOOP' || errno(e) === 'ENOTDIR') return fail('sentinel.object.unsafePath', `${rel} was replaced during the operation`, e);
+      return ioFail(`opening ${rel} for fsync`, e);
+    }
     try {
-      fh = await this.#io.open(path, FS.O_RDONLY | NOFOLLOW);
+      const st = await fh.stat();
+      if (!sameIdent(chain.get(rel), st)) fail('sentinel.object.unsafePath', `${rel} was replaced during the operation`);
+      await fh.sync();
     } catch (e) {
-      if (errno(e) === 'ENOENT') return fail('sentinel.object.missing', 'object not found');
-      if (errno(e) === 'ELOOP' || errno(e) === 'EMLINK') return fail('sentinel.object.unsafePath', 'object path is a symbolic link');
-      return ioFail('opening the object', e);
-    }
-    try {
-      let st: { size: number; isFile(): boolean };
-      try { st = await fh.stat(); } catch (e) { return ioFail('inspecting the object', e); }
-      if (!st.isFile()) fail('sentinel.object.unsafePath', 'object path is not a regular file');
-      if (st.size > MAX_ENCODED_BYTES) fail('sentinel.object.corrupt', `object file is ${st.size} bytes; the limit is ${MAX_ENCODED_BYTES}`);
-      if (expectedSize !== undefined && st.size !== expectedSize) fail('sentinel.object.corrupt', `object file is ${st.size} bytes; expected ${expectedSize}`);
-      let bytes: Buffer;
-      try { bytes = await readAll(fh, st.size, MAX_ENCODED_BYTES); } catch (e) {
-        if (e instanceof ObjectStoreError) throw e;
-        return ioFail('reading the object', e);
-      }
-      if (bytes.length !== st.size) fail('sentinel.object.corrupt', 'object file changed size while it was read');
-      return bytes;
-    } finally {
-      await fh.close().catch(() => {});
-    }
-  }
-
-  async #syncFile(path: string): Promise<void> {
-    let fh: ObjectFileHandle;
-    try { fh = await this.#io.open(path, FS.O_RDONLY | NOFOLLOW); } catch (e) { return ioFail('opening the object for fsync', e); }
-    try { await fh.sync(); } catch (e) { ioFail('fsync of the object', e); } finally { await fh.close().catch(() => {}); }
-  }
-
-  async #syncDir(rel: string): Promise<void> {
-    const path = rel === '.' ? this.#root : this.#abs(rel);
-    let fh: ObjectFileHandle;
-    try { fh = await this.#io.open(path, FS.O_RDONLY | DIRECTORY); } catch (e) { return ioFail(`opening ${rel} for fsync`, e); }
-    try { await fh.sync(); } catch (e) { ioFail(`fsync of ${rel}`, e); } finally { await fh.close().catch(() => {}); }
+      if (e instanceof ObjectStoreError) throw e;
+      ioFail(`fsync of ${rel}`, e);
+    } finally { await fh.close().catch(() => {}); }
   }
 
   #checkRef(ref: ObjectRef): void {
@@ -451,14 +506,111 @@ export class ObjectStore {
     if (ref.encodedDigest !== undefined && !HEX64.test(ref.encodedDigest)) fail('sentinel.object.invalidInput', 'an encoded digest is 64 lower-case hex characters');
   }
 
-  /** The raw bytes, after checking encoded size/digest (when known), the decode bound, raw size and raw digest. */
-  async read(ref: ObjectRef): Promise<Buffer> {
+  #chainSync(rels: readonly string[]): Chain {
+    let real: string;
+    try { real = realpathSync.native(this.#root); } catch (e) {
+      if (errno(e) === 'ENOENT') return fail('sentinel.object.missing', 'object not found');
+      return ioFail('resolving the store path', e);
+    }
+    if (real !== this.#root) fail('sentinel.object.unsafePath', 'the store path is not canonical (it passes through a symbolic link or is not its real path)');
+    const chain: Chain = new Map();
+    for (const rel of rels) {
+      let st: ObjectStat;
+      try { st = lstatSync(this.#abs(rel)); } catch (e) {
+        if (errno(e) === 'ENOENT') return fail('sentinel.object.missing', 'object not found');
+        return ioFail(`inspecting ${rel}`, e);
+      }
+      assertSafeDir(st, rel === '.' ? 'the store directory' : rel);
+      chain.set(rel, { dev: st.dev, ino: st.ino });
+    }
+    return chain;
+  }
+
+  #recheckSync(chain: Chain): void {
+    for (const [rel, ident] of chain) {
+      let st: ObjectStat;
+      try { st = lstatSync(this.#abs(rel)); } catch (e) { return fail('sentinel.object.unsafePath', `${rel} disappeared during the read`, e); }
+      if (st.isSymbolicLink() || !st.isDirectory() || !sameIdent(ident, st)) fail('sentinel.object.unsafePath', `${rel} was replaced during the read`);
+    }
+  }
+
+  /**
+   * An object file may carry extra names only inside `objects/tmp/` (a writer between link and unlink). Any other
+   * alias could be written through from outside the store, so it is refused. Re-stats until the count is stable.
+   */
+  #aliasesAllowedSync(fd: number, first: ObjectStat): boolean {
+    let st = first;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (st.nlink === 1) return true;
+      let staged = 0;
+      try {
+        const tmp = lstatSync(this.#abs('objects/tmp'));
+        if (!tmp.isSymbolicLink() && tmp.isDirectory()) {
+          for (const name of readdirSync(this.#abs('objects/tmp'))) {
+            try {
+              const s = lstatSync(this.#abs(`objects/tmp/${name}`));
+              if (s.isFile() && s.dev === st.dev && s.ino === st.ino) staged++;
+            } catch { /* removed meanwhile */ }
+          }
+        }
+      } catch { /* no staging directory: no allowed aliases */ }
+      const again = fstatSync(fd);
+      if (again.nlink === st.nlink && 1 + staged === st.nlink) return true;
+      st = again;
+    }
+    return false;
+  }
+
+  /** Every check a read makes, synchronously; returns the decoded bytes. */
+  #readVerifiedSync(ref: ObjectRef): Verified {
     this.#checkRef(ref);
-    const path = this.#abs(objectRelPath(ref.rawDigest, ref.codec));
-    await this.#checkParents(ref.rawDigest);
-    const encoded = await this.#readEncoded(path, ref.encodedSize);
-    if (ref.encodedDigest !== undefined && sha256(encoded) !== ref.encodedDigest) fail('sentinel.object.corrupt', 'encoded bytes do not match the recorded digest');
-    return decode(encoded, ref.codec, ref.rawDigest, ref.rawSize);
+    const rel = objectRelPath(ref.rawDigest, ref.codec);
+    const chain = this.#chainSync(readChain(ref.rawDigest));
+    const path = this.#abs(rel);
+    let fd: number;
+    try { fd = openSync(path, FS.O_RDONLY | NOFOLLOW); } catch (e) {
+      if (errno(e) === 'ENOENT') return fail('sentinel.object.missing', 'object not found');
+      if (errno(e) === 'ELOOP' || errno(e) === 'EMLINK') return fail('sentinel.object.unsafePath', 'object path is a symbolic link');
+      return ioFail('opening the object', e);
+    }
+    try {
+      const st = fstatSync(fd);
+      if (!st.isFile()) fail('sentinel.object.unsafePath', 'object path is not a regular file');
+      assertOwnerOnly(st, 'the object file');
+      if (!this.#aliasesAllowedSync(fd, st)) fail('sentinel.object.unsafePath', 'the object file has another name outside the store');
+      if (st.size > MAX_ENCODED_BYTES) fail('sentinel.object.corrupt', `object file is ${st.size} bytes; the limit is ${MAX_ENCODED_BYTES}`);
+      if (ref.encodedSize !== undefined && st.size !== ref.encodedSize) fail('sentinel.object.corrupt', `object file is ${st.size} bytes; expected ${ref.encodedSize}`);
+      const encoded = Buffer.alloc(st.size);
+      let off = 0;
+      try {
+        while (off < st.size) {
+          const n = readSync(fd, encoded, off, st.size - off, off);
+          if (n === 0) break;
+          off += n;
+        }
+        if (off === st.size && readSync(fd, Buffer.alloc(1), 0, 1, st.size) !== 0) fail('sentinel.object.corrupt', 'object file grew while it was read');
+      } catch (e) {
+        if (e instanceof ObjectStoreError) throw e;
+        return ioFail('reading the object', e);
+      }
+      if (off !== st.size) fail('sentinel.object.corrupt', 'object file is shorter than it claimed');
+      const encodedDigest = sha256(encoded);
+      if (ref.encodedDigest !== undefined && encodedDigest !== ref.encodedDigest) fail('sentinel.object.corrupt', 'encoded bytes do not match the recorded digest');
+      const decoded = decodeSync(encoded, ref.codec, ref.rawDigest, ref.rawSize);
+      // The name must still be this file, in the same directories.
+      let named: ObjectStat;
+      try { named = lstatSync(path); } catch (e) { return fail('sentinel.object.unsafePath', 'the object name changed during the read', e); }
+      if (named.isSymbolicLink() || !sameIdent(st, named)) fail('sentinel.object.unsafePath', 'the object name changed during the read');
+      this.#recheckSync(chain);
+      return { decoded, encodedDigest, encodedSize: st.size, ident: { dev: st.dev, ino: st.ino } };
+    } finally {
+      closeSync(fd);
+    }
+  }
+
+  /** The raw bytes, after every identity, size, decode-bound and digest check. */
+  async read(ref: ObjectRef): Promise<Buffer> {
+    return this.#readVerifiedSync(ref).decoded;
   }
 
   /** Reads a structured artifact and refuses bytes that are not the canonical form of what they parse to. */
@@ -472,39 +624,14 @@ export class ObjectStore {
     return value;
   }
 
-  /** Integrity check for one reference; never throws for missing or corrupt objects. */
-  async check(ref: ObjectRef): Promise<ObjectCheck> {
-    try {
-      await this.read(ref);
-      return { status: 'ok' };
-    } catch (e) {
-      if (!(e instanceof ObjectStoreError)) throw e;
-      if (e.code === 'sentinel.object.missing') return { status: 'missing', code: e.code, detail: e.message };
-      if (e.code === 'sentinel.object.corrupt') return { status: 'corrupt', code: e.code, detail: e.message };
-      if (e.code === 'sentinel.object.unsafePath') return { status: 'unsafe', code: e.code, detail: e.message };
-      throw e;
-    }
-  }
-
   /**
-   * The same verification as `check()`, synchronously and always against the real filesystem, for callers that
-   * must decide inside a database transaction. It reads and hashes the bytes on disk every time; a receipt is
-   * never trusted on its own. Cost is one bounded read and decode of the object (at most 16 MiB).
+   * Integrity check for one reference, synchronous so a caller can decide inside a database transaction. It reads
+   * and hashes the bytes on disk on every call; a receipt is never trusted on its own. Never throws for a missing,
+   * corrupt or unsafe object. Cost: one bounded read and decode (at most 16 MiB).
    */
   checkSync(ref: ObjectRef): ObjectCheck {
     try {
-      this.#checkRef(ref);
-      for (const rel of ['objects', 'objects/sha256', `objects/sha256/${ref.rawDigest.slice(0, 2)}`]) {
-        let st: ObjectStat;
-        try { st = lstatSync(this.#abs(rel)); } catch (e) {
-          if (errno(e) === 'ENOENT') fail('sentinel.object.missing', 'object not found');
-          return ioFail(`inspecting ${rel}`, e);
-        }
-        if (st.isSymbolicLink() || !st.isDirectory()) fail('sentinel.object.unsafePath', `${rel} is not a directory`);
-      }
-      const encoded = readEncodedSync(this.#abs(objectRelPath(ref.rawDigest, ref.codec)), ref.encodedSize);
-      if (ref.encodedDigest !== undefined && sha256(encoded) !== ref.encodedDigest) fail('sentinel.object.corrupt', 'encoded bytes do not match the recorded digest');
-      decodeSync(encoded, ref.codec, ref.rawDigest, ref.rawSize);
+      this.#readVerifiedSync(ref);
       return { status: 'ok' };
     } catch (e) {
       if (!(e instanceof ObjectStoreError)) throw e;
@@ -515,15 +642,8 @@ export class ObjectStore {
     }
   }
 
-  async #checkParents(rawDigest: string): Promise<void> {
-    for (const rel of ['objects', 'objects/sha256', `objects/sha256/${rawDigest.slice(0, 2)}`]) {
-      let st: ObjectStat;
-      try { st = await this.#io.lstat(this.#abs(rel)); } catch (e) {
-        if (errno(e) === 'ENOENT') fail('sentinel.object.missing', 'object not found');
-        return ioFail(`inspecting ${rel}`, e);
-      }
-      if (st.isSymbolicLink() || !st.isDirectory()) fail('sentinel.object.unsafePath', `${rel} is not a directory`);
-    }
+  async check(ref: ObjectRef): Promise<ObjectCheck> {
+    return this.checkSync(ref);
   }
 
   /** Read-only enumeration of everything under `objects/`. Follows no symbolic link. */
@@ -562,36 +682,6 @@ export class ObjectStore {
       }
     }
     return Object.freeze({ objects: Object.freeze(objects), staging: Object.freeze(staging), unexpected: Object.freeze(unexpected) });
-  }
-}
-
-function readEncodedSync(path: string, expectedSize: number | undefined): Buffer {
-  let fd: number;
-  try { fd = openSync(path, FS.O_RDONLY | NOFOLLOW); } catch (e) {
-    if (errno(e) === 'ENOENT') return fail('sentinel.object.missing', 'object not found');
-    if (errno(e) === 'ELOOP' || errno(e) === 'EMLINK') return fail('sentinel.object.unsafePath', 'object path is a symbolic link');
-    return ioFail('opening the object', e);
-  }
-  try {
-    const st = fstatSync(fd);
-    if (!st.isFile()) fail('sentinel.object.unsafePath', 'object path is not a regular file');
-    if (st.size > MAX_ENCODED_BYTES) fail('sentinel.object.corrupt', `object file is ${st.size} bytes; the limit is ${MAX_ENCODED_BYTES}`);
-    if (expectedSize !== undefined && st.size !== expectedSize) fail('sentinel.object.corrupt', `object file is ${st.size} bytes; expected ${expectedSize}`);
-    const buf = Buffer.alloc(st.size);
-    let off = 0;
-    while (off < st.size) {
-      const n = readSync(fd, buf, off, st.size - off, off);
-      if (n === 0) break;
-      off += n;
-    }
-    if (off !== st.size) fail('sentinel.object.corrupt', 'object file is shorter than it claimed');
-    if (readSync(fd, Buffer.alloc(1), 0, 1, st.size) !== 0) fail('sentinel.object.corrupt', 'object file grew while it was read');
-    return buf;
-  } catch (e) {
-    if (e instanceof ObjectStoreError) throw e;
-    return ioFail('reading the object', e);
-  } finally {
-    closeSync(fd);
   }
 }
 
