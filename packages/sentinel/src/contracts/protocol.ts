@@ -58,6 +58,14 @@ export interface StartMessage extends AttemptBinding {
   /** @maxItems 1024 */
   inputs: ArtifactId[];
   deadlineAt: Timestamp;
+  /**
+   * The plan's checks this attempt is to cover, and the scopes they are over. A result claims coverage only in these
+   * terms; anything else it reports is not coverage of the plan.
+   * @maxItems 2048
+   */
+  checks?: Id[];
+  /** @maxItems 256 */
+  scopes?: ScopeId[];
 }
 
 export interface CancelMessage extends AttemptBinding {

@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { IntentFiles } from '../dist/execution/recovery.js';
 import { LABELS } from '../dist/execution/isolation.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
-import { CANARY_IMAGE, containerPlan, publications } from './coordinator-helpers.ts';
+import { CANARY_IMAGE, containerRegistry, publications, syntheticPlan } from './coordinator-helpers.ts';
 import { Coordinator } from '../dist/execution/coordinator.js';
 
 const enabled = process.env.SENTINEL_ISOLATION === '1';
@@ -93,7 +93,7 @@ test('a container that appears after recovery first looked: admission waits, the
     // Nothing new was admitted while the create was unconfirmed: every attempt after the crash started after it appeared.
     const store = await storeIn(s.root);
     try {
-      for (const w of ['work-A', 'work-B', 'work-C', 'work-D']) {
+      for (const w of Object.values(summary.ids as Record<string, string>)) {
         if (publishedBefore.includes(w)) continue;
         for (const a of store.ledger.listAttempts({ id: w, revision: 1 })) {
           const started = Date.parse(store.ledger.getAttempt(a.id).envelope.startedAt);
@@ -129,10 +129,10 @@ test('within one epoch, a create without a confirmed answer holds admission unti
     const s = scratch('ctr-pending'); roots.push(s.root);
     const store = await storeIn(s.root);
     try {
-      const { plan, registry } = await containerPlan(s.root);
+      const p = await syntheticPlan(store, s.root, {}, { registry: await containerRegistry(), adapterPrefix: 'canary' });
       let deferred = false;
       let appearedAt = 0;
-      // Bounded fault: work-A's first create reports a timeout at once, and the daemon commits it 1.8 s later,
+      // Bounded fault: unit A's first create reports a timeout at once, and the daemon commits it 1.8 s later,
       // after the create's own reconcile window has looked and found nothing.
       const wrapRunner = (real: any) => ({
         ...real,
@@ -145,13 +145,13 @@ test('within one epoch, a create without a confirmed answer holds admission unti
           return real.run(args, signal);
         },
       });
-      const c = await Coordinator.open({ store, plan, registry, scratchRoot: s.work, containers: true, cleanupWaitMs: 20_000, backendOptions: { wrapRunner } });
+      const c = await Coordinator.open({ store, runId: p.runId, run: p.run, registry: p.registry, scratchRoot: s.work, containers: true, cleanupWaitMs: 20_000, backendOptions: { wrapRunner } });
       const summary = await c.run();
       assert.ok(appearedAt > 0, 'the late container did appear');
       assert.equal(summary.state, 'completed', JSON.stringify(summary.failures));
       assert.equal(summary.published, 4);
       assert.ok(summary.failures.some((f: any) => f.code === 'sentinel.execution.reconciliationPending'));
-      const [a] = store.ledger.listAttempts({ id: 'work-A', revision: 1 });
+      const [a] = store.ledger.listAttempts({ id: p.ids.A, revision: 1 });
       assert.ok(Date.parse(store.ledger.getAttempt(a.id).envelope.startedAt) >= appearedAt, 'no attempt started before the pending create resolved');
       assert.deepEqual(storeContainers(store.storeId), []);
     } finally { store.close(); }

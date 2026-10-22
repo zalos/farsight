@@ -66,8 +66,8 @@ test('a record naming another store, or with malformed fields, is kept and repor
     bad('token-short.json', { ...identity(store.storeId), token: 'abc' });
     bad('extra.json', { ...identity(store.storeId), surprise: 1 });
     assert.throws(() => workers.record({ ...identity(store.storeId), pid: -1 } as any), (e: any) => e.code === 'sentinel.execution.journalUnreadable', 'malformed records are not written either');
-    const { plan, registry } = syntheticPlan(s.root);
-    const c = await Coordinator.open({ store, plan, registry, scratchRoot: s.work, cleanupWaitMs: 0 });
+    const p = await syntheticPlan(store, s.root);
+    const c = await Coordinator.open({ store, runId: p.runId, run: p.run, registry: p.registry, scratchRoot: s.work, cleanupWaitMs: 0 });
     const reasons = Object.fromEntries(c.recovery.unresolved.map((u: any) => [`${u.journal}/${u.file}`, u.reason]));
     assert.deepEqual(reasons, {
       [`workers/${foreign.attempt}.json`]: 'names another store', 'intents/n1.json': 'names another store',

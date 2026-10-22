@@ -23,7 +23,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { chmodSync, closeSync, constants, copyFileSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ArtifactId, Digest, Id, WorkRef } from '../contracts/common.js';
+import type { ArtifactId, Digest, Id, ScopeId, WorkRef } from '../contracts/common.js';
 import type { AttemptWorker } from '../contracts/attempt.js';
 import type { ProtocolMessage, ResultMessage } from '../contracts/protocol.js';
 import type { ResourcePolicy } from '../contracts/work.js';
@@ -69,7 +69,9 @@ export interface AttemptRequest {
    * The coordinator records the attempt in the ledger here, so the ledger's fence exists before the worker acts.
    * Throwing stops and removes the worker; the error is rethrown.
    */
-  onWorker?: (worker: AttemptWorker, invocation: { digest: Digest; record: InvocationRecord }) => void;
+  onWorker?: (worker: AttemptWorker, invocation: { digest: Digest; record: InvocationRecord }) => void | Promise<void>;
+  /** The plan's checks and scopes this attempt covers; carried by the start and recorded in the invocation. */
+  assignment?: { checks: Id[]; scopes: ScopeId[] };
   /** A durable journal of container intents (recovery, PR 08): recorded before a create, settled once removed. */
   intents?: IntentJournal;
   /** A durable journal of built-in worker identities: recorded after spawn and before the worker acts. */
@@ -141,6 +143,7 @@ export interface InvocationRecord {
   inputFingerprint: Digest;
   inputs: ArtifactId[];
   deadlineAt: string;
+  assignment?: { checks: Id[]; scopes: ScopeId[] };
 }
 
 const sha256 = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
@@ -159,6 +162,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   const { owner, registry } = request;
   owner.assertHeld();
   const adapter = registry.get(request.adapterId);
+  // A bootstrap operation is the coordinator's own work over the store; nothing is started for it.
+  if (adapter.kind === 'operation') throw new ExecutionError('sentinel.execution.adapterInvalid', { reason: 'an operation is not a worker' });
   if (adapter.kind === 'external' && !request.backend) {
     // No backend means no isolation, and there is no host fallback.
     throw new ExecutionError('sentinel.execution.isolationUnavailable', { reason: 'no container backend' });
@@ -191,11 +196,12 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     coordinatorEpoch: owner.epoch, adapter: { id: adapter.id, version: adapter.version, digest: adapter.digest },
     isolation: adapter.isolation, ...(image ? { image: { reference: image.reference, id: image.id, architecture: image.architecture } } : {}),
     argv, environmentNames, limits, inputFingerprint, inputs: [...inputs].sort(), deadlineAt,
+    ...(request.assignment ? { assignment: { checks: [...request.assignment.checks], scopes: [...request.assignment.scopes] } } : {}),
   };
   const invocationDigest = sha256(canonicalJsonBytes(record));
   const session = new WorkerSession({
     attemptId: request.attemptId, work: request.work, coordinatorEpoch: owner.epoch, adapterId: adapter.id,
-    adapterDigest: adapter.digest, inputFingerprint, inputs, deadlineAt,
+    adapterDigest: adapter.digest, inputFingerprint, inputs, deadlineAt, ...(request.assignment ? { assignment: request.assignment } : {}),
   });
   const outcome: WorkerOutcome = {
     state: 'failed', attemptId: request.attemptId, work: { ...request.work }, coordinatorEpoch: owner.epoch,
@@ -259,7 +265,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       outcome.container = { id: containerId, image: image! };
       outcome.worker = { kind: 'owned-container', containerId, ownershipLabels: { store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch } };
       request.hooks?.at?.('after-spawn');
-      request.onWorker?.(outcome.worker, outcome.invocation);
+      await request.onWorker?.(outcome.worker, outcome.invocation);
     } catch (error) {
       // A container that exists is removed before the error leaves; its intent is settled only when that is confirmed.
       if (containerId) {
@@ -298,7 +304,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       // Durable with its pid, so recovery can find and verify it: only now may it load the adapter.
       proc.child.stdin.write(launchAuthorization(token));
       request.hooks?.at?.('after-spawn');
-      request.onWorker?.(outcome.worker, outcome.invocation);
+      await request.onWorker?.(outcome.worker, outcome.invocation);
       if (guard.ownerClosed) throw new ExecutionError('sentinel.execution.canceled', { reason: 'the store closed while the attempt was being recorded' });
     } catch (error) {
       proc.kill();

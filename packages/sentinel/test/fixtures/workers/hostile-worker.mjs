@@ -121,13 +121,14 @@ switch (behavior) {
         result(start, honestWork(start)); break;
       }
       case 'covering-ok': {
-        // Reports full coverage of the planned check and scope, with its coverage evidence produced.
+        // Reports full coverage of the checks and scopes its start assigned, with its coverage evidence produced.
         const a = honestWork(start);
-        result(start, a, { scannedSet: ['src/app.ts'], coveredChecks: [{ checkId: 'check-sql', coverage: a[0].id }] }); break;
+        result(start, a, { granularity: argument === 'coarse' ? 'aggregate' : 'per-file-per-rule', scannedSet: start.scopes ?? [], coveredChecks: (start.checks ?? []).map(checkId => ({ checkId, coverage: a[0].id })) }); break;
       }
       case 'skip-scope': {
         const a = honestWork(start);
-        result(start, a, { scannedSet: [], skipped: [{ scopeId: 'src/app.ts', reasonCode: 'sentinel.coverage.unsupported' }], coveredChecks: [{ checkId: 'check-sql', coverage: a[0].id }] }); break;
+        result(start, a, { granularity: 'per-file-per-rule', scannedSet: [], skipped: (start.scopes ?? []).map(scopeId => ({ scopeId, reasonCode: 'sentinel.coverage.unsupported' })),
+          coveredChecks: (start.checks ?? []).map(checkId => ({ checkId, coverage: a[0].id })) }); break;
       }
       case 'big-artifact': {
         // One artifact larger than the object store's 16 MiB decoded cap: verified here, refused when stored.

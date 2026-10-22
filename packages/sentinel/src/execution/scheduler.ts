@@ -62,7 +62,7 @@ const key = (r: WorkRef) => `${r.id}@${r.revision}`;
  * Validate the plan's DAG: unique revisions, dependencies inside the plan, no cycle. Returns a topological order.
  * A plan that fails here is refused before anything is written.
  */
-export function orderPlan(works: readonly WorkEnvelope[]): WorkEnvelope[] {
+export function orderPlan(works: readonly WorkEnvelope[], external: ReadonlySet<string> = new Set()): WorkEnvelope[] {
   const byKey = new Map<string, WorkEnvelope>();
   for (const w of works) {
     if (byKey.has(key(w))) throw new ExecutionError('sentinel.execution.planInvalid', { reason: `work ${key(w)} is listed twice` });
@@ -76,6 +76,8 @@ export function orderPlan(works: readonly WorkEnvelope[]): WorkEnvelope[] {
     if (state.get(k) === 'visiting' || depth > works.length) throw new ExecutionError('sentinel.execution.planInvalid', { reason: `the plan has a cycle through ${k}` });
     state.set(k, 'visiting');
     for (const d of w.dependencies) {
+      // Published work of an earlier revision the plan reuses (checked published when the plan is opened).
+      if (external.has(key(d))) continue;
       const dep = byKey.get(key(d));
       if (!dep) throw new ExecutionError('sentinel.execution.planInvalid', { reason: `work ${k} depends on ${key(d)}, which is not in the plan` });
       visit(dep, depth + 1);
@@ -88,13 +90,14 @@ export function orderPlan(works: readonly WorkEnvelope[]): WorkEnvelope[] {
 }
 
 /** Every unit's state from the plan and what the ledger committed. Pure; the coordinator acts on it. */
-export function decide(works: readonly WorkEnvelope[], committed: ReadonlyMap<string, CommittedUnit>, policy: RetryPolicy): UnitDecision[] {
-  const order = orderPlan(works);
+export function decide(works: readonly WorkEnvelope[], committed: ReadonlyMap<string, CommittedUnit>, policy: RetryPolicy,
+  external: ReadonlySet<string> = new Set()): UnitDecision[] {
+  const order = orderPlan(works, external);
   const out = new Map<string, UnitDecision>();
   for (const w of order) {
     const ref = { id: w.id, revision: w.revision };
     const c = committed.get(key(ref));
-    const deps = w.dependencies.map(d => out.get(key(d))!);
+    const deps = w.dependencies.filter(d => !external.has(key(d))).map(d => out.get(key(d))!);
     if (c?.workState === 'published') { out.set(key(ref), { ref, state: 'published' }); continue; }
     if (c?.workState === 'running') { out.set(key(ref), { ref, state: 'running' }); continue; }
     if (c?.workState === 'disabled-by-policy') { out.set(key(ref), { ref, state: 'disabled', reason: 'disabled by policy' }); continue; }

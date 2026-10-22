@@ -38,8 +38,8 @@ test('an admitted capture survives checkout deletion and a new owner; recovery r
   rmSync(repo, { recursive: true, force: true }); // the checkout is gone
   const second = await storeIn(dir);
   try {
-    const { plan, registry } = syntheticPlan(dir);
-    const c = await Coordinator.open({ store: second, plan, registry, scratchRoot: workDir(dir) });
+    const p = await syntheticPlan(second, join(dir, 'synthetic'));
+    const c = await Coordinator.open({ store: second, runId: p.runId, run: p.run, registry: p.registry, scratchRoot: workDir(dir) });
     assert.deepEqual(c.recovery.abortedStages, [], 'no already-released stage is touched');
     assert.equal(c.recovery.clean, true);
     assert.equal((await c.run()).published, 4);
@@ -47,7 +47,9 @@ test('an admitted capture survives checkout deletion and a new owner; recovery r
     assert.deepEqual(second.ledger.getSnapshot(snapshot.id), record);
     const plan2 = await second.planPrune();
     assert.equal(plan2.ok, true);
-    assert.equal(plan2.candidates.length, 0, 'every captured object is reachable from the snapshot roots');
+    assert.equal(plan2.candidates.length, 0, 'every captured object, and the admitted plan with what it pins, is reachable from its roots');
+    const admitted = second.ledger.getPlan(p.runId, 1)!;
+    for (const id of [admitted.plan, admitted.ruleLock, admitted.policy, admitted.profile]) assert.ok((await second.readArtifact(id!)).length > 0);
   } finally { second.close(); }
 });
 
@@ -66,8 +68,8 @@ test('a capture that crashes with 601 stages open is recovered: every stage is a
   const second = await storeIn(dir);
   try {
     assert.equal(second.ledger.listOpenStages(500).length, 500, 'more open stages than one page');
-    const { plan, registry } = syntheticPlan(dir);
-    const c = await Coordinator.open({ store: second, plan, registry, scratchRoot: workDir(dir) });
+    const p = await syntheticPlan(second, join(dir, 'synthetic'));
+    const c = await Coordinator.open({ store: second, runId: p.runId, run: p.run, registry: p.registry, scratchRoot: workDir(dir) });
     assert.deepEqual([...c.recovery.abortedStages].sort(), [...staged].sort(), 'every open stage, and only those');
     assert.deepEqual(second.ledger.listOpenStages(500), []);
     assert.equal((await c.run()).published, 4);

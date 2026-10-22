@@ -3,7 +3,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
-import { syntheticPlan } from './coordinator-helpers.ts';
+import { runEnvelope, workEnvelope } from './store-helpers.ts';
 
 const roots: string[] = [];
 after(() => roots.forEach(removeScratch));
@@ -14,11 +14,14 @@ const now = () => new Date().toISOString();
 async function seeded() {
   const s = fresh();
   const store = await storeIn(s.root);
-  const { plan } = syntheticPlan(s.root);
-  store.ledger.createRun({ ...plan.run, state: 'running', coordinatorEpoch: store.epoch });
-  const [a, b] = plan.works;
-  store.ledger.createWork({ ...a, state: 'ready', coordinatorEpoch: store.epoch });
-  store.ledger.createWork({ ...b, state: 'pending', coordinatorEpoch: store.epoch });
+  // Direct ledger fixtures (no admitted plan): the ledger's own transitions, independent of planning.
+  const run = runEnvelope(store.epoch, { id: 'run-e4', state: 'running' });
+  store.ledger.createRun(run as never);
+  const a = workEnvelope(store.epoch, { id: 'work-A', runId: 'run-e4', state: 'ready' });
+  const b = workEnvelope(store.epoch, { id: 'work-B', runId: 'run-e4', state: 'pending', dependencies: [{ id: 'work-A', revision: 1 }] });
+  store.ledger.createWork(a as never);
+  store.ledger.createWork(b as never);
+  const plan = { run, works: [a, b] };
   return { s, store, plan, A: { id: a.id, revision: 1 }, B: { id: b.id, revision: 1 } };
 }
 const attempt = (store: any, work: any, id: string, ordinal = 1) => store.ledger.startAttempt({
