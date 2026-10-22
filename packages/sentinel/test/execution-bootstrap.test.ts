@@ -262,3 +262,37 @@ test('maxOutputBytes bounds process output, which an operation does not produce:
   const summary = await (await Coordinator.open({ store, runId: 'run-boot', run: runEnvelope(snapshot.id, pin, policy.revision, profile.id), registry, scratchRoot: work })).run();
   assert.equal(summary.published, boot.units.length, JSON.stringify(summary.failures));
 });
+
+/** Hold the analysis artifact's object write for `ms`: the window between the grant check and acceptance. */
+async function slowAnalysisWrites(t: any, ms: number) {
+  const { bootstrapIo } = await import('../dist/execution/bootstrap.js');
+  bootstrapIo.beforeWrite = async (value: any) => { if (value?.analysis?.fingerprint) await new Promise(r => setTimeout(r, ms)); };
+  t.after(() => { bootstrapIo.beforeWrite = undefined; });
+}
+
+for (const [label, grant, budget, code] of [
+  ['the unit deadline', { deadlineMs: 1_000 }, 600_000, 'sentinel.execution.deadlineExceeded'],
+  ['the run deadline', {}, 1_000, 'sentinel.execution.runDeadline'],
+] as const) {
+  test(`${label} passing while a bootstrap operation's objects are written refuses its publication`, needsStore, async t => {
+    const dir = scratch(t, 'sentinel-exec-boot-window-');
+    const work = join(dir, 'work');
+    mkdirSync(work, { mode: 0o700 });
+    const { store, snapshot } = await captured(t, dir);
+    t.after(() => store.close());
+    const { registry, profile, record } = trusted(dir, true, { parse: grant });
+    const { pin } = lockedRules([{ familyId: RULE, adapterId: 'sentinel-pattern' }], []);
+    const { policy } = policyView([RULE]);
+    const boot = planBootstrap({ runId: 'run-boot', sourceIds: ['app'], profile: profile as any });
+    await admitPlan(store, { plan: boot, ruleLock: null, policy: null, profile: record });
+    const run = { ...runEnvelope(snapshot.id, pin, policy.revision, profile.id), budgets: { maxTokens: null, maxCost: null, deadlineMs: budget } };
+    await slowAnalysisWrites(t, 1_200);
+    await (await Coordinator.open({ store, runId: 'run-boot', run, registry, scratchRoot: work, retry: { maxAttempts: 1 } })).run();
+    const parseUnit = boot.units.find(u => u.stage === 'parse')!;
+    assert.equal(store.ledger.getPublication({ id: parseUnit.id, revision: 1 }), null, 'nothing accepted after the deadline');
+    const [a] = store.ledger.listAttempts({ id: parseUnit.id, revision: 1 });
+    assert.equal(store.ledger.getAttempt(a!.id)!.envelope.error?.code, code);
+    assert.deepEqual(store.ledger.listOpenStages(500), [], 'its stage was aborted');
+    assert.equal(store.ledger.getPublication({ id: boot.units.find(u => u.stage === 'inventory')!.id, revision: 1 }), null);
+  });
+}
