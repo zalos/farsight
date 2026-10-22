@@ -19,6 +19,10 @@ const QUALIFY = process.env.SENTINEL_IAC_QUALIFY?.replace(/^linux\//, '');
 // compiled-in checks must be caught, never counted.
 const NO_DISK = buildTrivyAdapter({ id: 'iac-trivy-nodisk', engineArgs: ['config', '--skip-check-update', '--disable-telemetry', '--skip-version-check', '--format', 'json', '--misconfig-scanners=dockerfile', '--ignorefile=', '--exit-code', '0', '--debug', '--cache-dir=/tmp/sentinel-trivy/elsewhere'] });
 
+// A variant whose engine refuses its arguments: the worker reports a diagnostic and then its result, and the failure
+// must arrive as an engine failure (not a protocol violation) that counts nothing.
+const BAD_ARGS = buildTrivyAdapter({ id: 'iac-trivy-badargs', engineArgs: ['config', '--no-such-sentinel-flag'] });
+
 let root: { root: string; work: string };
 let store: any;
 let service: any;
@@ -32,7 +36,7 @@ before(async () => {
   assert.ok(bundle, 'the pinned checks bundle has been acquired');
   root = scratch('trivy');
   store = await storeIn(root.root);
-  service = await createExecutionService(store, { scratchRoot: root.work, registry: createAdapterRegistry([TRIVY_ADAPTER, NO_DISK.definition]), containers: true });
+  service = await createExecutionService(store, { scratchRoot: root.work, registry: createAdapterRegistry([TRIVY_ADAPTER, NO_DISK.definition, BAD_ARGS.definition]), containers: true });
 });
 after(async () => { if (enabled) { await store.close(); removeScratch(root.root); } });
 
@@ -109,4 +113,12 @@ test('changing or deleting the caller’s files after the worker copied them cha
   const r = await pending;
   assert.ok(checks(r, 'services/api/Dockerfile').includes('DS-0002'));
   assert.equal(row(r, 'deploy/pod.yaml'), 'complete:');
+});
+
+test('an engine that fails reports a diagnostic and a result in order, and counts nothing', { skip }, async () => {
+  const r = await run(capturedTree(join(root.root, `tree-${n++}`), { 'Dockerfile': 'trivy/dockerfile-root.fixture' }), { adapter: BAD_ARGS });
+  assert.equal(r.attempt, 'succeeded', 'no protocol violation');
+  assert.equal(r.engineFailure, 'sentinel.trivy.engine.engineError');
+  assert.equal(r.findings.length, 0);
+  assert.equal(row(r, 'Dockerfile'), 'error:engineFailed');
 });
