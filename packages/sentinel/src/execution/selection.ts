@@ -37,12 +37,6 @@ const sorted = (xs: Iterable<string>) => [...xs].sort();
 export const unitsToRun = (s: RerunSelection): Set<Id> => new Set([...s.selected.map(x => x.unit), ...s.downstream]);
 
 /**
- * The selection fits the revision: every unit is either run or held, once; what runs is closed downstream (anything
- * depending on a unit that runs runs too); and nothing that runs depends on a held unit of the same revision (that
- * prerequisite would have to be reused from the parent, which a revision cannot express yet). The revision's own
- * reused work is the selection's.
- */
-/**
  * What a selection runs within one revision: the chosen units and everything downstream of them, and `needed`, the
  * units of the same revision something that runs depends on but that do not run. A non-empty `needed` is refused by
  * the caller (fail-closed): reusing another analysis unit's published result is not supported yet (PR 27).
@@ -58,6 +52,12 @@ export function selectionClosure(units: readonly Pick<PlanWork, 'id' | 'dependen
   return { run, needed: [...needed].sort() };
 }
 
+/**
+ * The selection fits the revision: every unit is either run or held, once; what runs is closed downstream (anything
+ * depending on a unit that runs runs too); and nothing that runs depends on a held unit of the same revision (that
+ * prerequisite would have to be reused from the parent, which a revision cannot express yet). The revision's own
+ * reused work is the selection's.
+ */
 export function checkSelection(plan: Readonly<PlanEnvelope>, s: RerunSelection): void {
   if (s?.schema !== SELECTION_SCHEMA) refuse('the selection is not a sentinel-rerun-selection/draft-1 record');
   if (plan.kind !== 'analysis') refuse('only an analysis revision is admitted with a selection');
@@ -68,14 +68,12 @@ export function checkSelection(plan: Readonly<PlanEnvelope>, s: RerunSelection):
   for (const id of run) if (!ids.has(id) || held.has(id)) refuse(`unit ${id} is not a unit of the revision, or is both run and held`);
   if (run.size + held.size !== ids.size || [...held].some(id => !ids.has(id))) refuse('every unit of the revision is run or held, once');
   if (s.selected.length !== new Set(s.selected.map(x => x.unit)).size) refuse('a unit is selected twice');
-  const byId = new Map<string, PlanWork>(plan.units.map(u => [u.id, u]));
   for (const u of plan.units) {
     for (const d of u.dependencies) {
       if (!ids.has(d.id)) continue;
       if (run.has(d.id) && !run.has(u.id)) refuse(`unit ${u.id} depends on ${d.id}, which runs, so it must run too`);
       if (run.has(u.id) && !run.has(d.id)) refuse(`unit ${u.id} needs ${d.id} of this revision, which is held`);
     }
-    void byId;
   }
   if (JSON.stringify(sorted(plan.reused.map(r => `${r.id}@${r.revision}`))) !== JSON.stringify(sorted(s.reused.map(r => `${r.id}@${r.revision}`)))) {
     refuse('the selection reuses other work than the revision');

@@ -138,7 +138,7 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   // The run is what it would read and do: the captured inventory (not the capture's time), the lock, the policy and
   // the profile. The same content under the same terms plans to the same run.
   const key = { inventory: snapshot.inventoryDigest, lock: current.digest, policy: options.policy.revision, profile: profile.digest, parent: options.parentId ?? null };
-  const runId = options.parentId ? rerunIdOf(store, key) : `run-${digest(key).slice(7, 39)}`;
+  const runId = options.parentId ? rerunIdOf(store, key, true) : `run-${digest(key).slice(7, 39)}`;
   const latest = store.ledger.latestPlan(runId);
   if (latest?.kind === 'analysis') return { outcome: 'kept', disclosure: disclose((await loadPlan(store, runId, latest.revision)).plan) };
 
@@ -367,7 +367,14 @@ export async function previewRerun(store: SentinelStore, parentId: string, selec
  * resumes it. Once that run has ended, an explicit rerun of the same parent and selection is a fresh run with its own
  * id: an ended run is never handed back as a new one.
  */
-function rerunIdOf(store: SentinelStore, request: Record<string, unknown>): string {
+function rerunIdOf(store: SentinelStore, request: Record<string, unknown>, legacyWhole = false): string {
+  if (legacyWhole) {
+    const legacy = `run-${digest(request).slice(7, 39)}`;
+    if (store.ledger.latestPlan(legacy)) {
+      const state = store.ledger.getRun(legacy)?.state;
+      if (state !== 'completed' && state !== 'canceled') return legacy;
+    }
+  }
   for (let generation = 0; ; generation++) {
     const id = `run-${digest({ ...request, generation }).slice(7, 39)}`;
     if (!store.ledger.latestPlan(id)) return id;

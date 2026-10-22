@@ -249,3 +249,39 @@ test('under a changed policy the rerun is planned and admitted under that policy
   assert.equal(admitted.plan.pins.policyDigest, (adopted as any).policy.revision);
   assert.notEqual(rerun.disclosure.runId, (await rerunRun(store, parentId, [plan.units[0]!.id], terms) as any).disclosure.runId, 'another policy is another rerun');
 });
+
+
+test('whole-analysis reruns rejoin an active legacy id across upgrade, then advance generations after terminal states', needsStore, async t => {
+  const { store, parentId, plan, terms, work, ws } = await ranParent(t);
+  const { RuleLockBook } = await import('../dist/service/rule-locks.js');
+  const { publicProfile, publicRegistry } = await import('../dist/service/scanner-profile.js');
+  const { planBootstrap } = await import('../dist/planner/index.js');
+  const { admitPlan } = await import('../dist/execution/plans.js');
+  const { digestOf } = await import('../dist/store/ledger-json.js');
+  const { openSnapshot } = await import('../dist/snapshot/materialize.js');
+  const book = new RuleLockBook(ws.trustDir), current = book.current()!;
+  const profile = publicProfile(publicRegistry(), new Set(), book.packsOf(current.lock));
+  const snapshot = (await openSnapshot(store, plan.pins.snapshotId!)).snapshot;
+  const key = { inventory: snapshot.inventoryDigest, lock: current.digest, policy: terms.policy.revision, profile: profile.digest, parent: parentId };
+  const legacyId = `run-${digestOf(key).slice(7, 39)}`;
+  // This is the pre-generation identity algorithm. Admit a genuine trusted bootstrap at that id, as an older
+  // installation could leave before execution; the new command must continue it rather than admit a parallel run.
+  await admitPlan(store, { plan: planBootstrap({ runId: legacyId, sourceIds: ['workspace'], profile: profile.planner }),
+    ruleLock: null, policy: null, profile: profile.record });
+  const first: any = await rerunRun(store, parentId, [], terms);
+  assert.equal(first.disclosure.runId, legacyId, 'joins the admitted legacy request before its run exists');
+  assert.equal(store.ledger.getRun(legacyId)!.state, 'running');
+  const again: any = await rerunRun(store, parentId, [], terms);
+  assert.equal(again.disclosure.runId, legacyId, 'joins the running legacy request');
+  assert.equal(again.outcome, 'kept');
+  assert.equal((await executeRun(store, legacyId, { scratchRoot: work })).state, 'completed');
+  const fresh: any = await rerunRun(store, parentId, [], terms);
+  assert.notEqual(fresh.disclosure.runId, legacyId, 'a completed legacy request is not active');
+  const canceled = await Coordinator.open({ store, runId: fresh.disclosure.runId, registry: publicRegistry(), scratchRoot: work });
+  canceled.cancel(); await canceled.run();
+  assert.equal(store.ledger.getRun(fresh.disclosure.runId)!.state, 'canceled');
+  const next: any = await rerunRun(store, parentId, [], terms);
+  assert.notEqual(next.disclosure.runId, legacyId);
+  assert.notEqual(next.disclosure.runId, fresh.disclosure.runId, 'a canceled generation cannot be rejoined either');
+  assert.equal((await rerunRun(store, parentId, [], terms) as any).disclosure.runId, next.disclosure.runId);
+});
