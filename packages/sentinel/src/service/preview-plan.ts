@@ -5,8 +5,8 @@
 // Rebuilding is deterministic: the same snapshot, policy revision and adapter give the same plan id, digest, work
 // envelopes and inputs, so a later process (`run <planId>`) recreates exactly what `plan` disclosed and checks it.
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RunEnvelope } from '../contracts/run.js';
 import type { WorkEnvelope } from '../contracts/work.js';
@@ -23,10 +23,30 @@ export const PREVIEW_PROFILE = 'static';
 export const PREVIEW_STAGE = 'sentinel.stage.previewDetector';
 const digest = (v: unknown) => `sha256:${createHash('sha256').update(canonicalJsonBytes(v)).digest('hex')}`;
 
-/** The built-in preview detector, registered for preview plans only (the production registry stays empty). */
+/**
+ * This package's own executable: the manifest's `bin`, found from this module's folder upward. It is right both in
+ * the workspace (`dist/cli.js`) and in the published bundle, whose shared code lives in chunk files beside it.
+ */
+function ownExecutable(): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 6; i++) {
+    const manifest = join(dir, 'package.json');
+    if (existsSync(manifest)) {
+      const pkg = JSON.parse(readFileSync(manifest, 'utf8')) as { name?: string; bin?: Record<string, string> };
+      const bin = pkg.bin?.['farsight-sentinel'];
+      if ((pkg.name === '@farsight/sentinel' || pkg.name === 'farsight-sentinel') && bin) return join(dir, bin);
+    }
+    dir = dirname(dir);
+  }
+  throw new Error('sentinel.execution.adapterInvalid: the package executable could not be found');
+}
+
+/**
+ * The built-in preview detector, registered for preview plans only (the production registry stays empty). It runs
+ * as this package's executable, which becomes the worker when the coordinator gives it the detector's identity.
+ */
 export const PREVIEW_ADAPTERS: AdapterRegistry = createAdapterRegistry([{
-  id: PREVIEW_DETECTOR_ID, version: 'preview-1', kind: 'built-in', isolation: 'child',
-  module: fileURLToPath(new URL('../adapters/preview-detector.js', import.meta.url)),
+  id: PREVIEW_DETECTOR_ID, version: 'preview-1', kind: 'built-in', isolation: 'child', module: ownExecutable(),
 }]);
 
 /** What a plan discloses before anything runs. */

@@ -7,6 +7,7 @@
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { adoptWorkspaceSettings, planWorkspace, previewReport, runPlan, runStatus, workspaceOf, PolicyError } from './service/local.js';
 import { renderPreviewJson, renderPreviewMarkdown } from './reports/preview.js';
+import { PREVIEW_DETECTOR_ID, runPreviewWorker } from './adapters/preview-detector.js';
 import { CAPABILITIES } from './capabilities.js';
 import { parseArgs, plannedIn, COMMANDS, type ParsedCommand } from './cli/args.js';
 import { initWorkspace, InitError } from './cli/init.js';
@@ -223,4 +224,7 @@ export async function main(argv: string[]): Promise<number> {
   }
 }
 
-process.exitCode = await main(process.argv.slice(2));
+// The coordinator starts the preview detector as this same executable, with its adapter identity in the (otherwise
+// empty) environment: then this process is that worker, not the command line. Nothing else selects it.
+if (process.env.SENTINEL_ADAPTER_ID === PREVIEW_DETECTOR_ID) await runPreviewWorker();
+else process.exitCode = await main(process.argv.slice(2));

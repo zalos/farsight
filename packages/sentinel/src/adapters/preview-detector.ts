@@ -39,7 +39,8 @@ export function detect(path: string, text: string, input: string): PreviewFindin
 const P = 'sentinel-worker/draft-1';
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 
-async function worker(): Promise<void> {
+/** Runs the worker protocol on this process's stdin and stdout. Only the package's executable calls it. */
+export async function runPreviewWorker(): Promise<void> {
   const IN = process.env.SENTINEL_INPUT!;
   const OUT = process.env.SENTINEL_OUTPUT!;
   const send = (m: unknown) => process.stdout.write(`${JSON.stringify(m)}\n`);
@@ -91,6 +92,3 @@ async function worker(): Promise<void> {
   });
 }
 
-// Run as a worker only when the coordinator starts this module (it sets the adapter identity); importing it
-// for `detect` starts nothing.
-if (process.env.SENTINEL_ADAPTER_ID === PREVIEW_DETECTOR_ID) await worker();
