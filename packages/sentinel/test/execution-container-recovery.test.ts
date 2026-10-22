@@ -36,7 +36,7 @@ test('a create whose reply is lost to a crash: recovery removes the container by
   assert.equal(summary.published, 4);
   assert.equal(summary.recovery.removedContainers.length, 1);
   assert.equal(summary.recovery.settledIntents.length, 1, 'its journaled intent was settled');
-  assert.equal(summary.clean, true);
+  assert.equal(summary.recovery.clean, true);
   assert.deepEqual(storeContainers(id), []);
   const store = await storeIn(s.root);
   try { assert.ok([...publications(store, 'run-e4').values()].every(n => n === 1)); } finally { store.close(); }
@@ -88,7 +88,7 @@ test('a crash while the run is canceling: its running container is removed and t
   assert.equal(run(s.root, 'cancel').signal, 'SIGKILL');
   const id = await storeIdOf(s.root);
   assert.equal(storeContainers(id).length, 1, 'the hung worker container outlived its coordinator');
-  const finished = run(s.root, 'none');
+  const finished = run(s.root, 'none-cancel');
   assert.equal(finished.status, 0, finished.stderr.slice(0, 600));
   const summary = summaryOf(finished);
   assert.equal(summary.state, 'canceled');

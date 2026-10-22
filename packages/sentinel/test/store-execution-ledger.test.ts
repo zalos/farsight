@@ -36,7 +36,9 @@ test('work is released and held with a catalog reason; illegal moves are refused
   store.close();
   const again = await storeIn(s.root);
   try {
-    assert.deepEqual({ ...again.ledger.getWork(B) }, { work: B, runId: 'run-e4', state: 'blocked', activeAttemptId: null, reason: 'sentinel.execution.dependencyFailed' });
+    const { envelope, ...row } = again.ledger.getWork(B);
+    assert.deepEqual(row, { work: B, runId: 'run-e4', state: 'blocked', activeAttemptId: null, reason: 'sentinel.execution.dependencyFailed' });
+    assert.equal(envelope.id, B.id, 'the envelope it was created with');
     again.ledger.setWorkState(B, 'ready');
     assert.equal(again.ledger.getWork(B).reason, null);
     const events = again.ledger.readEvents({ after: 0, limit: 500 }).events.filter((e: any) => e.kind === 'work-state');

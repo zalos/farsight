@@ -916,12 +916,14 @@ export class Ledger {
     return { events, cursor: events.at(-1)?.sequence ?? after, more };
   }
 
-  getWork(ref: WorkRef): { work: WorkRef; runId: Id; state: string; activeAttemptId: Id | null; reason: string | null } | null {
+  /** A work revision as recorded: its current state, and the envelope it was created with (immutable identity). */
+  getWork(ref: WorkRef): { work: WorkRef; runId: Id; state: string; activeAttemptId: Id | null; reason: string | null; envelope: WorkEnvelope } | null {
     checkRef(ref);
-    const r = this.#read(() => this.#get('SELECT run_id, state, active_attempt_id, state_reason FROM work_units WHERE id = ? AND revision = ?',
+    const r = this.#read(() => this.#get('SELECT run_id, state, active_attempt_id, state_reason, envelope FROM work_units WHERE id = ? AND revision = ?',
       ref.id, ref.revision));
     return r ? { work: { id: ref.id, revision: ref.revision }, runId: String(r.run_id), state: String(r.state),
-      activeAttemptId: r.active_attempt_id === null ? null : String(r.active_attempt_id), reason: r.state_reason === null ? null : String(r.state_reason) } : null;
+      activeAttemptId: r.active_attempt_id === null ? null : String(r.active_attempt_id), reason: r.state_reason === null ? null : String(r.state_reason),
+      envelope: JSON.parse(String(r.envelope)) as WorkEnvelope } : null;
   }
 
   /** A run as recorded: its state, its outcome once completed, and its envelope. */

@@ -3,35 +3,46 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { builtInRegistry, inputs } from './execution-helpers.ts';
+import { influenceManifest } from '../dist/execution/plan.js';
+import { inputFingerprintOf } from '../dist/execution/supervisor.js';
 
 const digest = (s: string) => `sha256:${createHash('sha256').update(s).digest('hex')}`;
 
-export function syntheticPlan(root: string, behaviours: Record<string, string> = {}, options: { runId?: string; limits?: Record<string, number>; argument?: string; resources?: Record<string, Record<string, number>>; held?: Record<string, string> } = {}) {
+export function syntheticPlan(root: string, behaviours: Record<string, string> = {}, options: { runId?: string; limits?: Record<string, number>; argument?: string; resources?: Record<string, Record<string, number>>; held?: Record<string, string>; registry?: any; adapterPrefix?: string; required?: (unit: string) => { checks: string[]; scope: string[] } | undefined } = {}) {
   const runId = options.runId ?? 'run-e4';
   const units = ['A', 'B', 'C', 'D'];
   const deps: Record<string, string[]> = { A: [], B: ['A'], C: ['A'], D: ['B', 'C'] };
   const behaviourOf = (u: string) => behaviours[u] ?? 'ok';
-  const registry = builtInRegistry(join(root, 'adapters'), [...new Set(units.map(behaviourOf))], options.limits ?? {}, options.argument);
+  const registry = options.registry ?? builtInRegistry(join(root, 'adapters'), [...new Set(units.map(behaviourOf))], options.limits ?? {}, options.argument);
+  const prefix = options.adapterPrefix ?? 'test';
   const captured = inputs(root);
+  const ids = captured.map(c => c.id);
   const run = {
     schema: 'sentinel-run/draft-1', id: runId, parentId: null, baselineId: null, snapshotId: 'snap-synthetic', planRevision: 1,
     coordinatorEpoch: 'epoch-planning', ruleLockDigest: digest('rules'), toolLockDigest: digest('tools'), policyRevisionDigest: digest('policy'),
     requestedScope: { sourceIds: ['synthetic'], profile: 'static' }, budgets: { maxTokens: null, maxCost: null, deadlineMs: 600_000 },
     createdAt: '2026-10-22T00:00:00Z', state: 'planned',
   };
-  const works = units.map(u => ({
-    schema: 'sentinel-work/draft-1', id: `work-${u}`, revision: 1, runId, planRevision: 1,
-    stage: { contract: 'sentinel.stage.synthetic', contractVersion: 'draft-1', kind: 'coded', implementationDigest: digest(`stage-${u}`) },
-    inputFingerprint: digest(`inputs-${u}`), influenceManifest: digest(`influence-${u}`),
-    dependencies: deps[u]!.map(d => ({ id: `work-${d}`, revision: 1 })),
-    resources: { deadlineMs: 120_000, memoryBytes: 2_147_483_648, cpuQuota: 2, maxPids: 128, maxOutputBytes: 4_194_304, ...(options.resources?.[u] ?? {}) },
-    coordinatorEpoch: 'epoch-planning', createdAt: '2026-10-22T00:00:00Z', activeAttemptId: null,
-    ...(options.held?.[u] ? { state: 'disabled-by-policy', reasonCode: options.held[u] } : { state: 'pending' }),
-  }));
+  const works = units.map(u => {
+    // Bound exactly as the coordinator checks: the adapter's digest, the actual inputs, the influence manifest.
+    const adapter = registry.get(`${prefix}-${behaviourOf(u)}`);
+    const w = {
+      schema: 'sentinel-work/draft-1', id: `work-${u}`, revision: 1, runId, planRevision: 1,
+      stage: { contract: 'sentinel.stage.synthetic', contractVersion: 'draft-1', kind: 'coded', implementationDigest: adapter.digest },
+      dependencies: deps[u]!.map(d => ({ id: `work-${d}`, revision: 1 })),
+      resources: { deadlineMs: 120_000, memoryBytes: 2_147_483_648, cpuQuota: 2, maxPids: 128, maxOutputBytes: 4_194_304, ...(options.resources?.[u] ?? {}) },
+      coordinatorEpoch: 'epoch-planning', createdAt: '2026-10-22T00:00:00Z', activeAttemptId: null,
+      ...(options.held?.[u] ? { state: 'disabled-by-policy', reasonCode: options.held[u] } : { state: 'pending' }),
+    } as any;
+    w.inputFingerprint = inputFingerprintOf(ids);
+    w.influenceManifest = influenceManifest(w, adapter, ids).id;
+    return w;
+  });
   const plan = {
     run, works,
-    adapterFor: (w: { id: string }) => `test-${behaviourOf(w.id.slice(5))}`,
+    adapterFor: (w: { id: string }) => `${prefix}-${behaviourOf(w.id.slice(5))}`,
     inputsFor: () => captured,
+    ...(options.required ? { requiredCoverage: (w: { id: string }) => options.required!(w.id.slice(5)) } : {}),
   };
   return { plan: plan as any, registry, units };
 }
@@ -69,13 +80,11 @@ export async function containerPlan(root: string, behaviours: Record<string, str
   const { readFileSync } = await import('node:fs');
   const { createAdapterRegistry } = await import('../dist/execution/registry.js');
   const { WORKER } = await import('./execution-helpers.ts');
-  const base = syntheticPlan(root, behaviours);
   const source = readFileSync(WORKER, 'utf8');
-  const kinds = [...new Set(base.units.map(u => behaviours[u] ?? 'ok'))];
+  const kinds = [...new Set(['A', 'B', 'C', 'D'].map(u => behaviours[u] ?? 'ok'))];
   const registry = createAdapterRegistry(kinds.map(b => ({
     id: `canary-${b}`, version: '0.0.0-test', kind: 'external' as const, isolation: 'container' as const, image: CANARY_IMAGE,
     command: ['node', '--input-type=module', '-e', source, b], limits: { timeoutMs: 30_000, helloTimeoutMs: 15_000, cancelGraceMs: 2_000, memoryBytes: 256 * 1024 * 1024, pids: 64, tmpfsBytes: 16 * 1024 * 1024 },
   })));
-  const plan = { ...base.plan, adapterFor: (w: { id: string }) => `canary-${behaviours[w.id.slice(5)] ?? 'ok'}` };
-  return { plan, registry };
+  return { plan: syntheticPlan(root, behaviours, { registry, adapterPrefix: 'canary' }).plan, registry };
 }

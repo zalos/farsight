@@ -39,6 +39,8 @@ export interface PublishRequest {
   outputs: readonly VerifiedOutput[];
   endedAt: string;
   hooks?: PublicationHooks;
+  /** Coordinator records published with the result (the influence manifest, the coverage evaluation), in order. */
+  records?: ReadonlyArray<{ value: unknown; schema: string }>;
 }
 
 /**
@@ -51,8 +53,12 @@ export async function publishOutcome(request: PublishRequest): Promise<Publicati
   const stageId = stageIdFor(attemptId);
   const artifactIds = request.outputs.map(o => o.id);
   const resultIdentity = store.objects.identifyCanonicalJson(request.result);
+  const records = (request.records ?? []).map(r => ({ ...r, identity: store.objects.identifyCanonicalJson(r.value) }));
+  const recordIds = records.map(r => r.identity.id);
   const staged: StagedArtifact[] = [
     { id: resultIdentity.id, schema: RESULT_SCHEMA, privacy: 'source-derived', links: [...new Set(artifactIds)].filter(id => id !== resultIdentity.id) },
+    ...records.filter((r, i) => r.identity.id !== resultIdentity.id && recordIds.indexOf(r.identity.id) === i && !artifactIds.includes(r.identity.id))
+      .map(r => ({ id: r.identity.id, schema: r.schema, privacy: 'metadata' as const })),
     ...request.outputs.filter(o => o.id !== resultIdentity.id)
       .map(o => ({ id: o.id, schema: o.mediaType.slice(0, 128) || 'application/octet-stream', privacy: 'source-derived' as const })),
   ];
@@ -63,6 +69,9 @@ export async function publishOutcome(request: PublishRequest): Promise<Publicati
   let receipts: StoredObject[];
   try {
     receipts = [await store.objects.putCanonicalJson(request.result, { expect: resultIdentity })];
+    for (const r of records) {
+      if (staged.some(s => s.id === r.identity.id && s.schema === r.schema)) receipts.push(await store.objects.putCanonicalJson(r.value, { expect: r.identity }));
+    }
     for (const o of request.outputs) {
       if (o.id === resultIdentity.id) continue;
       const bytes = readFileSync(o.path);
@@ -74,7 +83,9 @@ export async function publishOutcome(request: PublishRequest): Promise<Publicati
     throw error;
   }
   hooks?.at?.('after-objects', context);
-  const receipt = store.ledger.publish({ work, attemptId, stageId, receipts, outputs: [resultIdentity.id, ...artifactIds.filter(id => id !== resultIdentity.id)], endedAt: request.endedAt });
+  const outputs = [...new Set([resultIdentity.id, ...recordIds, ...artifactIds])];
+  receipts = receipts.filter((r, i) => receipts.findIndex(x => x.id === r.id) === i);
+  const receipt = store.ledger.publish({ work, attemptId, stageId, receipts, outputs, endedAt: request.endedAt });
   hooks?.at?.('after-publish', context);
   return receipt;
 }

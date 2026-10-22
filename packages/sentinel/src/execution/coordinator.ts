@@ -28,6 +28,10 @@ import {
 } from './scheduler.js';
 import { createExecutionService, type ExecutionService } from './service.js';
 import { releaseWorkDir, type CapturedInput, type WorkerOutcome } from './supervisor.js';
+import {
+  checkRecordedRun, checkRecordedWork, COVERAGE_EVALUATION_SCHEMA, evaluateCoverage, INFLUENCE_SCHEMA, validatePlan,
+  type CoverageEvaluation, type RequiredCoverage, type ValidatedPlan,
+} from './plan.js';
 
 /** What PR 06's planner hands the coordinator: canonical envelopes plus the two lookups execution needs. */
 export interface PlanBoundary {
@@ -38,6 +42,11 @@ export interface PlanBoundary {
   adapterFor(work: WorkEnvelope): Id;
   /** The captured inputs the work's input fingerprint covers. */
   inputsFor(work: WorkEnvelope): readonly CapturedInput[];
+  /**
+   * The planned checks and scope a work must cover (PR 06's check mapping). Without it a unit's coverage is
+   * unevaluated and the run can at best complete with partial coverage.
+   */
+  requiredCoverage?(work: WorkEnvelope): RequiredCoverage | undefined;
 }
 
 export const COORDINATOR_BOUNDARIES = ['before-spawn', 'after-spawn', 'after-attempt-start', ...PUBLICATION_BOUNDARIES] as const;
@@ -88,6 +97,8 @@ export interface RunSummary {
   blockedByCleanup: string[];
   /** Records acknowledged as terminal-unknown by acknowledgeUnknownCleanup(): kept for audit, never clean. */
   unknownCleanup: string[];
+  /** Each published unit's coverage evaluation, read back from its publication. */
+  coverage: CoverageEvaluation[];
 }
 
 const key = (r: WorkRef) => `${r.id}@${r.revision}`;
@@ -99,14 +110,13 @@ const DEPENDENCY_FAILED: CatalogKey = 'sentinel.execution.dependencyFailed';
 
 export class Coordinator {
   readonly #store: SentinelStore;
-  readonly #plan: PlanBoundary;
+  readonly #plan: ValidatedPlan;
   readonly #service: ExecutionService;
   readonly #intents: IntentFiles;
   readonly #workers: WorkerFiles;
   readonly #pool: ReservationPool;
   readonly #retry: RetryPolicy;
   readonly #hooks?: CoordinatorHooks;
-  readonly #registry: AdapterRegistry;
   readonly #cancel = new AbortController();
   readonly #failures: UnitFailure[] = [];
   /** Units refused before any worker existed (no attempt in the ledger): not retried in this coordinator. */
@@ -121,8 +131,11 @@ export class Coordinator {
   #pauseRequested = false;
   #cancelRequested = false;
 
-  private constructor(o: CoordinatorOptions, service: ExecutionService, intents: IntentFiles, workers: WorkerFiles, recovery: RecoveryReport) {
-    this.#store = o.store; this.#plan = o.plan; this.#service = service; this.#intents = intents; this.#workers = workers;
+  /** Evaluations read back from publications, by work. */
+  readonly #coverage = new Map<string, CoverageEvaluation>();
+
+  private constructor(o: CoordinatorOptions, plan: ValidatedPlan, service: ExecutionService, intents: IntentFiles, workers: WorkerFiles, recovery: RecoveryReport) {
+    this.#store = o.store; this.#plan = plan; this.#service = service; this.#intents = intents; this.#workers = workers;
     this.#unknown = new UnknownCleanup(o.store.storePath);
     const wait = o.cleanupWaitMs ?? 30_000;
     if (!Number.isInteger(wait) || wait < 0 || wait > 600_000) throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'cleanupWaitMs is 0 to 600000' });
@@ -130,7 +143,6 @@ export class Coordinator {
     this.#backendOptions = o.backendOptions;
     this.#pool = new ReservationPool(o.capacity ?? DEFAULT_CAPACITY);
     this.#retry = checkRetryPolicy(o.retry ?? DEFAULT_RETRY);
-    this.#registry = o.registry ?? TRUSTED_ADAPTERS;
     if (o.hooks) this.#hooks = o.hooks;
     this.recovery = recovery;
   }
@@ -138,18 +150,16 @@ export class Coordinator {
   /** Validate the plan, bind to the store, and recover whatever an earlier epoch left. Starts no new work. */
   static async open(o: CoordinatorOptions): Promise<Coordinator> {
     o.store.assertHeld();
-    orderPlan(o.plan.works);
-    for (const w of o.plan.works) {
-      if (w.runId !== o.plan.run.id || w.planRevision !== o.plan.run.planRevision) {
-        throw new ExecutionError('sentinel.execution.planInvalid', { reason: `work ${key(w)} belongs to another run or plan revision` });
-      }
-    }
+    // The plan as approved: frozen, bound to its adapters and actual inputs, and matching what the ledger holds.
+    const plan = validatePlan(o.plan, o.registry ?? TRUSTED_ADAPTERS);
+    checkRecordedRun(plan, o.store.ledger.getRun(plan.run.id)?.envelope);
+    for (const w of plan.works) checkRecordedWork(plan, { id: w.id, revision: w.revision }, o.store.ledger.getWork({ id: w.id, revision: w.revision }));
     const service = await createExecutionService(o.store, { scratchRoot: o.scratchRoot, ...(o.registry ? { registry: o.registry } : {}),
       ...(o.containers ? { containers: true } : {}), ...(o.backendOptions?.wrapRunner ? { wrapRunner: o.backendOptions.wrapRunner } : {}) });
     const intents = new IntentFiles(o.store.storePath);
     const workers = new WorkerFiles(o.store.storePath);
     const recovery = await recoverStore(o.store, { intents, workers, ...(service.backend ? { backend: service.backend } : {}) });
-    return new Coordinator(o, service, intents, workers, recovery);
+    return new Coordinator(o, plan, service, intents, workers, recovery);
   }
 
   /** Stop admitting new work; attempts in flight may finish and publish. The run becomes paused once they end. */
@@ -186,6 +196,8 @@ export class Coordinator {
   /** Execute (or resume) the run until it completes, pauses or is canceled. */
   async run(): Promise<RunSummary> {
     const runId = this.#plan.run.id;
+    // Earlier publications' coverage evaluations, read once; they decide the outcome together with this run's.
+    await this.#loadCoverage();
     let state = this.#runState();
     if (state === undefined) {
       this.#store.ledger.createRun({ ...this.#plan.run, state: 'running', coordinatorEpoch: this.#store.epoch } as RunEnvelope);
@@ -214,7 +226,7 @@ export class Coordinator {
         for (const d of decisions) {
           if (d.state !== 'ready' || inflight.has(key(d.ref))) continue;
           const work = this.#work(d.ref);
-          const limits = effectiveLimits(this.#registry.get(this.#plan.adapterFor(work)).limits, work.resources);
+          const limits = effectiveLimits(this.#plan.adapterOf(d.ref).limits, work.resources);
           const reservation = this.#pool.tryReserve(key(d.ref), { memoryBytes: limits.memoryBytes, cpus: limits.cpus });
           if (!reservation) break;
           const task = this.#unit(work).finally(() => { this.#pool.release(reservation); inflight.delete(key(d.ref)); });
@@ -233,8 +245,10 @@ export class Coordinator {
         const final = this.progress();
         if (final.every(d => ['published', 'failed', 'blocked', 'disabled'].includes(d.state))) {
           this.#persistHolds(final);
-          const outcome: RunOutcome = final.every(d => d.state === 'published') ? 'complete-coverage'
-            : final.every(d => d.state === 'published' || d.state === 'disabled') ? 'partial-coverage' : 'execution-failure';
+          // Exit codes prove nothing about coverage: complete only when every unit published and its evaluation is complete.
+          const evaluations = final.filter(d => d.state === 'published').map(d => this.#evaluationOf(d.ref));
+          const outcome: RunOutcome = !final.every(d => d.state === 'published' || d.state === 'disabled') ? 'execution-failure'
+            : final.every(d => d.state === 'published') && evaluations.every(e => e?.verdict === 'complete') ? 'complete-coverage' : 'partial-coverage';
           this.#store.ledger.setRunState(runId, 'completed', { outcome });
           break;
         }
@@ -301,14 +315,14 @@ export class Coordinator {
   }
 
   /** Create a plan unit's revision in the ledger under this epoch; a plan-held unit is created pending, then held. */
-  #create(work: WorkEnvelope, state: 'pending' | 'ready'): void {
-    const { reasonCode: _held, ...rest } = work as WorkEnvelope & { reasonCode?: string };
+  #create(work: Readonly<WorkEnvelope>, state: 'pending' | 'ready'): void {
+    const { reasonCode: _held, ...rest } = structuredClone(work) as WorkEnvelope & { reasonCode?: string };
     void _held;
     this.#store.ledger.createWork({ ...rest, state, activeAttemptId: null, coordinatorEpoch: this.#store.epoch, createdAt: now() } as WorkEnvelope);
   }
 
   /** One attempt of one unit, from creating its work revision to publishing or ending it. Never throws. */
-  async #unit(work: WorkEnvelope): Promise<void> {
+  async #unit(work: Readonly<WorkEnvelope>): Promise<void> {
     const ref: WorkRef = { id: work.id, revision: work.revision };
     let attemptId: Id | null = null;
     let outcome: WorkerOutcome | undefined;
@@ -319,7 +333,7 @@ export class Coordinator {
       const ordinal = this.#store.ledger.listAttempts(ref).length + 1;
       const id = attemptIdFor(ref, ordinal);
       outcome = await this.#service.run({
-        adapterId: this.#plan.adapterFor(work), attemptId: id, work: ref, inputs: this.#plan.inputsFor(work),
+        adapterId: this.#plan.adapterOf(ref).id, attemptId: id, work: ref, inputs: this.#plan.inputsOf(ref),
         signal: this.#cancel.signal, intents: this.#intents, workers: this.#workers, resources: work.resources,
         ...(this.#hooks ? { hooks: { at: (b: 'before-spawn' | 'after-spawn') => this.#hooks!.at?.(b, { work: ref, attemptId: id }) } } : {}),
         onWorker: worker => {
@@ -331,10 +345,15 @@ export class Coordinator {
           this.#hooks?.at?.('after-attempt-start', { work: ref, attemptId: id });
         },
       });
-      if (outcome.state === 'succeeded' && attemptId) {
+      if (outcome.state === 'succeeded' && attemptId && outcome.result!.inputFingerprint !== work.inputFingerprint) {
+        this.#end(ref, attemptId, 'failed', 'sentinel.execution.resultMismatch', { reason: 'the result names other inputs than the approved plan' });
+      } else if (outcome.state === 'succeeded' && attemptId) {
         try {
+          const evaluation = evaluateCoverage(ref, outcome.result!, this.#plan.requiredOf(ref));
           await publishOutcome({ store: this.#store, work: ref, attemptId, result: outcome.result!, outputs: outcome.outputs, endedAt: now(),
+            records: [{ value: this.#plan.manifestOf(ref), schema: INFLUENCE_SCHEMA }, { value: evaluation, schema: COVERAGE_EVALUATION_SCHEMA }],
             ...(this.#hooks ? { hooks: { at: (b, c) => this.#hooks!.at?.(b, c) } } : {}) });
+          this.#coverage.set(key(ref), evaluation);
         } catch (error) {
           const canceled = error instanceof LedgerError && error.code === 'sentinel.store.wrongState';
           this.#end(ref, attemptId, canceled ? 'canceled' : 'failed', canceled ? 'sentinel.execution.canceled' : codeOf(error), detailOf(error));
@@ -380,7 +399,23 @@ export class Coordinator {
     if (!this.#cancelRequested && !this.#pauseRequested) this.#failedUnstarted.set(key(ref), code);
   }
 
-  #work(ref: WorkRef): WorkEnvelope {
+  /** A published unit's coverage evaluation: this coordinator's, or one read back from an earlier publication. */
+  #evaluationOf(ref: WorkRef): CoverageEvaluation | undefined {
+    return this.#coverage.get(key(ref));
+  }
+
+  /** Read every earlier publication's evaluation from the store; an unreadable one counts as not complete. */
+  async #loadCoverage(): Promise<void> {
+    for (const w of this.#plan.works) {
+      const ref = { id: w.id, revision: w.revision };
+      if (this.#coverage.has(key(ref))) continue;
+      const out = this.#store.ledger.getPublication(ref)?.outputs.find(o => o.schema === COVERAGE_EVALUATION_SCHEMA);
+      if (!out) continue;
+      try { this.#coverage.set(key(ref), JSON.parse((await this.#store.readArtifact(out.id)).toString('utf8')) as CoverageEvaluation); } catch { /* not complete */ }
+    }
+  }
+
+  #work(ref: WorkRef): Readonly<WorkEnvelope> {
     return this.#plan.works.find(w => w.id === ref.id && w.revision === ref.revision)!;
   }
 
@@ -407,10 +442,18 @@ export class Coordinator {
     const units = this.progress();
     const run = this.#store.ledger.getRun(this.#plan.run.id);
     let published = 0;
-    for (const w of this.#plan.works) if (this.#store.ledger.getPublication({ id: w.id, revision: w.revision })) published++;
+    const coverage: CoverageEvaluation[] = [];
+    for (const w of this.#plan.works) {
+      const ref = { id: w.id, revision: w.revision };
+      if (!this.#store.ledger.getPublication(ref)) continue;
+      published++;
+      const e = this.#evaluationOf(ref);
+      if (e) coverage.push(e);
+    }
     return { runId: this.#plan.run.id, state: run?.state ?? 'planned', ...(run?.outcome ? { outcome: run.outcome } : {}), units,
-      failures: [...this.#failures], recovery: this.recovery, published, blockedByCleanup,
-      unknownCleanup: this.#unknown.list(), clean: this.recovery.clean && this.#unknown.list().length === 0 };
+      failures: [...this.#failures], recovery: this.recovery, published, blockedByCleanup, coverage,
+      unknownCleanup: this.#unknown.list(),
+      clean: this.recovery.clean && this.#unknown.list().length === 0 && coverage.length === published && coverage.every(c => c.verdict === 'complete') };
   }
 }
 

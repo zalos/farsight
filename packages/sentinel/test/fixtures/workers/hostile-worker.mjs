@@ -115,6 +115,15 @@ switch (behavior) {
         if (!existsSync(argument)) { writeFileSync(argument, 'attempted'); process.exit(5); }
         result(start, honestWork(start)); break;
       }
+      case 'covering-ok': {
+        // Reports full coverage of the planned check and scope, with its coverage evidence produced.
+        const a = honestWork(start);
+        result(start, a, { scannedSet: ['src/app.ts'], coveredChecks: [{ checkId: 'check-sql', coverage: a[0].id }] }); break;
+      }
+      case 'skip-scope': {
+        const a = honestWork(start);
+        result(start, a, { scannedSet: [], skipped: [{ scopeId: 'src/app.ts', reasonCode: 'sentinel.coverage.unsupported' }], coveredChecks: [{ checkId: 'check-sql', coverage: a[0].id }] }); break;
+      }
       case 'big-artifact': {
         // One artifact larger than the object store's 16 MiB decoded cap: verified here, refused when stored.
         const bytes = Buffer.alloc(17 * 1024 * 1024, 3);

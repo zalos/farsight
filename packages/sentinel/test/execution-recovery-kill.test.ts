@@ -55,7 +55,7 @@ for (const boundary of COORDINATOR_BOUNDARIES) {
         assert.equal(l.openStages, 0, `rep ${rep}: no stage left open`);
         // Every worker identity was settled: recovery proved it stopped, or the worker exited and was reaped.
         assert.deepEqual(new WorkerFiles(store.storePath).list(), { records: [], unresolved: [] }, `rep ${rep}: no worker obligation left`);
-        assert.equal(summary.clean, true, `rep ${rep}: recovery is clean`);
+        assert.equal(summary.recovery.clean, true, `rep ${rep}: recovery is clean`);
         if (rep === 0) t.diagnostic(`${boundary}: recovery ${JSON.stringify({ interrupted: summary.recovery.interrupted.length, stopped: summary.recovery.stoppedWorkers.length, aborted: summary.recovery.abortedStages.length })}`);
       } finally { store.close(); }
     }
