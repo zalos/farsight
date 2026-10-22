@@ -689,3 +689,30 @@ checks detector bytes against the pinned pack digest, and returns every other ru
 **Cost:** a Python file inside a string in the package, a tie to the image's `/usr/bin/python3`, and one attempt per job
 batch of at most 2,000 targets to keep timed output under its 3 MiB bound. **Not decided here:** registering the adapter
 in the production registry, the planner's batching, the scan command (PR 09), and amd64 qualification.
+
+31. **Sentinel's Express pack reads registration order from source and claims a property only from a refusal it can read (2026-10-22).**
+`farsight-sentinel/frameworks/express` (PR 15) answers, for each Express route the public parser found, which layer
+before its handler establishes authentication or authorization, for exactly Express 4.21.2. It reads only captured
+source with Oxc; it installs, builds and runs nothing, and leaves the structural graph unchanged (its surfaces are the
+parser's route nodes, its registrations are re-derived from syntax). The version must be pinned exactly in the root
+manifest, or be a range the npm lockfile written for it resolves to exactly 4.21.2; overrides, another lockfile with a
+range, a path alias for `express` or a nested manifest leave every fact unknown and `framework.version` null.
+Applications and routers are top-level `express()` / `Router()` constants; their layers are the top-level
+`use`, method, `all`, `route` and `param` statements of their own module, in order. Any other use of the object — a
+registration inside a function, branch or loop, the object handed to other code or registered on from another module —
+makes it open, and every route it could reach is unknown (`sentinel.express.registrationDynamic`): a skipped branch is
+never read as either outcome. Dispatch is simulated as Express runs it: for a route's effective path (mount paths
+joined, case-insensitive, non-strict), the matching layers registered before it on the application and on every router
+on its path, earlier routers whose prefix matches (their own layers), earlier routes matching the same method and path,
+then the route's own handlers before the last. A layer registered after the route is never on its path, so late
+middleware cannot clear a finding. A partial match is unknown, not either side. Middleware effects come from bodies,
+never names: a non-async `(req, res, next)` whose body is one guarded refusal with a literal 401 (authentication) or
+403 (authorization) on a request value, then `next()`; a pass-through; or an error handler. Everything else —
+third-party or unresolved functions, `next('route')`/`next('router')`, async bodies, param callbacks, router options or
+routing settings that change matching, sub-applications — is unknown with its reason. Because Express skips ordinary
+layers after an error until an error handler, a refusal followed by an error handler that may resume with `next()`, or
+by a layer whose arity is unknown, is unknown (`sentinel.express.errorPathResumes`). Facts per route and property:
+`applies` at each refusal's position, `unknown` at each unreadable position, and `does-not-apply` at the handler's
+position only when every earlier layer was read and none refuses for the property. The pack does not judge what the
+checked request value proves or what populated it; it is a draft, source-only capability until PR 09 wires it into a
+scan. Reason words are `strings-sentinel-express.ts`.
