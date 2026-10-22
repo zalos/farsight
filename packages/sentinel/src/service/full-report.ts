@@ -32,6 +32,7 @@ import {
 import { canonicalJson } from '@farsight/graph';
 import { STRINGS } from '@farsight/core/dist/strings.js';
 import { RuleLockBook } from './rule-locks.js';
+import { ReportKeyError, withheldLocationKey } from './report-key.js';
 
 /** The scanner adapters whose accepted records this report reads, and the preview detector's own findings. */
 const SECRETS_ADAPTER = 'secrets-gitleaks';
@@ -75,7 +76,7 @@ export interface RunAssessment {
   readonly ruleLock: unknown;
   /**
    * The opaque, store-keyed identity of a withheld citation's file: stable across this store's captures, never its path.
-   * Identical bytes in two files are two keys. The store id it is keyed by is not secret (withheldKeyFor).
+   * Identical bytes in two files are two keys. Keyed by the store's own secret, never the public store id.
    */
   readonly withheldKey: (e: WithheldLocationEvidence) => string;
   /** Files (`sourceId:relativePath`) whose name the secret scan matched: never printed or used to place anything. */
@@ -156,7 +157,18 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
   const secretTokens = new Set<string>();
   const entryIndex = new Map<string, number>();
   snapshot.entries.forEach((e, i) => { if (e.kind === 'file' && e.disposition === 'included') entryIndex.set(fileScope(e.sourceId, e.relativePath), i); });
-  const locationKeyOf = withheldKeyFor(store.storeId, snapshot);
+  // The key is the store's own secret, read only when a withheld citation needs one: a run with no secret evidence
+  // reports without the owner's trust folder.
+  let key: Buffer | undefined;
+  const keyOf = () => {
+    if (key) return key;
+    if (!options.trustDir) return unbound('a withheld citation needs the owner\'s report key');
+    try { return (key = withheldLocationKey(options.trustDir, store.storeId)); } catch (e) {
+      if (e instanceof ReportKeyError) return unbound(e.reason);
+      throw e;
+    }
+  };
+  const locationKeyOf = withheldKeyFor(keyOf, snapshot);
 
   const coverage: CoverageEnvelope[] = [];
   const observations: ObservationEnvelope[] = [];
@@ -316,14 +328,6 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
   };
 }
 
-/**
- * The opaque key of a withheld citation's file: an HMAC of its source and path keyed by this store's id. It is the same
- * for the same file in any capture of this store (so a comparison can continue a secret finding), and a report alone
- * neither carries the key nor the store id. The store id is not a secret, though: it labels the store's containers and
- * appears in its owner records and in a failed run's facts, so someone who has it and guesses a path exactly can
- * confirm the guess against a report's fingerprints. This keeps a path from being read off a report; it does not hide
- * a low-entropy path from a holder of the store id. A reference that does not resolve in this snapshot refuses.
- */
 /** The tokens a value or a name can hide in: runs of 8 or more letters, digits, `_` or `-`. */
 const tokensOf = (text: string) => text.match(/[A-Za-z0-9_-]{8,}/g) ?? [];
 
@@ -349,11 +353,17 @@ export function redactSecretTokens<T>(doc: T, tokens: ReadonlySet<string>): T {
   return walk(doc) as T;
 }
 
-function withheldKeyFor(storeId: string, snapshot: SnapshotEnvelope): (e: WithheldLocationEvidence) => string {
+/**
+ * The opaque key of a withheld citation's file: an HMAC of its source and path under the store's own secret key
+ * (report-key.ts), never the public store id. The same file in any capture of this store has the same key, so a
+ * comparison can continue a secret finding; without the secret, neither a report nor a bundle, nor both together
+ * with the store id, lets anyone confirm a guessed path. A reference that does not resolve in this snapshot refuses.
+ */
+function withheldKeyFor(key: () => Buffer, snapshot: SnapshotEnvelope): (e: WithheldLocationEvidence) => string {
   return e => {
     const resolved = resolveWithheldLocation(snapshot, e);
     if (!resolved.ok) return unbound('a withheld citation does not resolve in the captured snapshot');
-    return `loc.${createHmac('sha256', `sentinel-withheld-location/1\u0000${storeId}`).update(`${resolved.entry.sourceId}\u0000${resolved.entry.relativePath}`).digest('hex').slice(0, 32)}`;
+    return `loc.${createHmac('sha256', key()).update('sentinel-withheld-location/2\u0000').update(`${resolved.entry.sourceId}\u0000${resolved.entry.relativePath}`).digest('hex').slice(0, 32)}`;
   };
 }
 

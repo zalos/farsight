@@ -136,3 +136,43 @@ for (const mode of ['drop', 'entry', 'path', 'message', 'kind', 'checks', 'produ
   });
 }
 void readFileSync;
+
+test('the withheld-location key is the store\'s own secret: the public store id and an exact path guess cannot reproduce it', { skip }, async t => {
+  const { createHmac } = await import('node:crypto');
+  const { statSync, readdirSync, writeFileSync: write } = await import('node:fs');
+  const { correlate, normalizeObservation } = await import('../dist/findings/index.js');
+  const { withheldLocationKey } = await import('../dist/service/report-key.js');
+  const f = await publishedSecrets(t, 'positive');
+  const a = await assessRun(f.store, f.runId, { trustDir: f.ws.trustDir });
+  const secret = a.observations.filter(o => o.producer.kind === 'scanner' && o.producer.adapterId === 'secrets-gitleaks');
+  const e: any = secret.find(o => o.evidence.some((x: any) => a.snapshot.entries[x.entry].relativePath === 'first.txt'))!.evidence[0];
+  const path = (a.snapshot.entries[e.entry] as any).relativePath as string;
+  // What a holder of the public store id could compute for an exact guess of the path, under any public-keyed scheme.
+  const guesses = [
+    `loc.${createHmac('sha256', `sentinel-withheld-location/1\u0000${f.store.storeId}`).update(`${e.sourceId}\u0000${path}`).digest('hex').slice(0, 32)}`,
+    `loc.${createHmac('sha256', f.store.storeId).update('sentinel-withheld-location/2\u0000').update(`${e.sourceId}\u0000${path}`).digest('hex').slice(0, 32)}`,
+  ];
+  const actual = a.withheldKey(e);
+  for (const g of guesses) assert.notEqual(actual, g, 'the location key is not derivable from the store id');
+  // Nor can the guess reproduce a report's finding identity.
+  const r = await fullReport({ store: f.store, runId: f.runId, workspace: f.path, trustDir: f.ws.trustDir, disclosure: 'shareable', now: new Date() });
+  const read = (id: string) => f.store.readArtifact(id as never);
+  for (const g of guesses) {
+    const forged = correlate(await Promise.all(secret.map(o => normalizeObservation(o, read, new Map(), { withheldKey: () => g }))));
+    for (const x of forged) assert.ok(!r.document.findings.some((y: any) => y.id === x.id || y.fingerprint.exact === x.fingerprint.exact), 'a public-keyed guess confirms nothing');
+  }
+  // The key: 32 private bytes of this account in the owner's trust folder, outside the store, in no output.
+  const dir = join(f.ws.trustDir, 'report-keys');
+  const files = readdirSync(dir).filter(n => n.endsWith('.key'));
+  assert.equal(files.length, 1);
+  const st = statSync(join(dir, files[0]!));
+  assert.equal(st.size, 32); assert.equal(st.mode & 0o777, 0o600); assert.equal(st.nlink, 1);
+  assert.ok(!join(dir, files[0]!).startsWith(f.ws.storePath), 'never inside the store a bundle could export');
+  const key = withheldLocationKey(f.ws.trustDir, f.store.storeId);
+  assert.ok(key.equals(readFileSync(join(dir, files[0]!))), 'stable: the same key on every read');
+  for (const text of [r.json, r.markdown, r.html, JSON.stringify(r.sarif)]) for (const form of [key.toString('hex'), key.toString('base64')]) absent(text, 'report', form);
+  // A damaged key refuses; it is never silently replaced by a new one (identity would change).
+  write(join(dir, files[0]!), 'short', { mode: 0o600 });
+  await assert.rejects(fullReport({ store: f.store, runId: f.runId, workspace: f.path, trustDir: f.ws.trustDir, disclosure: 'shareable', now: new Date() }),
+    (err: any) => err.code === 'sentinel.report.evidenceUnbound' && /report key/.test(err.facts?.reason ?? ''));
+});
