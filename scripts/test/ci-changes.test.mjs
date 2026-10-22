@@ -4,7 +4,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, renameSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { changedPaths, detectChecks, selectChecks } from '../ci-changes.mjs';
+import { changedPaths, detectChecks, selectChecks, sentinelPackageInputs } from '../ci-changes.mjs';
+import { buildClosure } from '../pack-preflight.mjs';
 
 const none = { validate: false, e2e: false, echo: false, sentinel: false };
 const full = { validate: true, e2e: true, echo: true, sentinel: true };
@@ -22,11 +23,13 @@ test('e2e and unit test changes select their own check; mixed edits take the uni
 });
 
 test('runtime, fixtures and shared build inputs retain their affected checks', () => {
-  for (const path of ['packages/parsers/src/tsjs.ts', 'packages/work/src/gate.ts',
-    'examples/invoice-app/docs/flow.md', 'schemas/farsight-affected-v1.schema.json']) {
+  for (const path of ['packages/app/src/index.ts', 'examples/nx-workspace/package.json', 'schemas/farsight-affected-v1.schema.json']) {
     assert.deepEqual(selectChecks([path]), { ...none, validate: true, e2e: true }, path);
   }
-  for (const path of ['packages/server/public/app/main.js', 'packages/cli/src/cli.ts', 'packages/mcp/src/run.ts', 'packages/code-parser/src/tsjs.ts']) {
+  for (const path of ['packages/server/public/app/main.js', 'packages/cli/src/cli.ts', 'packages/mcp/src/run.ts',
+    'packages/code-parser/src/tsjs.ts', 'packages/parsers/src/tsjs.ts', 'packages/parsers/package.json',
+    'packages/work/src/gate.ts', 'packages/work-fixture/src/index.ts', 'packages/work-jira/package.json',
+    'packages/work-azdo/src/index.ts', 'examples/invoice-app/docs/flow.md']) {
     assert.deepEqual(selectChecks([path]), { ...none, validate: true, e2e: true, sentinel: true }, path);
   }
   for (const path of ['packages/graph/src/graph.ts', 'packages/core/src/graph.ts', 'packages/core/package.json',
@@ -38,6 +41,31 @@ test('runtime, fixtures and shared build inputs retain their affected checks', (
   for (const path of ['scripts/pack.mjs', 'scripts/pack-preflight.mjs', 'scripts/npm-consumer.mjs', 'scripts/test-farsight-package.mjs']) {
     assert.deepEqual(selectChecks([path]), full, `${path} is shared packaging`);
   }
+});
+
+test("every package in farsight-cli's real build closure selects sentinel-package", () => {
+  const closure = buildClosure(process.cwd(), '@farsight/cli').closure.map((p) => p.dir.split('/').pop());
+  assert.ok(closure.length >= 10 && closure.includes('parsers') && closure.includes('work-azdo'), closure.join(', '));
+  const inputs = sentinelPackageInputs();
+  for (const dir of closure) {
+    assert.ok(inputs.has(dir), dir);
+    assert.equal(selectChecks([`packages/${dir}/src/x.ts`]).sentinel, true, dir);
+    assert.equal(selectChecks([`packages/${dir}/package.json`]).sentinel, true, dir);
+  }
+  assert.ok(!inputs.has('echo') && !inputs.has('app'), 'packages outside both closures do not select it');
+  // a CLI dependency added later joins the set from the manifests alone
+  assert.equal(selectChecks(['packages/new-dep/src/x.ts'], { packageInputs: new Set(['new-dep']) }).sentinel, true);
+  assert.deepEqual(selectChecks(['docs/x.md'], { packageInputs: undefined }), none);
+});
+
+test('unreadable workspace manifests select every check', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'farsight-ci-manifests-'));
+  try {
+    assert.throws(() => sentinelPackageInputs(dir), /CLI closure unreadable/);
+    mkdirSync(join(dir, 'packages/cli'), { recursive: true });
+    writeFileSync(join(dir, 'packages/cli/package.json'), '{ not json');
+    assert.throws(() => sentinelPackageInputs(dir));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('Sentinel selects its package check without e2e; its build closure and the CLI layers select it too', () => {

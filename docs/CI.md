@@ -38,7 +38,7 @@ union of the matching checks. Secrets and PR commit conventions always run, incl
 | `packages/sentinel/` outside `test/` | `validate` + `sentinel-package` (no application package imports Sentinel, so no e2e) |
 | `e2e/`, `scripts/e2e.mjs`, `scripts/e2e-perf.mjs`, `scripts/synth-graph.mjs` | `e2e` (including its typecheck and small perf suite) |
 | Package `test/` folders, `scripts/test/`, changelog/release/hook-install/commit-lint scripts | `validate` |
-| Package code/assets, `examples/`, `schemas/` | `validate` + `e2e`; graph, core and Echo changes also select `echo-package`; graph, code-parser, core, cli, server and mcp changes also select `sentinel-package` |
+| Package code/assets, `examples/`, `schemas/` | `validate` + `e2e`; graph, core and Echo changes also select `echo-package`; changes to a package in `farsight-cli`'s workspace dependency closure (cli, server, mcp, parsers, code-parser, core, graph, work and the work providers today, read from the manifests by `scripts/ci-changes.mjs`), Sentinel's own closure, or `examples/invoice-app/` also select `sentinel-package`; unreadable manifests select all |
 | Everything else, including dependencies, build config, workflows, the selector itself and the shared packaging scripts (`pack.mjs`, `pack-preflight.mjs`, `npm-consumer.mjs`, `test-farsight-package.mjs`) | all |
 
 Markdown inside fixtures is test input, not automatically documentation. Graph and core are Echo build dependencies, so its
@@ -79,7 +79,10 @@ no real memories or host sessions. This check needs npm and GitHub release downl
 `echo-package` and blocks merging when that check runs. An unaffected package job is explicitly skipped.
 
 Sentinel's package job (ADR 18) proves the boundary in both directions from clean `npm init -y` consumers,
-outside the pnpm workspace. First `pnpm pack:cli` builds only `@farsight/cli...` and packs `farsight-cli`; the
+outside the pnpm workspace. Clean means none of the caller's npm configuration: inherited `npm_config_*`
+variables are dropped and npm's user and global config files, cache and XDG config/state are task-local
+(`scripts/npm-consumer.mjs`; `HOME` is untouched, and `FARSIGHT_NPM_REGISTRY` names a mirror explicitly). The
+scratch directory is removed on success and on any npm failure. First `pnpm pack:cli` builds only `@farsight/cli...` and packs `farsight-cli`; the
 pack preflight (`scripts/pack-preflight.mjs`) requires only the CLI's `workspace:` dependency closure and refuses
 before removing any prior artifact. `scripts/test-farsight-package.mjs` installs that tarball, checks that the
 bundle names no Sentinel module, that no Sentinel package is installed and that the tarball's `engines.node` equals

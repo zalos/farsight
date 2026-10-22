@@ -2,11 +2,33 @@
 // Coarse CI boundaries, not a per-test dependency graph. Unknown inputs run everything.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { basename } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { buildClosure } from './pack-preflight.mjs';
 
 const all = () => ({ validate: true, e2e: true, echo: true, sentinel: true });
 
-export function selectChecks(paths) {
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+
+/**
+ * The package directories `sentinel-package` packs: farsight-cli's whole workspace dependency
+ * closure (its clean-consumer startup without Sentinel is checked there) and Sentinel's own.
+ * Read from the manifests, so a new dependency of the CLI joins the set without editing this file.
+ */
+export function sentinelPackageInputs(root = repoRoot) {
+  const dirs = new Set(['graph', 'code-parser', 'core']);
+  for (const entry of ['@farsight/cli', '@farsight/sentinel']) {
+    const { closure, missing } = buildClosure(root, entry);
+    if (entry === '@farsight/cli' && (!closure.length || missing.length)) throw new Error('CLI closure unreadable');
+    for (const pkg of closure) dirs.add(basename(pkg.dir));
+  }
+  dirs.delete('sentinel'); // its own rules below
+  return dirs;
+}
+
+export function selectChecks(paths, { packageInputs } = {}) {
+  let inputs;
+  try { inputs = packageInputs ?? sentinelPackageInputs(); } catch { return all(); } // unreadable manifests: everything
   const checks = { validate: false, e2e: false, echo: false, sentinel: false };
   for (const path of paths) {
     // These Markdown files are shipped in the Echo tarball, so still check packaging.
@@ -29,8 +51,9 @@ export function selectChecks(paths) {
     } else if (/^(?:packages|examples|schemas)\//.test(path)) {
       checks.validate = checks.e2e = true;
       if (/^packages\/(?:graph|core|echo)\//.test(path)) checks.echo = true;
-      // Sentinel's build closure, and the CLI layers whose package must still start without Sentinel.
-      if (/^packages\/(?:graph|code-parser|core|cli|server|mcp)\//.test(path)) checks.sentinel = true;
+      // farsight-cli's closure (it must still pack and start without Sentinel) and Sentinel's own;
+      // the package smoke also ingests the invoice example.
+      if (inputs.has(/^packages\/([^/]+)\//.exec(path)?.[1]) || path.startsWith('examples/invoice-app/')) checks.sentinel = true;
     } else {
       return all(); // includes build/config/dependencies, workflows and this selector
     }
