@@ -27,10 +27,10 @@ test('failed interruption write refuses a fresh admission and leaves old checkpo
  await accept(f,service);await settled(service);const before=record(f),seq=f.store.ledger.currentSequence();await assert.rejects(accept(f,service,'recovery_request_next_0004'));assert.deepEqual(record(f),before);assert.equal(f.store.ledger.currentSequence(),seq);fault.mock.restore();
 });
 
-test('new epoch refuses startup if the interruption write fails, and a later genuine reopen recovers', {...needsStore,timeout:60000},async t=>{
+test('failed startup interruption disables preparation only, and a later genuine reopen recovers', {...needsStore,timeout:60000},async t=>{
  const f=await preparationFixture(t),old=new OwnerService(f.store,f.ws,{registry:f.registry});await accept(f,old);const before=record(f);f.store.close();await old.stop();const reopened=await openStore(f.ws.storePath);t.after(()=>reopened.close());
  const update=PreparationJournal.prototype.update,fault=t.mock.method(PreparationJournal.prototype,'update',function(this:PreparationJournal,r:any,...args:any[]){if(r.phase==='interrupted')throw new PreparationError('sentinel.preparation.invalid');return(update as any).call(this,r,...args);});
- assert.throws(()=>new OwnerService(reopened,f.ws,{registry:f.registry}),(e:any)=>e.code==='sentinel.preparation.invalid');assert.deepEqual(new PreparationJournal(reopened).read(before.requestKeyDigest),before);fault.mock.restore();
+ const limited=new OwnerService(reopened,f.ws,{registry:f.registry});t.after(()=>limited.stop());assert.ok(await limited.handle('service.capabilities',{},cli));await assert.rejects(limited.handle('service.preparation-capabilities',{},cli),(e:any)=>e.code==='sentinel.preparation.unavailable');assert.deepEqual(new PreparationJournal(reopened).read(before.requestKeyDigest),before);fault.mock.restore();
  const next=new OwnerService(reopened,f.ws,{registry:f.registry});t.after(()=>next.stop());assert.equal(new PreparationJournal(reopened).read(before.requestKeyDigest)!.phase,'interrupted');
 });
 test('private CLI mutex refuses reentry and unsafe link/sidecar identities without releasing another hold',needsStore,async t=>{
@@ -45,4 +45,19 @@ test('a genuinely active captured task cannot be retired by a second acceptance'
  const f=await preparationFixture(t),service=new OwnerService(f.store,f.ws,{registry:f.registry});t.after(()=>service.stop());const{ObjectStore}=await import('../dist/store/objects.js'),read=ObjectStore.prototype.read;let saw!:()=>void,release!:()=>void,once=false;const observed=new Promise<void>(r=>saw=r),held=new Promise<void>(r=>release=r);
  const mock=t.mock.method(ObjectStore.prototype,'read',async function(this:any,...args:any[]){const bytes=await(read as any).apply(this,args);if(!once&&bytes.toString('utf8').includes('sentinel-snapshot/draft-1')){once=true;saw();await held;}return bytes;});
  try{await accept(f,service);await observed;const before=record(f);assert.equal(before.phase,'captured');await assert.rejects(accept(f,service,'recovery_active_request_0002'),(e:any)=>e.code==='sentinel.preparation.busy');assert.deepEqual(record(f),before);assert.equal(service.busy,true);}finally{release();mock.mock.restore();}
+});
+
+test('corrupt preparation data disables only preparation; genuine inspection, report and run control remain usable', {...needsStore,timeout:60000},async t=>{
+ const f=await preparationFixture(t),first=new OwnerService(f.store,f.ws,{registry:f.registry});await accept(f,first);await settled(first);const actual=record(f);assert.equal(actual.phase,'prepared');await first.stop();
+ const{writeFileSync,existsSync}=await import('node:fs'),unknown=join(f.store.storePath,'preparation','records','unknown-owner-data');writeFileSync(unknown,'{}',{mode:0o600});
+ const service=new OwnerService(f.store,f.ws,{registry:f.registry});t.after(()=>service.stop());await assert.rejects(service.handle('service.preparation-capabilities',{},cli),(e:any)=>e.code==='sentinel.preparation.unavailable');assert.ok(await service.handle('run.inspect',{runId:actual.runId},cli));
+ const{currentPlan}=await import('../dist/service/canonical.js'),{runWriteBinding}=await import('../dist/service/local.js'),plan=(await currentPlan(f.store,actual.runId!))!,binding=runWriteBinding(f.ws,'run.start',plan,{storeId:f.store.storeId,runId:actual.runId!}),r=issueReceipt(new ReceiptBook(join(f.ws.trustDir,'receipts')),OWNER,{...binding,policyRevision:plan.policyRevision},{now:new Date(),ttlMs:600000});
+ const started:any=await service.handle('run.start',{planId:actual.runId,receiptId:r.id},cli);assert.equal(started.outcome,'submitted');await service.handle('run.wait',{runId:actual.runId,timeoutMs:25000},cli);assert.equal(f.store.ledger.getRun(actual.runId!)!.state,'completed');assert.ok(await service.handle('report.open',{runId:actual.runId,format:'json'},cli));assert.equal(existsSync(unknown),true,'unknown data is never swept');
+});
+
+test('journal temporary cleanup fences the held owner before every destructive operation', {...needsStore,timeout:60000},async t=>{
+ const f=await preparationFixture(t),service=new OwnerService(f.store,f.ws,{registry:f.registry});await accept(f,service);await settled(service);await service.stop();const r=record(f),dir=join(f.store.storePath,'preparation','records'),a=join(dir,`.${r.requestKeyDigest.slice(7)}.json.0000000000000001.tmp`),b=join(dir,`.${r.requestKeyDigest.slice(7)}.json.0000000000000002.tmp`);
+ const{default:fs}=await import('node:fs'),{syncBuiltinESMExports}=await import('node:module');fs.writeFileSync(a,'unaccepted partial update',{mode:0o600});fs.writeFileSync(b,'unaccepted partial update',{mode:0o600});const unlink=fs.unlinkSync;let removed=0;
+ const mock=t.mock.method(fs,'unlinkSync',function(path:any){const out=unlink(path);if(path===a||path===b){removed++;f.store.close();}return out;});syncBuiltinESMExports();
+ try{const j=new PreparationJournal(f.store);assert.throws(()=>j.recoverPublications());assert.equal(removed,1);assert.equal(Number(fs.existsSync(a))+Number(fs.existsSync(b)),1);}finally{mock.mock.restore();syncBuiltinESMExports();}
 });

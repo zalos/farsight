@@ -32,7 +32,7 @@ const PREVIEW_MS=30_000;
 const KEY=/^[A-Za-z0-9_-]{16,128}$/;
 const ID=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const CODES=new Set(['sentinel.preparation.expired','sentinel.preparation.canceled','sentinel.preparation.changed',
- 'sentinel.preparation.unavailable','sentinel.preparation.invalid','sentinel.preparation.retentionRequired','sentinel.preparation.busy','sentinel.preparation.ownerRestarted']);
+ 'sentinel.preparation.unavailable','sentinel.preparation.invalid','sentinel.preparation.retentionRequired','sentinel.preparation.busy','sentinel.preparation.ownerRestarted','sentinel.preparation.alreadyPrepared']);
 interface Preview {
  readonly id:string;readonly keyDigest:string;readonly requestDigest:string;readonly inputs:PreparationInputs;
  readonly parent:PreparationParent|null;readonly createdAt:number;readonly started:number;readonly channel:string;
@@ -54,11 +54,12 @@ function fields(value:unknown,required:readonly string[],optional:readonly strin
 export class PreparationController {
  readonly #store:SentinelStore;readonly #ws:Workspace;readonly #registry:AdapterRegistry;
  readonly #journal:PreparationJournal;readonly #runBusy:()=>boolean;readonly #finished:()=>void;
- readonly #previews=new Map<string,Preview>();readonly #settled=new Set<string>();#active:Active|undefined;#stopping=false;
+ readonly #previews=new Map<string,Preview>();readonly #settled=new Set<string>();#active:Active|undefined;#stopping=false;#disabled=false;
  constructor(store:SentinelStore,ws:Workspace,registry:AdapterRegistry,runBusy:()=>boolean,finished:()=>void){
   store.assertHeld();this.#store=store;this.#ws=ws;this.#registry=registry;this.#runBusy=runBusy;this.#finished=finished;this.#journal=new PreparationJournal(store);
-  this.#reconcile();
+  try{this.#journal.recoverPublications();this.#reconcile();}catch{this.#disabled=true;}
  }
+ #available():void{this.#store.assertHeld();if(this.#disabled)throw new PreparationError('sentinel.preparation.unavailable');}
  // Only a newly held epoch or this controller's genuinely settled task can justify data interruption.
  // This does not cancel a run, release a lease, prove a worker stopped, or authorize execution/recovery.
  #reconcile():void {
@@ -70,11 +71,11 @@ export class PreparationController {
   }
  }
  get busy():boolean{return this.#active!==undefined;}
- capabilities(){return Object.freeze({schema:'sentinel-preparation-capabilities/draft-1',apiRevision:1,storeId:this.#store.storeId,epoch:this.#store.epoch,
+ capabilities(){this.#available();return Object.freeze({schema:'sentinel-preparation-capabilities/draft-1',apiRevision:1,storeId:this.#store.storeId,epoch:this.#store.epoch,
   operations:['configuration.preview','prepare.accept','prepare.status','prepare.resume','prepare.cancel'],preparationMs:PREPARATION_LIMIT_MS,previewMs:PREVIEW_MS,terminalLimit:PREPARATION_TERMINAL_LIMIT,
   source:'configured-workspace',prerequisites:['capture','parse','inventory'],checksStartSeparately:true,automaticResume:false,limitationKey:'sentinel.preparation.limits'});}
  preview(body:unknown,by:RequestedBy):unknown {
-  if(this.#stopping)return invalid();const f=fields(body,['requestKey'],['parentId']),keyDigest=requestKey(f.requestKey);
+  this.#available();if(this.#stopping)return invalid();const f=fields(body,['requestKey'],['parentId']),keyDigest=requestKey(f.requestKey);
   const createdAt=Date.now(),started=performance.now(),stillWithin=()=>{this.#store.assertHeld();if(Date.now()<createdAt||Date.now()>=createdAt+PREVIEW_MS||performance.now()-started>=PREVIEW_MS)throw new PreparationError('sentinel.preparation.changed');};
   const inputs=resolvePreparationInputs(this.#store,{workspace:this.#ws.path,trustDir:this.#ws.trustDir,registry:this.#registry},stillWithin);
   const terms=preparationTerms(this.#store,inputs,stillWithin);let parent:PreparationParent|null=null;
@@ -99,7 +100,7 @@ export class PreparationController {
    ...(by.channel==='local-service'?{confirmation:binding}:{})};
  }
  status(body:unknown,by:RequestedBy):CommandResult {
-  const f=fields(body,['requestKey']),record=this.#journal.read(requestKey(f.requestKey));
+  this.#available();const f=fields(body,['requestKey']),record=this.#journal.read(requestKey(f.requestKey));
   const facts=record?this.#projection(record):{schema:'sentinel-preparation-status/draft-1',found:false};
   if(record&&by.channel==='local-service'){
    try{(facts as Record<string,unknown>).confirmation={cancel:this.#control(record,'run.cancel',by).binding,
@@ -129,7 +130,7 @@ export class PreparationController {
    credential:()=>({basis:'local-only',detail:'no provider or acquisition is used'})};
  }
  accept(body:unknown,by:RequestedBy):CommandResult {
-  if(this.#stopping)return invalid();this.#reconcile();const f=fields(body,['previewId','requestKey'],['receiptId']),keyDigest=requestKey(f.requestKey);
+  this.#available();if(this.#stopping)return invalid();this.#reconcile();const f=fields(body,['previewId','requestKey'],['receiptId']),keyDigest=requestKey(f.requestKey);
   if(f.receiptId!==undefined&&(by.channel!=='local-service'||!ID.test(f.receiptId)))return invalid();
   const previous=this.#journal.read(keyDigest),cached=this.#previews.get(by.channel);
   if(previous){
@@ -192,7 +193,7 @@ export class PreparationController {
   return this.#journal.update({...record,...patch,ownerEpoch:this.#store.epoch,updatedAt:new Date().toISOString(),recordRevision:record.recordRevision+1},record.recordRevision);
  }
  cancel(body:unknown,by:RequestedBy):CommandResult{
-  if(this.#stopping)return invalid();this.#reconcile();const f=fields(body,['requestKey'],['receiptId']),record=this.#journal.read(requestKey(f.requestKey));if(!record)throw new PreparationError('sentinel.preparation.unavailable');
+  this.#available();if(this.#stopping)return invalid();this.#reconcile();const f=fields(body,['requestKey'],['receiptId']),record=this.#journal.read(requestKey(f.requestKey));if(!record)throw new PreparationError('sentinel.preparation.unavailable');
   if(terminalPreparation(record))return result('prepare','kept',{facts:this.#projection(record)});
   const preflight=this.#controlPreflight(record,'run.cancel',by,f.receiptId);if(preflight.refusal)return preflight.refusal;
   const decision=f.receiptId?admitRequiringReceipt({...preflight.request!,now:new Date(),receipt:{book:preflight.book!,id:f.receiptId}}):preflight.decision!;
@@ -202,7 +203,7 @@ export class PreparationController {
   return result('prepare','requested',{verdicts:printed(decision.record),facts:this.#projection(this.#journal.read(record.requestKeyDigest)!)});
  }
  async resume(body:unknown,by:RequestedBy,signal?:AbortSignal):Promise<CommandResult>{
-  if(this.#stopping)return invalid();this.#reconcile();const f=fields(body,['requestKey'],['receiptId']);let record=this.#journal.read(requestKey(f.requestKey));if(!record||record.checkpoint==='none')throw new PreparationError('sentinel.preparation.unavailable');
+  this.#available();if(this.#stopping)return invalid();this.#reconcile();const f=fields(body,['requestKey'],['receiptId']);let record=this.#journal.read(requestKey(f.requestKey));if(!record||record.checkpoint==='none')throw new PreparationError('sentinel.preparation.unavailable');
   if(this.#active?.record.prepId===record.prepId)return result('prepare','kept',{facts:{...this.#projection(record),joined:true}});
   if(this.busy||this.#runBusy())throw new PreparationError('sentinel.preparation.busy');
   if(record.phase!=='interrupted'&&(terminalPreparation(record)||record.ownerEpoch===this.#store.epoch))throw new PreparationError('sentinel.preparation.unavailable');
@@ -214,7 +215,7 @@ export class PreparationController {
   const parent=record.parentId===null?null:{runId:record.parentId,revision:record.parentRevision!,planDigest:record.parentPlanDigest!,snapshotId:record.parentSnapshotId!};
   // Source/run closure proof is read-only before journal mutation. A later admission alone is never current.
   const identity=await resolvePreparationRun(this.#store,inputs,record.snapshotId!,clock,parent);clock.stillWithin();
-  if(identity.snapshotId!==record.snapshotId)throw new PreparationError('sentinel.preparation.changed');
+  if(identity.snapshotId!==record.snapshotId&&record.mode!=='workspace')throw new PreparationError('sentinel.preparation.changed');
   if(this.busy||this.#runBusy()||this.#journal.read(record.requestKeyDigest)?.recordRevision!==record.recordRevision)throw new PreparationError('sentinel.preparation.changed');
   const preflight=this.#controlPreflight(record,'capture.source',by,f.receiptId);if(preflight.refusal)return preflight.refusal;
   if(record.phase!=='interrupted')record=this.#write(record,{phase:'interrupted',errorCode:'sentinel.preparation.canceled'});
@@ -252,13 +253,13 @@ export class PreparationController {
     this.#update(active,{phase:'captured',snapshotId,checkpoint:'captured'});
    }
    const identity=await resolvePreparationRun(this.#store,resolved,snapshotId,active.clock,parent);active.clock.stillWithin();
-   // A recaptured same-inventory snapshot cannot relabel an existing run's immutable capture. Use an explicitly
-   // authorized pinned linked child instead; retain this newly captured snapshot as honest unused evidence.
-   if(identity.snapshotId!==active.record.snapshotId)throw new PreparationError('sentinel.preparation.changed');
+   // Same inventory may name an existing run. Its original snapshot/deadline stay authoritative; this
+   // preparation retains its newly admitted capture as unused evidence and never relabels either snapshot.
+   const reused=identity.snapshotId!==active.record.snapshotId;
    this.#update(active,{phase:'bootstrapping',checkpoint:'bootstrapping',runId:identity.runId,runDeadlineAt:active.clock.runDeadlineAt});
    const prepared=await planPreparedWorkspaceCanonical(this.#store,identity,{scratchRoot:lease.path,wrapRunner:lease.wrapRunner,onCoordinator:coordinator=>{active.coordinator=coordinator;if(active.abort.signal.aborted)coordinator.cancel();}});
    active.clock.stillWithin();
-   this.#update(active,{phase:'prepared',runId:prepared.disclosure.runId,planRevision:prepared.disclosure.revision,planDigest:prepared.disclosure.planDigest,runDeadlineAt:active.clock.runDeadlineAt});
+   this.#update(active,{phase:'prepared',runId:prepared.disclosure.runId,planRevision:prepared.disclosure.revision,planDigest:prepared.disclosure.planDigest,runDeadlineAt:active.clock.runDeadlineAt,errorCode:reused?'sentinel.preparation.alreadyPrepared':null});
   }catch(error){
    const phase=active.stopping?'interrupted':active.abort.signal.aborted&&active.abort.signal.reason?.code!=='sentinel.preparation.expired'?'canceled':'failed';
    try{this.#update(active,{phase,errorCode:failure(error)});}catch{/* no unsafe repair/deletion if ownership or journal publication is uncertain */}

@@ -1737,5 +1737,10 @@ the same controller may reconcile only its genuinely settled task, with no activ
 refuses new admission. This is status, never proof of worker death, revocation, cleanup or automatic resume.
 The real CLI serializes confirmed saved-key check/status/save/dispatch using a qualified SQLite EXCLUSIVE
 sidecar, immediate busy refusal and existing canonical private-file checks. It contains no approval/ledger rows,
-is never unlinked or reclaimed by PID/age, and kernel process death releases its lock. Captured/ambiguous keys
-remain retained; only an explicit canonical terminal-parent request may replace a prepared key.
+is never unlinked or reclaimed by PID/age, and kernel process death releases its lock. Captured/pending/ambiguous keys remain retained. A terminal prepared lookup can be replaced by an explicitly
+confirmed fresh source capture, while linked requests deliberately use the parent snapshot. Equal inventory may
+return the existing run without changing its original snapshot/deadline; the new capture remains unused evidence.
+Only exact private journal-writer temporaries are settled under the held owner before preparation use. Unrenamed
+updates do not become accepted state, exact nlink2 canonical aliases are removed, and unknown names remain.
+Recovery is bounded and checks ownership before each destructive operation. Corruption disables preparation
+alone, preserving unrelated inspection, report and run controls.

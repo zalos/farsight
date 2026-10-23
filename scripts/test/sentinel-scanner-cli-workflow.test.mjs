@@ -44,7 +44,7 @@ test('framework inspection privacy and genuine installed delivery remain mandato
 test('SDK run controls remain in the native service zero-skip list and installed package hook',()=>{
  const serviceWorkflow=readFileSync(new URL('.github/workflows/ci.yml',root),'utf8');
  const service=serviceWorkflow.slice(serviceWorkflow.indexOf('    name: sentinel-service'),serviceWorkflow.indexOf('\n  e2e:'));
- for(const file of ['service-mcp-controls','service-planned-pause','preparation-seams','preparation-admission','preparation-receipt-admission','preparation-journal','preparation-profile','preparation-service','preparation-recovery','preparation-public'])assert.ok(service.includes(`test/${file}.test.ts`));
+ for(const file of ['service-mcp-controls','service-planned-pause','preparation-seams','preparation-admission','preparation-receipt-admission','preparation-journal','preparation-profile','preparation-service','preparation-recovery','preparation-publication-crash','preparation-public'])assert.ok(service.includes(`test/${file}.test.ts`));
  for(const counter of ['skipped','fail','cancelled'])assert.ok(service.includes(`grep -qx '# ${counter} 0' service.tap`));
  const manifest=JSON.parse(readFileSync(new URL('package.json',root),'utf8'));
  assert.ok(manifest.scripts['test:sentinel:package'].includes('&& node scripts/test-sentinel-mcp-controls-consumer.mjs'));

@@ -62,9 +62,9 @@ export async function prepareCommand(ws:Workspace,options:{action?:string;confir
     const old=preparationOutcome(await client.request('prepare.status',{requestKey:previous}));lock.assertHeld();
     if(!old.status?.found)throw new PreparationError('sentinel.preparation.unavailable');
     if(previous===key){if(options.parentId!==undefined)throw new PreparationError('sentinel.preparation.changed');return project({...old,outcome:'kept'},{requestKeySaved:true});}
-    const status=old.status,linked=status.phase==='prepared'&&options.parentId!==undefined&&options.parentId===status.runId;
-    if(!linked&&(status.captured||!['interrupted','failed','canceled'].includes(status.phase)))
-     return project({...old,outcome:status.phase==='prepared'?'kept':'refused',reasonCode:status.phase==='prepared'?'sentinel.preparation.alreadyPrepared':'sentinel.preparation.busy'},{requestKeySaved:true});
+    const status=old.status;
+    if(status.phase!=='prepared'&&(status.captured||!['interrupted','failed','canceled'].includes(status.phase)))
+     return project({...old,outcome:'refused',reasonCode:'sentinel.preparation.busy'},{requestKeySaved:true});
    }
   }
   if(action==='status')return project(preparationOutcome(await client.request('prepare.status',{requestKey:key})));
@@ -85,6 +85,6 @@ export async function prepareCommand(ws:Workspace,options:{action?:string;confir
  }catch(error){
   if(dispatched)return result('prepare','configuration-failure',{reasonCode:'sentinel.preparation.outcomeUnknown'});
   if(error instanceof PreparationError)return result('prepare','configuration-failure',{reasonCode:error.code});
-  const code=(error as{code?:unknown})?.code;if(code==='sentinel.service.unknownOperation')return result('prepare','unavailable',{reasonCode:'sentinel.service.operationUnavailable'});throw error;
+  const code=(error as{code?:unknown})?.code;if(code==='sentinel.preparation.unavailable')return result('prepare','unavailable',{reasonCode:code});if(code==='sentinel.service.unknownOperation')return result('prepare','unavailable',{reasonCode:'sentinel.service.operationUnavailable'});throw error;
  }finally{try{lock?.close();}finally{client.close();}}
 }

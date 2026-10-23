@@ -1,6 +1,7 @@
 // Private preparation data, not execution/admission authority. Creation is lazy and only the held owner writes.
-// No deletion, sweep or repair: unknown records/bundles remain, and capacity requires explicit owner maintenance.
-import { lstatSync, mkdirSync, opendirSync, realpathSync } from 'node:fs';
+// Only exact owned writer temporaries may be settled under the held owner. Unknown records/bundles remain;
+// capacity requires explicit owner maintenance. A temporary name never becomes accepted captured state.
+import { lstatSync, mkdirSync, opendirSync, realpathSync, openSync, closeSync, fstatSync, unlinkSync, constants as FS } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { SentinelStore } from '../store/index.js';
@@ -86,6 +87,32 @@ export class PreparationJournal {
   this.#store=store;this.#root=join(store.storePath,'preparation');
   this.#records=join(this.#root,'records');this.#bundles=join(this.#root,'bundles');
   this.#known.set(held.path,held.identity);
+ }
+ /** Startup only, while no preparation task exists. These names are writer-private and never worker inputs.
+  * An unrenamed update is not accepted: keep the old canonical bytes and discard only its exact inert temp.
+  * A create alias is removable only when the canonical name and this exact temp are the same private nlink2 inode. */
+ recoverPublications():void {
+  if(!this.#layout())return;
+  for(const [directory,pattern,limit]of [[this.#records,/^\.([a-f0-9]{64}\.json)\.[a-f0-9]{16}\.tmp$/,RECORD_LIMIT],
+   [this.#bundles,/^\.(prep-[a-f0-9]{32}\.(?:config|resolved)\.json)\.[a-f0-9]{16}\.tmp$/,PREPARATION_BUNDLE_LIMIT]]as const){
+   const dir=opendirSync(directory);let visited=0;
+   try{for(let ent=dir.readSync();ent;ent=dir.readSync()){
+    this.#fence();if(++visited>PREPARATION_TERMINAL_LIMIT*4)return fail('sentinel.preparation.retentionRequired');
+    const match=pattern.exec(ent.name);if(!match)continue;const path=join(directory,ent.name),canonical=join(directory,match[1]!);
+    const fd=openSync(path,FS.O_RDONLY|FS.O_NOFOLLOW|FS.O_NONBLOCK);
+    try{const st=fstatSync(fd,{bigint:true});if(!st.isFile()||st.isSymbolicLink()||Number(st.mode)&0o077||UID!==undefined&&Number(st.uid)!==UID||st.size>BigInt(limit)||![1n,2n].includes(st.nlink))return fail();
+     let named;try{named=lstatSync(canonical,{bigint:true});}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;}
+     const alias=named!==undefined&&identityOf(named)===identityOf(st);
+     if(st.nlink===2n&&(!alias||!named!.isFile()||named!.isSymbolicLink()||named!.nlink!==2n||Number(named!.mode)&0o077||UID!==undefined&&Number(named!.uid)!==UID))return fail();
+     if(st.nlink===1n&&alias)return fail();
+     // Recheck all owned ancestors and the exact opened inode immediately before this one destructive operation.
+     this.#fence();const latest=lstatSync(path,{bigint:true}),after=fstatSync(fd,{bigint:true});
+     if(identityOf(latest)!==identityOf(st)||latest.isSymbolicLink()||after.nlink!==st.nlink||after.ctimeNs!==st.ctimeNs||after.size!==st.size)return fail();
+     if(alias&&identityOf(lstatSync(canonical,{bigint:true}))!==identityOf(st))return fail();
+     unlinkSync(path);this.#fence();syncDirectory(directory);this.#fence();
+    }finally{closeSync(fd);}
+   }}finally{dir.closeSync();}
+  }
  }
  /** The path is private and used only by storage tests/owner diagnostics, never a transport projection. */
  get directory():string{return this.#root;}

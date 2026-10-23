@@ -123,7 +123,7 @@ test('two actual owner CLIs contend immediately; killing the mutex holder releas
  const exited=new Promise<void>(resolve=>child.once('close',()=>resolve()));child.on('error',()=>{});
  try{await observed;const path=join(f.ws.trustDir,readdirSync(f.ws.trustDir).find(n=>/^preparation-client-.*\.json$/.test(n))!),before=readFileSync(path);
  const start=performance.now(),second=await f.owner('prepare','--confirm','--request-key','public_concurrent_request_0002');assert.equal(second.reasonCode,'sentinel.preparation.busy');assert.ok(performance.now()-start<5000);assert.equal(f.requests.filter(x=>x==='prepare.accept').length,1);assert.ok(readFileSync(path).equals(before));
- child.kill('SIGKILL');await exited;release();f.setAfter(undefined);await f.final();const retained=await f.owner('prepare','--confirm','--request-key','public_concurrent_request_0003');assert.equal(retained.outcome,'kept');assert.equal(retained.reasonCode,'sentinel.preparation.alreadyPrepared');assert.equal(retained.facts.found,true);assert.ok(readFileSync(path).equals(before));
+ child.kill('SIGKILL');await exited;release();f.setAfter(undefined);await f.final();const retained=await f.owner('prepare','--confirm','--request-key','public_concurrent_request_0003');assert.equal(retained.outcome,'submitted');assert.equal(retained.facts.found,true);assert.equal(readFileSync(path).equals(before),false,'terminal prepared lookup can be replaced by explicit fresh capture');assert.equal((await f.final()).facts.phase,'prepared');
  }finally{release();if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await exited;}
 });
 
@@ -132,4 +132,10 @@ test('ambiguous saved-key status cannot be replaced and reconnect to an older se
  f.setAfter(async(op)=>op==='prepare.status'?{command:'prepare',outcome:'answered',exitCode:0,verdicts:null,facts:{schema:'sentinel-preparation-status/draft-1',found:false}}:undefined);
  const refused=await f.owner('prepare','--confirm','--request-key','public_unknown_request_0002');assert.notEqual(refused.outcome,'submitted');assert.ok(readFileSync(path).equals(before));f.setAfter(undefined);f.setLegacy(true);
  assert.equal((await f.call(client,'sentinel_prepare_status',{requestKey:key})).error.code,'sentinel.service.operationUnavailable');assert.equal(f.requests.filter(x=>x==='prepare.accept').length,1);
+});
+
+test('terminal prepared lookup permits real edited-source fresh capture and unchanged inventory returns the existing run',{...needsStore,timeout:90000},async t=>{
+ const f=await fixture(t);assert.equal((await f.owner('prepare','--confirm','--request-key',key)).outcome,'submitted');const first=await f.final(),original=f.store.ledger.getRun(first.facts.runId)!;
+ writeFileSync(join(f.ws.path,'src/one.ts'),'export const changedSource = 2;\n');const nextKey='edited_source_preparation_0002';assert.equal((await f.owner('prepare','--confirm','--request-key',nextKey)).outcome,'submitted');const second=await f.final();assert.equal(second.facts.phase,'prepared');assert.notEqual(second.facts.runId,first.facts.runId);const retained=f.store.ledger.getRun(second.facts.runId)!;
+ const sameKey='same_inventory_preparation_0003';assert.equal((await f.owner('prepare','--confirm','--request-key',sameKey)).outcome,'submitted');const third=await f.final();assert.equal(third.facts.phase,'prepared',JSON.stringify(third));assert.equal(third.facts.runId,second.facts.runId);assert.equal(third.facts.reasonCode,'sentinel.preparation.alreadyPrepared');assert.equal(f.store.ledger.getRun(second.facts.runId)!.envelope.snapshotId,retained.envelope.snapshotId);assert.equal(f.store.ledger.getRun(second.facts.runId)!.envelope.createdAt,retained.envelope.createdAt);assert.equal(f.store.ledger.getRun(first.facts.runId)!.envelope.snapshotId,original.envelope.snapshotId);
 });
