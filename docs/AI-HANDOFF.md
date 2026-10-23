@@ -28,7 +28,11 @@ Main `2587763a` and integrated `8a04048b` ingested the same 1,724 frozen files: 
 source digest `22d37a423759` and 38,006,784-byte databases. Graph bytes changed 27,727,777 → 27,727,783 only through
 build/run metadata. Fresh front-door, Map and code-map screenshots were inspected: no page errors or failed
 requests, with five known missing-fixture-image responses. The exact temporary server was stopped. The primary
-checkout, dogfood graph and global installations remain unchanged. Final selected CI remains before merge.
+checkout, dogfood graph and global installations remain unchanged. PR #166's first validation found two stale
+capability tests that still treated MCP as unavailable. The precise expectation correction preserves every future
+unavailable capability and the store-facade checks; both complete files pass 36 tests with one intentional
+unqualified-host negative skipped on the qualified host. The original failure is retained. Fresh selected CI on
+the corrected commit remains required before merge.
 
 The separate observation PR [#165](https://github.com/zalos/farsight/pull/165), head `62f50c2c`, merged as
 `6ae1a194` after independent approval and all thirteen selected checks passed. Its first required native job passed 106 original tests and ten diagnostic controls, with zero failures,
