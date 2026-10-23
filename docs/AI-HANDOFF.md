@@ -20,7 +20,9 @@ Affected service/read/delivery/budget/contract/package validation passed 99 cont
 local-container retained-secret privacy controls passed with zero skips. Package/selector/workflow controls,
 types, schemas and catalog checks passed. The npm-only package exercised 16 typed exports, 28 contract types and
 schemas and 63 fixtures. Exact immutable artifacts and final installed evidence belong in the private review
-handoff; this candidate is not independently approved or merged yet. No C preparation implementation is included.
+handoff. Independent Claude review approved both the original control slice and final `0e0ee9e5` correction;
+root retained byte-identical production source while preserving main's observation and capability-test fixes.
+No C preparation implementation is included. Selected CI and merge remain the final candidate gate.
 The supplemental correction preserves the original run creation time and budget while honoring a pause during
 planned-run setup through legal states, without starting a worker; pending cancellation wins. An unreadable or lost
 response after control dispatch is nonretryable controlOutcomeUnknown, with status/readback guidance, rather than
@@ -28,6 +30,18 @@ proof the action was unavailable. Genuine unchanged baseline probes reproduced b
 coordinator/selected-rerun/service union passed 99 controls with zero skips and the installed SDK consumer passed
 an actual accepted-response corruption case without replay. Same-store epoch changes require fresh per-call
 admission; old read handles still expire.
+
+Combined acceptance: the complete workspace build, Sentinel typecheck, generated schemas, catalog lint (4,477
+entries), eight preserved workflow controls and 100 affected lifecycle/read/control/contract/package controls
+passed with zero test skips. The actual npm-only SDK control consumer passed on the integrated artifact, whose
+SHA-256 remains `fd41f994c15295af8d36679d2a4dc7d336d219da552301c4e4a932f6faae47af`.
+Main `cce989d4` and integrated runtime `dee88c22` ingested the same 1,735 frozen files at `6d56021f`: identical
+9,941 nodes, 20,514 edges, source digest `3937d97a5875` and 38,191,104-byte databases. Graph bytes were
+27,874,530 and 27,874,536; only build/run metadata changed. Fresh front-door, Map and code-map screenshots were
+inspected with no page errors or failed requests; the same five missing-fixture-image 404 responses remain.
+The isolated server was stopped by its recorded PID and its port verified clear. Primary checkout, dogfood graph
+and global installations remain untouched.
+
 Configuration saving, durable preparation/reconnect, linked rerun tools, in-browser owner confirmation, service-owned
 imports and the full GUI remain separate work. The original native release hold and bounded pending-wait shutdown
 note are unchanged.
