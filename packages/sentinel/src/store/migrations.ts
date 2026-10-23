@@ -406,7 +406,7 @@ ALTER TABLE plans ADD COLUMN selection_id TEXT REFERENCES artifacts(id);
 
 // Report-import operations are a distinct staging domain, not work attempts. No accepted roots can be minted
 // through generic staging; the private publication operation will be the only writer of acceptances.
-const EVENT_KINDS_V6 = `${EVENT_KINDS_V4},'evidence-opened','evidence-staged','evidence-transferred','evidence-aborted','evidence-accepted'`;
+const EVENT_KINDS_V6 = `${EVENT_KINDS_V4},'evidence-opened','evidence-staged','evidence-transferred','evidence-aborted','evidence-accepted','evidence-abandoned'`;
 const V6 = `
 CREATE TABLE events_next (
   sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -417,12 +417,14 @@ CREATE TABLE events_next (
   FOREIGN KEY (work_id, work_revision) REFERENCES work_units(id, revision),
   CHECK ((work_id IS NULL) = (work_revision IS NULL))
 ) STRICT;
-INSERT INTO events_next SELECT * FROM events ORDER BY sequence;
+INSERT INTO events_next (sequence,kind,run_id,work_id,work_revision,coordinator_epoch,at,payload)
+  SELECT sequence,kind,run_id,work_id,work_revision,coordinator_epoch,at,payload FROM events ORDER BY sequence;
 DROP TABLE events;
 ALTER TABLE events_next RENAME TO events;
 CREATE INDEX events_by_run ON events(run_id, sequence);
 ${APPEND_ONLY('events', 'DELETE')}
 ${APPEND_ONLY('events', 'UPDATE')}
+CREATE UNIQUE INDEX evidence_abandon_receipt ON events(json_extract(payload,'$.receipt.id')) WHERE kind = 'evidence-abandoned';
 CREATE TABLE evidence_operations (
   id TEXT PRIMARY KEY, store_id TEXT NOT NULL, coordinator_epoch TEXT NOT NULL REFERENCES epochs(epoch),
   nonce TEXT NOT NULL UNIQUE, domain TEXT NOT NULL CHECK (domain = 'report-import'),
@@ -451,6 +453,9 @@ CREATE TRIGGER evidence_operations_terminal BEFORE UPDATE OF state,terminal_sequ
 ${APPEND_ONLY('evidence_operations', 'DELETE')}
 ALTER TABLE staging ADD COLUMN evidence_operation_id TEXT REFERENCES evidence_operations(id);
 CREATE TRIGGER staging_evidence_domain BEFORE INSERT ON staging
+  WHEN NEW.evidence_operation_id IS NOT NULL AND (NEW.work_id IS NOT NULL OR NEW.attempt_id IS NOT NULL)
+  BEGIN SELECT RAISE(ABORT, 'sentinel.store.stagingMismatch: evidence is not an attempt'); END;
+CREATE TRIGGER staging_evidence_domain_update BEFORE UPDATE OF evidence_operation_id,work_id,attempt_id ON staging
   WHEN NEW.evidence_operation_id IS NOT NULL AND (NEW.work_id IS NOT NULL OR NEW.attempt_id IS NOT NULL)
   BEGIN SELECT RAISE(ABORT, 'sentinel.store.stagingMismatch: evidence is not an attempt'); END;
 CREATE INDEX staging_evidence ON staging(evidence_operation_id,stage_id);
