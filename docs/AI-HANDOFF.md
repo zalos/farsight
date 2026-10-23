@@ -9,7 +9,7 @@ Farsight was dogfooded on.
 ## Sentinel capture boundary and owned scratch — 2026-10-22
 
 PR #160 (bounded framework inspection) merged as `0b1f74a7`. The capture candidate on
-`codex/sentinel-capture-acceptance` implements ADR 46 and now includes merged deadline correction #161
+`codex/sentinel-capture-acceptance` implements ADR 46 and now includes merged deadline correction #161 and planner correction #162
 (`4cbe1d4d`); its final CI and merge remain open. SOL owns implementation and corrections, Claude performs independent review, and the lead owns integration
 and the definition of done.
 
@@ -35,6 +35,7 @@ Validation (Node 24, pnpm 9, isolated worktrees):
 - Affected build/typecheck, schema drift and catalog checks passed; the author's core suite passed 404 tests.
 - Final capture, layout, owner identity, scratch and preparation-crash controls: 28 passed, zero skipped.
   After merging #161, the combined build and 46 capture/deadline-boundary controls passed with zero skips.
+  After merging #162 (`aef9e705`), the combined build and 53 capture/planner/selected-rerun controls passed with zero skips.
 - The actual npm-only installed consumer passed with the existing pinned Gitleaks image: canonical inspection,
   official SARIF, withholding, source-removed selected rerun and actual service/worker kill-and-resume. Old lease
   identity survives recovery. Offline clean and withheld reports had no requests or page/console errors.

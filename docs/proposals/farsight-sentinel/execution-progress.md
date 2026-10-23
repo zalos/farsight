@@ -77,7 +77,11 @@ identifiers, not GitHub PR numbers.
   final review, 28 focused capture/cleanup controls, genuine npm-only native consumer acceptance, identical real-ingest
   node/edge values and browser inspection passed. Merged deadline correction [#161](https://github.com/zalos/farsight/pull/161)
   (`4cbe1d4d`) passed all selected CI; the combined capture branch then passed its build and 46 targeted controls
-  with zero skips. Exact-head selected CI and merge remain. The capture behavior is not yet merged-main behavior.
+  with zero skips. Planner correction [#162](https://github.com/zalos/farsight/pull/162) (`aef9e705`) then merged;
+  the combined capture/planner/selected-rerun build and 53 controls passed with zero skips. PR #162 retained an
+  initial native OOM-attribution failure, six passing unchanged-production diagnostic observations and one
+  passing unchanged failed-job rerun (104 controls, zero skips); historical cause remains unknown. A recurrence
+  stops further retries. Exact-head capture CI and merge remain; the capture behavior is not yet merged-main behavior.
 
   Historical framework candidate evidence: the candidate combined the retained source seam and closure with
   `64d86ae9`; its
@@ -150,7 +154,7 @@ All planned packages progress to the end of the backlog, then the end gates belo
 
 ## Current integration critical path
 
-Complete bounded planner-authentication cost correction → exact capture boundary → one complete retained-source /
+The bounded planner-authentication cost correction is merged (#162). Continue exact capture boundary → one complete retained-source /
 fixed built-in worker proof → actual PR18 owner paths workflow → usable PR20 decisions/import authority →
 deterministic MCP (23a) and host bridge (24) → the full configure/preview/run/reconnect/stage-I/O/retry/rerun/compare
 GUI (25). These are dependency/acceptance milestones, not completed implementations. Do not merge an unused pure
