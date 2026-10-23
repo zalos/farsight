@@ -38,6 +38,8 @@ import { loadPlan } from '../execution/plans.js';
 import { publicRegistry, scannerExecution } from './scanner-profile.js';
 import { ReadonlyViews, READONLY_OPERATIONS } from './readonly.js';
 import { controlCapabilities } from './controls.js';
+import { PreparationController } from './preparation-controller.js';
+import { PreparationError } from './preparation-clock.js';
 import { recordRunFailure, runFailureCode } from './run-failure.js';
 
 export type ServiceErrorCode =
@@ -119,6 +121,7 @@ export class OwnerService {
   /** Runs whose scratch lease was retained because a consumer was not proven stopped (scratch-lease.ts). */
   readonly #scratchRetained = new Map<string, ReturnType<typeof retainedFact>>();
   readonly #reads: ReadonlyViews;
+  readonly #preparations: PreparationController;
   #idleSince = Date.now();
   #stopping = false;
 
@@ -130,10 +133,11 @@ export class OwnerService {
     this.#runEnvelope = options.runEnvelope ?? (() => undefined);
     this.#now = options.now ?? (() => new Date());
     this.#reads = new ReadonlyViews(store, ws, this.#now);
+    this.#preparations = new PreparationController(store, ws, this.#registry, () => this.#active.size > 0, () => { this.#idleSince = Date.now(); });
   }
 
   /** True while a run executes. */
-  get busy(): boolean { return this.#active.size > 0; }
+  get busy(): boolean { return this.#active.size > 0 || this.#preparations.busy; }
   /** Bounded unexpired buffers keep a detached owner alive, without renewing their absolute TTLs. */
   get retainingReads(): boolean { return this.#reads.retaining; }
   /** When the last run ended (or the service started), for the idle stop. */
@@ -154,6 +158,18 @@ export class OwnerService {
       }
     }
     switch (op) {
+      case 'service.preparation-capabilities': fields(body, []); return this.#preparations.capabilities();
+      case 'configuration.preview': return this.#preparations.preview(body, by);
+      case 'prepare.status': return this.#preparations.status(body, by);
+      case 'prepare.cancel': return this.#preparations.cancel(body, by);
+      case 'prepare.resume': {
+        if (context.signal?.aborted) throw new PreparationError('sentinel.preparation.canceled');
+        return this.#preparations.resume(body, by);
+      }
+      case 'prepare.accept': {
+        if (context.signal?.aborted) throw new PreparationError('sentinel.preparation.canceled');
+        return this.#preparations.accept(body, by);
+      }
       case 'service.control-capabilities': {
         fields(body, []);
         return controlCapabilities(this.#store.storeId, this.#store.epoch);
@@ -248,7 +264,7 @@ export class OwnerService {
       if (failed) return this.#notAccepted('run', planId, failed, verdicts, facts);
       return result('run', 'submitted', { verdicts, facts: { ...facts, runId: planId, joined: true, state: runStateIn(this.#store, planId) } });
     }
-    if (this.#stopping || this.#active.size > 0) return result('run', 'configuration-failure', { verdicts, facts, reasonCode: 'sentinel.service.anotherRunActive' });
+    if (this.#stopping || this.#active.size > 0 || this.#preparations.busy) return result('run', 'configuration-failure', { verdicts, facts, reasonCode: 'sentinel.service.anotherRunActive' });
     if (isFinalRunState(runStateIn(this.#store, planId))) return canonicalResult(this.#store, 'run', planId, { executing: false, verdicts, facts, registry: this.#registry, trustDir:this.#ws.trustDir });
     // Accepted only once the coordinator has opened the admitted revision under this installation's registry: a plan
     // this installation cannot execute is refused here, with why, never answered `submitted` and left looking queued.
@@ -357,8 +373,9 @@ export class OwnerService {
   async stop(): Promise<void> {
     this.#stopping = true;
     this.#reads.close();
+    const preparation = this.#preparations.stop();
     for (const run of this.#active.values()) { run.pause = true; run.coordinator?.pause(); }
-    await Promise.all([...this.#active.values()].map(r => r.task));
+    await Promise.all([preparation, ...[...this.#active.values()].map(r => r.task)]);
   }
 }
 

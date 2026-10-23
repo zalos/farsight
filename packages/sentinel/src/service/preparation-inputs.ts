@@ -2,12 +2,14 @@
 // It reads actual adopted inputs and exact promoted pack bytes. Readiness remains an effectful later phase.
 import type { SentinelStore } from '../store/index.js';
 import { boundOwner } from '../store/owner-binding.js';
+import type { SnapshotEnvelope } from '../contracts/snapshot.js';
+import { snapshot as immutable } from '../policy/immutable.js';
 import type { RunEnvelope } from '../contracts/run.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { loadPolicyInputsReadOnly, workspaceIdentity } from '../policy/adoption.js';
 import { effectivePolicy, type EffectivePolicy, type PolicyInputs } from '../policy/settings.js';
 import { canonicalDigest } from '../policy/digest.js';
-import type { AdapterRegistry } from '../execution/registry.js';
+import { createAdapterRegistry, type AdapterRegistry, type AdapterDefinition } from '../execution/registry.js';
 import { loadPlan } from '../execution/plans.js';
 import { planBootstrap } from '../planner/index.js';
 import { openSnapshot } from '../snapshot/materialize.js';
@@ -15,9 +17,10 @@ import { RuleLockBook, type CurrentLock } from './rule-locks.js';
 import type { ValidatedPack } from '../rules/index.js';
 import { externalDrivers, publicProfile } from './scanner-profile.js';
 import { frameworkAvailable, FRAMEWORK_CONTROLS_ADAPTER_ID } from './framework-adapter.js';
-import type { TrustedProfile } from './trusted-profile.js';
+import { foundationProfile, OPERATIONS, type TrustedProfile } from './trusted-profile.js';
+import { PREVIEW_DETECTOR_ID } from '../adapters/preview-detector.js';
 import { workspaceRunIdentity } from './canonical.js';
-import { checkPreparationClock, PreparationError, type PreparationClock } from './preparation-clock.js';
+import { checkPreparationClock, tightenPreparationClock, PreparationError, type PreparationClock } from './preparation-clock.js';
 
 export const PREPARATION_BUNDLE_LIMIT = 256 * 1024;
 export interface PreparationInputs { readonly digest: string }
@@ -26,11 +29,16 @@ interface Inputs {
   readonly store: SentinelStore; readonly epoch: string; readonly workspace: string; readonly trustDir: string;
   readonly registry: AdapterRegistry; readonly policy: EffectivePolicy; readonly inputs: PolicyInputs;
   readonly current: CurrentLock; readonly packs: readonly ValidatedPack[]; readonly profile: TrustedProfile;
-  readonly bytes: Buffer;
+  readonly bytes: Buffer; readonly resolvedBytes: Buffer | null;
 }
 const inputsFor = new WeakMap<object, Inputs>();
 export interface PreparationParent { readonly runId: string; readonly revision: number; readonly planDigest: string; readonly snapshotId: string }
-const runsFor = new WeakMap<object, { inputs: PreparationInputs; clock: PreparationClock; parent: PreparationParent | null }>();
+export interface PreparationAvailability { readonly adapterId: string; readonly available: boolean; readonly reasonCode: string | null }
+interface PreparedRunState {
+  inputs: PreparationInputs; clock: PreparationClock; parent: PreparationParent | null; snapshot: SnapshotEnvelope;
+  recordedEnvelope: RunEnvelope | null;
+}
+const runsFor = new WeakMap<object, PreparedRunState>();
 const refuse = (): never => { throw new PreparationError('sentinel.preparation.changed'); };
 
 /** Pure candidate terms, not an available-capability claim. Only the existing held-service registry is supplied. */
@@ -50,14 +58,21 @@ export function resolvePreparationInputs(store: SentinelStore, options: {
   const ids = new Set(packs.flatMap(p => p.manifest.rules.filter(r => policy.rules.includes(r.familyId))
     .map(r => r.implementation.adapterId)).filter(id => externalDrivers().has(id)));
   if (frameworkAvailable(current.lock, packs)) ids.add(FRAMEWORK_CONTROLS_ADAPTER_ID);
-  const profile = publicProfile(options.registry, ids, packs);
+  if (Object.values(OPERATIONS).some(id => !options.registry.ids.includes(id) || options.registry.get(id).kind !== 'operation')) {
+    throw new PreparationError('sentinel.preparation.unavailable');
+  }
+  const profile = publicProfile(options.registry, new Set(), packs);
+  const fixed = foundationProfile(options.registry).record;
   const bytes = canonicalJsonBytes({ schema: 'sentinel-preparation-inputs/1', storeId: store.storeId, workspace,
-    inputs, policy: { settings: policy.settings, view: policy.view }, lock: current.lock, profile: profile.record });
+    inputs, policy: { settings: policy.settings, view: policy.view }, lock: current.lock,
+    recipe: { schema: 'sentinel-preparation-readiness/1', registry: options.registry.ids.map(id => options.registry.get(id)),
+      requestedAdapters: [...ids].sort(), operations: fixed.operations, resources: fixed.resources, parse: fixed.parse,
+      unavailable: 'retain-canonical-gaps', databasePolicy: 'complete-shipped-ecosystems', acquisitions: false } });
   if (bytes.length > PREPARATION_BUNDLE_LIMIT) throw new PreparationError('sentinel.preparation.invalid');
   stillWithin(); store.assertHeld();
   const out = Object.freeze({ digest: canonicalDigest(JSON.parse(bytes.toString('utf8'))) });
   inputsFor.set(out, { store, epoch: store.epoch, workspace: options.workspace, trustDir: options.trustDir,
-    registry: options.registry, policy, inputs, current, packs, profile, bytes });
+    registry: options.registry, policy, inputs, current, packs, profile, bytes, resolvedBytes: null });
   return out;
 }
 
@@ -82,15 +97,53 @@ export function assertPreparationInputs(store: SentinelStore, value: Preparation
   stillWithin(); store.assertHeld();
 }
 
-/** Actual availability must match the fixed candidate profile; unavailable assets do not silently downgrade it. */
-export function checkPreparationProfile(store: SentinelStore, value: PreparationInputs, available: ReadonlySet<string>, clock: PreparationClock): void {
+/** Freeze actual discovery once, before capture. Neither this data nor its handle grants admission. */
+export function checkPreparationProfile(store: SentinelStore, value: PreparationInputs, available: ReadonlySet<string>, clock: PreparationClock,
+  answers: readonly PreparationAvailability[] = []): PreparationInputs {
   checkPreparationClock(store, clock);
   const original = bound(store, value);
   assertPreparationInputs(store, value, () => clock.stillWithin());
-  if (!canonicalJsonBytes(publicProfile(original.registry, available, original.packs).record).equals(canonicalJsonBytes(original.profile.record))) {
-    throw new PreparationError('sentinel.preparation.unavailable');
-  }
+  const intended = JSON.parse(original.bytes.toString('utf8')).recipe.requestedAdapters as string[];
+  if ([...available].some(id => !intended.includes(id)) || answers.length > 32
+    || answers.some(a => !a || typeof a !== 'object' || Object.keys(a).sort().join(',') !== 'adapterId,available,reasonCode' || typeof a.available !== 'boolean')
+    || new Set(answers.map(a => a.adapterId)).size !== answers.length
+    || answers.some(a => !intended.includes(a.adapterId) || a.available !== available.has(a.adapterId)
+      || (a.available ? a.reasonCode !== null : !['sentinel.assets.missing','sentinel.execution.imageMissing','sentinel.execution.isolationUnavailable','sentinel.execution.backendUnqualified','sentinel.plan.toolMismatch'].includes(a.reasonCode!)))) return refuse();
+  if (answers.length && answers.length !== intended.length) return refuse();
+  const registry = createAdapterRegistry(original.registry.ids.filter(id =>
+    id === PREVIEW_DETECTOR_ID || (Object.values(OPERATIONS) as readonly string[]).includes(id) || available.has(id)
+  ).map(id => original.registry.get(id) as AdapterDefinition));
+  const profile = publicProfile(registry, available, original.packs);
+  const resolvedBytes = canonicalJsonBytes({ schema: 'sentinel-preparation-resolved/1', initial: value.digest,
+    profile: profile.record, availability: answers.length ? answers : intended.map(adapterId => ({ adapterId,
+      available: available.has(adapterId), reasonCode: available.has(adapterId) ? null : 'sentinel.assets.missing' })) });
+  if (resolvedBytes.length > PREPARATION_BUNDLE_LIMIT) throw new PreparationError('sentinel.preparation.invalid');
+  if (original.resolvedBytes !== null && !original.resolvedBytes.equals(resolvedBytes)) throw new PreparationError('sentinel.preparation.changed');
   clock.stillWithin();
+  const out = Object.freeze({ digest: value.digest });
+  inputsFor.set(out, { ...original, profile, resolvedBytes });
+  return out;
+}
+
+export function preparationResolvedBytes(store: SentinelStore, value: PreparationInputs): Buffer {
+  const bytes = bound(store, value).resolvedBytes;
+  if (!bytes) throw new PreparationError('sentinel.preparation.unavailable');
+  return Buffer.from(bytes);
+}
+
+/** Restore only as data plus fresh genuine rederivation; callers still need new admission and pinned readiness. */
+export function restorePreparationInputs(store: SentinelStore, options: { workspace: string; trustDir: string; registry: AdapterRegistry },
+  initialBytes: Uint8Array, resolvedBytes: Uint8Array, clock: PreparationClock): PreparationInputs {
+  checkPreparationClock(store, clock);
+  if (initialBytes.byteLength > PREPARATION_BUNDLE_LIMIT || resolvedBytes.byteLength > PREPARATION_BUNDLE_LIMIT) return refuse();
+  const initial = resolvePreparationInputs(store, options, () => clock.stillWithin());
+  if (!preparationInputBytes(store, initial).equals(Buffer.from(initialBytes))) return refuse();
+  let v: any; try { v = JSON.parse(Buffer.from(resolvedBytes).toString('utf8')); } catch { return refuse(); }
+  if (!v || Object.keys(v).sort().join(',') !== 'availability,initial,profile,schema'
+    || v.schema !== 'sentinel-preparation-resolved/1' || v.initial !== initial.digest || !Array.isArray(v.availability)) return refuse();
+  const resolved = checkPreparationProfile(store, initial, new Set(v.availability.filter((a: any) => a?.available === true).map((a: any) => a.adapterId)), clock, v.availability);
+  if (!preparationResolvedBytes(store, resolved).equals(Buffer.from(resolvedBytes))) return refuse();
+  return resolved;
 }
 
 /** Resolve exact identity from a genuine admitted snapshot before any plan-stage or run mutation. */
@@ -100,16 +153,31 @@ export async function resolvePreparationRun(store: SentinelStore, value: Prepara
   if (typeof snapshotId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(snapshotId)) return refuse();
   assertPreparationInputs(store, value, () => clock.stillWithin());
   const terms = bound(store, value);
-  const { snapshot } = await openSnapshot(store, snapshotId);
+  if (terms.resolvedBytes === null) throw new PreparationError('sentinel.preparation.unavailable');
+  let { snapshot } = await openSnapshot(store, snapshotId);
   clock.stillWithin();
   if (snapshot.sources.length !== 1 || snapshot.sources[0]!.sourceId !== 'workspace') return refuse();
   const parent = givenParent === null ? null : Object.freeze(structuredClone(givenParent));
   if (parent !== null) await checkParent(store, parent, snapshotId, clock);
   const runId = workspaceRunIdentity(store, { inventory: snapshot.inventoryDigest, lock: terms.current.digest,
     policy: terms.policy.revision, profile: terms.profile.digest, parent: parent?.runId ?? null });
+  const existing = store.ledger.getRun(runId);
+  if (existing) {
+    const admitted = await loadPlan(store, runId, existing.planRevision);
+    clock.stillWithin();
+    if (!canonicalJsonBytes(admitted.profile).equals(canonicalJsonBytes(terms.profile.record))
+      || existing.envelope.ruleLockDigest !== terms.current.digest || existing.envelope.policyRevisionDigest !== terms.policy.revision
+      || existing.envelope.parentId !== (parent?.runId ?? null)) return refuse();
+    const pinned = await openSnapshot(store, existing.envelope.snapshotId);
+    clock.stillWithin();
+    if (pinned.snapshot.inventoryDigest !== snapshot.inventoryDigest) return refuse();
+    snapshot = pinned.snapshot;
+    const deadline = Date.parse(existing.envelope.createdAt) + existing.envelope.budgets.deadlineMs;
+    if (deadline < Date.parse(clock.runDeadlineAt)) tightenPreparationClock(store, clock, new Date(deadline).toISOString());
+  }
   assertPreparationInputs(store, value, () => clock.stillWithin());
-  const out = Object.freeze({ runId, snapshotId });
-  runsFor.set(out, { inputs: value, clock, parent });
+  const out = Object.freeze({ runId, snapshotId: snapshot.id });
+  runsFor.set(out, { inputs: value, clock, parent, snapshot: immutable(snapshot), recordedEnvelope: existing?.envelope ?? null });
   return out;
 }
 
@@ -118,6 +186,7 @@ export async function resolvePreparationRun(store: SentinelStore, value: Prepara
 export async function recordPreparationBootstrap(store: SentinelStore, identity: PreparationRunIdentity): Promise<{ runDeadlineAt: string }> {
   const run = runsFor.get(identity);
   if (!run) return refuse();
+  preparationRunContext(store, identity);
   checkPreparationClock(store, run.clock);
   const terms = bound(store, run.inputs);
   assertPreparationInputs(store, run.inputs, () => run.clock.stillWithin());
@@ -139,11 +208,18 @@ export async function recordPreparationBootstrap(store: SentinelStore, identity:
   if (recorded) {
     const { state: _oldState, coordinatorEpoch: _oldEpoch, ...old } = recorded.envelope;
     const { state: _state, coordinatorEpoch: _epoch, ...expected } = envelope;
-    if (recorded.planRevision !== 1 || !canonicalJsonBytes(old).equals(canonicalJsonBytes(expected))) return refuse();
+    const prior = run.recordedEnvelope;
+    if (!prior || recorded.planRevision !== 1) return refuse();
+    const { state: _priorState, coordinatorEpoch: _priorEpoch, ...priorFields } = prior;
+    if (!canonicalJsonBytes(old).equals(canonicalJsonBytes(priorFields)) || old.snapshotId !== identity.snapshotId
+      || old.ruleLockDigest !== expected.ruleLockDigest || old.policyRevisionDigest !== expected.policyRevisionDigest) return refuse();
+    const deadline = Date.parse(old.createdAt) + old.budgets.deadlineMs;
+    if (deadline < Date.parse(run.clock.runDeadlineAt)) tightenPreparationClock(store, run.clock, new Date(deadline).toISOString());
   } else {
     assertPreparationInputs(store, run.inputs, () => run.clock.stillWithin());
     run.clock.stillWithin();
     store.ledger.createRun(envelope);
+    run.recordedEnvelope = store.ledger.getRun(identity.runId)!.envelope;
   }
   run.clock.stillWithin();
   return Object.freeze({ runDeadlineAt: run.clock.runDeadlineAt });
@@ -154,7 +230,7 @@ export function preparationTerms(store: SentinelStore, value: PreparationInputs,
   assertPreparationInputs(store, value, stillWithin);
   const t = bound(store, value);
   return Object.freeze({ policy: t.policy, current: t.current, packs: t.packs, profile: t.profile, registry: t.registry,
-    workspace: t.workspace, trustDir: t.trustDir });
+    workspace: t.workspace, trustDir: t.trustDir, resolved: t.resolvedBytes !== null });
 }
 
 async function checkParent(store: SentinelStore, parent: PreparationParent, snapshotId: string, clock: PreparationClock): Promise<void> {
@@ -168,4 +244,22 @@ async function checkParent(store: SentinelStore, parent: PreparationParent, snap
   const after = store.ledger.getRun(parent.runId);
   if (admitted.plan.digest !== parent.planDigest || !after || after.planRevision !== parent.revision
     || !['completed', 'canceled'].includes(after.state) || after.envelope.snapshotId !== snapshotId) return refuse();
+}
+
+/** Immediate pre-admission binding: rederive generation and current recorded parent, never caller metadata. */
+export function preparationRunContext(store: SentinelStore, identity: PreparationRunIdentity) {
+  const run = runsFor.get(identity);
+  if (!run) return refuse();
+  checkPreparationClock(store, run.clock);
+  const terms = preparationTerms(store, run.inputs, () => run.clock.stillWithin());
+  const id = workspaceRunIdentity(store, { inventory: run.snapshot.inventoryDigest, lock: terms.current.digest,
+    policy: terms.policy.revision, profile: terms.profile.digest, parent: run.parent?.runId ?? null });
+  if (id !== identity.runId || identity.snapshotId !== run.snapshot.id) return refuse();
+  if (run.parent) {
+    const current = store.ledger.getRun(run.parent.runId), plan = store.ledger.getPlan(run.parent.runId, run.parent.revision);
+    if (!current || !['completed','canceled'].includes(current.state) || current.planRevision !== run.parent.revision
+      || current.envelope.snapshotId !== run.parent.snapshotId || plan?.digest !== run.parent.planDigest) return refuse();
+  }
+  run.clock.stillWithin();
+  return Object.freeze({ ...terms, inputs: run.inputs, clock: run.clock, parent: run.parent, snapshot: run.snapshot });
 }

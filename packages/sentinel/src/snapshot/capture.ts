@@ -12,6 +12,7 @@
 //
 // A failure before admission aborts every stage it registered: the bytes written become unreferenced and wait for
 // an explicit prune. Nothing here opens the ledger database or the owner lock; it uses the facade only.
+import { withAdmissionFence } from '../store/admission-fence.js';
 import { createHash } from 'node:crypto';
 import { lstatSync, realpathSync } from 'node:fs';
 import { isAbsolute, sep } from 'node:path';
@@ -306,7 +307,7 @@ export function captureSnapshot(store: CaptureStore, request: CaptureRequest): P
  * closed when its capture attempt ends, which releases what it reserved.
  */
 export async function captureWithBudget(store: CaptureStore, request: CaptureRequest, budget: GitReadBudget,
-  stillWithin?: () => void): Promise<CaptureResult> {
+  stillWithin?: () => void, beforeAdmission?: () => void): Promise<CaptureResult> {
   // Internal only: callers retain their original owner/deadline/signal. Never a CaptureRequest/JSON field.
   const checkpoint = stillWithin ? () => { store.assertHeld(); stillWithin(); } : () => {};
   checkpoint();
@@ -316,7 +317,7 @@ export async function captureWithBudget(store: CaptureStore, request: CaptureReq
   for (let attempt = 1; attempt <= policy.stabilityAttempts; attempt++) {
     try {
       checkpoint();
-      return await captureOnce(store, request, policy, now, attempt, budget, checkpoint);
+      return await captureOnce(store, request, policy, now, attempt, budget, checkpoint, stillWithin !== undefined, beforeAdmission);
     } catch (e) {
       // A Git read refused after enumeration (a re-read reloading an index over the budget) is explicit too.
       if (e instanceof GitReadError) gitFailure(e);
@@ -328,12 +329,12 @@ export async function captureWithBudget(store: CaptureStore, request: CaptureReq
 }
 
 async function captureOnce(store: CaptureStore, request: CaptureRequest, policy: CapturePolicy, now: () => string, attempt: number,
-  budget: GitReadBudget, stillWithin: () => void): Promise<CaptureResult> {
+  budget: GitReadBudget, stillWithin: () => void, admissionFence: boolean, beforeAdmission?: () => void): Promise<CaptureResult> {
   const first = enumerate(request, policy, store, now, budget, stillWithin);
   let second: Enumerated | undefined;
   try {
     stillWithin();
-    return await captureEnumerated(store, request, policy, now, attempt, first, budget, e => { second = e; }, stillWithin);
+    return await captureEnumerated(store, request, policy, now, attempt, first, budget, e => { second = e; }, stillWithin, admissionFence, beforeAdmission);
   } finally {
     // The committed-tree read closures reopen pack files on demand; every handle is closed here, once nothing reads.
     for (const r of [...first.repos, ...(second?.repos ?? [])]) r.close();
@@ -341,7 +342,7 @@ async function captureOnce(store: CaptureStore, request: CaptureRequest, policy:
 }
 
 async function captureEnumerated(store: CaptureStore, request: CaptureRequest, policy: CapturePolicy, now: () => string,
-  attempt: number, first: Enumerated, budget: GitReadBudget, keep: (e: Enumerated) => void, stillWithin: () => void): Promise<CaptureResult> {
+  attempt: number, first: Enumerated, budget: GitReadBudget, keep: (e: Enumerated) => void, stillWithin: () => void, admissionFence: boolean, beforeAdmission?: () => void): Promise<CaptureResult> {
   stillWithin();
   const envelope = buildEnvelope(request.mode, policy, first, now(), attempt);
   const valid = validateEnvelope('snapshot', envelope);
@@ -404,8 +405,10 @@ async function captureEnumerated(store: CaptureStore, request: CaptureRequest, p
     receipts.push(manifestReceipt, await store.objects.put(sidecar, { expect: sidecarId }));
     stillWithin();
     store.assertHeld();
-    const record = store.ledger.admitSnapshot({ snapshotId: envelope.id, stageIds: [...open], manifest: manifestId.id,
+    beforeAdmission?.(); stillWithin();
+    const admit = () => store.ledger.admitSnapshot({ snapshotId: envelope.id, stageIds: [...open], manifest: manifestId.id,
       materialization: sidecarId.id, inventoryDigest: envelope.inventoryDigest, receipts });
+    const record = admissionFence ? withAdmissionFence(store, stillWithin, admit) : admit();
     open.length = 0;
     return Object.freeze({ snapshot: envelope, record, artifact: manifestReceipt, materialization, attempts: attempt });
   } catch (e) {

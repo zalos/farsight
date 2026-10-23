@@ -7,7 +7,7 @@ import { boundOwner } from '../store/owner-binding.js';
 export const PREPARATION_LIMIT_MS = 600_000;
 export type PreparationErrorCode = 'sentinel.preparation.expired' | 'sentinel.preparation.canceled'
   | 'sentinel.preparation.changed' | 'sentinel.preparation.unavailable' | 'sentinel.preparation.invalid'
-  | 'sentinel.preparation.retentionRequired';
+  | 'sentinel.preparation.retentionRequired' | 'sentinel.preparation.busy';
 export class PreparationError extends Error {
   constructor(readonly code: PreparationErrorCode) { super(code); this.name = 'PreparationError'; }
 }
@@ -18,7 +18,7 @@ export interface PreparationClock {
   readonly runDeadlineAt: string;
   stillWithin(): void;
 }
-const clocks = new WeakMap<object, { store: SentinelStore; epoch: string }>();
+const clocks = new WeakMap<object, { store: SentinelStore; epoch: string; tighten: (deadline: number) => void }>();
 
 export function preparationClock(store: SentinelStore, given: {
   readonly acceptedAt: string; readonly deadlineAt: string; readonly runDeadlineAt?: string;
@@ -33,25 +33,32 @@ export function preparationClock(store: SentinelStore, given: {
     || expiry - accepted > PREPARATION_LIMIT_MS || runExpiry > expiry || runExpiry <= accepted || started < accepted) {
     throw new PreparationError('sentinel.preparation.invalid');
   }
-  const ceiling = Math.min(expiry, runExpiry);
-  const remaining = ceiling - started;
+  let ceiling = Math.min(expiry, runExpiry);
   let lastWall = started, first: unknown;
   const out: PreparationClock = Object.freeze({
     acceptedAt: new Date(accepted).toISOString(), deadlineAt: new Date(expiry).toISOString(),
-    runDeadlineAt: new Date(ceiling).toISOString(),
+    get runDeadlineAt() { return new Date(ceiling).toISOString(); },
     stillWithin() {
       if (first) throw first;
       try {
         store.assertHeld();
-        if (signal?.aborted) throw new PreparationError('sentinel.preparation.canceled');
+        if (signal?.aborted) {
+          if (signal.reason instanceof PreparationError && signal.reason.code === 'sentinel.preparation.expired') throw signal.reason;
+          throw new PreparationError('sentinel.preparation.canceled');
+        }
         const wall = Date.now();
         if (wall < lastWall) throw new PreparationError('sentinel.preparation.invalid');
         lastWall = wall;
-        if (wall >= ceiling || performance.now() - mono >= remaining) throw new PreparationError('sentinel.preparation.expired');
+        if (wall >= ceiling || performance.now() - mono >= ceiling - started) throw new PreparationError('sentinel.preparation.expired');
       } catch (error) { first = error; throw error; }
     },
   });
-  clocks.set(out, { store, epoch: store.epoch });
+  clocks.set(out, { store, epoch: store.epoch, tighten(deadline) {
+    out.stillWithin();
+    if (!Number.isSafeInteger(deadline) || deadline > ceiling) throw new PreparationError('sentinel.preparation.invalid');
+    ceiling = deadline;
+    out.stillWithin();
+  } });
   out.stillWithin();
   return out;
 }
@@ -61,4 +68,11 @@ export function checkPreparationClock(store: SentinelStore, clock: PreparationCl
   const bound = clocks.get(clock);
   if (!bound || bound.store !== store || bound.epoch !== store.epoch) throw new PreparationError('sentinel.preparation.invalid');
   clock.stillWithin();
+}
+
+/** Tightening retains the ORIGINAL monotonic origin and acceptedAt; it never starts a fresh duration. */
+export function tightenPreparationClock(store: SentinelStore, clock: PreparationClock, runDeadlineAt: string): void {
+  checkPreparationClock(store, clock);
+  if (typeof runDeadlineAt !== 'string') throw new PreparationError('sentinel.preparation.invalid');
+  clocks.get(clock)!.tighten(Date.parse(runDeadlineAt));
 }

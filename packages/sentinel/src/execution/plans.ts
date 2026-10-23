@@ -16,6 +16,7 @@ import { isEffectivePolicy, type EffectivePolicy } from '../policy/settings.js';
 import { lockDigest } from '../rules/lock.js';
 import type { SentinelStore } from '../store/index.js';
 import { canonicalJsonBytes } from '../store/objects.js';
+import { withAdmissionFence } from '../store/admission-fence.js';
 import type { PlanRecord } from '../store/store-types.js';
 import { validateEnvelope } from '../validate.js';
 import { ExecutionError } from './errors.js';
@@ -68,7 +69,7 @@ function check(plan: PlanRevision, ruleLock: RuleLockEnvelope | null, policy: Ef
 }
 
 /** Admit an exact plan revision with what it pins. Returns the ledger's record. */
-export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest, stillWithin?: () => void): Promise<PlanRecord> {
+export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest, stillWithin?: () => void, beforeAdmission?: () => void): Promise<PlanRecord> {
   // Internal preparation fence only, never a persisted/public request field. Legacy callers retain their behavior.
   const checkpoint = () => { store.assertHeld(); stillWithin?.(); };
   checkpoint();
@@ -116,9 +117,11 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest,
     if (policy) receipts.push(await write(policy, ids.policy!));
     if (selection) receipts.push(await write(selection, ids.selection!));
     checkpoint();
-    return store.ledger.admitPlan({ runId: plan.runId, revision: plan.revision, kind: plan.kind, digest: plan.digest, previous: plan.previous,
+    beforeAdmission?.(); checkpoint();
+    const admit = () => store.ledger.admitPlan({ runId: plan.runId, revision: plan.revision, kind: plan.kind, digest: plan.digest, previous: plan.previous,
       plan: ids.plan.id, ruleLock: ids.ruleLock?.id ?? null, policy: ids.policy?.id ?? null, profile: ids.profile.id, selection: ids.selection?.id ?? null,
       snapshotId: plan.pins.snapshotId, stageIds: [stageId], receipts });
+    return stillWithin ? withAdmissionFence(store, checkpoint, admit) : admit();
   } catch (error) {
     try { store.assertHeld(); store.ledger.abortStaging(stageId); } catch { /* recovery aborts a stage left open */ }
     throw error;

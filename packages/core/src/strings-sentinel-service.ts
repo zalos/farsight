@@ -6,6 +6,7 @@ import type { StringEntry } from './strings.js';
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
 
 export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
+  'sentinel.preparation.busy': same('another preparation is active', 'This held owner admits one preparation or run at a time. Read the retained preparation or run state before explicitly requesting another operation.'),
   'sentinel.preparation.expired': same('the preparation deadline has passed', 'Discovery, capture, bootstrap, inspection delay and prepared analysis share the original preparation deadline. Explicitly authorize a fresh linked child over retained inputs; starting never resets the deadline.'),
   'sentinel.preparation.canceled': same('preparation was canceled', 'The original preparation signal stopped further acceptance. This does not prove uncertain producer cleanup or erase retained inputs.'),
   'sentinel.preparation.changed': same('the preparation inputs changed; review them again', 'The original held store, workspace, full adopted configuration, promoted lock, profile, recorded parent or pinned snapshot no longer matches. No caller digest substitutes for these actual inputs.'),

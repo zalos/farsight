@@ -132,12 +132,13 @@ test('plan admission rechecks its original fence after an actual durable write a
  assert.equal(store.ledger.readEvents({after:0,limit:500}).events.filter(e=>e.kind==='staging-aborted').length,1);
 });
 test('genuinely admitted bootstrap starts at original preparation time; existing rows are not overwritten',needsStore,async t=>{
- const {resolvePreparationInputs,preparationTerms,resolvePreparationRun,recordPreparationBootstrap}=await import('../dist/service/preparation-inputs.js');
+ const {resolvePreparationInputs,preparationTerms,resolvePreparationRun,recordPreparationBootstrap,checkPreparationProfile}=await import('../dist/service/preparation-inputs.js');
  const {admitPlan,loadPlan}=await import('../dist/execution/plans.js'),{planBootstrap,planAnalysis,plannerSnapshotFrom,plannerAnalysisFrom,plannerLockFrom,plannerPolicyFrom}=await import('../dist/planner/index.js');
  const {captureSnapshot}=await import('../dist/snapshot/index.js'),{Coordinator}=await import('../dist/execution/coordinator.js');
  const {scratchUnder}=await import('./lease-helpers.ts'),{loadBootstrap}=await import('../dist/execution/bootstrap.js');
  const f=await preparationFixture(t),acceptedAt=new Date(Date.now()-2000).toISOString(),clock=preparationClock(f.store,{acceptedAt,deadlineAt:new Date(Date.parse(acceptedAt)+600000).toISOString()});
- const proof=resolvePreparationInputs(f.store,{workspace:f.ws.path,trustDir:f.ws.trustDir,registry:f.registry},()=>clock.stillWithin());
+ const initial=resolvePreparationInputs(f.store,{workspace:f.ws.path,trustDir:f.ws.trustDir,registry:f.registry},()=>clock.stillWithin());
+ const proof=checkPreparationProfile(f.store,initial,new Set(),clock);
  const {snapshot}=await captureSnapshot(f.store,{mode:'working-copy',sources:[{sourceId:'workspace',repositoryId:'local-workspace',root:f.ws.path}]});
  const identity=await resolvePreparationRun(f.store,proof,snapshot.id,clock),terms=preparationTerms(f.store,proof,()=>clock.stillWithin());
  const boot=planBootstrap({runId:identity.runId,sourceIds:['workspace'],profile:terms.profile.planner});
@@ -168,10 +169,10 @@ test('pure policy loader refuses a source FIFO without waiting, creating state o
  assert.ifError(child.error);assert.equal(child.status,0,child.stderr);assert.equal(child.stdout,'sentinel.policy.settingsUnreadable');assert.deepEqual(treeFiles(f.ws.trustDir),before);
 });
 test('an admitted noncanonical bootstrap cannot create a preparation run, even with the right profile and run ID',needsStore,async t=>{
- const {resolvePreparationInputs,preparationTerms,resolvePreparationRun,recordPreparationBootstrap}=await import('../dist/service/preparation-inputs.js');
+ const {resolvePreparationInputs,preparationTerms,resolvePreparationRun,recordPreparationBootstrap,checkPreparationProfile}=await import('../dist/service/preparation-inputs.js');
  const {admitPlan}=await import('../dist/execution/plans.js'),{planBootstrap}=await import('../dist/planner/index.js'),{captureSnapshot}=await import('../dist/snapshot/index.js');
  const f=await preparationFixture(t),now=Date.now(),clock=preparationClock(f.store,{acceptedAt:new Date(now).toISOString(),deadlineAt:new Date(now+600000).toISOString()});
- const inputs=resolvePreparationInputs(f.store,{workspace:f.ws.path,trustDir:f.ws.trustDir,registry:f.registry}),terms=preparationTerms(f.store,inputs,()=>clock.stillWithin());
+ const initial=resolvePreparationInputs(f.store,{workspace:f.ws.path,trustDir:f.ws.trustDir,registry:f.registry}),inputs=checkPreparationProfile(f.store,initial,new Set(),clock),terms=preparationTerms(f.store,inputs,()=>clock.stillWithin());
  const {snapshot}=await captureSnapshot(f.store,{mode:'working-copy',sources:[{sourceId:'workspace',repositoryId:'local-workspace',root:f.ws.path}]});
  const identity=await resolvePreparationRun(f.store,inputs,snapshot.id,clock),boot=planBootstrap({runId:identity.runId,sourceIds:['foreign'],profile:terms.profile.planner});
  await admitPlan(f.store,{plan:boot,ruleLock:null,policy:null,profile:terms.profile.record});const before=f.store.ledger.currentSequence();
