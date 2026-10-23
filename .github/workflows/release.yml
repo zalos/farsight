@@ -50,7 +50,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  native-helper:
+    uses: ./.github/workflows/sentinel-cli-native-helper.yml
+    with:
+      source_sha: ${{ github.sha }}
   release-pr:
+    needs: native-helper
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -134,13 +139,19 @@ jobs:
           fi
 
       # after the version commit, so each bundle's stamp names it; publish.yml packs again after the merge
+      - name: Fetch the helper built for this workflow revision
+        uses: actions/download-artifact@v8
+        with:
+          name: sentinel-cli-native-darwin-arm64
+          path: build/sentinel-cli-native/darwin-arm64
+
       - name: Pack both tarballs, each at its own version
         env:
           TAG: ${{ steps.release.outputs.tag }}
         run: |
           node scripts/pack.mjs
           node scripts/release-manifest.mjs validate --tag "$TAG" | while IFS=$'\t' read -r name version _ _; do
-            if [ "$name" = farsight-sentinel ]; then node scripts/pack-sentinel.mjs --expect-version "$version"; fi
+            if [ "$name" = farsight-sentinel ]; then node scripts/pack-sentinel.mjs --expect-version "$version" --require-native-helper; fi
           done
           ls -l build/*.tgz build/sentinel/*.tgz 2>/dev/null || true
 

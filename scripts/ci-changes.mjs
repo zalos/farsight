@@ -50,7 +50,7 @@ export function selectChecks(paths, { packageInputs, isolationInputs } = {}) {
     if (['docs/ECHO.md', 'packages/echo/README.md', 'scripts/pack-echo.mjs',
       'scripts/test-echo-package.mjs', '.echo/settings.example.json', '.echo/connection.example.json'].includes(path)) {
       checks.echo = true;
-    } else if (path === 'scripts/npm-acceptance.mjs') {
+    } else if (['scripts/npm-acceptance.mjs', 'scripts/sentinel-release-acceptance.mjs', 'scripts/sentinel-native-helper.mjs'].includes(path)) {
       // The clean npm acceptance both packages' tarballs run through in sentinel-package, and its script tests.
       // (npm-consumer.mjs, which it builds on, is shared packaging and selects everything below.)
       checks.validate = checks.sentinel = true;

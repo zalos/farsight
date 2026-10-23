@@ -28,7 +28,7 @@ const MANIFEST = {
 
 function workspace({ build = true } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'farsight-pack-sentinel-'));
-  for (const file of ['pack-sentinel.mjs', 'pack-preflight.mjs', 'npm-consumer.mjs', 'test-sentinel-package.mjs']) {
+  for (const file of ['pack-sentinel.mjs', 'sentinel-native-helper.mjs', 'pack-preflight.mjs', 'npm-consumer.mjs', 'test-sentinel-package.mjs']) {
     write(root, `scripts/${file}`, readFileSync(resolve('scripts', file), 'utf8'));
   }
   symlinkSync(resolve('node_modules'), join(root, 'node_modules'), 'dir');

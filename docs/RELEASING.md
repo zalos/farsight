@@ -148,7 +148,8 @@ npm configuration or `NODE_PATH`, its own `HOME`, and no way to resolve a worksp
 | `farsight.*` | `--version` with the version and commit; `farsight.config.json` → ingest twice, the config unchanged and applied; read-only `serve` answers `/api/version`; `farsight mcp` answers an MCP stdio handshake |
 | `sentinel.*` | `--version` with Sentinel's own version (never farsight-cli's); `--help`; `capabilities --json`; `dist/build-stamp.json` names the version and commit; a store is created and reopened under a new epoch |
 | `combined.uninstall-sentinel-keeps-data-and-farsight` | uninstalling farsight-sentinel leaves its store byte for byte and farsight-cli working; a reinstalled Sentinel reopens the store |
-| pending until built | `sentinel.init-twice-preserves-config`, `sentinel.adopt-plan-run`, `sentinel.interrupt-resume` (PR 09); `sentinel.report-offline`, `sentinel.compare` (PR 19); `sentinel.replay` (PR 26); `sentinel.mcp-handshake` (PR 23a); `combined.host-handshake` (PR 24) |
+| Sentinel owner workflow | Initialize twice without replacing settings; adopt, plan and run a real preview with incomplete coverage reported honestly; retain source-free JSON, Markdown and HTML; compare reports; connect MCP to the owner service |
+| Combined installation | Discover the explicit owner UI companion and load its inert pairing frame; no browser confirmation or paid inference is fabricated |
 
 **What is installed is what was verified.** Each tarball is held as one verified copy with its SHA-256 and SHA-512
 (verify-release passes the copies it checked against the release manifest; a URL given to the runner alone is
@@ -157,7 +158,9 @@ verified SHA-512 in `package-lock.json` (generated from the copy under a separat
 the URL itself; npm refuses different bytes with `EINTEGRITY` before any install script runs. A server that answers a
 later request with another tarball fails the verification and runs nothing (`scripts/test/verify-release.test.mjs`).
 
-A pending gate is never reported as passed. Each names the capability the installed Sentinel reports for it; when
+The first CLI/UX release excludes portable replay bundles, broad model evaluation and managed application builds; tracked follow-ups are [#174](https://github.com/zalos/farsight/issues/174), [#175](https://github.com/zalos/farsight/issues/175), [#176](https://github.com/zalos/farsight/issues/176) and [#178](https://github.com/zalos/farsight/issues/178). The acceptance JSON names this release scope and deferred replay work. Interruption/recovery and full browser interaction are separate installed-consumer and browser CI checks, not inferred from the packaging handshake.
+
+A pending gate within this release scope is never reported as passed. Each names the capability the installed Sentinel reports for it; when
 the package reports that capability available, the gate **fails** until its check is written in the runner, so a
 release cannot claim a feature nothing verified. Exit 0 only when every gate passed, 1 when a gate failed, 2 when a
 gate is pending.
@@ -284,3 +287,7 @@ commits on `main`. To package a checkout instead, run `pnpm install --frozen-loc
 A running MCP process keeps the build it started with. Reconnect it after installing another build.
 `graph_overview` reports build identity, and `refresh_graph` re-ingests the recorded sources and reloads the graph; refreshing the graph does
 not replace the running process's compiled code.
+
+## Native CLI helper in release tarballs
+
+The release and publish workflows build the fixed macOS arm64 helper on `macos-15` from the exact source revision, run its credential-free self-test, and transfer only the helper and its manifest to the packaging job. Packaging requires the artifact and checks its source digest, executable digest, size and architecture before staging it. It never executes that helper on the Linux packaging host. The installed CLI needs no compiler or pnpm. Other CLI platforms remain unavailable until qualified ([#174](https://github.com/zalos/farsight/issues/174)); external scanners still require Linux containers. Live model checks are separately bounded and use the cheapest qualified model.

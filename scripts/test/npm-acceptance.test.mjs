@@ -10,7 +10,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
-  COMBINATIONS, MODES, Pending, isolatedEnv, isolatedToolchain, pendingByCapability, runAcceptance, summarize,
+  COMBINATIONS, MODES, Pending, mcpHandshake, isolatedEnv, isolatedToolchain, pendingByCapability, runAcceptance, summarize,
 } from '../npm-acceptance.mjs';
 import { CAPABILITIES, standIns } from './helpers/acceptance-standins.mjs';
 
@@ -66,7 +66,7 @@ test('six combinations from URLs: alone and together, global and project-local, 
     }
     assert.equal(status(report, 'farsight+sentinel/local', 'consumer.lockfile-reproduces-url-install'), 'passed');
     assert.equal(status(report, 'farsight/global', 'consumer.lockfile-reproduces-url-install'), undefined, 'a global install has no lockfile to check');
-    assert.deepEqual(report.summary.blockedBy, ['PR 09', 'PR 19', 'PR 23a', 'PR 24', 'PR 26']);
+    assert.deepEqual(report.summary.blockedBy, ['PR 09', 'PR 19', 'PR 23a', 'PR 24']);
   } finally { s.done(); }
 });
 
@@ -89,7 +89,7 @@ test('exit codes: pending gates block by default (2); --allow-pending reports th
     const cli = (...args) => spawnSync(process.execPath, [RUNNER, '--expect-farsight', '0.4.0', '--expect-sentinel', '0.1.0', '--modes', 'global', ...args], { encoding: 'utf8', timeout: 300_000 });
     const blocked = cli('--sentinel', s.sentinel);
     assert.equal(blocked.status, 2, 'without a flag, a pending gate blocks');
-    assert.match(blocked.stdout, /0 failed, 7 pending \(blocked by PR 09, PR 19, PR 23a, PR 26\)/);
+    assert.match(blocked.stdout, /0 failed, 5 pending \(blocked by PR 09, PR 19, PR 23a\)/);
     assert.match(blocked.stdout, /pending gates block: a release needs every gate passed/);
     const dev = cli('--sentinel', s.sentinel, '--allow-pending');
     assert.equal(dev.status, 0, dev.stderr + dev.stdout);
@@ -97,9 +97,14 @@ test('exit codes: pending gates block by default (2); --allow-pending reports th
     assert.equal(cli('--sentinel', s.sentinel, '--require-complete').status, 1, 'the old flag is unknown, not a silent no-op');
     const fails = cli('--sentinel', claimed.sentinel, '--allow-pending');
     assert.equal(fails.status, 1, '--allow-pending never excuses a failure');
-    assert.match(fails.stdout, /failed\s+sentinel\/global sentinel\.report-offline — the installed Sentinel reports reports as available/);
+    assert.match(fails.stdout, /failed\s+sentinel\/global sentinel\.report-offline — run admission must pass first/);
     const report = join(s.dir, 'report.json');
     assert.equal(cli('--farsight', s.farsight, '--only', 'farsight', '--report', report).status, 0, 'Farsight alone has no pending gate');
     assert.ok(existsSync(report));
   } finally { s.done(); claimed.done(); }
+});
+
+// A failed launch must not leave publication waiting for the handshake timeout.
+test('MCP process exit is an immediate failed handshake', async () => {
+  await assert.rejects(mcpHandshake(process.execPath, ['-e', 'process.exit(7)'], { cwd: process.cwd(), env: process.env, timeoutMs: 30000 }), /MCP exited \(7\)/);
 });

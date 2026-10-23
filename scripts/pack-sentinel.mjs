@@ -27,6 +27,8 @@ import { dirname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertTarball, buildClosure, missingBuildOutputs, npmPackEnv } from './pack-preflight.mjs';
 
+import { stageNativeCliHelper } from './sentinel-native-helper.mjs';
+
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dir = join(root, 'packages', 'sentinel');
 const fail = (message, details = []) => {
@@ -257,6 +259,7 @@ try {
     writeFileSync(join(out, 'dist', file), text);
   }
 
+  stageNativeCliHelper(root, out, process.argv.includes('--require-native-helper'));
   const files = ['dist'];
   if (schemaFiles.length) {
     cpSync(schemaDir, join(out, 'schemas'), { recursive: true });

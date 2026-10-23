@@ -39,6 +39,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { parseArgs, promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { cleanNpmEnv } from './npm-consumer.mjs';
+import { sentinelReleaseGates, sentinelHostGate } from './sentinel-release-acceptance.mjs';
 
 const run = promisify(execFile);
 export const PRODUCTS = Object.freeze({
@@ -57,10 +58,8 @@ export const FORBIDDEN_TOOLS = Object.freeze(['pnpm', 'pnpx', 'corepack', 'yarn'
 export const PENDING_SENTINEL_GATES = Object.freeze([
   { id: 'sentinel.init-twice-preserves-config', capability: 'scan-cli', what: 'initialize a project twice; the second run keeps the first configuration' },
   { id: 'sentinel.adopt-plan-run', capability: 'scan-cli', what: 'adopt the settings, plan and run a deterministic scan' },
-  { id: 'sentinel.interrupt-resume', capability: 'scan-cli', what: 'interrupt a scan and resume it' },
   { id: 'sentinel.report-offline', capability: 'reports', what: 'write the report and open it offline' },
   { id: 'sentinel.compare', capability: 'reports', what: 'compare two runs' },
-  { id: 'sentinel.replay', capability: 'replay-bundles', what: 'export a replay bundle and restore it' },
   { id: 'sentinel.mcp-handshake', capability: 'mcp', what: 'the installed Sentinel MCP server answers a handshake' },
 ]);
 export const PENDING_COMBINED_GATES = Object.freeze([
@@ -90,7 +89,7 @@ export function isolatedEnv(scratch, toolchain, extraBins = [], base = process.e
   const home = join(scratch, 'home');
   mkdirSync(home, { recursive: true });
   const env = cleanNpmEnv(scratch, kept);
-  return { ...env, HOME: home, USERPROFILE: home, PATH: [...extraBins, toolchain, '/usr/bin', '/bin'].join(':'), npm_config_update_notifier: 'false' };
+  return { ...env, HOME: home, USERPROFILE: home, PATH: [...extraBins, toolchain, '/usr/bin', '/bin'].join(':'), npm_config_update_notifier: 'false', npm_config_fetch_retries: '0' };
 }
 
 /** Serves local tarballs on a loopback port, so npm installs (and locks) a URL, as it would a release asset. */
@@ -154,7 +153,7 @@ export function writeApplication(dir) {
 }
 
 async function stopChild(child) {
-  if (!child || child.exitCode !== null) return;
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
   await new Promise((done) => {
     const timer = setTimeout(() => child.kill('SIGKILL'), 10_000);
     child.once('exit', () => { clearTimeout(timer); done(); });
@@ -168,6 +167,11 @@ export async function mcpHandshake(command, args, { cwd, env, timeoutMs = 60_000
   let buffer = '';
   let stderr = '';
   const waiting = new Map();
+  let ended;
+  const stopped = error => { ended = error; for (const pending of waiting.values()) pending.reject(error); waiting.clear(); };
+  child.once('error', stopped);
+  child.stdin.on('error', stopped);
+  child.once('exit', code => stopped(new Error(`MCP exited (${code}): ${stderr.slice(-2000)}`)));
   child.stderr.on('data', (d) => { stderr += d; });
   child.stdout.on('data', (d) => {
     buffer += d;
@@ -177,12 +181,14 @@ export async function mcpHandshake(command, args, { cwd, env, timeoutMs = 60_000
       if (!line) continue;
       let msg;
       try { msg = JSON.parse(line); } catch { continue; }
-      waiting.get(msg.id)?.(msg);
+      waiting.get(msg.id)?.answer(msg);
     }
   });
   const call = (id, method, params) => new Promise((ok, fail) => {
-    const timer = setTimeout(() => fail(new Error(`no answer to ${method} in ${timeoutMs} ms\n${stderr.slice(-2000)}`)), timeoutMs);
-    waiting.set(id, (msg) => { clearTimeout(timer); msg.error ? fail(new Error(`${method}: ${msg.error.message}`)) : ok(msg.result); });
+    if (ended) return fail(ended);
+    const finish = fn => value => { clearTimeout(timer); waiting.delete(id); fn(value); };
+    const timer = setTimeout(() => finish(fail)(new Error(`no answer to ${method} in ${timeoutMs} ms\n${stderr.slice(-2000)}`)), timeoutMs);
+    waiting.set(id, { reject: finish(fail), answer: msg => msg.error ? finish(fail)(new Error(`${method}: ${msg.error.message}`)) : finish(ok)(msg.result) });
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   try {
@@ -315,9 +321,9 @@ export async function acceptOne({ products, mode, sources, expect, keep = false,
 
     if (products.includes('farsight')) await farsightGates({ record, exec, app, binOf, expect, env, mode });
     let caps = null;
-    if (products.includes('sentinel')) caps = await sentinelGates({ record, exec, app, binOf, installed, expect, toolchain, scratch, products });
+    if (products.includes('sentinel')) caps = await sentinelGates({ record, exec, app, binOf, installed, expect, toolchain, scratch, products, env });
     if (products.includes('farsight') && products.includes('sentinel')) {
-      for (const g of PENDING_COMBINED_GATES) await record(g.id, () => pendingByCapability(caps, g));
+      await sentinelHostGate({ record, caps, pendingByCapability, exec, binOf, app, scratch, env, freePort, stopChild, mcpHandshake });
       await record('combined.uninstall-sentinel-keeps-data-and-farsight', async () => {
         const store = join(scratch, 'sentinel-data', 'store');
         if (!existsSync(store)) throw new Pending('no Sentinel store was retained to check (see sentinel.store-retained)', 'sentinel.store-retained');
@@ -429,7 +435,7 @@ async function storeProbe({ exec, installed, toolchain, store, step }) {
   return out;
 }
 
-async function sentinelGates({ record, exec, binOf, installed, expect, toolchain, scratch }) {
+async function sentinelGates({ record, exec, binOf, installed, expect, toolchain, scratch, app, env }) {
   const sentinel = binOf('sentinel');
   let caps = null;
   await record('sentinel.version', async () => {
@@ -440,7 +446,8 @@ async function sentinelGates({ record, exec, binOf, installed, expect, toolchain
   });
   await record('sentinel.help', async () => { const help = (await exec(sentinel, ['--help'])).stdout; if (!help.trim()) throw new Error('--help printed nothing'); return `${help.split('\n').length} lines`; });
   await record('sentinel.capabilities', async () => {
-    caps = JSON.parse((await exec(sentinel, ['capabilities', '--json'])).stdout);
+    const answer = JSON.parse((await exec(sentinel, ['capabilities', '--json'])).stdout);
+    caps = answer.facts ?? answer;
     if (expect.sentinel && caps.version !== expect.sentinel) throw new Error(`capabilities name version ${caps.version}`);
     return `${caps.capabilities.length} listed, ${caps.capabilities.filter((c) => c.state === 'unavailable').length} unavailable`;
   });
@@ -460,7 +467,7 @@ async function sentinelGates({ record, exec, binOf, installed, expect, toolchain
     if (first.epoch === second.epoch) throw new Error('a reopen kept the same owner epoch');
     return `created, reopened under a new epoch`;
   });
-  for (const g of PENDING_SENTINEL_GATES) await record(g.id, () => pendingByCapability(caps, g));
+  await sentinelReleaseGates({ record, exec, sentinel, app, env, scratch, caps, pendingByCapability, mcpHandshake, stopChild });
   return caps;
 }
 
@@ -511,7 +518,7 @@ export async function runAcceptance({ farsight, sentinel, expect = {}, only, mod
     const results = [];
     for (const products of combos) for (const mode of modes) results.push(...await acceptOne({ products, mode, sources, expect, keep, log }));
     const shown = Object.fromEntries(Object.entries(sources).filter(([, v]) => v).map(([k, v]) => [k, v.url]));
-    return { sources: shown, digests: Object.fromEntries(Object.entries(sources).filter(([, v]) => v).map(([k, v]) => [k, { sha256: v.sha256, integrity: v.integrity }])), results, summary: summarize(results) };
+    return { releaseScope: 'sentinel-first-cli-ux', deferred: [{ capability: 'replay-bundles', issue: 'https://github.com/zalos/farsight/issues/175' }], sources: shown, digests: Object.fromEntries(Object.entries(sources).filter(([, v]) => v).map(([k, v]) => [k, { sha256: v.sha256, integrity: v.integrity }])), results, summary: summarize(results) };
   } finally { await served?.close(); rmSync(held, { recursive: true, force: true }); }
 }
 

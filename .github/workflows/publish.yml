@@ -74,8 +74,15 @@ jobs:
           { echo "release=true"; echo "version=$v"; echo "tag=$tag"; echo "sha=$sha"; echo "prerelease=$pre"; } >> "$GITHUB_OUTPUT"
           echo "release $tag: the release commit is $sha"
 
-  publish:
+  native-helper:
     needs: detect
+    if: ${{ needs.detect.outputs.release == 'true' }}
+    uses: ./.github/workflows/sentinel-cli-native-helper.yml
+    with:
+      source_sha: ${{ needs.detect.outputs.sha }}
+
+  publish:
+    needs: [detect, native-helper]
     if: ${{ needs.detect.outputs.release == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -126,13 +133,19 @@ jobs:
           cp "$notes" "$RUNNER_TEMP/release-notes.md"
 
       # The committed manifest must agree with both packages' own manifests; each tarball is packed at its own version.
+      - name: Fetch the helper built for this workflow revision
+        uses: actions/download-artifact@v8
+        with:
+          name: sentinel-cli-native-darwin-arm64
+          path: build/sentinel-cli-native/darwin-arm64
+
       - name: Pack both tarballs from the release manifest
         run: |
           node scripts/release-manifest.mjs validate --tag "$TAG" > "$RUNNER_TEMP/packages.tsv"
           cat "$RUNNER_TEMP/packages.tsv"
           node scripts/pack.mjs
           while IFS=$'\t' read -r name version _ _; do
-            if [ "$name" = farsight-sentinel ]; then node scripts/pack-sentinel.mjs --expect-version "$version"; fi
+            if [ "$name" = farsight-sentinel ]; then node scripts/pack-sentinel.mjs --expect-version "$version" --require-native-helper; fi
           done < "$RUNNER_TEMP/packages.tsv"
 
       - name: Smoke-test the tarball

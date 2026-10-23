@@ -301,3 +301,16 @@ skipped with its reason, never as passed.
 
 Still pending, configuration only: the second model or hosted endpoint with a spend cap for PR 22's live
 evaluation (see *Resolutions and scope notes*).
+
+## First CLI and UX release scope — 2026-10-23
+
+The owner narrowed this push to a verified CLI scan using the cheapest qualified model, a usable owner UI, npm installation and a release. Hosted API work remains retained behind a default-off feature flag; it is not live-qualified in this release. Follow-up work stays open rather than being counted as complete:
+
+- [#173](https://github.com/zalos/farsight/issues/173): entry-point Markdown code walkthroughs.
+- [#174](https://github.com/zalos/farsight/issues/174): hosted API and broader CLI/provider qualification.
+- [#175](https://github.com/zalos/farsight/issues/175): replay bundles, pruning and differential scan gates.
+- [#176](https://github.com/zalos/farsight/issues/176): original Spring sample and managed runtime qualification.
+- [#177](https://github.com/zalos/farsight/issues/177): further UX polish, configuration editing and Fable review.
+- [#178](https://github.com/zalos/farsight/issues/178): broad model evaluation and fenced external review claims.
+
+Release validation must still demonstrate the public CLI path, exact retained instruction/model identity, the browser's separate confirmation and report flow, and clean npm-only consumers. A preview's incomplete required coverage is never a successful security verdict. Release readiness is recorded after those checks; this scope change does not complete the full plan.
