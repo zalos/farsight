@@ -1,5 +1,7 @@
 # Farsight Sentinel implementation plan
 
+> Owner update (2026-10-23): prioritize CLI adapters and the owner UX. Hosted API work and live validation are paused; preserve the existing implementation behind an adopted `hostedApiReviewEnabled` flag, default false for the new stage workflow. Enforce it in dispatch and show unavailability in the UI. Keep the hosted-only acceptance gate recorded for resumption; CLI-only validation and retained prompt/skill provenance continue.
+
 **Status:** PR 00 merged as [#118](https://github.com/zalos/farsight/pull/118) at `0c8c747`, 2026-10-19.
 Execution preparation reviewed against main `46018cb` on 2026-10-21; implementation has not started.
 The owner confirmed container-only external scanners with no host fallback. Exact capabilities remain subject

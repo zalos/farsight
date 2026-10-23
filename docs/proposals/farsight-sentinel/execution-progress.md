@@ -183,8 +183,12 @@ rerun with prior results intact. SOL implements; Claude reviews; the lead owns i
 Complete the active prerequisite, privacy and preparation corrections, then concentrate workers on CLI profiles,
 retained instruction/entry-point artifacts and the real owner UI. Broader cookie, differential and release-only
 expansion must not delay this usable workflow; their existing end gates remain recorded and are not waived.
-Validate actual hosted-only and supported CLI-only operation with local inference absent/forbidden. Unsupported
-profiles and missing approved credentials remain visible, and mocks never become transport qualification.
+The owner subsequently paused hosted API work and live validation. Retain the existing implementation behind an
+explicit adopted `hostedApiReviewEnabled` feature flag, disabled by default in the new stage workflow. Both
+dispatch and the UI must honor the flag; hiding a choice alone is insufficient. No API credentials, new login
+or spending decision is needed during this pause. Preserve the separate hosted-only acceptance gate for when
+the owner resumes it. Continue actual supported CLI-only operation with local inference absent/forbidden.
+Unsupported profiles remain visible, and mocks never become transport qualification.
 
 ## Current integration critical path
 
