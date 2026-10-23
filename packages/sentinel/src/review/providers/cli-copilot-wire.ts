@@ -33,3 +33,11 @@ export class NativeCopilotDecoder {
   const usage=u!;/* Preserve the vendor total as reported; cache counters are not assumed disjoint. */const input=usage.inputTokens;if(!Number.isSafeInteger(input))this.#bad('usage-tokens','sentinel.provider.malformedResponse');return{content:this.#message!,returnedModel:names[0]!,usage:{inputTokens:input,outputTokens:usage.outputTokens},finish:'complete'};
  }
 }
+
+// Exact fixed pinned1.0.103 startup template. Compare streaming bytes; never collect or retain native stderr.
+const noAuthTemplate=Buffer.from("Error: No authentication information found.\n\nCopilot can be authenticated with GitHub using an OAuth Token or a Fine-Grained Personal Access Token.\n\nTo authenticate, you can use any of the following methods:\n  • Start 'copilot' and run the '/login' command\n  • Set the COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN environment variable\n  • Run 'gh auth login' to authenticate with the GitHub CLI\n",'utf8');
+export class NativeCopilotStderrClassifier {
+ #at=0;#equal=true;
+ push(bytes:Uint8Array):void{for(const byte of bytes){if(this.#at>=noAuthTemplate.length||byte!==noAuthTemplate[this.#at])this.#equal=false;this.#at=Math.min(4097,this.#at+1)}}
+ get noAuthenticationInformation():boolean{return this.#equal&&this.#at===noAuthTemplate.length}
+}

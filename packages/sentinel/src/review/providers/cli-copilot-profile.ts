@@ -9,10 +9,10 @@ import {COPILOT_CODE_MANIFEST} from './cli-copilot-manifest.js';
 import {canonicalDigest} from '../../policy/digest.js';
 import {fail,ProviderError} from './errors.js';
 import type {NativeTiming} from './cli-native-profile.js';
-export const COPILOT_NATIVE_PROFILE=Object.freeze({id:'copilot-1.0.103-darwin-arm64-seatbelt-v2',version:'1.0.103',model:'gpt-6-luna',
+export const COPILOT_NATIVE_PROFILE=Object.freeze({id:'copilot-1.0.103-darwin-arm64-seatbelt-v3',version:'1.0.103',model:'gpt-6-luna',
  executableDigest:'sha256:1c81150e4bd7805c8470f4718bc8cb3c3a20c2379086f36309f7ae823e32ace6',executableBytes:181807712,
  runtimeDigest:'sha256:3d0df03e4145ef5a61c6e208cc4c80c6e56159a87b078b49ff2c91607397cc41',runtimeBytes:212717731,runtimeFiles:265,
- toolRestriction:'exclude-builtin-mcp-custom/1',autoLogin:'disabled',auth:'vendor-native-keychain',wire:'sentinel-copilot-chat/v1',softAiCredits:30,contextReservation:272000});
+ accountSelection:'owner-selected-host-login/1',toolRestriction:'exclude-builtin-mcp-custom/1',autoLogin:'disabled',auth:'vendor-native-keychain',wire:'sentinel-copilot-chat/v1',softAiCredits:30,contextReservation:272000});
 export interface NativeCopilotRuntime {readonly profileId:string;readonly executableDigest:string;readonly runtimeDigest:string;readonly profileDigest:string}
 interface FileIdentity {dev:number;ino:number;size:number;mtimeMs:number}
 interface Member {path:string;bytes:number;digest:string}
@@ -69,3 +69,21 @@ export async function nativeCopilotSetup(runtime:NativeCopilotRuntime,proxyPort:
 /** Recheck the complete private copy and executable immediately before process creation. */
 export async function verifyNativeCopilotSetup(setup:object,t:NativeTiming){const root=setups.get(setup);if(!root)return fail('sentinel.provider.notAdmitted','Copilot setup is not genuine');await runtimeMembers(join(root,'runtime'),t);const code=await readExecutable((setup as {executable:string}).executable,t);if(code.digest!==COPILOT_NATIVE_PROFILE.executableDigest||code.bytes!==COPILOT_NATIVE_PROFILE.executableBytes)fail('sentinel.provider.capabilityUntested','Copilot executable changed before launch');copilotBoundary(t)}
 export async function cleanupNativeCopilotSetup(setup:object){const root=setups.get(setup);if(!root)return;setups.delete(setup);await chmod(join(root,'runtime'),0o700).catch(()=>{});await rm(root,{recursive:true,force:true,maxRetries:0})}
+
+/** Data-only projection. Native machine state is credential-free by vendor schema; only the selected identity survives. */
+export interface NativeCopilotSelector {readonly host:'https://github.com';readonly login:string}
+const selectorFailure=():never=>fail('sentinel.provider.credentialUnavailable','native selected account metadata unavailable');
+export function projectNativeCopilotSelector(bytes:Uint8Array):Readonly<NativeCopilotSelector>{
+ if(bytes.byteLength===0||bytes.byteLength>262144)return selectorFailure();let text:string;try{text=new TextDecoder('utf8',{fatal:true}).decode(bytes)}catch{return selectorFailure()}
+ // JSONC comments only, outside strings. No eval, trailing-comma repair or borrowing of unrelated state.
+ let json='',quoted=false,escape=false;for(let i=0;i<text.length;i++){const c=text[i]!;if(quoted){json+=c;if(escape)escape=false;else if(c==='\\')escape=true;else if(c==='"')quoted=false;continue}if(c==='"'){quoted=true;json+=c;continue}if(c==='/'&&text[i+1]==='/'){while(i<text.length&&text[i]!=='\n')i++;json+='\n';continue}if(c==='/'&&text[i+1]==='*'){const end=text.indexOf('*/',i+2);if(end<0)return selectorFailure();json+=' ';i=end+1;continue}json+=c}if(quoted)return selectorFailure();
+ let state:unknown;try{state=JSON.parse(json)}catch{return selectorFailure()}if(!state||typeof state!=='object'||Array.isArray(state))return selectorFailure();const value=state as Record<string,unknown>;
+ const account=(v:unknown):v is NativeCopilotSelector=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sort().join()==='host,login'&&(v as NativeCopilotSelector).host==='https://github.com'&&typeof(v as NativeCopilotSelector).login==='string'&&/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test((v as NativeCopilotSelector).login)&&!(v as NativeCopilotSelector).login.includes('--');
+ const selected=value.lastLoggedInUser,accounts=value.loggedInUsers;if(!account(selected)||!Array.isArray(accounts)||accounts.length<1||accounts.length>64||accounts.some(a=>!account(a))||accounts.filter(a=>a.host===selected.host&&a.login===selected.login).length!==1)return selectorFailure();return Object.freeze({host:selected.host,login:selected.login});
+}
+/** Called only after admitted native authority. Never used by capabilities/code discovery. No raw state escapes. */
+export async function readNativeCopilotSelector(t:NativeTiming):Promise<Readonly<NativeCopilotSelector>>{
+ copilotBoundary(t);const selected=process.env.COPILOT_HOME??join(homedir(),'.copilot');if(!isAbsolute(selected)||selected.length>4096)return selectorFailure();
+ try{const directory=await checkedRoot(selected),path=join(selected,'config.json'),named=await lstat(path);if(!named.isFile()||named.isSymbolicLink()||named.nlink!==1||named.size>262144)return selectorFailure();const f=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);try{const before=await f.stat();if(!before.isFile()||before.nlink!==1||before.size<1||before.size>262144||!same(before,named))return selectorFailure();const bytes=Buffer.alloc(before.size);let at=0;while(at<bytes.length){copilotBoundary(t);const r=await f.read(bytes,at,bytes.length-at,at);if(!r.bytesRead)return selectorFailure();at+=r.bytesRead}const after=await f.stat();copilotBoundary(t);if(after.nlink!==1||!same(before,after)||!same(before,await lstat(path))||!same(directory,await lstat(selected)))return selectorFailure();return projectNativeCopilotSelector(bytes)}finally{await f.close()}}
+ catch(e){if(e instanceof ProviderError&&(e.code==='sentinel.provider.canceled'||e.code==='sentinel.provider.timeout'))throw e;return selectorFailure()}
+}

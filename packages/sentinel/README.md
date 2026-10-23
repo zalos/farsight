@@ -950,7 +950,8 @@ accepted or resumable work stay protected; reconnect never automatically replays
 The fixed Copilot profile uses GitHub Copilot CLI 1.0.103 on macOS arm64 and explicit model `gpt-6-luna`.
 The executable and complete matching external runtime must already be installed; Sentinel verifies their pins,
 copies only the recorded code closure into private temporary storage and refuses changed or missing code.
-Profile revision2 fixes all three runtime tool-source exclusions and explicitly disables automatic login;
+Profile revision3 fixes all three runtime tool-source exclusions, disables automatic login, and projects only
+the current native selected-account host/login into private state;
 old profile adoption must be refreshed from capabilities. It never downloads or redistributes Copilot. Local code discovery does not establish account access, model
 availability, authentication or inference. There is no silent model, provider or version fallback. Other Copilot models are not yet qualified or enabled;
 arbitrary model names refuse, and stage selections can choose only available profiles.
@@ -1010,13 +1011,16 @@ reported aggregate tokens with monetary consumption unobserved. Missing/contradi
 uncertain, with no retry/refund invented; reported usage beyond a reservation overdraws and stops further work.
 
 Supported native authentication stays inside the pinned Copilot process, using its already configured OS keychain.
-Sentinel copies no token, credential file or real user configuration, grants no `gh` fallback, and uses private
+After admission, Sentinel reads only bounded native machine state at the selected Copilot home, validates the
+selected GitHub host/login uniquely against its account list, and reconstructs only that selector privately. It
+copies no token, subscription snapshot, other accounts or unrelated settings, grants no `gh` fallback, and uses private
 HOME/config/cwd with no tools, MCP, hooks, plugins, custom instructions, updates or session reuse. The macOS policy
 allows the shared securityd broker: this trusts the pinned vendor's native authentication and **does not** enforce
 credential-service-specific confinement. Sentinel's exact prompt, ordered semantic messages and piped Copilot wire
 are retained before dispatch; only final visible text and reported identity/usage are accepted. Vendor hidden
 instructions/reasoning are unobserved, and public stages record **no additional skills selected**. Private accepted
-Failure diagnostics retain only fixed phase/reason, exit/signal classes and bounded byte/frame/proxy counters
+A fixed native no-authentication-information message is classified only by exact in-memory bytes; this does
+not establish the owner is logged out, and unknown messages remain unknown. Failure diagnostics retain only fixed phase/reason, exit/signal classes and bounded byte/frame/proxy counters
 in the existing reservation event; native text, event names, hosts and authentication details are discarded. These
 diagnostics do not prove no spend. Records can be read after source removal; known-secret/privacy failures withhold them. They are not safe to share.
 
