@@ -491,9 +491,13 @@ test('a configured review registry ships its fixed operation entry and refuses a
   const root = workspace();
   try {
     write(root, 'packages/sentinel/src/service/review-adapter.ts', 'export const reviews = true;\n');
+    write(root, 'build/sentinel/previous-package', 'keep this exact prior package');
+    const before = readdirSync(join(root, 'build/sentinel')).sort();
     const refused = node(root, 'pack-sentinel.mjs');
     assert.equal(refused.status, 1);
     assert.match(refused.stderr, /review\/dispatch.ts is missing/);
+    assert.equal(readFileSync(join(root, 'build/sentinel/previous-package'), 'utf8'), 'keep this exact prior package');
+    assert.deepEqual(readdirSync(join(root, 'build/sentinel')).sort(), before);
     write(root, 'packages/sentinel/src/review/dispatch.ts', 'export const operation = true;\n');
     const packed = node(root, 'pack-sentinel.mjs');
     assert.equal(packed.status, 0, packed.stderr);
