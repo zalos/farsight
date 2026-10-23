@@ -17,7 +17,7 @@ function optionalFailure(store:SentinelStore,error:unknown):void{
   hardBoundary(store);
   const code=(error as {code?:unknown})?.code;
   const unavailable=new Set(['sentinel.decision.invalidInput','sentinel.decision.corruptHistory','sentinel.decision.staleState','sentinel.decision.notFound','sentinel.decision.scopeExceeded','sentinel.decision.unauthorized',
-    'sentinel.execution.analysisUnavailable','sentinel.policy.workspaceNotCanonical','sentinel.store.invalidInput','sentinel.store.corruptRecord','sentinel.store.notFound',
+    'sentinel.execution.analysisUnavailable','sentinel.store.invalidInput','sentinel.store.corruptRecord','sentinel.store.notFound',
     'sentinel.object.missing','sentinel.object.corrupt','sentinel.object.digestMismatch','sentinel.object.unsafePath','sentinel.object.io',
     'sentinel.report.evidenceUnbound','sentinel.report.runNotReportable','ENOENT','EACCES','EPERM','ENOTDIR','ELOOP','EIO']);
   if(typeof code!=='string'||!unavailable.has(code))throw error;
@@ -29,6 +29,7 @@ function projected(document:ReportEnvelope,decisions:ReportEnvelope['decisions']
 }
 export async function withOwnerDecisions(document:ReportEnvelope,store:SentinelStore,ws:Workspace,findings:readonly Finding[],now:Date,baselineRunId?:string):Promise<ReportEnvelope>{
   hardBoundary(store);if(store.ledger.getRun(document.run.id)?.state!=='completed')return document;
+  if(ws.path==='')return projected(document,[],'unavailable','unavailable');
   let present:boolean;try{present=hasOwnerHistory(store,ws)}catch(error){optionalFailure(store,error);return projected(document,[],'unavailable','unavailable')}
   if(!present)return document;
   const timing={signal:new AbortController().signal,deadlineAt:performance.now()+120000};

@@ -65,16 +65,28 @@ try{
   const normal=await call('decision','read',cleanDecision);check(normal.body.facts.document.withheld===false&&normal.body.facts.document.decision.rationale===privateRationale,'clean useful owner detail');
   const baseline=await call('decision','read',cleanDecision,'--baseline',secret);check(baseline.body.facts.document.withheld===true,'baseline decision withheld');absent(JSON.stringify(baseline.body),'baseline-only decision');
   for(const d of ['private','shareable'])for(const format of ['json','md','html','sarif'])absent(await comparison(clean,secret,d,format),'baseline report privacy');
-  stage='native-selected';renameSync(join(ws,'src'),join(consumer.scratch,'source-away-native'));const childPlan=await call('rerun',secret,'--stage',previewUnit);check(childPlan.status===0,'retained selected child admission');const child=childPlan.body.facts.runId;check((await call('run',child)).body.facts.state==='completed','sourcegone selected executes');
+  stage='native-selected';renameSync(join(ws,'src'),join(consumer.scratch,'source-away-native'));const childPlan=await call('rerun',secret,'--stage',previewUnit);check(childPlan.status===0,'retained selected child admission');const child=childPlan.body.facts.runId;check((await call('run',child,'--confirm')).body.facts.state==='completed','sourcegone selected executes');
   const childDoc=JSON.parse(await report(child)),childFinding=childDoc.findings.find(f=>f.ruleFamilyId===preview.rules[0].familyId);check(childFinding,'selected actual finding');
   const childDecision=await propose(child,childFinding.id,'accepted-risk',{rationale:privateRationale,supersedes:childFinding.id===previewFinding.id?secretDecision:null});await approve(childDecision);
   const childRead=await call('decision','read',childDecision);check(childRead.body.facts.document.withheld===true,'selected inherited privacy');absent(JSON.stringify(childRead.body),'selected owner decision');
   for(const d of ['private','shareable'])for(const format of ['json','md','html','sarif'])absent(await report(child,null,d,format),'selected report privacy');
   const observed=await call('report',child),rows=observed.body.facts.report.observations;check(!rows.some(o=>o.value.producer?.adapterId==='secrets-gitleaks'||o.value.adapter==='secrets-gitleaks'),'selected does not copy ancestor secret findings');
-  const records=new DatabaseSync(ledger,{readOnly:true}),containers=[];try{for(const r of records.prepare('SELECT envelope,final_envelope FROM attempts').all()){const a=JSON.parse(r.final_envelope??r.envelope);if(a.worker.kind==='owned-container')containers.push({id:a.worker.containerId,labels:a.worker.ownershipLabels,attemptId:a.id,invocation:a.invocation})}}finally{records.close()}
-  check(containers.length>=2,'actual Gitleaks container attempts');for(const own of containers){check(/^[0-9a-f]{64}$/.test(own.id),'owned container ID');check(execFileSync('docker',['container','ls','--all','--no-trunc','--filter','id='+own.id,'--format','{{.ID}}'],{encoding:'utf8',timeout:10000}).trim()==='','exact own container removed')}
+  const records=new DatabaseSync(ledger,{readOnly:true}),containers=[];let storeId;try{storeId=records.prepare('SELECT store_id FROM ledger_store WHERE singleton=1').get()?.store_id;check(typeof storeId==='string','actual store identity');for(const r of records.prepare('SELECT envelope,final_envelope FROM attempts').all()){const a=JSON.parse(r.final_envelope??r.envelope);if(a.worker.kind==='owned-container')containers.push({id:a.worker.containerId,labels:a.worker.ownershipLabels,attemptId:a.id,invocation:a.invocation})}}finally{records.close()}
+  check(containers.length>=2,'actual Gitleaks container attempts');for(const own of containers){check(own.labels.store===storeId,'container belongs to exact test store');check(/^[0-9a-f]{64}$/.test(own.id),'owned container ID');check(execFileSync('docker',['container','ls','--all','--no-trunc','--filter','id='+own.id,'--format','{{.ID}}'],{encoding:'utf8',timeout:10000}).trim()==='','exact own container removed')}
   evidence.cases.nativePrivacy={secret,clean,child,secretDecision,cleanDecision,childDecision,current:true,baseline:true,selected:true,sourceGone:true,bothProfiles:true,allFourFormats:true,cleanUseful:true,noAncestorFindingsCopied:true,ownContainers:containers,cleanupConfirmed:true};
  }
- stage='done';evidence.success=true;console.log(JSON.stringify({success:true,artifact:evidence.artifactDigest,commands:evidence.commands.length,ownerDecisions:true,sourceGone:evidence.cases.sourceGone===true,nativePrivacy:!!evidence.cases.nativePrivacy}));
+ stage='done';evidence.success=true;
 }catch(error){evidence.success=false;evidence.failedStage=stage;evidence.failure={code:typeof error?.code==='string'?error.code:null,message:String(error?.message??'qualification failure').replaceAll(VALUE,'[synthetic]').replaceAll(GENERIC,'[synthetic]').slice(0,2048)};if(consumer)writeFileSync(join(consumer.scratch,'decision-consumer-failure.json'),JSON.stringify(evidence,null,2)+'\n',{mode:0o600});console.error(JSON.stringify({success:false,stage,failure:evidence.failure}));process.exitCode=1}
-finally{for(const service of services){try{if(existsSync(service.path)&&readFileSync(service.path,'utf8')===service.bytes)process.kill(service.pid,'SIGTERM')}catch{}}if(consumer&&evidence.success)consumer.cleanup()}
+finally{
+ // Detached services own their natural idle shutdown. Never signal a descriptor pid.
+ const alive=pid=>{try{process.kill(pid,0);return true}catch(error){return error?.code!=='ESRCH'}};
+ const deadline=Date.now()+90000;
+ while(services.some(service=>alive(service.pid))&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,250));
+ if(services.some(service=>alive(service.pid))){
+  evidence.success=false;evidence.cleanup='natural-service-exit-unconfirmed';process.exitCode=1;
+  if(consumer)writeFileSync(join(consumer.scratch,'decision-consumer-failure.json'),JSON.stringify(evidence,null,2)+'\n',{mode:0o600});
+  console.error(JSON.stringify({success:false,stage:'cleanup',reason:'natural-service-exit-unconfirmed'}));
+ }
+ if(consumer&&evidence.success)consumer.cleanup();
+}
+if(evidence.success)console.log(JSON.stringify({success:true,artifact:evidence.artifactDigest,commands:evidence.commands.length,ownerDecisions:true,sourceGone:evidence.cases.sourceGone===true,nativePrivacy:!!evidence.cases.nativePrivacy}));

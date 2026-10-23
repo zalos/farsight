@@ -147,7 +147,7 @@ test('report session does not reread a source body already verified by its genui
 
 
 test('a context-free retained report keeps findings while owner decisions are explicitly unavailable',needsStore,async t=>{
- const s=await ownerFixture(t);
+ const s=await ownerFixture(t);await approved(s);
  const result=await fullReport({store:s.store,workspace:'',trustDir:s.ws.trustDir,runId:s.runId,disclosure:'shareable',now:new Date()});
  assert.equal(result.document.findings.length,1);
  assert.equal(result.document.counts.findings.n,1);
