@@ -22,10 +22,10 @@ test('the package is optional, private and exports only files that exist', () =>
   assert.equal(manifest.private, true);
   assert.match(manifest.version, /-draft\./);
   // core supplies the shared catalog (and later counts/placement/grants); @types/node because the public store
-  // declarations name Node built-ins. No scanner, container client or model SDK dependency.
+  // declarations name Node built-ins. Only the lazy MCP protocol SDK is added; no scanner, container client or model SDK dependency.
 
   // oxc-parser (the version the public parser pins) because the Express pack reads source syntax itself (ADR 31).
-  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', '@vscode/tree-sitter-wasm', 'ajv', 'oxc-parser']);
+  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@modelcontextprotocol/sdk', '@types/node', '@vscode/tree-sitter-wasm', 'ajv', 'oxc-parser']);
   assert.equal(manifest.bin['farsight-sentinel'], './dist/cli.js');
   for (const [key, target] of Object.entries(manifest.exports as Record<string, any>)) {
     if (key.includes('*')) continue;
@@ -54,6 +54,8 @@ test('no Farsight package depends on or imports Sentinel', () => {
 // Every module import outside the package, per built file. A new import fails here until it is reviewed and
 // added; nothing networked, no worker or cluster, and no static node:sqlite import anywhere.
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
+  'service/readonly.js': ['@farsight/core/dist/strings.js', 'node:crypto', 'node:perf_hooks'],
+  'service/mcp.js': ['@farsight/core/dist/strings-sentinel-service.js', '@farsight/core/dist/strings.js', '@modelcontextprotocol/sdk/server/index.js', '@modelcontextprotocol/sdk/server/stdio.js', '@modelcontextprotocol/sdk/types.js'],
   'service/scanner-assets.js': ['node:crypto', 'node:fs', 'node:path'],
   'reports/accepted-secrets.js': ['@farsight/graph', 'node:crypto'],
   'reports/selected-privacy.js': ['@farsight/graph'],
@@ -177,7 +179,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'store/errors.js': ['@farsight/core/dist/strings-sentinel-store.js'],
   'store/ledger-json.js': ['node:crypto'],
   // Scope-local counters and a monotonic clock; neither performs I/O or starts work on import.
-  'store/read-budget.js': ['node:async_hooks', 'node:perf_hooks'],
+  'store/read-budget.js': ['node:async_hooks', 'node:perf_hooks', 'node:timers/promises'],
   'store/ledger.js': ['node:fs', 'node:path'],
   'store/migrations.js': ['node:crypto', 'node:fs', 'node:path'],
   'store/objects.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:path', 'node:util', 'node:zlib'],
@@ -325,7 +327,7 @@ test('public scanner command support is conditional on explicit adopted pinned a
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import', 'reports']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import', 'reports', 'mcp']);
   assert.equal(listed.find(c => c.id === 'framework-express')?.reasonCode, 'sentinel.capability.draftExpress');
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
   for (const id of ['dispositions']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);

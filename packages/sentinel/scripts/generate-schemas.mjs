@@ -27,6 +27,12 @@ const ENVELOPES = {
   plan: ['sentinel-plan/draft-1', 'PlanEnvelope'],
   paths: ['sentinel-paths/draft-1', 'PathEvidenceEnvelope'],
   deepimport: ['sentinel-deep-import/draft-1', 'DeepImportEnvelope'],
+  servicecapabilities: ['sentinel-service-capabilities/draft-1', 'ServiceCapabilities'],
+  runinspection: ['sentinel-run-inspection/draft-1', 'RunInspection'],
+  inspectionpage: ['sentinel-inspection-page/draft-1', 'InspectionPage'],
+  reportdelivery: ['sentinel-report-delivery/draft-1', 'ReportDelivery'],
+  deliverychunk: ['sentinel-delivery-chunk/draft-1', 'DeliveryChunk'],
+
 };
 
 const generator = createGenerator({

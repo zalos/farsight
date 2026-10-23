@@ -5,6 +5,7 @@
 // representations count again. A scope's first limit/cancel/deadline/owner failure survives callers' error mapping.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { performance } from 'node:perf_hooks';
+import { setImmediate as yieldToLoop } from 'node:timers/promises';
 import type { SentinelStore, StoredObject } from './index.js';
 import { boundOwner } from './owner-binding.js';
 import type { StoreOwner } from './owner.js';
@@ -93,8 +94,15 @@ export async function budgetedObjectRead<T>(store: SentinelStore, ref: Pick<Stor
   }
   for (const s of scopes) { s.reads++; s.decodedBytes += ref.rawSize; s.encodedBytes += ref.storedSize; }
   try {
+    // Verified object I/O is synchronous beneath its Promise. Yield to actual socket/cancel events, not only
+    // microtasks. One reservation covers this attempted read; the original scope/owner/deadline never resets.
+    await yieldToLoop(); readBudgetCheckpoint(store);
     const value = await read();
-    readBudgetCheckpoint(store);
+    await yieldToLoop(); readBudgetCheckpoint(store);
     return value;
-  } catch (error) { readBudgetFailure(store, error); throw error; }
+  } catch (error) {
+    readBudgetFailure(store, error);
+    await yieldToLoop(); readBudgetCheckpoint(store);
+    throw error;
+  }
 }

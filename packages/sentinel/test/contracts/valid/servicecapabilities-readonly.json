@@ -1,0 +1,38 @@
+{
+  "schema": "sentinel-service-capabilities/draft-1",
+  "apiRevision": 1,
+  "storeId": "store-example",
+  "epoch": "epoch-example",
+  "operations": [
+    "run.inspect"
+  ],
+  "schemas": [
+    "sentinel-run-inspection/draft-1"
+  ],
+  "controlsSupported": false,
+  "features": [],
+  "limits": {
+    "pageRows": 128,
+    "pageBytes": 262144,
+    "viewUnits": 2000,
+    "viewAttempts": 10000,
+    "viewBytes": 8388608,
+    "viewTtlMs": 60000,
+    "views": 8,
+    "viewCacheBytes": 67108864,
+    "inspectMs": 5000,
+    "copyMs": 250,
+    "reportMs": 20000,
+    "reportReads": 10000,
+    "reportDecodedBytes": 134217728,
+    "reportEncodedBytes": 134217728,
+    "deliveryBytes": 33554432,
+    "deliveryCacheBytes": 67108864,
+    "deliveries": 4,
+    "deliveryTtlMs": 300000,
+    "chunkDefault": 16384,
+    "chunkMax": 65536,
+    "cursors": 4096
+  },
+  "limitationKey": "sentinel.service.readLimits"
+}

@@ -159,6 +159,9 @@ importers:
       '@farsight/graph':
         specifier: workspace:*
         version: link:../graph
+      '@modelcontextprotocol/sdk':
+        specifier: 1.31.0
+        version: 1.31.0(zod@4.6.5)
       '@types/node':
         specifier: 26.1.0
         version: 26.1.0

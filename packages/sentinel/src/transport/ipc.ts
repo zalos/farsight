@@ -183,7 +183,7 @@ export interface ServiceIdentity {
 }
 
 export interface ServiceRequest { readonly id: number; readonly op: string; readonly body: unknown }
-export type ServiceHandler = (op: string, body: unknown, by: ReturnType<typeof requestedByOf>) => Promise<unknown>;
+export type ServiceHandler = (op: string, body: unknown, by: ReturnType<typeof requestedByOf>, context?: { readonly signal: AbortSignal }) => Promise<unknown>;
 
 export interface OwnerSocket {
   readonly address: RuntimeAddress;
@@ -251,6 +251,9 @@ function probeSocket(path: string, open: (path: string) => Socket): Promise<'liv
 
 function serveConnection(socket: Socket, identity: ServiceIdentity, handler: ServiceHandler): void {
   const decoder = new FrameDecoder();
+  // Cancellation addresses only this socket's unsettled new read preparation. No run control is canceled here.
+  const reads = new Map<number, AbortController>();
+  const inflight = new Set<number>();
   let by: ReturnType<typeof requestedByOf> | undefined;
   // One connection's failure never reaches the daemon: an unencodable value (too large, not JSON) becomes a bounded,
   // typed error for that request, and a write to a closed connection is dropped.
@@ -284,16 +287,28 @@ function serveConnection(socket: Socket, identity: ServiceIdentity, handler: Ser
         send({ protocol: SERVICE_PROTOCOL, type: 'welcome', storeId: identity.storeId, ownerNonce: identity.ownerNonce });
         continue;
       }
+      if (f.type === 'cancel') {
+        if (Object.keys(f).length !== 2 || typeof f.id !== 'number' || !Number.isSafeInteger(f.id) || f.id < 0) { refuse('sentinel.ipc.frameMalformed'); return; }
+        reads.get(f.id)?.abort();
+        continue;
+      }
       const id = typeof f.id === 'number' && Number.isSafeInteger(f.id) ? f.id : undefined;
-      if (id === undefined || typeof f.op !== 'string' || f.type !== 'request') { refuse('sentinel.ipc.frameMalformed'); return; }
+      if (id === undefined || id < 0 || typeof f.op !== 'string' || f.type !== 'request' || inflight.has(id) || inflight.size >= 128) { refuse('sentinel.ipc.frameMalformed'); return; }
       const granted = by;
+      inflight.add(id);
+      const read = f.op === 'run.inspect' || f.op === 'report.open' ? new AbortController() : undefined;
+      if (read) reads.set(id, read);
       Promise.resolve()
-        .then(() => handler(f.op as string, refuseActorClaims(f.body), granted))
+        .then(() => handler(f.op as string, refuseActorClaims(f.body), granted, read ? { signal: read.signal } : undefined))
         .then(value => send({ type: 'response', id, ok: true, value }),
           error => send({ type: 'response', id, ok: false, code: typeof error?.code === 'string' && /^sentinel\.[a-zA-Z.]{1,120}$/.test(error.code) ? error.code : 'sentinel.ipc.requestFailed' }))
-        .catch(() => socket.destroy());
+        .catch(() => socket.destroy())
+        .finally(() => { inflight.delete(id); reads.delete(id); });
     }
   });
+  const abortReads = () => { for (const read of reads.values()) read.abort(); };
+  socket.on('end', abortReads); // A peer can finish its read channel before the full socket close event.
+  socket.on('close', () => { abortReads(); reads.clear(); });
   socket.on('error', () => socket.destroy());
 }
 
@@ -396,8 +411,9 @@ export async function connectOwnerSocket(address: RuntimeAddress, expect: Servic
       const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
       return new Promise((resolve, reject) => {
         const settle = (fn: () => void) => { clearTimeout(timer); options.signal?.removeEventListener('abort', onAbort); pending.delete(id); fn(); };
-        const timer = setTimeout(() => settle(() => reject(new IpcError('sentinel.ipc.timeout'))), timeoutMs);
-        const onAbort = () => settle(() => reject(new IpcError('sentinel.ipc.canceled')));
+        const cancelRead = () => { if ((op === 'run.inspect' || op === 'report.open') && !socket.destroyed) { try { socket.write(encodeFrame({ type: 'cancel', id })); } catch { /* connection failure already rejects */ } } };
+        const timer = setTimeout(() => { cancelRead(); settle(() => reject(new IpcError('sentinel.ipc.timeout'))); }, timeoutMs);
+        const onAbort = () => { cancelRead(); settle(() => reject(new IpcError('sentinel.ipc.canceled'))); };
         options.signal?.addEventListener('abort', onAbort, { once: true });
         pending.set(id, { resolve: v => settle(() => resolve(v)), reject: e => settle(() => reject(e)) });
         socket.write(frame);

@@ -1,0 +1,30 @@
+{
+  "schema": "sentinel-report-delivery/draft-1",
+  "deliveryId": "delivery-example",
+  "storeId": "store-example",
+  "epoch": "epoch-example",
+  "reportId": "report-example",
+  "current": {
+    "runId": "run-example",
+    "planRevision": 2,
+    "snapshotId": "snap-example",
+    "ledgerSequence": 1
+  },
+  "generationSequence": 1,
+  "evaluatedAt": "2026-10-22T00:00:00.000Z",
+  "disclosure": {
+    "profile": "shareable",
+    "profileDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "catalogVersion": "draft-1",
+  "context": {
+    "binding": "unavailable",
+    "reasonCode": "sentinel.place.noContext"
+  },
+  "documentDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "format": "json",
+  "formatDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "formatBytes": 2,
+  "createdAt": "2026-10-22T00:00:00.000Z",
+  "expiresAt": "2026-10-22T00:05:00.000Z"
+}

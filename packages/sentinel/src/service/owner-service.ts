@@ -36,6 +36,7 @@ import {
 import { assertSupportedRules, canonicalResult, currentPlan, rerunEnvelopeOf } from './canonical.js';
 import { loadPlan } from '../execution/plans.js';
 import { publicRegistry, scannerExecution } from './scanner-profile.js';
+import { ReadonlyViews, READONLY_OPERATIONS } from './readonly.js';
 import { recordRunFailure, runFailureCode } from './run-failure.js';
 
 export type ServiceErrorCode =
@@ -116,6 +117,7 @@ export class OwnerService {
   readonly #lastError = new Map<string, string>();
   /** Runs whose scratch lease was retained because a consumer was not proven stopped (scratch-lease.ts). */
   readonly #scratchRetained = new Map<string, ReturnType<typeof retainedFact>>();
+  readonly #reads: ReadonlyViews;
   #idleSince = Date.now();
   #stopping = false;
 
@@ -126,6 +128,7 @@ export class OwnerService {
     this.#drivers = options.drivers;
     this.#runEnvelope = options.runEnvelope ?? (() => undefined);
     this.#now = options.now ?? (() => new Date());
+    this.#reads = new ReadonlyViews(store, ws, this.#now);
   }
 
   /** True while a run executes. */
@@ -134,9 +137,19 @@ export class OwnerService {
   get idleSince(): number { return this.#idleSince; }
 
   /** One request, from a connection whose requester the transport fixed. Returns a typed command result. */
-  async handle(op: string, body: unknown, by: RequestedBy): Promise<unknown> {
+  async handle(op: string, body: unknown, by: RequestedBy, context: { readonly signal?: AbortSignal } = {}): Promise<unknown> {
     // The owner's channel never arrives here: every connection is a service client (transport/ipc.ts).
     if (by.channel === 'owner-cli') throw new ServiceError('sentinel.service.requestInvalid');
+    if ((READONLY_OPERATIONS as readonly string[]).includes(op)) {
+      if (this.#stopping) throw new ServiceError('sentinel.service.requestInvalid');
+      switch (op) {
+        case 'service.capabilities': fields(body, []); return this.#reads.capabilities();
+        case 'run.inspect': return this.#reads.inspect(body, by.channel, context.signal);
+        case 'view.page': return this.#reads.page(body, by.channel);
+        case 'report.open': return this.#reads.report(body, by.channel, context.signal);
+        case 'delivery.read': return this.#reads.read(body, by.channel);
+      }
+    }
     switch (op) {
       case 'service.info': {
         fields(body, []);
@@ -336,6 +349,7 @@ export class OwnerService {
   /** Pauses every executing run and waits for its work in flight to end. Starts nothing afterwards. */
   async stop(): Promise<void> {
     this.#stopping = true;
+    this.#reads.close();
     for (const run of this.#active.values()) { run.pause = true; run.coordinator?.pause(); }
     await Promise.all([...this.#active.values()].map(r => r.task));
   }
@@ -390,12 +404,12 @@ function removeServiceDescriptor(ws: Workspace, ownerNonce: string): void {
 }
 
 /** A connection to the workspace's running service, or undefined when none answers at its recorded address. */
-export async function connectService(ws: Workspace): Promise<ServiceClient | undefined> {
+export async function connectService(ws: Workspace, kind: import('../transport/ipc.js').ClientKind = 'cli'): Promise<ServiceClient | undefined> {
   const d = readServiceDescriptor(ws);
   if (!d) return undefined;
   try {
     checkAddress(d.address);
-    return await connectOwnerSocket(d.address, { storeId: d.storeId, ownerNonce: d.ownerNonce }, 'cli');
+    return await connectOwnerSocket(d.address, { storeId: d.storeId, ownerNonce: d.ownerNonce }, kind);
   } catch (e) {
     // Nothing listening, or something else answering: no service for this workspace. An unsafe folder or socket is
     // not a missing service and refuses.
@@ -429,9 +443,9 @@ export async function serveWorkspace(ws: Workspace, options: ServeOptions): Prom
   let lastRequest = Date.now();
   try {
     const address = runtimeAddress({ storePath: store.storePath, ownerNonce, sources: [ws.path] });
-    const socket = await listenOwnerSocket(address, { storeId: store.storeId, ownerNonce }, async (op, body, by) => {
+    const socket = await listenOwnerSocket(address, { storeId: store.storeId, ownerNonce }, async (op, body, by, context) => {
       inflight++;
-      try { return await service.handle(op, body, by); } finally { inflight--; lastRequest = Date.now(); }
+      try { return await service.handle(op, body, by, context); } finally { inflight--; lastRequest = Date.now(); }
     });
     try {
       const descriptor: ServiceDescriptor = Object.freeze({

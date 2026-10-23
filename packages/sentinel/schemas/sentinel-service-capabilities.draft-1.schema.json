@@ -1,0 +1,205 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/ServiceCapabilities",
+  "definitions": {
+    "ServiceCapabilities": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-service-capabilities/draft-1"
+        },
+        "apiRevision": {
+          "type": "number",
+          "const": 1
+        },
+        "storeId": {
+          "$ref": "#/definitions/Id"
+        },
+        "epoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16
+        },
+        "schemas": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8
+        },
+        "controlsSupported": {
+          "type": "boolean",
+          "const": false
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "library": {
+                "type": "string",
+                "enum": [
+                  "available-draft",
+                  "unavailable"
+                ]
+              },
+              "readiness": {
+                "type": "string",
+                "const": "not-checked"
+              },
+              "reasonCode": {
+                "$ref": "#/definitions/CatalogKey"
+              }
+            },
+            "required": [
+              "id",
+              "library",
+              "readiness",
+              "reasonCode"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 64
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "pageRows": {
+              "$ref": "#/definitions/Count"
+            },
+            "pageBytes": {
+              "$ref": "#/definitions/Count"
+            },
+            "viewUnits": {
+              "$ref": "#/definitions/Count"
+            },
+            "viewAttempts": {
+              "$ref": "#/definitions/Count"
+            },
+            "viewBytes": {
+              "$ref": "#/definitions/Count"
+            },
+            "viewTtlMs": {
+              "$ref": "#/definitions/Count"
+            },
+            "views": {
+              "$ref": "#/definitions/Count"
+            },
+            "viewCacheBytes": {
+              "$ref": "#/definitions/Count"
+            },
+            "inspectMs": {
+              "$ref": "#/definitions/Count"
+            },
+            "copyMs": {
+              "$ref": "#/definitions/Count"
+            },
+            "reportMs": {
+              "$ref": "#/definitions/Count"
+            },
+            "reportReads": {
+              "$ref": "#/definitions/Count"
+            },
+            "reportDecodedBytes": {
+              "$ref": "#/definitions/Count"
+            },
+            "reportEncodedBytes": {
+              "$ref": "#/definitions/Count"
+            },
+            "deliveryBytes": {
+              "$ref": "#/definitions/Count"
+            },
+            "deliveryCacheBytes": {
+              "$ref": "#/definitions/Count"
+            },
+            "deliveries": {
+              "$ref": "#/definitions/Count"
+            },
+            "deliveryTtlMs": {
+              "$ref": "#/definitions/Count"
+            },
+            "chunkDefault": {
+              "$ref": "#/definitions/Count"
+            },
+            "chunkMax": {
+              "$ref": "#/definitions/Count"
+            },
+            "cursors": {
+              "$ref": "#/definitions/Count"
+            }
+          },
+          "required": [
+            "pageRows",
+            "pageBytes",
+            "viewUnits",
+            "viewAttempts",
+            "viewBytes",
+            "viewTtlMs",
+            "views",
+            "viewCacheBytes",
+            "inspectMs",
+            "copyMs",
+            "reportMs",
+            "reportReads",
+            "reportDecodedBytes",
+            "reportEncodedBytes",
+            "deliveryBytes",
+            "deliveryCacheBytes",
+            "deliveries",
+            "deliveryTtlMs",
+            "chunkDefault",
+            "chunkMax",
+            "cursors"
+          ],
+          "additionalProperties": false
+        },
+        "limitationKey": {
+          "type": "string",
+          "const": "sentinel.service.readLimits"
+        }
+      },
+      "required": [
+        "schema",
+        "apiRevision",
+        "storeId",
+        "epoch",
+        "operations",
+        "schemas",
+        "controlsSupported",
+        "features",
+        "limits",
+        "limitationKey"
+      ],
+      "additionalProperties": false
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-service-capabilities.draft-1.schema.json",
+  "title": "sentinel-service-capabilities/draft-1"
+}

@@ -6,6 +6,7 @@ const same = (text: string, define: string): StringEntry => ({ hud: text, profes
 const one = (text: string, pluralKey: string): StringEntry => ({ hud: text, professional: text, singularOf: pluralKey });
 
 export const SENTINEL_REPORT_STRINGS: Record<string, StringEntry> = {
+  'sentinel.scope.inspection': same('in this saved scan view', 'One immutable sanitized copy of a selected admitted plan and its own recorded work, attempts, inputs and outputs at a single ledger sequence.'),
   'sentinel.scope.report': same('in this report', 'What the number beside it counts over: one saved report of one scan, as of the moment the report was made.'),
   'sentinel.scope.finding': same('for this finding', 'What the number beside it counts over: the screens, journeys or people one finding is placed on, each counted once.'),
   'sentinel.scope.inventory': same('in the captured files', 'What the number beside it counts over: the files and folders the scan captured and listed, before any check ran.'),

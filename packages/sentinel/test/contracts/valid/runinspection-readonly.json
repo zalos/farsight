@@ -1,0 +1,46 @@
+{
+  "schema": "sentinel-run-inspection/draft-1",
+  "viewId": "view-example",
+  "storeId": "store-example",
+  "epoch": "epoch-example",
+  "runKey": "h11111111111111111111111111111111",
+  "planKey": "h11111111111111111111111111111111",
+  "snapshotKey": null,
+  "planRevision": 1,
+  "sequence": 1,
+  "historical": false,
+  "status": "planned",
+  "outcome": null,
+  "createdAt": "2026-10-22T00:00:00.000Z",
+  "expiresAt": "2026-10-22T00:01:00.000Z",
+  "counts": {
+    "works": {
+      "n": 0,
+      "unit": "sentinel.service.count.works",
+      "bizUnit": "sentinel.service.count.works",
+      "scope": "sentinel.scope.inspection",
+      "source": "ReadonlyViews.inspect.works"
+    },
+    "attempts": {
+      "n": 0,
+      "unit": "sentinel.service.count.attempts",
+      "bizUnit": "sentinel.service.count.attempts",
+      "scope": "sentinel.scope.inspection",
+      "source": "ReadonlyViews.inspect.attempts"
+    },
+    "inputs": {
+      "n": 0,
+      "unit": "sentinel.service.count.inputs",
+      "bizUnit": "sentinel.service.count.inputs",
+      "scope": "sentinel.scope.inspection",
+      "source": "ReadonlyViews.inspect.inputs"
+    },
+    "outputs": {
+      "n": 0,
+      "unit": "sentinel.service.count.outputs",
+      "bizUnit": "sentinel.service.count.outputs",
+      "scope": "sentinel.scope.inspection",
+      "source": "ReadonlyViews.inspect.outputs"
+    }
+  }
+}

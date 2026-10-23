@@ -1,0 +1,453 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/InspectionPage",
+  "definitions": {
+    "InspectionPage": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-inspection-page/draft-1"
+        },
+        "viewId": {
+          "$ref": "#/definitions/Id"
+        },
+        "sequence": {
+          "$ref": "#/definitions/Count"
+        },
+        "collection": {
+          "$ref": "#/definitions/InspectionCollection"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InspectionRow"
+          },
+          "maxItems": 128
+        },
+        "nextCursor": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema",
+        "viewId",
+        "sequence",
+        "collection",
+        "rows",
+        "nextCursor"
+      ],
+      "additionalProperties": false
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "InspectionCollection": {
+      "type": "string",
+      "enum": [
+        "works",
+        "attempts",
+        "inputs",
+        "outputs"
+      ]
+    },
+    "InspectionRow": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/InspectionWork"
+        },
+        {
+          "$ref": "#/definitions/InspectionAttempt"
+        },
+        {
+          "$ref": "#/definitions/InspectionInput"
+        },
+        {
+          "$ref": "#/definitions/InspectionOutput"
+        }
+      ]
+    },
+    "InspectionWork": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "work"
+        },
+        "workKey": {
+          "$ref": "#/definitions/ViewHandle"
+        },
+        "stage": {
+          "$ref": "#/definitions/PlanStage"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "prerequisites": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "workKey": {
+                "$ref": "#/definitions/ViewHandle"
+              },
+              "revision": {
+                "$ref": "#/definitions/Ordinal"
+              },
+              "binding": {
+                "type": "string",
+                "enum": [
+                  "in-view",
+                  "reference-only"
+                ]
+              }
+            },
+            "required": [
+              "workKey",
+              "revision",
+              "binding"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 1024
+        },
+        "disposition": {
+          "type": "string",
+          "enum": [
+            "selected",
+            "downstream",
+            "held",
+            "planned"
+          ]
+        },
+        "recordedWork": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "ready",
+                    "published",
+                    "failed",
+                    "running",
+                    "leased",
+                    "blocked",
+                    "disabled-by-policy",
+                    "satisfied-by-reuse"
+                  ]
+                },
+                "influenceKey": {
+                  "$ref": "#/definitions/ViewHandle"
+                },
+                "activeAttemptKey": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/ViewHandle"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "state",
+                "influenceKey",
+                "activeAttemptKey"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inputCount": {
+          "$ref": "#/definitions/Count"
+        },
+        "implementationKey": {
+          "$ref": "#/definitions/ViewHandle"
+        }
+      },
+      "required": [
+        "kind",
+        "workKey",
+        "stage",
+        "revision",
+        "prerequisites",
+        "disposition",
+        "recordedWork",
+        "inputCount",
+        "implementationKey"
+      ],
+      "additionalProperties": false
+    },
+    "ViewHandle": {
+      "type": "string",
+      "pattern": "^h[0-9a-f]{32}$"
+    },
+    "PlanStage": {
+      "type": "string",
+      "enum": [
+        "capture",
+        "parse",
+        "inventory",
+        "check"
+      ],
+      "description": "What a work unit does: the bootstrap stages, or running checks."
+    },
+    "Ordinal": {
+      "type": "integer",
+      "description": "A positive integer ordinal or revision.",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "InspectionAttempt": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "attempt"
+        },
+        "workKey": {
+          "$ref": "#/definitions/ViewHandle"
+        },
+        "attemptKey": {
+          "$ref": "#/definitions/ViewHandle"
+        },
+        "ordinal": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "state": {
+          "$ref": "#/definitions/AttemptState"
+        },
+        "startedAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "endedAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "usageCertainty": {
+          "$ref": "#/definitions/UsageCertainty"
+        },
+        "invocationKey": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ViewHandle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputCount": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "accepted": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "$ref": "#/definitions/CatalogKey"
+            },
+            "retryable": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "retryable"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "kind",
+        "workKey",
+        "attemptKey",
+        "ordinal",
+        "state",
+        "startedAt",
+        "usageCertainty",
+        "invocationKey",
+        "outputCount",
+        "accepted"
+      ],
+      "additionalProperties": false
+    },
+    "AttemptState": {
+      "type": "string",
+      "enum": [
+        "running",
+        "succeeded",
+        "failed",
+        "interrupted",
+        "canceled",
+        "canceled-after-spend"
+      ]
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "A UTC RFC 3339 timestamp with an explicit Z offset and a real calendar date (no leap second), years 0000–9999 proleptic Gregorian, up to nine fractional digits. The pattern bounds each field; the `date-time` format check refuses a day the month does not have. Comparisons keep all nine digits.",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$",
+      "format": "date-time"
+    },
+    "UsageCertainty": {
+      "type": "string",
+      "enum": [
+        "confirmed",
+        "unknown",
+        "not-applicable"
+      ],
+      "description": "Confirmed spend and unknown usage are distinct facts; a timeout never proves a provider stopped billing."
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "InspectionInput": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "input"
+        },
+        "workKey": {
+          "$ref": "#/definitions/ViewHandle"
+        },
+        "sourceKey": {
+          "$ref": "#/definitions/ViewHandle"
+        },
+        "inputKey": {
+          "$ref": "#/definitions/ViewHandle"
+        },
+        "contentKey": {
+          "$ref": "#/definitions/ViewHandle"
+        }
+      },
+      "required": [
+        "kind",
+        "workKey",
+        "sourceKey",
+        "inputKey",
+        "contentKey"
+      ],
+      "additionalProperties": false
+    },
+    "InspectionOutput": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "output"
+        },
+        "workKey": {
+          "$ref": "#/definitions/ViewHandle"
+        },
+        "attemptKey": {
+          "$ref": "#/definitions/ViewHandle"
+        },
+        "outputKey": {
+          "$ref": "#/definitions/ViewHandle"
+        },
+        "accepted": {
+          "type": "boolean"
+        },
+        "mediaType": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Fixed allowlisted schema or null, never arbitrary producer text."
+        },
+        "privacy": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "metadata",
+            "source-derived",
+            "source",
+            null
+          ]
+        },
+        "publicationKey": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ViewHandle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sequence": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "acceptedAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "workKey",
+        "attemptKey",
+        "outputKey",
+        "accepted",
+        "mediaType",
+        "privacy",
+        "publicationKey",
+        "sequence",
+        "acceptedAt"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-inspection-page.draft-1.schema.json",
+  "title": "sentinel-inspection-page/draft-1"
+}
