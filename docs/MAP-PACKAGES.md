@@ -304,5 +304,8 @@ Sentinel structural task requests (ADR 45) add `contracts/pathrequest.ts` and
 unavailable deep-flow capability stay explicit gaps. These helpers grant no execution or receipt authority.
 `analysis/paths/protocol.ts` is the pure sealed-object job/output reader: exact request/ancestor/source bindings,
 read-byte hashes and parser result/index links, returning call reachability and frontiers without check credit. It
-launches and publishes nothing. Shared
-retained-source admission, canonical driver/owner dispatch and report projection remain required integration gates.
+launches and publishes nothing. `analysis/paths/admission.ts` binds the exact admitted path units to a genuine
+owner-bound retained-source proof, revalidates its closure through counted reads and derives source-derived request
+retention links before the existing atomic plan admission. Unrelated execution units remain held; request ancestry
+uses exact accepted edges, and mixed legacy selections refuse. Canonical driver/owner dispatch, selected path-task
+reruns and report projection remain required integration gates.

@@ -1609,9 +1609,15 @@ Admission must prove the actual current ancestor revision, allowed ended state a
 same retained bootstrap/source authority used by canonical execution. The request is staged as source-derived with
 the plan, linked to the exact admitted ancestor and accepted operation/parser closure; callers cannot supply those
 links or turn copied artifact JSON into authority. Execution rechecks the pin and uses sealed retained bytes, never
-today's workspace or an unpinned prepare-only parameter. The shared readonly authority extraction and its canonical
-owner command/driver/report wiring are implementation gates; the contract/planner checkpoint alone does not enable
-production path execution. Public reports must keep call reachability distinct from data flow or protection, retain
+today's workspace or an unpinned prepare-only parameter. The internal admission seam requires the genuine
+owner-bound read proof, validates the request's exact path unit fingerprints and included source bodies, and derives
+all retention links itself before staging. Proof construction and closure revalidation are separate bounded read
+passes; both retain the original absolute deadline and signal. Repeated pre-write assertions check that proof without
+copying its large source view or minting execution authority. Execution holds every unrelated unit. Authenticated
+request ancestor edges and genuine selected-rerun edges retain their recorded revisions; a parent id alone grants
+nothing. Mixed request pins and legacy rerun selections currently refuse explicitly; selected reruns of path tasks
+remain a required integration item. Canonical owner command, fixed worker/driver, lifecycle and report wiring remain
+implementation gates; this internal checkpoint does not enable production path execution. Public reports must keep call reachability distinct from data flow or protection, retain
 bounds/frontiers and apply current, baseline and proven selected-ancestor privacy to every path-controlled detail.
 
 Deep imports retain ADR 36's separate owner `evidence.import` receipt boundary and tool-scope-only observations.

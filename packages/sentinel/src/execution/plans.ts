@@ -7,6 +7,9 @@
 // analysis plan pins an admitted snapshot. Then the four records are staged, stored and admitted together; the plan
 // is a collection root and links the other three. loadPlan reads them back and repeats every check, so what the
 // coordinator executes is exactly what was admitted, whatever happened to the caller's objects.
+import type { PathRequestEnvelope } from '../contracts/pathrequest.js';
+import { pathRequestOf, PATH_REQUEST_SCHEMA } from '../analysis/paths/request.js';
+import { verifyPathAdmission, pathUnitsFor, type PathRequestAdmission } from '../analysis/paths/admission.js';
 import { createHash } from 'node:crypto';
 import type { ArtifactId, Id } from '../contracts/common.js';
 import type { RuleLockEnvelope } from '../contracts/rules.js';
@@ -40,6 +43,8 @@ export interface AdmitPlanRequest {
   profile: ExecutionProfileRecord;
   /** A selected rerun's selection (analysis revisions only): the units this run executes. */
   selection?: RerunSelection | null;
+  /** Required exactly when the plan pins a source-derived structural request. */
+  pathRequest?: PathRequestAdmission;
 }
 
 export interface AdmittedPlan {
@@ -49,6 +54,8 @@ export interface AdmittedPlan {
   policy: EffectivePolicyRecord | null;
   profile: ExecutionProfileRecord;
   selection: RerunSelection | null;
+  /** Accepted canonical request bytes; absent for all legacy plans. Never a launch capability. */
+  pathRequest?: Readonly<PathRequestEnvelope>;
 }
 
 const refuse = (reason: string): never => { throw new ExecutionError('sentinel.execution.planInvalid', { reason }); };
@@ -78,7 +85,10 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest)
   const selection = request.selection ? structuredClone(request.selection) : null;
   check(plan, ruleLock, policy, profile);
   if (selection) checkSelection(plan, selection);
+  if (selection && plan.pins.pathRequest) refuse('selected reruns of path tasks require a separately authenticated request selection');
   if (plan.pins.snapshotId !== null && !store.ledger.getSnapshot(plan.pins.snapshotId)) refuse('the plan pins a snapshot that was not admitted');
+  if ((plan.pins.pathRequest!==undefined)!==(request.pathRequest!==undefined)) refuse('a pinned path request requires its genuine read proof');
+  const path=request.pathRequest?await verifyPathAdmission(store,plan,profile,request.pathRequest):undefined;
   const ids = {
     plan: store.objects.identifyCanonicalJson(plan), profile: store.objects.identifyCanonicalJson(profile),
     ruleLock: ruleLock ? store.objects.identifyCanonicalJson(ruleLock) : null, policy: policy ? store.objects.identifyCanonicalJson(policy) : null,
@@ -92,20 +102,27 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest)
       && existing.selection === (ids.selection?.id ?? null)) return existing;
     refuse(`revision ${plan.revision} of run ${plan.runId} was already admitted with other content`);
   }
-  const pinned = [ids.profile.id, ...(ids.ruleLock ? [ids.ruleLock.id] : []), ...(ids.policy ? [ids.policy.id] : []), ...(ids.selection ? [ids.selection.id] : [])];
+  const pinned = [ids.profile.id, ...(ids.ruleLock ? [ids.ruleLock.id] : []), ...(ids.policy ? [ids.policy.id] : []), ...(ids.selection ? [ids.selection.id] : []),...(path?[path.request.id]:[])];
   const stageId = `plan.${plan.runId}.${plan.revision}.${plan.digest.slice(7, 23)}`.slice(0, 128);
+  path?.boundary();
   store.ledger.registerStaging(stageId, [
     { id: ids.plan.id, schema: 'sentinel-plan/draft-1', privacy: 'source-derived', links: pinned },
     { id: ids.profile.id, schema: profile.schema, privacy: 'metadata' },
     ...(ruleLock ? [{ id: ids.ruleLock!.id, schema: 'sentinel-rulelock/draft-1', privacy: 'metadata' as const }] : []),
     ...(policy ? [{ id: ids.policy!.id, schema: policy.kind, privacy: 'metadata' as const }] : []),
     ...(selection ? [{ id: ids.selection!.id, schema: SELECTION_SCHEMA, privacy: 'metadata' as const }] : []),
+    ...(path?[{id:path.request.id,schema:PATH_REQUEST_SCHEMA,privacy:'source-derived' as const,links:path.links}]:[]),
   ]);
+  const put = async (value:unknown, expect: {id:ArtifactId;rawSize:number}) => {
+    path?.boundary();const receipt=await store.objects.putCanonicalJson(value,{expect});path?.boundary();return receipt;
+  };
   try {
-    const receipts = [await store.objects.putCanonicalJson(plan, { expect: ids.plan }), await store.objects.putCanonicalJson(profile, { expect: ids.profile })];
-    if (ruleLock) receipts.push(await store.objects.putCanonicalJson(ruleLock, { expect: ids.ruleLock! }));
-    if (policy) receipts.push(await store.objects.putCanonicalJson(policy, { expect: ids.policy! }));
-    if (selection) receipts.push(await store.objects.putCanonicalJson(selection, { expect: ids.selection! }));
+    const receipts = [await put(plan, ids.plan), await put(profile, ids.profile)];
+    if (ruleLock) receipts.push(await put(ruleLock, ids.ruleLock!));
+    if (policy) receipts.push(await put(policy, ids.policy!));
+    if (selection) receipts.push(await put(selection, ids.selection!));
+    if(path) receipts.push(await put(path.request.value,store.objects.identifyCanonicalJson(path.request.value)));
+    path?.boundary();
     store.assertHeld();
     return store.ledger.admitPlan({ runId: plan.runId, revision: plan.revision, kind: plan.kind, digest: plan.digest, previous: plan.previous,
       plan: ids.plan.id, ruleLock: ids.ruleLock?.id ?? null, policy: ids.policy?.id ?? null, profile: ids.profile.id, selection: ids.selection?.id ?? null,
@@ -133,9 +150,12 @@ export async function loadPlan(store: SentinelStore, runId: Id, revision?: numbe
   const selection = record.selection ? await readJson<RerunSelection>(store, record.selection) : null;
   check(plan, ruleLock, policy, profile);
   if (selection) checkSelection(plan, selection);
+  if (selection && plan.pins.pathRequest) refuse('selected reruns of path tasks require a separately authenticated request selection');
+  const pathRequest=plan.pins.pathRequest?pathRequestOf(await readJson(store,plan.pins.pathRequest)):undefined;
+  if(pathRequest) pathUnitsFor(plan,pathRequest);
   if (plan.runId !== record.runId || plan.revision !== record.revision || plan.digest !== record.digest || plan.kind !== record.kind
     || plan.previous !== record.previous || plan.pins.snapshotId !== record.snapshotId) refuse('the stored plan is not the revision the ledger admitted');
-  return { record, plan, ruleLock, policy, profile, selection };
+  return { record, plan, ruleLock, policy, profile, selection,...(pathRequest?{pathRequest:pathRequest.value}:{}) };
 }
 
 /**

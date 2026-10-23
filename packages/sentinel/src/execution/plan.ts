@@ -12,6 +12,8 @@
 // The execution binding is a separate record, never the plan's manifest: it names the canonical manifest's id, the
 // adapter digest, the exact inputs and the PR 07 protocol fingerprint the worker's start carries and its result must
 // repeat. It is accepted with every attempt's start (linked from its invocation record), failed attempts included.
+import { pathRequestOf } from '../analysis/paths/request.js';
+import { pathUnitsFor } from '../analysis/paths/admission.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { ArtifactId, Digest, Id, WorkRef } from '../contracts/common.js';
@@ -168,6 +170,11 @@ export async function executablePlan(store: SentinelStore, admitted: AdmittedPla
       const runs = unitsToRun(admitted.selection);
       works = works.map(w => (runs.has(w.id) ? w : { ...w, state: 'disabled-by-policy', reasonCode: NOT_SELECTED } as WorkEnvelope));
     }
+    if (plan.pins.pathRequest) {
+      if (!admitted.pathRequest) refuse('the path task has no accepted request');
+      const active=pathUnitsFor(plan,pathRequestOf(admitted.pathRequest));
+      works=works.map(w=>active.has(w.id)?w:{...w,state:'disabled-by-policy',reasonCode:NOT_SELECTED} as WorkEnvelope);
+    }
     const held = new Set(works.filter(w => w.state === 'blocked' || w.state === 'disabled-by-policy').map(key));
     inputsOf = w => (held.has(key(w)) ? [] : boundary.inputsFor(w).map(i => ({ id: i.id, path: i.path })));
   } else {
@@ -223,7 +230,7 @@ export async function executablePlan(store: SentinelStore, admitted: AdmittedPla
   const proven = new Set(plan.reused.map(key));
   // Preserve the exact plan every unit was bound to; copying the caller admission again could read a later plan.
   const admittedCopy = deepFreeze({ ...structuredClone({ record: admitted.record, ruleLock: admitted.ruleLock,
-    policy: admitted.policy, profile: admitted.profile, selection: admitted.selection }), plan });
+    policy: admitted.policy, profile: admitted.profile, selection: admitted.selection,...(admitted.pathRequest?{pathRequest:admitted.pathRequest}:{}) }), plan });
   const result = Object.freeze({
     run, admitted: admittedCopy, works: Object.freeze(works.map(w => units.get(key(w))!.work)),
     external: new Set(proven), restored, reusedProven: (r: WorkRef) => proven.has(key(r)),
