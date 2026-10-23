@@ -483,10 +483,14 @@ export class Coordinator {
       const signal = AbortSignal.any([this.#cancel.signal, this.#deadline.signal, unitDeadline, elapsedDeadline.signal]);
       stillWithin = () => {
         if (this.#cancel.signal.aborted) throw new ExecutionError('sentinel.execution.canceled', { reason: 'canceled before acceptance' });
-        if (this.#deadlinePassed || Date.now() >= this.#runDeadline) throw new ExecutionError('sentinel.execution.runDeadline', { reason: 'the run deadline passed before acceptance' });
+        if (this.#deadlinePassed || Date.now() >= this.#runDeadline) {
+          this.#deadlinePassed = true;
+          this.#deadline.abort();
+          throw new ExecutionError('sentinel.execution.runDeadline', { reason: 'the run deadline passed before acceptance' });
+        }
         if (unitDeadline.aborted || performance.now() >= unitDeadlineAt) {
           // The monotonic boundary can precede delivery of the timeout event; notify driver work before refusing.
-          elapsedDeadline.abort();
+          elapsedDeadline.abort(new DOMException('unit deadline elapsed', 'TimeoutError'));
           throw new ExecutionError('sentinel.execution.deadlineExceeded', { deadlineMs: work.resources.deadlineMs, elapsedMs: Math.round(performance.now() - t0) });
         }
       };

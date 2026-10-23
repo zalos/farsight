@@ -80,9 +80,49 @@ test('elapsed unit deadline aborts the driver signal before a delayed timer noti
   assert.deepEqual(f.store.ledger.listAttempts({ id: f.p.ids.A, revision: 1 }), []);
   assert.ok(summary.failures.some(e => e.code === 'sentinel.execution.deadlineExceeded'));
   assert.equal(signal?.aborted, true);
+  assert.equal(signal?.reason?.name, 'TimeoutError');
   assert.equal(notifications, 1);
   assertNoScratch(f);
 });
+
+for (const canceled of [false, true]) {
+  test(`elapsed run deadline notifies the driver with delayed timer delivery${canceled ? ', preserving cancellation first' : ''}`, { timeout: 10_000 }, async t => {
+    const f = await setup(t, {}, 1000);
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const wallNow = Date.now.bind(Date);
+    let elapsed = 0;
+    t.mock.method(Date, 'now', () => wallNow() + elapsed);
+    let signal: AbortSignal | undefined;
+    let notifications = 0;
+    let coordinator: Coordinator;
+    const d = driver(f.p, {
+      async prepare(ctx: any) {
+        if (ctx.unit.id === f.p.ids.A) {
+          signal = ctx.signal;
+          signal!.addEventListener('abort', () => { notifications++; }, { once: true });
+          assert.equal(signal!.aborted, false);
+          elapsed = 1001;
+          if (canceled) coordinator.cancel();
+        }
+        return { job: { unit: ctx.unit.id }, auxiliary: [] };
+      },
+    });
+    coordinator = await Coordinator.open(options(f, d));
+    const summary = await coordinator.run();
+    assert.equal(f.store.ledger.getPublication({ id: f.p.ids.A, revision: 1 }), null);
+    assert.deepEqual(f.store.ledger.listAttempts({ id: f.p.ids.A, revision: 1 }), []);
+    assert.equal(signal?.aborted, true);
+    assert.equal(notifications, 1);
+    if (canceled) {
+      assert.equal(summary.state, 'canceled');
+      assert.ok(summary.failures.some(e => e.code === 'sentinel.execution.canceled'));
+      assert.equal(summary.failures.some(e => e.code === 'sentinel.execution.runDeadline'), false);
+    } else {
+      assert.ok(summary.failures.some(e => e.code === 'sentinel.execution.runDeadline'));
+    }
+    assertNoScratch(f);
+  });
+}
 
 for (const phase of ['prepare', 'normalize'] as const) {
   test(`one unit deadline includes driver ${phase}`, async t => {
