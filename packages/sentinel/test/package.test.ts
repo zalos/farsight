@@ -203,6 +203,12 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // Bounded call paths and attested deep import (ADR 36): pure over parser evidence and captured bytes; no engine, no process.
   'analysis/paths/paths.js': ['@farsight/graph', 'node:crypto'],
   'analysis/deep/import.js': ['@farsight/graph', 'node:crypto'],
+  // Imported report readers (PR 20 Stage A): one bounded no-follow file read, hashing and canonical JSON; no network,
+  // no process, no decompression, no store or receipt.
+  'imports/bounded-file.js': ['node:fs', 'node:path'],
+  'imports/collect.js': ['node:crypto'],
+  'imports/normalize.js': ['@farsight/graph', 'node:crypto'],
+  'imports/sarif.js': ['@farsight/graph'],
   // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
   // The framework inspection worker (ADR 44): sealed inputs by digest, one output file; it runs only as its own entry.
   'frameworks/controls/closure.js': ['node:crypto', 'node:fs', 'node:module', 'node:path', 'node:url', 'require:oxc-parser'],
