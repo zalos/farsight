@@ -5,7 +5,7 @@ import { assertCanonicalStorePath } from '../store/paths.js';
 import { ensurePrivateDir } from '../policy/user-state.js';
 import { ensureDurableDir } from './publish-once.js';
 import { frameworkControlsAdapter, CONTROLS_SUPPORTED_RULES, type FrameworkControlsAdapter } from '../frameworks/controls/driver.js';
-import { FRAMEWORK_CONTROLS_ADAPTER_ID } from '../frameworks/controls/worker.js';
+import { FRAMEWORK_CONTROLS_ADAPTER_ID } from '../frameworks/controls/definitions.js';
 import { readPackDirectory, validatePack, type ValidatedPack } from '../rules/index.js';
 import type { RuleLockEnvelope } from '../contracts/rules.js';
 import { builtinPackDir } from './package-paths.js';

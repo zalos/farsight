@@ -9,7 +9,9 @@ import { createRequire } from 'node:module';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CLOSURE_REFUSED, FRAMEWORK_CONTROLS_WORKER, workerClosure, writeClosureEntry } from '../dist/frameworks/controls/index.js';
+import { CLOSURE_REFUSED, workerClosure, writeClosureEntry } from '../dist/frameworks/controls/closure.js';
+import { builtinWorkerFiles } from '../dist/execution/assets.js';
+const FRAMEWORK_CONTROLS_WORKER = builtinWorkerFiles('framework-controls').worker;
 import { moduleDigestOf } from '../dist/execution/registry.js';
 
 /** A synthetic worker: dist/frameworks/controls/worker.js importing a sibling module and a package with a dependency. */
@@ -41,7 +43,7 @@ test('the closure reaches imported Sentinel files and whole packages, transitive
   const paths = c.entries.map(e => e[0]);
   for (const p of [fx.worker, fx.effects, fx.depB]) assert.ok(paths.includes(p), p);
   // The real worker reaches the fact mapping, every framework library and the parser package.
-  const real = workerClosure().entries.map(e => e[0]);
+  const real = workerClosure(FRAMEWORK_CONTROLS_WORKER).entries.map(e => e[0]);
   for (const needle of ['/controls/facts.js', '/express/effects.js', '/nest/analyze.js', '/spring/pack.js', '/next/analyze.js', '/oxc-parser/']) {
     assert.ok(real.some(p => p.includes(needle)), needle);
   }

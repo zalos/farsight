@@ -28,6 +28,7 @@ import type { PlanCheck, PlanEnvelope, PlanWork } from '../contracts/plan.js';
 import type { ResultMessage } from '../contracts/protocol.js';
 import type { ResolvedRule } from '../rules/resolve.js';
 import { ExecutionError } from './errors.js';
+import type { ExecutionBinding } from './plan.js';
 import type { ExecutionProfileRecord } from './profile.js';
 import type { AdapterRegistry } from './registry.js';
 import type { CapturedInput, VerifiedOutput, WorkerOutcome } from './supervisor.js';
@@ -100,6 +101,8 @@ export interface NormalizedOutcome {
 }
 
 export interface VerifiedAttempt {
+  /** The genuine prepared binding, supplied internally by the coordinator. */
+  readonly binding?: Readonly<ExecutionBinding>;
   /** The exact supervisor outcome, deep-frozen by the coordinator; image facts never come from worker metadata. */
   readonly outcome: Readonly<WorkerOutcome>;
   readonly result: ResultMessage;

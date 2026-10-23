@@ -17,10 +17,10 @@ import { storeIn } from './execution-helpers.ts';
 import { lockedRules, policyView } from './planner-helpers.ts';
 import { PARSE, RESOURCES } from './coordinator-helpers.ts';
 
-export async function retainedFixture(t: any, options: { fault?: (value: any, snapshot: any) => void; scope?: 'source-file' | 'repository'; incomplete?: boolean; items?: (items: any[]) => void; bootstrap?: 'none' | 'parse' | 'two'; otherSource?: boolean } = {}) {
+export async function retainedFixture(t: any, options: { fault?: (value: any, snapshot: any) => void; scope?: 'source-file' | 'repository'; incomplete?: boolean; items?: (items: any[]) => void; bootstrap?: 'none' | 'parse' | 'two'; otherSource?: boolean; extraFiles?: Record<string, string> } = {}) {
   const dir = scratch(t, 'sentinel-retained-'), work = join(dir, 'work'), repo = join(dir, 'repo');
   mkdirSync(work, { mode: 0o700 });
-  commitRepo(repo, { 'src/app.ts': 'export const app = (code: string) => eval(code);\n', 'src/other.ts': 'export const other = 1;\n', 'package.json': '{"name":"original-retained-fixture","private":true}\n' });
+  commitRepo(repo, { 'src/app.ts': 'export const app = (code: string) => eval(code);\n', 'src/other.ts': 'export const other = 1;\n', 'package.json': '{"name":"original-retained-fixture","private":true}\n', ...options.extraFiles });
   const store = await storeIn(dir);
   t.after(() => { if (store.held) store.close(); });
   const sources = [{ sourceId: 'app', repositoryId: 'example/retained-fixture', root: repo }];
