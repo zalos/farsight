@@ -6,11 +6,11 @@ import { spawn } from 'node:child_process';
 import { dirname, basename, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseNativeClaudeToken, type NativeClaudeToken } from './cli-native-auth.js';
-import { fail, ProviderError } from './errors.js';
+import { fail, ProviderError, NativeCredentialError, parseNativeAuthDiagnostic } from './errors.js';
 import { claimNativeLogin, assertNativeLoginActive, type NativeCallAuthority } from './broker.js';
 import type { NativeTiming } from './cli-native-profile.js';
 
-export const NATIVE_HELPER_SOURCE = 'sha256:eae6134cf8eb7e0f0772f6d7889072ff315b825a524a4f69237e3f5ffd95af27';
+export const NATIVE_HELPER_SOURCE = 'sha256:6192b46a93c6352f7f7795543b51b6f75c2f75ee89e91fbcce523a9cf3a3d0cf';
 export interface NativeHelper { readonly digest: string; readonly protocol: 'claude-keychain-token/1' }
 const helpers = new WeakMap<object, { path: string; digest: string }>();
 async function helperDirectory(timing: NativeTiming): Promise<string> {
@@ -74,17 +74,17 @@ export async function readNativeLogin(helper: NativeHelper, timing: NativeTiming
   const deadlineAt = Math.min(timing.deadlineAt, Date.now() + 5000);
   const bytes = await new Promise<Buffer>((resolve, reject) => {
     const child = spawn(held.path, [], { env: { PATH: '/usr/bin:/bin' }, stdio: ['ignore', 'pipe', 'pipe'] });
-    let total = 0, stderr = 0, failure: ProviderError | undefined; const chunks: Buffer[] = [];
+    let total = 0, stderr = 0, failure: ProviderError | undefined; const chunks: Buffer[] = [], diagnostic: Buffer[] = [];
     const stop = (error: ProviderError) => { failure ??= error; child.kill('SIGKILL'); };
     const abort = () => stop(new ProviderError('sentinel.provider.canceled', 'native helper canceled'));
     const timer = setTimeout(() => stop(new ProviderError('sentinel.provider.timeout', 'native helper deadline elapsed')), Math.max(1, deadlineAt - Date.now()));
     timing.signal?.addEventListener('abort', abort, { once: true });
     child.stdout.on('data', (data: Buffer) => { total += data.length; if (total > 65536) stop(new ProviderError('sentinel.provider.credentialUnavailable', 'native helper output bounds')); else chunks.push(data); });
-    child.stderr.on('data', (data: Buffer) => { stderr += data.length; if (stderr > 1024) stop(new ProviderError('sentinel.provider.credentialUnavailable', 'native helper stderr bounds')); });
+    child.stderr.on('data', (data: Buffer) => { stderr += data.length; if (stderr <= 256) diagnostic.push(data); if (stderr > 1024) stop(new ProviderError('sentinel.provider.credentialUnavailable', 'native helper stderr bounds')); });
     child.once('error', () => { failure ??= new ProviderError('sentinel.provider.credentialUnavailable', 'native helper could not start'); });
     child.once('close', (code, signal) => {
       clearTimeout(timer); timing.signal?.removeEventListener('abort', abort);
-      if (failure || code !== 0 || signal !== null || stderr !== 0) { for (const c of chunks) c.fill(0); reject(failure ?? new ProviderError('sentinel.provider.credentialUnavailable', 'native login unavailable without interaction')); }
+      if (failure || code !== 0 || signal !== null || stderr !== 0) { for (const c of chunks) c.fill(0); const detail = stderr <= 256 && signal === null && [65,69,70,74,77].includes(code!) ? parseNativeAuthDiagnostic(Buffer.concat(diagnostic)) : undefined; reject(failure ?? (detail ? new NativeCredentialError(detail) : new ProviderError('sentinel.provider.credentialUnavailable', 'native login unavailable without interaction'))); }
       else resolve(Buffer.concat(chunks));
     });
     if (timing.signal?.aborted) abort();
