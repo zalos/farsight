@@ -13,4 +13,6 @@ export interface OwnerUiCapabilities{
  schema:'sentinel-owneruicapabilities/draft-1';apiRevision:1;storeId:Id;epoch:Id;
  operations:['owner-ui.pair','owner-ui.revoke','owner-ui.context','owner-ui.preview','owner-ui.accept','owner-ui.status','owner-ui.resume','owner-ui.cancel','owner-ui.control-preview','owner-ui.control'];
  receiptSchema:'sentinel-owneruireceipt/draft-1';settingsSave:false;modelAdmission:false;
+ /** Bounded retained-run selection, process inspection and identity display; no extra effect authority. */
+ processInspection?:true;
 }

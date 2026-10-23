@@ -69,6 +69,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'owner-ui/authority.js': ['@farsight/core/dist/sentinel-companion.js', 'node:async_hooks', 'node:crypto'],
   'owner-ui/descriptor.js': ['@farsight/core/dist/sentinel-companion.js', 'node:fs', 'node:path'],
   'owner-ui/host.js': ['@farsight/core/dist/sentinel-companion.js', 'node:http'],
+  'owner-ui/process.js': ['node:crypto'],
   'owner-ui/operations.js': ['node:crypto', 'node:path'],
   'owner-ui/receipts.js': ['node:crypto'],
   'owner-ui/server.js': ['@farsight/core/dist/sentinel-companion.js', '@farsight/core/dist/strings.js', 'node:crypto', 'node:http'],

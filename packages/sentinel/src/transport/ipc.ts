@@ -309,7 +309,7 @@ function serveConnection(socket: Socket, identity: ServiceIdentity, handler: Ser
       if (id === undefined || typeof f.op !== 'string' || f.type !== 'request' || inflight.has(id) || inflight.size >= 128) { refuse('sentinel.ipc.frameMalformed'); return; }
       const granted = by;
       inflight.add(id);
-      const read = f.op === 'run.inspect' || f.op === 'report.open' || f.op === 'prepare.resume' ? new AbortController() : undefined;
+      const read = f.op === 'run.inspect' || f.op === 'report.open' || f.op === 'prepare.resume' || f.op === 'owner-ui.process' ? new AbortController() : undefined;
       if (read) reads.set(id, read);
       Promise.resolve()
         .then(() => handler(f.op as string, refuseActorClaims(f.body), granted, read ? { signal: read.signal } : undefined))

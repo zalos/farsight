@@ -1413,6 +1413,13 @@ export class Ledger {
       epoch: String(r.coordinator_epoch), planRevision: Number(r.plan_revision), envelope: JSON.parse(String(r.envelope)) as RunEnvelope } : null;
   }
 
+  /** Newest recorded run identities only, physically bounded before reading envelopes. No SQL/connection escapes. */
+  listRuns(limit=64):Array<{id:Id;state:RunState;planRevision:number;createdAt:string}>{
+    if(!Number.isSafeInteger(limit)||limit<1||limit>128)throw invalid('run page limit is 1..128');
+    return this.#read(()=>this.#all('SELECT id,state,plan_revision,created_at FROM runs ORDER BY rowid DESC LIMIT ?',limit))
+      .map(r=>({id:String(r.id),state:r.state as RunState,planRevision:Number(r.plan_revision),createdAt:String(r.created_at)}));
+  }
+
   /**
    * One page of a work revision's attempts, by ordinal: those after `afterOrdinal`, at most `limit` (≤ 500, default
    * 500). Page with the last ordinal returned; countAttempts() gives the exact total.

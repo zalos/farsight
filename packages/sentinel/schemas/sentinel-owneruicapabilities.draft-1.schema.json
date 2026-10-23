@@ -77,6 +77,11 @@
         "modelAdmission": {
           "type": "boolean",
           "const": false
+        },
+        "processInspection": {
+          "type": "boolean",
+          "const": true,
+          "description": "Bounded retained-run selection, process inspection and identity display; no extra effect authority."
         }
       },
       "required": [

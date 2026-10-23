@@ -193,6 +193,10 @@
         },
         "implementationKey": {
           "$ref": "#/definitions/ViewHandle"
+        },
+        "resources": {
+          "$ref": "#/definitions/ResourcePolicy",
+          "description": "Actual recorded grant, absent before the work was created. Adapter enforcement may tighten it."
         }
       },
       "required": [
@@ -234,6 +238,45 @@
       "description": "A positive integer ordinal or revision.",
       "minimum": 1,
       "maximum": 2147483647
+    },
+    "ResourcePolicy": {
+      "type": "object",
+      "properties": {
+        "deadlineMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120000
+        },
+        "memoryBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483648
+        },
+        "cpuQuota": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 2
+        },
+        "maxPids": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        },
+        "maxOutputBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4194304
+        }
+      },
+      "required": [
+        "deadlineMs",
+        "memoryBytes",
+        "cpuQuota",
+        "maxPids",
+        "maxOutputBytes"
+      ],
+      "additionalProperties": false,
+      "description": "Bounds the supervisor enforces. The PR 01 proposed ceilings (2 GiB, 2 CPUs, 128 PIDs, 120 s, 4 MiB output) are the maxima here; a profile may only lower them."
     },
     "InspectionAttempt": {
       "type": "object",

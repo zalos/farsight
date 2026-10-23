@@ -387,3 +387,9 @@ contains the foreground HTTP companion, pure session/host validation, qualified 
 service authority/receipts/operations, and static catalog-backed panel. `contracts/ownerui.ts` registers its
 separate closed receipt/capability documents. `test/owner-ui-*` covers real owner/socket/browser boundaries;
 `scripts/test-sentinel-owner-ui-consumer.mjs` uses only npm-installed public executables at runtime.
+
+The owner panel's `owner-ui/process.ts` privately resolves bounded retained-run handles and authenticated
+plan/model identity metadata; `process-layout.ts` folds canonical work dependencies into bounded graph levels.
+`InspectionWork.resources` optionally carries the actual recorded work grant. No raw source or generic artifact
+read endpoint is introduced. `owner-ui-process.test.ts` checks genuine source-gone owner projections and DAG
+bounds; the source and installed browser journeys exercise graph expansion and manual report selection.
