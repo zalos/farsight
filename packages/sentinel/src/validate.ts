@@ -383,6 +383,11 @@ const report: Check<ReportEnvelope> = (v, out) => {
     for (const j of duplicates(f.evidence, e => e.id)) out.add(err(`/findings/${i}/evidence/${j}`, 'duplicate evidence'));
   });
   v.gaps.forEach((g, i) => placeErrors(out, `/gaps/${i}/place`, g.place));
+  if(v.decisionEvaluation){
+    const section=v.decisionEvaluation,allowed=section.status==='complete'?['sentinel.decision.section.complete']:section.status==='unavailable'?['sentinel.decision.section.unavailable']:['sentinel.decision.section.partial','sentinel.decision.section.limit'];
+    if(!allowed.includes(section.reasonCode))out.add(err('/decisionEvaluation/reasonCode','decision availability and reason disagree'));
+    if(section.status==='unavailable'&&v.decisions.some(d=>d.evaluator==='sentinel-decision-evaluation/2'))out.add(err('/decisions','unavailable source decisions cannot carry decision credit'));
+  }
   v.decisions.forEach((d, i) => {
     if (!findings.has(d.findingId)) out.add(err(`/decisions/${i}/findingId`, 'decision about a finding the report does not contain'));
     // Validity is as of the report's pinned clock. Invalidation is the service's own finding and stays as recorded.

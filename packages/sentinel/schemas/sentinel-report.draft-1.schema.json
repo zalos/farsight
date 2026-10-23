@@ -158,6 +158,34 @@
           },
           "maxItems": 25000
         },
+        "decisionEvaluation": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "partial",
+                "unavailable"
+              ]
+            },
+            "reasonCode": {
+              "type": "string",
+              "enum": [
+                "sentinel.decision.section.complete",
+                "sentinel.decision.section.partial",
+                "sentinel.decision.section.unavailable",
+                "sentinel.decision.section.limit"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "reasonCode"
+          ],
+          "additionalProperties": false,
+          "description": "Availability of optional source-only owner adjudication, never scanner coverage."
+        },
         "historical": {
           "type": "array",
           "items": {

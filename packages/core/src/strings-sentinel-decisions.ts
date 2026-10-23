@@ -3,6 +3,12 @@ import type { StringEntry } from './strings.js';
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
 
 export const SENTINEL_DECISION_STRINGS: Record<string, StringEntry> = {
+  'sentinel.decision.confirmationUncertain': same('Confirmation spending could not be established; publication was not attempted', 'The confirmation store did not return a verified consumed receipt. Spending may have occurred; no decision append was attempted. Inspect retained confirmation before confirming again.'),
+  'sentinel.decision.spentNotPublished': same('Confirmation was spent; decision publication was not attempted', 'The operation failed after consuming confirmation and before its publication attempt. A new operation needs fresh confirmation; no permission is reconstructed.'),
+  'sentinel.decision.section.complete': same('Matching owner decisions were evaluated', 'Matching approvals within this report scope were checked against retained authority at the report evaluation time. This is not check coverage or deployed protection.'),
+  'sentinel.decision.section.partial': same('Some owner decisions could not be evaluated', 'Unavailable source or supporting authority supplies no decision credit, rationale or private hashes. Current findings remain independently assessed.'),
+  'sentinel.decision.section.unavailable': same('Owner decisions could not be evaluated', 'The optional owner decision history or its authority could not be verified. No decision credit is inferred; the report keeps its independently verified findings and privacy.'),
+  'sentinel.decision.section.limit': same('Owner decision evaluation reached its limit', 'At most fifty matching approvals are evaluated per report. Remaining approvals are not evaluated and grant no credit. Distinct source proofs still share the original report limits.'),
   'sentinel.decision.reportHeading': same('Owner decisions', 'Source-only owner adjudications, separate from check results. Earlier unbound decision records are not consumed by this evaluator.'),
   'sentinel.capability.draftDecisions': same('source-bound local owner decisions', 'Propose, approve, read and list owner adjudications of actual accepted findings. No deployed mitigation is established; service-owned owner confirmation and qualified cookie proof remain unavailable.'),
   'sentinel.decision.deliveryRefused': same('decision output could not be delivered', 'The complete output exceeded its bound; the acknowledgement separately states whether a decision was already retained.'),

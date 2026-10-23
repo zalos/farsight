@@ -419,3 +419,11 @@ test('the PR 01 feasibility fixtures are still in place', () => {
     assert.ok(existsSync(`${pkgDir}test/fixtures/${f}`), f);
   }
 });
+
+
+test('decision fault injection stays outside the named package and findings exports',async()=>{
+  const findings=await import('../dist/findings/index.js');
+  assert.equal('setOwnerDecisionAppendFailureForTest' in findings,false);
+  assert.equal(Object.hasOwn(manifest.exports,'./findings/owner-decision-test-hooks'),false);
+  assert.equal(Object.hasOwn(manifest.exports,'./findings/*'),false);
+});

@@ -387,6 +387,7 @@ const TRUSTED = new RegExp('^(?:' + [
   // Exact scalar paths only: a later field added to either (a disposition's rationale, say) is screened until it is
   // listed here on purpose. Definitions are the catalog's own words (document.ts); a decision's fields are generated.
   String.raw`definitions\.\*\.(?:key|define|text\.business|text\.code)`,
+  String.raw`decisionEvaluation\.(?:status|reasonCode)`,
   String.raw`decisions\.\*\.(?:dispositionId|findingId|validity|expiresAt|evaluator|state|reasonCode|basisDigest|journalHead)`,
   String.raw`counts\.[A-Za-z]+\.` + COUNT,
   String.raw`findings\.\*\.(?:id|observationIds\.\*|ruleFamilyId|severity|comparison|comparisonReason|match\.kind|match\.baselineFindingIds\.\*|fingerprint\.(?:version|exact|probable))`,

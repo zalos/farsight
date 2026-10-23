@@ -16,7 +16,8 @@ import { parseStrictJson } from '../imports/strict-json.js';
 import { ImportBudget } from '../imports/types.js';
 import { validateEnvelope } from '../validate.js';
 import { acceptedFindingBasisFor, acceptedFindingOf, revalidateFindingRecord } from './decision-basis.js';
-import { appendOwnerDecision, checkedOwnerInput, prepareOwnerProposal, readOwnerHistory, ownerHistoryOf, type OwnerProposal } from './owner-journal.js';
+import { appendOwnerDecision, ownerDecisionFailurePhase, checkedOwnerInput, prepareOwnerProposal, readOwnerHistory, ownerHistoryOf, type OwnerProposal } from './owner-journal.js';
+import { ownerDecisionAfterRetainedAppend } from './owner-decision-test-hooks.js';
 import { decisionProjection } from './owner-evaluation.js';
 
 export const DECISION_CLI_LIMITS=Object.freeze({inputBytes:64*1024,outputBytes:32*1024*1024,defaultPage:50,maxPage:100,cursorBytes:512});
@@ -87,25 +88,30 @@ export async function ownerDecisionCommand(ws:Workspace,p:ParsedCommand):Promise
       return{result:result(command,'read',{facts:{document,decisionId:proposal.id}})};
     }
     const operation=action==='propose'?'disposition.propose':'disposition.approve';
-    metadata={decisionId:proposal.id,publication:'unknown'};
+    metadata={decisionId:proposal.id,publication:'not-established'};
     let done=await appendOwnerDecision(context,basis,ws,proposal,operation,new Date());
     if(done.status==='denied')return{result:result(command,'refused',{reasonCode:done.admission.verdicts.policy.reasonCode,verdicts:printed(done.admission)})};
     if(done.status==='awaiting-confirmation'){
       if(!confirm)return{result:result(command,'awaiting-confirmation',{verdicts:printed(done.admission),facts:{authority:'owner-adjudication-of-accepted-source'}})};
       assertMayConfirm(OWNER);acceptedFindingOf(basis);
       const issued=issueReceipt(ownerContextOf(context).receipts,OWNER,done.binding,{now:new Date(),ttlMs:60000});
-      metadata={decisionId:proposal.id,publication:'unknown'};
+      metadata={decisionId:proposal.id,publication:'not-established'};
       done=await appendOwnerDecision(context,basis,ws,proposal,operation,new Date(),issued.id);
     }
     if(done.status!=='proposed'&&done.status!=='applied')throw Error('decision unavailable');
     metadata={decisionId:proposal.id,publication:'retained'};
+    ownerDecisionAfterRetainedAppend();
     const document=await decisionProjection(readOwnerHistory(context),basis,ws,proposal.id,new Date(),baseline);
     return{result:result(command,done.status,{facts:{...metadata,reused:done.reused,document}})};
   }catch(error){
-    const cause=(error as {code?:unknown})?.code;
-    const allowed=['sentinel.decision.invalidInput','sentinel.decision.corruptHistory','sentinel.decision.staleState','sentinel.decision.notFound','sentinel.decision.scopeExceeded','sentinel.decision.unauthorized'];
+    const cause=(error as {code?:unknown})?.code,phase=ownerDecisionFailurePhase(error);
+    if(phase==='retained')metadata={...metadata,publication:'retained'};
+    else if(phase==='publication-attempted')metadata={...metadata,publication:'unknown'};
+    else if(phase==='consumption-attempted')metadata={...metadata,publication:'not-established',confirmation:'unknown'};
+    else if(phase==='spent')metadata={...metadata,publication:'not-established',confirmation:'spent'};
+    const allowed=['sentinel.receipt.expired','sentinel.receipt.mismatch','sentinel.receipt.unknown','sentinel.receipt.alreadyUsed','sentinel.decision.invalidInput','sentinel.decision.corruptHistory','sentinel.decision.staleState','sentinel.decision.notFound','sentinel.decision.scopeExceeded','sentinel.decision.unauthorized'];
     if(metadata.publication==='retained')return{result:result(command,'delivery-failed',{reasonCode:'sentinel.decision.deliveryRefused',facts:metadata})};
-    const code=metadata.publication!=='not-established'?'sentinel.decision.publicationUncertain':typeof cause==='string'&&allowed.includes(cause)?cause:'sentinel.decision.unavailable';
+    const code=metadata.publication==='unknown'?'sentinel.decision.publicationUncertain':phase==='consumption-attempted'?'sentinel.decision.confirmationUncertain':phase==='spent'?'sentinel.decision.spentNotPublished':typeof cause==='string'&&allowed.includes(cause)?cause:'sentinel.decision.unavailable';
     return{result:result(command,'refused',{reasonCode:code,facts:metadata})};
   }finally{try{store.close()}catch{/* Closing cannot roll back an appended owner record. */}}
 }

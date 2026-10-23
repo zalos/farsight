@@ -64,8 +64,9 @@ export function renderMarkdown(doc: ReportEnvelope): string {
       lines.push(...placeLines(doc, h.place), '');
     }
   }
-  if(doc.decisions.some(d=>d.evaluator==='sentinel-decision-evaluation/2')){
+  if(doc.decisionEvaluation||doc.decisions.some(d=>d.evaluator==='sentinel-decision-evaluation/2')){
     lines.push('## '+md(wordOf(doc,'sentinel.decision.reportHeading','business')),'',md(wordOf(doc,'sentinel.decision.sourceOnly','business')),'');
+    if(doc.decisionEvaluation)lines.push(md(wordOf(doc,doc.decisionEvaluation.reasonCode,'business')),'');
     for(const d of doc.decisions)if(d.evaluator)lines.push('- '+md(d.dispositionId)+': '+md(wordOf(doc,d.reasonCode!,'business'))+' ('+md(d.validity)+')'+(d.rationale!==null&&d.rationale!==undefined?' — '+md(d.rationale):''));
     lines.push('');
   }

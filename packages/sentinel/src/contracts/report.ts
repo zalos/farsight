@@ -261,6 +261,8 @@ export interface ReportEnvelope {
   gaps: ReportGap[];
   /** @maxItems 25000 */
   decisions: ReportDecision[];
+  /** Availability of optional source-only owner adjudication, never scanner coverage. */
+  decisionEvaluation?: { status:'complete'|'partial'|'unavailable'; reasonCode:'sentinel.decision.section.complete'|'sentinel.decision.section.partial'|'sentinel.decision.section.unavailable'|'sentinel.decision.section.limit' };
   /** @maxItems 25000 */
   historical?: ReportHistoricalFinding[];
   /** @maxItems 2048 */

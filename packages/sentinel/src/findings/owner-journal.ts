@@ -26,11 +26,15 @@ export interface OwnerProposal {
 interface Audit {admission:AdmissionEnvelope;receipt:ReceiptEnvelope|null;intent:ActionIntent;stateDigest:string;policyRevision:string}
 interface Payload {proposal:OwnerProposal|null;approval:{proposalId:string}|null;audit:Audit}
 interface Entry {schema:'sentinel-owner-decision-journal/2';storeId:string;workspaceDigest:string;sequence:number;previous:string|null;payload:Payload}
-export interface OwnerHistory {head:string|null;sequence:number;bytes:number;proposals:Map<string,OwnerProposal>;approved:Map<string,Audit>}
+export interface OwnerHistory {lastAdmittedAt:string|null;head:string|null;sequence:number;bytes:number;proposals:Map<string,OwnerProposal>;approved:Map<string,Audit>}
 const histories=new WeakMap<object,{context:ImportOwnerContext;head:string|null;state:OwnerHistory}>();
 const same=(a:unknown,b:unknown)=>canonicalJson(a)===canonicalJson(b);
 function invalid():never{return fail('sentinel.decision.corruptHistory','owner decision history is unavailable')}
 const prepared=new WeakMap<OwnerProposal,AcceptedFindingBasis>();
+const reportHistories=new WeakSet<object>();
+/** Report-only immutable snapshot; final full verification is mandatory before any projection is returned. */
+export function readOwnerReportHistory(context:ImportOwnerContext):OwnerHistory{const h=readOwnerHistory(context);reportHistories.add(h);return h}
+export function finishOwnerReportHistory(value:OwnerHistory):void{reportHistories.delete(value);ownerHistoryOf(value)}
 /** Missing decision history is the unchanged report path, including older nondefault store layouts. */
 export function hasOwnerHistory(store:SentinelStore,ws:Workspace):boolean{
   boundOwner(store).assertHeld();
@@ -73,14 +77,14 @@ function checkAudit(context:ImportOwnerContext,a:Audit,b:ReceiptBinding,requires
 }
 /** Full bounded history only; a paged/copied collection never supplies evaluation authority. */
 export function readOwnerHistory(context:ImportOwnerContext):OwnerHistory{
-  const c=ownerContextOf(context),dir=folder(context),state:OwnerHistory={head:null,sequence:0,bytes:0,proposals:new Map(),approved:new Map()};
+  const c=ownerContextOf(context),dir=folder(context),state:OwnerHistory={lastAdmittedAt:null,head:null,sequence:0,bytes:0,proposals:new Map(),approved:new Map()};
   if(dir){
     const names:string[]=[],handle=opendirSync(dir);
     try{let e,visited=0;while((e=handle.readSync())!==null){ownerContextOf(context);if(++visited>OWNER_DECISION_LIMITS.directoryEntries)invalid();if(isTemporaryName(e.name))continue;if(names.length>=OWNER_DECISION_LIMITS.entries||!/^[0-9]{12}\.json$/.test(e.name))invalid();names.push(e.name);}}finally{handle.closeSync()}
     for(const name of names.sort()){
       const n=state.sequence+1;if(name!==String(n).padStart(12,'0')+'.json')invalid();
       const bytes=readPublished(dir,name,OWNER_DECISION_LIMITS.recordBytes);if(!bytes||state.bytes+bytes.length>OWNER_DECISION_LIMITS.historyBytes)invalid();
-      const e=JSON.parse(new TextDecoder('utf8',{fatal:true}).decode(bytes)) as Entry;
+      let e:Entry;try{e=JSON.parse(new TextDecoder('utf8',{fatal:true}).decode(bytes)) as Entry}catch{invalid()}
       if(!bytes.equals(Buffer.from(canonicalJson(e))))invalid();
       if(!e||Object.keys(e).sort().join('|')!=='payload|previous|schema|sequence|storeId|workspaceDigest'||e.schema!=='sentinel-owner-decision-journal/2'||e.storeId!==c.store.storeId||e.workspaceDigest!==c.workspaceDigest||e.sequence!==n||e.previous!==state.head
         ||!e.payload||Object.keys(e.payload).sort().join('|')!=='approval|audit|proposal'||(e.payload.proposal===null)===(e.payload.approval===null))invalid();
@@ -101,7 +105,7 @@ export function readOwnerHistory(context:ImportOwnerContext):OwnerHistory{
         if(compareTimestamps(audit.admission.decidedAt,p.createdAt)<0||(p.input.expiresAt!==null&&compareTimestamps(audit.admission.decidedAt,p.input.expiresAt)>=0))invalid();
         state.approved.set(p.id,deepFreeze(audit));
       }
-      state.sequence=n;state.bytes+=bytes.length;state.head=digestOf(e);
+      if(state.lastAdmittedAt===null||compareTimestamps(audit.admission.decidedAt,state.lastAdmittedAt)>0)state.lastAdmittedAt=audit.admission.decidedAt;state.sequence=n;state.bytes+=bytes.length;state.head=digestOf(e);
     }
   }
   ownerContextOf(context);histories.set(state,{context,head:state.head,state:{...state,proposals:new Map(state.proposals),approved:new Map(state.approved)}});return state;
@@ -111,7 +115,7 @@ function bindingHistorical(context:ImportOwnerContext,head:string|null,action:'d
     stateDigest:digestOf({storeId:c.store.storeId,workspaceDigest:c.workspaceDigest,head,value:digestOf(value)})};
 }
 export function ownerHistoryOf(value:OwnerHistory):Readonly<OwnerHistory>{
-  const h=histories.get(value);if(!h||readOwnerHistory(h.context).head!==h.head)return fail('sentinel.decision.staleState','history changed');return{...h.state,proposals:new Map(h.state.proposals),approved:new Map(h.state.approved)};
+  const h=histories.get(value);if(h)ownerContextOf(h.context);if(!h||(!reportHistories.has(value)&&readOwnerHistory(h.context).head!==h.head))return fail('sentinel.decision.staleState','history changed');return{...h.state,proposals:new Map(h.state.proposals),approved:new Map(h.state.approved)};
 }
 function append(context:ImportOwnerContext,state:OwnerHistory,payload:Payload){
   const c=ownerContextOf(context);if(state.sequence>=OWNER_DECISION_LIMITS.entries)fail('sentinel.decision.scopeExceeded','history limit');
@@ -127,8 +131,14 @@ export async function prepareOwnerProposal(basis:AcceptedFindingBasis,ws:Workspa
   const support=await readOwnerSupport(basis,ws,i.evidence);acceptedFindingOf(basis);
   const p=deepFreeze({id:'decision-'+randomUUID(),basis:s.record,basisDigest:acceptedFindingDigest(basis),input:i,support,createdAt:stamp(now)});prepared.set(p,basis);return p;
 }
+type EffectPhase='not-established'|'consumption-attempted'|'spent'|'publication-attempted'|'retained';
+const effectFailures=new WeakMap<object,EffectPhase>();
+/** Only errors observed inside the genuine append path carry effect metadata. */
+export function ownerDecisionFailurePhase(error:unknown):EffectPhase{return error!==null&&typeof error==='object'?effectFailures.get(error)??'not-established':'not-established'}
 /** Admission/receipt is genuine and shared; the caller cannot choose its actor or pass a confirmation boolean. */
 export async function appendOwnerDecision(context:ImportOwnerContext,basis:AcceptedFindingBasis,ws:Workspace,proposal:OwnerProposal,action:'disposition.propose'|'disposition.approve',now:Date,receiptId?:string){
+  let phase:EffectPhase='not-established';
+  try{
   const s=acceptedFindingOf(basis);if(s.context!==context||!same(s.record,proposal.basis))fail('sentinel.decision.unauthorized','foreign basis');
   const support=await readOwnerSupport(basis,ws,proposal.input.evidence);acceptedFindingOf(basis);
   // Source/support reads may outlast a receipt. The argument is an action-start sample, never a clock that can
@@ -161,10 +171,14 @@ export async function appendOwnerDecision(context:ImportOwnerContext,basis:Accep
   const receiptForecast=receiptId===undefined?null:forecastAdmission(context,b,receiptId,new Date());
   acceptedFindingOf(basis);ownerHistoryOf(state);currentImportPolicy(context,b.policyRevision);
   now=new Date();
+  if(state.lastAdmittedAt!==null&&compareTimestamps(stamp(now),state.lastAdmittedAt)<0)fail('sentinel.decision.staleState','wall clock precedes saved authority');
   if(proposal.input.expiresAt!==null&&compareTimestamps(proposal.input.expiresAt,stamp(now))<=0)fail('sentinel.decision.staleState','proposal expired');
   const predicted=receiptForecast?{...admission(context,b,now).record,outcome:'admitted' as const,receipt:digestOf(receiptForecast.receipt)}:null;
   if(predicted)boundedAudit({admission:predicted,receipt:receiptForecast!.receipt,intent:b.intent,stateDigest:b.stateDigest,policyRevision:b.policyRevision});
+  if(receiptId!==undefined)phase='consumption-attempted';
   const decided=admission(context,b,now,receiptId);
+  if(!decided.receipt)phase='not-established';
+  if(decided.receipt)phase='spent';
   if(receiptForecast&&(!decided.receipt||!same(decided.receipt.receipt,receiptForecast.receipt)||!same(decided.record,predicted)))fail('sentinel.decision.unauthorized','consumed authority differs from its bounded forecast');
   if(decided.record.outcome!=='admitted')return{status:decided.record.outcome,binding:b,admission:decided.record};
   // Receipt spending and publication are separate durable effects; failure after spend must never claim rollback.
@@ -172,7 +186,13 @@ export async function appendOwnerDecision(context:ImportOwnerContext,basis:Accep
   const audit:Audit={admission:decided.record,receipt:decided.receipt?.receipt??null,intent:b.intent,stateDigest:b.stateDigest,policyRevision:b.policyRevision};
   if(action==='disposition.approve'&&!decided.receipt)fail('sentinel.decision.unauthorized','owner receipt missing');
   checkAudit(context,audit,b,action==='disposition.approve');
+  phase='publication-attempted';
   append(context,state,{proposal:action==='disposition.propose'?proposal:null,approval:action==='disposition.approve'?{proposalId:proposal.id}:null,audit});
+  phase='retained';
   const verified=readOwnerHistory(context);if(!verified.proposals.has(proposal.id)||(action==='disposition.approve'&&!verified.approved.has(proposal.id)))invalid();
   return{status:action==='disposition.propose'?'proposed' as const:'applied' as const,reused:false,proposal};
+  }catch(error){
+    const code=(error as {code?:unknown})?.code;
+    if(phase==='consumption-attempted'&&typeof code==='string'&&['sentinel.receipt.expired','sentinel.receipt.mismatch','sentinel.receipt.unknown','sentinel.receipt.alreadyUsed'].includes(code))phase='not-established';
+    if(error!==null&&typeof error==='object')effectFailures.set(error,phase);throw error;}
 }
