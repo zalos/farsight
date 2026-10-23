@@ -63,8 +63,10 @@ requests, with five known missing-fixture-image responses. The exact temporary s
 checkout, dogfood graph and global installations remain unchanged. PR #166's first validation found two stale
 capability tests that still treated MCP as unavailable. The precise expectation correction preserves every future
 unavailable capability and the store-facade checks; both complete files pass 36 tests with one intentional
-unqualified-host negative skipped on the qualified host. The original failure is retained. Fresh selected CI on
-the corrected commit remains required before merge.
+unqualified-host negative skipped on the qualified host. The original failure is retained. Independent review
+approved the exact correction; all fifteen final checks passed on `864242d7`, including full recovery, native
+isolation and installed scanners. PR [#166](https://github.com/zalos/farsight/pull/166) merged as `cce989d4`
+with the same reviewed tree. Its normal post-merge CI also passed. This does not clear the historical native hold.
 
 The separate observation PR [#165](https://github.com/zalos/farsight/pull/165), head `62f50c2c`, merged as
 `6ae1a194` after independent approval and all thirteen selected checks passed. Its first required native job passed 106 original tests and ten diagnostic controls, with zero failures,
