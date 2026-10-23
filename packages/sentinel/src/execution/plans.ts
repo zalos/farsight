@@ -7,6 +7,8 @@
 // analysis plan pins an admitted snapshot. Then the four records are staged, stored and admitted together; the plan
 // is a collection root and links the other three. loadPlan reads them back and repeats every check, so what the
 // coordinator executes is exactly what was admitted, whatever happened to the caller's objects.
+import {verifyReviewInputs} from '../review/plan.js';
+import type {InstructionArtifact} from '../review/instructions.js';
 import type { PathRequestEnvelope } from '../contracts/pathrequest.js';
 import { pathRequestOf, PATH_REQUEST_SCHEMA } from '../analysis/paths/request.js';
 import { verifyPathAdmission, pathUnitsFor, type PathRequestAdmission } from '../analysis/paths/admission.js';
@@ -46,6 +48,8 @@ export interface AdmitPlanRequest {
   selection?: RerunSelection | null;
   /** Required exactly when the plan pins a source-derived structural request. */
   pathRequest?: PathRequestAdmission;
+  /** Exact private inputs of closed review units; data revalidated against current policy/capture before staging. */
+  reviewArtifacts?:readonly InstructionArtifact[];
 }
 
 export interface AdmittedPlan {
@@ -92,6 +96,7 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest,
   if (plan.pins.snapshotId !== null && !store.ledger.getSnapshot(plan.pins.snapshotId)) refuse('the plan pins a snapshot that was not admitted');
   if ((plan.pins.pathRequest!==undefined)!==(request.pathRequest!==undefined)) refuse('a pinned path request requires its genuine read proof');
   const path=request.pathRequest?await verifyPathAdmission(store,plan,profile,request.pathRequest):undefined;
+  const reviewArtifacts=request.reviewArtifacts??[];if(plan.units.some(u=>u.review)){if(!request.policy)return refuse('review requires current policy');await verifyReviewInputs(store,plan,request.policy,reviewArtifacts)}else if(reviewArtifacts.length)refuse('no review unit accepts extra inputs');
   const ids = {
     plan: store.objects.identifyCanonicalJson(plan), profile: store.objects.identifyCanonicalJson(profile),
     ruleLock: ruleLock ? store.objects.identifyCanonicalJson(ruleLock) : null, policy: policy ? store.objects.identifyCanonicalJson(policy) : null,
@@ -105,11 +110,12 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest,
       && existing.selection === (ids.selection?.id ?? null)) return existing;
     refuse(`revision ${plan.revision} of run ${plan.runId} was already admitted with other content`);
   }
-  const pinned = [ids.profile.id, ...(ids.ruleLock ? [ids.ruleLock.id] : []), ...(ids.policy ? [ids.policy.id] : []), ...(ids.selection ? [ids.selection.id] : []),...(path?[path.request.id]:[])];
+  const pinned = [...plan.units.flatMap(u=>u.review?[u.review.spec]:[]),ids.profile.id, ...(ids.ruleLock ? [ids.ruleLock.id] : []), ...(ids.policy ? [ids.policy.id] : []), ...(ids.selection ? [ids.selection.id] : []),...(path?[path.request.id]:[])];
   const stageId = `plan.${plan.runId}.${plan.revision}.${plan.digest.slice(7, 23)}`.slice(0, 128);
   path?.boundary();
   checkpoint();
   store.ledger.registerStaging(stageId, [
+    ...reviewArtifacts.map(a=>({id:a.id,schema:a.schema,privacy:'source-derived' as const,links:[...a.links]})),
     { id: ids.plan.id, schema: 'sentinel-plan/draft-1', privacy: 'source-derived', links: pinned },
     { id: ids.profile.id, schema: profile.schema, privacy: 'metadata' },
     ...(ruleLock ? [{ id: ids.ruleLock!.id, schema: 'sentinel-rulelock/draft-1', privacy: 'metadata' as const }] : []),
@@ -122,6 +128,7 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest,
   };
   try {
     const receipts = [await put(plan, ids.plan), await put(profile, ids.profile)];
+    for(const a of reviewArtifacts){store.assertHeld();receipts.push(await store.objects.put(a.bytes,{expect:{id:a.id,rawSize:a.bytes.byteLength}}));store.assertHeld()}
     if (ruleLock) receipts.push(await put(ruleLock, ids.ruleLock!));
     if (policy) receipts.push(await put(policy, ids.policy!));
     if (selection) receipts.push(await put(selection, ids.selection!));

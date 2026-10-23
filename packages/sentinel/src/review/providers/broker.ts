@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 import type { ActionEffect, ActionIntent, Budget, DecisionChannel, Principal } from '../../contracts/index.js';
 import { admit, type AdmissionResult } from '../../policy/admission.js';
 import { canonicalDigest } from '../../policy/digest.js';
-import { isConsumedReceipt, receiptAuthority, type ReceiptBook } from '../../policy/receipts.js';
+import { isConsumedReceipt, receiptAuthority, type ReceiptBook, type ConsumedReceipt } from '../../policy/receipts.js';
 import { snapshot } from '../../policy/immutable.js';
 import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.js';
 import type { BudgetLedger, Reservation } from './budget.js';
@@ -25,6 +25,9 @@ import { ProviderError, fail } from './errors.js';
 import { chatBody, chatPath, parseReply, type ChatMessage, type FinishReason, type ReplyIdentity } from './kinds.js';
 import { isProviderBinding, type ProviderBinding } from './profile.js';
 import { exchange } from './transport.js';
+import { nativeClaudeCall } from './cli-native-call.js';
+import { nativeRuntimeHelper, qualifyInstalledNativeClaude, type NativeClaudeRuntime, type NativeTiming } from './cli-native-profile.js';
+import { renderNativeClaudeWire, type NativeReviewWire } from './cli-native-wire.js';
 
 export interface BrokerDeps {
   readonly ledger: BudgetLedger;
@@ -32,6 +35,8 @@ export interface BrokerDeps {
   /** This coordinator epoch; recovery fences other epochs' reservations. */
   readonly epoch: string;
   readonly now?: () => Date;
+  /** Qualified closed native runtime supplied by the trusted local owner process, never a request body. */
+  readonly nativeClaude?: NativeClaudeRuntime;
 }
 
 export interface OpenEnvelopeRequest {
@@ -61,6 +66,10 @@ export interface GenerateRequest {
   readonly messages: readonly ChatMessage[];
   readonly maxOutputTokens: number;
   readonly signal?: AbortSignal;
+  /** Canonical digest of the exact native wire already retained before this call. */
+  readonly expectedWireDigest?: string;
+  /** Original absolute coordinator unit deadline. Required by the native profile. */
+  readonly deadlineAt?: number;
 }
 
 export interface ModelReply {
@@ -74,9 +83,9 @@ export interface ModelReply {
     readonly inputTokens: number;
     readonly outputTokens: number;
     /** DecimalAmount; `0` with basis `no-fee` is a local runtime's absent fee, not free compute. */
-    readonly monetaryCost: string;
-    readonly currency: string;
-    readonly basis: 'rate-schedule' | 'no-fee';
+    readonly monetaryCost: string | null;
+    readonly currency: string | null;
+    readonly basis: 'rate-schedule' | 'no-fee' | 'subscription-quota';
   };
   readonly reservation: Reservation;
 }
@@ -100,7 +109,32 @@ export function envelopeIntent(binding: ProviderBinding, runId: string, budget: 
   return { action: 'paid.admit', input: binding.digest, effects, budget: { ...budget }, scope: { profile: null, provider: binding.providerId, targets: [runId] } };
 }
 
-const envelopes = new WeakMap<object, { binding: ProviderBinding; credential: Secret | null; budget: Budget }>();
+const envelopes = new WeakMap<object, { binding: ProviderBinding; credential: Secret | null; budget: Budget; nativeRuntime?: NativeClaudeRuntime; receipt?: ConsumedReceipt }>();
+/** Package-internal opaque authority. No exported factory: only generate can issue it from its private envelope. */
+export interface NativeCallAuthority { readonly nativeCall: 'closed-v1' }
+type NativeCallContext = { runtime: NativeClaudeRuntime; wire: NativeReviewWire; limits: NativeTiming & { maxResponseBytes: number; maxOutputTokens: number } };
+const nativeCalls = new WeakMap<object, NativeCallContext & { ledger: BudgetLedger; reservationId: string; receipt: ConsumedReceipt; phase: 'issued' | 'started' | 'read' }>();
+function activeNativeCall(value: object) {
+  const held = nativeCalls.get(value);
+  if (!held || !isConsumedReceipt(held.receipt) || held.ledger.reservation(held.reservationId).state !== 'dispatched') return fail('sentinel.provider.notAdmitted', 'native call has no live admitted reservation');
+  if (held.limits.signal?.aborted) fail('sentinel.provider.canceled', 'native authority canceled');
+  if (Date.now() >= held.limits.deadlineAt) fail('sentinel.provider.timeout', 'native authority original deadline elapsed');
+  return held;
+}
+/** One start only, validated against broker-private state. A qualified executable alone grants nothing. */
+export function beginNativeCall(value: NativeCallAuthority): NativeCallContext {
+  const held = activeNativeCall(value);
+  if (held.phase !== 'issued') return fail('sentinel.provider.notAdmitted', 'native call authority was already used');
+  held.phase = 'started'; return { runtime: held.runtime, wire: held.wire, limits: held.limits };
+}
+/** The helper additionally consumes its exact one-read authority before the fixed native query. */
+export function claimNativeLogin(value: NativeCallAuthority, helper: object, timing: NativeTiming): void {
+  const held = activeNativeCall(value);
+  if (held.phase !== 'started' || nativeRuntimeHelper(held.runtime) !== helper || held.limits.deadlineAt !== timing.deadlineAt || held.limits.signal !== timing.signal) return fail('sentinel.provider.notAdmitted', 'native login has no exact one-read authority');
+  held.phase = 'read';
+}
+export function assertNativeLoginActive(value: NativeCallAuthority): void { const held = activeNativeCall(value); if (held.phase !== 'read') fail('sentinel.provider.notAdmitted', 'native login authority is not active'); }
+export function finishNativeCall(value: NativeCallAuthority): void { nativeCalls.delete(value); }
 const stamp = (d: Date) => d.toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z');
 const ROLES = new Set(['system', 'user', 'assistant']);
 
@@ -122,7 +156,10 @@ export class ModelBroker {
     if (!isProviderBinding(binding)) fail('sentinel.provider.notTrusted', 'only bindProvider’s own binding is accepted');
     if (!isEffectivePolicy(policy) || policy.revision !== binding.policyRevision) fail('sentinel.provider.bindingChanged', 'the policy changed since the binding was made');
     const b = req.budget;
-    if (b.maxTokens === null || b.maxCost === null || b.currency === null || toNanos(b.maxCost) === null) fail('sentinel.provider.budgetExhausted', 'a model budget states its tokens, money and currency');
+    const native = binding.kind === 'claude-cli';
+    if (native) {
+      if (b.maxTokens === null || b.maxCost !== null || b.currency !== null) fail('sentinel.provider.budgetExhausted', 'native subscription states its token quota and unobserved money');
+    } else if (b.maxTokens === null || b.maxCost === null || b.currency === null || toNanos(b.maxCost) === null) fail('sentinel.provider.budgetExhausted', 'a model budget states its tokens, money and currency');
     const hosted = binding.disclosure === 'hosted';
     const priced = binding.pricing.kind === 'rates';
     const intent = envelopeIntent(binding, req.runId, b);
@@ -134,9 +171,19 @@ export class ModelBroker {
     const preview = decide(() => ({ basis: 'unknown', detail: 'not read yet' }));
     if (!preview.record.verdicts.policy.allowed) fail('sentinel.provider.notAdmitted', preview.record.verdicts.policy.reasonCode);
     if ((hosted || priced) && !req.receipt) fail('sentinel.provider.receiptRequired', hosted ? 'hosted disclosure' : 'priced inference');
+    let nativeRuntime: NativeClaudeRuntime | undefined;
+    if (native) {
+      nativeRuntime = this.#deps.nativeClaude ?? await qualifyInstalledNativeClaude({ deadlineAt: Date.now() + 5000 });
+      const p = binding.nativeProfile;
+      if (!p || nativeRuntime.profileId !== p.id || nativeRuntime.executableDigest !== p.executableDigest
+        || nativeRuntime.helperDigest !== p.helperDigest || nativeRuntime.profileDigest !== p.profileDigest) fail('sentinel.provider.capabilityUntested', 'adopted native runtime is unavailable or changed');
+      nativeRuntimeHelper(nativeRuntime); // genuine fixed qualification only, no credential read
+    }
     let credential: Secret | null = null;
     let answer: ReturnType<Parameters<typeof admit>[0]['credential']>;
-    if (binding.credential === null) {
+    if (native) {
+      answer = { basis: 'keychain-scope', allowed: true, detail: 'fixed no-UI native read capability; login validity remains unobserved until admitted call' };
+    } else if (binding.credential === null) {
       answer = hosted ? { basis: 'unknown', detail: 'a hosted provider with no credential reference' } : { basis: 'local-only', detail: 'a loopback provider needs no remote credential' };
     } else {
       try { credential = await resolveCredential(this.#deps.credentials, binding.credential); answer = { basis: 'keychain-scope', allowed: true, detail: 'read for the approved reference' }; }
@@ -156,15 +203,27 @@ export class ModelBroker {
     const receiptDigest = spent?.digest ?? null;
     const admissionDigest = canonicalDigest(result.record);
     const id = `menv-${admissionDigest.slice(7, 39)}`;
-    this.#deps.ledger.createEnvelope({ id, runId: req.runId, bindingDigest: binding.digest, admissionDigest, receiptDigest,
-      maxTokens: b.maxTokens!, maxCostNanos: toNanos(b.maxCost)!, currency: b.currency!, createdAt: stamp(this.#now()) });
+    this.#deps.ledger.createEnvelope({ id, runId: req.runId, providerId: binding.providerId, bindingDigest: binding.digest, admissionDigest, receiptDigest,
+      maxTokens: b.maxTokens!, maxCostNanos: native ? null : toNanos(b.maxCost!)!, currency: b.currency!, ...(native ? { accountingBasis: 'subscription-quota' as const } : {}), createdAt: stamp(this.#now()) });
     const env: ModelEnvelope = Object.freeze({ id, runId: req.runId, bindingDigest: binding.digest, admission: result.record, receiptDigest });
-    envelopes.set(env, { binding, credential, budget: { ...b } });
+    envelopes.set(env, { binding, credential, budget: { ...b }, ...(nativeRuntime ? { nativeRuntime } : {}), ...(spent ? { receipt: spent } : {}) });
     return env;
   }
 
+  /** Pure exact wire for the session checkpoint; grants no launch or admission authority. */
+  renderRequest(binding: ProviderBinding, messages: readonly ChatMessage[], maxOutputTokens: number): NativeReviewWire | undefined {
+    if (!isProviderBinding(binding)) fail('sentinel.provider.notTrusted', 'native wire requires the current adopted binding');
+    if (binding.kind !== 'claude-cli') return undefined;
+    const wire = renderNativeClaudeWire(binding.model, messages, maxOutputTokens);
+    if (Buffer.byteLength(wire.stdin) + Buffer.byteLength(wire.system) > binding.limits.maxRequestBytes) fail('sentinel.provider.requestTooLarge', 'native wire exceeds the adopted input bound');
+    return wire;
+  }
+
   /** The worst case one call could be charged, before it is sent. */
-  worstCase(binding: ProviderBinding, body: Uint8Array, messages: number, maxOutputTokens: number): { inputTokens: number; tokens: number; costNanos: bigint } {
+  worstCase(binding: ProviderBinding, body: Uint8Array, messages: number, maxOutputTokens: number): { inputTokens: number; tokens: number; costNanos: bigint | null } {
+    // Reserve the entire fixed context, including opaque vendor overhead, for a single native turn.
+    // This is a conservative token quota, not a monetary prediction or a free-subscription claim.
+    if (binding.kind === 'claude-cli') return { inputTokens: binding.limits.contextTokens - maxOutputTokens, tokens: binding.limits.contextTokens, costNanos: null };
     const inputTokens = body.byteLength + messages * binding.limits.templateTokensPerMessage;
     const tokens = inputTokens + maxOutputTokens;
     const costNanos = binding.pricing.kind === 'rates'
@@ -184,7 +243,11 @@ export class ModelBroker {
     if (!Number.isSafeInteger(call.maxOutputTokens) || call.maxOutputTokens < 1 || call.maxOutputTokens > L.maxOutputTokens) fail('sentinel.provider.invalidProfile', 'maxOutputTokens is outside the profile');
     if (!Array.isArray(call.messages) || call.messages.length < 1 || call.messages.length > L.maxMessages
       || call.messages.some(m => !m || !ROLES.has(m.role) || typeof m.content !== 'string')) fail('sentinel.provider.invalidProfile', 'messages are a bounded list of role and text');
-    const body = Buffer.from(JSON.stringify(chatBody(binding.kind, binding.model, call.messages, call.maxOutputTokens, L.contextTokens)), 'utf8');
+    const wire = this.renderRequest(binding, call.messages, call.maxOutputTokens);
+    if (wire ? call.expectedWireDigest !== canonicalDigest(wire) : call.expectedWireDigest !== undefined) fail('sentinel.provider.bindingChanged', 'retained native wire does not match this exact call');
+    const nativeDeadline = wire ? call.deadlineAt : undefined;
+    if (wire && (!Number.isSafeInteger(nativeDeadline) || nativeDeadline! <= Date.now() || nativeDeadline! - Date.now() > L.timeoutMs)) fail('sentinel.provider.timeout', 'native call requires its original bounded unit deadline');
+    const body = Buffer.from(wire ? wire.system + wire.stdin : JSON.stringify(chatBody(binding.kind, binding.model, call.messages, call.maxOutputTokens, L.contextTokens)), 'utf8');
     if (body.byteLength > L.maxRequestBytes) fail('sentinel.provider.requestTooLarge', `${body.byteLength} of ${L.maxRequestBytes} bytes`);
     const worst = this.worstCase(binding, body, call.messages.length, call.maxOutputTokens);
     if (worst.tokens > L.contextTokens) fail('sentinel.provider.contextExceeded', `${worst.tokens} of ${L.contextTokens} tokens`);
@@ -193,22 +256,33 @@ export class ModelBroker {
     let res = ledger.reserve({ envelopeId: env.id, operationId: call.operationId, tokens: worst.tokens, costNanos: worst.costNanos, epoch: this.#deps.epoch, at: stamp(this.#now()) });
     // An operation is sent at most once: a repeat finds its reservation already past `held` and is refused.
     if (res.state !== 'held') fail('sentinel.provider.reservationState', `operation ${call.operationId} is already ${res.state}`);
+    let nativeAuthority: NativeCallAuthority | undefined;
+    if (wire) {
+      if (!held.nativeRuntime || !held.receipt || !isConsumedReceipt(held.receipt)
+        || receiptAuthority(held.receipt)?.intentDigest !== env.admission.intentDigest || res.envelopeId !== env.id) return fail('sentinel.provider.notAdmitted', 'native call requires its exact admitted receipt and held reservation');
+      nativeAuthority = Object.freeze({ nativeCall: 'closed-v1' as const });
+      nativeCalls.set(nativeAuthority, { runtime: held.nativeRuntime, wire, limits: Object.freeze({ deadlineAt: nativeDeadline!, maxResponseBytes: L.maxResponseBytes, maxOutputTokens: call.maxOutputTokens, ...(call.signal ? { signal: call.signal } : {}) }), ledger, reservationId: res.id, receipt: held.receipt, phase: 'issued' });
+    }
     res = ledger.dispatch(res.id, stamp(this.#now()));
 
     let parsed: ReturnType<typeof parseReply>;
     try {
+      if (wire) {
+        parsed = await nativeClaudeCall(nativeAuthority!);
+      } else {
       const { json } = await exchange({ origin: binding.origin, method: 'POST', path: chatPath(binding.kind), body, credential,
         maxResponseBytes: L.maxResponseBytes, timeoutMs: L.timeoutMs, ...(call.signal ? { signal: call.signal } : {}) });
       parsed = parseReply(binding.kind, json);
+      }
     } catch (error) {
       const e = error instanceof ProviderError ? error : new ProviderError('sentinel.provider.malformedResponse', 'unexpected failure', 'possible');
       const after = e.spend === 'none' ? ledger.releaseUnsent(res.id, stamp(this.#now()), 'no-connection') : ledger.markUncertain(res.id, stamp(this.#now()), e.code);
       throw new ModelCallError(e, after);
-    }
+    } finally { if (nativeAuthority) finishNativeCall(nativeAuthority); }
 
     const { inputTokens, outputTokens } = parsed.usage;
     let settled: Reservation;
-    let costNanos = 0n;
+    let costNanos: bigint | null = binding.kind === 'claude-cli' ? null : 0n;
     if (inputTokens === null || outputTokens === null) {
       settled = ledger.markUncertain(res.id, stamp(this.#now()), 'the reply reported no usage');
     } else {
@@ -226,9 +300,9 @@ export class ModelBroker {
     return Object.freeze({
       content: parsed.content, finish: parsed.finish, truncated: parsed.finish === 'length',
       identity: Object.freeze({ requestedModel: binding.model, returnedModel: parsed.returnedModel, probedRevision: binding.capability.revision,
-        source: binding.kind === 'ollama' ? 'host-reported' as const : 'provider-response' as const }),
-      usage: Object.freeze({ certainty: 'confirmed' as const, inputTokens: inputTokens!, outputTokens: outputTokens!, monetaryCost: fromNanos(costNanos),
-        currency: held.budget.currency!, basis: binding.pricing.kind === 'rates' ? 'rate-schedule' as const : 'no-fee' as const }),
+        source: binding.kind === 'ollama' || binding.kind === 'claude-cli' ? 'host-reported' as const : 'provider-response' as const }),
+      usage: Object.freeze({ certainty: 'confirmed' as const, inputTokens: inputTokens!, outputTokens: outputTokens!, monetaryCost: costNanos === null ? null : fromNanos(costNanos),
+        currency: held.budget.currency, basis: binding.pricing.kind === 'subscription-quota' ? 'subscription-quota' as const : binding.pricing.kind === 'rates' ? 'rate-schedule' as const : 'no-fee' as const }),
       reservation: settled,
     });
   }

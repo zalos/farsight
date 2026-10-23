@@ -1,7 +1,7 @@
 // Service read documents and separately negotiated control projections. Handles never grant store/launch authority.
 import type { Count, Id, Ordinal, Timestamp, Digest, CatalogKey } from './common.js';
 import type { ReportCount } from './report.js';
-import type { PlanStage } from './plan.js';
+import type { PlanWork } from './plan.js';
 import type { RunState, RunOutcome } from './run.js';
 import type { WorkEnvelope } from './work.js';
 import type { AttemptState, UsageCertainty } from './attempt.js';
@@ -45,7 +45,7 @@ export interface RunInspection {
 export interface InspectionWork {
   kind: 'work';
   workKey: ViewHandle;
-  stage: PlanStage;
+  stage: PlanWork['stage'];
   revision: Ordinal;
   /** @maxItems 1024 */
   prerequisites: Array<{ workKey: ViewHandle; revision: Ordinal; binding: 'in-view' | 'reference-only' }>;

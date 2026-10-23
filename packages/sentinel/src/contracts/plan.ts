@@ -4,6 +4,8 @@
 // content; a change is a new revision, never an edit. A check that is not planned is kept with its reason and is
 // never covered by any work unit.
 import type { ArtifactId, CatalogKey, Count, Digest, Id, Ordinal, RelativePath, ScopeId, WorkRef } from './common.js';
+import type {Budget} from './policy.js';
+import type {ReviewProviderSelection} from './instructions.js';
 import type { RuleFamilyId, RuleScopeKind } from './rules.js';
 
 /** A check's planning state. Only `planned` is assigned to work; every other state carries its reason. */
@@ -11,6 +13,8 @@ export type PlanCheckState = 'planned' | 'unsupported' | 'applicability-unknown'
 
 /** What a work unit does: the bootstrap stages, or running checks. */
 export type PlanStage = 'capture' | 'parse' | 'inventory' | 'check';
+export type ReviewPlanStage='review-guided'|'review-general';
+export interface PlannedReview {spec:ArtifactId;specDigest:Digest;instructions:ArtifactId;instructionDigest:Digest;sourcePacket:ArtifactId;segmentId:Id;selection:ReviewProviderSelection;terms:{disclosure:'local-only'|'hosted';budget:Budget}}
 
 /** One check: (scope, rule revision, environment, mode). Its id is a digest of exactly those. */
 export interface PlanCheck {
@@ -42,7 +46,9 @@ export interface PlanInput {
 export interface PlanWork {
   id: Id;
   revision: Ordinal;
-  stage: PlanStage;
+  stage: PlanStage | ReviewPlanStage;
+  /** Exact retained model request inputs; present only on the two closed review stages. */
+  review?: PlannedReview;
   /** @maxLength 128 */
   contract: string;
   implementationDigest: Digest;

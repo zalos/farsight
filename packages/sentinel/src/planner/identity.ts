@@ -36,3 +36,6 @@ export function trustedView<T extends object>(value: T): T {
 }
 
 export const isTrustedView = (value: unknown): boolean => typeof value === 'object' && value !== null && trusted.has(value);
+
+/** A review unit is pinned to its exact segment/spec and remains separate from check coverage. */
+export const reviewUnitIdOf=(u:{runId:string;revision:number;stage:string;sourceId:string;segmentId:string;specDigest:string})=>`work-review-${shortHash(u)}`;

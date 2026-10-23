@@ -78,8 +78,16 @@ function boundsMiss(intent: ActionIntent, policy: EffectivePolicy): [PolicyReaso
   if ((paid || discloses) && !provider) return ['sentinel.admission.providerNotTrusted', 'a paid or disclosing action names a trusted provider'];
   if (paid && provider) {
     const b = intent.budget;
-    if (b.maxTokens === null || b.maxCost === null || b.currency === null) return ['sentinel.admission.budgetRequired', 'a paid action states its token and cost bounds'];
     const cap = provider.budget;
+    // Only the explicitly adopted closed CLI subscription profile accounts in tokens with money unobserved.
+    // A monetary or unconfigured provider cannot use null money to bypass its bound.
+    if (provider.kind === 'claude-cli' && provider.nativeProfile && provider.models?.length
+      && provider.models.every(m => m.pricing.kind === 'subscription-quota' && m.pricing.basis === 'owner-subscription')
+      && cap.maxTokens !== null && cap.maxCost === null && cap.currency === null) {
+      if (b.maxTokens === null || b.maxCost !== null || b.currency !== null) return ['sentinel.admission.budgetRequired', 'a subscription action states its token quota with monetary consumption unobserved'];
+      return b.maxTokens > cap.maxTokens ? ['sentinel.admission.budgetExceeded', 'the intent exceeds the adopted token quota'] : null;
+    }
+    if (b.maxTokens === null || b.maxCost === null || b.currency === null) return ['sentinel.admission.budgetRequired', 'a paid action states its token and cost bounds'];
     if (cap.maxTokens === null || cap.maxCost === null || cap.currency === null) return ['sentinel.admission.budgetExceeded', 'the provider has no budget in the adopted settings'];
     if (b.currency !== cap.currency || b.maxTokens > cap.maxTokens || compareDecimal(b.maxCost, cap.maxCost) > 0) {
       return ['sentinel.admission.budgetExceeded', 'the intent reserves more than the provider’s budget allows'];

@@ -1,3 +1,4 @@
+export type {InstructionContent,SelectedSkill,ReviewInstructionsEnvelope,ReviewInstructionBinding,ReviewRequestEnvelope,ReviewProviderSelection} from './instructions.js';
 // The draft Sentinel contracts. Types here are the one source; schemas/*.schema.json and
 // src/schemas.generated.ts are generated from them by scripts/generate-schemas.mjs (--check detects drift).
 export type * from './common.js';
@@ -13,6 +14,8 @@ export type * from './protocol.js';
 export type * from './rules.js';
 export type * from './policy.js';
 export type * from './controls.js';
+export type * from './review.js';
+export type * from './review-providers.js';
 export type * from './plan.js';
 export type * from './paths.js';
 export type * from './deepimport.js';
@@ -69,6 +72,11 @@ export const ENVELOPES = {
   configurationpreview: { schema: 'sentinel-configuration-preview/draft-1', type: 'ConfigurationPreview' },
   preparationstatus: { schema: 'sentinel-preparation-status/draft-1', type: 'PreparationStatus' },
   preparationoutcome: { schema: 'sentinel-preparation-outcome/draft-1', type: 'PreparationOutcome' },
+  partitions: { schema: 'sentinel-review-partitions/draft-1', type: 'ReviewPartitionsEnvelope' },
+  checkpoint: { schema: 'sentinel-review-checkpoint/draft-1', type: 'ReviewCheckpointEnvelope' },
+  instructions: {schema:'sentinel-review-instructions/draft-1',type:'ReviewInstructionsEnvelope'},
+  reviewrequest: {schema:'sentinel-review-request/draft-1',type:'ReviewRequestEnvelope'},
+  review: { schema: 'sentinel-review-record/draft-1', type: 'ReviewRecordEnvelope' },
 } as const;
 
 export type EnvelopeKind = keyof typeof ENVELOPES;
@@ -129,6 +137,10 @@ export const CONTROL_PROPERTIES = [
   'authentication', 'authorization', 'csrf', 'input-validation', 'rate-limit', 'security-headers', 'cors',
 ] as const;
 export const CONTROL_VERDICTS = ['applies', 'does-not-apply', 'unknown'] as const;
+export const REVIEW_VERDICTS = ['finding', 'no-finding', 'inconclusive'] as const;
+export const REVIEW_KINDS = ['guided', 'general'] as const;
+export const REVIEW_OUTCOMES = ['completed', 'unfinished'] as const;
+export const MODEL_PRICING_KINDS = ['rates', 'no-fee'] as const;
 
 /** Largest serialized envelope or worker message accepted, in UTF-8 bytes (PR 01's proposed 4 MiB output ceiling). */
 export const MAX_ENVELOPE_BYTES = 4 * 1024 * 1024;
