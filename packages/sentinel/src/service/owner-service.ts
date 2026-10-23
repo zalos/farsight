@@ -13,6 +13,10 @@
 // One run executes at a time. A second start for the plan being run joins it (one run, never two); a start for a run
 // that already finished prints its result again without executing anything. A run interrupted by the service
 // stopping, however it stopped, is recovered by the coordinator when it is resumed.
+import {OwnerUiOperations,ownerUiPolicy} from '../owner-ui/operations.js';
+import {activeOwnerUiProof,assertOwnerUiProof} from '../owner-ui/authority.js';
+import {OwnerUiReceiptBook} from '../owner-ui/receipts.js';
+import {admitOwnerUi} from '../policy/admission.js';
 import { unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -109,6 +113,7 @@ export interface OwnerServiceOptions {
 
 /** The service's operations over a store this process holds. The socket and the process around it are serveWorkspace's. */
 export class OwnerService {
+  readonly #ownerUi: OwnerUiOperations;
   readonly #store: SentinelStore;
   readonly #ws: Workspace;
   readonly #registry: AdapterRegistry;
@@ -133,13 +138,14 @@ export class OwnerService {
     this.#runEnvelope = options.runEnvelope ?? (() => undefined);
     this.#now = options.now ?? (() => new Date());
     this.#reads = new ReadonlyViews(store, ws, this.#now);
+    this.#ownerUi = new OwnerUiOperations(store,ws,(op,body,by,context)=>this.handle(op,body,by,context),(kind,body,by)=>this.#preparations.ownerUiConfirmation(kind,body,by));
     this.#preparations = new PreparationController(store, ws, this.#registry, () => this.#active.size > 0, () => { this.#idleSince = Date.now(); });
   }
 
   /** True while a run executes. */
   get busy(): boolean { return this.#active.size > 0 || this.#preparations.busy; }
   /** Bounded unexpired buffers keep a detached owner alive, without renewing their absolute TTLs. */
-  get retainingReads(): boolean { return this.#reads.retaining; }
+  get retainingReads(): boolean { return this.#reads.retaining || this.#ownerUi.retaining; }
   /** When the last run ended (or the service started), for the idle stop. */
   get idleSince(): number { return this.#idleSince; }
 
@@ -147,6 +153,9 @@ export class OwnerService {
   async handle(op: string, body: unknown, by: RequestedBy, context: { readonly signal?: AbortSignal } = {}): Promise<unknown> {
     // The owner's channel never arrives here: every connection is a service client (transport/ipc.ts).
     if (by.channel === 'owner-cli') throw new ServiceError('sentinel.service.requestInvalid');
+    if(op==='service.review-capabilities')return this.#ownerUi.handle('owner-ui.review-capabilities',body,by,context);
+    if(op==='service.owner-ui-capabilities'){fields(body,[]);return this.#ownerUi.capabilities();}
+    if(op.startsWith('owner-ui.')){if(this.#stopping)throw new ServiceError('sentinel.service.requestInvalid');return this.#ownerUi.handle(op,body,by,context);}
     if ((READONLY_OPERATIONS as readonly string[]).includes(op)) {
       if (this.#stopping) throw new ServiceError('sentinel.service.requestInvalid');
       switch (op) {
@@ -220,7 +229,8 @@ export class OwnerService {
     // The run's current admitted analysis revision, read back from the ledger and verified: what the write acts on.
     const record = await currentPlan(this.#store, planId);
     if (!record || record.kind !== 'analysis') return { refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts }) };
-    const adopted = adoptedPolicy(this.#ws);
+    const uiProof=by.channel==='owner-ui'?activeOwnerUiProof():null;
+    const adopted = uiProof?ownerUiPolicy(this.#ws):adoptedPolicy(this.#ws);
     if ('refusal' in adopted) return { refusal: adopted.refusal };
     const { policy } = adopted;
     if (policy.revision !== record.policyRevision) return { refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts }) };
@@ -228,6 +238,15 @@ export class OwnerService {
     const { intent, stateDigest } = runWriteBinding(this.#ws, action, record, { storeId: this.#store.storeId, runId: planId });
     facts.effects = intent.effects;
     const now = this.#now();
+    if(receiptId!==undefined&&uiProof){
+      assertOwnerUiProof(uiProof,action);
+      const decision=admitOwnerUi({intent,stateDigest,policy,requestedBy:uiProof.requestedBy,now,
+        capability:()=>({available:true,detail:'implemented deterministic service control; excludes model authority'}),
+        credential:()=>({basis:'local-only',detail:'no provider/model admission is included'}),
+        receipt:{book:new OwnerUiReceiptBook(join(this.#ws.trustDir,'receipts'),uiProof),id:receiptId}},uiProof,true);
+      if(decision.record.outcome!=='admitted')return{refusal:result(command,'configuration-failure',{verdicts:printed(decision.record),reasonCode:decision.record.verdicts.policy.reasonCode})};
+      return{verdicts:printed(decision.record),facts:{...facts,receipt:decision.receipt?.digest}};
+    }
     if (receiptId !== undefined) {
       // The owner's receipt: checked against exactly this action, plan digest and policy revision, and spent once.
       // What the connection said about itself plays no part; an unknown, spent, expired or mismatched one refuses.
@@ -372,6 +391,7 @@ export class OwnerService {
   /** Pauses every executing run and waits for its work in flight to end. Starts nothing afterwards. */
   async stop(): Promise<void> {
     this.#stopping = true;
+    this.#ownerUi.close();
     this.#reads.close();
     const preparation = this.#preparations.stop();
     for (const run of this.#active.values()) { run.pause = true; run.coordinator?.pause(); }

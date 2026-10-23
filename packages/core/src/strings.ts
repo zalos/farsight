@@ -54,6 +54,7 @@ import { SENTINEL_STORE_STRINGS } from './strings-sentinel-store.js';
 import { SENTINEL_CAPTURE_STRINGS } from './strings-sentinel-capture.js';
 import { SENTINEL_PARSER_STRINGS } from './strings-sentinel-parser.js';
 import { SENTINEL_PLAN_STRINGS } from './strings-sentinel-plan.js';
+import {SENTINEL_OWNER_UI_STRINGS} from './strings-sentinel-owner-ui.js';
 import { SENTINEL_SERVICE_STRINGS } from './strings-sentinel-service.js';
 import { SENTINEL_GLOSSARY_STRINGS } from './strings-sentinel-glossary.js';
 import { SENTINEL_STORAGE_ERROR_STRINGS } from './strings-sentinel-storage-errors.js';
@@ -226,6 +227,7 @@ export const STRINGS: Record<string, StringEntry> = {
   // Sentinel's command line and local service: arguments, outcomes, verdicts, actors, socket, init, preview report
   // (strings-sentinel-service.ts)
   ...SENTINEL_SERVICE_STRINGS,
+  ...SENTINEL_OWNER_UI_STRINGS,
   // Sentinel's glossary: each code-register term and its business twin, sentinel.term.biz.* (strings-sentinel-glossary.ts)
   ...SENTINEL_GLOSSARY_STRINGS,
 

@@ -28,6 +28,7 @@ import { ENVELOPES, ENVELOPE_KINDS, MAX_ENVELOPE_BYTES, type EnvelopeKind } from
 import { parseEnvelope } from './validate.js';
 // Every printed word comes from the shared catalog (strings-sentinel-cli.ts and strings-sentinel-service.ts).
 import { sentinelWord, SENTINEL_CLI_STRINGS } from '@farsight/core/dist/strings-sentinel-cli.js';
+import { SENTINEL_OWNER_UI_STRINGS } from '@farsight/core/dist/strings-sentinel-owner-ui.js';
 import { sentinelServiceWord } from '@farsight/core/dist/strings-sentinel-service.js';
 
 const word = (key: string, values: Record<string, string | number> = {}) =>
@@ -63,6 +64,7 @@ function help(): string {
     `  ${word('sentinel.cli.usageServe')}`,
     `  ${word('sentinel.service.mcpUsage')}`,
     `  ${word('sentinel.preparation.usage')}`,
+    `  ${SENTINEL_OWNER_UI_STRINGS['sentinel.ownerUi.usage']!.professional}`,
     `  ${word('sentinel.cli.usageRules')}`,
     `  ${word('sentinel.cli.usageAssets')}`,
     `  ${word('sentinel.cli.usageFollow')}`,
@@ -476,6 +478,7 @@ async function dispatch(p: ParsedCommand): Promise<number> {
       out(word('sentinel.cli.version', { version: facts.version, draft: facts.contracts })); return 0;
     }
     case 'capabilities': return capabilities(p);
+    case 'owner-ui': {const origin=p.flags['--farsight-origin'];if(typeof origin!=='string')return finish(result('owner-ui','configuration-failure',{reasonCode:'sentinel.ownerUi.invalid'}));return(await import('./owner-ui/server.js')).runOwnerUi(workspaceFor(p),origin);}
     case 'mcp': return (await import('./service/mcp.js')).runMcp(workspaceFor(p));
     case 'prepare': return serviceOut(await (await import('./service/preparation-client.js')).prepareCommand(workspaceFor(p),{action:p.args.action,confirm:p.flags['--confirm']===true,requestKey:typeof p.flags['--request-key']==='string'?p.flags['--request-key']:undefined,parentId:typeof p.flags['--parent']==='string'?p.flags['--parent']:undefined}));
     case 'validate': return validate(p);

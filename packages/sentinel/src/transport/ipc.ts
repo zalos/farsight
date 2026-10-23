@@ -170,10 +170,11 @@ export class FrameDecoder {
  * recorded under: every one is a non-owner agent, so no hello can select owner authority. The owner's CLI is a
  * `local-service` client like any other; owner authority travels only as a receipt its own process minted.
  */
-export type ClientKind = 'cli' | 'mcp' | 'http-bridge';
+export type ClientKind = 'cli' | 'mcp' | 'http-bridge' | 'owner-ui';
 const GRANTS: Readonly<Record<ClientKind, ServiceGrant>> = Object.freeze({
   'cli': Object.freeze({ principal: 'agent', channel: 'local-service' }),
   'mcp': Object.freeze({ principal: 'agent', channel: 'mcp' }),
+  'owner-ui': Object.freeze({ principal: 'agent', channel: 'owner-ui' }),
   'http-bridge': Object.freeze({ principal: 'agent', channel: 'http-bridge' }),
 });
 

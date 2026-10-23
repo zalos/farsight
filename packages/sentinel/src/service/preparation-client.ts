@@ -90,3 +90,6 @@ export async function prepareCommand(ws:Workspace,options:{action?:string;confir
   const code=(error as{code?:unknown})?.code;if(code==='sentinel.preparation.unavailable')return result('prepare','unavailable',{reasonCode:code});if(code==='sentinel.service.unknownOperation')return result('prepare','unavailable',{reasonCode:'sentinel.service.operationUnavailable'});throw error;
  }finally{try{lock?.close();}finally{client.close();}}
 }
+
+// Package-internal companion coordination; these data helpers mint no authority and are not public exports.
+export {savedPath as preparationClientFilename,savedKey as readPreparationClientKey,saveKey as savePreparationClientKey};

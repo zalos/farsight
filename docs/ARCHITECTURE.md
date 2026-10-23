@@ -1744,3 +1744,31 @@ Only exact private journal-writer temporaries are settled under the held owner b
 updates do not become accepted state, exact nlink2 canonical aliases are removed, and unknown names remain.
 Recovery is bounded and checks ownership before each destructive operation. Corruption disables preparation
 alone, preserving unrelated inspection, report and run controls.
+
+ADR48 owner-panel extension: an explicit foreground `farsight-sentinel owner-ui` companion pairs one canonical
+workspace with an exact loopback Farsight origin and that host process's random instance. Farsight has no Sentinel
+runtime dependency: read-only discovery checks a private one-link descriptor and returns only the owner origin.
+The companion uses the already held service, never opens another store or launches a service implicitly. Descriptor
+publication uses a private SQLite cross-process mutex; discovery creates or repairs nothing.
+
+One explicit launch mints one code, served at most once within two minutes. The owner-origin frame activates it
+only after an exact live paired-parent handshake; top-level/wrong-parent navigation cannot activate the shipped
+client. Only an owner-origin reload token persists; capabilities remain in memory, rotate on reload, and expire
+at the original one-hour deadline. Parent messages carry presentation and veto-only view context, never approval,
+receipt, descriptor nonce or capability. Both host read-only and historical view context refuse effects. A fixed
+host-instance/readOnly probe and a fresh exact-parent context challenge occur immediately before effect dispatch;
+this is a sampled boundary, not an atomic transaction across processes. Already accepted work may finish later.
+
+A separate closed owner-UI receipt honestly names `owner-ui`/`human` and its workspace, store, epoch, host, session
+and context revision. It can confirm only capture and existing start/pause/cancel actions. Ordinary owner-UI socket
+handshakes remain agents; private descriptor proof plus the live scoped controller authority is required to issue
+or spend that receipt. It cannot confirm settings, import, acquisition, disclosure, or model spending, and never
+qualifies as a consumed CLI receipt. Legacy CLI receipt/capability schemas remain unchanged. A genuinely paired
+unexpired session retains the owner past detached idle; sockets and reload do not renew it, and revoke/expiry
+release retention. Restart loses browser authority and requires another explicit owner launch.
+
+The panel consumes the canonical service inspection/report projections, with view-local evidence references,
+explicit historical bootstrap versus current checks, separate preview/confirmation/start, source-gone linked
+reruns, and verified Markdown format bytes. Selecting another run clears the prior report. Settings saving is
+unavailable pending shared adoption/CAS; model execution stays unavailable until its own capability and admission
+are qualified. Hosted API review is paused by default. The panel does not infer model authority from run start.

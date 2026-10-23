@@ -4,7 +4,7 @@ import { Ajv, type ValidateFunction } from 'ajv';
 import schemas from './schemas.generated.js';
 import { ENVELOPES, MAX_ENVELOPE_BYTES, type EnvelopeKind } from './contracts/index.js';
 import type {
-  AttemptEnvelope, CoverageEnvelope, DispositionEnvelope, ObservationEnvelope, PolicyResult, ProtocolMessage,
+  OwnerUiReceiptEnvelope, OwnerUiCapabilities, AttemptEnvelope, CoverageEnvelope, DispositionEnvelope, ObservationEnvelope, PolicyResult, ProtocolMessage,
   ReportCount, ReportEnvelope, RunEnvelope, SnapshotEnvelope, WorkEnvelope, FindingPlace, HelloMessage,
   WelcomeMessage, RefuseMessage, RulePackManifest, RuleLockEnvelope, SettingsEnvelope, RepoConfigEnvelope,
   EffectivePolicyEnvelope, AdoptionEnvelope, ReceiptEnvelope, AdmissionEnvelope, ControlFactsEnvelope, Rights, Budget,
@@ -31,6 +31,8 @@ export interface EnvelopeTypes {
   policy: EffectivePolicyEnvelope;
   adoption: AdoptionEnvelope;
   receipt: ReceiptEnvelope;
+  owneruireceipt: OwnerUiReceiptEnvelope;
+  owneruicapabilities: OwnerUiCapabilities;
   admission: AdmissionEnvelope;
   controls: ControlFactsEnvelope;
   plan: PlanEnvelope;
@@ -497,7 +499,7 @@ function nanos(t: string): bigint {
   return seconds * 1_000_000_000n + BigInt((m[7] ?? '').padEnd(9, '0'));
 }
 
-const receipt: Check<ReceiptEnvelope> = (v, out) => {
+const receipt: Check<Pick<ReceiptEnvelope, 'issuedAt' | 'expiresAt'>> = (v, out) => {
   if (compareTimestamps(v.expiresAt, v.issuedAt) <= 0) out.add(err('/expiresAt', 'expires at or before issue'));
   else if (nanos(v.expiresAt) - nanos(v.issuedAt) > BigInt(MAX_RECEIPT_TTL_MS) * 1_000_000n) out.add(err('/expiresAt', 'a receipt lives at most one hour'));
 };
@@ -729,7 +731,7 @@ const timestampNanos = (value: string): bigint | null => {
 
 const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   snapshot, run, work, attempt, observation, coverage, disposition, report, protocol,
-  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan, paths, deepimport,
+  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, owneruireceipt: receipt, owneruicapabilities: () => [], admission, controls, plan, paths, deepimport,
   servicecapabilities: () => [],
   runinspection: () => [],
   inspectionpage: () => [],

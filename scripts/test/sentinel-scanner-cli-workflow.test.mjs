@@ -53,3 +53,13 @@ test('SDK run controls remain in the native service zero-skip list and installed
  assert.equal(selected(['scripts/test-sentinel-preparation-consumer.mjs']),true);
  assert.equal(selected(['scripts/test-sentinel-mcp-controls-consumer.mjs']),true,'changing the consumer selects package/native acceptance');
 });
+
+// Browser checks use the already provisioned e2e browser, while pure validate never launches one.
+test('owner UI service and installed browser acceptance stay explicitly selected with no skips',()=>{
+ const ci=readFileSync(new URL('.github/workflows/ci.yml',root),'utf8');
+ for(const name of ['session','host','descriptor','service','lifecycle'])assert.ok(ci.includes(`test/owner-ui-${name}.test.ts`));
+ assert.ok(ci.includes("SENTINEL_OWNER_UI_BROWSER: '1'"));assert.ok(ci.includes('packages/sentinel/test/owner-ui-browser.test.ts'));
+ assert.ok(ci.includes("grep -q '^# skipped 0$' sentinel-owner-ui.tap"));assert.ok(ci.includes('node scripts/test-sentinel-owner-ui-consumer.mjs'));
+ const source=readFileSync(new URL('scripts/test-sentinel-owner-ui-consumer.mjs',root),'utf8');assert.ok(source.includes('npmConsumer('));assert.doesNotMatch(source,/packages\/sentinel\/dist|from[\s]*['"](?:\.\.\/)?packages\//);
+ assert.equal(selected(['scripts/test-sentinel-owner-ui-consumer.mjs']),true);
+});

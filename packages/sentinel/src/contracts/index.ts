@@ -18,6 +18,7 @@ export type * from './paths.js';
 export type * from './deepimport.js';
 export type * from './service.js';
 export type * from './preparation.js';
+export type * from './ownerui.js';
 
 /**
  * Every envelope: its kind, the one schema version this build reads and writes, and the generated type.
@@ -39,6 +40,8 @@ export const ENVELOPES = {
   repoconfig: { schema: 'sentinel-repoconfig/draft-1', type: 'RepoConfigEnvelope' },
   policy: { schema: 'sentinel-policy/draft-1', type: 'EffectivePolicyEnvelope' },
   adoption: { schema: 'sentinel-adoption/draft-1', type: 'AdoptionEnvelope' },
+  owneruireceipt: { schema: 'sentinel-owneruireceipt/draft-1', type: 'OwnerUiReceiptEnvelope' },
+  owneruicapabilities: { schema: 'sentinel-owneruicapabilities/draft-1', type: 'OwnerUiCapabilities' },
   receipt: { schema: 'sentinel-receipt/draft-1', type: 'ReceiptEnvelope' },
   admission: { schema: 'sentinel-admission/draft-1', type: 'AdmissionEnvelope' },
   controls: { schema: 'sentinel-controls/draft-1', type: 'ControlFactsEnvelope' },
@@ -80,7 +83,7 @@ export const COVERAGE_STATUSES = ['complete', 'partial', 'unsupported', 'not-run
 export const COVERAGE_GRANULARITIES = ['per-file-per-rule', 'per-file', 'aggregate'] as const;
 export const COVERAGE_BASES = ['executed', 'reused', 'imported', 'unavailable'] as const;
 export const DISPOSITION_DECISIONS = ['accepted-risk', 'false-positive', 'mitigated', 'deferred'] as const;
-export const DECISION_CHANNELS = ['owner-cli', 'mcp', 'http-bridge', 'model', 'local-service'] as const;
+export const DECISION_CHANNELS = ['owner-cli', 'mcp', 'http-bridge', 'model', 'local-service', 'owner-ui'] as const;
 export const ASSERTION_TRUSTS = ['asserted', 'imported-config', 'runtime-observed'] as const;
 export const COMPARISON_LABELS = [
   'new', 'persistent', 'changed-evidence', 'changed-detection', 'reopened', 'reopened-disposition-expired',

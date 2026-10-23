@@ -1,9 +1,10 @@
+import {companionDirectory,companionWorkspaceDigest,companionOrigin,readCompanion} from '@farsight/core/dist/sentinel-companion.js';
 import { containsCredentialShape } from '@farsight/core/dist/credential-shapes.js';
 import { readinessOf } from './readiness.js';
 import { syncGraph, syncGraphJson, syncParam, compareAnswer, type SyncGraph } from './compare.js';
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve, basename, sep } from 'node:path';
@@ -809,6 +810,8 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
   const readOnly: ReadOnlyWhy | null = opts.readOnly ?? null;
   const publicDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
   const ws = resolve(workspaceDir);
+  const hostInstance='host-'+randomBytes(16).toString('hex');
+  const companionFor=(host:string|undefined)=>{try{if(!host)return null;const farsightOrigin=companionOrigin('http://'+host);return readCompanion(companionDirectory(),{workspaceDigest:companionWorkspaceDigest(ws),farsightOrigin,hostInstance});}catch{return null;}};
 
   /**
    * The graph a request reads: the served one, or — with `?asof=<sync>` — that sync rebuilt from history
@@ -865,8 +868,9 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
     if (url === '/' || url === '/index.html') {
       // frames: only this server and the Storybooks the graph (or a source's settings) recorded —
       // the viewer never frames an origin nobody configured or discovered (ADR 9)
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': `object-src 'none'; base-uri 'self'; frame-src 'self' ${storybookOrigins().join(' ')}`.trim() });
-      return res.end(readFileSync(join(publicDir, 'viewer.html')));
+      const owner=companionFor(req.headers.host)?.ownerOrigin??'';
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': `object-src 'none'; base-uri 'self'; frame-src 'self' ${storybookOrigins().join(' ')} ${owner}`.trim() });
+      return res.end(readFileSync(join(publicDir, 'viewer.html'),'utf8').replace('<body',`<body data-sentinel-owner-origin="${owner}"`));
     }
     if (url.startsWith('/compare/') && req.method === 'GET') {
       // §9: `farsight-diff v1` froze `permalink` as /compare/<base>...<head>#<id>
@@ -924,13 +928,14 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const answer = compareAnswer(ws, { index: g.index, meta: g.meta, roots: g.roots }, new URL(url, 'http://localhost').searchParams);
       return send(answer.code, JSON.stringify(answer.body));
     }
+    if(url==='/api/sentinel/companion'&&req.method==='GET'){const owner=companionFor(req.headers.host);res.setHeader('cache-control','no-store');return send(200,JSON.stringify(owner?{available:true,ownerOrigin:owner.ownerOrigin}:{available:false,reasonCode:'sentinel.ownerUi.launch'}));}
     if (url === '/api/version' && req.method === 'GET') {
       // which Farsight is serving (version · built · commit) and which one wrote the graph — a consumer's "when was this last updated"
       const m = existsSync(graphPath) ? loadJourneyGraph(graphPath).meta : {};
       // plus: is a newer build installed than this process runs, and does the graph match — with the steps to fix either
       const install = installState();
       const currency = currencyAdvice({ role: 'server', running: buildInfo(), install, graph: { farsight: m.farsight, generatedAt: m.generatedAt, sync: m.sync } });
-      return send(200, JSON.stringify({ farsight: buildInfo(), install, currency, session: { readOnly: !!readOnly, ...(readOnly ? { why: readOnly } : {}) }, graph: { generatedAt: m.generatedAt, sync: m.sync, workspace: m.workspace, graphPath: m.graphPath, farsight: m.farsight } }));
+      return send(200, JSON.stringify({ farsight: buildInfo(), install, currency, session: { instance:hostInstance, readOnly: !!readOnly, ...(readOnly ? { why: readOnly } : {}) }, graph: { generatedAt: m.generatedAt, sync: m.sync, workspace: m.workspace, graphPath: m.graphPath, farsight: m.farsight } }));
     }
     if ((url === '/api/stories' || url.startsWith('/api/stories?')) && req.method === 'GET') {
       // the Storybooks the graph recorded, whether each answered, how its index mapped onto

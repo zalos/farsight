@@ -1,0 +1,79 @@
+// Explicit foreground companion. Reuses the existing owner socket; never opens/acquires a store.
+import{createServer,type ServerResponse}from'node:http';import{randomBytes}from'node:crypto';
+import{companionOrigin,companionDirectory,companionWorkspaceDigest}from'@farsight/core/dist/sentinel-companion.js';import{STRINGS}from'@farsight/core/dist/strings.js';
+import{connectService}from'../service/owner-service.js';import type{ServiceClient}from'../transport/ipc.js';import type{Workspace}from'../service/local.js';
+import{preparationCapabilities,configurationPreview,preparationOutcome}from'../service/preparation-projection.js';import{controlOutcome}from'../service/controls.js';
+import{preparationClientFilename,readPreparationClientKey,savePreparationClientKey}from'../service/preparation-client.js';import{preparationKeyLock}from'../service/preparation-key-lock.js';
+import{ownerHost}from'./host.js';import{OwnerUiSession,OwnerUiError}from'./session.js';import{publishOwnerCompanion}from'./descriptor.js';import{ownerUiHtml,ownerUiScript,ownerUiCss}from'./view.js';
+const fields=(v:unknown,keys:readonly string[])=>{if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!keys.includes(k)))throw new OwnerUiError();return v as Record<string,any>;};
+const digestId=(v:unknown)=>{if(typeof v!=='string'||!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(v))throw new OwnerUiError();return v;};
+export async function startOwnerUi(ws:Workspace,farsightOrigin:string){
+ companionOrigin(farsightOrigin);const host=await ownerHost(farsightOrigin),session=new OwnerUiSession(host.instance),client=await connectService(ws,'owner-ui');if(!client)throw new OwnerUiError('sentinel.service.operationUnavailable');
+ try{preparationCapabilities(await client.request('service.preparation-capabilities',{}));const caps:any=await client.request('service.owner-ui-capabilities',{});if(caps?.schema!=='sentinel-owneruicapabilities/draft-1'||caps.storeId!==client.storeId||caps.settingsSave!==false||caps.modelAdmission!==false)throw new OwnerUiError();}catch(error){client.close();throw error;}
+ const processNonce=randomBytes(32).toString('hex');let origin='',proof:string|null=null,closed=false,pendingPreview:any=null,lastRun:string|null=null,lastKey:string|null=null,effect=false;
+ try{lastKey=readPreparationClientKey(ws,client.storeId);}catch(error){client.close();throw error;}
+ let challenge:{id:string;resolve:()=>void;reject:(e:unknown)=>void;timer:ReturnType<typeof setTimeout>}|null=null;let eventResponse:ServerResponse|null=null;
+ const sockets=new Set<import('node:net').Socket>();
+ const ask=(op:string,body:Record<string,unknown>,signal?:AbortSignal)=>client.request(op,body,{signal});
+ const auth=(cap:string)=>{descriptor.assertCurrent();return session.authenticate(cap);};
+ const ui=(op:string,body:Record<string,unknown>,cap:string,signal?:AbortSignal)=>{const view=auth(cap);if(!proof)throw new OwnerUiError();return ask(op,{proof,revision:view.revision,...body},signal);};
+ const send=(res:ServerResponse,status:number,value:unknown)=>{if(!res.destroyed){res.writeHead(status,{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'});res.end(JSON.stringify(value));}};
+ const current=(cap:string,revision:number,signal:AbortSignal)=>{if(signal.aborted)throw new OwnerUiError('sentinel.preparation.canceled');auth(cap);session.writable(cap,revision);};
+ async function freshContext(cap:string,signal:AbortSignal){const revision=auth(cap).revision;current(cap,revision,signal);const actual=await ownerHost(farsightOrigin,host.instance);current(cap,revision,signal);if(actual.readOnly)throw new OwnerUiError('sentinel.ownerUi.readOnly');if(challenge)throw new OwnerUiError('sentinel.ownerUi.busy');
+  await new Promise<void>((resolve,reject)=>{const id=randomBytes(32).toString('hex'),fail=(e:unknown)=>{if(challenge?.id===id){clearTimeout(challenge.timer);challenge=null;}reject(e);};const timer=setTimeout(()=>fail(new OwnerUiError('sentinel.ownerUi.changed')),1500);challenge={id,timer,resolve:()=>{clearTimeout(timer);challenge=null;signal.removeEventListener('abort',aborted);resolve();},reject:fail};const aborted=()=>fail(new OwnerUiError('sentinel.preparation.canceled'));signal.addEventListener('abort',aborted,{once:true});if(eventResponse){const res=eventResponse;eventResponse=null;send(res,200,{challenge:id});}});
+  current(cap,revision,signal);return revision;
+ }
+ const server=createServer(async(req,res)=>{
+  const abort=new AbortController();res.once('close',()=>{if(!res.writableEnded)abort.abort();});
+  try{
+   if(closed||req.headers.host!==origin.slice(7)||req.url?.includes('?'))throw new OwnerUiError();
+   res.setHeader('referrer-policy','no-referrer');res.setHeader('cache-control','no-store');res.setHeader('x-content-type-options','nosniff');
+   const csp=`default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors ${farsightOrigin}; base-uri 'none'; form-action 'none'; object-src 'none'`;
+   if(req.method==='GET'){
+    if(req.url==='/capabilities'){const header=req.headers.authorization;if(typeof header!=='string'||!/^Bearer [a-f0-9]{64}$/.test(header))throw new OwnerUiError();const cap=header.slice(7);auth(cap);send(res,200,await ui('service.review-capabilities',{},cap,abort.signal));return;}
+    if(req.url==='/bootstrap'){const code=session.bootstrap();res.writeHead(303,{location:'/frame#launch='+code,'content-security-policy':csp});res.end();return;}
+    if(req.url==='/frame'){res.writeHead(200,{'content-type':'text/html; charset=utf-8','content-security-policy':csp});res.end(ownerUiHtml(farsightOrigin,host.instance));return;}
+    if(req.url==='/client.js'){res.writeHead(200,{'content-type':'text/javascript'});res.end(ownerUiScript());return;}
+    if(req.url==='/style.css'){res.writeHead(200,{'content-type':'text/css'});res.end(ownerUiCss);return;}
+    if(req.url==='/words.json'){send(res,200,Object.fromEntries(Object.entries(STRINGS).filter(([k])=>k.startsWith('sentinel.')||k==='nav.sentinel').map(([k,v])=>[k,{hud:v.hud,professional:v.professional,define:v.define}])));return;}
+    send(res,404,{error:'sentinel.ownerUi.invalid'});return;
+   }
+   if(req.method!=='POST'||req.headers.origin!==origin||req.headers['content-type']!=='application/json')throw new OwnerUiError();
+   let size=0;const chunks:Buffer[]=[];for await(const raw of req){const bytes=Buffer.from(raw);size+=bytes.length;if(size>16384)throw new OwnerUiError();chunks.push(bytes);}const body=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));
+   if(req.url==='/session'){
+    const f=fields(body,['kind','secret','view']);const active=session.activate(f.kind,f.secret,f.view);try{const pair:any=await ask('owner-ui.pair',{farsightOrigin,hostInstance:host.instance,processNonce},abort.signal);if(typeof pair.proof!=='string'||!/^[a-f0-9]{64}$/.test(pair.proof))throw new OwnerUiError();proof=pair.proof;await ask('owner-ui.context',{proof,view:session.authenticate(active.capability)},abort.signal);if(abort.signal.aborted)throw new OwnerUiError();send(res,200,{...active,readOnly:host.readOnly});}catch(error){session.revoke();throw error;}return;
+   }
+   const cap=typeof req.headers.authorization==='string'?req.headers.authorization.slice(7):'';if(req.headers.authorization!==`Bearer ${cap}`)throw new OwnerUiError();auth(cap);
+   if(req.url==='/context'){const f=fields(body,['view']);session.update(cap,f.view);await ask('owner-ui.context',{proof,view:session.authenticate(cap)},abort.signal);if(challenge&&session.authenticate(cap).mode!=='live')challenge.reject(new OwnerUiError('sentinel.ownerUi.readOnly'));send(res,200,{revision:session.authenticate(cap).revision});return;}
+   if(req.url==='/events'){fields(body,[]);if(eventResponse)throw new OwnerUiError('sentinel.ownerUi.busy');if(challenge){send(res,200,{challenge:challenge.id});return;}eventResponse=res;const timer=setTimeout(()=>{if(eventResponse===res){eventResponse=null;send(res,200,{challenge:null});}},1000);res.once('close',()=>{clearTimeout(timer);if(eventResponse===res)eventResponse=null;});return;}
+   if(req.url==='/ack'){const f=fields(body,['id','view']);if(!challenge||challenge.id!==f.id)throw new OwnerUiError();session.update(cap,f.view);await ask('owner-ui.context',{proof,view:session.authenticate(cap)},abort.signal);auth(cap);const pending=challenge;if(!pending||pending.id!==f.id)throw new OwnerUiError();pending.resolve();send(res,200,{acknowledged:true});return;}
+   if(req.url==='/preview'){
+    const f=fields(body,['linked']);if(f.linked!==undefined&&typeof f.linked!=='boolean')throw new OwnerUiError();if(f.linked&&!lastRun)throw new OwnerUiError();const requestKey='request-'+randomBytes(16).toString('hex'),preview=configurationPreview(await ui('owner-ui.preview',{requestKey,...(f.linked?{parentId:lastRun}:{})},cap,abort.signal));const confirm=session.challenge(cap,'prepare');pendingPreview={kind:'prepare',requestKey,previewId:preview.id,parentId:f.linked?lastRun:null,challenge:confirm};send(res,200,{preview,confirmation:confirm});return;
+   }
+   if(req.url==='/control-preview'){const f=fields(body,['action']);if(!lastRun||typeof f.action!=='string'||!['start','pause','cancel'].includes(f.action))throw new OwnerUiError();const preview:any=await ui('owner-ui.control-preview',{runId:lastRun,action:f.action},cap,abort.signal);if(preview.unavailable){send(res,200,preview);return;}const confirm=session.challenge(cap,'control');pendingPreview={kind:'control',previewId:preview.id,challenge:confirm};send(res,200,{preview,confirmation:confirm});return;}
+   if(req.url==='/confirm'){
+    const f=fields(body,['id','revision']);if(effect||!pendingPreview)throw new OwnerUiError('sentinel.ownerUi.busy');effect=true;const pending=pendingPreview;pendingPreview=null;
+    try{session.consume(cap,f.id,pending.kind,f.revision);let lock:Awaited<ReturnType<typeof preparationKeyLock>>|undefined;
+     try{if(pending.kind==='prepare'){lock=await preparationKeyLock(ws.trustDir,preparationClientFilename(ws,client.storeId));const previous=readPreparationClientKey(ws,client.storeId);if(previous){const old=preparationOutcome(await ask('prepare.status',{requestKey:previous},abort.signal));if(!old.status?.found)throw new OwnerUiError('sentinel.preparation.unavailable');const status=old.status,allowed=status.phase==='prepared'||pending.parentId===null&&(['failed','canceled'].includes(status.phase)||status.phase==='interrupted'&&status.resumeAvailable===false);if(!allowed)throw new OwnerUiError('sentinel.preparation.busy');}}
+      await freshContext(cap,abort.signal);if(pending.kind==='prepare'){lock!.assertHeld();savePreparationClientKey(ws,client.storeId,pending.requestKey);lastKey=pending.requestKey;send(res,200,await ui('owner-ui.accept',{requestKey:lastKey,previewId:pending.previewId},cap,abort.signal));}else send(res,200,await ui('owner-ui.control',{previewId:pending.previewId},cap,abort.signal));
+     }finally{lock?.close();}
+    }finally{effect=false;}return;
+   }
+   if(req.url==='/status'){fields(body,[]);lastKey=readPreparationClientKey(ws,client.storeId);if(!lastKey){lastRun=null;send(res,200,{status:null});return;}const status=preparationOutcome(await ask('prepare.status',{requestKey:lastKey},abort.signal));lastRun=status.status?.found?status.status.runId??null:null;send(res,200,status);return;}
+   if(req.url==='/inspect'){const f=fields(body,['phase']);if(f.phase!==undefined&&!['bootstrap','analysis'].includes(f.phase))throw new OwnerUiError();if(!lastRun)throw new OwnerUiError();send(res,200,await ask('run.inspect',{runId:lastRun,...(f.phase==='bootstrap'?{planRevision:1}:{})},abort.signal));return;}
+   if(req.url==='/page'){const f=fields(body,['viewId','collection','cursor']);if(!['works','attempts','inputs','outputs'].includes(f.collection))throw new OwnerUiError();send(res,200,await ask('view.page',{viewId:digestId(f.viewId),collection:f.collection,limit:32,...(f.cursor?{cursor:digestId(f.cursor)}:{})},abort.signal));return;}
+   if(req.url==='/report'){fields(body,[]);if(!lastRun)throw new OwnerUiError();send(res,200,await ask('report.open',{runId:lastRun,format:'md'},abort.signal));return;}
+   if(req.url==='/delivery'){const f=fields(body,['deliveryId','offset']);if(!Number.isSafeInteger(f.offset)||f.offset<0)throw new OwnerUiError();send(res,200,await ask('delivery.read',{deliveryId:digestId(f.deliveryId),offset:f.offset},abort.signal));return;}
+   throw new OwnerUiError();
+  }catch(error){if(session.revoked&&proof){const revoked=proof;proof=null;await client.request('owner-ui.revoke',{proof:revoked},{timeoutMs:1500}).catch(()=>{});}const candidate=(error as{code?:unknown})?.code,code=typeof candidate==='string'&&Object.hasOwn(STRINGS,candidate)?candidate:'sentinel.ownerUi.failed';send(res,400,{error:code,message:STRINGS[code]?.professional});}
+ });
+ server.maxConnections=32;server.headersTimeout=5000;server.requestTimeout=10000;server.keepAliveTimeout=1000;
+ server.on('connection',socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));});
+ try{await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>{server.removeListener('error',reject);resolve();});});origin=`http://127.0.0.1:${(server.address()as import('node:net').AddressInfo).port}`;
+ }catch(error){client.close();throw error;}
+ let descriptor:Awaited<ReturnType<typeof publishOwnerCompanion>>;
+ try{descriptor=await publishOwnerCompanion(companionDirectory(),{schema:'farsight-sentinel-companion/1',ownerOrigin:origin,farsightOrigin,workspaceDigest:companionWorkspaceDigest(ws.path),hostInstance:host.instance,processNonce,expiresAt:new Date(session.expiresAt).toISOString()});}catch(error){client.close();for(const socket of sockets)socket.destroy();await new Promise<void>(r=>server.close(()=>r()));throw error;}
+ const controller={origin,async close(){if(closed)return;closed=true;clearTimeout(expiryTimer);session.revoke();if(challenge)challenge.reject(new OwnerUiError('sentinel.ownerUi.expired'));if(eventResponse)send(eventResponse,200,{challenge:null});try{if(proof)await client.request('owner-ui.revoke',{proof},{timeoutMs:1500}).catch(()=>{});}finally{client.close();for(const socket of sockets)socket.destroy();await new Promise<void>(r=>server.close(()=>r()));await descriptor.close();}}};
+ const expiryTimer=setTimeout(()=>{void controller.close().catch(()=>{});},Math.max(1,session.expiresAt-Date.now()));return controller;
+}
+export async function runOwnerUi(ws:Workspace,origin:string){const running=await startOwnerUi(ws,origin);process.stdout.write(`${STRINGS['sentinel.ownerUi.launch']!.professional}\n`);const stop=new AbortController(),onSignal=()=>stop.abort();process.once('SIGINT',onSignal);process.once('SIGTERM',onSignal);try{await new Promise<void>(r=>stop.signal.addEventListener('abort',()=>r(),{once:true}));}finally{process.removeListener('SIGINT',onSignal);process.removeListener('SIGTERM',onSignal);await running.close();}return 0;}

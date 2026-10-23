@@ -259,7 +259,8 @@
         "mcp",
         "http-bridge",
         "model",
-        "local-service"
+        "local-service",
+        "owner-ui"
       ],
       "description": "Where a decision came from. Only a trusted local owner action approves; MCP, HTTP, model output and any client of the owner's local service (`local-service`, the owner's own CLI included when it talks to the service) propose."
     },

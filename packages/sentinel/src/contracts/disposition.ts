@@ -7,7 +7,7 @@ export type DispositionDecision = 'accepted-risk' | 'false-positive' | 'mitigate
  * Where a decision came from. Only a trusted local owner action approves; MCP, HTTP, model output and any client of
  * the owner's local service (`local-service`, the owner's own CLI included when it talks to the service) propose.
  */
-export type DecisionChannel = 'owner-cli' | 'mcp' | 'http-bridge' | 'model' | 'local-service';
+export type DecisionChannel = 'owner-cli' | 'mcp' | 'http-bridge' | 'model' | 'local-service' | 'owner-ui';
 
 /** Assertion provenance, kept apart from graph evidence classes. */
 export type AssertionTrust = 'asserted' | 'imported-config' | 'runtime-observed';
