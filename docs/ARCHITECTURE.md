@@ -1570,8 +1570,8 @@ validated plan, current revision and original source/owner checks; a read-only p
 `retained-bootstrap.ts` and `retained-analysis.ts` share verification mechanics while retaining those different
 entry authorities. Execution's body-read behavior is unchanged.
 
-The closed internal descriptor table currently names `framework-controls` and `bounded-paths`; the latter cannot
-register until its real worker and driver ship. No caller selects a worker path or export. Framework definitions
+The closed internal descriptor table names `framework-controls` and `bounded-paths`; each resolves its shipped
+fixed worker and driver through the same installed closure contract. No caller selects a worker path or export. Framework definitions
 import the actual pure support modules, and report reads/imports/help do not resolve assets, load the worker or
 load the native parser. Already accepted reports remain readable with worker assets absent; a new execution still
 requires the installed assets and exact registration identity.
@@ -1616,9 +1616,27 @@ passes; both retain the original absolute deadline and signal. Repeated pre-writ
 copying its large source view or minting execution authority. Execution holds every unrelated unit. Authenticated
 request ancestor edges and genuine selected-rerun edges retain their recorded revisions; a parent id alone grants
 nothing. Mixed request pins and legacy rerun selections currently refuse explicitly; selected reruns of path tasks
-remain a required integration item. Canonical owner command, fixed worker/driver, lifecycle and report wiring remain
-implementation gates; this internal checkpoint does not enable production path execution. Public reports must keep call reachability distinct from data flow or protection, retain
+remain a required integration item. Canonical owner command, lifecycle and report wiring remain implementation
+gates; the internal worker checkpoint does not complete the owner workflow. Public reports must keep call reachability distinct from data flow or protection, retain
 bounds/frontiers and apply current, baseline and proven selected-ancestor privacy to every path-controlled detail.
+
+The shipped `bounded-paths` worker has one explicit sealed job naming its request and the four original retained
+roles. A source unit admits at most 1,018 entries before the six fixed roles/job/request, within the existing 1,024
+start-input cap. No worker enumerates JSON to discover a job. `DriverContext.pathRequest` is data supplied only
+from the coordinator's genuine admitted plan. The driver binds the exact work, attempt, assignment, source, profile,
+sealed input set and derived job before normalization; output graph, path steps, sites, cycles and producer identity
+are checked against the original parser evidence. Only the exact promoted shipped rule selected by owner policy
+can plan this task. Registration does not alter adopted settings, requested families or default stages.
+
+Sentinel's rule evidence vocabulary adds `call-path`: a retained bounded structural query result, including an
+explicit no-path or frontier outcome. This is not a new Farsight evidence class, security finding, data-flow fact or
+clearance. Structural task completion gives no required security coverage, and unrelated required checks remain
+gaps. The worker enforces one budget over all queries: 64 MiB decoded/cache bytes, 1,024 distinct reads, one million
+visits, four million traversal/index steps and four MiB output. Limits can only tighten. These are cooperative
+accounting limits, not hard heap or RSS claims. The coordinator preserves its original unit prepare-to-accept
+cancellation/deadline; a separately bounded normalization pass records its own graph-validation counters without
+re-running the queries or re-reading bodies. Worker usage, normalization usage, proof and admission revalidation
+are separately stated; none claims a single combined quota.
 
 Deep imports retain ADR 36's separate owner `evidence.import` receipt boundary and tool-scope-only observations.
 A consumed in-process receipt cannot be reconstructed from serialized JSON; durable import acceptance and its crash

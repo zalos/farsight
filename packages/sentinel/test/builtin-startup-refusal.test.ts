@@ -30,7 +30,6 @@ test('only the exact framework startup refusal receives a nonretryable catalog c
 const negatives: [string, any, any, any][] = [
   ['no adapter', null, driver, outcome], ['external', {...adapter,kind:'external',isolation:'container'},driver,outcome],
   ['other id', {...adapter,id:'other-worker'},driver,outcome], ['inherited id', {...adapter,id:'toString'},driver,outcome],
-  ['descriptor without refusal status', {...adapter,id:'bounded-paths'}, {...driver,adapterId:'bounded-paths'}, {...outcome,adapter:{id:'bounded-paths',digest}}],
   ['wrong isolation', {...adapter,isolation:'container'},driver,outcome], ['no driver',adapter,undefined,outcome],
   ['wrong driver id',adapter,{...driver,adapterId:'other'},outcome], ['wrong driver digest',adapter,{...driver,implementationDigest:`sha256:${'b'.repeat(64)}`},outcome],
   ['wrong outcome id',adapter,driver,{...outcome,adapter:{id:'other',digest}}], ['wrong outcome digest',adapter,driver,{...outcome,adapter:{id:adapter.id,digest:`sha256:${'b'.repeat(64)}`}}],
@@ -45,3 +44,11 @@ const negatives: [string, any, any, any][] = [
     [`specific failure ${code}`,adapter,driver,{...outcome,code:`sentinel.execution.${code}`}] as [string,any,any,any]),
 ];
 for (const [name,a,d,o] of negatives) test(`startup classification excludes ${name}`, () => assert.equal(closureRefusalOf(a,d,o),undefined));
+
+
+test('the shipped bounded paths descriptor has the same exact startup refusal contract',()=>{
+  const a={...adapter,id:'bounded-paths'},d={...driver,adapterId:a.id},o={...outcome,adapter:{id:a.id,digest}};
+  assert.equal(BUILTIN_WORKERS[a.id].closureRefusalExit,71);
+  assert.equal(closureRefusalOf(a,d,o)?.code,'sentinel.execution.closureRefused');
+  assert.equal(closureRefusalOf(a,d,{...o,protocol:{frames:0,bytes:1}}),undefined);
+});

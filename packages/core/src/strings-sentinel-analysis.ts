@@ -6,6 +6,8 @@ const same = (text: string, define: string): StringEntry => ({ hud: text, profes
 
 export const SENTINEL_ANALYSIS_STRINGS: Record<string, StringEntry> = {
   // ---- bounded call paths ----
+  'sentinel.paths.budgetExceeded': same('the structural search stopped at its work limit', 'The shared input, retained-byte, traversal, output or time allowance was exhausted. No partial search is accepted as a completed result.'),
+  'sentinel.paths.rule.callReachability': same('bounded structural call reachability', 'A retained bounded call-path query result includes a reached, no-path or frontier outcome in the captured parser graph. It never establishes data flow, security enforcement or clearance.'),
   'sentinel.paths.unresolvedCall': same('the search met a call it cannot follow', 'The parser could not tell what a call reaches, or it reaches something outside the analysed graph. The search stops there, so it cannot say whether a path continues through it.'),
   'sentinel.paths.fanoutLimit': same('a function calls more places than the search follows', 'A function has more outgoing calls than the search bound allows; the calls past the bound were not followed, so a path through them is not ruled out.'),
   'sentinel.paths.depthLimit': same('the search reached its depth bound', 'Paths longer than the depth bound were not explored, so a longer path is not ruled out.'),

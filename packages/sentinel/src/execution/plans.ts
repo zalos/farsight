@@ -121,7 +121,7 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest)
     if (ruleLock) receipts.push(await put(ruleLock, ids.ruleLock!));
     if (policy) receipts.push(await put(policy, ids.policy!));
     if (selection) receipts.push(await put(selection, ids.selection!));
-    if(path) receipts.push(await put(path.request.value,store.objects.identifyCanonicalJson(path.request.value)));
+    if(path) receipts.push(await put(path.request.value,{id:path.request.id,rawSize:canonicalJsonBytes(path.request.value).length}));
     path?.boundary();
     store.assertHeld();
     return store.ledger.admitPlan({ runId: plan.runId, revision: plan.revision, kind: plan.kind, digest: plan.digest, previous: plan.previous,

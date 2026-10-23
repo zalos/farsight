@@ -625,6 +625,9 @@ remain visible, and none of these control facts establishes protection.
 
 ## Remaining product and release gates
 
+The fixed structural-path worker/driver is an internal execution seam over an admitted retained request. It reports
+call reachability and bounded frontiers, without security coverage or findings. Its exact shipped pack must be
+explicitly promoted and selected by owner policy; no default stages or settings are changed by registration.
 Canonical structural-path requests and durable deep imports are not owner CLI workflows yet; no qualified deep-flow
 engine ships. Decisions/import authority, provider/model command integration, deterministic MCP, the optional host
 bridge, GUI configuration and stage detail, model selection, replay/retention and later differential/build/runtime

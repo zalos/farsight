@@ -307,5 +307,10 @@ read-byte hashes and parser result/index links, returning call reachability and 
 launches and publishes nothing. `analysis/paths/admission.ts` binds the exact admitted path units to a genuine
 owner-bound retained-source proof, revalidates its closure through counted reads and derives source-derived request
 retention links before the existing atomic plan admission. Unrelated execution units remain held; request ancestry
-uses exact accepted edges, and mixed legacy selections refuse. Canonical driver/owner dispatch, selected path-task
-reruns and report projection remain required integration gates.
+uses exact accepted edges, and mixed legacy selections refuse. `analysis/paths/budget.ts` accounts aggregate
+worker reads, decoded/cache bytes and query work; `worker.ts` is the fixed supervised sealed-job child; `driver.ts`
+binds normalization to the genuine coordinator context and original parser graph; `definitions.ts` is pure shared
+identity data. `rules/bounded-paths/` defines the exact promoted structural family with `call-path` rule evidence,
+and `service/path-adapter.ts` gates availability without adopting policy. Tests in `path-worker-inputs.test.ts` and
+`path-driver.test.ts` exercise the genuine child and completed/canceled ancestor acceptance. Canonical owner
+dispatch, selected path-task reruns and report projection remain required integration gates.

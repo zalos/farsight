@@ -54,6 +54,7 @@ test('no Farsight package depends on or imports Sentinel', () => {
 // Every module import outside the package, per built file. A new import fails here until it is reviewed and
 // added; nothing networked, no worker or cluster, and no static node:sqlite import anywhere.
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
+  'service/path-adapter.js': ['node:path'],
   'service/scanner-assets.js': ['node:crypto', 'node:fs', 'node:path'],
   'reports/accepted-secrets.js': ['@farsight/graph', 'node:crypto'],
   'reports/selected-privacy.js': ['@farsight/graph'],
@@ -206,6 +207,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // Bounded call paths and attested deep import (ADR 36): pure over parser evidence and captured bytes; no engine, no process.
   'analysis/paths/paths.js': ['@farsight/graph', 'node:crypto'],
   'analysis/paths/protocol.js': ['node:crypto'],
+  // The fixed structural child reads only sealed files; its driver writes the private prepared request.
+  'analysis/paths/worker.js': ['node:crypto', 'node:fs', 'node:url'],
+  'analysis/paths/driver.js': ['node:fs', 'node:path'],
   'analysis/deep/import.js': ['@farsight/graph', 'node:crypto'],
   // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
   // The framework inspection worker (ADR 44): sealed inputs by digest, one output file; it runs only as its own entry.

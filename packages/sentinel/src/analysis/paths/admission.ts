@@ -2,13 +2,14 @@
 // canonical request is source-derived data and cannot grant launch, select a parent publication or supply links.
 import type { ArtifactId, PathRequestEnvelope } from '../../contracts/index.js';
 import { canonicalArtifactId } from '../../planner/boundary.js';
+import type { PlanEnvelope } from '../../contracts/plan.js';
 import type { PlanRevision } from '../../planner/types.js';
 import type { SentinelStore } from '../../store/index.js';
 import { canonicalJsonBytes } from '../../store/objects.js';
 import { ExecutionError } from '../../execution/errors.js';
 import { readRetainedSourceProof, assertRetainedSourceProof, RetainedBudget, type ProofTiming, type RetainedSourceProof } from '../../execution/retained-source.js';
 import type { ExecutionProfileRecord } from '../../execution/profile.js';
-import { pathRequestOf, PATHS_ADAPTER_ID, type CanonicalPathRequest } from './request.js';
+import { pathRequestOf, PATHS_ADAPTER_ID, PATHS_PROTOCOL_INPUT_LIMIT, PATHS_RESERVED_INPUTS, type CanonicalPathRequest } from './request.js';
 
 export interface PathRequestAdmission {
   readonly document: PathRequestEnvelope;
@@ -20,13 +21,14 @@ const same = (a: unknown, b: unknown) => canonicalJsonBytes(a).equals(canonicalJ
 export const requestAncestor = (r: Readonly<PathRequestEnvelope>) => ({ ...r.ancestor, snapshotId:r.snapshotId, sourceId:r.sourceId });
 
 /** Exact active unit set, derived from the immutable admitted plan and its authenticated request pin. */
-export function pathUnitsFor(plan: Readonly<PlanRevision>, request: CanonicalPathRequest): Set<string> {
+export function pathUnitsFor(plan: Readonly<PlanEnvelope>, request: CanonicalPathRequest): Set<string> {
   const r=request.value;
   if(plan.kind!=='analysis'||plan.pins.pathRequest!==request.id||plan.pins.snapshotId!==r.snapshotId||plan.runId===r.ancestor.runId
     ||plan.pins.analyses.filter(a=>a.sourceId===r.sourceId).length!==1) return refuse('the path request differs from the admitted source and capture');
   const units=plan.units.filter(u=>u.adapterId===PATHS_ADAPTER_ID&&u.sourceId===r.sourceId);
   if(!units.length) return refuse('the requested source has no supported path unit');
   for(const u of units){
+    if(u.inputs.length+PATHS_RESERVED_INPUTS>PATHS_PROTOCOL_INPUT_LIMIT) return refuse('the whole source exceeds the sealed path input protocol bound');
     if(u.stage!=='check'||u.scopes.length!==1||u.scopes[0]!==r.sourceId||u.dependencies.length!==1
       ||!plan.reused.some(x=>x.id===u.dependencies[0]!.id&&x.revision===u.dependencies[0]!.revision)
       ||u.checks.length===0||u.checks.some(id=>!plan.checks.some(c=>c.id===id&&c.state==='planned'&&c.sourceId===r.sourceId&&c.scopeKind==='repository'&&c.scopeId===r.sourceId&&c.familyId==='sentinel.paths.call-reachability'&&c.unit?.id===u.id&&c.unit.revision===u.revision))) {
@@ -48,13 +50,18 @@ export async function verifyPathAdmission(store: SentinelStore, plan: PlanRevisi
   const { signal, deadlineAt, stillWithin }=callerTiming;
   const timing: ProofTiming=Object.freeze({signal,...(deadlineAt!==undefined?{deadlineAt}:{}),...(stillWithin?{stillWithin}:{})});
   const request=pathRequestOf(document),ancestor=requestAncestor(request.value);
+  const childBoundary=()=>{
+    const child=store.ledger.getRun(plan.runId);
+    if(child&&(child.envelope.parentId!==ancestor.runId||child.envelope.snapshotId!==ancestor.snapshotId)) return refuse('the recorded path task parent or capture differs from the proven request ancestor');
+  };
+  childBoundary();
   const view=readRetainedSourceProof(store,proof,ancestor,timing);
   const units=pathUnitsFor(plan,request);
   if(!same(profile.parse,view.parse)||plan.pins.analyses.find(a=>a.sourceId===view.sourceId)?.analysisFingerprint!==view.analysisFingerprint) {
     return refuse('the path task must retain the original admitted parse settings and source analysis');
   }
   // Every revalidation read retains the mint's original fences even if this caller supplies a later deadline.
-  const originalBoundary=()=>assertRetainedSourceProof(store,proof,ancestor,timing);
+  const originalBoundary=()=>{childBoundary();assertRetainedSourceProof(store,proof,ancestor,timing)};
   const budget=new RetainedBudget(store,{signals:[timing.signal],...(timing.deadlineAt!==undefined?{deadlineAt:timing.deadlineAt}:{}),stillWithin:[originalBoundary]});
   const closure=new Set(view.closure.map(c=>c.id));
   const parent=await budget.planLoader()(ancestor.runId,ancestor.revision);
@@ -70,6 +77,6 @@ export async function verifyPathAdmission(store: SentinelStore, plan: PlanRevisi
   for(const id of closure) await budget.read(id,source.has(id)?'source':'metadata');
   assertRetainedSourceProof(store,proof,ancestor,timing);
   return {request,links:[...closure].sort() as ArtifactId[],usage:budget.usage(),boundary:()=>{
-    budget.boundary();assertRetainedSourceProof(store,proof,ancestor,timing);
+    budget.boundary();originalBoundary();
   }};
 }

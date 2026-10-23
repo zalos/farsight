@@ -173,3 +173,13 @@ test('revalidation stops at the original proof deadline after an awaited read ev
     assert.equal(s.store.ledger.currentSequence(),before);assert.deepEqual(objectNames(s.store),files);
   }finally{reader.mock.restore();clock.mock.restore()}
 });
+
+test('an existing linked run must retain its proven request parent before admission writes',needsStore,async t=>{
+  const s=await candidate(t);
+  // A genuine existing run with no analysis plan yet: admission may precede creation, but cannot repair its parent.
+  s.store.ledger.createRun({...s.run,id:s.plan.runId,parentId:null,planRevision:1,state:'planned'});
+  const before=s.store.ledger.currentSequence(),files=objectNames(s.store);
+  await assert.rejects(admitPlan(s.store,s.admission),(e:any)=>e.code==='sentinel.execution.planInvalid'&&e.detail.reason.includes('recorded path task parent'));
+  assert.equal(s.store.ledger.currentSequence(),before);assert.deepEqual(objectNames(s.store),files);
+  assert.equal(s.store.ledger.latestPlan(s.plan.runId),undefined);
+});

@@ -6,15 +6,15 @@ import type { ArtifactId, PathEvidenceEnvelope, PathRequestEnvelope, SnapshotEnv
 import type { AnalysisArtifact } from '@farsight/code-parser';
 import type { ParserIndex, ParserResult } from '../../snapshot/parser.js';
 import { validateEnvelope } from '../../validate.js';
-import { boundedCallPaths } from './paths.js';
-import { parsePathRequest, PathRequestError } from './request.js';
+import { controlledCallPaths } from './paths.js';
+import { PathExecutionBudget } from './budget.js';
+import { parsePathRequest, PathRequestError, PATHS_PROTOCOL_INPUT_LIMIT } from './request.js';
 
-export const PATHS_JOB_SCHEMA = 'sentinel-bounded-paths-job/draft-1';
-export const PATHS_OUTPUT_SCHEMA = 'sentinel-bounded-paths-output/draft-1';
-export const PATHS_OUTPUT_MEDIA = 'application/vnd.sentinel.bounded-paths+json';
+import { PATHS_JOB_SCHEMA, PATHS_OUTPUT_SCHEMA } from './definitions.js';
+export { PATHS_JOB_SCHEMA, PATHS_OUTPUT_SCHEMA, PATHS_OUTPUT_MEDIA } from './definitions.js';
 const MAX_OBJECT_BYTES = 16 * 1024 * 1024;
 const MAX_JOB_BYTES = 4096;
-const MAX_INPUTS = 200_006;
+const MAX_INPUTS = PATHS_PROTOCOL_INPUT_LIMIT;
 const ID = /^sha256:[0-9a-f]{64}$/;
 
 /** Only immutable object references; the request itself names the exact ancestor, queries, source and bounds. */
@@ -35,6 +35,7 @@ export interface PathsOutput {
   readonly evidence: PathEvidenceEnvelope;
   /** What this invocation read, never a substitute for the coordinator's sealed-input/admission proof. */
   readonly actualReadSet: readonly ArtifactId[];
+  readonly usage: ReturnType<PathExecutionBudget['usage']>;
 }
 
 const hash = (b: Uint8Array): ArtifactId => `sha256:${createHash('sha256').update(b).digest('hex')}`;
@@ -61,7 +62,8 @@ export function parsePathsJob(bytes: Uint8Array): PathsJob {
  * Inspects one job using only its attempt's sealed input IDs. The callback is an object-byte reader, never a path
  * reader. Canonical admission/producer authority is deliberately not reconstructed from these structural objects.
  */
-export async function inspectPathInputs(jobBytes: Uint8Array, inputs: readonly string[], read: (id: ArtifactId) => Promise<Uint8Array>): Promise<PathsOutput> {
+export async function inspectPathInputs(jobBytes: Uint8Array, inputs: readonly string[], read: (id: ArtifactId) => Promise<Uint8Array>, budget = new PathExecutionBudget()): Promise<PathsOutput> {
+  budget.boundary();
   const job = parsePathsJob(jobBytes);
   if (!Array.isArray(inputs) || inputs.length > MAX_INPUTS || inputs.some(id => typeof id !== 'string' || !ID.test(id))) return fail();
   const allowed = new Set(inputs);
@@ -74,8 +76,11 @@ export async function inspectPathInputs(jobBytes: Uint8Array, inputs: readonly s
     let pending = cache.get(id);
     if (!pending) {
       pending = (async () => {
+        budget.read();
         const returned = await read(id);
+        budget.boundary();
         if (!(returned instanceof Uint8Array) || returned.byteLength > MAX_OBJECT_BYTES) return fail();
+        budget.bytes(returned.byteLength);
         const bytes = Uint8Array.from(returned);
         if (hash(bytes) !== id) return fail();
         actual.add(id);
@@ -103,14 +108,16 @@ export async function inspectPathInputs(jobBytes: Uint8Array, inputs: readonly s
     || result.artifact !== job.analysis.artifact || result.index !== job.analysis.index
     || result.analysisFingerprint !== index.analysisFingerprint || artifact?.analysis?.fingerprint !== result.analysisFingerprint) return fail();
   const captured = new Set(snapshot.entries.filter(e => e.sourceId === sourceId && e.kind === 'file' && e.disposition === 'included').map(e => 'content' in e ? e.content : ''));
-  const evidence = await boundedCallPaths({
+  const evidence = await controlledCallPaths({
     snapshot, analysis: { sourceId, artifact, index }, queries, bounds,
     readContent: id => captured.has(id as ArtifactId) ? get(id as ArtifactId) : Promise.reject(new PathRequestError('unbound')),
-  });
+  },budget);
   const output: PathsOutput = {
     schema: PATHS_OUTPUT_SCHEMA, job: jobId, request: request.id, ancestor: { ...ancestor }, snapshotId, sourceId,
-    evidence, actualReadSet: [...actual].sort(),
+    evidence, actualReadSet: [...actual].sort(), usage:budget.usage(),
   };
-  if (Buffer.byteLength(JSON.stringify(output)) > MAX_OBJECT_BYTES) return fail();
+  const outputBytes=Buffer.byteLength(JSON.stringify(output));
+  budget.output(outputBytes);
+  if (outputBytes > MAX_OBJECT_BYTES) return fail();
   return output;
 }

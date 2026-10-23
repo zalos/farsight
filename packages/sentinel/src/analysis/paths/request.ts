@@ -8,6 +8,9 @@ import { deepFreeze } from '../../policy/immutable.js';
 import { digestOf } from '../../store/ledger-json.js';
 
 export const PATH_REQUEST_SCHEMA = 'sentinel-path-request/draft-1' as const;
+// The fixed worker protocol allows 1024 sealed IDs, including job, request and four retained roles.
+export const PATHS_PROTOCOL_INPUT_LIMIT = 1024;
+export const PATHS_RESERVED_INPUTS = 6;
 export const PATHS_ADAPTER_ID = 'bounded-paths';
 
 export class PathRequestError extends Error {

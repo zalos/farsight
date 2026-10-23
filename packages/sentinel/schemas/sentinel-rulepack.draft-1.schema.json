@@ -344,9 +344,10 @@
         "matched-pattern",
         "control-fact",
         "dependency-version",
-        "advisory-id"
+        "advisory-id",
+        "call-path"
       ],
-      "description": "Evidence a result of the rule must carry."
+      "description": "call-path means a retained bounded query result, including no-path/frontier; never security or data-flow evidence."
     },
     "CweId": {
       "type": "string",

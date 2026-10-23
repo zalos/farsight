@@ -88,7 +88,7 @@ export const RULE_CAPABILITIES = [
 export const RULE_MEANINGS = ['candidate', 'finding'] as const;
 /** Ordered from least to most severe; a lower failing threshold is stricter. */
 export const SEVERITIES = ['info', 'low', 'medium', 'high', 'critical'] as const;
-export const RULE_EVIDENCE = ['source-span', 'matched-pattern', 'control-fact', 'dependency-version', 'advisory-id'] as const;
+export const RULE_EVIDENCE = ['source-span', 'matched-pattern', 'control-fact', 'dependency-version', 'advisory-id', 'call-path'] as const;
 export const FRAMEWORK_IDS = ['next', 'express', 'nest', 'spring'] as const;
 export const RULE_ORIGINS = ['sentinel-original', 'third-party'] as const;
 export const SENTINEL_ACTIONS = [

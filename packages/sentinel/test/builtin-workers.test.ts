@@ -29,23 +29,26 @@ async function layoutFixture(t: any, change: (root: string, manifest: any) => vo
   }
   symlinkSync(join(import.meta.dirname, '../node_modules'), join(root, 'node_modules'));
   const assets: Record<string, any> = {};
-  for (const stem of ['execution/launch-gate', 'frameworks/controls/worker']) {
+  for (const stem of ['execution/launch-gate', 'frameworks/controls/worker', 'analysis/paths/worker']) {
     const path = `dist/${stem}.mjs`, bytes = '// inert owned asset\n'; mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), bytes); assets[stem] = { path, sha256: sha(bytes) };
   }
   writeFileSync(join(dist, 'frameworks/controls/driver.mjs'), '// inert owned driver\n');
+  writeFileSync(join(dist, 'analysis/paths/driver.mjs'), '// inert owned path driver\n');
   const manifest = { name: 'farsight-sentinel', type: 'module', sentinel: { assets } };
   change(root, manifest);
   writeFileSync(join(root, 'package.json'), JSON.stringify(manifest));
   return await import(pathToFileURL(join(dist, 'execution/assets.js')).href);
 }
 
-test('built-in descriptors are a frozen own-property closed set; unavailable paths never register', t => {
+test('built-in descriptors are a frozen own-property closed set; both shipped workers have fixed entries', t => {
   assert.deepEqual(Object.keys(BUILTIN_WORKERS), ['framework-controls', 'bounded-paths']);
   assert.ok(Object.isFrozen(BUILTIN_WORKERS) && Object.isFrozen(BUILTIN_WORKERS['framework-controls']));
   assert.equal(BUILTIN_WORKERS['framework-controls'].closureRefusalExit, CLOSURE_REFUSED);
-  assert.ok(!Object.hasOwn(BUILTIN_WORKERS['bounded-paths'], 'closureRefusalExit'));
+  assert.equal(BUILTIN_WORKERS['bounded-paths'].closureRefusalExit, CLOSURE_REFUSED);
+  assert.ok(builtinWorkerFiles('bounded-paths').driver.endsWith('/analysis/paths/driver.js'));
+  assert.ok(writeBuiltinClosureEntry(scratch(t), 'bounded-paths').module);
   const out = scratch(t);
-  for (const id of ['x', '__proto__', 'constructor', null, 1, {}, 'bounded-paths']) {
+  for (const id of ['x', '__proto__', 'constructor', null, 1, {}]) {
     if (id !== 'bounded-paths') assert.throws(() => builtinWorker(id), invalid);
     assert.throws(() => writeBuiltinClosureEntry(out, id as any), invalid);
     assert.deepEqual(readdirSync(out), []);
@@ -70,9 +73,10 @@ test('modeled versions come from each real support module', () => {
 test('installed fixed worker and driver need only the worker asset pin; launch gate is checked', async t => {
   const m = await layoutFixture(t);
   assert.ok(m.builtinWorkerFiles('framework-controls').driver.endsWith('/driver.mjs'));
+  assert.ok(m.builtinWorkerFiles('bounded-paths').driver.endsWith('/analysis/paths/driver.mjs'));
   assert.ok(m.launchGateUrl().endsWith('/launch-gate.mjs'));
 });
-for (const stem of ['frameworks/controls/worker', 'execution/launch-gate']) {
+for (const stem of ['frameworks/controls/worker', 'analysis/paths/worker', 'execution/launch-gate']) {
   for (const fault of ['missing-with-js', 'missing-pin', 'wrong-path', 'wrong-sha', 'linked-file']) {
     test(`installed ${stem}: ${fault} refuses`, async t => {
       const m = await layoutFixture(t, (root, manifest) => {
@@ -83,7 +87,7 @@ for (const stem of ['frameworks/controls/worker', 'execution/launch-gate']) {
         if (fault === 'wrong-sha') manifest.sentinel.assets[stem].sha256 = '0'.repeat(64);
         if (fault === 'linked-file') { renameSync(path, path + '.elsewhere'); symlinkSync(path + '.elsewhere', path); }
       });
-      assert.throws(() => stem.includes('worker') ? m.builtinWorkerFiles('framework-controls') : m.launchGateUrl(), invalid);
+      assert.throws(() => stem.includes('worker') ? m.builtinWorkerFiles(stem.startsWith('analysis/')?'bounded-paths':'framework-controls') : m.launchGateUrl(), invalid);
     });
   }
 }
