@@ -34,7 +34,7 @@ export async function withOwnerDecisions(document:ReportEnvelope,store:SentinelS
   const timing={signal:new AbortController().signal,deadlineAt:performance.now()+120000};
   let history:OwnerHistory,session:FindingReadSession,context:ReturnType<typeof importOwnerContext>;
   try{context=importOwnerContext(store,ws,timing);history=readOwnerReportHistory(context);session=findingReadSessionFor(store,ws,timing)}catch(error){optionalFailure(store,error);return projected(document,[],'unavailable','unavailable')}
-  const actual=ownerHistoryOf(history),decisions:ReportEnvelope['decisions']=[],bases=new Map<string,Awaited<ReturnType<typeof acceptedFindingBasisFor>>>(),privacy=new Map<string,Promise<boolean>>();
+  const actual=ownerHistoryOf(history),decisions:ReportEnvelope['decisions']=[],bases=new Map<string,Awaited<ReturnType<typeof acceptedFindingBasisFor>>>();
   let attempted=0,partial=false,limited=false;
   for(const p of actual.proposals.values()){
     if(!actual.approved.has(p.id))continue;
@@ -46,7 +46,7 @@ export async function withOwnerDecisions(document:ReportEnvelope,store:SentinelS
     try{
       let basis=bases.get(finding.id);if(!basis){basis=await acceptedFindingBasisFor(store,ws,document.run.id,finding.id,timing,session);bases.set(finding.id,basis)}
       derivingCurrent=false;
-      const view=await decisionProjection(history,basis,ws,p.id,now,baselineRunId,session,privacy);acceptedFindingOf(basis);ownerContextOf(context);hardBoundary(store);
+      const view=await decisionProjection(history,basis,ws,p.id,now,baselineRunId,session);acceptedFindingOf(basis);ownerContextOf(context);hardBoundary(store);
       const d=view.decision;if(d.validity==='none')continue;
       decisions.push({dispositionId:d.id,findingId:d.findingId,evaluator:view.evaluator,state:d.state,reasonCode:d.reasonCode,basisDigest:d.basisDigest,journalHead:view.journalHead!,validity:d.validity,expiresAt:d.expiresAt,rationale:document.disclosure.profile==='shareable'?null:d.rationale});
     }catch(error){if(derivingCurrent&&typeof(error as {code?:unknown})?.code==='string'&&String((error as {code:string}).code).startsWith('sentinel.report.'))throw error;optionalFailure(store,error);partial=true}

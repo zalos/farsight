@@ -107,11 +107,14 @@ test('real consumed receipt failure before write is spent and not a publication 
 });
 
 test('report session requires genuine owner binding and final full history fence',{timeout:60000},async t=>{
- const s=await ownerFixture(t),{findingReadSessionFor,finishFindingReadSession}=await import('../dist/findings/decision-basis.js');
+ const s=await ownerFixture(t),{findingReadSessionFor,finishFindingReadSession,findingSecretPrivacy}=await import('../dist/findings/decision-basis.js');
  const {readOwnerReportHistory,finishOwnerReportHistory}=await import('../dist/findings/owner-journal.js');
  const session=findingReadSessionFor(s.store,s.ws,timing());
  for(const fake of [{},Object.assign({},session),new Proxy(session,{})])await assert.rejects(acceptedFindingBasisFor(s.store,s.ws,s.runId,s.finding.id,timing(),fake as any));
  const b=await acceptedFindingBasisFor(s.store,s.ws,s.runId,s.finding.id,timing(),session),c=acceptedFindingOf(b).context,h=readOwnerReportHistory(c);
+ assert.equal(await findingSecretPrivacy(b,s.ws,undefined,session),false);
+ for(const fake of [{},Object.assign({},session),new Proxy(session,{})])await assert.rejects(findingSecretPrivacy(b,s.ws,undefined,fake as any));
+ await assert.rejects(findingSecretPrivacy(b,{...s.ws},undefined,session));
  const p=await prepareOwnerProposal(b,s.ws,input(),new Date());await appendOwnerDecision(c,b,s.ws,p,'disposition.propose',new Date());
  assert.throws(()=>finishOwnerReportHistory(h),(e:any)=>e.code==='sentinel.decision.staleState');
  await s.reopen();await assert.rejects(finishFindingReadSession(session));
@@ -123,4 +126,20 @@ test('malformed optional journal is unavailable without suppressing independentl
  writeFileSync(journal,'{',{mode:0o600});
  const r=await fullReport({store:s.store,workspace:s.ws.path,trustDir:s.ws.trustDir,runId:s.runId,disclosure:'private',now:new Date()});
  assert.equal(r.document.counts.findings.n,1);assert.equal(r.document.decisions.length,0);assert.equal(r.document.decisionEvaluation?.status,'unavailable');
+});
+
+test('a genuinely derived source report rejects invalidated nonopen decision credit', {timeout:60000}, async t=>{
+ const s=await ownerFixture(t);await approved(s);
+ const r=await fullReport({store:s.store,workspace:s.ws.path,trustDir:s.ws.trustDir,runId:s.runId,disclosure:'private',now:new Date()});
+ assert.equal(r.document.decisions[0]!.state,'accepted-risk');assert.equal(validateEnvelope('report',r.document).ok,true);
+ for(const validity of ['none','expired','invalidated'] as const){const bad=structuredClone(r.document);bad.decisions[0]!.validity=validity;assert.equal(validateEnvelope('report',bad).ok,false);}
+ const open=structuredClone(r.document);open.decisions[0]!.state='open';open.decisions[0]!.validity='invalidated';assert.equal(validateEnvelope('report',open).ok,true);
+});
+
+// The body is genuinely captured and hash-read by the retained source proof, never skipped or caller-claimed.
+test('report session does not reread a source body already verified by its genuine retained proof',{timeout:60000},async t=>{
+ const s=await ownerFixture(t,{paddingBytes:8*1024*1024});await approved(s);s.sourceGone();
+ const r=await withStoreReadBudget(s.store,{decodedBytes:12*1024*1024},()=>fullReport({store:s.store,workspace:s.ws.path,trustDir:s.ws.trustDir,runId:s.runId,disclosure:'private',now:new Date()}));
+ assert.equal(r.value.document.decisions.length,1);assert.equal(r.value.document.decisionEvaluation?.status,'complete');assert.ok(r.usage.decodedBytes>=8*1024*1024);assert.ok(r.usage.decodedBytes<12*1024*1024);
+ t.diagnostic(JSON.stringify({capturedBodyBytes:8*1024*1024,actualReadUsage:r.usage,sourceRemoved:true}));
 });

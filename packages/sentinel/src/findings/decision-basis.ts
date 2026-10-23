@@ -5,6 +5,10 @@ import { assessRun } from '../service/full-report.js';
 import { findingsOf } from '../reports/document.js';
 import { retainedSourceForAdmission, readRetainedSourceProof, type ProofTiming, type RetainedSourceProof, type RetainedSourceAncestor } from '../execution/retained-source.js';
 import { loadPlan } from '../execution/plans.js';
+import { retainedBootstrapForReport } from '../execution/retained-bootstrap.js';
+import { selectedSecretPrivacy } from '../reports/selected-privacy.js';
+import { verifyWorkEnvelope, capturedInputsOf } from '../planner/boundary.js';
+import { inputFingerprintOf } from '../execution/supervisor.js';
 import { importOwnerContext, ownerContextOf, type ImportOwnerContext } from '../evidence/owner-context.js';
 import { deepFreeze } from '../policy/immutable.js';
 import { canonicalJson, digestOf } from '../store/ledger-json.js';
@@ -29,14 +33,15 @@ interface State {context:ImportOwnerContext;proof:RetainedSourceProof;record:Acc
 const bases=new WeakMap<object,State>();
 /** One report's opaque, owner-bound reuse. It never survives its original deadline or grants authority from JSON. */
 export interface FindingReadSession { readonly session: unique symbol }
+interface PrivacyPin {runId:string;revision:number;planDigest:string;snapshotId:string|null;state:string}
 interface ReadSession { store:SentinelStore;ws:Workspace;context:ImportOwnerContext;timing:ProofTiming;closed:boolean;
   assessments:Map<string,Promise<Awaited<ReturnType<typeof assessRun>>>>;findings:Map<string,Promise<Awaited<ReturnType<typeof findingsOf>>>>;
   plans:Map<string,Promise<Awaited<ReturnType<typeof loadPlan>>>>;proofs:Map<string,Promise<RetainedSourceProof>>;
-  records:Map<string,Promise<AcceptedFindingBasis>>;supports:Map<string,Promise<readonly OwnerDecisionSupport[]>>;supportReads:Map<string,{basis:AcceptedFindingBasis;evidence:readonly string[];baselineRunId?:string}>;verified:Set<string>;tokens:Set<AcceptedFindingBasis> }
+  records:Map<string,Promise<AcceptedFindingBasis>>;supports:Map<string,Promise<readonly OwnerDecisionSupport[]>>;supportReads:Map<string,{basis:AcceptedFindingBasis;evidence:readonly string[];baselineRunId?:string}>;verified:Set<string>;tokens:Set<AcceptedFindingBasis>;privacy:Map<string,Promise<boolean>>;privacyPins:Map<string,PrivacyPin> }
 const readSessions=new WeakMap<object,ReadSession>();
 export function findingReadSessionFor(store:SentinelStore,ws:Workspace,timing:ProofTiming):FindingReadSession {
   const token=Object.freeze({}) as FindingReadSession,context=importOwnerContext(store,ws,timing);
-  readSessions.set(token,{store,ws,context,timing,closed:false,assessments:new Map(),findings:new Map(),plans:new Map(),proofs:new Map(),records:new Map(),supports:new Map(),supportReads:new Map(),verified:new Set(),tokens:new Set()});return token;
+  readSessions.set(token,{store,ws,context,timing,closed:false,assessments:new Map(),findings:new Map(),plans:new Map(),proofs:new Map(),records:new Map(),supports:new Map(),supportReads:new Map(),verified:new Set(),tokens:new Set(),privacy:new Map(),privacyPins:new Map()});return token;
 }
 function readSession(token:FindingReadSession|undefined,store:SentinelStore,ws:Workspace):ReadSession|undefined {
   if(token===undefined)return undefined;const s=readSessions.get(token);
@@ -45,7 +50,7 @@ function readSession(token:FindingReadSession|undefined,store:SentinelStore,ws:W
 function memo<K,V>(map:Map<K,Promise<V>>|undefined,key:K,read:()=>Promise<V>):Promise<V>{if(!map)return read();let result=map.get(key);if(!result){result=read();map.set(key,result)}return result}
 export async function finishFindingReadSession(token:FindingReadSession):Promise<void> {
   const s=readSessions.get(token);if(!s||s.closed)return fail('sentinel.decision.unauthorized','closed report read session');
-  try{ownerContextOf(s.context);for(const support of s.supportReads.values()){await readOwnerSupport(support.basis,s.ws,support.evidence,support.baselineRunId);ownerContextOf(s.context)}for(const basis of s.tokens)acceptedFindingOf(basis);ownerContextOf(s.context);}finally{s.closed=true;readSessions.delete(token)}
+  try{ownerContextOf(s.context);for(const support of s.supportReads.values()){await readOwnerSupport(support.basis,s.ws,support.evidence,support.baselineRunId);ownerContextOf(s.context)}for(const basis of s.tokens)acceptedFindingOf(basis);for(const pin of s.privacyPins.values())assertPrivacyPin(s.store,pin);ownerContextOf(s.context);}finally{s.closed=true;readSessions.delete(token)}
 }
 
 export function acceptedFindingOf(value:AcceptedFindingBasis):Readonly<State> {
@@ -58,7 +63,8 @@ export function acceptedFindingOf(value:AcceptedFindingBasis):Readonly<State> {
 export async function acceptedFindingBasisFor(store:SentinelStore,ws:Workspace,runId:string,findingId:string,timing:ProofTiming,session?:FindingReadSession):Promise<AcceptedFindingBasis> {
   if(!validId(runId)||!/^finding\.[0-9a-f]{40}$/.test(findingId))return fail('sentinel.decision.invalidInput','invalid finding selection');
   const cache=readSession(session,store,ws),context=cache?.context??importOwnerContext(store,ws,timing),c=ownerContextOf(context);
-  const assessment=await memo(cache?.assessments,runId,()=>assessRun(store,runId,{trustDir:c.trustDir}));ownerContextOf(context);
+  const assessmentKey=canonicalJson(privacyPin(store,runId));
+  const assessment=await memo(cache?.assessments,assessmentKey,()=>assessRun(store,runId,{trustDir:c.trustDir}));ownerContextOf(context);
   const findings=await memo(cache?.findings,runId,()=>findingsOf(assessment.observations,id=>store.readArtifact(id),{withheldKey:assessment.withheldKey}));ownerContextOf(context);
   const finding=findings.find(f=>f.id===findingId);
   if(!finding||finding.sourceIds.length!==1||finding.observations.length===0)return fail('sentinel.decision.notFound','no single-source accepted finding');
@@ -68,6 +74,8 @@ export async function acceptedFindingBasisFor(store:SentinelStore,ws:Workspace,r
   const ancestor={runId,revision,planDigest:plan.digest,snapshotId:assessment.snapshot.id,sourceId:finding.sourceIds[0]!};
   const proof=await memo(cache?.proofs,canonicalJson(ancestor),()=>retainedSourceForAdmission(store,ancestor,cache?.timing??timing));
   const source=readRetainedSourceProof(store,proof,ancestor,timing);ownerContextOf(context);
+  // This genuine proof already hash-read every source body. Reuse only those roles in this report's private session.
+  if(cache)for(const entry of source.closure)if(entry.role==='source-content')cache.verified.add(entry.id);
   const publications:AcceptedFindingRecord['publications'][number][]=[],seen=new Set<string>(),closure=new Set(source.closure.map(x=>x.id));
   for(const normalized of finding.observations){
     const observation=normalized.observation,p=observation.producer;
@@ -117,4 +125,62 @@ export async function readOwnerSupport(basis:AcceptedFindingBasis,ws:Workspace,e
     out.push({id,kind:'accepted-import',root:view.root});
   }
   acceptedFindingOf(basis);return deepFreeze(out);
+}
+
+/** Current, baseline and selected-ancestor privacy is derived from accepted publications, never observation JSON. */
+export async function findingSecretPrivacy(basis:AcceptedFindingBasis,ws:Workspace,baselineRunId?:string,session?:FindingReadSession):Promise<boolean>{
+  const s=acceptedFindingOf(basis),c=ownerContextOf(s.context),cache=readSession(session,c.store,ws);
+  const ids=new Set([s.record.ancestor.runId,...(baselineRunId?[baselineRunId]:[])]);
+  const current=c.store.ledger.getRun(s.record.ancestor.runId);if(current?.envelope.baselineId)ids.add(current.envelope.baselineId);
+  let withheld=false;
+  for(const id of ids){
+    const pin=privacyPin(c.store,id),key=canonicalJson(pin);cache?.privacyPins.set(key,pin);
+    const secret=await memo(cache?.privacy,key,async()=>{
+      // A canceled run is always coarse-withheld. Nonterminal or unreadable evidence cannot establish clean.
+      if(pin.state==='canceled')return true;
+      if(pin.state!=='completed')return fail('sentinel.decision.unauthorized','privacy ancestor is not reportable');
+      const assessment=await memo(cache?.assessments,key,()=>assessRun(c.store,id,{trustDir:c.trustDir}));
+      acceptedFindingOf(basis);assertPrivacyPin(c.store,pin);
+      if(assessment.planRevision!==pin.revision||assessment.snapshot.id!==pin.snapshotId)return fail('sentinel.decision.unauthorized','privacy assessment changed');
+      const admitted=await loadPlan(c.store,id,pin.revision);acceptedFindingOf(basis);assertPrivacyPin(c.store,pin);
+      if(admitted.plan.digest!==pin.planDigest)return fail('sentinel.decision.unauthorized','privacy plan changed');
+      await verifyCurrentSecretInvocations(c.store,admitted,assessment.snapshot,basis);assertPrivacyPin(c.store,pin);
+      if(assessment.observations.some(o=>o.producer.kind==='scanner'&&o.producer.adapterId==='secrets-gitleaks'))return true;
+      if(admitted.selection){
+        const retained=await retainedBootstrapForReport(c.store,id,admitted);acceptedFindingOf(basis);assertPrivacyPin(c.store,pin);
+        for(const ancestor of retained.selectedAncestors){
+          const ancestorPin=privacyPin(c.store,ancestor.runId);
+          if(ancestorPin.revision!==ancestor.revision||ancestorPin.planDigest!==ancestor.planDigest||ancestorPin.snapshotId!==pin.snapshotId)return fail('sentinel.decision.unauthorized','privacy selection changed');
+          cache?.privacyPins.set(canonicalJson(ancestorPin),ancestorPin);
+        }
+      }
+      const privacy=await selectedSecretPrivacy(c.store,id,admitted);acceptedFindingOf(basis);assertPrivacyPin(c.store,pin);return privacy.hasMatches;
+    });
+    acceptedFindingOf(basis);assertPrivacyPin(c.store,pin);withheld ||= secret;
+  }
+  if(cache)for(const pin of cache.privacyPins.values())assertPrivacyPin(c.store,pin);
+  acceptedFindingOf(basis);return withheld;
+}
+function privacyPin(store:SentinelStore,runId:string):PrivacyPin{
+  const r=store.ledger.getRun(runId),p=r&&store.ledger.getPlan(runId,r.planRevision);
+  if(!r||!p)return fail('sentinel.decision.unauthorized','privacy ancestor unavailable');
+  return {runId,revision:r.planRevision,planDigest:p.digest,snapshotId:r.envelope.snapshotId,state:r.state};
+}
+function assertPrivacyPin(store:SentinelStore,pin:PrivacyPin):void{
+  if(canonicalJson(privacyPin(store,pin.runId))!==canonicalJson(pin))return fail('sentinel.decision.staleState','privacy ancestor changed');
+}
+
+// assessRun binds findings/counts/citations. Privacy also requires the retained current scanner's actual owner invocation,
+// just as selectedSecretPrivacy requires it for ancestors. No copied observation or producer label supplies this proof.
+async function verifyCurrentSecretInvocations(store:SentinelStore,admitted:Awaited<ReturnType<typeof loadPlan>>,snapshot:Awaited<ReturnType<typeof assessRun>>['snapshot'],basis:AcceptedFindingBasis):Promise<void>{
+ const same=(a:unknown,b:unknown)=>canonicalJson(a??null)===canonicalJson(b??null),bad=():never=>fail('sentinel.decision.unauthorized','accepted secret invocation unavailable or unbound'),plan=admitted.plan;
+ for(const unit of plan.units.filter(u=>u.adapterId==='secrets-gitleaks')){
+  const row=store.ledger.getWork(unit),pub=store.ledger.getPublication(unit);if(!pub){if(row?.state==='published')bad();continue;}
+  const attempt=store.ledger.getAttempt(pub.attemptId),digest=admitted.profile.adapters.find(a=>a.adapterId===unit.adapterId)?.digest;
+  if(!row||row.runId!==plan.runId||row.envelope.planRevision!==plan.revision||row.state!=='published'||!same(pub.work,{id:unit.id,revision:unit.revision})||!attempt||attempt.state!=='succeeded'||!same(attempt.work,pub.work)||!attempt.envelope.invocation||!digest||unit.implementationDigest!==digest||row.envelope.stage.implementationDigest!==digest||attempt.envelope.worker?.kind!=='owned-container'||!same(attempt.envelope.worker.ownershipLabels,{store:store.storeId,attempt:attempt.id,epoch:attempt.epoch}))bad();
+  try{verifyWorkEnvelope(plan,row!.envelope);capturedInputsOf(plan,unit,snapshot);}catch{return bad();}
+  let invocation:any;try{invocation=JSON.parse(new TextDecoder('utf8',{fatal:true}).decode(await store.readArtifact(attempt!.envelope.invocation!)));}catch{return bad();}
+  acceptedFindingOf(basis);
+  if(invocation?.format!=='sentinel-invocation/draft-1'||invocation.store!==store.storeId||invocation.attemptId!==attempt!.id||!same(invocation.work,pub.work)||invocation.coordinatorEpoch!==attempt!.epoch||invocation.adapter?.id!==unit.adapterId||invocation.adapter?.digest!==digest||invocation.isolation!=='container'||!Array.isArray(invocation.inputs)||invocation.inputs.some((i:unknown)=>typeof i!=='string')||invocation.inputFingerprint!==inputFingerprintOf(invocation.inputs)||unit.inputs.some(i=>!invocation.inputs.includes(i.content))||!Array.isArray(invocation.assignment?.checks)||!Array.isArray(invocation.assignment?.scopes)||!same([...invocation.assignment.checks].sort(),[...unit.checks].sort())||!same([...invocation.assignment.scopes].sort(),[...unit.scopes].sort()))bad();
+ }
 }

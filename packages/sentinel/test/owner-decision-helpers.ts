@@ -11,9 +11,10 @@ import {assessRun} from '../dist/service/full-report.js';
 import {findingsOf} from '../dist/reports/document.js';
 export const timing=()=>({signal:new AbortController().signal,deadlineAt:performance.now()+120000});
 const cli=fileURLToPath(new URL('../dist/cli.js',import.meta.url));
-export async function ownerFixture(t:any,options:{granted?:boolean;findingCount?:number}={}){
+export async function ownerFixture(t:any,options:{granted?:boolean;findingCount?:number;paddingBytes?:number}={}){
   const s=scratch('owner-decisions'),path=join(s.root,'ws');mkdirSync(join(path,'src'),{recursive:true});
   for(let i=0;i<(options.findingCount??1);i++)writeFileSync(join(path,'src',options.findingCount===undefined?'lookup.ts':`lookup${i}.ts`),'export const lookup = (id) => db.query("SELECT * FROM invoice WHERE id = " + id);\n');
+  if(options.paddingBytes)writeFileSync(join(path,'src','original-data.txt'),Buffer.alloc(options.paddingBytes,65));
   const env={...process.env,XDG_STATE_HOME:join(s.root,'state')},ws=workspaceOf(path,env);
   const raw=(...args:string[])=>spawnSync(process.execPath,[cli,...args,'--workspace',path],{env,encoding:'utf8',timeout:60000});
   const command=(...args:string[])=>{const r=spawnSync(process.execPath,[cli,...args,'--workspace',path,'--json'],{env,encoding:'utf8',timeout:60000});assert.equal(r.signal,null);let value:any;try{value=JSON.parse(r.stdout)}catch{assert.fail('command response unavailable: '+r.stderr)}return{...r,value};};

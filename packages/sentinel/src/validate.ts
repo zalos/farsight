@@ -392,6 +392,7 @@ const report: Check<ReportEnvelope> = (v, out) => {
     if (!findings.has(d.findingId)) out.add(err(`/decisions/${i}/findingId`, 'decision about a finding the report does not contain'));
     // Validity is as of the report's pinned clock. Invalidation is the service's own finding and stays as recorded.
     const expired = d.expiresAt !== null && compareTimestamps(d.expiresAt, v.evaluatedAt) <= 0;
+    if (d.evaluator === 'sentinel-decision-evaluation/2' && d.state !== 'open' && d.validity !== 'valid') out.add(err(`/decisions/${i}/state`, 'only a valid source decision changes state'));
     if (d.validity === 'valid' && expired) out.add(err(`/decisions/${i}/validity`, 'the decision had expired at the report time'));
     if (d.validity === 'expired' && !expired) out.add(err(`/decisions/${i}/validity`, 'the decision had not expired at the report time'));
   });

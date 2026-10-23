@@ -4,15 +4,13 @@ import { compareTimestamps, validateEnvelope } from '../validate.js';
 import { deepFreeze } from '../policy/immutable.js';
 import { stamp } from '../policy/receipts.js';
 import { ownerContextOf } from '../evidence/owner-context.js';
-import { selectedSecretPrivacy } from '../reports/selected-privacy.js';
-import { loadPlan } from '../execution/plans.js';
 import { digestOf, canonicalJson } from '../store/ledger-json.js';
 import type { Workspace } from '../service/local.js';
-import { acceptedFindingOf, acceptedFindingDigest, readOwnerSupport, revalidateFindingRecord, type AcceptedFindingBasis, type FindingReadSession } from './decision-basis.js';
+import { acceptedFindingOf, findingSecretPrivacy, acceptedFindingDigest, readOwnerSupport, revalidateFindingRecord, type AcceptedFindingBasis, type FindingReadSession } from './decision-basis.js';
 import { ownerHistoryOf, type OwnerHistory, type OwnerProposal } from './owner-journal.js';
 import { fail } from './decision-data.js';
 
-export async function decisionProjection(history:OwnerHistory,basis:AcceptedFindingBasis,ws:Workspace,id:string,now:Date,baselineRunId?:string,session?:FindingReadSession,privacyCache?:Map<string,Promise<boolean>>):Promise<DecisionViewEnvelope>{
+export async function decisionProjection(history:OwnerHistory,basis:AcceptedFindingBasis,ws:Workspace,id:string,now:Date,baselineRunId?:string,session?:FindingReadSession):Promise<DecisionViewEnvelope>{
   const actual=ownerHistoryOf(history),s=acceptedFindingOf(basis),c=ownerContextOf(s.context),p=actual.proposals.get(id);
   if(!p)return fail('sentinel.decision.notFound','decision not found');
   // Historical proposal basis is independently replayed, never authorized by its JSON schema label.
@@ -30,7 +28,7 @@ export async function decisionProjection(history:OwnerHistory,basis:AcceptedFind
     if(validity==='valid'&&p.input.decision==='false-positive')state='false-positive';
     if(p.input.decision==='mitigated'&&validity==='valid')validity='invalidated';
   }else if(superseded){reason='superseded';validity='invalidated';}
-  const privacy=await privacyFor(basis,baselineRunId,privacyCache)||(canonicalJson(p.basis.ancestor)!==canonicalJson(s.record.ancestor)&&await privacyFor(historical,baselineRunId,privacyCache));acceptedFindingOf(basis);acceptedFindingOf(historical);ownerHistoryOf(history);
+  const privacy=await findingSecretPrivacy(basis,ws,baselineRunId,session)||(canonicalJson(p.basis.ancestor)!==canonicalJson(s.record.ancestor)&&await findingSecretPrivacy(historical,ws,baselineRunId,session));acceptedFindingOf(basis);acceptedFindingOf(historical);ownerHistoryOf(history);
   const projection:OwnerDecisionProjection={id:p.id,findingId:s.record.findingId,basisDigest:privacy?null:acceptedFindingDigest(basis),decision:p.input.decision,
     scope:{kind:'finding-source',findingId:s.record.findingId},approval:approval&&compareTimestamps(approval.admission.decidedAt,at)<=0?'approved':'proposed',state,validity,
     reasonCode:'sentinel.decision.reason.'+reason.replace(/-([a-z])/g,(_,x:string)=>x.toUpperCase()),expiresAt:p.input.expiresAt,rationale:privacy?null:p.input.rationale};
@@ -42,20 +40,4 @@ export async function decisionProjection(history:OwnerHistory,basis:AcceptedFind
 function dependency(p:OwnerProposal){return dependencyOf(p.basis)}
 function dependencyOf(r:ReturnType<typeof acceptedFindingOf>['record']){
   return digestOf({sourceId:r.ancestor.sourceId,findingId:r.findingId,fingerprint:r.fingerprint,familyId:r.familyId,citations:r.citations,checks:r.publications.flatMap(p=>p.checks)});
-}
-async function privacyFor(basis:AcceptedFindingBasis,baselineRunId?:string,cache?:Map<string,Promise<boolean>>):Promise<boolean>{
-  const s=acceptedFindingOf(basis),c=ownerContextOf(s.context);
-  if(cache){const key=canonicalJson({ancestor:s.record.ancestor,baselineRunId:baselineRunId??null});let p=cache.get(key);if(!p){p=privacyFor(basis,baselineRunId);cache.set(key,p)}return p;}
-  let withheld=false;
-  const ids=new Set([s.record.ancestor.runId,...(baselineRunId?[baselineRunId]:[])]);
-  const run=c.store.ledger.getRun(s.record.ancestor.runId);
-  if(run?.envelope.baselineId)ids.add(run.envelope.baselineId);
-  for(const id of ids){
-    const r=c.store.ledger.getRun(id);if(!r)return fail('sentinel.decision.unauthorized','privacy ancestor unavailable');
-    if(r.state==='canceled'){withheld=true;continue;}
-    const admitted=await loadPlan(c.store,id,r.planRevision);acceptedFindingOf(basis);
-    const privacy=await selectedSecretPrivacy(c.store,id,admitted);acceptedFindingOf(basis);
-    withheld ||= privacy.hasMatches;
-  }
-  return withheld;
 }
