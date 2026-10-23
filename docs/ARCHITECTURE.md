@@ -2073,6 +2073,13 @@ reruns, and verified Markdown format bytes. Selecting another run clears the pri
 unavailable pending shared adoption/CAS; model execution stays unavailable until its own capability and admission
 are qualified. Hosted API review is paused by default. The panel does not infer model authority from run start.
 
+ADR48 saved-key correction: private lookup version2 records only `unsent`, `unknown`, or `refused` dispatch data,
+under the same existing cross-process mutex. Legacy version1 is conservatively unknown. A durable unsent save is
+marked unknown immediately before sending; a validated definitive nonaccepted response can mark refused. Only a
+definitively absent service status plus unsent/refused data permits replacing that lookup. Lost ACK, malformed
+response, failed state writes, and the unavoidable unknown-before-send crash gap remain protected. An accepted
+journal always takes precedence. This is bounded client discovery data, not approval, task ownership or replay.
+
 42. **Sentinel owner decisions are source-bound adjudications, with one retained evaluation across reports (2026-10-23).**
 The executable exposes `decision propose`, `approve`, `read` and `list`. A proposal names one real accepted
 finding; a private held-owner proof rederives its source, executed plan, rule, producer invocation and cited bytes.

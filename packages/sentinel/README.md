@@ -939,3 +939,8 @@ false; there is no hidden fallback. Configured model and exact prompt/skill iden
 qualified service projection. A busy dead saved preparation with `--parent` must be replaced through a fresh
 unlinked request; captured resumable state and unknown lookup state remain protected. Preparation corruption
 requires inspecting/repairing private state and restarting the owner; other run/report inspection stays available.
+
+A definitive refused owner-panel preparation does not pin the next request forever. Saved lookup data distinguishes
+known-unsent, definitively-refused and unknown dispatch. A fresh request can replace only known-unsent/refused data
+when the genuine service also confirms no retained preparation exists. Lost responses, legacy unknown records,
+accepted or resumable work stay protected; reconnect never automatically replays them.

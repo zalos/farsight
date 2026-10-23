@@ -1,6 +1,7 @@
 import type{StringEntry}from'./strings.js';
 const same=(text:string,define:string):StringEntry=>({hud:text,professional:text,define});
 export const SENTINEL_OWNER_UI_STRINGS:Record<string,StringEntry>={
+ 'sentinel.capability.draftHostBridge':same('Paired local owner panel','Explicit local companion, exact host/context pairing, separate deterministic browser receipts and canonical retained inspection/reports. Settings editing and model-call authority are not included.'),
  'nav.sentinel':same('Sentinel','Prepare and inspect a scan through the separately launched local owner companion. The application host cannot confirm an action.'),
  'sentinel.ownerUi.title':same('Sentinel','Local scan preparation, retained work and shareable reports through the running owner service.'),
  'sentinel.ownerUi.usage':same('farsight-sentinel owner-ui --workspace <folder> --farsight-origin <origin>    launch the paired owner panel','Foreground companion for an already running owner service and exact loopback Farsight origin. The browser confirms only implemented deterministic actions; no terminal confirmation is required after launch.'),
