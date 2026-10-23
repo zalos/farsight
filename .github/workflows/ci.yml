@@ -360,7 +360,10 @@ jobs:
           SENTINEL_REPORT_BROWSER: '1'
         run: |
           set -euo pipefail
-          node --disable-warning=ExperimentalWarning --experimental-strip-types --test             --test-reporter=spec --test-reporter-destination=stdout             --test-reporter=tap --test-reporter-destination=sentinel-paths-browser.tap             packages/sentinel/test/path-report-browser.test.ts
+          node --disable-warning=ExperimentalWarning --experimental-strip-types --test \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=tap --test-reporter-destination=sentinel-paths-browser.tap \
+            packages/sentinel/test/path-report-browser.test.ts
           grep -qx '# tests 1' sentinel-paths-browser.tap
           grep -qx '# pass 1' sentinel-paths-browser.tap
           grep -qx '# fail 0' sentinel-paths-browser.tap
