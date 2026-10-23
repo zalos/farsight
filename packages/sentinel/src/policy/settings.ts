@@ -49,7 +49,10 @@ export function parseSettings(bytes: Uint8Array): SettingsEnvelope {
   const value = decode(bytes);
   const checked = validateEnvelope('settings', value);
   if (!checked.ok) return policyFail('sentinel.policy.settingsInvalid', `${checked.errors[0]?.path || '/'}: ${checked.errors[0]?.message ?? 'invalid'}`);
-  for (const [path, text] of strings(checked.value, '', p => /^\/providers\/\d+\/credential$/.test(p))) {
+  // Only schema-validated native identity digests are metadata. Preserve the real settings bytes; filter an elided clone.
+  const secretView=structuredClone(checked.value);
+  for(const provider of secretView.providers)if(provider.kind==='claude-cli'&&provider.nativeProfile){const pins=provider.nativeProfile as unknown as Record<string,unknown>;for(const key of ['executableDigest','helperDigest','profileDigest'])if(typeof pins[key]==='string'&&/^sha256:[a-f0-9]{64}$/.test(pins[key] as string))delete pins[key]}
+  for (const [path, text] of strings(secretView, '', p => /^\/providers\/\d+\/credential$/.test(p))) {
     if (containsCredentialShape(text)) policyFail('sentinel.policy.credentialValue', `${path} holds a value shaped like a credential; settings hold keychain references only`);
   }
   return checked.value;

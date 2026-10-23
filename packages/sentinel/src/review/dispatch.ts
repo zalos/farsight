@@ -4,7 +4,7 @@ import type {SentinelStore} from '../store/index.js';import type {EffectivePolic
 import {selectedSecretPrivacy} from '../reports/selected-privacy.js';import {loadPlan} from '../execution/plans.js';
 import {snapshot} from '../policy/immutable.js';import {specDigest} from './session.js';
 import {canonicalDigest} from '../policy/digest.js';import {isValidatedPlan,type ValidatedPlan} from '../execution/plan.js';import {ExecutionError} from '../execution/errors.js';import type {PreparedOutputs} from '../execution/bootstrap.js';
-import type {BudgetLedger} from './providers/budget.js';import type {ModelBroker} from './providers/broker.js';import {resolveReviewModel} from './providers/selection.js';import {readReviewSpec} from './plan.js';import {providerCaller} from './caller.js';import {LedgerCheckpointStore} from './checkpoints.js';import {runSession} from './session.js';import {usageOf} from './operation.js';
+import type {BudgetLedger} from './providers/budget.js';import type {ModelBroker} from './providers/broker.js';import {resolveReviewModel} from './providers/selection.js';import {readReviewSpec} from './plan.js';import {providerCaller} from './caller.js';import {LedgerCheckpointStore} from './checkpoints.js';import {runSession} from './session.js';import {reviewFail} from './errors.js';import {usageOf} from './operation.js';
 export const REVIEW_IMPLEMENTATION_URL=import.meta.url;
 export const REVIEW_ADAPTERS=Object.freeze([{id:'sentinel.review.guided',version:'1',kind:'operation' as const,operation:'review-guided' as const},{id:'sentinel.review.general',version:'1',kind:'operation' as const,operation:'review-general' as const}]);
 class ReviewWithheld extends Error {readonly code='sentinel.review.frontier.withheld';constructor(){super('accepted secret privacy withholds this optional review stage')}}
@@ -17,6 +17,7 @@ export async function prepareAdmittedReview(store:SentinelStore,plan:ValidatedPl
  if(new Set(plan.admitted.plan.units.filter(u=>u.review).map(u=>u.review!.selection.bindingDigest)).size>1)return bad();store.assertHeld();const unit=plan.unitOf(ref).unit;if(!unit.review||plan.admitted.plan.pins.snapshotId!==plan.run.snapshotId)return bad();
  if(await reviewSecretsKnown(store,plan.run.id,plan.admitted))throw new ReviewWithheld();
  const spec=await readReviewSpec(store,unit),policy=runtime.currentPolicy(),resolved=resolveReviewModel(policy,spec.kind,spec.segmentId!);
+ if(resolved.binding.disclosure==='hosted')await requireHostedSecretCoverage(store,plan.run.id,plan.admitted,unit.sourceId!);
  if(policy.revision!==plan.admitted.plan.pins.policyDigest||resolved.selection.bindingDigest!==unit.review.selection.bindingDigest)return bad();
  const prior=runtime.ledger.loadCheckpoint(spec.sessionId);if(prior&&prior.epoch!==store.epoch)runtime.ledger.recover([prior.epoch],new Date().toISOString());
  const request={binding:resolved.binding,policy,runId:plan.run.id,budget:unit.review.terms.budget,requestedBy:runtime.requestedBy,stateDigest:canonicalDigest({store:store.storeId,run:plan.run.id,plan:plan.admitted.plan.digest,binding:resolved.selection.bindingDigest})};let cache=envelopeCache.get(runtime);if(!cache)envelopeCache.set(runtime,cache=new Map());const key=request.stateDigest;let envelope=cache.get(key);if(!envelope){const receipt=runtime.receiptFor?.(request)??runtime.receipt;envelope=await runtime.broker.openEnvelope({...request,...(receipt?{receipt}:{})});cache.set(key,envelope)}
@@ -35,4 +36,28 @@ export async function runAdmittedReview(store:SentinelStore,plan:ValidatedPlan,r
 export async function reviewSecretsKnown(store:SentinelStore,runId:string,admitted:import('../execution/plans.js').AdmittedPlan):Promise<boolean>{
  const current=await selectedSecretPrivacy(store,runId,admitted,true);let matches=current.hasMatches;const base=store.ledger.getRun(runId)?.envelope.baselineId;
  if(base){const row=store.ledger.getRun(base);if(!row)return bad();const baseline=await loadPlan(store,base,row.planRevision);matches=(await selectedSecretPrivacy(store,base,baseline,true)).hasMatches||matches}store.assertHeld();return matches;
+}
+
+
+/** Additional disclosure gate, not absence proof: only the current run's genuinely accepted complete scan qualifies. */
+export async function requireHostedSecretCoverage(store:SentinelStore,runId:string,admitted:import('../execution/plans.js').AdmittedPlan,sourceId:string):Promise<void>{
+ const fail=():never=>reviewFail('sentinel.review.secretCoverageRequired');store.assertHeld();
+ const current=await loadPlan(store,runId,admitted.plan.revision);if(current.plan.digest!==admitted.plan.digest||store.ledger.getRun(runId)?.planRevision!==current.plan.revision)return fail();
+ // This authenticates the actual owned-container publication, invocation, assigned checks and exact finding count.
+ if((await selectedSecretPrivacy(store,runId,current,true)).hasMatches)return fail();
+ const evidence=await (await import('../execution/retained-bootstrap.js')).retainedBootstrapForReport(store,runId,current),entries=evidence.snapshot.entries.flatMap((e,i)=>e.sourceId===sourceId&&e.kind==='file'&&e.disposition==='included'?[{entry:sourceId+'#entry:'+i,path:e.relativePath,content:e.content}]:[]);
+ const same=(a:unknown,b:unknown)=>canonicalDigest(a)===canonicalDigest(b),read=async(id:string)=>{const bytes=await store.readArtifact(id as never);store.assertHeld();if(bytes.length>4194304)return fail();try{return JSON.parse(new TextDecoder('utf8',{fatal:true}).decode(bytes))}catch{return fail()}};
+ for(const unit of current.plan.units.filter(u=>u.adapterId==='secrets-gitleaks'&&u.sourceId===sourceId)){
+  const publication=store.ledger.getPublication(unit),row=store.ledger.getWork(unit);if(!publication||row?.state!=='published')continue;
+  if(!same(unit.inputs.map(i=>[i.relativePath,i.content]).sort(),entries.map(e=>[e.path,e.content]).sort()))continue;
+  const reports=publication.outputs.filter(o=>o.schema==='sentinel-driver-report/draft-1');if(reports.length!==1)continue;const report=await read(reports[0]!.id);
+  const expected=entries.map(e=>e.entry).sort();if(report.status!=='complete'||report.findings!==0||report.adapter!=='secrets-gitleaks'||report.runId!==runId||report.snapshotId!==current.plan.pins.snapshotId||!same(report.work,{id:unit.id,revision:unit.revision})||report.attemptId!==publication.attemptId||!Array.isArray(report.expectedEntries)||!Array.isArray(report.scanned)||!Array.isArray(report.actualReadSet)||!Array.isArray(report.skipped)||report.skipped.length||!same([...report.expectedEntries].sort(),expected)||!same([...report.scanned].sort(),expected)||!same([...report.actualReadSet].sort(),expected))continue;
+  const coverages=publication.outputs.filter(o=>o.schema==='sentinel-coverage/draft-1');let complete=unit.checks.length>0;
+  for(const checkId of unit.checks){const check=current.plan.checks.find(c=>c.id===checkId),pin=check&&current.plan.pins.rules.find(p=>p.familyId===check.familyId&&p.revision===check.ruleRevision);if(!check||check.state!=='planned'||check.scopeKind!=='repository'||check.sourceId!==sourceId||check.scopeId!==sourceId||check.familyId!=='sentinel.secrets.current-tree'||check.ruleRevision!==1||pin?.adapterId!=='secrets-gitleaks'){complete=false;break}
+   const values=await Promise.all(coverages.map(o=>read(o.id))),matches=values.filter(v=>v.checkId===checkId);if(matches.length!==1){complete=false;break}const coverage=matches[0];const {validateEnvelope}=await import('../validate.js');if(!validateEnvelope('coverage',coverage).ok||coverage.runId!==runId||coverage.workId!==unit.id||coverage.workRevision!==unit.revision||coverage.status!=='complete'||coverage.basis?.kind!=='executed'||coverage.basis.attemptId!==publication.attemptId||coverage.skipped.length){complete=false;break}
+   if(!publication.outputs.some(o=>o.id===coverage.assessedScopeArtifact)||!publication.outputs.some(o=>o.id===coverage.limitationsArtifact)){complete=false;break}const scope=await read(coverage.assessedScopeArtifact),limits=await read(coverage.limitationsArtifact);if(scope.schema!=='sentinel-coverage-scope/draft-1'||scope.checkId!==checkId||scope.scopeKind!=='repository'||scope.scopeId!==sourceId||scope.scanned!==true||limits.schema!=='sentinel-coverage-limitations/draft-1'||limits.checkId!==checkId||limits.skipped?.length!==0||limits.unresolved?.length!==0){complete=false;break}
+  }
+  if(complete){store.assertHeld();if(store.ledger.getRun(runId)?.planRevision!==current.plan.revision||canonicalDigest(store.ledger.getPublication(unit))!==canonicalDigest(publication))return fail();return}
+ }
+ return fail();
 }

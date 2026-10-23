@@ -31,7 +31,7 @@ const RUN_REF: CommandSpec = { flags: { ...COMMON, ...STORE }, positional: ['run
 const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   help: { flags: COMMON, positional: [], min: 0 },
   version: { flags: COMMON, positional: [], min: 0 },
-  capabilities: { flags: COMMON, positional: [], min: 0 },
+  capabilities: { flags: {...COMMON,'--models':'boolean'}, positional: [], min: 0 },
   validate: { flags: COMMON, positional: ['kind', 'file'], min: 2 },
   init: { flags: { ...COMMON, '--workspace': 'value', '--profile': 'value' }, positional: [], min: 0 },
   settings: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['action'], min: 1 },
@@ -113,6 +113,7 @@ export function parseArgs(argv: readonly string[]): ParseResult {
   }
   if (positional.length > spec.positional.length) return fail('sentinel.args.unexpectedArgument', positional[spec.positional.length]!);
   if (positional.length < spec.min) return fail('sentinel.args.missingArgument', spec.positional[positional.length]!);
+  if(command==='capabilities'&&flags['--models']&&!json)return fail('sentinel.args.unexpectedArgument','--models requires --json');
   if(command==='run'&&flags['--confirm-models']&&flags['--detach'])return fail('sentinel.args.unexpectedArgument','--confirm-models requires foreground run');
   if(command==='report'&&flags['--instructions']){if(!json||Object.keys(flags).some(f=>!['--json','--workspace','--instructions'].includes(f)))return fail('sentinel.args.unexpectedArgument','--instructions requires only --json');}
   if(command==='paths'&&flags['--request']===undefined)return fail('sentinel.args.missingValue','--request');

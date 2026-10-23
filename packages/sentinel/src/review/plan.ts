@@ -10,7 +10,7 @@ const digest=(v:unknown)=>canonicalDigest(v) as ArtifactId;const bad=():never=>r
 export const MAX_REVIEW_UNITS=32;
 export interface ReviewPlanInputs {readonly plan:PlanEnvelope;readonly artifacts:readonly InstructionArtifact[]}
 export function withReviewUnits(given:PlanEnvelope,specs:readonly SessionSpec[],terms:ReadonlyMap<string,PlannedReview['terms']>):ReviewPlanInputs {
- if(given.kind!=='analysis'||specs.length>MAX_REVIEW_UNITS||given.units.some(u=>u.review))return bad();const plan=structuredClone(given),artifacts=new Map<ArtifactId,InstructionArtifact>();
+ if(specs.length>MAX_REVIEW_UNITS)reviewFail('sentinel.review.planLimit',String(specs.length)+' requested, maximum '+MAX_REVIEW_UNITS);if(given.kind!=='analysis'||given.units.some(u=>u.review))return bad();const plan=structuredClone(given),artifacts=new Map<ArtifactId,InstructionArtifact>();
  const put=(value:unknown,schema:string,links:readonly ArtifactId[])=>{const bytes=canonicalJsonBytes(value),id=digest(value);if(bytes.length>4194304)return bad();artifacts.set(id,{id,bytes,schema,links});return id};
  for(const s of specs){if(!s.instructions||!s.segmentId||!s.requestedSelection||s.runId!==plan.runId||s.scope.snapshotId!==plan.pins.snapshotId)return bad();
   const manifest=instructionManifest(s.instructions);for(const a of instructionArtifacts(s.instructions))artifacts.set(a.id,a);

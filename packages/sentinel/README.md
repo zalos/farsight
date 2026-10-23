@@ -836,3 +836,85 @@ qualified enforcement evidence. Changing evidence or expiry reopens the issue; h
 Clean private reports may include rationale, while shareable reports omit it. A relevant accepted secret match
 withholds source-derived owner detail in both profiles. These local commands return busy while a service owns
 the store; they never stop or impersonate it. Service-owned/browser decision confirmation remains unavailable.
+
+## Foreground review and private instruction records
+
+Configured review stages use the same admitted plan, coordinator attempts and model budget ledger as ordinary
+runs. They establish model claims or unfinished inspection, never deterministic coverage or mitigation. Hosted
+HTTP APIs are off by default; no local model server is required for the fixed native CLI path. The currently
+supported native profile is Claude Code 2.1.282 on macOS arm64 and the requested Haiku model below. Other
+versions/platforms refuse. Account authentication and actual inference need separate qualification; successfully
+hashing a local binary does not establish either, and a login refusal never means the user is logged out.
+
+First obtain data for the owner configuration, without reading a credential or starting a process:
+
+```sh
+farsight-sentinel capabilities --models --json > native-profile.json
+farsight-sentinel init --workspace ./workspace --profile secrets
+```
+
+A missing/wrong native binary or packaged helper returns a typed unavailable result. Discovery considers only
+the first installed `claude` on bounded absolute `PATH` entries; it never hunts for another version or downloads
+one. Keep `native-profile.json` outside the source checkout. Copy its `facts.modelProfiles[0].nativeProfile` into
+the provider below in `workspace/.farsight/sentinel/settings.json`, retaining the existing settings fields:
+
+```json
+{
+  "hostedApiReviewEnabled": false,
+  "providers": [{
+    "id": "native-claude", "kind": "claude-cli", "endpoint": "https://api.anthropic.com",
+    "credential": null, "disclosure": "hosted",
+    "nativeProfile": { "id": "COPY_DISCOVERED_ID", "executableDigest": "COPY_DISCOVERED_DIGEST", "helperDigest": "COPY_DISCOVERED_DIGEST", "profileDigest": "COPY_DISCOVERED_DIGEST" },
+    "budget": { "maxTokens": 400000, "maxCost": null, "currency": null },
+    "models": [{
+      "id": "haiku", "model": "claude-haiku-4-5-20251001",
+      "limits": { "maxRequestBytes": 65536, "maxResponseBytes": 16384, "timeoutMs": 60000, "maxOutputTokens": 512, "contextTokens": 200000, "maxMessages": 32, "templateTokensPerMessage": 8 },
+      "pricing": { "kind": "subscription-quota", "basis": "owner-subscription" },
+      "terms": { "retention": "RECORD_THE_TERMS_YOU_REVIEWED", "training": "unknown", "source": "RECORD_THE_SOURCE_YOU_REVIEWED", "recordedAt": "RECORD_YYYY-MM-DD" },
+      "capability": { "schema": "sentinel-model-capability/draft-1", "kind": "claude-cli", "origin": "https://api.anthropic.com", "model": "claude-haiku-4-5-20251001", "listed": true, "revision": null, "probedAt": "RECORD_YYYY-MM-DDTHH:MM:SS.000000000Z" }
+    }]
+  }],
+  "reviewModels": { "stages": [{ "stage": "general", "providerId": "native-claude", "modelId": "haiku" }], "segments": [] }
+}
+```
+
+This is a configuration fragment, not a claim that a subscription permits access or that vendor terms were
+verified. Replace every placeholder with the discovered pins or owner-reviewed facts before adopting. Record
+uncertainty honestly. Subscription quota records confirmed tokens when available; monetary consumption remains
+unobserved, never USD zero. Each native call conservatively reserves the full fixed context before dispatch.
+The one provider/run budget is cumulative across stages and reopened epochs. Review the chosen token cap.
+
+Explicitly extend the owner's existing `run.start` grant to allow `paid-inference`, `source-disclosure` and
+`network` effects, and add a human `paid.admit` grant scoped to provider `native-claude`, with confirmation required.
+Do not widen agent grants. Then use the public owner commands:
+
+```sh
+farsight-sentinel settings adopt --workspace ./workspace --confirm
+farsight-sentinel rules promote builtin:secrets --workspace ./workspace --confirm
+farsight-sentinel assets adopt-tool secrets-gitleaks --workspace ./workspace --confirm
+farsight-sentinel plan --workspace ./workspace --json
+farsight-sentinel run PLAN_ID --workspace ./workspace --confirm --confirm-models --json
+farsight-sentinel report RUN_ID --workspace ./workspace --instructions --json
+```
+
+Inspect the exact model selection, disclosure and budget in the plan before confirming. `--confirm-models` needs
+foreground `--confirm`; it cannot be combined with detach and does not replace the separate model admission
+receipt. Another live owner yields busy until it naturally releases; the command never takes its lock. Model
+execution and settings editing from the graphical service remain unavailable in this slice.
+
+The private result contains accepted model statements and captured citations, exact Sentinel prompt/selected
+skill/resource bytes, semantic messages, native wire, requested selection and reported identity. It works after
+source removal. A prepared or failed request is distinguished by its operation outcome and is not evidence that
+a vendor received it. Vendor hidden instructions, internal reasoning and vendor skills are unobserved. Public
+stages use the bundled prompt with **no additional skills selected**; there is no vendor discovery. The explicit
+prepared-instruction library can retain selected skills without granting execution authority.
+
+Hosted review requires an actually complete accepted current-source Gitleaks scan, exact captured entries and no skipped scope before any model receipt, login read or call. Missing, held, unsupported or partial secret scans refuse; no matches alone is insufficient. The Gitleaks image must already be installed at its adopted pin; planning acquires nothing.
+
+Known current or retained-ancestor secrets withhold optional model work and private trace delivery. Missing
+privacy or publication proof refuses rather than exposing raw data. The default report excludes private traces;
+the private result is not safe to share. One exact provider/model binding per run is supported: configured
+stage/segment overrides selecting different bindings are refused. Use a new linked rerun for changed adopted
+model terms; old results remain immutable. The slice caps a plan at 32 review units, input artifacts at 16 MiB,
+private trace content/output at 8 MiB with a shared 20-second read deadline, and checkpoints at their existing
+4 MiB limit. These bounds can leave inspection unfinished; they never establish absence or complete coverage.

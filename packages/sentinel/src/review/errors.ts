@@ -27,6 +27,7 @@ export const REVIEW_LIMITATION_CODES = Object.freeze(['sentinel.review.limitatio
 
 export const REVIEW_ERROR_CODES = Object.freeze([
   'sentinel.review.invalidInput', 'sentinel.review.integrity', 'sentinel.review.checkpoint',
+  'sentinel.review.planLimit','sentinel.review.secretCoverageRequired','sentinel.review.foregroundRequired',
 ] as const);
 
 /** E5/E8 gate states and reasons. */
