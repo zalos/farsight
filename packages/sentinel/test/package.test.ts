@@ -174,6 +174,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // The store's reason codes are catalog words; core's catalog is the only Farsight module the library reads.
   'store/errors.js': ['@farsight/core/dist/strings-sentinel-store.js'],
   'store/ledger-json.js': ['node:crypto'],
+  // Scope-local counters and a monotonic clock; neither performs I/O or starts work on import.
+  'store/read-budget.js': ['node:async_hooks', 'node:perf_hooks'],
   'store/ledger.js': ['node:fs', 'node:path'],
   'store/migrations.js': ['node:crypto', 'node:fs', 'node:path'],
   'store/objects.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:path', 'node:util', 'node:zlib'],
