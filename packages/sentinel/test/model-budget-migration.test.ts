@@ -17,7 +17,7 @@ function rows(path: string) {
   const db = new DatabaseSync(path, { readOnly: true });
   try { return [
     db.prepare('SELECT id, run_id, binding_digest, admission_digest, receipt_digest, max_tokens, max_cost_nanos, currency, overdrawn, created_at FROM envelopes ORDER BY rowid').all(),
-    ...['reservations', 'reservation_events'].map(table => db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()),
+    ...['reservations', 'reservation_events'].map(table => db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all().map((row: any) => { const { accounting_basis: _basis, ...old } = row; return old; })),
   ]; }
   finally { db.close(); }
 }
@@ -29,7 +29,9 @@ test('genuine legacy migration preserves exact pending spend, states, timestamps
   const [env] = ledger.listEnvelopes({ limit: 10 });
   assert.equal(env!.providerId, null); assert.equal(env!.createdAt, at);
   assert.deepEqual(env!.totals.byState, { held: 1, dispatched: 1, settled: 0, uncertain: 1, released: 0 });
-  assert.equal(env!.totals.chargedTokens, 600); assert.equal(env!.totals.chargedCostNanos, 6_000_000_000n);
+  assert.equal(env!.totals.chargedTokens, 600);
+  const metadata = new DatabaseSync(path, { readOnly: true });
+  assert.deepEqual(metadata.prepare('SELECT DISTINCT accounting_basis FROM reservations').all().map((x: any) => x.accounting_basis), ['money']); metadata.close(); assert.equal(env!.totals.chargedCostNanos, 6_000_000_000n);
   assert.deepEqual(rows(path), before);
 });
 

@@ -83,7 +83,7 @@ export async function probeModel(policy: EffectivePolicy, providerId: string, mo
   return { capability, settingsPatch: { path: `/providers/${p}/models/${m}/capability`, value: capability } };
 }
 
-export interface ReconcileUsage { readonly inputTokens: number; readonly outputTokens: number; readonly cost: string }
+export interface ReconcileUsage { readonly inputTokens: number; readonly outputTokens: number; readonly cost: string | null }
 
 /** The reconciliation the owner confirms: settle one uncertain reservation at stated usage, bound to its current state. */
 export function reconcileIntent(ledger: BudgetLedger, reservationId: string, usage: ReconcileUsage): { intent: ActionIntent; stateDigest: string } {
@@ -91,7 +91,7 @@ export function reconcileIntent(ledger: BudgetLedger, reservationId: string, usa
   if (r.state !== 'uncertain') fail('sentinel.provider.reservationState', `${r.state} is not uncertain`);
   const env = ledger.listEnvelopes({ limit: 200 }).find(e => e.id === r.envelopeId);
   if (!env) return fail('sentinel.provider.ledgerInvalid', 'the reservation’s envelope is not listed');
-  if (!Number.isSafeInteger(usage.inputTokens) || usage.inputTokens < 0 || !Number.isSafeInteger(usage.outputTokens) || usage.outputTokens < 0 || toNanos(usage.cost) === null) {
+  if (!Number.isSafeInteger(usage.inputTokens) || usage.inputTokens < 0 || !Number.isSafeInteger(usage.outputTokens) || usage.outputTokens < 0 || (usage.cost !== null && toNanos(usage.cost) === null) || (env.totals.accountingBasis === 'subscription-quota') !== (usage.cost === null)) {
     fail('sentinel.provider.ledgerInvalid', 'usage is whole token counts and a decimal cost');
   }
   const intent: ActionIntent = { action: 'paid.admit', input: canonicalDigest({ reconcile: reservationId, usage }), effects: ['paid-inference'],
@@ -106,7 +106,7 @@ export function reconcileReservation(ledger: BudgetLedger, policy: EffectivePoli
   if (!isEffectivePolicy(policy)) fail('sentinel.provider.notTrusted', 'only effectivePolicy\u2019s own result');
   const { intent, stateDigest } = reconcileIntent(ledger, reservationId, usage);
   const spent = authorize(policy, intent, stateDigest, who, () => ({ basis: 'local-only', detail: 'a ledger record; no provider is contacted' }), now);
-  return ledger.reconcile(reservationId, { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costNanos: toNanos(usage.cost)! }, spent.digest,
+  return ledger.reconcile(reservationId, { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costNanos: usage.cost === null ? null : toNanos(usage.cost)! }, spent.digest,
     now.toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z'));
 }
 
@@ -116,9 +116,9 @@ export const INSPECT_LIMITS = Object.freeze({ maxEnvelopes: 50, maxReservations:
 export function inspectEnvelopes(ledger: BudgetLedger, options: { runId?: string; limit?: number } = {}) {
   const limit = Math.min(Math.max(1, options.limit ?? 20), INSPECT_LIMITS.maxEnvelopes);
   return ledger.listEnvelopes({ ...(options.runId !== undefined ? { runId: options.runId } : {}), limit }).map(e => ({
-    id: e.id, runId: e.runId, providerId: e.providerId, currency: e.currency, createdAt: e.createdAt, confirmedByOwner: e.receiptDigest !== null,
-    maxTokens: e.totals.maxTokens, maxCost: fromNanos(e.totals.maxCostNanos), chargedTokens: e.totals.chargedTokens, chargedCost: fromNanos(e.totals.chargedCostNanos),
+    id: e.id, runId: e.runId, ...(e.totals.accountingBasis ? { accountingBasis: e.totals.accountingBasis } : {}), providerId: e.providerId, currency: e.currency, createdAt: e.createdAt, confirmedByOwner: e.receiptDigest !== null,
+    maxTokens: e.totals.maxTokens, maxCost: e.totals.maxCostNanos === null ? null : fromNanos(e.totals.maxCostNanos), chargedTokens: e.totals.chargedTokens, chargedCost: e.totals.chargedCostNanos === null ? null : fromNanos(e.totals.chargedCostNanos),
     overdrawn: e.totals.overdrawn, byState: e.totals.byState,
-    open: ledger.openReservations(e.id, INSPECT_LIMITS.maxReservations).map(r => ({ id: r.id, operationId: r.operationId, state: r.state, tokens: r.tokens, cost: fromNanos(r.costNanos) })),
+    open: ledger.openReservations(e.id, INSPECT_LIMITS.maxReservations).map(r => ({ id: r.id, operationId: r.operationId, state: r.state, tokens: r.tokens, cost: r.costNanos === null ? null : fromNanos(r.costNanos) })),
   }));
 }
