@@ -67,15 +67,17 @@ identifiers, not GitHub PR numbers.
   installed Linux scanner and offline report workflow. The first post-merge native run failed OOM attribution;
   one unchanged failed-job retry passed 104 checks with zero skips. Exit 137 alone is not an OOM witness, and
   the retry does not erase the failure or establish flake-free behavior. The scanner job passed.
-  The private capture-boundary candidate `a5f6cbcc` (ADR 46, not merged) proposes removing the owner-policy
+  The reviewed capture-boundary candidate (ADR 46, not yet merged) removes the owner-policy
   omission of `.farsight` described there: a capture leaves out only
   the exact held store; run scratch is a lease inside it, released only on scoped stopped-consumer proof; trust state
   and the service runtime folder are refused inside the workspace. On the default layout the Express inspection then
   answers without a capture gap (open route established does-not-apply; guarded route a cited refusalUnproven
   unknown). Routes under hidden folders stay cited `routeNotInGraph` frontiers because Farsight's parser lists no
   hidden folder, and a minimal workspace's report counts the captured settings file as seen by no check. Independent
-  verification of the final cleanup and capture boundaries, installed consumer acceptance, root real-ingest and
-  browser measurement, selected CI and merge remain. These are candidate claims, not merged-main behavior.
+  final review, 28 focused capture/cleanup controls, genuine npm-only native consumer acceptance, identical real-ingest
+  node/edge values and browser inspection passed. Merged deadline correction [#161](https://github.com/zalos/farsight/pull/161)
+  (`4cbe1d4d`) passed all selected CI; the combined capture branch then passed its build and 46 targeted controls
+  with zero skips. Exact-head selected CI and merge remain. The capture behavior is not yet merged-main behavior.
 
   Historical framework candidate evidence: the candidate combined the retained source seam and closure with
   `64d86ae9`; its

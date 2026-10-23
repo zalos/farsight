@@ -9,8 +9,8 @@ Farsight was dogfooded on.
 ## Sentinel capture boundary and owned scratch — 2026-10-22
 
 PR #160 (bounded framework inspection) merged as `0b1f74a7`. The capture candidate on
-`codex/sentinel-capture-acceptance` starts from that commit and implements ADR 46; its final CI and merge remain
-open. SOL owns implementation and corrections, Claude performs independent review, and the lead owns integration
+`codex/sentinel-capture-acceptance` implements ADR 46 and now includes merged deadline correction #161
+(`4cbe1d4d`); its final CI and merge remain open. SOL owns implementation and corrections, Claude performs independent review, and the lead owns integration
 and the definition of done.
 
 - Working-copy capture excludes only the held store at its exact canonical path and acquired identity. Store
@@ -34,6 +34,7 @@ Validation (Node 24, pnpm 9, isolated worktrees):
 
 - Affected build/typecheck, schema drift and catalog checks passed; the author's core suite passed 404 tests.
 - Final capture, layout, owner identity, scratch and preparation-crash controls: 28 passed, zero skipped.
+  After merging #161, the combined build and 46 capture/deadline-boundary controls passed with zero skips.
 - The actual npm-only installed consumer passed with the existing pinned Gitleaks image: canonical inspection,
   official SARIF, withholding, source-removed selected rerun and actual service/worker kill-and-resume. Old lease
   identity survives recovery. Offline clean and withheld reports had no requests or page/console errors.
@@ -48,7 +49,8 @@ Historical failures remain distinct from those passes. The author's later full S
 1,000 passed, two failed, 141 skipped. The failures were a durable normalized-write test that did not reach its
 injected boundary and a framework cancellation test that expected forced termination. A controlled two-file rerun
 passed those two cases but exposed a separate driver-signal/deadline mismatch (22 passed, one failed). PR #161
-corrects unit/run deadline notification and makes durable-write boundary tests deterministic; the framework test's
+merged with all selected checks passing, including full recovery and installed scanner acceptance. It corrects
+unit/run deadline notification and makes durable-write boundary tests deterministic; the framework test's
 cancellation timing assumption is being reviewed with the fixed-worker seam. Passing an isolated retry does not
 close the original failed run.
 
