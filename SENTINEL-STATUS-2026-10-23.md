@@ -1,6 +1,6 @@
 # Sentinel status and session handoff
 
-**Snapshot: 2026-10-23 05:01 PM EDT.** This session is ending at the owner's request. No further implementation, merge or release work is being started. The local preview remains running.
+**Session closeout: October 23, 2026.** This is the current-state recap and ordered restart plan requested at the repository root. The owner requested cleanup and a clean handoff; release publication is still outstanding.
 
 ## Current position
 
@@ -9,7 +9,7 @@ The Copilot CLI release candidate is merged, but the new release has **not** bee
 - [PR #183](https://github.com/zalos/farsight/pull/183) merged the owner preparation/interface, process graph, reporting and npm delivery integration.
 - [PR #190](https://github.com/zalos/farsight/pull/190), `feat(cli): enable Copilot scans with retained review evidence`, merged on October 23 as **`7bb4ba230308275876603b147581c4aa54b839a1`**.
 - All final checks on #190's exact head `e417610f` passed, including native isolation/recovery, service and browser checks, clean npm consumers, and the five-scanner installed-command workflow. Independent Claude source review cleared the final CLI changes.
-- A focused owner-UI correction is committed separately and locally tested. It is **not independently reviewed, integrated, in a PR, or merged**.
+- [PR #196](https://github.com/zalos/farsight/pull/196), `fix(sentinel): clarify scan readiness and owner session recovery`, merged as **`1ff7a25e0c00b18574a700c65dd4f1c6a69dcb33`** after independent SOL and Claude reviews and all selected CI checks passed on `9ebefebc`.
 - The release workflow, release PR, publication and verification of the published package URLs have **not** been completed.
 
 This is a scoped first CLI/UX release effort. It does **not** complete the original Sentinel plan.
@@ -37,23 +37,27 @@ The preview is available at **http://127.0.0.1:4520/#/sentinel** and uses a copi
 
 At inspection, the saved run had **three successful preparation attempts**: capture, parse and inventory. Its current analysis revision had **zero attempts**. The run's original deadline was **October 23 at 4:52:25 p.m. Eastern**, which has now passed. No analysis start was dispatched by the manager while diagnosing the panel.
 
-The screenshot showed a raw `sentinel.ownerUi.expired` response. The current paired browser tab subsequently worked through both Reconnect and navigation away and back. The exact screenshot failure was not reproduced in that paired tab. A genuine duplicate/consumed bootstrap request did reproduce the raw JSON document in a targeted test, and is addressed by the saved UI correction.
+The screenshot showed a raw `sentinel.ownerUi.expired` response. The current paired browser tab subsequently worked through both Reconnect and navigation away and back. The exact screenshot failure was not reproduced in that paired tab. A genuine duplicate/consumed bootstrap request did reproduce the raw JSON document in a targeted test, and is addressed by the merged UI correction.
 
 Two presentation defects were confirmed:
 
 1. An unavailable or consumed browser pairing could display JSON instead of readable recovery guidance.
 2. The interface displayed preparation and raw recorded run state without sufficient distinction, while the start controls appeared below the large process graph. A recorded `running` state did not prove analysis checks had started.
 
-The saved correction adds a catalog-backed recovery page, puts status and start controls before the graph, distinguishes preparation from analysis execution, and makes failed refreshes visible while disabling writes until a successful read. It preserves one-use pairing, the absolute session lifetime, separate confirmation, deadlines and all model admission gates. It neither renews authority automatically nor replays an action.
+The merged correction adds a catalog-backed recovery page, puts status and start controls before the graph, distinguishes preparation from analysis execution, and makes failed refreshes visible while disabling writes until a successful read. It preserves one-use pairing, the absolute session lifetime, separate confirmation, deadlines and all model admission gates. It neither renews authority automatically nor replays an action.
 
-**Local UI correction:** branch `codex/sol-owner-ui-reconnect`, commit **`673324df679e62bfbf65cfff016fd29498b04bf1`**, based on the pre-squash #190 head. The worker reports Sentinel build/typecheck and catalog checks, **22 focused/package tests and one genuine browser flow passing with zero skips**. Independent review and final integration validation remain pending. The running user preview still serves the earlier build; it has not been updated with this correction.
+**UI qualification:** SOL implemented the correction; independent SOL and Claude reviews found no remaining blockers. The focused local acceptance passed 22 controls and one genuine browser flow with zero skips, plus build/typecheck and catalog checks. All selected PR checks passed, including e2e, service, npm package, native isolation/recovery and installed scanner acceptance.
+
+A fixed-source comparison against main `7bb4ba23` found identical **11,399 nodes, 24,466 edges, source digest `2c154ed1702d` and 45,359,104-byte databases**. Graph bytes changed from 32,908,911 to 32,908,917 only through build/run metadata. Fresh front-door, Map and code-map screenshots were inspected: zero page exceptions or failed requests. Five known fixture-image 404s produced matching console messages; this was not a zero-console-error result. The temporary verification server was stopped.
+
+The main checkout is rebuilt from merged code. The existing preview is moved to that build so cleanup can remove its old worktree. Its expired run and retained evidence are preserved; restarting the viewer does not extend the run's deadline. Browser owner sessions still have an absolute one-hour lifetime and must be relaunched after expiry. The new readable recovery page is guidance, not automatic authority renewal.
 
 ## Decisions and their basis
 
 | Decision | Who made or approved it; consequence |
 |---|---|
 | Prioritize a bounded release now and iterate later | Owner direction. The current push focuses on CLI qualification, usable graph/owner controls, npm installation and a release, rather than claiming the whole original plan is complete. |
-| Use SOL workers and Claude reviewers | Latest owner direction. The manager integrates, reviews evidence and enforces completion criteria. The new UI correction still needs its independent review. |
+| Use SOL workers and Claude reviewers | Latest owner direction. The manager integrates, reviews evidence and enforces completion criteria. The UI correction received both independent SOL and Claude reviews. |
 | Allow host CLI execution for pure agentic phases | Owner explicitly refined the earlier container-only decision. No Docker or local inference is required for the qualified host Copilot path when the adopted profile permits it and no external scanner is selected. Required scanners are not silently skipped. |
 | Keep external scanners container-only | Owner-confirmed. Their dependencies and execution remain managed inside qualified Linux containers; no host fallback. |
 | Prioritize Copilot; return to Claude later | Owner direction. Native Claude remains disabled/unqualified for this release. This is separate from using Claude as a development reviewer. |
@@ -62,20 +66,26 @@ The saved correction adds a catalog-backed recovery page, puts status and start 
 | Apply the reviewed Copilot sign-in fix | Explicit owner approval. The pinned native process can use the reviewed macOS Keychain/certificate services. The access is not restricted to one Keychain item, and OS trust-service requests can occur outside Sentinel's proxy. Those limits are documented. |
 | Permit three bounded Copilot turns | Implementation/review decision after a two-turn trial exhausted its budget before the model received the requested source. The new default remains within the existing 120-second deadline and does not expand already-adopted budgets. |
 | Treat model-to-ordinary-report projection and historical memory-attribution gaps as follow-ups | Manager's scoped beta disposition, not proof these gaps are fixed. Private model evidence remains readable; unidentified worker exits still fail rather than becoming successful work. Issues #194 and #184 retain the limitations. |
-| Hold publication for the observed UI clarity problem | Manager's release-quality decision. The fix is saved, but its review/integration gates remain open as this session ends. |
+| Resolve the observed UI clarity problem before release | Manager's release-quality decision. The correction is reviewed and merged in #196; publication and published-package acceptance remain separate gates. |
+| Finish cleanup and stop with a recap | Latest owner direction. Close the reviewed UI work, preserve recoverable history/evidence, update main and record the remaining release plan without treating uncompleted work as done. |
 
-## Immediate work needed to finish this release
+## Ordered plan to finish the scoped release
 
-1. Independently review UI commit `673324df` with SOL and Claude, address findings, and integrate it onto current main. The prepared integration branch is `codex/sentinel-owner-ui-feedback`, based on `7bb4ba23`.
-2. Complete candidate/main ingest comparison and real-browser verification. A fixed-source main baseline is already saved: **11,399 nodes, 24,466 edges, source digest `2c154ed1702d`, graph 32,908,911 bytes, database 45,359,104 bytes**. Candidate comparison has not run.
-3. Create a focused UI PR, use the repository's title/template conventions, pass affected CI and squash-merge. No UI PR has been opened yet.
-4. Update the running local preview from the reviewed build and verify readable expiry, clear preparation/execution state, separate start confirmation, retained reports and reconnect. Preserve saved run evidence; do not silently extend the expired run's budget.
-5. Update the handoff/progress ledger to reflect #190's completed merge and the eventual UI result. Older milestone text in those documents remains historical.
-6. Dispatch the release workflow for Farsight **0.4.0** and Sentinel **0.1.0-beta.1**. Review and merge the generated release PR only after its required checks and release recovery gates pass.
-7. Let publication build the release artifacts, then verify both published tarballs against the manifest and complete clean npm-only installation from the actual published URLs.
-8. Report the release links, validated scope and remaining limitations. Do not declare the original full plan complete.
+1. Start from current `main` and this report. Confirm no new code has changed the qualified native CLI path. Recheck the existing preview's status, readable recovery and separate confirmation when resuming; its old run is expired, so create and confirm a fresh plan only when actually running new work.
+2. Review release notes against the scope and limitations here, especially foreground-only Copilot execution, the private model observation report, default-off hosted API/Claude paths and deferred custom stages. The UI correction and its independent reviews are already complete; do not reopen the implementation from scratch.
+3. Dispatch the normal release workflow on main with **Farsight 0.4.0** and **Sentinel 0.1.0-beta.1** as separate explicit versions. Review the generated release PR and merge only after its required checks and release recovery gates pass. Follow [the release procedure](docs/RELEASING.md); no release workflow was dispatched during this closeout.
+4. Let publication build and publish both artifacts and the release manifest. Verify the actual published URLs, sizes and hashes, then pass the clean npm-only consumers against those published bytes. Local package acceptance is already strong evidence but does not replace this gate.
+5. Return the release links, qualified platform/model scope and open limitations. The scoped release is complete only then. Continue the larger feature plan from the issue order below in a later iteration.
 
-The existing Copilot live proof should not be repeated merely because presentation files changed. Re-run inference only if integration changes the qualified execution path or exposes an unresolved concern.
+Do not repeat the existing paid Copilot proof merely because presentation or documentation changed. Repeat inference only if a change affects that execution path or exposes an unresolved concern. Hosted API work remains paused pending later owner direction.
+
+## Repository cleanup and preserved work
+
+The cleanup inventory covers **108 Sentinel worktrees** from this session. Before deletion, all heads were retained under recovery refs and in a verified Git bundle; tracked/untracked edits and non-reproducible ignored evidence were copied with hashes into a private recovery archive. Three old dirty worktrees were preserved this way rather than reset. Review packets, original failures and final proof remain available. The final integration checkout is removed after this recap merges and main is synchronized.
+
+Obsolete Sentinel local branches and the two remote diagnostic branches are removed after their history is preserved. No diagnostic workflow is merged as product code. Other projects' worktrees and the unrelated App Router and dependency PRs remain untouched. Desktop worktree archive requests were queued; the physical checkouts were cleaned through verified Git removal, so a stale app attachment is not proof that a checkout still exists.
+
+The primary checkout stays on `main`. Its pre-existing `.vscode/settings.json` edit is retained byte-for-byte; this is an intentional user change, not an outstanding Sentinel change. The primary main build is refreshed, but its multi-source dogfood graph is preserved and no fixture e2e results are stamped there. Private recovery manifests record exact old paths, branch heads, checksums and restoration instructions; private machine paths and credential references are not committed to this public repository.
 
 ## Outstanding issue ledger and recommended follow-up order
 
@@ -95,8 +105,8 @@ Two other PRs are open: [#121 — delegated App Router guards](https://github.co
 
 ## Definition of done and restart point
 
-The scoped release is done only when the user-visible UI correction is reviewed and merged, the qualified CLI behavior remains intact, release checks pass, the versions are published, and fresh npm consumers validate the published bytes. A passing build, saved patch, merged feature PR or source-only review is insufficient on its own.
+The UI correction is reviewed and merged. The scoped release is done only when the qualified CLI behavior remains intact, release checks pass, the versions are published, and fresh npm consumers validate the published bytes. A passing build, saved patch, merged feature PR or source-only review is insufficient on its own.
 
-Resume from the saved UI correction and the ordered steps above. Keep the original failures, fixed-source baseline and private validation packets for comparison. Do not restart the whole implementation plan or spend on new live model trials without a specific need. Keep product changes in worktrees and preserve the primary dogfood checkout.
+Resume from the merged UI correction and the ordered release steps above. Keep the original failures, fixed-source baseline and private validation packets for comparison. Do not restart the whole implementation plan or spend on new live model trials without a specific need. Keep product changes in worktrees and preserve the primary dogfood checkout.
 
 Reference documents: [implementation plan](docs/proposals/farsight-sentinel/implementation-plan.md), [execution ledger](docs/proposals/farsight-sentinel/execution-progress.md), [AI handoff](docs/AI-HANDOFF.md), and [release procedure](docs/RELEASING.md).

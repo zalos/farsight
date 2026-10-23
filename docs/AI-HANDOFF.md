@@ -1,5 +1,37 @@
 # Farsight — shared Codex / Claude memory
 
+## Sentinel session closeout — 2026-10-23
+
+The current recap, owner decisions, open issues and ordered release plan are at the repository root:
+[SENTINEL-STATUS-2026-10-23.md](../SENTINEL-STATUS-2026-10-23.md). This checkpoint supersedes historical
+candidate/merge-pending language below. The owner requested worktree cleanup, an updated main checkout and a
+handoff; no new release workflow was started during closeout.
+
+Copilot PR [#190](https://github.com/zalos/farsight/pull/190) merged as `7bb4ba23` after all final checks passed.
+The focused owner-interface fix [#196](https://github.com/zalos/farsight/pull/196) merged as `1ff7a25e` after
+independent SOL and Claude reviews and all selected checks passed on `9ebefebc`. Consumed/expired pairing now
+shows readable recovery guidance; preparation and analysis attempts are distinguished; status and separate
+owner controls precede the graph; failed reads visibly disable writes until recovery. One-use pairing, deadlines,
+confirmation and model admission remain intact. Nonblocking follow-ups are recorded under #182.
+
+Local UI validation passed 22 controls and one genuine browser flow without skips, with build/types/catalog checks.
+Fixed-source main/candidate comparison retained identical 11,399 nodes, 24,466 edges, source digest
+`2c154ed1702d` and 45,359,104-byte databases. Graph bytes changed by six through metadata only. Inspected
+front-door, Map and code-map screenshots had zero page exceptions or failed requests, with five known missing
+fixture-image 404s and corresponding console messages. The verification server was stopped.
+
+The primary checkout stays on main with a refreshed main build and its existing editor-settings edit preserved.
+The temporary preview moves to the main build; its expired run and original evidence remain unchanged. The 108
+session worktrees have a verified private recovery bundle, file manifests and retained review evidence before
+removal; obsolete local and diagnostic remote branches are retired. The final integration checkout is removed
+after the closeout documentation merges. Unrelated worktrees and PRs #121/#195 remain untouched.
+
+Latest published Farsight remains **0.3.0**. Targets **0.4.0** and **Sentinel 0.1.0-beta.1** still need the release
+workflow, reviewed release PR, publication and published-URL npm acceptance. The original full plan is not done:
+ordinary-report model projection, configurable stages, walkthroughs, Spring qualification and Fable review remain
+tracked. Hosted API work is paused/default-off; native Claude remains unqualified. Do not repeat paid Copilot
+qualification unless the execution path changes or a concrete concern warrants it.
+
 ## Sentinel CLI and owner UI release candidate — 2026-10-23
 
 [#183](https://github.com/zalos/farsight/pull/183) merged as `657e8c4b`: durable preparation, separate browser
