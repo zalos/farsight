@@ -172,6 +172,7 @@ export async function executablePlan(store: SentinelStore, admitted: AdmittedPla
     inputsOf = w => (held.has(key(w)) ? [] : boundary.inputsFor(w).map(i => ({ id: i.id, path: i.path })));
   } else {
     plan = ownedPlanRevision(given);
+    if (plan.kind !== 'bootstrap') refuse('the bootstrap boundary requires a bootstrap plan');
     works = workEnvelopesFor(plan, conversion).map(c => c.envelope);
   }
   if (plan.runId !== recordedRun.id || plan.revision !== currentRevision) refuse('the plan is not the run\'s current revision');
@@ -220,8 +221,11 @@ export async function executablePlan(store: SentinelStore, admitted: AdmittedPla
   }
   const get = <T>(m: Map<string, T>, r: WorkRef): T => m.get(key(r)) ?? refuse(`work ${key(r)} is not in the plan`);
   const proven = new Set(plan.reused.map(key));
+  // Preserve the exact plan every unit was bound to; copying the caller admission again could read a later plan.
+  const admittedCopy = deepFreeze({ ...structuredClone({ record: admitted.record, ruleLock: admitted.ruleLock,
+    policy: admitted.policy, profile: admitted.profile, selection: admitted.selection }), plan });
   const result = Object.freeze({
-    run, admitted: deepFreeze(structuredClone(admitted)), works: Object.freeze(works.map(w => units.get(key(w))!.work)),
+    run, admitted: admittedCopy, works: Object.freeze(works.map(w => units.get(key(w))!.work)),
     external: new Set(proven), restored, reusedProven: (r: WorkRef) => proven.has(key(r)),
     unitOf: (r: WorkRef) => get(units, r), bindingOf: (r: WorkRef) => get(bindings, r),
   });

@@ -65,8 +65,13 @@ function sealedPlan(plan: PlanRevision): PlanRevision {
   return plan;
 }
 
-// Exact, type-preserving: the id and revision must be the same values a strict comparison would accept.
-const refKey = (r: WorkRef) => JSON.stringify([r.id, r.revision]);
+// Exact primitive values only: JSON serialization otherwise unboxes wrappers and invokes caller conversion hooks.
+// Read each property once, then serialize only values the former strict id/revision comparison could match.
+const refKey = (r: WorkRef): string => {
+  const id = r?.id, revision = r?.revision;
+  if (typeof id !== 'string' || typeof revision !== 'number') throw invalid('the work reference is not a unit of this plan');
+  return JSON.stringify([id, revision]);
+};
 
 /** What one validated plan revision answers by lookup: its units, each unit's planned checks, its built manifests. */
 interface PlanIndex {
