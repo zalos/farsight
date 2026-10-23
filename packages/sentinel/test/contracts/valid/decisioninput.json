@@ -1,0 +1,8 @@
+{
+  "schema": "sentinel-decision-input/draft-1",
+  "decision": "accepted-risk",
+  "rationale": "Owner review of this captured source only.",
+  "evidence": [],
+  "expiresAt": null,
+  "supersedes": null
+}

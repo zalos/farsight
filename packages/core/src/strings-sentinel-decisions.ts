@@ -3,6 +3,27 @@ import type { StringEntry } from './strings.js';
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
 
 export const SENTINEL_DECISION_STRINGS: Record<string, StringEntry> = {
+  'sentinel.decision.reportHeading': same('Owner decisions', 'Source-only owner adjudications, separate from check results. Earlier unbound decision records are not consumed by this evaluator.'),
+  'sentinel.capability.draftDecisions': same('source-bound local owner decisions', 'Propose, approve, read and list owner adjudications of actual accepted findings. No deployed mitigation is established; service-owned owner confirmation and qualified cookie proof remain unavailable.'),
+  'sentinel.decision.deliveryRefused': same('decision output could not be delivered', 'The complete output exceeded its bound; the acknowledgement separately states whether a decision was already retained.'),
+  'sentinel.decision.sourceOnly': same('Owner decision about captured source; deployed protection is not established', 'The finding and owner confirmation are retained. Route, deployment and runtime control facts remain unassessed; a claimed mitigation stays open until separately qualified evidence is bound.'),
+  'sentinel.decision.usage': same('farsight-sentinel decision propose <run> --finding <id> --proposal <file> [--confirm] | approve <id> [--confirm] | read <id> [--baseline <run>] | list <run> [--after <cursor>] [--limit <n>]', 'Local owner decisions use genuine accepted findings. A busy store refuses before private input or confirmation effects; service-owned graphical confirmation is a separate required workflow.'),
+  'sentinel.decision.ownerBusy': same('The store is held by another owner; retry after natural release', 'No decision or confirmation was written. This local command does not stop or impersonate the service.'),
+  'sentinel.decision.inputRefused': same('The decision input or option was refused', 'Only closed bounded proposal fields and supported options are read. No supplied value or exception text is repeated.'),
+  'sentinel.decision.unavailable': same('The accepted decision basis could not be verified', 'Missing source, invocation, history or owner authority never becomes a valid decision. Read retained state before a fresh confirmation.'),
+  'sentinel.decision.publicationUncertain': same('Decision publication could not be established', 'A confirmation may have been spent. Read the decision again; no rollback or automatic replay is promised.'),
+  'sentinel.decision.pageScope': same('this returned decision page', 'Only metadata rows on this page are counted. Payload availability is not evaluated; stable decision identifier order is not chronological.'),
+  'sentinel.decision.operations': same('{n} decisions on this page', 'Returned proposal metadata, never completed checks or security findings.'),
+  'sentinel.decision.identifier': same('decision {id}', 'Generated identity for this exact retained owner decision. The identity is not permission.'),
+  'sentinel.decision.reason.proposed': same('awaiting approval', 'A proposal changes no finding outcome.'),
+  'sentinel.decision.reason.expired': same('reopened: disposition expired', 'The explicit owner expiry passed; historical output is unchanged.'),
+  'sentinel.decision.reason.sourceChanged': same('reopened: accepted source changed', 'The current accepted finding dependencies differ from the owner-confirmed source scope.'),
+  'sentinel.decision.reason.assertionUnverified': same('open: mitigation is unverified', 'Owner approval or imported evidence cannot establish a deployed control.'),
+  'sentinel.decision.reason.acceptedRisk': same('accepted risk remains visible', 'The owner accepted this exact source finding as risk, without claiming deployed protection.'),
+  'sentinel.decision.reason.falsePositive': same('owner judged false positive', 'This is scoped owner adjudication, not independent evidence that a control exists.'),
+  'sentinel.decision.reason.deferred': same('deferred and open', 'Deferral preserves the open finding.'),
+  'sentinel.decision.reason.superseded': same('superseded by a later owner decision', 'The earlier historical record remains immutable.'),
+
   'sentinel.decision.invalidInput': same('decision input is invalid', 'The proposed decision or its scope is malformed or outside supported bounds; nothing is applied.'),
   'sentinel.decision.corruptHistory': same('decision history could not be verified', 'The saved decision chain or its original owner confirmation does not validate. No approval is inferred from an incomplete history.'),
   'sentinel.decision.staleState': same('review the changed decision history', 'The saved decision history changed after confirmation, or the proposal is no longer current. Read and confirm the current state again.'),

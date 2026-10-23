@@ -143,7 +143,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'policy/user-state.js': ['node:crypto', 'node:fs', 'node:path'],
   // Rule packs are read as data: listed and opened, never imported, evaluated or spawned.
   'rules/pack.js': ['node:fs', 'node:path'],
-  'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:fs', 'node:path'],
+  'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-decisions.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:fs', 'node:path'],
   // The full report: reads the store's accepted evidence, an owner-supplied graph file, and writes one new file.
   // The per-store report key: random bytes kept once in the owner's trust folder.
   'service/report-key.js': ['node:crypto', 'node:path'],
@@ -208,6 +208,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'snapshot/policy.js': ['node:crypto', 'node:path'],
   // Findings and reports (ADR 38): pure folds over observations, captured bytes and a pinned context; core's own
   // journey, impact and persona folds and its catalog; no process, no network, no file access.
+  'findings/owner-journal.js': ['node:crypto','node:fs','node:path'],
+  'findings/owner-cli.js': ['@farsight/core/dist/strings.js','node:path'],
+  'findings/owner-report.js': ['@farsight/core/dist/strings.js'],
   'findings/dispositions.js': ['node:crypto', 'node:fs', 'node:path'],
   'findings/correlate.js': ['@farsight/graph', 'node:crypto'],
   'findings/normalize.js': ['node:crypto'],
@@ -341,10 +344,10 @@ test('public scanner command support is conditional on explicit adopted pinned a
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import', 'reports', 'report-imports', 'mcp']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import', 'reports', 'report-imports', 'dispositions', 'mcp']);
   assert.equal(listed.find(c => c.id === 'framework-express')?.reasonCode, 'sentinel.capability.draftExpress');
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
-  for (const id of ['dispositions']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
+  assert.deepEqual([listed.find(c=>c.id==='dispositions')?.state,listed.find(c=>c.id==='dispositions')?.reasonCode],['available-draft','sentinel.capability.draftDecisions']);
   assert.equal(listed.find(c => c.id === 'interprocedural-flow')?.state, 'unavailable', 'no deep engine is claimed');
   assert.equal(listed.find(c => c.id === 'framework-spring')?.reasonCode, 'sentinel.capability.draftSpring');
   assert.equal(listed.find(c => c.id === 'rules-and-planning')?.state, 'available-draft');

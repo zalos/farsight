@@ -35,6 +35,9 @@ const ENVELOPES = {
   controlcapabilities: ['sentinel-control-capabilities/draft-1', 'ControlCapabilities'],
   controloutcome: ['sentinel-control-outcome/draft-1', 'ControlOutcome'],
 
+  decisioninput:['sentinel-decision-input/draft-1','OwnerDecisionInput'],
+  decisionview:['sentinel-decision-view/draft-1','DecisionViewEnvelope'],
+  decisionpage:['sentinel-decision-page/draft-1','DecisionPageEnvelope'],
   importview: ['sentinel-import-view/draft-1','ImportViewEnvelope'],
   importpage: ['sentinel-import-page/draft-1','ImportPageEnvelope'],
 };

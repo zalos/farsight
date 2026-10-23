@@ -18,6 +18,7 @@ export type * from './paths.js';
 export type * from './deepimport.js';
 export type * from './service.js';
 export type * from './import-view.js';
+export type * from './decision-view.js';
 
 /**
  * Every envelope: its kind, the one schema version this build reads and writes, and the generated type.
@@ -44,6 +45,9 @@ export const ENVELOPES = {
   controls: { schema: 'sentinel-controls/draft-1', type: 'ControlFactsEnvelope' },
   plan: { schema: 'sentinel-plan/draft-1', type: 'PlanEnvelope' },
   paths: { schema: 'sentinel-paths/draft-1', type: 'PathEvidenceEnvelope' },
+  decisioninput:{schema:'sentinel-decision-input/draft-1',type:'OwnerDecisionInput'},
+  decisionview:{schema:'sentinel-decision-view/draft-1',type:'DecisionViewEnvelope'},
+  decisionpage:{schema:'sentinel-decision-page/draft-1',type:'DecisionPageEnvelope'},
   importview: {schema:'sentinel-import-view/draft-1',type:'ImportViewEnvelope'},
   importpage: {schema:'sentinel-import-page/draft-1',type:'ImportPageEnvelope'},
   deepimport: { schema: 'sentinel-deep-import/draft-1', type: 'DeepImportEnvelope' },

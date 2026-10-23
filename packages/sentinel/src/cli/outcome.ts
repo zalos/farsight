@@ -22,6 +22,8 @@ export type CommandEffectOutcome =
   /** The command line or a local input could not be used. */
   | 'refused'
   /** The owner import is retained; no scan or coverage verdict follows. */
+  | 'proposed'
+  | 'applied'
   | 'read'
   | 'accepted'
   /** Exactly one old import operation released its pending pins. */
@@ -34,6 +36,7 @@ export type CommandOutcome = PolicyResult | CommandEffectOutcome;
 /** The exit code of each outcome. Only the five policy results own their codes; the others never claim one. */
 export const OUTCOME_EXIT_CODES: Readonly<Record<CommandOutcome, number>> = Object.freeze({
   ...POLICY_EXIT_CODES,
+  proposed:0, applied:0,
   read: 0,
   accepted: 0,
   abandoned: 0,

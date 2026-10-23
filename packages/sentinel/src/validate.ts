@@ -8,7 +8,7 @@ import type {
   ReportCount, ReportEnvelope, RunEnvelope, SnapshotEnvelope, WorkEnvelope, FindingPlace, HelloMessage,
   WelcomeMessage, RefuseMessage, RulePackManifest, RuleLockEnvelope, SettingsEnvelope, RepoConfigEnvelope,
   EffectivePolicyEnvelope, AdoptionEnvelope, ReceiptEnvelope, AdmissionEnvelope, ControlFactsEnvelope, Rights, Budget,
-  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope, ServiceCapabilities, RunInspection, InspectionPage, ReportDelivery, DeliveryChunk, ControlCapabilities, ControlOutcome, ImportViewEnvelope, ImportPageEnvelope,
+  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope, ServiceCapabilities, RunInspection, InspectionPage, ReportDelivery, DeliveryChunk, ControlCapabilities, ControlOutcome, ImportViewEnvelope, ImportPageEnvelope, OwnerDecisionInput, DecisionViewEnvelope, DecisionPageEnvelope,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
 import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf } from './planner/identity.js';
@@ -44,6 +44,9 @@ export interface EnvelopeTypes {
   controlcapabilities: ControlCapabilities;
   controloutcome: ControlOutcome;
 
+  decisioninput: OwnerDecisionInput;
+  decisionview: DecisionViewEnvelope;
+  decisionpage: DecisionPageEnvelope;
   importview: ImportViewEnvelope;
   importpage: ImportPageEnvelope;
 }
@@ -716,6 +719,14 @@ const deepimport: Check<DeepImportEnvelope> = (v, out) => {
   });
 };
 
+const decisioninput:Check<OwnerDecisionInput>=(v,out)=>{if(new Set(v.evidence).size!==v.evidence.length)out.add(err('/evidence','evidence is unique'));};
+const decisionview:Check<DecisionViewEnvelope>=(v,out)=>{
+  if(v.decision.scope.findingId!==v.decision.findingId)out.add(err('/decision/scope','scope names another finding'));
+  if(v.withheld&&(v.decision.rationale!==null||v.decision.basisDigest!==null))out.add(err('/decision/rationale','withheld source metadata must be absent'));
+  if(v.decision.state!=='open'&&(v.decision.approval!=='approved'||v.decision.validity!=='valid'||v.decision.state!==v.decision.decision))out.add(err('/decision/state','only a valid matching owner adjudication changes source state'));
+  if(v.decision.approval==='proposed'&&v.decision.state!=='open')out.add(err('/decision/state','proposal grants no adjudication'));
+};
+const decisionpage:Check<DecisionPageEnvelope>=(v,out)=>{countErrors(out,'/count',v.count,v.items.length);if(v.count.n!==v.items.length||new Set(v.items.map(i=>i.id)).size!==v.items.length)out.add(err('/items','page count or identity mismatch'));};
 const importview:Check<ImportViewEnvelope>=(v,out)=>{
   if(v.withheld!==(v.document===null)||v.withheld!==(v.limitation!==null))out.add(err('/withheld','withholding removes the complete imported document'));
   if(v.document)for(const k of ['claims','exchanges','cookies'] as const)if(v.counts[k].n!==v.document[k].length)out.add(err('/counts','counts describe the retained normalized document'));
@@ -726,7 +737,7 @@ const importpage:Check<ImportPageEnvelope>=(v,out)=>{
 };
 const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   snapshot, run, work, attempt, observation, coverage, disposition, report, protocol,
-  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan, paths, deepimport, importview, importpage,
+  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan, paths, deepimport, importview, importpage, decisioninput, decisionview, decisionpage,
   servicecapabilities: () => [],
   runinspection: () => [],
   inspectionpage: () => [],

@@ -7,7 +7,7 @@ export const COMMANDS = {
   help: null, version: null, capabilities: null, validate: null, init: null, settings: null,
   plan: null, run: null, status: null, report: null, wait: null, pause: null, resume: null, cancel: null, serve: null,
   retry: null, rerun: null,
-  rules: null, assets: null, mcp: null, evidence: null,
+  rules: null, assets: null, mcp: null, evidence: null, decision: null,
   compare: null, bundle: 'PR 26',
 } as const satisfies Record<string, string | null>;
 export type CommandName = keyof typeof COMMANDS;
@@ -50,6 +50,7 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   rules: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['action', 'packDir'], min: 1 },
   assets: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--archive': 'value', '--manifest': 'value', '--max-bytes': 'value', '--license': 'value' }, positional: ['action', 'assetId'], min: 2 },
   mcp: { flags: STORE, positional: [], min: 0 },
+  decision:{flags:{...COMMON,...STORE,'--confirm':'boolean','--finding':'value','--proposal':'value','--baseline':'value','--after':'value','--limit':'value'},positional:['action','target'],min:2},
   evidence:{flags:{...COMMON,...STORE,'--confirm':'boolean','--source':'value','--report':'value','--manifest':'value','--expect-candidate':'value','--predecessor':'value','--baseline':'value','--format':'value','--out':'value','--after':'value','--limit':'value'},positional:['action','target'],min:2},
   bundle: { flags: COMMON, positional: [], min: 0 },
 };
@@ -113,6 +114,11 @@ export function parseArgs(argv: readonly string[]): ParseResult {
   if (positional.length < spec.min) return fail('sentinel.args.missingArgument', spec.positional[positional.length]!);
   const args: Record<string, string> = {};
   spec.positional.forEach((p, i) => { if (positional[i] !== undefined) args[p] = positional[i]!; });
+  if(command==='decision'){
+    const common=['--json','--workspace'];const allowed:Record<string,string[]>={propose:['--finding','--proposal','--confirm'],approve:['--confirm'],read:['--baseline'],list:['--after','--limit']};
+    if(!Object.hasOwn(allowed,args.action!))return fail('sentinel.args.unexpectedArgument','decision');
+    for(const flag of Object.keys(flags))if(!common.includes(flag)&&!allowed[args.action!]!.includes(flag))return fail('sentinel.args.unknownFlag','decision');
+  }
   if(command==='evidence'){
     const common=['--json','--workspace'];
     const allowed:Record<string,string[]>={import:['--source','--report','--manifest','--confirm','--expect-candidate','--predecessor','--baseline','--format','--out'],read:['--baseline','--format','--out'],list:['--source','--after','--limit','--format','--out'],abandon:['--confirm']};

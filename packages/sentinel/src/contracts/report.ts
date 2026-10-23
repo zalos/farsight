@@ -170,6 +170,13 @@ export interface ReportGap {
 export interface ReportDecision {
   dispositionId: Id;
   findingId: Id;
+  /** Source-only owner adjudication; earlier unbound records are never upgraded to this evaluator. */
+  evaluator?: 'sentinel-decision-evaluation/2';
+  state?: 'open'|'accepted-risk'|'false-positive';
+  reasonCode?: CatalogKey;
+  basisDigest?: Digest|null;
+  journalHead?: Digest;
+  rationale?: BoundedText|null;
   /** Validity as of the report's evaluation time; opening an old report never recalculates it. */
   validity: 'valid' | 'expired' | 'invalidated';
   expiresAt: Timestamp | null;

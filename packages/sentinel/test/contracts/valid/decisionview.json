@@ -1,0 +1,26 @@
+{
+  "schema": "sentinel-decision-view/draft-1",
+  "evaluator": "sentinel-decision-evaluation/2",
+  "authority": "owner-adjudication-of-accepted-source",
+  "disclosure": "owner-local",
+  "evaluatedAt": "2026-10-23T00:00:00Z",
+  "journalHead": null,
+  "withheld": false,
+  "limitationKey": "sentinel.decision.sourceOnly",
+  "decision": {
+    "id": "decision-example",
+    "findingId": "finding.example",
+    "basisDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "decision": "accepted-risk",
+    "scope": {
+      "kind": "finding-source",
+      "findingId": "finding.example"
+    },
+    "approval": "proposed",
+    "state": "open",
+    "validity": "none",
+    "reasonCode": "sentinel.decision.reason.proposed",
+    "expiresAt": null,
+    "rationale": "Owner review of this captured source only."
+  }
+}
