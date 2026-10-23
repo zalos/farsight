@@ -848,6 +848,10 @@ supported native profile is Claude Code 2.1.282 on macOS arm64 and the requested
 versions/platforms refuse. Account authentication and actual inference need separate qualification; successfully
 hashing a local binary does not establish either, and a login refusal never means the user is logged out.
 
+Preparation includes review stages from genuinely adopted model selections even when its recipe does not
+request a review adapter; the frozen profile records code availability, while dispatch still requires the exact
+model binding, receipt and admission.
+
 First obtain data for the owner configuration, without reading a credential or starting a process:
 
 ```sh
