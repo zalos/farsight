@@ -2129,13 +2129,20 @@ a closed `copilot-cli` profile for Copilot 1.0.103 on macOS arm64 with explicit 
 Sentinel verifies the external executable and every member of its fixed runtime closure, copies only that
 code into owned temporary storage, and runs with private config/cwd, fixed no-tools arguments and
 TLS-verified exact-host proxy access. The vendor runtime is not redistributed. Native authentication remains
-inside pinned Copilot. Profile v5 retains real HOME identity for native User-keychain lookup, with no general HOME
+inside pinned Copilot. Profile v6 retains real HOME identity for native User-keychain lookup, with no general HOME
 file-content access (the real HOME path itself and existing directory metadata checks are visible to the vendor). Additional filesystem reads cover only the user's
 encrypted `Library/Keychains` files and `/private/var/protected/trustd`, with no filesystem writes there, plus fixed SecurityServer/securityd/trustd IPC. General preferences remain denied. This is
 vendor-process trust, not credential-service-specific or read-only API confinement. OS trust-service fetches may
 bypass the child's exact-host application proxy. Only bounded selected-account host/login metadata is projected
 into private state; no token, unrelated settings or ambient source access is copied. Unknown CONNECT targets are
 refused before DNS/forwarding on that socket; valid allowed connections remain subject to shared caps/deadlines.
+
+The v6 profile binds documented silent rendered-text output and model-default reasoning effort. It does not
+parse the vendor's internal event stream or infer a session/version from it. Only a native exit zero with zero
+stderr and a bounded fatal-UTF-8 visible response can continue to the owned usage-file validation (sole selected
+model, one reported user/request, nonnegative aggregate counts). At most one final LF is removed; NUL/ANSI
+controls refuse. The received rendered text still must satisfy Sentinel's exact reply/citation grammar. Vendor
+intermediate activity remains unobserved, and one reported request is not proof of no other hidden activity.
 
 Genuine current complete Gitleaks coverage precedes hosted disclosure and model admission. Exact prompt,
 semantic messages, wire, selected model and explicit empty additional-skills selection are retained before

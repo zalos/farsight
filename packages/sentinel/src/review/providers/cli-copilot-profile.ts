@@ -9,10 +9,10 @@ import {COPILOT_CODE_MANIFEST} from './cli-copilot-manifest.js';
 import {canonicalDigest} from '../../policy/digest.js';
 import {fail,ProviderError} from './errors.js';
 import type {NativeTiming} from './cli-native-profile.js';
-export const COPILOT_NATIVE_PROFILE=Object.freeze({id:'copilot-1.0.103-darwin-arm64-seatbelt-v5',version:'1.0.103',model:'gpt-6-luna',
+export const COPILOT_NATIVE_PROFILE=Object.freeze({id:'copilot-1.0.103-darwin-arm64-seatbelt-v6',version:'1.0.103',model:'gpt-6-luna',
  executableDigest:'sha256:1c81150e4bd7805c8470f4718bc8cb3c3a20c2379086f36309f7ae823e32ace6',executableBytes:181807712,
  runtimeDigest:'sha256:3d0df03e4145ef5a61c6e208cc4c80c6e56159a87b078b49ff2c91607397cc41',runtimeBytes:212717731,runtimeFiles:265,
- accountSelection:'owner-selected-host-login/1',toolRestriction:'exclude-builtin-mcp-custom/1',autoLogin:'vendor-stored-oauth-detection',auth:'vendor-native-keychain',authFileReads:'$HOME/Library/Keychains;/private/var/protected/trustd',authMachServices:'com.apple.SecurityServer;com.apple.trustd;com.apple.trustd.agent',preferences:'denied',proxyRejection:'per-socket-unknown-connect/1',wire:'sentinel-copilot-chat/v1',softAiCredits:30,contextReservation:272000});
+ accountSelection:'owner-selected-host-login/1',toolRestriction:'exclude-builtin-mcp-custom/1',autoLogin:'vendor-stored-oauth-detection',auth:'vendor-native-keychain',authFileReads:'$HOME/Library/Keychains;/private/var/protected/trustd',authMachServices:'com.apple.SecurityServer;com.apple.trustd;com.apple.trustd.agent',preferences:'denied',proxyRejection:'per-socket-unknown-connect/1',wire:'sentinel-copilot-chat/v1',output:'silent-text/1',reasoningEffort:'model-default',decoder:'fatal-utf8-visible-and-owned-usage/1',softAiCredits:30,contextReservation:272000});
 export interface NativeCopilotRuntime {readonly profileId:string;readonly executableDigest:string;readonly runtimeDigest:string;readonly profileDigest:string}
 interface FileIdentity {dev:number;ino:number;size:number;mtimeMs:number}
 interface Member {path:string;bytes:number;digest:string}

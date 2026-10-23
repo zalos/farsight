@@ -9,28 +9,25 @@ export function renderNativeCopilotWire(model:string,messages:readonly ChatMessa
 }
 const obj=(v:unknown):Record<string,any>|undefined=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,any>:undefined;
 const count=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
-/** Pinned1.0.103 cli-main emits assistant.message and one result; final usage is its separately owned usage-output file. */
+/** Pinned silent stdout is rendered visible text, not an event/session protocol. Caller requires clean process completion. */
 export class NativeCopilotDecoder {
- #pending=Buffer.alloc(0);#total=0;#frames=0;#result=false;#message:string|undefined;#session:string|undefined;#eventClass:NativeCopilotDiagnostic['eventClass']='none';
+ #pending=Buffer.alloc(0);#total=0;
  constructor(readonly maxBytes:number,readonly requestedModel:string){}
  get bytes(){return this.#total}
- observation(){return Object.freeze({bytes:this.#total,frames:this.#frames,eventClass:this.#eventClass})}
- #bad(reason:NativeCopilotDiagnostic['reason'],code:ProviderErrorCode='sentinel.provider.malformedResponse'):never {throw new NativeCopilotError(code,'possible',{schema:'sentinel-copilot-failure/1',phase:reason.startsWith('usage-')?'usage':'stream',reason,exitCode:null,signal:null,eventClass:this.#eventClass,frames:this.#frames,stdoutBytes:this.#total,stderrBytes:0,connections:0,upstreamBytes:0,downstreamBytes:0,proxyEnded:'open'})}
- push(chunk:Uint8Array){this.#total+=chunk.byteLength;if(this.#total>this.maxBytes)this.#bad('response-bound','sentinel.provider.responseTooLarge');this.#pending=Buffer.concat([this.#pending,chunk]);let i;while((i=this.#pending.indexOf(10))!==-1){const line=this.#pending.subarray(0,i);this.#pending=this.#pending.subarray(i+1);this.#line(line)}}
- #line(bytes:Uint8Array){if(bytes.byteLength===0)return;if(++this.#frames>128||this.#result)this.#bad('invalid-event','sentinel.provider.malformedResponse');let e:Record<string,any>|undefined;try{e=obj(JSON.parse(new TextDecoder('utf8',{fatal:true}).decode(bytes)))}catch{this.#bad('invalid-json','sentinel.provider.malformedResponse')}this.#eventClass=e?.type==='session.start'?'session-start':e?.type==='assistant.message'?'visible':e?.type==='result'?'result':['user.message','assistant.turn_start','assistant.turn_end','assistant.reasoning','assistant.reasoning_delta','assistant.message_delta','session.info','session.warning'].includes(e?.type)?'lifecycle':'unknown';if(!e||typeof e.type!=='string')return this.#bad('invalid-event','sentinel.provider.malformedResponse');
-  if(e.type==='result'){if(e.exitCode!==0||e.outcome!==undefined||typeof e.sessionId!=='string'||e.sessionId.length>96||!this.#message||!this.#session||this.#session!==e.sessionId)this.#bad('result','sentinel.provider.malformedResponse');this.#result=true;return}
-  // Only harmless lifecycle/final-visible events. Tool/skill/subagent/extension/unknown events refuse before acceptance.
-  if(!['session.start','user.message','assistant.turn_start','assistant.turn_end','assistant.message','assistant.reasoning','assistant.reasoning_delta','assistant.message_delta','session.info','session.warning'].includes(e.type))this.#bad('disallowed-event','sentinel.provider.malformedResponse');
-  const data=obj(e.data);if(!data)return this.#bad('invalid-event','sentinel.provider.malformedResponse');
-  if(e.type==='session.start'){if(this.#session||typeof data.sessionId!=='string'||data.sessionId.length>96||data.copilotVersion!=='1.0.103'||data.selectedModel!==undefined&&data.selectedModel!==this.requestedModel)this.#bad('session-identity','sentinel.provider.malformedResponse');this.#session=data.sessionId}
-  if(e.type==='assistant.message'){if(this.#message!==undefined||typeof data.content!=='string'||(data.toolRequests!==undefined&&(!Array.isArray(data.toolRequests)||data.toolRequests.length))||data.chunkCount!==undefined&&data.chunkCount!==1)this.#bad('visible-message','sentinel.provider.malformedResponse');this.#message=data.content}
-  // Reasoning/event contents are discarded immediately, never included in the accepted return value or artifacts.
- }
+ observation(){return Object.freeze({bytes:this.#total,frames:0,eventClass:this.#total?'visible' as const:'none' as const})}
+ #bad(reason:NativeCopilotDiagnostic['reason'],code:ProviderErrorCode='sentinel.provider.malformedResponse'):never {throw new NativeCopilotError(code,'possible',{schema:'sentinel-copilot-failure/1',phase:reason.startsWith('usage-')?'usage':'stream',reason,exitCode:null,signal:null,eventClass:this.#total?'visible':'none',frames:0,stdoutBytes:this.#total,stderrBytes:0,connections:0,upstreamBytes:0,downstreamBytes:0,proxyEnded:'open'})}
+ push(chunk:Uint8Array){this.#total+=chunk.byteLength;if(this.#total>this.maxBytes)this.#bad('response-bound','sentinel.provider.responseTooLarge');this.#pending=Buffer.concat([this.#pending,chunk])}
  finish(usageBytes:Uint8Array):ParsedReply{
-  if(this.#pending.length){const last=this.#pending;this.#pending=Buffer.alloc(0);this.#line(last)}if(!this.#result||this.#message===undefined||this.#total+usageBytes.byteLength>this.maxBytes)this.#bad('usage-shape','sentinel.provider.malformedResponse');let metrics:Record<string,any>|undefined;try{metrics=obj(JSON.parse(new TextDecoder('utf8',{fatal:true}).decode(usageBytes)))}catch{this.#bad('usage-shape','sentinel.provider.malformedResponse')}
+  if(this.#total+usageBytes.byteLength>this.maxBytes)this.#bad('response-bound','sentinel.provider.responseTooLarge');
+  let content:string;try{content=new TextDecoder('utf8',{fatal:true,ignoreBOM:true}).decode(this.#pending)}catch{this.#bad('visible-message')}
+  // Preserve rendered bytes as text; only one conventional final LF is removed. Never repair/strip terminal escapes.
+  if(content!.endsWith('\n'))content=content!.slice(0,-1);
+  if(!content!.trim()||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(content!))this.#bad('visible-message');
+  let metrics:Record<string,any>|undefined;try{metrics=obj(JSON.parse(new TextDecoder('utf8',{fatal:true}).decode(usageBytes)))}catch{this.#bad('usage-shape')}
   const models=obj(metrics?.modelMetrics),names=models?Object.keys(models):[];if(names.length!==1||names[0]!==this.requestedModel||metrics?.currentModel!==undefined&&metrics.currentModel!==this.requestedModel||metrics?.totalUserRequests!==1)this.#bad('usage-model','sentinel.provider.identityMismatch');
-  const model=obj(models![names[0]!]),requests=obj(model?.requests),u=obj(model?.usage);if(requests?.count!==1||!u||['inputTokens','outputTokens','cacheReadTokens','cacheWriteTokens'].some(k=>!count(u[k])))this.#bad('usage-count','sentinel.provider.malformedResponse');
-  const usage=u!;/* Preserve the vendor total as reported; cache counters are not assumed disjoint. */const input=usage.inputTokens;if(!Number.isSafeInteger(input))this.#bad('usage-tokens','sentinel.provider.malformedResponse');return{content:this.#message!,returnedModel:names[0]!,usage:{inputTokens:input,outputTokens:usage.outputTokens},finish:'complete'};
+  const model=obj(models![names[0]!]),requests=obj(model?.requests),u=obj(model?.usage);if(requests?.count!==1||!u||['inputTokens','outputTokens','cacheReadTokens','cacheWriteTokens'].some(k=>!count(u[k])))this.#bad('usage-count');
+  // Vendor total is preserved; cache counters are not assumed disjoint. Usage is not an audit of hidden activity.
+  return{content:content!,returnedModel:names[0]!,usage:{inputTokens:u!.inputTokens,outputTokens:u!.outputTokens},finish:'complete'};
  }
 }
 

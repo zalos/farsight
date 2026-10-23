@@ -1017,15 +1017,19 @@ its fixed executable grant and `/usr/bin:/bin` PATH, so it cannot execute a sepa
 After admission, Sentinel reads only bounded native machine state at the selected Copilot home, validates the
 selected GitHub host/login uniquely against its account list, and reconstructs only that selector privately. It
 copies no token, subscription snapshot, other accounts or unrelated settings, grants no `gh` fallback, and uses private
-config/cwd with no tools, MCP, hooks, plugins, custom instructions, updates or session reuse. The v5 macOS profile
+config/cwd with no tools, MCP, hooks, plugins, custom instructions, updates or session reuse. The v6 macOS profile
 retains real HOME identity for native User-keychain lookup, exposing that path to the pinned vendor but granting
 no general HOME file-content access; existing directory metadata checks remain permitted. It adds filesystem reads only of the user's encrypted `Library/Keychains` files and the
 fixed `/private/var/protected/trustd` store, with no filesystem write grant there, and fixed SecurityServer/securityd/trustd IPC. General preference access is denied. This trusts the pinned
 vendor's native authentication and **does not** enforce credential-service-specific or read-only API confinement.
 The OS trust service may fetch trust/revocation data outside Sentinel's application proxy; only the Copilot child
 connections are constrained by the exact-host proxy. Other HOME files and a separate `gh` executable remain denied. Sentinel's exact prompt, ordered semantic messages and piped Copilot wire
-are retained before dispatch; only final visible text and reported identity/usage are accepted. Vendor hidden
-instructions/reasoning are unobserved, and public stages record **no additional skills selected**. A fixed native no-authentication-information message is classified only by exact in-memory bytes; this does
+are retained before dispatch. The fixed silent-text mode uses model-default reasoning effort and retains the
+exact rendered visible response (removing at most one final LF), not vendor event/session telemetry. Acceptance
+requires exit zero, zero stderr, fatal UTF-8 decoding, no NUL/ANSI controls, and the same bounded owned usage file
+naming only the selected model with one reported user/request count. Sentinel still validates its JSON reply
+grammar and citations; concatenated or otherwise invalid answers remain unfinished. These usage counts do not
+prove absence of all hidden activity. Vendor intermediate events, hidden instructions and reasoning are unobserved, and public stages record **no additional skills selected**. A fixed native no-authentication-information message is classified only by exact in-memory bytes; this does
 not establish the owner is logged out, and unknown messages remain unknown. Failure diagnostics retain only fixed phase/reason, exit/signal classes and bounded byte/frame/proxy counters
 in the existing reservation event; native text, event names, hosts and authentication details are discarded. These
 diagnostics do not prove no spend. Records can be read after source removal; known-secret/privacy failures withhold them. They are not safe to share.
