@@ -11,7 +11,8 @@
 //   every later recovery checks it again; nothing is killed on a time estimate.
 // - A container labelled with this store under an earlier epoch is removed by exact ID and every label.
 // - A journaled create intent is looked for again; not found is kept as pending, never assumed absent.
-// - Stages left open by an earlier epoch are aborted.
+// - Generic stages left open by an earlier epoch are aborted. Evidence-domain stages remain pinned until their
+//   exact private operation is explicitly transferred or reconciled; worker recovery never grants that authority.
 // - A journal record that cannot be read (a link, not a regular file, too large, not the expected JSON) is kept
 //   untouched and reported; recovery is then not clean.
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, opendirSync, readSync, renameSync, unlinkSync, writeSync } from 'node:fs';
@@ -423,11 +424,13 @@ export async function recoverStore(store: SentinelStore, options: { intents: Int
     if (r === 'removed') { options.intents.settle(intent); report.settledIntents.push(intent.name); report.settledWorkers.push(intent.attempt); }
     else report.pendingIntents.push(intent);
   }
-  // 5. Stages left open by earlier epochs.
+  // 5. Generic stages left open by earlier epochs, without the first-page/current-epoch starvation case.
+  let stageCursor: string | undefined;
   for (;;) {
-    const stale = store.ledger.listOpenStages(500).filter(s => s.epoch !== epoch);
+    const stale = store.ledger.listOpenStages(500, { after: stageCursor, epochNot: epoch, domain: 'generic' });
     if (stale.length === 0) break;
     for (const s of stale) { store.ledger.abortStaging(s.stageId); report.abortedStages.push(s.stageId); }
+    stageCursor = stale.at(-1)!.stageId;
   }
   report.clean = report.obligations.length === 0 && report.pendingIntents.length === 0 && report.unresolved.length === 0 && report.uncertain.length === 0;
   return report;

@@ -96,7 +96,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/coordinator.js': ['node:crypto', 'node:fs', 'node:path'],
   'execution/coverage.js': ['node:crypto'],
   'execution/durability.js': ['node:fs'],
-  'execution/retained-analysis.js': ['node:crypto'],
+  'execution/retained-source.js': ['node:crypto'],
   'execution/plan.js': ['node:crypto', 'node:path'],
   'execution/plans.js': ['node:crypto'],
   'execution/errors.js': ['@farsight/core/dist/strings-sentinel-execution.js'],
@@ -173,6 +173,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'planner/boundary.js': ['node:crypto'],
   // The store's reason codes are catalog words; core's catalog is the only Farsight module the library reads.
   'store/errors.js': ['@farsight/core/dist/strings-sentinel-store.js'],
+  'evidence/import-operation.js': ['node:crypto'],
   'store/ledger-json.js': ['node:crypto'],
   'store/ledger.js': ['node:fs', 'node:path'],
   'store/migrations.js': ['node:crypto', 'node:fs', 'node:path'],

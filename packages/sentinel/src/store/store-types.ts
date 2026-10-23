@@ -258,6 +258,7 @@ export const LEDGER_EVENT_KINDS = [
   'epoch-opened', 'run-created', 'run-state', 'work-created', 'attempt-started', 'attempt-ended',
   'work-published', 'staging-registered', 'staging-aborted', 'report-pinned', 'snapshot-admitted', 'work-state',
   'plan-admitted', 'run-plan-advanced',
+  'evidence-opened', 'evidence-staged', 'evidence-transferred', 'evidence-aborted', 'evidence-accepted',
 ] as const;
 export type LedgerEventKind = (typeof LEDGER_EVENT_KINDS)[number];
 
