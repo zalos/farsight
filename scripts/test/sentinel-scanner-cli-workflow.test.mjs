@@ -77,3 +77,14 @@ test('owner decisions retain installed command and native privacy acceptance',()
  assert.ok(workflow.includes('node scripts/test-sentinel-decisions-consumer.mjs | tee decisions-consumer.log'));
  assert.ok(workflow.includes(`grep -q '"nativePrivacy":true' decisions-consumer.log`));
 });
+
+test('structural paths retain installed workflow, native privacy and explicit offline browser gates',()=>{
+ const manifest=JSON.parse(readFileSync(new URL('package.json',root),'utf8'));
+ const ci=readFileSync(new URL('.github/workflows/ci.yml',root),'utf8');
+ assert.ok(manifest.scripts['test:sentinel:package'].includes('node scripts/test-sentinel-paths-consumer.mjs'));
+ assert.equal(selected(['scripts/test-sentinel-paths-consumer.mjs']),true);
+ assert.ok(workflow.includes('test/path-report-secrets.test.ts'));
+ assert.ok(workflow.includes('node scripts/test-sentinel-paths-consumer.mjs | tee paths-consumer.log'));
+ assert.ok(ci.includes('packages/sentinel/test/path-report-browser.test.ts'));
+ for(const line of ['tests 1','pass 1','fail 0','cancelled 0','skipped 0'])assert.ok(ci.includes("grep -qx '# "+line+"' sentinel-paths-browser.tap"));
+});
