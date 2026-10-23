@@ -289,6 +289,10 @@ test('genuine selected child and grandchild ancestors prove through exact select
     const proof = await retainedSourceForAdmission(store, ancestor, timing());
     assert.equal(writes(store), before);
     const view = readRetainedSourceProof(store, proof, ancestor, timing());
+    const actualDepth = lineage.indexOf(runId) + 1;
+    await assert.rejects(retainedSourceForAdmission(store, ancestor, timing(), { ...RETAINED_PROOF_LIMITS, depth: actualDepth - 1 }), unavailable('budget-depth'));
+    assert.ok(await retainedSourceForAdmission(store, ancestor, timing(), { ...RETAINED_PROOF_LIMITS, depth: actualDepth }), 'exact actual lineage depth passes');
+    assert.ok(await retainedSourceForAdmission(store, ancestor, timing(), { ...RETAINED_PROOF_LIMITS, depth: actualDepth + 1 }), 'one spare lineage level passes');
     const revisions: Array<[string, number]> = [];
     for (const r of lineage.slice(0, lineage.indexOf(runId) + 1).reverse()) {
       revisions.push([r, store.ledger.getRun(r)!.planRevision]);

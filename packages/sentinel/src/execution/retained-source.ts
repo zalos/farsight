@@ -119,6 +119,24 @@ export const RETAINED_PROOF_LIMITS = Object.freeze({
 });
 export type RetainedProofLimits = typeof RETAINED_PROOF_LIMITS;
 const KEPT = new Set(['sentinel.execution.canceled', 'sentinel.execution.deadlineExceeded', 'sentinel.execution.runDeadline', 'sentinel.execution.analysisUnavailable']);
+// Internal callers may tighten these ceilings; caller-owned objects never become live budget state.
+function copiedLimits(limits: RetainedProofLimits): RetainedProofLimits {
+  if (!limits || typeof limits !== 'object') return fail('invalid retained proof limits');
+  const entries = Object.entries(RETAINED_PROOF_LIMITS).map(([key, ceiling]) => {
+    const value = limits[key as keyof RetainedProofLimits];
+    if (!Number.isSafeInteger(value) || value < 0 || value > ceiling) return fail('invalid retained proof limits');
+    return [key, value] as const;
+  });
+  return Object.freeze(Object.fromEntries(entries)) as RetainedProofLimits;
+}
+
+// +Infinity is an absent extra caller constraint. It cannot relax the finite internal deadline.
+function callerDeadline(value: number | undefined): number {
+  if (value === undefined || value === Infinity) return Infinity;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return fail('invalid retained proof deadline');
+  return value;
+}
+
 type BudgetReason = 'budget-reads' | 'budget-source-bytes' | 'budget-metadata-bytes' | 'budget-retained' | 'budget-depth';
 
 /** What one bounded call spent; for measurement and tests, never authority. */
@@ -143,13 +161,13 @@ export class RetainedBudget {
   constructor(store: SentinelStore, options: { signals: readonly AbortSignal[]; deadlineAt?: number; stillWithin?: readonly (() => void)[];
     owner?: StoreOwner; epoch?: string; limits?: RetainedProofLimits }) {
     this.#store = store;
-    this.#limits = options.limits ?? RETAINED_PROOF_LIMITS;
+    this.#limits = copiedLimits(options.limits === undefined ? RETAINED_PROOF_LIMITS : options.limits);
     // The deadline starts before the first read; a caller's own absolute deadline can only make it earlier.
-    this.deadlineAt = Math.min(this.started + this.#limits.deadlineMs, options.deadlineAt ?? Infinity);
+    this.deadlineAt = Math.min(this.started + this.#limits.deadlineMs, callerDeadline(options.deadlineAt));
     this.#owner = options.owner ?? boundOwner(store);
     this.#epoch = options.epoch ?? store.epoch;
-    this.#signals = options.signals;
-    this.#stillWithin = options.stillWithin ?? [];
+    this.#signals = Object.freeze([...options.signals]);
+    this.#stillWithin = Object.freeze([...(options.stillWithin ?? [])]);
   }
 
   get owner(): StoreOwner { return this.#owner; }
@@ -313,8 +331,8 @@ export async function retainedSourceForAdmission(store: SentinelStore, ancestorI
   limits: RetainedProofLimits = RETAINED_PROOF_LIMITS): Promise<RetainedSourceProof> {
   const owner = boundOwner(store);
   store.assertHeld();
-  const epoch = store.epoch, storeId = store.storeId;
-  const budget = new RetainedBudget(store, { signals: [timing.signal], ...(timing.deadlineAt !== undefined ? { deadlineAt: timing.deadlineAt } : {}),
+  const epoch = store.epoch, storeId = store.storeId, signal = timing.signal;
+  const budget = new RetainedBudget(store, { signals: [signal], ...(timing.deadlineAt !== undefined ? { deadlineAt: timing.deadlineAt } : {}),
     ...(timing.stillWithin ? { stillWithin: [timing.stillWithin] } : {}), owner, epoch, limits });
   try {
     budget.boundary();
@@ -335,9 +353,16 @@ export async function retainedSourceForAdmission(store: SentinelStore, ancestorI
     if (admitted.plan.kind !== 'analysis' || admitted.plan.digest !== ancestor.planDigest || admitted.record.digest !== ancestor.planDigest
       || admitted.plan.pins.snapshotId !== ancestor.snapshotId
       || admitted.plan.pins.analyses.filter(a => a.sourceId === ancestor.sourceId).length !== 1) fail('the ancestor plan is not its recorded analysis of this source');
-    let depth = 0;
+    const lineageRuns = new Set<string>();
     const lineage = await retainedLineage(store, ancestor.runId, admitted, {
-      loadPlan: async (runId, revision) => { if (++depth > limits.depth * 2) budget.refuse('budget-depth'); return load(runId, revision); },
+      loadPlan: async (runId, revision) => {
+        // The existing lineage bound counts actual runs (including this ancestor), not repeated plan loads.
+        if (!lineageRuns.has(runId)) {
+          if (lineageRuns.size >= budget.limits.depth) budget.refuse('budget-depth');
+          lineageRuns.add(runId);
+        }
+        return load(runId, revision);
+      },
       invocation: async id => json(await budget.read(id, 'metadata')),
     });
     const io: RetainedSourceIO = { read: id => budget.read(id, 'metadata'), boundary: () => budget.boundary(), loadPlan: load };
@@ -368,14 +393,15 @@ export async function retainedSourceForAdmission(store: SentinelStore, ancestorI
       entries: structuredClone(v.opened.snapshot.entries.filter(e => e.sourceId === ancestor.sourceId)),
       closure: [...closure.values()].sort((a, b) => cmp(a.role, b.role) || cmp(a.id, b.id)),
     });
-    // After every copy: the deadline, cancellation, the genuine owner and epoch and the recorded revision, then mint.
+    const handle = Object.freeze(Object.create(null)) as RetainedSourceProof;
+    const state: ProofState = Object.freeze({ store, owner, epoch, storeId, ancestor, deadlineAt: budget.deadlineAt, signal, view,
+      bytes: Object.freeze({ result: Buffer.from(v.bytes.result), index: Buffer.from(v.bytes.index), artifact: Buffer.from(v.bytes.artifact), manifest: Buffer.from(manifestBytes) }),
+      usage: Object.freeze(budget.usage()) });
+    // After every copy and state allocation: check, then immediately mint with the prepared state.
     budget.boundary();
     if (store.storeId !== storeId) fail('the store changed');
     assertRecordedAncestor(store, ancestor);
-    const handle = Object.freeze(Object.create(null)) as RetainedSourceProof;
-    proofs.set(handle, Object.freeze({ store, owner, epoch, storeId, ancestor, deadlineAt: budget.deadlineAt, signal: timing.signal, view,
-      bytes: Object.freeze({ result: Buffer.from(v.bytes.result), index: Buffer.from(v.bytes.index), artifact: Buffer.from(v.bytes.artifact), manifest: Buffer.from(manifestBytes) }),
-      usage: Object.freeze(budget.usage()) }));
+    proofs.set(handle, state);
     return handle;
   } catch (error) {
     if (budget.failure !== undefined) throw budget.failure;
@@ -398,7 +424,7 @@ function copyView(state: ProofState): ReadonlyRetainedSource {
 export function readRetainedSourceProof(store: SentinelStore, proof: RetainedSourceProof, ancestorIn: RetainedSourceAncestor, timing: ProofTiming): ReadonlyRetainedSource {
   const state = (proof !== null && typeof proof === 'object') ? proofs.get(proof) : undefined;
   if (!state || store !== state.store) return fail('not a retained-source proof for this store');
-  const budget = new RetainedBudget(store, { signals: [state.signal, timing.signal], deadlineAt: Math.min(state.deadlineAt, timing.deadlineAt ?? Infinity),
+  const budget = new RetainedBudget(store, { signals: [state.signal, timing.signal], deadlineAt: Math.min(state.deadlineAt, callerDeadline(timing.deadlineAt)),
     ...(timing.stillWithin ? { stillWithin: [timing.stillWithin] } : {}), owner: state.owner, epoch: state.epoch });
   const check = () => {
     budget.boundary();
