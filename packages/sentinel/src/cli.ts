@@ -89,7 +89,11 @@ function finish(r: CommandResult): number {
   return r.exitCode;
 }
 
-function capabilities(p: ParsedCommand): number {
+async function capabilities(p: ParsedCommand): Promise<number> {
+  if(p.flags['--models']===true){
+    try{const {qualifyInstalledNativeClaude,CLAUDE_NATIVE_PROFILE}=await import('./review/providers/cli-native-profile.js');const runtime=await qualifyInstalledNativeClaude({deadlineAt:Date.now()+5000});return finish(result('capabilities','answered',{facts:{version:version(),modelProfiles:[{kind:'claude-cli',model:'claude-haiku-4-5-20251001',version:CLAUDE_NATIVE_PROFILE.version,platform:'darwin',architecture:'arm64',nativeProfile:{id:runtime.profileId,executableDigest:runtime.executableDigest,helperDigest:runtime.helperDigest,profileDigest:runtime.profileDigest},qualification:'local-bytes-only',authentication:'unobserved',inference:'unobserved'}]}}))}
+    catch(e){const code=(e as {code?:string})?.code;return finish(result('capabilities','unavailable',{reasonCode:code==='sentinel.provider.timeout'?'sentinel.provider.timeout':'sentinel.provider.capabilityUntested',facts:{modelProfiles:[],qualification:'unavailable',authentication:'unobserved',inference:'unobserved'}}))}
+  }
   if (p.json) return finish(result('capabilities', 'answered', { facts: { version: version(), capabilities: CAPABILITIES } }));
   const state = (c: (typeof CAPABILITIES)[number]) => word(c.state === 'unavailable' ? 'sentinel.cli.stateUnavailable' : 'sentinel.cli.stateDraft');
   const width = Math.max(...CAPABILITIES.map(c => state(c).length));
@@ -269,6 +273,7 @@ async function owner(p: ParsedCommand): Promise<number> {
         }
       };
       const planNow = await describeNow();
+      if(action==='run.start'&&planNow?.effects.includes('paid-inference'))return serviceOut(result(p.command,'configuration-failure',{reasonCode:'sentinel.review.foregroundRequired'}));
       const shown = confirmForService(ws, { command: p.command, action, plan: planNow, planId: runId, confirm: false, now });
       if (!confirm || ('result' in shown && shown.result.outcome !== 'awaiting-confirmation')) return serviceOut('result' in shown ? shown.result : result(p.command, 'refused'));
       const client = p.command === 'pause' ? await connectService(ws) : await ensureService(ws);

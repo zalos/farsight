@@ -234,6 +234,7 @@ export class OwnerService {
     if ('refusal' in adopted) return { refusal: adopted.refusal };
     const { policy } = adopted;
     if (policy.revision !== record.policyRevision) return { refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts }) };
+    if(action==='run.start'&&record.model&&!['completed','canceled'].includes(this.#store.ledger.getRun(planId)?.state??''))return {refusal:result(command,'configuration-failure',{reasonCode:'sentinel.review.foregroundRequired',facts})};
     // The write is on this workspace's store and this run: a receipt confirmed for another instance does not match.
     const { intent, stateDigest } = runWriteBinding(this.#ws, action, record, { storeId: this.#store.storeId, runId: planId });
     facts.effects = intent.effects;

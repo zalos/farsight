@@ -7,6 +7,9 @@ import type { StringEntry } from './strings.js';
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
 
 export const SENTINEL_REVIEW_STRINGS: Record<string, StringEntry> = {
+  'sentinel.review.planLimit': same('review plan exceeds its segment cap: {detail}', 'At most 32 configured review segments may be planned at once. Select general review only or narrow the source instead of silently omitting segments. This refusal starts no model call.'),
+  'sentinel.review.secretCoverageRequired': same('a complete accepted secret scan is required before hosted review', 'The exact current source needs a genuine successful Gitleaks repository scan with complete coverage, exact captured entries and no skipped or unresolved scope before any hosted model admission, credential read or call. No matches is not proof that a scan ran.'),
+  'sentinel.review.foregroundRequired': same('configured model review requires foreground owner confirmation', 'Use run PLAN --confirm --confirm-models in the local owner CLI. Detached service, MCP and resume cannot authorize this model workflow. They refuse before consuming a run-start receipt or starting work.'),
   // ---- tool refusals ----
   'sentinel.review.tool.outOfScope': same('outside this review\'s scope', 'The model asked for a file, rule or node this review was not given. Its scope is fixed before it starts, and nothing in the code under review can widen it.'),
   'sentinel.review.tool.unknown': same('not a tool of this review', 'The model asked for something the review offers no tool for. It can list its files, read lines of them, read its rule and read recorded call paths; nothing else.'),
