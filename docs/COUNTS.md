@@ -992,3 +992,13 @@ Placement screens are broken down into `sentinel.count.part.directUse` and `sent
 place lists fewer rows than it reaches, `of` carries the full count. Placement IDs are canonical graph node IDs (`repo::path::name`), not ledger IDs. Placement reachability is navigation
 evidence, never proof of exploitation. The source on every count is `sentinel report fold draft-1` (placement: `sentinel place fold draft-1`); a `recheck`
 command arrives with the Sentinel CLI.
+
+### Sentinel immutable service inspection counts (ADR 48)
+
+`RunInspection.counts` counts the sanitized copied rows, not findings or coverage. The unit keys
+`sentinel.service.count.works`, `.attempts`, `.inputs` and `.outputs` have both registers and definitions;
+the shared scope is `sentinel.scope.inspection`. `source` names `ReadonlyViews.inspect.<collection>`.
+A work is one admitted unit; an attempt is one recorded attempt for those units; an input is one unit/input
+association (the same captured file used by two units counts twice); an output is one recorded attempt/output
+association, with `accepted` separately stating whether that exact attempt owns the accepted publication.
+A reference-only prerequisite adds no row or count. Pagination never recomputes these totals from current work.

@@ -13,12 +13,13 @@ const artifact=resolve(process.argv[2]??join(root,'build/sentinel',`farsight-sen
 const c=await npmConsumer('sentinel-mcp-', [artifact]);
 const services=new Set(),clients=new Set();
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
-async function stop(child){if(child.exitCode!==null||child.signalCode!==null)return;child.kill('SIGTERM');await Promise.race([new Promise(r=>child.once('exit',r)),wait(10000).then(()=>{throw Error('owned MCP service did not stop');})]);}
+async function stop(child){if(child.exitCode!==null||child.signalCode!==null)return;child.kill('SIGTERM');let timer;try{await Promise.race([new Promise(r=>child.once('exit',r)),new Promise((_,reject)=>timer=setTimeout(()=>reject(Error('owned MCP service did not stop')),10000))]);}finally{clearTimeout(timer);}}
 try{
  const require=createRequire(join(c.dir,'package.json'));
  const {Client}=await import(pathToFileURL(require.resolve('@modelcontextprotocol/sdk/client/index.js')).href);
  const {StdioClientTransport}=await import(pathToFileURL(require.resolve('@modelcontextprotocol/sdk/client/stdio.js')).href);
- const sentinel=await import(pathToFileURL(require.resolve('farsight-sentinel')).href),renderers=await import(pathToFileURL(require.resolve('farsight-sentinel/reports')).href);
+ writeFileSync(join(c.dir,'sentinel-public.mjs'),"export * from 'farsight-sentinel';\n");writeFileSync(join(c.dir,'sentinel-reports.mjs'),"export * from 'farsight-sentinel/reports';\n");
+ const sentinel=await import(pathToFileURL(join(c.dir,'sentinel-public.mjs')).href),renderers=await import(pathToFileURL(join(c.dir,'sentinel-reports.mjs')).href);
  assert.equal(JSON.parse(readFileSync(resolve(dirname(require.resolve('@modelcontextprotocol/sdk/client/index.js')),'../../..','package.json'))).version,'1.31.0');
  const scratch=realpathSync.native(c.scratch),ws=join(scratch,'workspace');mkdirSync(join(ws,'src'),{recursive:true});
  for(let i=0;i<4;i++)writeFileSync(join(ws,'src',`private-lookup-${i}.ts`),'export const lookup = (id) => db.query("SELECT * FROM invoice WHERE id = " + id);\n');
@@ -52,7 +53,10 @@ try{
  for(const format of['json','md','html','sarif']){
   const started=performance.now(),m=await tool('sentinel_report_open',{runId:childId,baselineRunId:parent,format}),text=await bytes(m),expected={...doc,evaluatedAt:m.evaluatedAt};
   assert.equal(`sha256:${createHash('sha256').update(canonical(expected)).digest('hex')}`,m.documentDigest,'same canonical document at the explicit evaluation time');
-  const rendered=format==='json'?canonical(expected)+'\n':format==='md'?renderers.renderMarkdown(expected):format==='html'?renderers.renderHtml(expected):JSON.stringify(renderers.toSarif(expected),null,2)+'\n';assert.equal(text,rendered);
+  const rendered=format==='json'?canonical(expected)+'\n':format==='md'?renderers.renderMarkdown(expected):format==='html'?renderers.renderHtml(expected):JSON.stringify(renderers.toSarif(expected),null,2)+'\n';
+  // Canonical JSON parsing changes record insertion order. SARIF values must agree;
+  // the delivered bytes are independently checked against the manifest digest above.
+  if(format==='sarif')assert.deepEqual(JSON.parse(text),JSON.parse(rendered));else assert.equal(text,rendered);
   measure.push({format,bytes:Buffer.byteLength(text),elapsedMs:performance.now()-started});
  }
  const saved=await tool('sentinel_report_open',{runId:parent,format:'json'}),savedBytes=await bytes(saved);await client.close();clients.delete(client);
@@ -60,8 +64,53 @@ try{
  await client.close();clients.delete(client);await stop(service);services.delete(service);service=serving();({client,stderr}=await ready());
  const expired=await client.callTool({name:'sentinel_delivery_read',arguments:{deliveryId:saved.deliveryId,offset:0}});assert.equal(expired.isError,true);assert.equal(expired.structuredContent.error.code,'sentinel.service.deliveryExpired');
  const unavailable=await client.callTool({name:'sentinel_run_start',arguments:{planId:parent}});assert.equal(unavailable.isError,true);assert.equal(unavailable.structuredContent.error.code,'sentinel.service.operationUnavailable');
+ // A second genuine public plan uses the shipped framework worker; application bytes are never executed.
+ await client.close();clients.delete(client);await stop(service);services.delete(service);
+ mkdirSync(join(ws,'src'));writeFileSync(join(ws,'package.json'),JSON.stringify({name:'original-mcp-example',version:'1.0.0',dependencies:{express:'4.21.2'}}));
+ writeFileSync(join(ws,'package-lock.json'),JSON.stringify({lockfileVersion:3,packages:{'':{dependencies:{express:'4.21.2'}},'node_modules/express':{version:'4.21.2',resolved:'https://registry.npmjs.org/express/-/express-4.21.2.tgz'}}}));
+ const route=value=>`import express from 'express';const app=express();app.get('/${value}',(_req,res)=>res.send('example'));\n`;
+ writeFileSync(join(ws,'src/routes.ts'),route('open'));
+ const settings=join(ws,'.farsight/sentinel/settings.json'),controls=['sentinel.controls.authentication','sentinel.controls.authorization','sentinel.controls.input-validation'];
+ const configure=rules=>writeFileSync(settings,JSON.stringify({...JSON.parse(readFileSync(settings)),mandatoryRules:rules}));
+ configure(controls);assert.equal((await call('settings','adopt','--confirm')).status,0);assert.equal((await call('rules','promote','builtin:framework-controls','--confirm')).status,0);
+ const framework=await call('plan');assert.equal(framework.status,0,JSON.stringify(framework));const frameworkId=framework.body.facts.planId;
+ assert.equal((await call('run',frameworkId)).body.facts.state,'completed');rmSync(join(ws,'src'),{recursive:true});
+ service=serving();({client,stderr}=await ready());
+ const clean=JSON.parse(await bytes(await tool('sentinel_report_open',{runId:frameworkId,format:'json'})));
+ assert.equal(clean.findings.length,0);assert.equal(clean.inspections.length,1);assert.equal(clean.inspections[0].assessment,'none');
+ assert.ok(clean.inspections[0].rows.some(r=>r.state==='established'&&r.verdict==='does-not-apply'));assert.ok(JSON.stringify(clean).includes('GET /open'));
+ for(const format of['md','html','sarif']){const text=await bytes(await tool('sentinel_report_open',{runId:frameworkId,format}));assert.ok(text.includes('Framework control inspection')||format==='sarif');}
+ const frameworkView=await tool('sentinel_run_inspect',{runId:frameworkId});assert.ok(frameworkView.counts.outputs.n>0);
+ let native=false;
+ if(process.env.SENTINEL_ISOLATION==='1'){
+  await client.close();clients.delete(client);await stop(service);services.delete(service);
+  mkdirSync(join(ws,'src'));const value=['Sntl','Fxt9q2','Lr7Wv4','Zk8Jm3','Pd6Hy1','Tb5Qe0'].join('');
+  writeFileSync(join(ws,'src/routes.ts'),route(value));writeFileSync(join(ws,'.env'),`api_key = "${value}"\n`);
+  const installed=dirname(require.resolve('farsight-sentinel/package.json')),secrets=JSON.parse(readFileSync(join(installed,'rules/secrets/sentinel-pack.json')));
+  configure([...controls,...secrets.rules.map(r=>r.familyId)]);assert.equal((await call('settings','adopt','--confirm')).status,0);
+  assert.equal((await call('rules','promote','builtin:secrets','--confirm')).status,0);assert.equal((await call('assets','adopt-tool','secrets-gitleaks','--confirm')).status,0);
+  const secretPlan=await call('plan');assert.equal(secretPlan.status,0,JSON.stringify(secretPlan));const secretId=secretPlan.body.facts.planId;
+  assert.equal((await call('run',secretId)).body.facts.state,'completed');rmSync(join(ws,'src'),{recursive:true});rmSync(join(ws,'.env'));
+  service=serving();({client,stderr}=await ready());
+  const secret=JSON.parse(await bytes(await tool('sentinel_report_open',{runId:secretId,format:'json'})));
+  assert.ok(secret.findings.length>0);assert.match(secret.inspections[0].sourceId,/^withheld-/);
+  for(const format of['json','md','html','sarif'])assert.equal((await bytes(await tool('sentinel_report_open',{runId:secretId,format}))).includes(value),false,'current genuine secret withholding');
+  await client.close();clients.delete(client);await stop(service);services.delete(service);
+  // Select exactly the genuine published inspection, leaving the ancestor's secret scanner held.
+  const secretChild=await call('rerun',secretId,'--stage',secret.inspections[0].work.id,'--confirm');assert.equal(secretChild.status,0,JSON.stringify(secretChild));const selectedId=secretChild.body.facts.runId;
+  assert.equal((await call('run',selectedId)).body.facts.state,'completed');
+  service=serving();({client,stderr}=await ready());
+  for(const format of['json','md','html','sarif'])assert.equal((await bytes(await tool('sentinel_report_open',{runId:selectedId,baselineRunId:secretId,format}))).includes(value),false,'source-gone selected ancestry withholding');
+  await client.close();clients.delete(client);await stop(service);services.delete(service);
+  mkdirSync(join(ws,'src'));writeFileSync(join(ws,'src/routes.ts'),route('clean'));configure(controls);assert.equal((await call('settings','adopt','--confirm')).status,0);
+  const cleanPlan=await call('plan');assert.equal(cleanPlan.status,0,JSON.stringify(cleanPlan));assert.equal((await call('run',cleanPlan.body.facts.planId)).body.facts.state,'completed');rmSync(join(ws,'src'),{recursive:true});
+  service=serving();({client,stderr}=await ready());
+  const ordinary=JSON.parse(await bytes(await tool('sentinel_report_open',{runId:cleanPlan.body.facts.planId,format:'json'})));assert.ok(JSON.stringify(ordinary).includes('GET /clean'));
+  for(const format of['json','md','html','sarif']){const text=await bytes(await tool('sentinel_report_open',{runId:cleanPlan.body.facts.planId,baselineRunId:selectedId,format}));assert.equal(text.includes(value),false,'baseline selected ancestry withholding');if(format==='json')assert.match(JSON.parse(text).inspections[0].sourceId,/^withheld-/);}
+  native=true;
+ }
  assert.equal(stderr(),'');
- console.log(JSON.stringify({schema:'sentinel-mcp-consumer/draft-1',npmOnly:true,sdk:'1.31.0',sourceGone:true,selected:true,comparison:true,reconnect:true,restartExpired:true,controlsAbsent:true,inspectMs,formats:measure}));
+ console.log(JSON.stringify({schema:'sentinel-mcp-consumer/draft-1',npmOnly:true,sdk:'1.31.0',sourceGone:true,selected:true,comparison:true,reconnect:true,restartExpired:true,controlsAbsent:true,frameworkSourceGone:true,nativeSecrets:native,sarifParity:'semantic',otherFormatParity:'exact',inspectMs,formats:measure}));
 }finally{
  for(const client of clients)await client.close().catch(()=>{});for(const child of services)await stop(child);
  c.cleanup();

@@ -35,6 +35,7 @@ export interface RunInspection {
   planRevision: Ordinal;
   sequence: Count;
   historical: boolean;
+  /** Current recorded run state; historical describes the selected plan rows, not a historical status fold. */
   status: RunState | 'awaiting-first-execution';
   outcome: RunOutcome | null;
   createdAt: Timestamp;

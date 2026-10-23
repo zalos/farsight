@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {performance} from 'node:perf_hooks';
-import {rmSync} from 'node:fs';
+import {rmSync,readFileSync,writeFileSync,chmodSync} from 'node:fs';
 import {join} from 'node:path';
 import {publishedReadonly,requester} from './service-readonly-helpers.ts';
 import {fullReport,renderingOf} from '../dist/service/full-report.js';
@@ -45,7 +45,7 @@ test('all delivered formats equal the canonical same-evaluation report after sou
  }
 });
 
-test('absolute monotonic expiry and service replacement explicitly invalidate handles',async t=>{
+test('absolute monotonic expiry explicitly invalidates handles without sliding on reads',async t=>{
  const f=await publishedReadonly(t),view:any=await f.call('run.inspect',{runId:f.runId}),manifest:any=await f.call('report.open',{runId:f.runId,format:'json'});
  const later=performance.now()+READONLY_LIMITS.deliveryTtlMs+1;t.mock.method(performance,'now',()=>later);
  await assert.rejects(f.call('view.page',{viewId:view.viewId,collection:'works'}),code('sentinel.service.viewExpired'));
@@ -74,7 +74,7 @@ test('pages remain at one frozen revision while a genuine child worker finishes'
  const id=child.disclosure.runId,view:any=await f.call('run.inspect',{runId:id});
  const run=executeRun(f.store,id,{scratchRoot:f.work,trustDir:f.ws.trustDir});
  const before:any=await f.call('view.page',{viewId:view.viewId,collection:'works'});
- assert.ok(before.rows.every((r:any)=>r.recordedWork===null));assert.equal((await run).state,'completed');
+ assert.ok(before.rows.every((r:any)=>r.recordedWork===null));assert.ok(before.rows.some((r:any)=>r.prerequisites.some((d:any)=>d.binding==='reference-only')),'retained bootstrap references are labeled without expanding ancestor rows');assert.equal((await run).state,'completed');
  assert.deepEqual(await f.call('view.page',{viewId:view.viewId,collection:'works'}),before);
  const fresh:any=await f.call('run.inspect',{runId:id});assert.equal(fresh.status,'completed');assert.ok(fresh.counts.attempts.n>view.counts.attempts.n);
 });
@@ -101,4 +101,43 @@ test('complete serialized page limit includes handles and cursor overhead at min
  assert.ok(validateEnvelope('inspectionpage',page).ok);assert.equal(Buffer.byteLength(JSON.stringify(page),'utf8'),READONLY_LIMITS.pageBytes);checkInspectionPageBytes(page);
  page.viewId+='x';assert.ok(validateEnvelope('inspectionpage',page).ok);assert.throws(()=>checkInspectionPageBytes(page),code('sentinel.service.projectionLimit'));
  page.viewId=page.viewId.slice(0,-2);assert.equal(Buffer.byteLength(JSON.stringify(page),'utf8'),READONLY_LIMITS.pageBytes-1);checkInspectionPageBytes(page);
+});
+
+test('exact final original deadline refuses after allocation without installing or evicting any delivery',async t=>{
+ let calls=0,armed=false,clock=0;const f=await publishedReadonly(t,{now:()=>{if(armed&&++calls===2)clock=READONLY_LIMITS.reportMs;return new Date();}});
+ const held:any[]=[];for(let i=0;i<READONLY_LIMITS.deliveries;i++)held.push(await f.call('report.open',{runId:f.runId,format:'json'}));
+ t.mock.method(performance,'now',()=>clock);armed=true;
+ await assert.rejects(f.call('report.open',{runId:f.runId,format:'html'}),code('sentinel.execution.deadlineExceeded'));assert.equal(calls,2);
+ for(const m of held)assert.equal((await f.call('delivery.read',{deliveryId:m.deliveryId,offset:0}) as any).deliveryId,m.deliveryId);
+});
+
+test('one active generation refuses a second reader; a busy worker returns a coherent view or a bounded retry hint',async t=>{
+ const f=await publishedReadonly(t),{rerunRun}=await import('../dist/service/canonical.js');
+ const child:any=await rerunRun(f.store,f.runId,[],{workspace:f.ws.path,trustDir:f.ws.trustDir,policy:f.policy,scratchRoot:f.work,now:new Date()});assert.ok(!('reasonCode'in child));
+ const {publicRegistry,scannerExecution}=await import('../dist/service/scanner-profile.js'),{Coordinator}=await import('../dist/execution/coordinator.js');
+ const registry=publicRegistry(f.ws.trustDir),assets=await scannerExecution(f.store,child.disclosure.runId,f.ws.trustDir,f.work,registry);
+ let task:Promise<unknown>|undefined,started=0,publication:any;
+ const coordinator=await Coordinator.open({...assets,store:f.store,runId:child.disclosure.runId,registry,scratchRoot:f.work,hooks:{async at(boundary,ctx){
+  if(boundary==='after-objects'&&!task){publication=ctx;started=performance.now();task=f.call('report.open',{runId:f.runId,format:'json'});void task.catch(()=>{});
+   await assert.rejects(f.call('report.open',{runId:f.runId,format:'html'}),code('sentinel.service.deliveryBusy'));
+  }
+ }}});
+ assert.equal((await coordinator.run()).state,'completed');assert.ok(task&&publication);assert.ok(f.store.ledger.getPublication(publication.work));
+ let m:any,busyOutcome='coherent';try{m=await task;assert.ok(m.generationSequence<=f.store.ledger.currentSequence());}catch(e:any){assert.equal(e.code,'sentinel.report.viewChanged');assert.equal(e.retryable,true);assert.equal(e.facts.generations,2);busyOutcome='viewChanged';}
+ const busyMs=performance.now()-started,stableStart=performance.now();m=await f.call('report.open',{runId:f.runId,format:'json'});assert.equal(m.generationSequence,f.store.ledger.currentSequence());const doc=JSON.parse((await delivery(f,m)).toString());assert.equal(doc.run.id,f.runId);
+ t.diagnostic(JSON.stringify({measurement:'service-report-during-genuine-unrelated-worker-publication',busyOutcome,busyMs,stableMs:performance.now()-stableStart,formatBytes:m.formatBytes,sequence:m.generationSequence}));
+});
+
+test('damaged actual accepted report bytes refuse without a partial install or eviction',async t=>{
+ const f=await publishedReadonly(t),held:any[]=[];for(let i=0;i<READONLY_LIMITS.deliveries;i++)held.push(await f.call('report.open',{runId:f.runId,format:'json'}));
+ const plan=await loadPlan(f.store,f.runId),unit=plan.plan.units[0],publication=f.store.ledger.getPublication(unit)!;
+ assert.ok(publication);const output=publication.outputs.find(o=>o.schema==='application/json')!;assert.ok(output);
+ const ref=f.store.ledger.objectsOf(output.id)[0],hex=output.id.slice(7),path=join(f.store.storePath,'objects/sha256',hex.slice(0,2),hex+(ref.codec==='gzip'?'.gzip':'.raw')),original=readFileSync(path);
+ chmodSync(path,0o600);writeFileSync(path,Buffer.alloc(original.length));
+ try{await assert.rejects(f.call('report.open',{runId:f.runId,format:'html'}),code('sentinel.report.evidenceUnbound'));}finally{writeFileSync(path,original);chmodSync(path,0o400);}
+ for(const m of held)assert.equal((await f.call('delivery.read',{deliveryId:m.deliveryId,offset:0}) as any).deliveryId,m.deliveryId);
+});
+
+test('an explicit historical admitted revision labels its rows and retains current recorded run status',async t=>{
+ const f=await publishedReadonly(t),v:any=await f.call('run.inspect',{runId:f.runId,planRevision:1});assert.equal(v.historical,true);assert.equal(v.planRevision,1);assert.equal(v.status,'completed');const page:any=await f.call('view.page',{viewId:v.viewId,collection:'works'});assert.ok(validateEnvelope('inspectionpage',page).ok);assert.ok(page.rows.length>0);
 });

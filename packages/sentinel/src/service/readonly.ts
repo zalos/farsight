@@ -95,6 +95,7 @@ export class ReadonlyViews {
             bytes+=Buffer.byteLength(JSON.stringify(row));if(bytes>READONLY_LIMITS.viewBytes)throw new ReadonlyError('sentinel.service.projectionLimit');rows[collection].push(row);
           };
           for(const unit of plan.units){
+            if(unit.dependencies.length>1024)throw new ReadonlyError('sentinel.service.projectionLimit');
             const ref={id:unit.id,revision:unit.revision},wk=workKey(ref);workKeys.add(wk);
             const work=this.store.ledger.getWork(ref);
             if(work&&(work.runId!==plan.runId||work.envelope.planRevision!==revision||work.envelope.inputFingerprint!==unit.inputFingerprint||work.envelope.stage.implementationDigest!==unit.implementationDigest||!WORK_STATES.includes(work.state as any)))throw new ReadonlyError('sentinel.service.viewInvalid');
@@ -178,7 +179,7 @@ export class ReadonlyViews {
         evaluatedAt:built.document.evaluatedAt,disclosure:structuredClone(built.document.disclosure),catalogVersion:built.document.catalogVersion,
         context:{binding:'unavailable',reasonCode:'sentinel.place.noContext'},documentDigest:built.documentDigest,format:built.format,formatDigest:built.formatDigest,formatBytes:bytes.length,
         createdAt:created.toISOString(),expiresAt:new Date(created.getTime()+READONLY_LIMITS.deliveryTtlMs).toISOString()};
-      this.#held(stop);if(performance.now()-started>READONLY_LIMITS.reportMs)throw new ExecutionError('sentinel.execution.deadlineExceeded');
+      this.#held(stop);if(performance.now()-started>=READONLY_LIMITS.reportMs)throw new ExecutionError('sentinel.execution.deadlineExceeded');
       for(const identity of[built.currentIdentity,...(built.baselineIdentity?[built.baselineIdentity]:[])]){const run=this.store.ledger.getRun(identity.runId);if(!run||run.state!=='completed'||run.planRevision!==identity.planRevision||run.envelope.snapshotId!==identity.snapshotId)throw new ReadonlyError('sentinel.service.viewChanged');}
       if(this.store.ledger.currentSequence()!==built.generationSequence)throw new ReadonlyError('sentinel.service.viewChanged');
       // No await/caller callback after the final owner/signal/run/revision/snapshot/sequence fence.

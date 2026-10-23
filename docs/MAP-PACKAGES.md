@@ -296,3 +296,12 @@ delivery.
 `test/cli-scanners-e2e.test.ts`, `test/scanner-assets.test.ts` and
 `scripts/test-sentinel-scanner-consumer.mjs` cover the public command path, strict asset boundaries and installed
 npm-only detached execution. These are executable internals, not new JavaScript package exports.
+
+Sentinel's read-only service slice (ADR 48) lives in `src/contracts/service.ts` (five additive wire documents),
+`src/service/readonly.ts` (held-owner immutable inspection pages and canonical report delivery buffers),
+`src/service/mcp.ts` (lazy SDK stdio adapter) and `src/store/read-budget.ts` (private physical-read accounting).
+`service/full-report.ts` shares one canonical fold between legacy all-format reports and one-format delivery;
+`service/owner-service.ts` reuses its existing held store. `transport/ipc.ts` adds socket-local cancellation of
+unsettled read preparation without changing the handshake. `scripts/test-sentinel-mcp-consumer.mjs` installs only
+the tarball with npm and exercises the real SDK, retained framework reports and, under explicit native opt-in,
+genuine local-container secret privacy. The package starts no MCP process or SDK import at ordinary library import.

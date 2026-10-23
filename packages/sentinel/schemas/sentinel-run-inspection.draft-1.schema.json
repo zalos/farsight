@@ -52,7 +52,8 @@
               "type": "string",
               "const": "awaiting-first-execution"
             }
-          ]
+          ],
+          "description": "Current recorded run state; historical describes the selected plan rows, not a historical status fold."
         },
         "outcome": {
           "anyOf": [

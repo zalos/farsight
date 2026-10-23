@@ -267,3 +267,12 @@ The individual Pattern, OSV and IaC qualification jobs select their own installe
 `SENTINEL_PACKAGE_ENGINE=pattern|osv|iac`; all four asset manifests and their exact bytes are still checked. A local package smoke
 with `SENTINEL_ISOLATION=1` and no selector executes all four workers. Each native job must observe its own worker
 success marker, so a missing or failed selected engine cannot pass as an asset-only check.
+
+The read-only MCP slice (ADR 48) runs its genuine owner-store/socket/budget controls in the service job's explicit
+zero-skip list. Ordinary `test:sentinel:package` also installs the tarball with npm and drives the real SDK through
+preview and framework reports, source-removed selected replay, reconnect and restart expiry. The native scanner
+job additionally selects `service-readonly-native.test.ts` and the installed MCP consumer with native opt-in:
+current/baseline/selected secret withholding uses the already provisioned pinned Gitleaks image. Native missing
+assets fail; ordinary validation explicitly skips those two native controls. SARIF consumer rerendering from
+canonical-key-sorted parsed JSON compares semantic values; exact delivered format hashes are always checked,
+and the genuine same-evaluation held-service tests compare all four legacy rendering bytes exactly.

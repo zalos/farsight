@@ -288,12 +288,12 @@ function serveConnection(socket: Socket, identity: ServiceIdentity, handler: Ser
         continue;
       }
       if (f.type === 'cancel') {
-        if (Object.keys(f).length !== 2 || typeof f.id !== 'number' || !Number.isSafeInteger(f.id) || f.id < 0) { refuse('sentinel.ipc.frameMalformed'); return; }
+        if (Object.keys(f).length !== 2 || typeof f.id !== 'number' || !Number.isSafeInteger(f.id)) { refuse('sentinel.ipc.frameMalformed'); return; }
         reads.get(f.id)?.abort();
         continue;
       }
       const id = typeof f.id === 'number' && Number.isSafeInteger(f.id) ? f.id : undefined;
-      if (id === undefined || id < 0 || typeof f.op !== 'string' || f.type !== 'request' || inflight.has(id) || inflight.size >= 128) { refuse('sentinel.ipc.frameMalformed'); return; }
+      if (id === undefined || typeof f.op !== 'string' || f.type !== 'request' || inflight.has(id) || inflight.size >= 128) { refuse('sentinel.ipc.frameMalformed'); return; }
       const granted = by;
       inflight.add(id);
       const read = f.op === 'run.inspect' || f.op === 'report.open' ? new AbortController() : undefined;
