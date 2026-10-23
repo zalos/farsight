@@ -1,0 +1,12 @@
+{
+  "schema": "sentinel-import-page/draft-1",
+  "authority": "metadata-only-not-evaluated",
+  "items": [],
+  "next": null,
+  "count": {
+    "n": 0,
+    "unit": "sentinel.evidence.operations",
+    "scope": "sentinel.evidence.pageScope",
+    "source": "accepted report-import projection"
+  }
+}

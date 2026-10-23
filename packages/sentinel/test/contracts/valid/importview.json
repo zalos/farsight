@@ -1,0 +1,32 @@
+{
+  "schema": "sentinel-import-view/draft-1",
+  "kind": "imported-report",
+  "authority": "owner-associated-imported-claims",
+  "candidateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "root": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "withheld": true,
+  "limitation": "accepted-secret-match",
+  "limitationKey": "sentinel.evidence.importedClaims",
+  "counts": {
+    "claims": {
+      "n": 0,
+      "unit": "sentinel.evidence.claims",
+      "scope": "sentinel.evidence.countScope",
+      "source": "accepted report-import projection"
+    },
+    "exchanges": {
+      "n": 0,
+      "unit": "sentinel.evidence.exchanges",
+      "scope": "sentinel.evidence.countScope",
+      "source": "accepted report-import projection"
+    },
+    "cookies": {
+      "n": 0,
+      "unit": "sentinel.evidence.cookies",
+      "scope": "sentinel.evidence.countScope",
+      "source": "accepted report-import projection"
+    }
+  },
+  "document": null,
+  "disclosure": "owner-local"
+}

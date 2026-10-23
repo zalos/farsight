@@ -1,0 +1,99 @@
+{
+  "@version": "2.16.0",
+  "@generated": "Thu, 22 Oct 2026 10:00:00",
+  "created": "2026-10-22T10:00:00.000000000Z",
+  "insights": [
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "https://app.example.test",
+      "key": "insight.code.2xx",
+      "description": "Percentage of responses with status code 2xx",
+      "statistic": "100"
+    }
+  ],
+  "site": [
+    {
+      "@name": "https://app.example.test",
+      "@host": "app.example.test",
+      "@port": "443",
+      "@ssl": "true",
+      "alerts": [
+        {
+          "pluginid": "10011",
+          "alertRef": "10011",
+          "alert": "Cookie Without Secure Flag",
+          "name": "Cookie Without Secure Flag",
+          "riskcode": "1",
+          "confidence": "2",
+          "riskdesc": "Low (Medium)",
+          "desc": "<p>A cookie has been set without the secure flag.</p>",
+          "instances": [
+            {
+              "uri": "https://app.example.test/login",
+              "nodeName": "https://app.example.test/login",
+              "method": "POST",
+              "param": "theme",
+              "attack": "",
+              "evidence": "Set-Cookie: theme",
+              "otherinfo": "",
+              "request-header": "POST https://app.example.test/login HTTP/1.1\r\nHost: app.example.test\r\nCookie: pref=dark\r\n\r\n",
+              "request-body": "user=example",
+              "response-header": "HTTP/1.1 200\r\nContent-Type: text/html\r\nSet-Cookie: sid=synthetic-session-value; Path=/; Secure; HttpOnly; SameSite=Lax\r\nSet-Cookie: theme=dark; Path=/; Expires=Fri, 22 Oct 2027 10:00:00 GMT\r\n\r\n",
+              "response-body": "<html></html>"
+            }
+          ],
+          "count": "1",
+          "systemic": false,
+          "solution": "<p>Set the secure flag.</p>",
+          "otherinfo": "",
+          "reference": "<p>https://example.test/reference</p>",
+          "cweid": "614",
+          "wascid": "13",
+          "sourceid": "3",
+          "tags": [
+            {
+              "tag": "OWASP_2021_A05",
+              "link": "https://example.test/tag"
+            }
+          ]
+        }
+      ],
+      "statistics": {
+        "site.specific.stat.a": 1
+      }
+    }
+  ],
+  "statistics": {
+    "global.stat.a": 1
+  },
+  "sequences": [
+    {
+      "name": "Sign in",
+      "steps": [
+        {
+          "step": "1",
+          "pass": "true",
+          "resultDetails": "Pass",
+          "alertIds": [],
+          "original": {
+            "uri": "https://app.example.test/login",
+            "method": "POST",
+            "request-header": "POST https://app.example.test/login HTTP/1.1\r\nHost: app.example.test\r\n\r\n",
+            "request-body": "",
+            "response-header": "HTTP/1.1 200\r\nSet-Cookie: seq=1; Secure\r\n\r\n",
+            "response-body": ""
+          },
+          "replay": {
+            "uri": "https://app.example.test/login",
+            "method": "POST",
+            "request-header": "POST https://app.example.test/login HTTP/1.1\r\nHost: app.example.test\r\n\r\n",
+            "request-body": "",
+            "response-header": "HTTP/1.1 200\r\n\r\n",
+            "response-body": ""
+          }
+        }
+      ]
+    }
+  ]
+}

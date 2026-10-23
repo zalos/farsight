@@ -404,6 +404,74 @@ const V5 = `
 ALTER TABLE plans ADD COLUMN selection_id TEXT REFERENCES artifacts(id);
 `;
 
+// Report-import operations are a distinct staging domain, not work attempts. No accepted roots can be minted
+// through generic staging; the private publication operation will be the only writer of acceptances.
+const EVENT_KINDS_V6 = `${EVENT_KINDS_V4},'evidence-opened','evidence-staged','evidence-transferred','evidence-aborted','evidence-accepted','evidence-abandoned'`;
+const V6 = `
+CREATE TABLE events_next (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL CHECK (kind IN (${EVENT_KINDS_V6})),
+  run_id TEXT REFERENCES runs(id), work_id TEXT, work_revision INTEGER,
+  coordinator_epoch TEXT NOT NULL REFERENCES epochs(epoch), at TEXT NOT NULL,
+  payload TEXT NOT NULL CHECK (json_valid(payload) AND length(CAST(payload AS BLOB)) <= 16384),
+  FOREIGN KEY (work_id, work_revision) REFERENCES work_units(id, revision),
+  CHECK ((work_id IS NULL) = (work_revision IS NULL))
+) STRICT;
+INSERT INTO events_next (sequence,kind,run_id,work_id,work_revision,coordinator_epoch,at,payload)
+  SELECT sequence,kind,run_id,work_id,work_revision,coordinator_epoch,at,payload FROM events ORDER BY sequence;
+DROP TABLE events;
+ALTER TABLE events_next RENAME TO events;
+CREATE INDEX events_by_run ON events(run_id, sequence);
+${APPEND_ONLY('events', 'DELETE')}
+${APPEND_ONLY('events', 'UPDATE')}
+CREATE UNIQUE INDEX evidence_abandon_receipt ON events(json_extract(payload,'$.receipt.id')) WHERE kind = 'evidence-abandoned';
+CREATE TABLE evidence_operations (
+  id TEXT PRIMARY KEY, store_id TEXT NOT NULL, coordinator_epoch TEXT NOT NULL REFERENCES epochs(epoch),
+  nonce TEXT NOT NULL UNIQUE, domain TEXT NOT NULL CHECK (domain = 'report-import'),
+  run_id TEXT NOT NULL REFERENCES runs(id), plan_revision INTEGER NOT NULL,
+  plan_digest TEXT NOT NULL CHECK (${DIGEST('plan_digest')}), snapshot_id TEXT NOT NULL REFERENCES snapshots(id),
+  source_id TEXT NOT NULL, binding_digest TEXT NOT NULL CHECK (${DIGEST('binding_digest')}),
+  candidate_digest TEXT NOT NULL CHECK (${DIGEST('candidate_digest')}),
+  receipt_id TEXT NOT NULL UNIQUE, receipt_digest TEXT NOT NULL CHECK (${DIGEST('receipt_digest')}),
+  predecessor_id TEXT UNIQUE REFERENCES evidence_operations(id),
+  state TEXT NOT NULL CHECK (state IN ('open','aborted','superseded','accepted')),
+  identity TEXT NOT NULL CHECK (json_valid(identity) AND length(CAST(identity AS BLOB)) <= 524288),
+  opened_sequence INTEGER NOT NULL UNIQUE REFERENCES events(sequence),
+  terminal_sequence INTEGER UNIQUE REFERENCES events(sequence), created_at TEXT NOT NULL,
+  CHECK ((state = 'open') = (terminal_sequence IS NULL)),
+  FOREIGN KEY (run_id, plan_revision) REFERENCES plans(run_id, revision)
+) STRICT;
+CREATE INDEX evidence_operations_binding ON evidence_operations(binding_digest, id);
+CREATE INDEX evidence_operations_open ON evidence_operations(state, id);
+CREATE TRIGGER evidence_operations_identity BEFORE UPDATE OF id,store_id,coordinator_epoch,nonce,domain,run_id,
+  plan_revision,plan_digest,snapshot_id,source_id,binding_digest,candidate_digest,receipt_id,receipt_digest,
+  predecessor_id,identity,opened_sequence,created_at ON evidence_operations
+  BEGIN SELECT RAISE(ABORT, 'sentinel.store.appendOnly: evidence operation identity'); END;
+CREATE TRIGGER evidence_operations_terminal BEFORE UPDATE OF state,terminal_sequence ON evidence_operations
+  WHEN OLD.state <> 'open' OR NEW.state = 'open'
+  BEGIN SELECT RAISE(ABORT, 'sentinel.store.appendOnly: evidence operation terminal'); END;
+${APPEND_ONLY('evidence_operations', 'DELETE')}
+ALTER TABLE staging ADD COLUMN evidence_operation_id TEXT REFERENCES evidence_operations(id);
+CREATE TRIGGER staging_evidence_domain BEFORE INSERT ON staging
+  WHEN NEW.evidence_operation_id IS NOT NULL AND (NEW.work_id IS NOT NULL OR NEW.attempt_id IS NOT NULL)
+  BEGIN SELECT RAISE(ABORT, 'sentinel.store.stagingMismatch: evidence is not an attempt'); END;
+CREATE TRIGGER staging_evidence_domain_update BEFORE UPDATE OF evidence_operation_id,work_id,attempt_id ON staging
+  WHEN NEW.evidence_operation_id IS NOT NULL AND (NEW.work_id IS NOT NULL OR NEW.attempt_id IS NOT NULL)
+  BEGIN SELECT RAISE(ABORT, 'sentinel.store.stagingMismatch: evidence is not an attempt'); END;
+CREATE INDEX staging_evidence ON staging(evidence_operation_id,stage_id);
+CREATE TABLE evidence_acceptances (
+  candidate_digest TEXT PRIMARY KEY CHECK (${DIGEST('candidate_digest')}),
+  operation_id TEXT NOT NULL UNIQUE REFERENCES evidence_operations(id),
+  root_id TEXT NOT NULL REFERENCES artifacts(id), binding_digest TEXT NOT NULL CHECK (${DIGEST('binding_digest')}),
+  previous_candidate TEXT REFERENCES evidence_acceptances(candidate_digest),
+  sequence INTEGER NOT NULL UNIQUE REFERENCES events(sequence),
+  coordinator_epoch TEXT NOT NULL REFERENCES epochs(epoch), accepted_at TEXT NOT NULL
+) STRICT;
+CREATE INDEX evidence_acceptances_binding ON evidence_acceptances(binding_digest, sequence);
+${APPEND_ONLY('evidence_acceptances', 'UPDATE')}
+${APPEND_ONLY('evidence_acceptances', 'DELETE')}
+`;
+
 /** The shipped migrations, in order. Never edit a released step: add the next number. */
 export const LEDGER_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: 'foundation', sql: V1 },
@@ -411,6 +479,7 @@ export const LEDGER_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 3, name: 'durable-execution', sql: V3 },
   { version: 4, name: 'plan-admission', sql: V4 },
   { version: 5, name: 'plan-selection', sql: V5 },
+  { version: 6, name: 'evidence-operations', sql: V6 },
 ]);
 
 export const migrationChecksum = (m: Migration): string =>

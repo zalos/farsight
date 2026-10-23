@@ -17,6 +17,7 @@ export type * from './plan.js';
 export type * from './paths.js';
 export type * from './deepimport.js';
 export type * from './service.js';
+export type * from './import-view.js';
 
 /**
  * Every envelope: its kind, the one schema version this build reads and writes, and the generated type.
@@ -43,6 +44,8 @@ export const ENVELOPES = {
   controls: { schema: 'sentinel-controls/draft-1', type: 'ControlFactsEnvelope' },
   plan: { schema: 'sentinel-plan/draft-1', type: 'PlanEnvelope' },
   paths: { schema: 'sentinel-paths/draft-1', type: 'PathEvidenceEnvelope' },
+  importview: {schema:'sentinel-import-view/draft-1',type:'ImportViewEnvelope'},
+  importpage: {schema:'sentinel-import-page/draft-1',type:'ImportPageEnvelope'},
   deepimport: { schema: 'sentinel-deep-import/draft-1', type: 'DeepImportEnvelope' },
   servicecapabilities: { schema: 'sentinel-service-capabilities/draft-1', type: 'ServiceCapabilities' },
   runinspection: { schema: 'sentinel-run-inspection/draft-1', type: 'RunInspection' },
@@ -99,10 +102,10 @@ export const FRAMEWORK_IDS = ['next', 'express', 'nest', 'spring'] as const;
 export const RULE_ORIGINS = ['sentinel-original', 'third-party'] as const;
 export const SENTINEL_ACTIONS = [
   'run.start', 'capture.source', 'disposition.propose', 'disposition.approve', 'rule.promote',
-  'tool.acquire', 'paid.admit', 'disclosure.send', 'settings.adopt', 'run.pause', 'run.cancel', 'context.pin', 'evidence.import',
+  'tool.acquire', 'paid.admit', 'disclosure.send', 'settings.adopt', 'run.pause', 'run.cancel', 'context.pin', 'evidence.import', 'evidence.abandon',
 ] as const;
 /** Owner actions: an agent can never be granted them, and a person always confirms them with a receipt. */
-export const OWNER_ACTIONS = ['disposition.approve', 'rule.promote', 'tool.acquire', 'settings.adopt', 'context.pin', 'evidence.import'] as const;
+export const OWNER_ACTIONS = ['disposition.approve', 'rule.promote', 'tool.acquire', 'settings.adopt', 'context.pin', 'evidence.import', 'evidence.abandon'] as const;
 export const ACTION_EFFECTS = ['local-artifacts', 'source-disclosure', 'paid-inference', 'network', 'tool-execution'] as const;
 export const SETTINGS_TRUST = ['adopted', 'not-adopted', 'changed', 'missing', 'invalid'] as const;
 export const ADMISSION_OUTCOMES = ['admitted', 'denied', 'awaiting-confirmation'] as const;

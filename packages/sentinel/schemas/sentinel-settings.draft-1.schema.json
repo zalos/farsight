@@ -186,6 +186,7 @@
         "disclosure.send",
         "settings.adopt",
         "evidence.import",
+        "evidence.abandon",
         "run.pause",
         "run.cancel",
         "context.pin"

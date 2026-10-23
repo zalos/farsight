@@ -181,6 +181,10 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'planner/boundary.js': ['node:crypto'],
   // The store's reason codes are catalog words; core's catalog is the only Farsight module the library reads.
   'store/errors.js': ['@farsight/core/dist/strings-sentinel-store.js'],
+  'evidence/owner-cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:path'],
+  'evidence/import-operation.js': ['node:crypto'],
+  'evidence/owner-context.js': ['node:fs', 'node:path'],
+  'evidence/audit.js': ['node:fs', 'node:path'],
   'store/ledger-json.js': ['node:crypto'],
   // Scope-local counters and a monotonic clock; neither performs I/O or starts work on import.
   'store/read-budget.js': ['node:async_hooks', 'node:perf_hooks', 'node:timers/promises'],
@@ -213,6 +217,12 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // Bounded call paths and attested deep import (ADR 36): pure over parser evidence and captured bytes; no engine, no process.
   'analysis/paths/paths.js': ['@farsight/graph', 'node:crypto'],
   'analysis/deep/import.js': ['@farsight/graph', 'node:crypto'],
+  // Imported report readers (PR 20 Stage A): one bounded no-follow file read, hashing and canonical JSON; no network,
+  // no process, no decompression, no store or receipt.
+  'imports/bounded-file.js': ['node:fs', 'node:path'],
+  'imports/collect.js': ['node:crypto'],
+  'imports/normalize.js': ['@farsight/graph', 'node:crypto'],
+  'imports/sarif.js': ['@farsight/graph'],
   // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
   // The framework inspection worker (ADR 44): sealed inputs by digest, one output file; it runs only as its own entry.
   'frameworks/controls/closure.js': ['node:crypto', 'node:fs', 'node:module', 'node:path', 'node:url', 'require:oxc-parser'],
@@ -330,7 +340,7 @@ test('public scanner command support is conditional on explicit adopted pinned a
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import', 'reports', 'mcp']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import', 'reports', 'report-imports', 'mcp']);
   assert.equal(listed.find(c => c.id === 'framework-express')?.reasonCode, 'sentinel.capability.draftExpress');
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
   for (const id of ['dispositions']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
