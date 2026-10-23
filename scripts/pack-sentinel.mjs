@@ -4,7 +4,11 @@
 // bundled from `src/<x>.ts` with Sentinel's workspace dependencies inlined, in one build whose shared
 // modules land in `dist/chunks/` so every export subpath sees the same module instances. Third-party
 // dependencies of that closure stay external and become the tarball's dependencies. The
-// tarball carries Sentinel's own version, runtime floor and `private` flag, not the app's.
+// tarball carries Sentinel's own version, runtime floor and `private` flag, not the app's: a manifest
+// without a version is refused (it is never taken from farsight-cli's), and `--expect-version X.Y.Z`
+// (the release workflows pass the release manifest's) refuses any other. Like farsight-cli's, the
+// tarball carries its build identity in dist/build-stamp.json: version, build time, and the commit
+// facts by core's gitIdentity rule (HEAD, the last commit that touched code, whether it was dirty).
 // Public types are required: every JavaScript export needs a `types` condition, and tsc's
 // declarations ship beside the bundles. A declaration that imports a publishable workspace library
 // (one with publishConfig, such as @farsight/graph or @farsight/code-parser) gets that library's
@@ -12,7 +16,7 @@
 // other workspace package, or a module the tarball does not declare, is refused: it would not
 // resolve for a consumer.
 //
-//   pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs
+//   pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs [--expect-version X.Y.Z]
 //   → build/sentinel/farsight-sentinel-<sentinel version>.tgz
 import { build } from 'esbuild';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -33,10 +37,18 @@ const fail = (message, details = []) => {
 if (!existsSync(join(dir, 'package.json'))) fail('packages/sentinel/package.json is missing; there is no Sentinel package to pack.');
 const sentinel = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+// Sentinel's own version, or nothing: never farsight-cli's.
+if (typeof sentinel.version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(sentinel.version)) {
+  fail('packages/sentinel/package.json has no version of its own; farsight-sentinel is never versioned from farsight-cli.');
+}
+const expectAt = process.argv.indexOf('--expect-version');
+const expected = expectAt >= 0 ? process.argv[expectAt + 1] : undefined;
+if (expectAt >= 0 && !expected) fail('--expect-version needs a version.');
+if (expected && expected !== sentinel.version) fail(`packages/sentinel/package.json is ${sentinel.version}, not the expected ${expected}.`);
 
 // Sentinel's own workspace closure must be built (its imports resolve through each `main`);
 // checked before build/sentinel is touched.
-const missing = missingBuildOutputs(root, sentinel.name);
+const missing = missingBuildOutputs(root, sentinel.name, [join(root, 'packages', 'core', 'dist', 'version.js')]);
 if (missing.length) {
   fail('compiled packages are missing. Run `pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs`.',
     missing.map((path) => 'missing: ' + (isAbsolute(path) ? relative(root, path) : path)));
@@ -204,7 +216,16 @@ if (unresolvable.length) {
 
 // Everything is built in a staging directory; build/sentinel is replaced only after the bundle and
 // the tarball succeed, and other packages' outputs in build/ are never touched.
-const version = sentinel.version ?? pkg.version;
+const version = sentinel.version;
+// The build identity, by the rule farsight-cli's packer uses (core's gitIdentity; core is in Sentinel's closure).
+const { gitIdentity } = await import(pathToFileURL(join(root, 'packages', 'core', 'dist', 'version.js')).href);
+const git = gitIdentity(root);
+const buildIdentity = {
+  name: 'farsight-sentinel', version, built: new Date().toISOString(),
+  ...(git.commit ? { commit: git.commit } : {}),
+  ...(git.codeCommit ? { codeCommit: git.codeCommit } : {}),
+  ...(git.codeCommit && typeof git.dirty === 'boolean' ? { dirty: git.dirty } : {}),
+};
 const buildDir = join(root, 'build');
 mkdirSync(buildDir, { recursive: true });
 const stage = mkdtempSync(join(buildDir, '.stage-sentinel-'));
@@ -229,6 +250,8 @@ try {
     const text = readFileSync(path, 'utf8');
     if (!text.startsWith('#!')) writeFileSync(path, '#!/usr/bin/env node\n' + text);
   }
+  // Read back by the release acceptance and, once its CLI prints it, by `farsight-sentinel --version`.
+  writeFileSync(join(out, 'dist', 'build-stamp.json'), JSON.stringify(buildIdentity, null, 2) + '\n');
   for (const [file, text] of declarations) {
     mkdirSync(dirname(join(out, 'dist', file)), { recursive: true });
     writeFileSync(join(out, 'dist', file), text);
@@ -276,4 +299,4 @@ try {
 const published = join(buildDir, 'sentinel');
 rmSync(published, { recursive: true, force: true });
 renameSync(stage, published);
-console.log(`\npackaged: build/sentinel/farsight-sentinel-${version}.tgz`);
+console.log(`\npackaged: build/sentinel/farsight-sentinel-${version}.tgz  (built ${buildIdentity.built}${buildIdentity.commit ? `, commit ${buildIdentity.commit}` : ''}${buildIdentity.dirty ? ', with uncommitted changes' : ''})`);

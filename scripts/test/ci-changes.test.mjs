@@ -44,6 +44,17 @@ test('runtime, fixtures and shared build inputs retain their affected checks', (
   }
 });
 
+test('the release scripts select their own checks: the acceptance runs in sentinel-package, the rest are script tests', () => {
+  assert.deepEqual(selectChecks(['scripts/npm-acceptance.mjs']), { ...none, validate: true, sentinel: true });
+  for (const path of ['scripts/release-manifest.mjs', 'scripts/verify-release.mjs', 'scripts/release.mjs', 'scripts/changelog.mjs']) {
+    assert.deepEqual(selectChecks([path]), { ...none, validate: true }, path);
+  }
+  assert.deepEqual(selectChecks(['scripts/test/helpers/acceptance-standins.mjs']), { ...none, validate: true }, 'a test helper is a script test');
+  for (const path of ['.github/workflows/release.yml', '.github/workflows/publish.yml', '.github/workflows/verify-release.yml']) {
+    assert.deepEqual(selectChecks([path]), full, `${path} is a workflow`);
+  }
+});
+
 test("every package in farsight-cli's real build closure selects sentinel-package", () => {
   const closure = buildClosure(process.cwd(), '@farsight/cli').closure.map((p) => p.dir.split('/').pop());
   assert.ok(closure.length >= 10 && closure.includes('parsers') && closure.includes('work-azdo'), closure.join(', '));

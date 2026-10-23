@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { nextVersion, compareVersions } from '../release.mjs';
+import { assetManifest, checkManifest, manifestLines, validateCommitted } from '../release-manifest.mjs';
 
 const SCRIPTS = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -25,7 +26,7 @@ test('next versions', () => {
   assert.ok(compareVersions('0.1.1', '0.1.0') > 0);
 });
 
-function repo() {
+function repo({ sentinel } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'farsight-release-'));
   const g = (...args) => execFileSync('git', args, { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
   g('init', '-q', '-b', 'main');
@@ -34,8 +35,12 @@ function repo() {
   g('config', 'commit.gpgsign', 'false');
   g('config', 'tag.gpgsign', 'false');
   mkdirSync(join(dir, 'scripts'));
-  for (const f of ['release.mjs', 'changelog.mjs']) copyFileSync(join(SCRIPTS, f), join(dir, 'scripts', f));
+  for (const f of ['release.mjs', 'changelog.mjs', 'release-manifest.mjs']) copyFileSync(join(SCRIPTS, f), join(dir, 'scripts', f));
   writeFileSync(join(dir, 'package.json'), '{\n  "name": "x",\n  "version": "0.1.0",\n  "private": true\n}\n');
+  if (sentinel) {
+    mkdirSync(join(dir, 'packages', 'sentinel'), { recursive: true });
+    writeFileSync(join(dir, 'packages', 'sentinel', 'package.json'), `{\n  "name": "@farsight/sentinel",\n  "version": "${sentinel}",\n  "private": true\n}\n`);
+  }
   g('add', '-A');
   g('commit', '-q', '-m', 'chore: start');
   const run = (...args) => execFileSync(process.execPath, ['scripts/release.mjs', '--repo-url', 'https://github.com/example/repo', ...args], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GITHUB_OUTPUT: '' } }).toString();
@@ -120,7 +125,7 @@ test('--no-tag --branch --commit-notes: the release-PR shape — a new branch wi
     assert.equal(r.g('rev-parse', 'HEAD~1'), main);
     assert.equal(r.g('log', '-1', '--format=%s'), 'chore(release): v0.1.1');
     assert.equal(r.g('tag', '-l'), '', 'no tag');
-    assert.deepEqual(r.g('show', '--name-only', '--format=', 'HEAD').split('\n').sort(), ['.github/release-notes/v0.1.1.md', 'CHANGELOG.md', 'package.json']);
+    assert.deepEqual(r.g('show', '--name-only', '--format=', 'HEAD').split('\n').sort(), ['.github/release-manifests/v0.1.1.json', '.github/release-notes/v0.1.1.md', 'CHANGELOG.md', 'package.json']);
     const notes = readFileSync(join(r.dir, '.github/release-notes/v0.1.1.md'), 'utf8');
     assert.match(notes, /### Fixes[\s\S]*a repair/);
     assert.match(notes, /releases\/download\/v0\.1\.1\/farsight-cli-0\.1\.1\.tgz/);
@@ -142,5 +147,72 @@ test('--no-tag --branch --commit-notes: the release-PR shape — a new branch wi
     r.g('branch', 'release/v0.1.2');
     assert.throws(() => r.run('--bump', 'patch', '--no-tag', '--branch', 'release/v{version}'), /branch release\/v0\.1\.2 already exists/);
     assert.equal(r.g('status', '--porcelain'), '');
+  } finally { r.done(); }
+});
+
+test('farsight-sentinel is released at its own explicit version, never Farsight\'s, and the manifest names both', () => {
+  const r = repo({ sentinel: '0.0.0-draft.1' });
+  try {
+    writeFileSync(join(r.dir, 'a.txt'), 'a');
+    r.g('add', 'a.txt');
+    r.g('commit', '-q', '-m', 'feat: both packages');
+    // no version named for Sentinel: refused, nothing written
+    assert.throws(() => r.run('--bump', 'minor', '--no-tag', '--branch', 'release/v{version}', '--commit-notes'), /name farsight-sentinel's release version with --sentinel-version \(it is 0\.0\.0-draft\.1 now; it is never taken from farsight-cli's\)/);
+    assert.throws(() => r.run('--bump', 'minor', '--sentinel-version', 'one'), /not a version/);
+    assert.throws(() => r.run('--bump', 'minor', '--sentinel-version', '0.0.0-draft.1'), /farsight-sentinel 0\.0\.0-draft\.1 is not after its current version/);
+    assert.equal(r.g('status', '--porcelain'), '');
+    assert.equal(r.g('rev-parse', '--abbrev-ref', 'HEAD'), 'main');
+
+    const dry = r.run('--dry-run', '--bump', 'minor', '--sentinel-version', '0.1.0');
+    assert.match(dry, /farsight-sentinel: 0\.0\.0-draft\.1 → 0\.1\.0 \(its own version\)/);
+
+    // deliberately different versions: farsight-cli 0.2.0, farsight-sentinel 0.1.0
+    const out = r.run('--bump', 'minor', '--sentinel-version', '0.1.0', '--no-tag', '--branch', 'release/v{version}', '--commit-notes');
+    assert.match(out, /farsight-sentinel 0\.1\.0 \(from 0\.0\.0-draft\.1\)/);
+    assert.equal(JSON.parse(readFileSync(join(r.dir, 'package.json'), 'utf8')).version, '0.2.0');
+    assert.match(readFileSync(join(r.dir, 'packages/sentinel/package.json'), 'utf8'), /^\{\n  "name": "@farsight\/sentinel",\n  "version": "0\.1\.0",\n  "private": true\n\}\n$/, 'only the version changed; private is kept');
+    assert.deepEqual(r.g('show', '--name-only', '--format=', 'HEAD').split('\n').sort(),
+      ['.github/release-manifests/v0.2.0.json', '.github/release-notes/v0.2.0.md', 'CHANGELOG.md', 'package.json', 'packages/sentinel/package.json']);
+    const manifest = validateCommitted(r.dir, 'v0.2.0');
+    assert.deepEqual(manifest.packages, {
+      farsight: { name: 'farsight-cli', version: '0.2.0', file: 'farsight-cli-0.2.0.tgz' },
+      sentinel: { name: 'farsight-sentinel', version: '0.1.0', file: 'farsight-sentinel-0.1.0.tgz' },
+    });
+    const notes = readFileSync(join(r.dir, '.github/release-notes/v0.2.0.md'), 'utf8');
+    assert.match(notes, /releases\/download\/v0\.2\.0\/farsight-cli-0\.2\.0\.tgz/);
+    assert.match(notes, /releases\/download\/v0\.2\.0\/farsight-sentinel-0\.1\.0\.tgz/);
+    assert.doesNotMatch(notes, /farsight-sentinel-0\.2\.0/, 'no Sentinel line from Farsight\'s version');
+
+    // the committed manifest must agree with the packages: a hand edit is caught
+    writeFileSync(join(r.dir, 'packages/sentinel/package.json'), '{ "name": "@farsight/sentinel", "version": "0.2.0", "private": true }\n');
+    assert.throws(() => validateCommitted(r.dir, 'v0.2.0'), /farsight-sentinel: the manifest says 0\.1\.0, packages\/sentinel\/package\.json says 0\.2\.0/);
+    r.g('checkout', '--', 'packages/sentinel/package.json');
+
+    // the uploaded manifest: each tarball's URL from its own name and version, with size and digest
+    mkdirSync(join(r.dir, 'build', 'sentinel'), { recursive: true });
+    writeFileSync(join(r.dir, 'build', 'farsight-cli-0.2.0.tgz'), 'farsight tarball');
+    writeFileSync(join(r.dir, 'build', 'sentinel', 'farsight-sentinel-0.1.0.tgz'), 'sentinel tarball');
+    const assets = assetManifest(r.dir, 'v0.2.0', { repoUrl: 'https://github.com/example/repo/', commit: 'abcdef1' });
+    assert.equal(assets.packages.sentinel.url, 'https://github.com/example/repo/releases/download/v0.2.0/farsight-sentinel-0.1.0.tgz');
+    assert.equal(assets.packages.farsight.url, 'https://github.com/example/repo/releases/download/v0.2.0/farsight-cli-0.2.0.tgz');
+    assert.equal(assets.packages.sentinel.bytes, 16);
+    assert.match(assets.packages.sentinel.sha256, /^sha256:[0-9a-f]{64}$/);
+    assert.notEqual(assets.packages.sentinel.sha256, assets.packages.farsight.sha256);
+    assert.equal(manifestLines(assets).split('\n').filter(Boolean).length, 2);
+    const forged = JSON.parse(JSON.stringify(assets));
+    forged.packages.sentinel.url = assets.packages.farsight.url;
+    assert.throws(() => checkManifest(forged, { assets: true }), /packages\.sentinel: url, bytes or sha256 is wrong/);
+    rmSync(join(r.dir, 'build', 'sentinel', 'farsight-sentinel-0.1.0.tgz'));
+    assert.throws(() => assetManifest(r.dir, 'v0.2.0', { repoUrl: 'https://github.com/example/repo', commit: 'abcdef1' }), /farsight-sentinel-0\.1\.0\.tgz is missing/);
+  } finally { r.done(); }
+});
+
+test('a checkout without Sentinel refuses a Sentinel version and releases farsight-cli alone', () => {
+  const r = repo();
+  try {
+    assert.throws(() => r.run('--bump', 'patch', '--sentinel-version', '0.1.0'), /--sentinel-version 0\.1\.0 was given, but packages\/sentinel\/package\.json does not exist/);
+    r.run('--bump', 'patch', '--no-tag', '--branch', 'release/v{version}', '--commit-notes');
+    assert.deepEqual(Object.keys(validateCommitted(r.dir, 'v0.1.1').packages), ['farsight']);
+    assert.doesNotMatch(readFileSync(join(r.dir, '.github/release-notes/v0.1.1.md'), 'utf8'), /farsight-sentinel/);
   } finally { r.done(); }
 });

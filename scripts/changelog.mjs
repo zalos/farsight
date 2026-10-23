@@ -150,8 +150,21 @@ export function tarballUrl(repoUrl, version) {
   return `${repoUrl ?? '<repository>'}/releases/download/v${version}/farsight-cli-${version}.tgz`;
 }
 
-export function renderNotes({ version, commits, repoUrl }) {
+/** `farsight-sentinel`'s download URL in the same release: its own name and its own version, under farsight-cli's tag. */
+export function sentinelTarballUrl(repoUrl, tag, sentinelVersion) {
+  const file = `farsight-sentinel-${sentinelVersion}.tgz`;
+  return `${repoUrl ?? '<repository>'}/releases/download/${tag}/${file}`;
+}
+
+export function renderNotes({ version, commits, repoUrl, sentinelVersion }) {
   const guide = repoUrl ? `${repoUrl}/blob/v${version}/docs/GETTING-STARTED.md` : 'docs/GETTING-STARTED.md';
+  // farsight-sentinel is optional and versioned on its own; its line is derived from its own version, never Farsight's
+  const sentinel = sentinelVersion ? [
+    '',
+    `# optional, installed separately: farsight-sentinel ${sentinelVersion}`,
+    `npm install -g ${sentinelTarballUrl(repoUrl, `v${version}`, sentinelVersion)}`,
+    'farsight-sentinel --version',
+  ] : [];
   return [
     renderGroups(commits, repoUrl).trimEnd(),
     '',
@@ -160,6 +173,7 @@ export function renderNotes({ version, commits, repoUrl }) {
     '```sh',
     `npm install -g ${tarballUrl(repoUrl, version)}`,
     `farsight --version   # farsight ${version} · built … · commit …`,
+    ...sentinel,
     '```',
     '',
     `Needs Node 24 or newer. Then follow [Getting started](${guide}).`,
@@ -188,7 +202,7 @@ export function sinceLabel(since) {
 export function today() { return new Date().toISOString().slice(0, 10); }
 
 /** Everything the CLI prints or writes, for one release. */
-export function changelog(cwd, { version, since, repoUrl, date } = {}) {
+export function changelog(cwd, { version, since, repoUrl, date, sentinelVersion } = {}) {
   const v = version ?? JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')).version;
   const from = resolveSince(cwd, since);
   const url = resolveRepoUrl(cwd, repoUrl);
@@ -196,7 +210,7 @@ export function changelog(cwd, { version, since, repoUrl, date } = {}) {
   return {
     version: v, since: from, repoUrl: url, commits,
     section: renderSection({ version: v, date: date ?? today(), commits, repoUrl: url }),
-    notes: renderNotes({ version: v, commits, repoUrl: url }),
+    notes: renderNotes({ version: v, commits, repoUrl: url, sentinelVersion }),
   };
 }
 

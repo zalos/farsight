@@ -444,16 +444,40 @@ Best while actively hacking on Farsight itself: `pnpm build` and every consumer 
 
 ### Refreshing after Farsight changes
 
-| Install | To pick up new Farsight code |
+| Install | To pick up a new Farsight release |
 |---|---|
-| A (global tarball) | `pnpm build && node scripts/pack.mjs && npm i -g build/farsight-cli-*.tgz` |
-| B (per-project tarball) | rebuild + repack as above, then re-run `npm install` of the tarball in each app |
-| C (workspace path) | `pnpm build` — that's it |
+| A (global tarball) | `npm install -g https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsight-cli-X.Y.Z.tgz` with the newer release's URL — npm only |
+| B (per-project tarball) | `npm install --save-dev <the newer release's URL>` in each app, then commit `package.json` and the lockfile so teammates get the same release with `npm ci` |
+| C (workspace path) | `pnpm build` in the Farsight checkout — that's it |
+
+Release consumers never need pnpm or a checkout. Only someone working on Farsight itself, testing an unreleased
+build in another app, packs a local tarball from the checkout (`pnpm build && node scripts/pack.mjs`) and installs
+`build/farsight-cli-*.tgz` with npm as above; npm then records that local file path, so it suits one machine only.
 
 Two gotchas:
 
-- **Same-version tarball reinstalls can be served stale from npm's cache.** If a reinstall doesn't pick up changes, add `--force`, or bump `version` in the root `package.json` (pack.mjs stamps the tarball from it).
+- **Same-version local tarball reinstalls can be served stale from npm's cache.** A published release has its own version and URL, so this only affects a locally packed tarball: add `--force` to the reinstall, or bump `version` in the root `package.json` before packing (pack.mjs stamps the tarball from it).
 - **Running servers hold old code.** Restart `farsight serve` and restart any MCP client session after upgrading — and re-run `farsight ingest` in the consuming app if the parser changed, since `graph.json` is a snapshot of what the *old* parser extracted.
+
+### Farsight Sentinel (optional, installed separately)
+
+Sentinel, the optional security-review package, ships as its own tarball on the same GitHub Release, at its own
+version (`A.B.C`, which the release notes name; it is not farsight-cli's). Farsight neither bundles nor needs it, and
+each installs and works with npm alone:
+
+```sh
+npm install -g https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsight-sentinel-A.B.C.tgz
+farsight-sentinel --version
+farsight-sentinel capabilities        # what this build can and cannot do yet, each with the change it is planned in
+```
+
+Per project, `npm install --save-dev <the same URL>` pins it like farsight-cli, and `npx farsight-sentinel` runs it.
+`npm uninstall -g farsight-sentinel` removes the package and nothing else: its stored evidence stays where it was
+written, and Farsight keeps working.
+
+The commands that initialize a project and run a scan (`init`, `plan`, `run`, `report`) are not in this build yet;
+`farsight-sentinel capabilities` lists them as unavailable. The initialization steps for npm-only users will be
+written here with the release that ships them.
 
 ## Dogfood: Farsight on Farsight
 

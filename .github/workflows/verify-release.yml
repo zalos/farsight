@@ -1,0 +1,57 @@
+# Verifies a published release from its GitHub Release URLs alone: reads release-manifest.json, checks each
+# tarball's size and digest, then installs farsight-cli alone, farsight-sentinel alone and both, each globally and
+# into a project, in clean consumers with only Node and npm (scripts/verify-release.mjs). It changes nothing on
+# GitHub. Called by publish.yml after a release; run it again any time with
+#   gh workflow run verify-release.yml -f tag=vX.Y.Z
+name: verify-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag to verify (vX.Y.Z); every acceptance gate must pass
+        type: string
+        required: true
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TAG: ${{ inputs.tag }}
+      URL: ${{ github.server_url }}/${{ github.repository }}
+    steps:
+      - name: Refuse a malformed tag
+        run: |
+          case "$TAG" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "::error::$TAG is not a release tag"; exit 1 ;; esac
+      # The scripts only: the release under test is installed from its URLs, never built from this checkout.
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            scripts
+            package.json
+            .nvmrc
+          sparse-checkout-cone-mode: false
+      # Node and npm only: no pnpm is set up, so nothing can resolve a workspace.
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Install and use the published release
+        run: |
+          # every gate must pass: a pending gate fails the verification (no diagnostic mode here)
+          node scripts/verify-release.mjs --tag "$TAG" --repo-url "$URL" --report "$RUNNER_TEMP/verify.json"
+      - name: Keep the report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: verify-release-${{ inputs.tag }}
+          path: ${{ runner.temp }}/verify.json
+          if-no-files-found: ignore
