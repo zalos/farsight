@@ -3,15 +3,46 @@
 // holds the existing default-off after-stage hook before a real SIGKILL. Readonly SQLite observes genuine state;
 // the harness never writes ledger rows or mints acceptance authority.
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
+import {spawn,execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
+import {tmpdir} from 'node:os';
 import {DatabaseSync} from 'node:sqlite';
-import {existsSync,mkdirSync,readFileSync,readdirSync,realpathSync,renameSync,writeFileSync} from 'node:fs';
+import {constants,openSync,closeSync,fstatSync,readSync,writeSync,existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,realpathSync,renameSync,rmSync,writeFileSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {npmConsumer} from './npm-consumer.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),version=JSON.parse(readFileSync(join(root,'packages/sentinel/package.json'))).version;
 const artifact=resolve(process.argv[2]??join(root,'build/sentinel',`farsight-sentinel-${version}.tgz`));
-assert.ok(existsSync(artifact),'pack Sentinel first');const c=await npmConsumer('sentinel-import-', [artifact]);
+assert.ok(existsSync(artifact),'pack Sentinel first');
+// Test-harness provenance only: no package stamp/export or product permission is introduced.
+// Packing reads Sentinel source, while the private crash fixture runs compiled modules; compile first.
+const ARTIFACT_BYTES=64*1024*1024,COMMAND_MS=120000,DIAGNOSTIC_BYTES=512*1024;
+function artifactDigest(path,snapshot){
+ const fd=openSync(path,constants.O_RDONLY|constants.O_NOFOLLOW);let out;
+ try{
+  const before=fstatSync(fd);assert.ok(before.isFile()&&before.size<=ARTIFACT_BYTES,'bounded regular artifact required');
+  if(snapshot)out=openSync(snapshot,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);
+  const hash=createHash('sha256'),buffer=Buffer.alloc(64*1024);let total=0;
+  for(;;){const n=readSync(fd,buffer,0,buffer.length,null);if(n===0)break;total+=n;assert.ok(total<=ARTIFACT_BYTES,'artifact exceeds64MiB');
+   hash.update(buffer.subarray(0,n));if(out!==undefined){let offset=0;while(offset<n){const written=writeSync(out,buffer,offset,n-offset);assert.ok(written>0,'artifact snapshot write refused');offset+=written;}}
+  }
+  const after=fstatSync(fd);assert.equal(total,before.size);assert.equal(after.size,before.size);assert.equal(after.mtimeMs,before.mtimeMs,'artifact changed while read');
+  return hash.digest('hex');
+ }finally{if(out!==undefined)closeSync(out);closeSync(fd)}
+}
+const artifactScope=mkdtempSync(join(tmpdir(),'sentinel-import-artifact-')),snapshot=join(artifactScope,'input.tgz');
+let c,artifactSha256;
+try{
+ artifactSha256=artifactDigest(artifact,snapshot);
+ const options={cwd:root,timeout:COMMAND_MS,maxBuffer:DIAGNOSTIC_BYTES,stdio:['ignore','pipe','pipe']};
+ execFileSync(process.execPath,[join(root,'node_modules/typescript/bin/tsc'),'-p',join(root,'packages/sentinel/tsconfig.json')],options);
+ execFileSync(process.execPath,[join(root,'scripts/pack-sentinel.mjs')],options);
+ const repacked=join(root,'build/sentinel','farsight-sentinel-'+version+'.tgz');
+ assert.equal(artifactDigest(repacked),artifactSha256,'private build/input artifact mismatch');
+ // Install the original snapshot, never the potentially overwritten default output.
+ c=await npmConsumer('sentinel-import-', [snapshot]);
+}catch(error){rmSync(artifactScope,{recursive:true,force:true});throw error}
+
 const ownedPids=new Set(),serviceRecords=new Map(),children=new Map();const delay=ms=>new Promise(r=>setTimeout(r,ms));
 try{
  const dir=realpathSync.native(c.scratch),ws=join(dir,'workspace');mkdirSync(join(ws,'src'),{recursive:true});
@@ -101,7 +132,7 @@ try{
   for(const id of ownContainers){assert.match(id,/^[0-9a-f]{64}$/);const listed=await c.exec('docker',['container','ls','--all','--no-trunc','--filter','id='+id,'--format','{{.ID}}']);assert.equal(listed.stdout.trim(),'','exact own accepted container was removed')}
   nativePrivacy=true;
  }
- console.log('sentinel evidence consumer ok: '+JSON.stringify({installed:true,sourceGone:true,detachedBusy:true,naturalRelease:true,privateControlledCrash:true,installedTransfer:true,interruptedPending:true,explicitAbandon:true,nativePrivacy,ownContainers}));
+ console.log('sentinel evidence consumer ok: '+JSON.stringify({installed:true,sourceGone:true,detachedBusy:true,naturalRelease:true,privateBuildMatchesArtifact:true,artifactSha256,privateControlledCrash:true,installedTransfer:true,privateBuiltInterruptedPending:true,explicitAbandon:true,nativePrivacy,ownContainers}));
 }finally{
  // Only processes whose handles/descriptors were recorded inside this consumer's own private workspace.
  for(const pid of ownedPids){
@@ -110,5 +141,5 @@ try{
  }
  for(const child of children.values())if(child.exitCode===null&&child.signalCode===null)await Promise.race([new Promise(r=>child.once('exit',r)),delay(5000)]);
  if([...children.values()].some(child=>child.exitCode===null&&child.signalCode===null))throw Error('owned consumer process cleanup unconfirmed; scratch retained');
- c.cleanup();
+ try{c.cleanup()}finally{rmSync(artifactScope,{recursive:true,force:true})}
 }
