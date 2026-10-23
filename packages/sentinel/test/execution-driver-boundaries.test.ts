@@ -57,9 +57,9 @@ test('elapsed unit deadline aborts the driver signal before a delayed timer noti
   const timeout = AbortSignal.timeout.bind(AbortSignal);
   const delayedTimer = new AbortController();
   t.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 1000 ? delayedTimer.signal : timeout(ms));
-  const monotonicNow = performance.now.bind(performance);
+  const monotonicNow = performance.now();
   let elapsed = 0;
-  t.mock.method(performance, 'now', () => monotonicNow() + elapsed);
+  t.mock.method(performance, 'now', () => monotonicNow + elapsed);
   let signal: AbortSignal | undefined;
   let notifications = 0;
   const d = driver(f.p, {
@@ -88,10 +88,10 @@ test('elapsed unit deadline aborts the driver signal before a delayed timer noti
 for (const canceled of [false, true]) {
   test(`elapsed run deadline notifies the driver with delayed timer delivery${canceled ? ', preserving cancellation first' : ''}`, { timeout: 10_000 }, async t => {
     const f = await setup(t, {}, 1000);
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    const wallNow = Date.now.bind(Date);
+    const wallNow = Date.parse(f.p.run.createdAt);
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: wallNow });
     let elapsed = 0;
-    t.mock.method(Date, 'now', () => wallNow() + elapsed);
+    t.mock.method(Date, 'now', () => wallNow + elapsed);
     let signal: AbortSignal | undefined;
     let notifications = 0;
     let coordinator: Coordinator;
