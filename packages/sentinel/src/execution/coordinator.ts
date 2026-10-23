@@ -13,11 +13,13 @@
 // and inventory units run as the coordinator's own operations (bootstrap.ts); an analysis revision's check units
 // run as workers, and what each covered is recorded as canonical coverage records (coverage.ts) that PR 06's
 // evaluateRequiredCoverage alone turns into the run's outcome.
+import { BUILTIN_WORKERS, closureRefusalOf } from './builtin-workers.js';
 import { deepFreeze } from '../policy/immutable.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { driverRefusal, fileDigest, isCheckDriverRegistry, type CheckDriver, type CheckDriverRegistry, type DriverContext, type RuleFiles } from './check-drivers.js';
+import { retainedAnalysisFor, retainedBinding, verifyRetainedAuxiliary } from './retained-analysis.js';
 import { resolveLockedRules } from '../rules/resolve.js';
 import type { ValidatedPack } from '../rules/pack.js';
 import { restoreSnapshot } from '../snapshot/materialize.js';
@@ -478,11 +480,20 @@ export class Coordinator {
       const t0 = performance.now();
       const unitDeadlineAt = t0 + work.resources.deadlineMs;
       const unitDeadline = AbortSignal.timeout(work.resources.deadlineMs);
-      const signal = AbortSignal.any([this.#cancel.signal, this.#deadline.signal, unitDeadline]);
+      const elapsedDeadline = new AbortController();
+      const signal = AbortSignal.any([this.#cancel.signal, this.#deadline.signal, unitDeadline, elapsedDeadline.signal]);
       stillWithin = () => {
         if (this.#cancel.signal.aborted) throw new ExecutionError('sentinel.execution.canceled', { reason: 'canceled before acceptance' });
-        if (this.#deadlinePassed || Date.now() >= this.#runDeadline) throw new ExecutionError('sentinel.execution.runDeadline', { reason: 'the run deadline passed before acceptance' });
-        if (unitDeadline.aborted || performance.now() >= unitDeadlineAt) throw new ExecutionError('sentinel.execution.deadlineExceeded', { deadlineMs: work.resources.deadlineMs, elapsedMs: Math.round(performance.now() - t0) });
+        if (this.#deadlinePassed || Date.now() >= this.#runDeadline) {
+          this.#deadlinePassed = true;
+          this.#deadline.abort();
+          throw new ExecutionError('sentinel.execution.runDeadline', { reason: 'the run deadline passed before acceptance' });
+        }
+        if (unitDeadline.aborted || performance.now() >= unitDeadlineAt) {
+          // The monotonic boundary can precede delivery of the timeout event; notify driver work before refusing.
+          elapsedDeadline.abort(new DOMException('unit deadline elapsed', 'TimeoutError'));
+          throw new ExecutionError('sentinel.execution.deadlineExceeded', { deadlineMs: work.resources.deadlineMs, elapsedMs: Math.round(performance.now() - t0) });
+        }
       };
       stillWithin();
       // A trusted check driver prepares the exact job and auxiliary inputs; the source inputs stay the plan's own.
@@ -498,6 +509,7 @@ export class Coordinator {
       let invocation: { digest: string; record: InvocationRecord } | undefined;
       outcome = await this.#service.run({
         adapterId: executable.adapter!.id, attemptId: id, work: ref, inputs,
+        ...(prepared && executable.adapter!.kind === 'built-in' && Object.hasOwn(BUILTIN_WORKERS, executable.adapter!.id) ? { job: prepared.binding.derived!.job } : {}),
         assignment: { checks: executable.checks.map(c => c.id), scopes: [...executable.unit.scopes], inputScopes: executable.inputScopes.map(x => ({ input: x.input, scopes: [...x.scopes] })) },
         signal, intents: this.#intents, workers: this.#workers, resources,
         ...(this.#hooks ? { hooks: { at: (b: 'before-spawn' | 'after-spawn') => this.#hooks!.at?.(b, { work: ref, attemptId: id }) } } : {}),
@@ -534,7 +546,7 @@ export class Coordinator {
           // A driver normalizes the verified result (before the work folder is released) into the coverage view
           // and records published with it; without one, the result's own coverage claims are read.
           const out = deepFreeze(outcome);
-          const normalized = driver ? await driver.normalize(prepared!.context, { outcome: out, result: out.result!, outputs: out.outputs, workDir: out.workDir, job: prepared!.job,
+          const normalized = driver ? await driver.normalize(prepared!.context, { outcome: out, result: out.result!, outputs: out.outputs, workDir: out.workDir, job: prepared!.job, binding: deepFreeze(binding),
             output: (oid: ArtifactId) => {
               const o = out.outputs.find(x => x.id === oid);
               if (!o) throw new ExecutionError('sentinel.execution.outputMismatch', { reason: 'not a verified output' });
@@ -578,7 +590,8 @@ export class Coordinator {
       } else if (attemptId && this.#deadlinePassed && !this.#cancelRequested) {
         this.#end(ref, attemptId, 'failed', 'sentinel.execution.runDeadline', outcome.detail);
       } else if (attemptId) {
-        this.#end(ref, attemptId, outcome.state === 'canceled' ? 'canceled' : 'failed', outcome.code ?? 'sentinel.execution.workerExited', outcome.detail);
+        const refusal = closureRefusalOf(executable.adapter, driver, outcome);
+        this.#end(ref, attemptId, outcome.state === 'canceled' ? 'canceled' : 'failed', refusal?.code ?? outcome.code ?? 'sentinel.execution.workerExited', refusal?.detail ?? outcome.detail);
       } else {
         this.#unstarted(ref, outcome.code ?? 'sentinel.execution.workerExited', outcome.detail);
       }
@@ -604,8 +617,9 @@ export class Coordinator {
   }
 
   async #prepareIn(dir: string, driver: CheckDriver, executable: ReturnType<ValidatedPlan['unitOf']>, signal: AbortSignal, stillWithin: () => void) {
-    const context: DriverContext = {
-      signal, plan: this.#plan.admitted.plan, unit: executable.unit, checks: executable.checks, profile: this.#plan.admitted.profile,
+    const context: DriverContext = Object.freeze({
+      signal, analysis: driver.reads?.analysis ? await retainedAnalysisFor(this.#store, this.#plan, executable.unit, this.#plan.admitted.profile, signal, stillWithin) : null,
+      plan: this.#plan.admitted.plan, unit: executable.unit, checks: executable.checks, profile: this.#plan.admitted.profile,
       inputs: executable.inputs, inputScopes: executable.inputScopes, rules: this.#rulesOf(executable.checks),
       tools: this.#plan.admitted.plan.pins.tools.filter(t => t.adapterId === executable.unit.adapterId).map(t => ({ ...t })),
       databases: this.#plan.admitted.plan.pins.databases.map(pin => {
@@ -615,7 +629,7 @@ export class Coordinator {
         return { databaseId: pin.databaseId, snapshotDigest: pin.snapshotDigest, path: copy.path };
       }),
       restored: this.#plan.restored, workDir: dir,
-    };
+    });
     stillWithin();
     const job = await driver.prepare(context);
     stillWithin();
@@ -628,14 +642,15 @@ export class Coordinator {
       if (!s.isFile() || s.isSymbolicLink()) throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'a prepared input is not a regular file' });
       return { id: fileDigest(a.path) as ArtifactId, path: a.path, role: String(a.role).slice(0, 64) };
     });
+    verifyRetainedAuxiliary(context.analysis, auxiliary);
     const base = this.#plan.bindingOf(executable.work);
     const extra = [{ id: jobId, path: jobPath }, ...auxiliary.map(a => ({ id: a.id, path: a.path }))];
     const inputs = [...executable.inputs, ...extra].filter((x, i, all) => all.findIndex(y => y.id === x.id) === i);
     const ids = inputs.map(i => i.id).sort();
     const binding: ExecutionBinding = { ...base, inputs: ids, protocolFingerprint: inputFingerprintOf(ids), sourceInputs: [...base.inputs],
-      derived: { job: jobId, auxiliary: auxiliary.map(a => ({ id: a.id, role: a.role })) } };
+      derived: { job: jobId, auxiliary: auxiliary.map(a => ({ id: a.id, role: a.role })), ...(context.analysis ? { analysis: retainedBinding(context.analysis) } : {}) } };
     const records = [{ value: job.job, schema: 'sentinel-check-job/draft-1', privacy: 'source-derived' as const },
-      ...auxiliary.map(a => ({ bytes: readFileSync(a.path), schema: `sentinel-check-input/${a.role}`.slice(0, 128), privacy: 'source-derived' as const }))];
+      ...auxiliary.map(a => ({ bytes: readFileSync(a.path), schema: `sentinel-check-input/${a.role}`.slice(0, 128), privacy: a.role === 'analysis-artifact' ? 'source' as const : 'source-derived' as const }))];
     return { dir, context, binding, inputs, records, job: job.job };
   }
 

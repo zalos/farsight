@@ -17,13 +17,18 @@
 // limitation attributed by the plan's own extents. A driver that cannot prove a check's rule is one its engine runs
 // must report that check as not covered.
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import type { ArtifactId, Digest, Id } from '../contracts/common.js';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { ArtifactId, Digest, Id, WorkRef } from '../contracts/common.js';
+import type { CaptureEntry } from '../contracts/snapshot.js';
+import type { AnalysisArtifact, ParserIndex, ParserResult } from '../snapshot/parser.js';
+import { retainedBytesOf } from './retained-analysis.js';
 import type { CoverageGranularity } from '../contracts/coverage.js';
 import type { PlanCheck, PlanEnvelope, PlanWork } from '../contracts/plan.js';
 import type { ResultMessage } from '../contracts/protocol.js';
 import type { ResolvedRule } from '../rules/resolve.js';
 import { ExecutionError } from './errors.js';
+import type { ExecutionBinding } from './plan.js';
 import type { ExecutionProfileRecord } from './profile.js';
 import type { AdapterRegistry } from './registry.js';
 import type { CapturedInput, VerifiedOutput, WorkerOutcome } from './supervisor.js';
@@ -34,9 +39,34 @@ export interface RuleFiles {
   readonly files: readonly { readonly path: string; readonly digest: Digest; readonly bytes: Uint8Array }[];
 }
 
+export const ANALYSIS_ROLES = Object.freeze(['analysis-result', 'analysis-index', 'analysis-artifact', 'snapshot-manifest'] as const);
+export interface RetainedAnalysis {
+  readonly sourceId: Id;
+  readonly snapshotId: Id;
+  readonly analysisFingerprint: string;
+  readonly inventory: WorkRef;
+  readonly result: { readonly id: ArtifactId; readonly value: ParserResult };
+  readonly index: { readonly id: ArtifactId; readonly value: ParserIndex };
+  readonly artifact: { readonly id: ArtifactId; readonly value: AnalysisArtifact };
+  readonly manifest: ArtifactId;
+  readonly entries: readonly CaptureEntry[];
+}
+
+/** Fixed roles and ORIGINAL hash-checked bytes; JSON reserialization cannot silently change their identities. */
+export function retainedAuxiliary(context: DriverContext): PreparedJob['auxiliary'] {
+  const bytes = retainedBytesOf(context.analysis);
+  return ANALYSIS_ROLES.map(role => {
+    const path = join(context.workDir, `sentinel-${role}.json`);
+    writeFileSync(path, bytes[role], { flag: 'wx', mode: 0o600 });
+    return { path, role };
+  });
+}
+
 export interface DriverContext {
   /** The same cancellation and absolute unit/run deadline signal used by the worker. */
   readonly signal: AbortSignal;
+  /** Coordinator-owned retained evidence, only when the registered driver opts in. */
+  readonly analysis: RetainedAnalysis | null;
   readonly plan: Readonly<PlanEnvelope>;
   readonly unit: Readonly<PlanWork>;
   readonly checks: readonly Readonly<PlanCheck>[];
@@ -71,6 +101,8 @@ export interface NormalizedOutcome {
 }
 
 export interface VerifiedAttempt {
+  /** The genuine prepared binding, supplied internally by the coordinator. */
+  readonly binding?: Readonly<ExecutionBinding>;
   /** The exact supervisor outcome, deep-frozen by the coordinator; image facts never come from worker metadata. */
   readonly outcome: Readonly<WorkerOutcome>;
   readonly result: ResultMessage;
@@ -85,6 +117,7 @@ export interface VerifiedAttempt {
 }
 
 export interface CheckDriver {
+  readonly reads?: { readonly analysis?: true };
   readonly adapterId: Id;
   /** The registered adapter's digest this driver is written for; any other digest is refused. */
   readonly implementationDigest: Digest;
@@ -118,7 +151,11 @@ export function createCheckDriverRegistry(list: readonly CheckDriver[], registry
     if (adapter.kind === 'operation') refuse(`driver for ${d.adapterId}: an operation runs no check`);
     if (adapter.digest !== d.implementationDigest) refuse(`driver for ${d.adapterId}: written for another implementation digest`);
     if (byId.has(d.adapterId)) refuse(`two drivers for ${d.adapterId}`);
-    byId.set(d.adapterId, Object.freeze({ ...d }));
+    const reads = d.reads;
+    if (reads !== undefined && (!reads || typeof reads !== 'object' || Array.isArray(reads)
+      || Object.getPrototypeOf(reads) !== Object.prototype || Reflect.ownKeys(reads).some(key => key !== 'analysis')
+      || Object.entries(Object.getOwnPropertyDescriptors(reads)).some(([key, descriptor]) => key !== 'analysis' || !('value' in descriptor) || descriptor.value !== true))) refuse('driver reads declares only analysis: true');
+    byId.set(d.adapterId, Object.freeze({ ...d, reads: reads === undefined ? undefined : Object.freeze({ analysis: Object.hasOwn(reads, 'analysis') ? true as const : undefined }) }));
   }
   const out = Object.freeze({ ids: Object.freeze([...byId.keys()]), driverFor: (id: Id) => byId.get(id) });
   drivers.add(out);

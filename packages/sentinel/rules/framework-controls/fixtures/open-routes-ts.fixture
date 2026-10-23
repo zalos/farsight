@@ -1,0 +1,6 @@
+// Synthetic inspection fixture: only pass-through layers before the route, so nothing can refuse it.
+import express from 'express';
+const app = express();
+app.use(express.json());
+app.get('/status', (req, res) => res.json({ up: true }));
+export default app;

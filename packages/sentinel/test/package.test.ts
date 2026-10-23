@@ -92,10 +92,11 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/assets.js': ['node:fs', 'node:path', 'node:url'],
   'execution/bootstrap.js': ['node:fs', 'node:path'],
-  'execution/check-drivers.js': ['node:crypto', 'node:fs'],
+  'execution/check-drivers.js': ['node:crypto', 'node:fs', 'node:path'],
   'execution/coordinator.js': ['node:crypto', 'node:fs', 'node:path'],
   'execution/coverage.js': ['node:crypto'],
   'execution/durability.js': ['node:fs'],
+  'execution/retained-analysis.js': ['node:crypto'],
   'execution/plan.js': ['node:crypto', 'node:path'],
   'execution/plans.js': ['node:crypto'],
   'execution/errors.js': ['@farsight/core/dist/strings-sentinel-execution.js'],
@@ -146,10 +147,14 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/preview-detector.js': ['node:crypto', 'node:fs'],
   // This package's own executable and shipped rule packs, found from the module's folder upward.
   'service/package-paths.js': ['node:fs', 'node:path', 'node:url'],
+  'service/framework-adapter.js': ['node:path'],
+  'service/inspection-report.js': ['@farsight/core/dist/strings.js', '@farsight/graph'],
   // The CLI's canonical path: the planner, admission, bootstrap and coordinator in their order; digests only.
   'service/canonical.js': ['node:crypto'],
   'service/local.js': ['node:crypto', 'node:fs', 'node:path'],
   'service/owner-service.js': ['node:crypto', 'node:fs', 'node:path'],
+  // A run's scratch lease inside the held store: no-follow folder checks and a bounded post-order removal.
+  'service/scratch-lease.js': ['node:crypto', 'node:fs', 'node:path'],
   // Fatal-run diagnostics compose a private journal path; filesystem access stays in reviewed journal helpers.
   'service/run-failure.js': ['node:path'],
   // The owner's rule locks: content-addressed revisions and one pointer in private state, through policy/user-state.
@@ -202,6 +207,10 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'analysis/paths/protocol.js': ['node:crypto'],
   'analysis/deep/import.js': ['@farsight/graph', 'node:crypto'],
   // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
+  // The framework inspection worker (ADR 44): sealed inputs by digest, one output file; it runs only as its own entry.
+  'frameworks/controls/closure.js': ['node:crypto', 'node:fs', 'node:module', 'node:path', 'node:url', 'require:oxc-parser'],
+  'frameworks/controls/driver.js': ['node:url'],
+  'frameworks/controls/worker.js': ['node:crypto', 'node:fs', 'node:url'],
   'frameworks/express/pack.js': ['@farsight/graph', 'node:crypto'],
   'frameworks/express/syntax.js': ['dynamic:oxc-parser'],
   'snapshot/worktree.js': ['node:fs'],
@@ -211,8 +220,16 @@ test('the library imports only its reviewed modules, and nothing that could star
   const dist = `${pkgDir}dist/`;
   const found: Record<string, string[]> = {};
   for (const file of filesUnder(dist).filter(f => f.endsWith('.js'))) {
-    const text = readFileSync(file, 'utf8');
+    let text = readFileSync(file, 'utf8');
+    // The framework inspection worker's entry is generated text (ADR 44): it must import the worker dynamically, after
+    // checking the closure, so its template is not this module's own imports. Exactly that one template is set aside.
+    if (file.slice(dist.length) === 'frameworks/controls/closure.js') {
+      const template = /return `\/\/ Generated: the framework inspection worker[\s\S]*?`;\n/g;
+      assert.equal(text.match(template)?.length, 1, 'closure.js holds exactly one generated entry template');
+      text = text.replace(template, '');
+    }
     const specs = new Set<string>();
+    for (const m of text.matchAll(/\bcreateRequire\(import\.meta\.url\)\(['"]([^'"]+)['"]\)/g)) specs.add(`require:${m[1]}`);
     for (const m of text.matchAll(/(?:^|[\s;])(?:import|export)\s[^;'"]*?from\s*['"]([^'"]+)['"]|^\s*import\s*['"]([^'"]+)['"]/gm)) {
       const spec = m[1] ?? m[2]!;
       if (!spec.startsWith('.')) specs.add(spec);

@@ -27,10 +27,12 @@ export interface StoreLayout {
   readonly ledger: string;
   /** Immutable content-addressed objects (PR 03 object lane). */
   readonly objects: string;
+  /** The holder's scratch leases (`scratch/<epoch>/w-…`), inside the store so a capture never reads them as source. */
+  readonly scratch: string;
 }
 
 export const STORE_FILE_NAMES = Object.freeze({
-  owner: 'owner.sqlite', descriptor: 'owner.json', ledger: 'ledger.sqlite', objects: 'objects',
+  owner: 'owner.sqlite', descriptor: 'owner.json', ledger: 'ledger.sqlite', objects: 'objects', scratch: 'scratch',
 });
 
 // Hazard every lane must respect: POSIX advisory locks belong to the process, so closing *any* descriptor this
@@ -44,6 +46,7 @@ export function storeLayout(root: string): StoreLayout {
     descriptor: join(root, STORE_FILE_NAMES.descriptor),
     ledger: join(root, STORE_FILE_NAMES.ledger),
     objects: join(root, STORE_FILE_NAMES.objects),
+    scratch: join(root, STORE_FILE_NAMES.scratch),
   });
 }
 

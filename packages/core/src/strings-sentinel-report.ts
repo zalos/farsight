@@ -10,6 +10,11 @@ export const SENTINEL_REPORT_STRINGS: Record<string, StringEntry> = {
   'sentinel.scope.finding': same('for this finding', 'What the number beside it counts over: the screens, journeys or people one finding is placed on, each counted once.'),
   'sentinel.scope.inventory': same('in the captured files', 'What the number beside it counts over: the files and folders the scan captured and listed, before any check ran.'),
 
+  'sentinel.count.controlAnswers': same('{n} control answers', 'One answer per captured surface and inspected property, partitioned into established, partial and not run. These are configuration facts, never findings or a policy assessment.'),
+  'sentinel.count.controlAnswersOne': one('1 control answer', 'sentinel.count.controlAnswers'),
+  'sentinel.count.control.established': same('{n} established', 'Surface and property answers every claiming framework library resolved within its supported scope.'),
+  'sentinel.count.control.partial': same('{n} partial', 'Surface and property answers a framework library could not fully resolve or on which claiming libraries disagree.'),
+  'sentinel.count.control.notRun': same('{n} not run', 'Surface and property answers no library established or modeled.'),
   'sentinel.count.findings': same('{n} findings', 'Issues the report lists after grouping what the checks found. Several checks that saw the same weakness count as one finding.'),
   'sentinel.count.findingsOne': one('1 finding', 'sentinel.count.findings'),
   'sentinel.count.issues': same('{n} issues', 'Problems the report asks someone to look at, each counted once however many checks noticed it.'),

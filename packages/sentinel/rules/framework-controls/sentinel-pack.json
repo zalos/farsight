@@ -1,0 +1,128 @@
+{
+  "schema": "sentinel-rulepack/draft-1",
+  "packId": "sentinel-framework-controls",
+  "version": "0.1.0",
+  "rights": {
+    "spdx": "MIT",
+    "origin": "sentinel-original"
+  },
+  "rules": [
+    {
+      "familyId": "sentinel.controls.authentication",
+      "revision": 1,
+      "titleKey": "sentinel.controls.rule.authentication",
+      "applicability": {
+        "languages": [
+          "typescript",
+          "javascript",
+          "java"
+        ],
+        "scopeKind": "repository"
+      },
+      "requires": [
+        "framework-order"
+      ],
+      "implementation": {
+        "adapterId": "framework-controls",
+        "rulePath": "detectors/framework-libraries.json"
+      },
+      "meaning": "candidate",
+      "severity": "info",
+      "evidenceRequired": [
+        "control-fact"
+      ],
+      "limitationKeys": [
+        "sentinel.controls.limitation.inspectionOnly"
+      ],
+      "mappings": {
+        "cwe": []
+      },
+      "fixtures": {
+        "positive": [
+          "fixtures/guarded-routes-ts.fixture"
+        ],
+        "negative": [
+          "fixtures/open-routes-ts.fixture"
+        ]
+      }
+    },
+    {
+      "familyId": "sentinel.controls.authorization",
+      "revision": 1,
+      "titleKey": "sentinel.controls.rule.authorization",
+      "applicability": {
+        "languages": [
+          "typescript",
+          "javascript",
+          "java"
+        ],
+        "scopeKind": "repository"
+      },
+      "requires": [
+        "framework-order"
+      ],
+      "implementation": {
+        "adapterId": "framework-controls",
+        "rulePath": "detectors/framework-libraries.json"
+      },
+      "meaning": "candidate",
+      "severity": "info",
+      "evidenceRequired": [
+        "control-fact"
+      ],
+      "limitationKeys": [
+        "sentinel.controls.limitation.inspectionOnly"
+      ],
+      "mappings": {
+        "cwe": []
+      },
+      "fixtures": {
+        "positive": [
+          "fixtures/guarded-routes-ts.fixture"
+        ],
+        "negative": [
+          "fixtures/open-routes-ts.fixture"
+        ]
+      }
+    },
+    {
+      "familyId": "sentinel.controls.input-validation",
+      "revision": 1,
+      "titleKey": "sentinel.controls.rule.inputValidation",
+      "applicability": {
+        "languages": [
+          "typescript",
+          "javascript",
+          "java"
+        ],
+        "scopeKind": "repository"
+      },
+      "requires": [
+        "framework-order"
+      ],
+      "implementation": {
+        "adapterId": "framework-controls",
+        "rulePath": "detectors/framework-libraries.json"
+      },
+      "meaning": "candidate",
+      "severity": "info",
+      "evidenceRequired": [
+        "control-fact"
+      ],
+      "limitationKeys": [
+        "sentinel.controls.limitation.inspectionOnly"
+      ],
+      "mappings": {
+        "cwe": []
+      },
+      "fixtures": {
+        "positive": [
+          "fixtures/guarded-routes-ts.fixture"
+        ],
+        "negative": [
+          "fixtures/open-routes-ts.fixture"
+        ]
+      }
+    }
+  ]
+}

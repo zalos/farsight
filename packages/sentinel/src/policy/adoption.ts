@@ -11,7 +11,7 @@ import { canonicalDigest, sha256Digest } from './digest.js';
 import { PolicyError, policyFail } from './errors.js';
 import { intentDigest, receiptAuthority, type ConsumedReceipt } from './receipts.js';
 import { MAX_SETTINGS_BYTES, parseRepoConfig, parseSettings, type PolicyInputs } from './settings.js';
-import { ensurePrivateDir, isWithin, readCheckoutFile, readPrivateFile, writePrivateFileAtomic } from './user-state.js';
+import { ensurePrivateDir, overlaps, prospectiveCanonical, readCheckoutFile, readPrivateFile, writePrivateFileAtomic } from './user-state.js';
 
 /** Where the settings file lives in a workspace. */
 export const SETTINGS_PATH = '.farsight/sentinel/settings.json';
@@ -47,11 +47,23 @@ export function workspaceIdentity(workspace: string): WorkspaceIdentity {
 }
 
 function checkedTrustDir(trustDir: string, workspace: WorkspaceIdentity): string {
+  // Before anything is created: a trust folder that is, contains or lies inside the checkout is refused with the
+  // checkout untouched.
+  assertTrustOutside(trustDir, workspace.path);
   ensurePrivateDir(trustDir, 'sentinel.policy.trustDirUnsafe');
   const real = realpathSync.native(trustDir);
   if (real !== trustDir) policyFail('sentinel.policy.trustDirUnsafe', 'the trust folder passes through a link or is not its canonical spelling');
-  if (isWithin(real, workspace.path)) policyFail('sentinel.policy.trustDirInsideWorkspace', 'the trust folder must be outside the checkout');
+  if (overlaps(real, workspace.path)) policyFail('sentinel.policy.trustDirInsideWorkspace', 'the trust folder must be outside the checkout');
   return real;
+}
+
+/**
+ * Refuses, creating nothing, a trust folder that would be, contain or lie inside a captured source. `sources` are
+ * the canonical roots a caller actually captures; only a caller that knows both may decide this.
+ */
+export function assertTrustOutside(trustDir: string, ...sources: readonly string[]): void {
+  const prospective = prospectiveCanonical(trustDir, 'sentinel.policy.trustDirUnsafe');
+  if (sources.some(s => overlaps(prospective, s))) policyFail('sentinel.policy.trustDirInsideWorkspace', 'the trust folder must be outside every captured source');
 }
 
 const adoptionFile = (workspace: WorkspaceIdentity) => `adoption-${workspace.digest.slice('sha256:'.length)}.json`;

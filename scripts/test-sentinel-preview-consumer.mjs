@@ -39,7 +39,7 @@ try {
   // The files the package starts by path (the launch gate) are installed where its manifest says, with those bytes.
   const installed = join(consumer.dir, 'node_modules', 'farsight-sentinel');
   const assets = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8')).sentinel?.assets ?? {};
-  assert.deepEqual(Object.keys(assets), ['execution/launch-gate']);
+  assert.deepEqual(Object.keys(assets), ['execution/launch-gate', 'frameworks/controls/worker']);
   for (const [name, { path, sha256 }] of Object.entries(assets)) {
     assert.equal(createHash('sha256').update(readFileSync(join(installed, path))).digest('hex'), sha256, `${name} is the recorded bytes`);
   }

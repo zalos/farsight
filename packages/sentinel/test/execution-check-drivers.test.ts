@@ -24,6 +24,7 @@ function driver(registry: any, over: Record<string, unknown> = {}, rules: any[] 
     supportedRules: () => rules.map((r: any) => ({ familyId: r.familyId, revision: r.revision, definitionDigest: r.definitionDigest })),
     async prepare(ctx: any) {
       seen.push(ctx);
+      assert.equal(ctx.analysis, null, 'a driver without an explicit read declaration receives no retained evidence');
       const config = join(ctx.workDir, 'rules.yml');
       writeFileSync(config, ctx.rules.flatMap((r: any) => r.files.map((f: any) => `${r.rule.familyId} ${f.path} ${f.digest}`)).join('\n'));
       return { job: { checks: ctx.checks.map((c: any) => c.id), inputs: ctx.inputs.map((i: any) => i.id), rules: ctx.rules.map((r: any) => r.rule.familyId) },

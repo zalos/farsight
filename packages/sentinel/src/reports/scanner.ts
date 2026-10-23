@@ -2,7 +2,7 @@
 // canonical coverage evaluator's verdict, with raw normalized records retained as observations, not a security verdict.
 import type {SentinelStore} from '../store/index.js';
 import type {CoverageEnvelope} from '../contracts/coverage.js';
-import type {ReportCount} from '../contracts/report.js';
+import type {ReportControlInspection,ReportCount} from '../contracts/report.js';
 import {loadPlan} from '../execution/plans.js';
 import {openSnapshot} from '../snapshot/materialize.js';
 import {evaluateRequiredCoverage,type RequiredCoverage} from '../planner/coverage.js';
@@ -12,12 +12,13 @@ import {selectedSecretNames} from './selected-privacy.js';
 export interface ScannerReport{
  schema:'sentinel-scanner-report/draft-1';label:'deterministic';runId:string;snapshotId:string;planDigest:string;ledgerSequence:number;generatedAt:string;
  counts:ReportCount[];coverage:RequiredCoverage;observations:Array<{artifact:string;attemptId:string;value:unknown}>;
+ inspections?:ReportControlInspection[];
  reports:Array<{artifact:string;attemptId:string;value:unknown}>;pins:unknown;limitations:string[];
 }
-export async function scannerReportOf(store:SentinelStore,runId:string,now:Date):Promise<ScannerReport|undefined>{
+export async function scannerReportOf(store:SentinelStore,runId:string,now:Date,options:{trustDir?:string}={}):Promise<ScannerReport|undefined>{
  const run=store.ledger.getRun(runId);if(!run||run.state!=='completed')return undefined;
  const admitted=await loadPlan(store,runId,run.planRevision);const plan=admitted.plan;
- if(!plan.units.some(u=>u.adapterId&&['pattern-semgrep','advisories-osv','iac-trivy','ci-zizmor','secrets-gitleaks'].includes(u.adapterId)))return undefined;
+ if(!plan.units.some(u=>u.adapterId&&['pattern-semgrep','advisories-osv','iac-trivy','ci-zizmor','secrets-gitleaks','framework-controls'].includes(u.adapterId)))return undefined;
  const records:CoverageEnvelope[]=[];const observations:ScannerReport['observations']=[];const reports:ScannerReport['reports']=[];
  for(const unit of plan.units){const pub=store.ledger.getPublication({id:unit.id,revision:unit.revision});if(!pub)continue;
   for(const output of pub.outputs){if(!['sentinel-coverage/draft-1','sentinel-driver-finding/draft-1','sentinel-driver-report/draft-1'].includes(output.schema))continue;
@@ -25,6 +26,7 @@ export async function scannerReportOf(store:SentinelStore,runId:string,now:Date)
    if(output.schema==='sentinel-coverage/draft-1'){
     if(value.runId!==runId||value.workId!==unit.id||value.workRevision!==unit.revision||value.basis?.kind!=='executed'||value.basis.attemptId!==pub.attemptId)throw new Error('invalid accepted coverage binding');records.push(value);
    }else{
+    if(unit.adapterId==='framework-controls')continue; // The authenticated, privacy-projected section below owns inspection records.
     if(value.runId!==runId||value.snapshotId!==plan.pins.snapshotId||value.work?.id!==unit.id||value.work?.revision!==unit.revision||value.attemptId!==pub.attemptId)throw new Error('invalid accepted observation binding');
     (output.schema==='sentinel-driver-finding/draft-1'?observations:reports).push({artifact:output.id,attemptId:pub.attemptId,value});
    }
@@ -38,6 +40,12 @@ export async function scannerReportOf(store:SentinelStore,runId:string,now:Date)
  let sequence=0;for(let after=0;;){const page=store.ledger.readEvents({runId,after,limit:500});for(const event of page.events)sequence=event.sequence;if(!page.more)break;after=page.cursor;}
  const doc:ScannerReport={schema:'sentinel-scanner-report/draft-1',label:'deterministic',runId,snapshotId:plan.pins.snapshotId!,planDigest:plan.digest,ledgerSequence:sequence,generatedAt:now.toISOString(),counts,coverage,observations,reports,
   pins:{rules:plan.pins.rules,tools:plan.pins.tools,databases:plan.pins.databases},limitations:['sentinel.service.policyNotEvaluated','sentinel.report.scannerSlice']};
+ if(plan.units.some(u=>u.adapterId==='framework-controls')){
+  const {fullReport}=await import('../service/full-report.js');
+  const projected=await fullReport({store,runId,now,workspace:'',trustDir:options.trustDir,disclosure:'shareable'});
+  doc.inspections=projected.document.inspections;
+  if(projected.document.counts.controlAnswers)doc.counts.push(projected.document.counts.controlAnswers);
+ }
  const names=[...await matchedNames(store,plan.pins.snapshotId!,observations),...await selectedSecretNames(store,runId,admitted)];
  return withholdMatchedNames(doc,[...new Set(names)].sort((a,b)=>b.length-a.length));
 }
@@ -61,5 +69,5 @@ function withholdMatchedNames<T>(doc:T,names:readonly string[]):T{
 }
 export function renderScannerMarkdown(doc:ScannerReport):string{
  const word=(key:string)=>STRINGS[key]?.professional??key;
- return[`# ${word('sentinel.report.scannerHeading')}`,'',word('sentinel.report.scannerRun').replace('{run}',doc.runId),word('sentinel.report.scannerSnapshot').replace('{snapshot}',doc.snapshotId),'',...doc.counts.map(c=>`- ${word(c.unit).replace('{n}',String(c.n))} ${word(c.scope)}; re-check: \`${c.recheck!.cli}\``),'',...doc.limitations.map(key=>word(key)),''].join('\n');
+ return[`# ${word('sentinel.report.scannerHeading')}`,'',word('sentinel.report.scannerRun').replace('{run}',doc.runId),word('sentinel.report.scannerSnapshot').replace('{snapshot}',doc.snapshotId),'',...doc.counts.map(c=>`- ${word(c.unit).replace('{n}',String(c.n))} ${word(c.scope)}; re-check: \`${c.recheck!.cli}\``),'',...(doc.inspections??[]).flatMap(i=>[word('sentinel.controls.reportHeading'),word(i.limitationKey),...i.rows.map(r=>`${r.surfaceId} · ${r.property}: ${r.state}${r.verdict?` · ${r.verdict}`:''}${r.reasonCode?` · ${word(r.reasonCode)}`:''}`)]),...doc.limitations.map(key=>word(key)),''].join('\n');
 }
