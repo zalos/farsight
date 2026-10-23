@@ -77,5 +77,3 @@ test('owner decisions retain installed command and native privacy acceptance',()
  assert.ok(workflow.includes('node scripts/test-sentinel-decisions-consumer.mjs | tee decisions-consumer.log'));
  assert.ok(workflow.includes(`grep -q '"nativePrivacy":true' decisions-consumer.log`));
 });
-
-
