@@ -10,7 +10,7 @@ import {intentDigest,type ConsumedReceipt} from '../policy/receipts.js';
 import {issueReceipt} from '../policy/owner-receipts.js';
 import {admit} from '../policy/index.js';
 import {validateEnvelope} from '../validate.js';
-import {ContainerBackend} from '../execution/isolation.js';
+import {ContainerBackend,type DockerRunner} from '../execution/isolation.js';
 import {candidateDigest,emptyLock,lockDigest,promote,promotionIntent,type PromotionCandidate} from '../rules/index.js';
 import {TRIVY_CHECKS_BUNDLE} from '../adapters/trivy/adapter.js';
 import {acquireAdvisorySnapshots, acquisitionIntent, MAX_ACQUISITION_BYTES} from '../adapters/osv/acquire.js';
@@ -54,9 +54,9 @@ function recordFor(trustDir:string,entry:LockedTool|LockedDatabase):HeldAsset{
 export function heldDatabases(trustDir:string,lock:RuleLockEnvelope){return lock.databases.map(entry=>{const held=recordFor(trustDir,entry);
  const path=join(folder(trustDir,'objects'),entry.snapshotDigest.slice(7));const b=readAsset(path,MAX_ARCHIVE);if(digest(b)!==entry.snapshotDigest)bad();
  return{databaseId:entry.databaseId,snapshotDigest:entry.snapshotDigest,path,record:held.metadata};});}
-export async function installedAdapters(trustDir:string,lock:RuleLockEnvelope,ids:readonly string[],scratch:string):Promise<ReadonlySet<string>>{
+export async function installedAdapters(trustDir:string,lock:RuleLockEnvelope,ids:readonly string[],scratch:string,wrapRunner?:(runner:DockerRunner)=>DockerRunner):Promise<ReadonlySet<string>>{
  const all=externalDrivers();const selected=[...new Set(ids)].filter(id=>all.has(id));if(!selected.length)return new Set();
- const backend=await ContainerBackend.connect({privateDir:scratch});const out=new Set<string>();
+ const backend=await ContainerBackend.connect({privateDir:scratch,...(wrapRunner?{wrapRunner}:{})});const out=new Set<string>();
  for(const id of selected){const def=all.get(id)!.definition;const tool=lock.tools.filter(t=>t.adapterId===id);
   if(tool.length!==1||tool[0]!.version!==def.version||tool[0]!.artifactDigest!==def.image.split('@')[1])throw new ScannerAssetError('sentinel.assets.missing');
   recordFor(trustDir,tool[0]!);const image=await backend.inspectImage(def.image);if(tool[0]!.platform!==`linux-${image.architecture}`)bad();
