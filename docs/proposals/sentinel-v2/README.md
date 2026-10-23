@@ -322,5 +322,57 @@ re-export and never re-instantiate, because the `WeakSet` brands would otherwise
 invocation records and work/attempt ids are checked byte-identical on the fixtures after every move, and the real-ingest
 comparison `AGENTS.md` requires runs for anything core-adjacent.
 
-<!-- SECTION:7 -->
+## 7. Hygiene first: formatter, linter, hooks, CI
+
+Nothing in phases 1–4 is reviewable on code written as one-statement-per-semicolon lines, so the first PR adds the tools
+and changes no product code; the reformat lands one area per `style:` PR, each proven to change no program. The exact
+files are in [tooling.md](tooling.md); the tested prototype of the proof is [tooling/ast-equivalence.mjs](tooling/ast-equivalence.mjs).
+
+| choice | decision | why |
+|---|---|---|
+| Prettier 3.9.10 | `printWidth: 120`, `singleQuote`, `trailingComma: 'all'`, `quoteProps: 'preserve'`, `embeddedLanguageFormatting: 'off'`, JS/TS only in this phase | 120 is what the clean packages already write (p90 ≈ 121); single quotes because seven tests match source text; `preserve` and `off` keep every formatting PR AST-identical and never touch the worker sources that live in template literals and are sha256-pinned |
+| ESLint 10.13.0 + typescript-eslint 8.72.0 (flat config, no type information yet) | `recommended` plus `no-var`, `eqeqeq`, `prefer-const`, `no-unused-vars` with `_` as errors; `complexity`, `max-depth`, `max-params`, `max-lines`, `max-lines-per-function`, `no-nested-ternary` as warnings to ratchet; existing violations frozen in `eslint-suppressions.json` | correctness on all code from day one with zero code edits; structure rules become errors package by package during phase 1; type-aware rules wait for test tsconfigs |
+| no import sorting | `eslint-plugin-import-x` left out | reordering ESM imports moves side effects; not behaviour-neutral |
+| lefthook 2.2.2 | `pre-commit`: the main-branch guard, `prettier --write` on staged files, `eslint --quiet`; `commit-msg`: the existing `lint-commits.mjs`; `no_auto_install: true`; **no LFS hook names** | 37 worktrees share one hooks directory: auto-install would rewrite hooks on every branch switch, and a lefthook-owned LFS hook would skip `git lfs` in any worktree on an older branch |
+| CI `lint` job | `format:check`, `lint`, and for a PR titled `style…` the AST-equivalence check against the merge base; required after its first run; about two runner-minutes | the selector needs no change: docs-only pushes skip it, everything else runs it |
+| blame | `.git-blame-ignore-revs` with each style squash SHA, set by `install-hooks.mjs` | squash-merging means a style PR cannot know its own SHA; the next PR records it |
+
+What a naive reformat would break, all verified: two generated schema files are byte-compared in CI; `examples/`,
+`prototypes/`, `**/fixtures/` and `packages/sentinel/rules/` are inputs whose lines and digests tests assert; the PR 01
+feasibility harness under `scripts/` is sha256-pinned by 240 retained evidence records; seven tests match source text
+with single quotes; the string lint's first rule works line by line; `.claude/worktrees/` is excluded only through
+`.git/info/exclude`; the root `package.json` is not ESM, so configs are `.mjs`. Each is in the ignore lists or the
+checklist. The string catalogs (`core/src/strings*.ts`, one entry per line by design) stay unformatted unless the owner
+wants the extra 7–10k lines.
+
+Measured churn at 120 columns: at least 34.8k lines rewritten across the repo, 20.2k of them in Sentinel (58 %;
+13,351 Sentinel lines are over 120 characters today), 2.6k in `scripts/`, 12k in the other packages. Neither open PR
+touches Sentinel source, so the Sentinel reformat lands first with no conflict; the remaining packages wait for #121.
+
+The proof: `ast-equivalence.mjs` parses both revisions of every changed JS/TS file with the repo's TypeScript and
+compares a trivia-free token stream (node kinds, identifiers, cooked strings, raw template text, numbers, regexes,
+`let`/`const`, optional-chain extent), unwrapping parentheses and ignoring trailing commas and stray semicolons.
+Re-printing 617 real files gave zero differences; every planted semantic edit (`==` → `===`, `let` → `const`, a changed
+template, `'a':` → `a:`, an ASI hazard, moved braces) was caught.
+
+
+## 8. Sequencing, and what done looks like
+
+| phase | what lands | why in this order | done when |
+|---|---|---|---|
+| 0 · hygiene | Prettier, ESLint, lefthook, the CI `lint` check, one reformat PR with a blame-ignore rev | a refactor of unformatted, unlinted code cannot be reviewed; every later PR is readable | `pnpm lint` and `pnpm format:check` pass on `main` and are required checks; the reformat changed no compiled output |
+| 1 · carve | kernel, guardrails, moves with shims, the four interfaces, the facade, the ledger ports, the flag registry | the pipeline model needs seams to plug into; the UI needs one facade to read through | no transport imports internals; digests on the fixtures byte-identical; the qualified Copilot path passes its workflows unchanged |
+| 2 · declare | `pipeline.json`, stage contracts, typed inputs, stage packs, composite admission, host scripts, reports by output type, stage rerun and compare, one `scan` command | this is the product the owner asked for; it is built on phase 1's seams | the default pipeline plans to today's units; a custom agentic stage runs on the fixture and feeds the report |
+| 3 · surface | the read model, the five stops, configure in place, compare, the gate-card chip, the companion retired | the data exists after phase 2; the UI only draws it | the six mocks drawn from the fixture with zero page errors; business register clean; outsiders explain a finding from the PATH stop |
+| 4 · runners | `AgentRunner` native mode, Claude CLI qualified, Copilot native mode, custom prompts and skills, hosted API behind the flag, cost on every stage, per-entry fan-out | qualification is paid and slow; it runs beside phase 3, not before it | both CLIs pass the isolation, zero-contact and replay controls on macOS arm64 and Linux amd64 |
+| 5 · release | Farsight 0.4.0 and Sentinel 0.1.0 through the release PR flow; the deferred gates | unchanged from the closeout | published URLs install in clean npm-only prefixes |
+
+Phases 3 and 4 run in parallel after phase 2. Phase 0 is one lead-owned PR between merges; everything else is one PR per
+task in its own worktree with an independent review, as the ledger already prescribes. Nothing in phases 1–4 removes the
+qualified Copilot path until its replacement has passed the same workflows.
+
+**The bar, in Farsight's own words:** a person who opens Sentinel on a real application understands what was checked,
+by what, where it ran and what it cost, before they understand the tool; and from any entry point they can read the
+whole path under it and see what sits on it.
+
 
