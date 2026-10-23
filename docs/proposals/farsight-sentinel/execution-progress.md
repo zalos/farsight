@@ -8,10 +8,15 @@ identifiers, not GitHub PR numbers.
 
 ## Checkpoint — 2026-10-22
 
-Current integration sequence after merged #163: finish the independently reviewed bounded retained-source/fixed-worker
-seam, then the real owner path workflow and durable decisions/imports. Read-only service/MCP work proceeds toward
-the optional bridge and complete deterministic scan GUI. A private source review or storage checkpoint is not a
-public command. The separate configured-model track, Fable cleanup, Java/Spring container qualification, npm-only
+The bounded retained-source/fixed-worker seam merged as #164 (`2587763a`) after all sixteen final checks passed.
+Actual owner paths and usable decisions/imports remain the immediate product work. Read-only service/MCP proceeds
+in parallel toward the optional bridge and complete deterministic scan GUI. Its reviewed first candidate still
+has usability corrections before its PR. A private source review or storage checkpoint is not a public command.
+Post-merge native isolation failed two of 106 tests, with unidentified exit 137 and no daemon OOM witness. That
+job was not retried. One reviewed, instrumented original-suite run passed 106 tests with zero skips and directly
+observed its own three memory kills; it did not reproduce or diagnose the earlier failures. The kernel-journal
+probe was unavailable because its option was invalid. Preserve the failed run and investigation; neither a
+passing diagnostic nor an upstream hypothesis clears the release gate. The separate configured-model track, Fable cleanup, Java/Spring container qualification, npm-only
 installation and release remain required; no second-model acquisition or spend is inferred from this schedule.
 
 - PR 03 merged as [#135](https://github.com/zalos/farsight/pull/135), `97ff419`, after independent SOL
@@ -161,8 +166,8 @@ All planned packages progress to the end of the backlog, then the end gates belo
 
 ## Current integration critical path
 
-The bounded planner-authentication cost correction is merged (#162). Continue exact capture boundary → one complete retained-source /
-fixed built-in worker proof → actual PR18 owner paths workflow → usable PR20 decisions/import authority →
+The bounded planner-authentication correction (#162), exact capture boundary (#163) and shared retained-source /
+fixed built-in worker proof (#164) are merged. Continue actual PR18 owner paths workflow → usable PR20 decisions/import authority →
 deterministic MCP (23a) and host bridge (24) → the full configure/preview/run/reconnect/stage-I/O/retry/rerun/compare
 GUI (25). These are dependency/acceptance milestones, not completed implementations. Do not merge an unused pure
 seam merely to move a row. Existing required checks stay visible when held or unavailable; structural call paths

@@ -6,12 +6,54 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Sentinel read-only service integration and native investigation — 2026-10-23
+
+PR #164 merged as `2587763a` with the exact independently reviewed `36f44104` tree. All sixteen final checks
+passed, including native isolation, installed scanners and the twenty-repetition recovery matrix. The first
+validation failure was a stale strict package-import audit; its exact correction passed before those final checks.
+
+Post-merge native CI did fail: [run 39888758431](https://github.com/zalos/farsight/actions/runs/39888758431)
+passed 104 of 106 tests, with two memory canaries exiting 137 without a daemon OOM witness. Other main checks and
+installed scanners passed. Production retained an unidentified worker exit, as required; exit 137 is not OOM proof.
+This was the third recurrence, and that failed job was not retried.
+
+One separately reviewed test-only diagnostic preserved the original command, concurrency, limits and assertions.
+[Run 39893066846](https://github.com/zalos/farsight/actions/runs/39893066846), candidate `9350ccfa`, passed all
+106 native tests and eight diagnostic controls with zero skips. Each of its three memory cases had an exact
+container-cgroup kill counter and a daemon OOM event; its ordinary forced exit had neither. These observations
+do not diagnose the earlier failures. The bounded kernel-journal query used an invalid option and was explicitly
+unavailable. The temporary recovery-workflow replacement must never merge. No unchanged retry or release
+clearance follows from this passing diagnostic; the investigation and next validation gate remain open.
+
+The first read-only service/MCP candidate `3012c306` reuses the actual owner service and canonical report fold.
+Independent Claude source review found no blocking safety issue. SOL is correcting detached-service lifetime,
+retryable inspection contention, the status tool's advertised inputs and the exact SDK peer dependency before
+the PR. Public controls, plan preparation through MCP, the bridge and scan GUI are separate remaining work.
+The frozen candidate passed 72 affected checks, 28 transport/legacy checks and two native privacy checks, each
+with zero skips. Actual offline npm-only consumers exercised SDK delivery, source-removed framework and selected
+secret ancestry, reconnect, restart expiry and strict installed-worker recovery. Installed SARIF regeneration
+parity is semantic; its delivered-byte digest is exact. Same-evaluation held-service parity covers all four exact
+legacy renderings. No official SARIF-schema result is claimed for these particular package runs.
+
+Main `2587763a` and candidate `3012c306` ingested the same 1,722 frozen files: identical 9,880 nodes, 20,434 edges,
+source digest `49a29835dc0f` and 37,974,016-byte databases. Graph bytes changed 27,712,742 → 27,712,748 through
+build/run metadata only. Three fresh screenshots were inspected: no page errors or failed requests; five known
+missing-fixture-image responses. The isolated viewer was stopped by its verified process identity. These numbers
+describe this checkpoint, not unmeasured subsequent changes; primary checkout and dogfood graph were untouched.
+
+In parallel, the private report-import acceptance checkpoint `d666f0cd` passed independent source review. Its
+last delta passed 29 acceptance/process-crash controls and one genuine two-engine privacy case without skips.
+Migration 6 is unshipped; main has migrations 1–5. This is storage/authority groundwork, not a public import or
+mitigation command. Actual retained owner paths, usable decisions/imports, deterministic service/bridge/full GUI,
+configured model work, final Fable review, Java/Spring container qualification, npm initialization and release
+remain required. SOL implements, Claude independently reviews, and root owns integration and the definition of done.
+
 ## Sentinel retained source and fixed worker integration — 2026-10-22
 
 The isolated shared-proof candidate extends ADR 44 over merged main `d79a9b3a`. Independent Claude reviews
 approved the bounded read-only source proof, strict own-package resolver and immutable asset pins, explicit sealed
 job identity and legacy report compatibility, and terminal startup verification classification. SOL implements;
-Claude reviews; the lead owns integration and final acceptance. This candidate has not yet merged.
+Claude reviews; the lead owns integration and final acceptance. This historical candidate subsequently merged as #164; see the newer checkpoint above.
 
 The read proof is bound to the original held owner, executed revision, source closure, deadline and signal.
 Aggregate byte/read/depth/time bounds are cooperative and can only tighten; the proof grants no execution authority.
