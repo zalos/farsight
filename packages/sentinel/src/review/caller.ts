@@ -3,12 +3,18 @@
 // operation is never sent again. The current binding is passed on every call; a changed provider or policy stops it.
 import type { ModelIdentity } from '../contracts/index.js';
 import type { ModelBroker, ModelEnvelope } from './providers/broker.js';
-import type { ProviderBinding } from './providers/profile.js';
+import { isProviderBinding, type ProviderBinding, type ProviderSelection } from './providers/profile.js';
+import { fail } from './providers/errors.js';
 import type { CallerReply, ModelCaller } from './session.js';
 
-export function providerCaller(broker: ModelBroker, envelope: ModelEnvelope, binding: () => ProviderBinding): ModelCaller {
+export function providerCaller(broker: ModelBroker, envelope: ModelEnvelope, binding: () => ProviderBinding): ModelCaller & { readonly selection: ProviderSelection } {
   return {
     kind: 'provider',
+    get selection(): ProviderSelection {
+      const current = binding();
+      if (!isProviderBinding(current)) fail('sentinel.provider.notTrusted', 'selection requires the current genuine provider binding');
+      return Object.freeze({ providerId: current.providerId, modelId: current.modelId, bindingDigest: current.digest });
+    },
     async call(req): Promise<CallerReply> {
       const r = await broker.generate(envelope, binding(), { operationId: req.operationId, messages: req.messages, maxOutputTokens: req.maxOutputTokens,
         ...(req.signal ? { signal: req.signal } : {}) });

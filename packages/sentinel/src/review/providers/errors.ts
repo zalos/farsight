@@ -6,7 +6,7 @@ import { sentinelProviderWord } from '@farsight/core/dist/strings-sentinel-provi
 export const PROVIDER_ERROR_CODES = Object.freeze([
   'sentinel.provider.invalidProfile', 'sentinel.provider.notTrusted', 'sentinel.provider.originRefused',
   'sentinel.provider.termsRequired', 'sentinel.provider.unpriced', 'sentinel.provider.capabilityUntested',
-  'sentinel.provider.capabilityMissing', 'sentinel.provider.notAdmitted', 'sentinel.provider.receiptRequired',
+  'sentinel.provider.capabilityMissing', 'sentinel.provider.featureDisabled', 'sentinel.provider.notAdmitted', 'sentinel.provider.receiptRequired',
   'sentinel.provider.bindingChanged', 'sentinel.provider.budgetExhausted', 'sentinel.provider.envelopeOverdrawn',
   'sentinel.provider.contextExceeded', 'sentinel.provider.requestTooLarge', 'sentinel.provider.responseTooLarge',
   'sentinel.provider.redirectRefused', 'sentinel.provider.httpStatus', 'sentinel.provider.malformedResponse',

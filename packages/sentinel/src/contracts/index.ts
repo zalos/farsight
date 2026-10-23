@@ -14,6 +14,7 @@ export type * from './rules.js';
 export type * from './policy.js';
 export type * from './controls.js';
 export type * from './review.js';
+export type * from './review-providers.js';
 export type * from './plan.js';
 
 /**
