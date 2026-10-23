@@ -64,6 +64,13 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `objects-ledger.ts` (the ledger seam and verifier) and `gc.ts` (read-only reachability and the dry-run prune plan).
   The fixed native `cli-native-{profile,helper,auth,call,proxy,wire}.ts` modules qualify exact executable/helper
   bytes, enforce one-use admitted credential/launch authority, confine one native call and retain versioned wire.
+  The separate `cli-copilot-{profile,manifest,proxy,wire,call}.ts` modules reuse that broker for the fixed
+  Copilot CLI profile: exact external code-closure verification/copy, private selected-account state and native
+  authentication with real HOME identity/read-only Keychain and trustd filesystem access (no general HOME file-content access),
+  exact-host TLS proxying, retained semantic/wire bytes and bounded silent rendered-text/owned-usage decoding
+  after clean process completion; intermediate vendor events remain unobserved. The runtime
+  remains external; `test/cli-copilot.test.ts` has portable protocol controls and an explicit local code/startup
+  opt-in, while `cli-copilot-public.test.ts` proves the public missing-secret-coverage refusal before model effects.
   `native/claude-keychain-helper.m` is compiled only at build time by `scripts/build-cli-native-helper.mjs`;
   missing/wrong-platform artifacts refuse. Quota uses the same `budget.ts`, with null monetary fields and
   cumulative same-provider/run caps. Synthetic native and genuine legacy migration tests read no real credentials.

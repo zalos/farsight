@@ -1,3 +1,5 @@
+import {assertNativeClaudeReviewEnabled} from '../review/providers/selection.js';
+import {ProviderError} from '../review/providers/errors.js';
 // The owner's background service: one process that holds a workspace's store, answers its private local socket and
 // runs plans in the background, so a run survives the command that started it. It is started by the owner (`serve`,
 // or `run --detach` starting it on demand) and runs as the owner's own account, but it grants nothing to the
@@ -234,6 +236,11 @@ export class OwnerService {
     if ('refusal' in adopted) return { refusal: adopted.refusal };
     const { policy } = adopted;
     if (policy.revision !== record.policyRevision) return { refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts }) };
+    if(action==='run.start'){
+      const admitted=await loadPlan(this.#store,planId,record.revision);
+      try{for(const unit of admitted.plan.units)if(unit.review)assertNativeClaudeReviewEnabled(policy,unit.review.selection.providerId);}
+      catch(error){if(!(error instanceof ProviderError))throw error;return{refusal:result(command,'configuration-failure',{reasonCode:error.code,facts})};}
+    }
     if(action==='run.start'&&record.effects.includes('paid-inference')&&!['completed','canceled'].includes(this.#store.ledger.getRun(planId)?.state??''))return {refusal:result(command,'configuration-failure',{reasonCode:'sentinel.review.foregroundRequired',facts})};
     // The write is on this workspace's store and this run: a receipt confirmed for another instance does not match.
     const { intent, stateDigest } = runWriteBinding(this.#ws, action, record, { storeId: this.#store.storeId, runId: planId });

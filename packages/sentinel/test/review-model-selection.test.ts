@@ -102,6 +102,8 @@ test('additive settings parsing retains absent legacy bytes and accepts only the
   assert.deepEqual(parseSettings(encoded), legacy);
   assert.equal(JSON.stringify(parseSettings(encoded)), encoded.toString());
   const settings = { ...legacy, reviewModels: defaults() };
+  for(const nativeClaudeReviewEnabled of [false,true])assert.equal(parseSettings(Buffer.from(JSON.stringify({...settings,nativeClaudeReviewEnabled}))).nativeClaudeReviewEnabled,nativeClaudeReviewEnabled);
+  for(const nativeClaudeReviewEnabled of ['true',null,1])assert.throws(()=>parseSettings(Buffer.from(JSON.stringify({...settings,nativeClaudeReviewEnabled}))),is('sentinel.policy.settingsInvalid'));
   assert.deepEqual(parseSettings(Buffer.from(JSON.stringify(settings))).reviewModels, defaults());
   assert.throws(() => parseSettings(Buffer.from(JSON.stringify({ ...settings, reviewModels: { ...defaults(), command: 'copilot' } }))), is('sentinel.policy.settingsInvalid'));
 });

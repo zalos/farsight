@@ -945,6 +945,99 @@ known-unsent, definitively-refused and unknown dispatch. A fresh request can rep
 when the genuine service also confirms no retained preparation exists. Lost responses, legacy unknown records,
 accepted or resumable work stay protected; reconnect never automatically replays them.
 
+## Copilot CLI foreground review
+
+The fixed Copilot profile uses GitHub Copilot CLI 1.0.103 on macOS arm64 and explicit model `gpt-6-luna`.
+The executable and complete matching external runtime must already be installed; Sentinel verifies their pins,
+copies only the recorded code closure into private temporary storage and refuses changed or missing code.
+Profile revision6 binds silent rendered text/model-default reasoning, preserves all three runtime tool-source exclusions
+and vendor stored-OAuth detection, and projects only
+the current native selected-account host/login into private state;
+old profile adoption must be refreshed from capabilities. It never downloads or redistributes Copilot. Local code discovery does not establish account access, model
+availability, authentication or inference. There is no silent model, provider or version fallback. Other Copilot models are not yet qualified or enabled;
+arbitrary model names refuse, and stage selections can choose only available profiles.
+
+```sh
+farsight-sentinel capabilities --models --json > model-profiles.json
+farsight-sentinel init --workspace ./workspace --profile secrets
+```
+
+Keep that output outside the captured source. Copy the `copilot-cli` entry's exact `copilotProfile` into the
+provider below, retain the other initialized settings, and replace owner-reviewed terms/date placeholders:
+
+```json
+{
+  "hostedApiReviewEnabled": false,
+  "nativeClaudeReviewEnabled": false,
+  "providers": [{
+    "id": "native-copilot", "kind": "copilot-cli", "endpoint": "https://api.githubcopilot.com",
+    "credential": null, "disclosure": "hosted",
+    "copilotProfile": { "id": "COPY_DISCOVERED_ID", "executableDigest": "COPY_DISCOVERED_DIGEST", "runtimeDigest": "COPY_DISCOVERED_DIGEST", "profileDigest": "COPY_DISCOVERED_DIGEST" },
+    "budget": { "maxTokens": 816000, "maxCost": null, "currency": null },
+    "models": [{
+      "id": "luna", "model": "gpt-6-luna",
+      "limits": { "maxRequestBytes": 65536, "maxResponseBytes": 16384, "timeoutMs": 60000, "maxOutputTokens": 512, "contextTokens": 272000, "maxMessages": 32, "templateTokensPerMessage": 8 },
+      "pricing": { "kind": "subscription-quota", "basis": "owner-subscription" },
+      "terms": { "retention": "RECORD_REVIEWED_TERMS", "training": "unknown", "source": "RECORD_REVIEWED_SOURCE", "recordedAt": "RECORD_YYYY-MM-DD" },
+      "capability": { "schema": "sentinel-model-capability/draft-1", "kind": "copilot-cli", "origin": "https://api.githubcopilot.com", "model": "gpt-6-luna", "listed": true, "revision": null, "probedAt": "RECORD_YYYY-MM-DDTHH:MM:SS.000000000Z" }
+    }]
+  }],
+  "reviewModels": { "stages": [{ "stage": "general", "providerId": "native-copilot", "modelId": "luna" }], "segments": [] }
+}
+```
+
+Copilot is hosted source disclosure even while the HTTP API and native Claude switches are off. Extend only
+the owner's `run.start` grant with `paid-inference`, `source-disclosure` and `network`, and add a confirmed human
+`paid.admit` grant scoped to `native-copilot`. A complete genuine current-source Gitleaks publication covering
+every captured entry is required before model admission or native authentication; partial scans cannot be joined.
+
+```sh
+farsight-sentinel settings adopt --workspace ./workspace --confirm
+farsight-sentinel rules promote builtin:secrets --workspace ./workspace --confirm
+farsight-sentinel assets adopt-tool secrets-gitleaks --workspace ./workspace --confirm
+farsight-sentinel plan --workspace ./workspace --json
+farsight-sentinel run PLAN_ID --workspace ./workspace --confirm --confirm-models --json
+farsight-sentinel report RUN_ID --workspace ./workspace --instructions --json
+```
+
+The Gitleaks image must already be installed at its adopted pin. Review the exact selection/disclosure/budget
+before confirming. One exact model binding per run is supported. New Copilot review plans seal at most three Sentinel
+model turns per review unit for a list/read/final exchange, with at most 60 seconds per invocation and 120 seconds for the whole unit. If more
+reads/turns are needed, inspection stays unfinished; no source extent is silently declared complete.
+The example token budget covers three full-context reservations in the worst case; it is not an upfront minimum
+for three small calls because each confirmed call settles actual usage. Existing adopted budgets are never expanded
+automatically. Their remaining balance governs every new reservation; insufficient balance refuses before another call.
+
+Copilot's `max-ai-credits 30` is a **soft** vendor limit. It is not a hard spend, token or hidden-model-call ceiling.
+The output-token setting is a request, not a provider-enforced cap; original deadlines and combined response bytes
+are hard client bounds. The existing ledger reserves the full configured context before each invocation and records
+reported aggregate tokens with monetary consumption unobserved. Missing/contradictory usage or possible spend stays
+uncertain, with no retry/refund invented; reported usage beyond a reservation overdraws and stops further work.
+
+Supported native authentication stays inside the pinned Copilot process, using its already configured OS keychain.
+Sentinel omits `--no-auto-login`: that vendor flag disables stored-OAuth detection as well as GitHub CLI reuse;
+it does not merely prevent interactive login. GitHub CLI fallback receives no new permission: the child has only
+its fixed executable grant and `/usr/bin:/bin` PATH, so it cannot execute a separate `gh` binary.
+After admission, Sentinel reads only bounded native machine state at the selected Copilot home, validates the
+selected GitHub host/login uniquely against its account list, and reconstructs only that selector privately. It
+copies no token, subscription snapshot, other accounts or unrelated settings, grants no `gh` fallback, and uses private
+config/cwd with no tools, MCP, hooks, plugins, custom instructions, updates or session reuse. The v6 macOS profile
+retains real HOME identity for native User-keychain lookup, exposing that path to the pinned vendor but granting
+no general HOME file-content access; existing directory metadata checks remain permitted. It adds filesystem reads only of the user's encrypted `Library/Keychains` files and the
+fixed `/private/var/protected/trustd` store, with no filesystem write grant there, and fixed SecurityServer/securityd/trustd IPC. General preference access is denied. This trusts the pinned
+vendor's native authentication and **does not** enforce credential-service-specific or read-only API confinement.
+The OS trust service may fetch trust/revocation data outside Sentinel's application proxy; only the Copilot child
+connections are constrained by the exact-host proxy. Other HOME files and a separate `gh` executable remain denied. Sentinel's exact prompt, ordered semantic messages and piped Copilot wire
+are retained before dispatch. The fixed silent-text mode uses model-default reasoning effort and retains the
+exact rendered visible response (removing at most one final LF), not vendor event/session telemetry. Acceptance
+requires exit zero, zero stderr, fatal UTF-8 decoding, no NUL/ANSI controls, and the same bounded owned usage file
+naming only the selected model with one reported user/request count. Sentinel still validates its JSON reply
+grammar and citations; concatenated or otherwise invalid answers remain unfinished. These usage counts do not
+prove absence of all hidden activity. Vendor intermediate events, hidden instructions and reasoning are unobserved, and public stages record **no additional skills selected**. A fixed native no-authentication-information message is classified only by exact in-memory bytes; this does
+not establish the owner is logged out, and unknown messages remain unknown. Failure diagnostics retain only fixed phase/reason, exit/signal classes and bounded byte/frame/proxy counters
+in the existing reservation event; native text, event names, hosts and authentication details are discarded. These
+diagnostics do not prove no spend. Records can be read after source removal; known-secret/privacy failures withhold them. They are not safe to share.
+
 ## Foreground review and private instruction records
 
 Configured review stages use the same admitted plan, coordinator attempts and model budget ledger as ordinary
@@ -959,6 +1052,12 @@ hashing a local binary does not establish either, and a login refusal never mean
 Preparation includes review stages from genuinely adopted model selections even when its recipe does not
 request a review adapter; the frozen profile records code availability, while dispatch still requires the exact
 model binding, receipt and admission.
+
+Native Claude execution is deferred for this release. `nativeClaudeReviewEnabled` defaults to false when
+absent, and public stage selection and existing-plan start refuse before confirmation, credentials or launch.
+The implementation and the following future qualification instructions are retained. Explicitly adopting
+`nativeClaudeReviewEnabled: true` only opens that release gate; it does not prove runtime qualification,
+authentication or successful inference. Copilot qualification is separate; no provider fallback occurs.
 
 First obtain data for the owner configuration, without reading a credential or starting a process:
 
@@ -975,6 +1074,7 @@ the provider below in `workspace/.farsight/sentinel/settings.json`, retaining th
 ```json
 {
   "hostedApiReviewEnabled": false,
+  "nativeClaudeReviewEnabled": false,
   "providers": [{
     "id": "native-claude", "kind": "claude-cli", "endpoint": "https://api.anthropic.com",
     "credential": null, "disclosure": "hosted",
@@ -1037,3 +1137,49 @@ stage/segment overrides selecting different bindings are refused. Use a new link
 model terms; old results remain immutable. The slice caps a plan at 32 review units, input artifacts at 16 MiB,
 private trace content/output at 8 MiB with a shared 20-second read deadline, and checkpoints at their existing
 4 MiB limit. These bounds can leave inspection unfinished; they never establish absence or complete coverage.
+
+
+### Agentic-only review without external scanners
+
+Capture, parsing, retained inputs and general model review do not need Docker or a local model. In the existing
+owner settings, keep the configured Copilot provider and its exact model pins, and explicitly select:
+
+```json
+{
+  "mandatoryRules": [],
+  "hostedReviewSecretScan": "when-selected",
+  "reviewModels": {
+    "stages": [{ "stage": "general", "providerId": "native-copilot", "modelId": "luna" }],
+    "segments": []
+  }
+}
+```
+
+This is a fragment to merge into the existing settings, not a replacement for provider terms, limits, grants or
+capability pins. The repository's `requestedRules` must also be empty for a purely agentic run; repository requests
+cannot disable owner-mandatory rules. Adopt the changed settings before preparing a new plan:
+
+```sh
+farsight-sentinel settings adopt --workspace ./workspace --confirm
+farsight-sentinel rules promote builtin:foundation-preview --workspace ./workspace --confirm
+farsight-sentinel plan --workspace ./workspace --json
+farsight-sentinel run PLAN_ID --workspace ./workspace --confirm --confirm-models --json
+farsight-sentinel report RUN_ID --workspace ./workspace --full --format markdown
+```
+
+The promoted pack supplies the existing bootstrap recipe; no rule in it runs unless selected by the effective
+policy. Inspect that plan before confirming. General review partitions captured source independently of checks;
+guided review is generated only for planned deterministic checks. Source disclosure, network and paid-inference
+grants and exact model confirmation remain required. Hosted HTTP API and native Claude release switches are
+unchanged; this does not enable another provider or a fallback.
+
+If `hostedReviewSecretScan` is absent or `required`, hosted review still requires the complete accepted current-source
+secret scan described above. With `when-selected`, selecting the secret rule still requires that same complete
+scan: missing assets, failed or partial scans and known secret matches do not qualify. Any external scanner selected
+by the effective rules uses its pinned Linux container and existing asset checks; there is no host fallback.
+Known secret matches in current, baseline or proven selected ancestry still withhold review.
+
+An agentic-only report does not mean clean or secret-free. It reports zero planned deterministic checks and no
+executed deterministic coverage, retains the count of files seen by no check, and records model claims and unfinished
+review scope separately. Inspect exact selected provider/model, prompt and ordered skill identities with the private
+owner command `report RUN_ID --instructions --json`; model claims never establish check coverage.

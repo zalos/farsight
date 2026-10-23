@@ -23,7 +23,26 @@ The owner narrowed this push to a verified CLI scan using the cheapest qualified
 
 Release validation must still demonstrate the public CLI path, exact retained instruction/model identity, the browser's separate confirmation and report flow, and clean npm-only consumers. A preview's incomplete required coverage is never a successful security verdict. Release readiness is recorded after those checks; this scope change does not complete the full plan.
 
-Draft [#183](https://github.com/zalos/farsight/pull/183) joins preparation, the owner interface, configured review operations and the npm release path. Six clean npm consumers passed all 87 checks at `517e81ea`; final graph, selected CI and published-asset acceptance remain open. Native CLI validation stopped at operating-system authorization before any model launch or provider request. No live inference is qualified. The working graph has passed genuine source and installed-browser parent/child selection, expanded evidence, separate execution confirmation and report/reconnect checks. A baseline-change delivery race has a reproduced failure and passing correction; final integrated and published-asset acceptance remain separate.
+[#183](https://github.com/zalos/farsight/pull/183) merged as `657e8c4b`, joining preparation, the owner interface,
+configured review operations and the npm release path. Six clean npm consumers passed all 87 checks at
+`517e81ea`; the working graph passed genuine source and installed-browser parent/child selection, expanded
+evidence, separate execution confirmation and report/reconnect checks. A baseline-change delivery race has a
+reproduced failure and passing correction.
+
+[#190](https://github.com/zalos/farsight/pull/190), runtime `551090cc`, passed the final installed public Copilot CLI
+scan on macOS arm64 with pinned version 1.0.103 and `gpt-6-luna`: three confirmed calls, actual captured source
+in the final model request, a cited model-review observation in the private instruction report, exact retained
+prompt/messages/model/empty additional-skills selection, source-removed reports and terminal replay without
+additional dispatch. Ten observed container boundaries made zero connection attempts; no local model or direct
+hosted API was used. This qualifies the foreground owner CLI, not service/browser model execution, other
+models/platforms, scanner finding promotion or complete deterministic coverage. The ordinary report remains
+partial with no deterministic findings. The approved credential access and OS trust-service limits are documented
+in README and ADR48. Native Claude remains disabled.
+
+The original two-turn scan is retained as unfinished: list/read exhausted its budget before the source could be
+sent in a final request. New plans allow three turns under the same 120-second unit deadline and unchanged
+owner-adopted budgets. Independent Claude review cleared the correction. Final PR CI, merge, release workflow
+and published-asset acceptance remain distinct gates; this is not a claim that publication has finished.
 
 ## Current native attribution disposition — 2026-10-23
 

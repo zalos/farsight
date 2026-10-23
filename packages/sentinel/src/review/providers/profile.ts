@@ -13,6 +13,7 @@ import { snapshot } from '../../policy/immutable.js';
 import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.js';
 import { toNanos } from './decimal.js';
 import { fail } from './errors.js';
+import {COPILOT_NATIVE_PROFILE} from './cli-copilot-profile.js';
 import { CLAUDE_NATIVE_PROFILE } from './cli-native-profile.js';
 
 export type ProviderKind = ProviderSettings['kind'];
@@ -40,6 +41,7 @@ export interface ProviderBinding {
   readonly origin: EndpointOrigin;
   readonly credential: KeychainRef | null;
   readonly nativeProfile?: ProviderSettings['nativeProfile'];
+  readonly copilotProfile?: ProviderSettings['copilotProfile'];
   readonly disclosure: 'local-only' | 'hosted';
   readonly model: string;
   readonly limits: ModelLimits;
@@ -111,8 +113,8 @@ export function bindProvider(policy: EffectivePolicy, providerId: string, modelI
   const limits = checkLimits(profile.limits);
   checkOrigin(settings.endpoint, settings.disclosure);
 
-  const native = settings.kind === 'claude-cli';
-  if (native) {
+  const native = settings.kind === 'claude-cli' || settings.kind === 'copilot-cli';
+  if (settings.kind === 'claude-cli') {
     const p = settings.nativeProfile;
     if (!p || p.id !== CLAUDE_NATIVE_PROFILE.id || p.executableDigest !== CLAUDE_NATIVE_PROFILE.executableDigest
       || !/^sha256:[a-f0-9]{64}$/.test(p.helperDigest) || !/^sha256:[a-f0-9]{64}$/.test(p.profileDigest)
@@ -123,6 +125,13 @@ export function bindProvider(policy: EffectivePolicy, providerId: string, modelI
       fail('sentinel.provider.invalidProfile', 'the adopted native CLI profile is missing or outside its fixed bounds');
     }
   } else if (settings.nativeProfile !== undefined) fail('sentinel.provider.invalidProfile', 'native profile belongs only to the fixed CLI kind');
+  if(settings.kind==='copilot-cli'){
+    const p=settings.copilotProfile;
+    if(!p||p.id!==COPILOT_NATIVE_PROFILE.id||p.executableDigest!==COPILOT_NATIVE_PROFILE.executableDigest||p.runtimeDigest!==COPILOT_NATIVE_PROFILE.runtimeDigest||!/^sha256:[a-f0-9]{64}$/.test(p.profileDigest)
+      ||settings.nativeProfile!==undefined||settings.endpoint!=='https://api.githubcopilot.com'||settings.disclosure!=='hosted'||settings.credential!==null||profile.model!==COPILOT_NATIVE_PROFILE.model
+      ||limits.contextTokens!==COPILOT_NATIVE_PROFILE.contextReservation||limits.maxRequestBytes>65536||limits.maxResponseBytes>16384||limits.timeoutMs>60000||limits.maxOutputTokens>512||limits.maxMessages>32
+      ||settings.budget.maxTokens===null||settings.budget.maxCost!==null||settings.budget.currency!==null)fail('sentinel.provider.invalidProfile','the fixed Copilot profile is missing or outside its bounds');
+  }else if(settings.copilotProfile!==undefined)fail('sentinel.provider.invalidProfile','Copilot code identity belongs only to its fixed kind');
   const pricing = profile.pricing;
   if (pricing === null || pricing === undefined) return fail('sentinel.provider.unpriced', 'the model gives no rate schedule and no local no-fee basis');
   if (pricing.kind === 'no-fee') {
@@ -154,6 +163,7 @@ export function bindProvider(policy: EffectivePolicy, providerId: string, modelI
   const body = {
     providerId: settings.id, modelId: profile.id, kind: settings.kind, origin: settings.endpoint, credential: settings.credential,
     ...(settings.nativeProfile ? { nativeProfile: settings.nativeProfile } : {}),
+    ...(settings.copilotProfile ? { copilotProfile: settings.copilotProfile } : {}),
     disclosure: settings.disclosure, model: profile.model, limits, pricing, terms, capability: cap, settingsBudget: settings.budget,
   };
   const binding: ProviderBinding = snapshot({ ...body, digest: canonicalDigest(body), policyRevision: policy.revision });

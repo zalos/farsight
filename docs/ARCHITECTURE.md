@@ -2116,3 +2116,49 @@ instruction text, hidden model authority or provider call is added. Endpoint/cod
 where the qualified inspection does not supply them. Full and baseline comparison reports are explicitly
 regenerated through the existing canonical renderer for the exact selected runs. Linked whole-run preparation
 keeps its existing owner receipt; per-work browser rerun, settings editing and custom stages remain unavailable.
+
+ADR48 release qualification gate: optional owner-adopted `nativeClaudeReviewEnabled` defaults false when
+absent. Public native-Claude stage resolution and existing admitted review selections at foreground start
+refuse before run confirmation/receipt effects, credentials or process launch. The direct retained binding
+library remains available for subsequent qualification. Explicit true does not grant policy, prove native
+readiness or bypass other gates. Hosted API pause retains its separate flag and refusal; no automatic provider
+substitution is introduced. This release prioritizes separately qualified Copilot CLI.
+
+ADR48 Copilot boundary: the existing model broker and cumulative same-provider/run quota ledger also accept
+a closed `copilot-cli` profile for Copilot 1.0.103 on macOS arm64 with explicit `gpt-6-luna`. Before launch,
+Sentinel verifies the external executable and every member of its fixed runtime closure, copies only that
+code into owned temporary storage, and runs with private config/cwd, fixed no-tools arguments and
+TLS-verified exact-host proxy access. The vendor runtime is not redistributed. Native authentication remains
+inside pinned Copilot. Profile v6 retains real HOME identity for native User-keychain lookup, with no general HOME
+file-content access (the real HOME path itself and existing directory metadata checks are visible to the vendor). Additional filesystem reads cover only the user's
+encrypted `Library/Keychains` files and `/private/var/protected/trustd`, with no filesystem writes there, plus fixed SecurityServer/securityd/trustd IPC. General preferences remain denied. This is
+vendor-process trust, not credential-service-specific or read-only API confinement. OS trust-service fetches may
+bypass the child's exact-host application proxy. Only bounded selected-account host/login metadata is projected
+into private state; no token, unrelated settings or ambient source access is copied. Unknown CONNECT targets are
+refused before DNS/forwarding on that socket; valid allowed connections remain subject to shared caps/deadlines.
+
+The v6 profile binds documented silent rendered-text output and model-default reasoning effort. It does not
+parse the vendor's internal event stream or infer a session/version from it. Only a native exit zero with zero
+stderr and a bounded fatal-UTF-8 visible response can continue to the owned usage-file validation (sole selected
+model, one reported user/request, nonnegative aggregate counts). At most one final LF is removed; NUL/ANSI
+controls refuse. The received rendered text still must satisfy Sentinel's exact reply/citation grammar. Vendor
+intermediate activity remains unobserved, and one reported request is not proof of no other hidden activity.
+
+Genuine current complete Gitleaks coverage precedes hosted disclosure and model admission. Exact prompt,
+semantic messages, wire, selected model and explicit empty additional-skills selection are retained before
+dispatch. New Copilot review plans permit at most three Sentinel turns per review unit within the same 120-second
+overall deadline, original per-call deadlines and bounded response bytes; vendor AI credits are soft, hidden model work is unobserved, and uncertain usage stays charged
+possible on the same ledger. Code-only qualification and auth-free startup do not qualify account access or
+real inference. Other models and platforms require separate qualification; no fallback is introduced.
+
+
+**Update — explicit optional external stages (2026-10-23).** The adopted settings may set
+`hostedReviewSecretScan: 'required' | 'when-selected'`. Omission preserves the required secret-scan gate.
+`when-selected` permits general agentic review over the genuine captured inventory without any external check;
+if the secret family is selected by effective policy or pinned/planned as Gitleaks, the existing exact current-source
+complete-coverage gate still applies. Missing definitions/assets, partial or failed scans cannot silently disable
+that gate. Current, baseline and proven selected-ancestor secret withholding is unchanged and runs first.
+This choice is visible in the redacted effective policy, included in its revision and therefore in plan/receipt
+bindings. It changes neither model capability nor source-disclosure/network/paid admission. General review's
+accepted records remain `deterministicCoverage: false`; reports retain zero planned checks and the files seen by no
+check. Guided review still depends on planned checks. Selected external scanners still use pinned containers only.

@@ -42,7 +42,7 @@ export interface ReviewInstructionsEnvelope {
 /** One exact Sentinel request sent to the caller. Its identity is the request bytes, not a claim about vendor internals. */
 export interface ReviewProviderSelection {providerId:Id;modelId:Id;bindingDigest:Digest}
 export interface ReviewInstructionBinding {manifest:ArtifactId;digest:Digest;assembled:ArtifactId;sourcePacket:ArtifactId;segmentId:Id;selection?:ReviewProviderSelection}
-export interface NativeReviewWire {encoding:'sentinel-claude-chat/v1';
+export interface NativeReviewWire {encoding:'sentinel-claude-chat/v1'|'sentinel-copilot-chat/v1';
 /** @maxLength 4194304 */
 system:string;
 /** @maxLength 4194304 */

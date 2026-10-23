@@ -103,6 +103,13 @@ a model.
 - **Disclosure.** It is bounded by the review's scope: a model sees only bounded line slices of the files its session
   was given, as data marked untrusted, through a fixed reply grammar with no tool, target, disclosure or approval
   power. Files a withheld secret-location citation names are removed from review whole, path included.
+- **External-stage selection.** Hosted review requires complete accepted current-source secret coverage by default.
+  An owner may explicitly adopt `hostedReviewSecretScan: "when-selected"` for agentic-only review without an
+  external scanner. If the secret rule is selected, its existing complete-coverage gate still applies even when
+  missing assets prevented a scan from being planned. Known accepted secrets still withhold review across current,
+  baseline and proven selected ancestry. Omitting the scan makes no secret-free or deterministic coverage claim;
+  source-disclosure, network and paid-inference admission remain required. Selected external scanners remain
+  container-only, with no automatic acquisition or host fallback.
 - **Spend.** The worst case is reserved in a durable ledger before a request leaves. A call that may have been
   charged stays charged until the owner reconciles it with a receipt, and recovery fences a crashed coordinator's
   epoch so it can neither spend nor write again.

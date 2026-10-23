@@ -159,6 +159,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'frameworks/next/config.js': ['dynamic:oxc-parser'],
   'frameworks/next/errors.js': ['@farsight/core/dist/strings-sentinel-next.js'],
   // Fixed native CLI boundary: exact helper and executable, anonymous token FD, owned fixed TLS egress only.
+  'review/providers/cli-copilot-call.js': ['node:child_process', 'node:fs', 'node:fs/promises'],
+  'review/providers/cli-copilot-profile.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:os', 'node:path'],
+  'review/providers/cli-copilot-proxy.js': ['node:dns/promises', 'node:net'],
   'review/providers/cli-native-call.js': ['node:child_process', 'node:fs/promises'],
   'review/providers/cli-native-helper.js': ['node:child_process', 'node:crypto', 'node:fs', 'node:fs/promises', 'node:path', 'node:url'],
   'review/providers/cli-native-profile.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:path'],
