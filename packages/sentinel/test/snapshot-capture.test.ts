@@ -440,12 +440,12 @@ test('source capture and the implemented scanner slice are draft capabilities; l
   assert.ok(STRINGS['sentinel.capability.draftCapture']?.define);
   const mcp = CAPABILITIES.find(c => c.id === 'mcp');
   assert.deepEqual([mcp?.state, mcp?.reasonCode], ['available-draft', 'sentinel.capability.draftMcpReadonly']);
-  assert.ok(STRINGS['sentinel.capability.draftMcpReadonly']?.define);
-  for (const id of ['framework-next', 'framework-nest', 'interprocedural-flow', 'dispositions', 'model-review', 'farsight-host-bridge', 'gui', 'replay-bundles']) {
+  assert.ok(STRINGS['sentinel.capability.draftMcpReadonly']?.define);assert.equal(CAPABILITIES.find(c=>c.id==='farsight-host-bridge')?.reasonCode,'sentinel.capability.draftHostBridge');
+  for (const id of ['framework-next', 'framework-nest', 'interprocedural-flow', 'dispositions', 'model-review', 'gui', 'replay-bundles']) {
     assert.equal(CAPABILITIES.find(c => c.id === id)?.state, 'unavailable', id);
   }
   for (const id of ['pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks']) assert.equal(CAPABILITIES.find(c => c.id === id)?.reasonCode, 'sentinel.capability.pinnedScanners', id);
-  assert.deepEqual(CAPABILITIES.filter((c: any) => c.state !== 'unavailable').map((c: any) => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import', 'reports', 'mcp']);
+  assert.deepEqual(CAPABILITIES.filter((c: any) => c.state !== 'unavailable').map((c: any) => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import', 'reports', 'mcp', 'farsight-host-bridge']);
 });
 
 test('restore recreates empty folders and never an execute bit; the materialization keeps the original as provenance', needsStore, async t => {

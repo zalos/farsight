@@ -22,16 +22,24 @@ const KEY=/^[A-Za-z0-9_-]{16,128}$/;
 const invalid=():never=>{throw new PreparationError('sentinel.preparation.invalid');};
 const bookFor=(ws:Workspace)=>new ReceiptBook(join(ws.trustDir,'receipts'));
 function savedPath(ws:Workspace,storeId:string):string{return`preparation-client-${canonicalDigest({workspace:workspaceIdentity(ws.path),storeId}).slice(7)}.json`;}
-function savedKey(ws:Workspace,storeId:string):string|null{
+type DispatchState='unsent'|'unknown'|'refused';
+function savedRecord(ws:Workspace,storeId:string):{requestKey:string;dispatch:DispatchState}|null{
  const bytes=readPrivateFile(join(ws.trustDir,savedPath(ws,storeId)),1024,'sentinel.receipt.storeUnsafe',{repairTemporaryAliases:false});if(!bytes)return null;
  let v:any;try{v=JSON.parse(bytes.toString('utf8'));}catch{return invalid();}
- if(!v||Object.keys(v).sort().join(',')!=='requestKey,savedAt,schema,storeId,workspaceIdentity'||v.schema!=='sentinel-preparation-client/1'||v.storeId!==storeId||v.workspaceIdentity!==workspaceIdentity(ws.path).digest
-  ||typeof v.requestKey!=='string'||!KEY.test(v.requestKey)||typeof v.savedAt!=='string'||!Number.isFinite(Date.parse(v.savedAt))||!canonicalJsonBytes(v).equals(bytes))return invalid();return v.requestKey;
+ const legacy=v?.schema==='sentinel-preparation-client/1';
+ if(!v||Object.keys(v).sort().join(',')!==(legacy?'requestKey,savedAt,schema,storeId,workspaceIdentity':'dispatch,requestKey,savedAt,schema,storeId,workspaceIdentity')||!legacy&&v.schema!=='sentinel-preparation-client/2'||v.storeId!==storeId||v.workspaceIdentity!==workspaceIdentity(ws.path).digest
+  ||typeof v.requestKey!=='string'||!KEY.test(v.requestKey)||typeof v.savedAt!=='string'||!Number.isFinite(Date.parse(v.savedAt))||!canonicalJsonBytes(v).equals(bytes)||!legacy&&!['unsent','unknown','refused'].includes(v.dispatch))return invalid();
+ return{requestKey:v.requestKey,dispatch:legacy?'unknown':v.dispatch};
 }
-function saveKey(ws:Workspace,storeId:string,key:string):void{
- const bytes=canonicalJsonBytes({schema:'sentinel-preparation-client/1',storeId,workspaceIdentity:workspaceIdentity(ws.path).digest,requestKey:key,savedAt:new Date().toISOString()});
+function savedKey(ws:Workspace,storeId:string):string|null{return savedRecord(ws,storeId)?.requestKey??null;}
+function absentKeyReplaceable(ws:Workspace,storeId:string,key:string):boolean{const record=savedRecord(ws,storeId);return record?.requestKey===key&&record.dispatch!=='unknown';}
+function saveKey(ws:Workspace,storeId:string,key:string,dispatch:DispatchState='unknown'):void{
+ if(!KEY.test(key)||!['unsent','unknown','refused'].includes(dispatch))return invalid();
+ const bytes=canonicalJsonBytes({schema:'sentinel-preparation-client/2',storeId,workspaceIdentity:workspaceIdentity(ws.path).digest,requestKey:key,savedAt:new Date().toISOString(),dispatch});
  if(bytes.length>1024)return invalid();writePrivateFileAtomic(ws.trustDir,savedPath(ws,storeId),bytes,'sentinel.receipt.storeUnsafe');
 }
+function definitivelyRefused(value:PreparationOutcome):boolean{return value.status?.found!==true&&['configuration-failure','refused','awaiting-confirmation','unavailable'].includes(value.outcome);}
+
 function project(value:PreparationOutcome,extra:Record<string,unknown>={}):CommandResult{
  return result('prepare',value.outcome,{verdicts:value.verdicts,...(value.reasonCode?{reasonCode:value.reasonCode}:{}),facts:{...(value.status??{}),...(value.joined===undefined?{}:{joined:value.joined}),...extra}});
 }
@@ -60,13 +68,15 @@ export async function prepareCommand(ws:Workspace,options:{action?:string;confir
    const previous=savedKey(ws,client.storeId);
    if(previous){
     const old=preparationOutcome(await client.request('prepare.status',{requestKey:previous}));lock.assertHeld();
-    if(!old.status?.found)throw new PreparationError('sentinel.preparation.unavailable');
+    if(old.status?.found===false&&absentKeyReplaceable(ws,client.storeId,previous)){/* known unsent or definitively refused; no accepted journal exists */}
+    else{if(!old.status?.found)throw new PreparationError('sentinel.preparation.unavailable');
     if(previous===key){if(options.parentId!==undefined)throw new PreparationError('sentinel.preparation.changed');return project({...old,outcome:'kept'},{requestKeySaved:true});}
     const status=old.status;
     const replaceable=status.phase==='prepared'||options.parentId===undefined
      &&(['failed','canceled'].includes(status.phase)||status.phase==='interrupted'&&status.resumeAvailable===false);
     if(!replaceable)
      return project({...old,outcome:'refused',reasonCode:'sentinel.preparation.busy'},{requestKeySaved:true});
+    }
    }
   }
   if(action==='status')return project(preparationOutcome(await client.request('prepare.status',{requestKey:key})));
@@ -82,8 +92,8 @@ export async function prepareCommand(ws:Workspace,options:{action?:string;confir
   if(!preview.confirmation)return invalid();
   const decided=confirm(ws,preview.confirmation,options.confirm);if('refusal'in decided)return decided.refusal;
   // Owner explicitly confirmed this exact binding. Save discovery data before the write, not after its ACK.
-  lock?.assertHeld();saveKey(ws,client.storeId,key);dispatched=true;
-  return project(preparationOutcome(await client.request('prepare.accept',{previewId:preview.id,requestKey:key,receiptId:decided.receiptId})),{requestKeySaved:true});
+  lock?.assertHeld();saveKey(ws,client.storeId,key,'unsent');lock?.assertHeld();saveKey(ws,client.storeId,key,'unknown');dispatched=true;
+  const accepted=preparationOutcome(await client.request('prepare.accept',{previewId:preview.id,requestKey:key,receiptId:decided.receiptId}));if(definitivelyRefused(accepted)){lock?.assertHeld();saveKey(ws,client.storeId,key,'refused');}return project(accepted,{requestKeySaved:true});
  }catch(error){
   if(dispatched)return result('prepare','configuration-failure',{reasonCode:'sentinel.preparation.outcomeUnknown'});
   if(error instanceof PreparationError)return result('prepare','configuration-failure',{reasonCode:error.code});
@@ -92,4 +102,4 @@ export async function prepareCommand(ws:Workspace,options:{action?:string;confir
 }
 
 // Package-internal companion coordination; these data helpers mint no authority and are not public exports.
-export {savedPath as preparationClientFilename,savedKey as readPreparationClientKey,saveKey as savePreparationClientKey};
+export {savedPath as preparationClientFilename,savedKey as readPreparationClientKey,saveKey as savePreparationClientKey,absentKeyReplaceable as absentPreparationKeyReplaceable,definitivelyRefused as preparationDefinitivelyRefused};

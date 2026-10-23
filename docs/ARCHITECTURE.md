@@ -1772,3 +1772,10 @@ explicit historical bootstrap versus current checks, separate preview/confirmati
 reruns, and verified Markdown format bytes. Selecting another run clears the prior report. Settings saving is
 unavailable pending shared adoption/CAS; model execution stays unavailable until its own capability and admission
 are qualified. Hosted API review is paused by default. The panel does not infer model authority from run start.
+
+ADR48 saved-key correction: private lookup version2 records only `unsent`, `unknown`, or `refused` dispatch data,
+under the same existing cross-process mutex. Legacy version1 is conservatively unknown. A durable unsent save is
+marked unknown immediately before sending; a validated definitive nonaccepted response can mark refused. Only a
+definitively absent service status plus unsent/refused data permits replacing that lookup. Lost ACK, malformed
+response, failed state writes, and the unavoidable unknown-before-send crash gap remain protected. An accepted
+journal always takes precedence. This is bounded client discovery data, not approval, task ownership or replay.
