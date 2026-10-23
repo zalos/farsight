@@ -6,17 +6,20 @@ evidence moved it. A row moves to **done** only when its PR has merged and the e
 An open PR, green CI, a stub or a process that exited zero is not that evidence. Numbers are local planning
 identifiers, not GitHub PR numbers.
 
-## Checkpoint — 2026-10-22
+## Checkpoint — 2026-10-23
 
 The bounded retained-source/fixed-worker seam merged as #164 (`2587763a`) after all sixteen final checks passed.
 Actual owner paths and usable decisions/imports remain the immediate product work. Read-only service/MCP proceeds
-in parallel toward the optional bridge and complete deterministic scan GUI. Its reviewed first candidate still
-has usability corrections before its PR. A private source review or storage checkpoint is not a public command.
+in parallel toward the optional bridge and complete deterministic scan GUI. Its final read-only correction `d35e2d04` is independently approved
+and passes installed SDK/native privacy and real-ingest/browser acceptance; final CI remains before its PR merges. A private source review or storage checkpoint is not a public command.
 Post-merge native isolation failed two of 106 tests, with unidentified exit 137 and no daemon OOM witness. That
 job was not retried. One reviewed, instrumented original-suite run passed 106 tests with zero skips and directly
 observed its own three memory kills; it did not reproduce or diagnose the earlier failures. The kernel-journal
 probe was unavailable because its option was invalid. Preserve the failed run and investigation; neither a
-passing diagnostic nor an upstream hypothesis clears the release gate. The separate configured-model track, Fable cleanup, Java/Spring container qualification, npm-only
+passing diagnostic nor an upstream hypothesis clears the release gate. Standalone observation PR #165 preserves
+the original assertions and adds corrected real-runner preflight/provenance and bounded artifacts. Its first native
+job passed 106 original tests and ten diagnostic controls with no skips, including exact-container kernel OOM
+records in all three memory cases; remaining PR checks are pending. The separate configured-model track, Fable cleanup, Java/Spring container qualification, npm-only
 installation and release remain required; no second-model acquisition or spend is inferred from this schedule.
 
 - PR 03 merged as [#135](https://github.com/zalos/farsight/pull/135), `97ff419`, after independent SOL
@@ -231,7 +234,7 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 | 20 | Dispositions, assertions, runtime-evidence import | 19 | in progress (private only) | Decisions bound to scoped evidence and expiry | Reviewed pure kernel `b4ded90c`; Stage-A parser/privacy/budget corrections independently approved at `a8f0da3d`; private atomic import acceptance/readback/transfer/abandonment checkpoint `d666f0cd` independently approved with real crash and native privacy controls; public owner import and decision commands, genuine finding basis, expiry/reopening, report integration and the qualified cookie story remain open |
 | 21 | Ollama and hosted transport | 08, 09 | in progress | Redirects, truncation, cancellation, unpriced endpoints handled | Provider transport/budget library merged #156; trusted owner command/service admission, configured provider selection, recovery and disclosure integration remain open |
 | 22 | Guided and general model review | 18–21 | in progress | E5/E8 under configured budgets and accepted thresholds; live evaluation awaits the second-model configuration | Private model checkpoint and settings exist; deadline/cancel/disclosure/quote/budget and authority corrections, independent verification, exact citations/adversarial controls and the two-model 600-evaluation gate remain open |
-| 23a | Deterministic MCP and placed evidence | 20, schema with 24 | in progress (private only) | Read access cannot mutate or admit paid work | Read-only service/MCP candidate `3012c306` passed affected/native/installed-SDK acceptance and real-ingest comparison; TTL retention, contention/status/dependency correction `d35e2d04` independently approved, with exact installed packaging and CI still pending; preparation/control, host placement and full canonical parity remain open |
+| 23a | Deterministic MCP and placed evidence | 20, schema with 24 | in progress (private only) | Read access cannot mutate or admit paid work | Read-only service/MCP candidate `3012c306` passed affected/native/installed-SDK acceptance and real-ingest comparison; TTL retention, contention/status/dependency correction `d35e2d04` independently approved, with exact installed packaging and root graph/browser acceptance passed; final CI remains before merge; preparation/control, host placement and full canonical parity remain open |
 | 23b | Fenced external review claims | 22, 23a | pending | Cross-workspace, expired and duplicate submissions fail | — |
 | 24 | Optional Farsight host bridge | 09, 20 | pending | Origin/body/path guards, version mismatch, absent service handled | — |
 | 25 | Deterministic GUI and placement | 23a, 24 | pending | CLI/MCP/GUI agree; configure → preview → run → stage I/O → rerun → compare demonstrated | — |

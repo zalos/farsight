@@ -6,6 +6,38 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Sentinel read-only MCP final integration — 2026-10-23
+
+Independent Claude review approved the read-only service/MCP correction `d35e2d04`; root integrated it as
+`8a04048b` with progress documentation only. Immutable work/attempt/input/output views and report deliveries use
+the real held owner and canonical report/privacy fold. No mutation, actor override, automatic service startup or
+raw artifact reader is exposed. An unexpired view or delivery retains the detached service only until its original
+absolute TTL; a connection alone does not. Contention is retryable, MCP status accepts only its run id, and the
+SDK peer is pinned. Preparation, execution controls, the bridge and scan GUI remain open.
+
+The original 3012 candidate failed all three unchanged lifetime/contention regression probes; the correction
+passed 22 initial focused controls and 46 final lifecycle/socket/detached-run/contracts controls, two native
+privacy controls and 14 workflow controls, all without skips. These groups overlap and are not a unique total.
+Build, types, schema drift and catalog checks passed. The exact d35 npm tarball is 1,133,673 bytes, SHA-256
+`372231b034cd84c5e69c5295f350f358580fceddaf2b89c0fc35f95e3446511f`; the installed official SDK flow passes
+source-removed native privacy, clean retained reports, same-channel reconnect/restart expiry and a real 16-second
+quiet interval across the detached owner's 15-second idle cutoff. Ordinary import/help also works with the SDK
+removed. The draft package has no embedded commit field; the retained source/artifact manifest binds the commit.
+
+Main `2587763a` and integrated `8a04048b` ingested the same 1,724 frozen files: identical 9,886 nodes, 20,445 edges,
+source digest `22d37a423759` and 38,006,784-byte databases. Graph bytes changed 27,727,777 → 27,727,783 only through
+build/run metadata. Fresh front-door, Map and code-map screenshots were inspected: no page errors or failed
+requests, with five known missing-fixture-image responses. The exact temporary server was stopped. The primary
+checkout, dogfood graph and global installations remain unchanged. Final selected CI remains before merge.
+
+The separate observation PR [#165](https://github.com/zalos/farsight/pull/165), head `62f50c2c`, is independently
+approved. Its first required native job passed 106 original tests and ten diagnostic controls, with zero failures,
+skips or cancellations. The CI merge reference has the exact PR tree. Both real journal preflight queries passed;
+all three memory cases have exact-container kernel OOM records and own-cgroup counter increases, while plain
+SIGKILL remains an unidentified exit. All four traces have zero dropped records. Other checks remain pending at
+this checkpoint. This qualifies this observer run, not the three historical failures. No failed job was retried;
+release remains held and the temporary diagnostic workflow will not merge.
+
 ## Sentinel read-only service integration and native investigation — 2026-10-23
 
 PR #164 merged as `2587763a` with the exact independently reviewed `36f44104` tree. All sixteen final checks
