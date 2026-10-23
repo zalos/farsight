@@ -301,3 +301,27 @@ test('genuine selected child and grandchild ancestors prove through exact select
     t.diagnostic(JSON.stringify({ fixture: `canonical ${['parent', 'selected child', 'selected grandchild'][lineage.indexOf(runId)]}`, usage: retainedSourceProofUsage(proof) }));
   }
 });
+
+test('every read position keeps its typed refusal: budget, cancellation and deadline are never re-labelled', needsStore, async t => {
+  const s = await completed(t);
+  const usage = retainedSourceProofUsage(await retainedSourceForAdmission(s.store, s.ancestor, timing()))!;
+  // Each read limit below the actual count refuses at that read, wherever it is: plans, the lineage's inventory
+  // invocation (behind the report walk's own catch), the operations, the snapshot or a body.
+  for (let reads = 0; reads < usage.reads; reads++) {
+    await assert.rejects(retainedSourceForAdmission(s.store, s.ancestor, timing(), { ...RETAINED_PROOF_LIMITS, reads }), unavailable('budget-reads'), `reads=${reads}`);
+  }
+  let calls = 0;
+  await retainedSourceForAdmission(s.store, s.ancestor, timing({ stillWithin: () => { calls++; } }));
+  const { ExecutionError } = await import('../dist/execution/errors.js');
+  for (const code of ['sentinel.execution.canceled', 'sentinel.execution.deadlineExceeded'] as const) {
+    for (let k = 1; k <= calls; k++) {
+      let n = 0;
+      await assert.rejects(retainedSourceForAdmission(s.store, s.ancestor, timing({ stillWithin: () => { if (++n === k) throw new ExecutionError(code); } })),
+        (e: any) => e.code === code, `${code} at boundary ${k} of ${calls}`);
+    }
+  }
+  // The report walk itself is unchanged: its own refusal code for an unreadable invocation stays bootstrapEvidence.
+  const { retainedBootstrapForReport } = await import('../dist/execution/retained-bootstrap.js');
+  const admitted = await loadPlan(s.store, s.run.id, 2);
+  assert.ok(await retainedBootstrapForReport(s.store, s.run.id, admitted));
+});

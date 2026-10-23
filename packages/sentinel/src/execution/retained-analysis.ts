@@ -90,6 +90,8 @@ export async function retainedAnalysisFor(store: SentinelStore, plan: ValidatedP
     return value;
   } catch (error) {
     boundary();
+    // A refusal the budget raised inside another module's reader (the snapshot reader) keeps its own code and reason.
+    if (budget?.failure !== undefined) throw budget.failure;
     if (error instanceof ExecutionError && ['sentinel.execution.canceled', 'sentinel.execution.deadlineExceeded', 'sentinel.execution.runDeadline', 'sentinel.execution.analysisUnavailable'].includes(error.code)) throw error;
     throw new ExecutionError('sentinel.execution.analysisUnavailable', { reason: 'retained bootstrap evidence is missing, malformed or mismatched' }, { cause: error });
   }

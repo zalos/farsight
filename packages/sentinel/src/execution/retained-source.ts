@@ -118,6 +118,7 @@ export const RETAINED_PROOF_LIMITS = Object.freeze({
   deadlineMs: 120_000,
 });
 export type RetainedProofLimits = typeof RETAINED_PROOF_LIMITS;
+const KEPT = new Set(['sentinel.execution.canceled', 'sentinel.execution.deadlineExceeded', 'sentinel.execution.runDeadline', 'sentinel.execution.analysisUnavailable']);
 type BudgetReason = 'budget-reads' | 'budget-source-bytes' | 'budget-metadata-bytes' | 'budget-retained' | 'budget-depth';
 
 /** What one bounded call spent; for measurement and tests, never authority. */
@@ -133,6 +134,11 @@ export class RetainedBudget {
   readonly started = performance.now();
   readonly deadlineAt: number;
   reads = 0; sourceBytes = 0; metadataBytes = 0; retainedBytes = 0;
+  /**
+   * The first refusal this budget raised: cancellation, deadline, owner change or a bound. Callers rethrow it, so a
+   * reader wrapped by another module's catch (the lineage walk, the snapshot reader) never re-labels it.
+   */
+  failure: unknown;
 
   constructor(store: SentinelStore, options: { signals: readonly AbortSignal[]; deadlineAt?: number; stillWithin?: readonly (() => void)[];
     owner?: StoreOwner; epoch?: string; limits?: RetainedProofLimits }) {
@@ -154,11 +160,25 @@ export class RetainedBudget {
     return { reads: this.reads, sourceBytes: this.sourceBytes, metadataBytes: this.metadataBytes, retainedBytes: this.retainedBytes, elapsedMs: performance.now() - this.started };
   }
 
-  refuse(reason: BudgetReason): never { return fail(reason); }
+  refuse(reason: BudgetReason): never { return this.#record(() => fail(reason)); }
+
+  #record<T>(f: () => T): T {
+    try { return f(); } catch (error) {
+      // Cancellation, deadlines and budget/ownership refusals keep their own identity; anything else a caller's
+      // callback throws stays an evidence failure, as before.
+      if (this.failure === undefined && (this.#storeLost || (error instanceof ExecutionError && KEPT.has(error.code)))) this.failure = error;
+      this.#storeLost = false;
+      throw error;
+    }
+  }
 
   /** The genuine store, its owner and epoch, cancellation, the absolute deadline, then the caller's tighter check. */
-  boundary(): void {
-    this.#store.assertHeld();
+  boundary(): void { this.#record(() => this.#boundary()); }
+
+  #storeLost = false;
+
+  #boundary(): void {
+    try { this.#store.assertHeld(); } catch (error) { this.#storeLost = true; throw error; }
     if (boundOwner(this.#store) !== this.#owner || this.#store.epoch !== this.#epoch) fail('the store owner or epoch changed');
     if (this.#signals.some(s => s.aborted)) throw new ExecutionError('sentinel.execution.canceled');
     if (performance.now() >= this.deadlineAt) throw new ExecutionError('sentinel.execution.deadlineExceeded', { deadlineMs: this.#limits.deadlineMs });
@@ -171,6 +191,7 @@ export class RetainedBudget {
     if (this.reads + 1 > this.#limits.reads) this.refuse('budget-reads');
     let recorded: number | undefined;
     try { recorded = this.#store.ledger.objectsOf(id)[0]?.rawSize; } catch { recorded = undefined; }
+    // An unrecorded or mismatched object is evidence failure, not a budget refusal: it is not recorded as `failure`.
     if (recorded === undefined || !Number.isSafeInteger(recorded) || recorded < 0 || recorded > MAX_ARTIFACT_BYTES) return fail('a retained object is not recorded');
     if (kind === 'source' ? this.sourceBytes + recorded > this.#limits.sourceBytes : this.metadataBytes + recorded > this.#limits.metadataBytes) {
       this.refuse(kind === 'source' ? 'budget-source-bytes' : 'budget-metadata-bytes');
@@ -357,6 +378,7 @@ export async function retainedSourceForAdmission(store: SentinelStore, ancestorI
       usage: Object.freeze(budget.usage()) }));
     return handle;
   } catch (error) {
+    if (budget.failure !== undefined) throw budget.failure;
     if (error instanceof ExecutionError && ['sentinel.execution.canceled', 'sentinel.execution.deadlineExceeded', 'sentinel.execution.analysisUnavailable'].includes(error.code)) throw error;
     throw new ExecutionError('sentinel.execution.analysisUnavailable', { reason: 'retained source evidence is missing, malformed or mismatched' }, { cause: error });
   }
