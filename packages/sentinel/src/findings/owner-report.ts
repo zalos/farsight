@@ -17,7 +17,7 @@ function optionalFailure(store:SentinelStore,error:unknown):void{
   hardBoundary(store);
   const code=(error as {code?:unknown})?.code;
   const unavailable=new Set(['sentinel.decision.invalidInput','sentinel.decision.corruptHistory','sentinel.decision.staleState','sentinel.decision.notFound','sentinel.decision.scopeExceeded','sentinel.decision.unauthorized',
-    'sentinel.execution.analysisUnavailable','sentinel.store.invalidInput','sentinel.store.corruptRecord','sentinel.store.notFound',
+    'sentinel.execution.analysisUnavailable','sentinel.policy.workspaceNotCanonical','sentinel.store.invalidInput','sentinel.store.corruptRecord','sentinel.store.notFound',
     'sentinel.object.missing','sentinel.object.corrupt','sentinel.object.digestMismatch','sentinel.object.unsafePath','sentinel.object.io',
     'sentinel.report.evidenceUnbound','sentinel.report.runNotReportable','ENOENT','EACCES','EPERM','ENOTDIR','ELOOP','EIO']);
   if(typeof code!=='string'||!unavailable.has(code))throw error;

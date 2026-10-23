@@ -345,3 +345,14 @@ retained results. The owner CLI prepares the task and separately starts it, with
 report delivery through the existing service. `scripts/test-sentinel-paths-consumer.mjs` exercises the actual installed
 workflow, strict worker assets and source-removed reports; native privacy and offline browser tests remain separate
 explicit zero-skip checks. No structural outcome counts as data flow, a security finding or independent absence proof.
+
+
+Sentinel owner decisions (ADR 42) add `findings/owner-cli.ts`, `owner-journal.ts`, `decision-basis.ts`,
+`owner-evaluation.ts` and `owner-report.ts`. They bind actual accepted source findings, genuine consumed receipts,
+retained audit history and one report projection; the new contract views live in `contracts/decision-view.ts`.
+`strings-sentinel-decisions.ts` supplies both registers. The private report proof session avoids re-reading already
+verified source bodies without relaxing final ownership, evidence or privacy checks. `owner-decision-privacy.test.ts`
+runs genuine Gitleaks current/baseline/selected/canceled cases in the explicit zero-skip native job.
+`scripts/test-sentinel-decisions-consumer.mjs` installs the tarball with npm alone and exercises public decisions,
+source removal, owner-service contention and all-format reports, adding current/baseline/selected privacy under
+native opt-in. Its recorded command outcome does not qualify service-owned writes or installed crash windows.

@@ -55,7 +55,7 @@ for(const secret of [true,false])test(`genuine ${secret?'secret':'clean'} accept
   for(const disclosure of ['private','shareable'] as const){
    const r=await fullReport({store:s.store,workspace:s.path,trustDir:s.ws.trustDir,runId:run,disclosure,now:new Date(),...(run===clean?{baselineRunId:parent}:{})});
    for(const text of [r.json,r.markdown,r.html,JSON.stringify(r.sarif)]){absent(text,'current/baseline/selected decision report',VALUE);absent(text,'current/baseline/selected decision report',GENERIC_VALUE)}
-   if(!secret&&disclosure==='private')assert.ok(r.json.includes(rationale));
+   if(!secret)assert.equal(r.json.includes(rationale),disclosure==='private','only private reports retain owner rationale');
   }
   release();s.store.close();previous=id;previousFinding=finding;
  }
@@ -66,7 +66,7 @@ for(const secret of [true,false])test(`genuine ${secret?'secret':'clean'} accept
  const accepted=s.store.ledger.getPublication(parentPlan.units.find(u=>u.adapterId==='secrets-gitleaks')!)!,invocation=s.store.ledger.getAttempt(accepted.attemptId)!.envelope.invocation!;
  const copies=s.store.ledger.objectsOf(invocation).map(o=>({path:join(s.ws.storePath,objectRelPath(invocation.slice(7),o.codec)),bytes:readFileSync(join(s.ws.storePath,objectRelPath(invocation.slice(7),o.codec)))}));assert.ok(copies.length);
  for(const copy of copies)unlinkSync(copy.path);release();s.store.close();
- const refused=s.command('decision','read',decisions.get(clean)!,'--baseline',parent);assert.equal(refused.value.outcome,'refused');assert.equal(refused.value.facts.document,undefined);absent(refused.stdout,'unproven privacy refusal',VALUE);absent(refused.stdout,'unproven privacy refusal',GENERIC_VALUE);
- for(const copy of copies)writeFileSync(copy.path,copy.bytes,{mode:0o400});
+ try{const refused=s.command('decision','read',decisions.get(clean)!,'--baseline',parent);assert.equal(refused.value.outcome,'refused');assert.equal(refused.value.facts.document,undefined);absent(refused.stdout,'unproven privacy refusal',VALUE);absent(refused.stdout,'unproven privacy refusal',GENERIC_VALUE);
+ }finally{for(const copy of copies)writeFileSync(copy.path,copy.bytes,{mode:0o400});}
  t.diagnostic(JSON.stringify({ownContainers:[...containers],cleaned:true,secret,current:true,baseline:true,selectedSourceGone:true,canceledAncestor:true,publicAcknowledgements:true,publicReadList:true,bothProfilesFourFormats:true}));
 });

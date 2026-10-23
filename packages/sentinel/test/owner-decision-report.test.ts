@@ -1,4 +1,5 @@
 import {test} from 'node:test';
+import {needsStore} from './snapshot-helpers.ts';
 import assert from 'node:assert/strict';
 import {readdirSync,unlinkSync,writeFileSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
@@ -142,4 +143,15 @@ test('report session does not reread a source body already verified by its genui
  const r=await withStoreReadBudget(s.store,{decodedBytes:12*1024*1024},()=>fullReport({store:s.store,workspace:s.ws.path,trustDir:s.ws.trustDir,runId:s.runId,disclosure:'private',now:new Date()}));
  assert.equal(r.value.document.decisions.length,1);assert.equal(r.value.document.decisionEvaluation?.status,'complete');assert.ok(r.usage.decodedBytes>=8*1024*1024);assert.ok(r.usage.decodedBytes<12*1024*1024);
  t.diagnostic(JSON.stringify({capturedBodyBytes:8*1024*1024,actualReadUsage:r.usage,sourceRemoved:true}));
+});
+
+
+test('a context-free retained report keeps findings while owner decisions are explicitly unavailable',needsStore,async t=>{
+ const s=await ownerFixture(t);
+ const result=await fullReport({store:s.store,workspace:'',trustDir:s.ws.trustDir,runId:s.runId,disclosure:'shareable',now:new Date()});
+ assert.equal(result.document.findings.length,1);
+ assert.equal(result.document.counts.findings.n,1);
+ assert.equal(result.document.decisionEvaluation?.status,'unavailable');
+ assert.equal(result.document.decisionEvaluation?.reasonCode,'sentinel.decision.section.unavailable');
+ assert.deepEqual(result.document.decisions,[]);
 });

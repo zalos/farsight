@@ -1867,3 +1867,28 @@ the same genuine store with fresh admission, while A2 handles remain epoch-bound
 record uses planned → running → pausing → paused without launching work or renewing time/budget; pending cancel
 skips that pause branch and wins. Genuine canonical selected-child and actual owner-service setup gates qualify
 both branches without depending on the later path worker.
+
+
+42. **Sentinel owner decisions are source-bound adjudications, with one retained evaluation across reports (2026-10-23).**
+The executable exposes `decision propose`, `approve`, `read` and `list`. A proposal names one real accepted
+finding; a private held-owner proof rederives its source, executed plan, rule, producer invocation and cited bytes.
+Neither caller-supplied scope nor stored JSON supplies authority. Approval requires current adopted policy and
+an exact consumed owner receipt. The append-only private `/2` journal binds the workspace/store, prior head,
+proposal and admission audit; create-once publication and directory synchronization distinguish uncertainty,
+spent-but-unpublished work and readable retained decisions. The earlier `/1` evaluator remains unchanged.
+
+The `/2` projection applies accepted-risk and false-positive decisions only while their source evidence,
+approval, scope and expiry remain valid. An owner assertion of mitigation never proves enforcement and leaves
+the issue open. Evaluation time is pinned. The canonical report uses the same evaluator for JSON, Markdown,
+offline HTML and SARIF; optional journal damage becomes an unavailable section, without hiding independently
+validated findings. Shared read-budget, cancellation and ownership failures still propagate. Context-free report
+projections cannot evaluate owner history and state that limitation rather than inventing a workspace.
+
+A report-local opaque proof session reuses only source bodies already hash-read by a genuine retained proof;
+its final history, current/baseline and selected-ancestor fences remain mandatory. Accepted secret evidence in
+any relevant run withholds owner rationale and source-derived details in public acknowledgements, reads and
+reports; shareable reports omit rationale even when clean. Unsupported, incomplete or unbound secret evidence
+cannot establish a clean result. Lists are bounded metadata only, not evaluated decisions. Input is limited to
+64 KiB, history to 1,024 entries/32 MiB, a page to 100 entries and a report to 50 evaluated decisions, with
+explicit unavailable/partial outcomes. Local owner commands return busy while the service holds the store;
+service-owned and browser confirmation, qualified cookie enforcement and deleting retention remain separate work.
