@@ -23,7 +23,7 @@ The owner narrowed this push to a verified CLI scan using the cheapest qualified
 
 Release validation must still demonstrate the public CLI path, exact retained instruction/model identity, the browser's separate confirmation and report flow, and clean npm-only consumers. A preview's incomplete required coverage is never a successful security verdict. Release readiness is recorded after those checks; this scope change does not complete the full plan.
 
-Draft [#183](https://github.com/zalos/farsight/pull/183) joins preparation, the owner interface, configured review operations and the npm release path. Six clean npm consumers passed all 87 checks at `517e81ea`; final graph, selected CI and published-asset acceptance remain open. Native CLI validation stopped at operating-system authorization before any model launch or provider request. No live inference is qualified.
+Draft [#183](https://github.com/zalos/farsight/pull/183) joins preparation, the owner interface, configured review operations and the npm release path. Six clean npm consumers passed all 87 checks at `517e81ea`; final graph, selected CI and published-asset acceptance remain open. Native CLI validation stopped at operating-system authorization before any model launch or provider request. No live inference is qualified. The working graph has passed genuine source and installed-browser parent/child selection, expanded evidence, separate execution confirmation and report/reconnect checks. A baseline-change delivery race has a reproduced failure and passing correction; final integrated and published-asset acceptance remain separate.
 
 ## Current native attribution disposition — 2026-10-23
 
