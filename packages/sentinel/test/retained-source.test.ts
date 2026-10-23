@@ -13,12 +13,13 @@ import { retainedBytesOf, verifyRetainedAuxiliary } from '../dist/execution/reta
 import { RETAINED_PROOF_LIMITS, readRetainedSourceProof, retainedSourceForAdmission, retainedSourceProofUsage } from '../dist/execution/retained-source.js';
 import { planAnalysis, plannerAnalysisFrom, plannerSnapshotFrom } from '../dist/planner/index.js';
 import { openStore } from '../dist/store/index.js';
-import { adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, scratchUnder, removeScratch, workspaceOf } from '../dist/service/local.js';
+import { adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, workspaceOf } from '../dist/service/local.js';
 import { executeRun, planWorkspaceCanonical, rerunRun } from '../dist/service/canonical.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
 import { initWorkspace } from '../dist/cli/init.js';
 import { needsStore, unlock } from './snapshot-helpers.ts';
 import { retainedFixture } from './retained-analysis-helpers.ts';
+import { scratchUnder, removeScratch } from './lease-helpers.ts';
 
 const timing = (extra: Record<string, unknown> = {}) => ({ signal: new AbortController().signal, ...extra });
 const unavailable = (reason?: string) => (e: any) => e.code === 'sentinel.execution.analysisUnavailable' && (reason === undefined || e.detail?.reason === reason || e.message.includes(reason));
@@ -261,7 +262,7 @@ test('genuine selected child and grandchild ancestors prove through exact select
   assert.ok('policy' in adopted);
   const store = await openStore(ws.storePath);
   t.after(() => { try { store.close(); } catch { /* closed */ } });
-  const work = scratchUnder(ws);
+  const work = scratchUnder(store);
   t.after(() => removeScratch(work));
   const terms = { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() };
   const planned = await planWorkspaceCanonical(store, terms);
