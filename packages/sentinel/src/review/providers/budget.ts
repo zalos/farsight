@@ -262,6 +262,11 @@ export class BudgetLedger {
         }
         return;
       }
+      // A new admission/resume does not create a new budget for the same provider and run.
+      for (const old of this.#all('SELECT max_tokens,max_cost_nanos,currency,accounting_basis FROM envelopes WHERE provider_id = ? AND run_id = ?', e.providerId, e.runId)) {
+        if (old.accounting_basis !== (quota ? 'subscription-quota' : 'money') || old.currency !== e.currency) fail('sentinel.provider.ledgerInvalid', 'a resumed run cannot change accounting basis or currency');
+        if (BigInt(e.maxTokens) > (old.max_tokens as bigint) || (e.maxCostNanos !== null && e.maxCostNanos > (old.max_cost_nanos as bigint))) fail('sentinel.provider.budgetExhausted', 'a resumed run may only tighten its original budget');
+      }
       this.#run('INSERT INTO envelopes (id, run_id, provider_id, binding_digest, admission_digest, receipt_digest, max_tokens, max_cost_nanos, currency, created_at, accounting_basis) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
         e.id, e.runId, e.providerId, e.bindingDigest, e.admissionDigest, e.receiptDigest, e.maxTokens, e.maxCostNanos, e.currency, e.createdAt, quota ? 'subscription-quota' : 'money');
     });
@@ -310,7 +315,7 @@ export class BudgetLedger {
   reserve(r: { envelopeId: string; operationId: string; tokens: number; costNanos: bigint | null; epoch: string; at: string }): Reservation {
     id(r.envelopeId, 'the envelope'); id(r.operationId, 'the operation'); id(r.epoch, 'the epoch'); tokens(r.tokens, 'tokens'); if (r.costNanos !== null) nanos(r.costNanos, 'cost');
     return this.#tx(() => {
-      const provenance = this.#get('SELECT provider_id FROM envelopes WHERE id = ?', r.envelopeId);
+      const provenance = this.#get('SELECT provider_id,run_id FROM envelopes WHERE id = ?', r.envelopeId);
       if (!provenance || provenance.provider_id === null) fail('sentinel.provider.notTrusted', 'legacy provider provenance cannot admit new work');
       // An operation is sent at most once in this ledger, under whichever envelope: after a crash a new envelope never
       // makes an uncertain operation sendable again.
@@ -324,9 +329,13 @@ export class BudgetLedger {
       this.#assertLive(r.epoch);
       const t = this.#totals(r.envelopeId);
       if ((t.accountingBasis === 'subscription-quota') !== (r.costNanos === null)) fail('sentinel.provider.ledgerInvalid', 'reservation must use its envelope accounting basis');
-      if (t.overdrawn) fail('sentinel.provider.envelopeOverdrawn', 'an earlier call reported more than it reserved');
-      if (t.chargedTokens + r.tokens > t.maxTokens) fail('sentinel.provider.budgetExhausted', `${t.maxTokens - t.chargedTokens} tokens left, ${r.tokens} needed`);
-      if (t.chargedCostNanos !== null && r.costNanos !== null && t.maxCostNanos !== null && t.chargedCostNanos + r.costNanos > t.maxCostNanos) fail('sentinel.provider.budgetExhausted', 'not enough money left for the worst case');
+      const run = this.#get(`SELECT MIN(e.max_tokens) AS max_tokens,MIN(e.max_cost_nanos) AS max_cost,MAX(e.overdrawn) AS overdrawn,
+        COALESCE(SUM(CASE WHEN r.state = 'settled' THEN r.used_input + r.used_output WHEN r.state = 'released' OR r.id IS NULL THEN 0 ELSE r.tokens END),0) AS tokens,
+        COALESCE(SUM(CASE WHEN r.state = 'settled' THEN r.used_cost_nanos WHEN r.state = 'released' OR r.id IS NULL THEN 0 ELSE r.cost_nanos END),0) AS cost
+        FROM envelopes e LEFT JOIN reservations r ON r.envelope_id = e.id WHERE e.provider_id = ? AND e.run_id = ?`, provenance!.provider_id as string, provenance!.run_id as string)!;
+      if (run.overdrawn === 1n) fail('sentinel.provider.envelopeOverdrawn', 'an earlier call in this run reported more than it reserved');
+      if ((run.tokens as bigint) + BigInt(r.tokens) > (run.max_tokens as bigint)) fail('sentinel.provider.budgetExhausted', 'not enough tokens left across this provider and run');
+      if (r.costNanos !== null && run.max_cost !== null && (run.cost as bigint) + r.costNanos > (run.max_cost as bigint)) fail('sentinel.provider.budgetExhausted', 'not enough money left across this provider and run');
       // A digest of the exact pair: distinct operations never share an id, whatever their length.
       const rid = `res-${createHash('sha256').update(`${r.envelopeId}\u0000${r.operationId}`).digest('hex').slice(0, 48)}`;
       this.#run('INSERT INTO reservations (id, envelope_id, operation_id, state, tokens, cost_nanos, epoch, created_at, updated_at, accounting_basis) VALUES (?,?,?,?,?,?,?,?,?,?)',

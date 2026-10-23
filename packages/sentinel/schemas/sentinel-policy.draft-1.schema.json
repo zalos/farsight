@@ -119,7 +119,8 @@
                 "type": "string",
                 "enum": [
                   "ollama",
-                  "openai-compatible"
+                  "openai-compatible",
+                  "claude-cli"
                 ]
               },
               "disclosure": {

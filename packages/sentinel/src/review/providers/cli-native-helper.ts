@@ -3,15 +3,29 @@ import { constants } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { dirname, basename, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseNativeClaudeToken, type NativeClaudeToken } from './cli-native-auth.js';
 import { fail, ProviderError } from './errors.js';
+import { claimNativeLogin, assertNativeLoginActive, type NativeCallAuthority } from './broker.js';
 import type { NativeTiming } from './cli-native-profile.js';
 
 export const NATIVE_HELPER_SOURCE = 'sha256:eae6134cf8eb7e0f0772f6d7889072ff315b825a524a4f69237e3f5ffd95af27';
 export interface NativeHelper { readonly digest: string; readonly protocol: 'claude-keychain-token/1' }
 const helpers = new WeakMap<object, { path: string; digest: string }>();
-const base = new URL('./native/', import.meta.url);
+async function helperDirectory(timing: NativeTiming): Promise<string> {
+  const module = fileURLToPath(import.meta.url); let dist = dirname(module);
+  // Only compiled dist ancestry, never an enclosing workspace's package. The own manifest is mandatory.
+  for (let depth = 0; depth < 3 && basename(dist) !== 'dist'; depth++) dist = dirname(dist);
+  if (basename(dist) !== 'dist') return fail('sentinel.provider.capabilityUntested', 'native helper compiled layout unavailable');
+  const fd = await open(join(dirname(dist), 'package.json'), constants.O_RDONLY | constants.O_NOFOLLOW);
+  let name: unknown;
+  try { const info = await fd.stat(); if (!info.isFile() || info.size > 65536) throw new Error(); name = JSON.parse(await fd.readFile('utf8')).name; } finally { await fd.close(); }
+  const member = relative(dist, module).split('\\').join('/');
+  if (name === '@farsight/sentinel' ? member !== 'review/providers/cli-native-helper.js'
+    : name !== 'farsight-sentinel' || !/^(?:chunks\/chunk-[A-Z0-9]+|index|cli|review\/providers\/index)\.mjs$/.test(member)) return fail('sentinel.provider.capabilityUntested', 'native helper own package layout refused');
+  boundary(timing); return join(dist, 'review/providers/native');
+}
 function boundary(t: NativeTiming) {
   if (t.signal?.aborted) fail('sentinel.provider.canceled', 'native helper canceled');
   if (!Number.isSafeInteger(t.deadlineAt) || Date.now() >= t.deadlineAt) fail('sentinel.provider.timeout', 'native helper original deadline elapsed');
@@ -32,7 +46,8 @@ export async function qualifyNativeHelper(timing: NativeTiming): Promise<NativeH
   if (process.platform !== 'darwin' || process.arch !== 'arm64') return fail('sentinel.provider.capabilityUntested', 'native helper platform unavailable');
   boundary(timing);
   try {
-    const manifestPath = fileURLToPath(new URL('manifest.json', base));
+    const base = await helperDirectory(timing);
+    const manifestPath = join(base, 'manifest.json');
     const mfd = await open(manifestPath, constants.O_RDONLY | constants.O_NOFOLLOW);
     let manifest: any;
     try { const info = await mfd.stat(); if (!info.isFile() || info.size > 2048) throw new Error(); manifest = JSON.parse(await mfd.readFile('utf8')); } finally { await mfd.close(); }
@@ -40,8 +55,8 @@ export async function qualifyNativeHelper(timing: NativeTiming): Promise<NativeH
       || manifest.schema !== 'sentinel-native-cli-helper/1' || manifest.platform !== 'darwin' || manifest.arch !== 'arm64'
       || manifest.protocol !== 'claude-keychain-token/1' || manifest.sourceDigest !== NATIVE_HELPER_SOURCE || manifest.noUi !== true
       || typeof manifest.compiler !== 'string' || manifest.compiler.length > 500 || !/^sha256:[a-f0-9]{64}$/.test(manifest.helperDigest)) throw new Error();
-    const path = await realpath(fileURLToPath(new URL('claude-keychain-helper', base)));
-    if (path !== fileURLToPath(new URL('claude-keychain-helper', base))) throw new Error();
+    const path = await realpath(join(base, 'claude-keychain-helper'));
+    if (path !== join(base, 'claude-keychain-helper')) throw new Error();
     const observed = await hash(path, timing);
     if (observed.digest !== manifest.helperDigest || observed.bytes !== manifest.helperBytes) throw new Error();
     const result = Object.freeze({ digest: observed.digest, protocol: 'claude-keychain-token/1' as const });
@@ -50,10 +65,12 @@ export async function qualifyNativeHelper(timing: NativeTiming): Promise<NativeH
     return fail('sentinel.provider.capabilityUntested', 'fixed native helper missing or unqualified'); }
 }
 /** Called only by the broker after a genuine envelope, consumed receipt and durable held reservation. */
-export async function readNativeLogin(helper: NativeHelper, timing: NativeTiming): Promise<NativeClaudeToken> {
+export async function readNativeLogin(helper: NativeHelper, timing: NativeTiming, authority: NativeCallAuthority): Promise<NativeClaudeToken> {
+  claimNativeLogin(authority, helper, timing);
   const held = helpers.get(helper); if (!held) return fail('sentinel.provider.notTrusted', 'native helper is not qualified');
   const observed = await hash(held.path, timing); if (observed.digest !== held.digest) return fail('sentinel.provider.capabilityUntested', 'native helper changed');
   boundary(timing);
+  assertNativeLoginActive(authority);
   const deadlineAt = Math.min(timing.deadlineAt, Date.now() + 5000);
   const bytes = await new Promise<Buffer>((resolve, reject) => {
     const child = spawn(held.path, [], { env: { PATH: '/usr/bin:/bin' }, stdio: ['ignore', 'pipe', 'pipe'] });

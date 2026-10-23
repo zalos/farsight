@@ -2,8 +2,8 @@
 // Machine-local executable paths are supplied only to qualification and accepted only by exact native bytes.
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { open, realpath, mkdtemp, mkdir, rm } from 'node:fs/promises';
-import { isAbsolute } from 'node:path';
+import { open, realpath, mkdtemp, mkdir, rm, lstat } from 'node:fs/promises';
+import { isAbsolute, join } from 'node:path';
 import { fail } from './errors.js';
 import { qualifyNativeHelper, type NativeHelper } from './cli-native-helper.js';
 import { canonicalDigest } from '../../policy/digest.js';
@@ -93,4 +93,19 @@ export async function cleanupNativeClaudeSetup(setup: object): Promise<void> {
 
 export function nativeRuntimeHelper(runtime: NativeClaudeRuntime): NativeHelper {
   const held = runtimes.get(runtime); if (!held) return fail('sentinel.provider.notTrusted', 'native runtime is not qualified'); return held.helper;
+}
+
+/** First installed fixed basename only; no command execution, alternate candidates or model/credential probe. */
+export async function qualifyInstalledNativeClaude(timing: NativeTiming): Promise<NativeClaudeRuntime> {
+  boundary(timing);
+  const path = process.env.PATH ?? '';
+  const dirs = path.split(':');
+  if (path.length > 8192 || dirs.length > 32 || dirs.some(d => !isAbsolute(d))) return fail('sentinel.provider.capabilityUntested', 'native installed path is outside fixed discovery bounds');
+  for (const dir of dirs) {
+    boundary(timing); const candidate = join(dir, 'claude');
+    try { await lstat(candidate); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue; return fail('sentinel.provider.capabilityUntested', 'first native CLI candidate unavailable'); }
+    return qualifyNativeClaude(candidate, timing);
+  }
+  return fail('sentinel.provider.capabilityUntested', 'fixed native CLI is not installed');
 }

@@ -67,3 +67,21 @@ test('quota and monetary bases cannot be mixed, inferred from zero, or changed d
   assert.throws(() => l.settle(r.id, { inputTokens: 1, outputTokens: 1, costNanos: 0n }, at), code('sentinel.provider.ledgerInvalid'));
   assert.equal(l.reservation(r.id).state, 'dispatched');
 });
+
+test('resumed same-provider run cannot multiply quota across admissions, while an independent run has its own cap', async t => {
+  const { ledger: l } = await ledger(t); const old = reserve(l, 'prior-unknown', 70); l.dispatch(old.id,at); l.markUncertain(old.id,at,'unknown before restart');
+  l.createEnvelope(quota('resumed'));
+  const next = (tokens: number) => l.reserve({envelopeId:'resumed',operationId:'resumed-call',tokens,costNanos:null,epoch:'new',at});
+  assert.throws(()=>next(31),code('sentinel.provider.budgetExhausted')); assert.equal(next(30).state,'held');
+  l.createEnvelope({...quota('independent'),runId:'other-run'});
+  assert.equal(l.reserve({envelopeId:'independent',operationId:'other-run-call',tokens:100,costNanos:null,epoch:'new',at}).state,'held');
+});
+test('resume can only tighten the original run cap and cannot switch accounting basis/currency or escape a prior overrun', async t => {
+  const {ledger:l}=await ledger(t);
+  assert.throws(()=>l.createEnvelope({...quota('raised'),maxTokens:101}),code('sentinel.provider.budgetExhausted'));
+  assert.throws(()=>l.createEnvelope({...quota('money-resume'),accountingBasis:undefined,maxCostNanos:1n,currency:'USD'}),code('sentinel.provider.ledgerInvalid'));
+  l.createEnvelope({...quota('tightened'),maxTokens:60});
+  assert.throws(()=>l.createEnvelope({...quota('re-raised'),maxTokens:70}),code('sentinel.provider.budgetExhausted'));
+  const r=reserve(l,'overrun-old',50);l.dispatch(r.id,at);l.settle(r.id,{inputTokens:55,outputTokens:1,costNanos:null},at);
+  assert.throws(()=>l.reserve({envelopeId:'tightened',operationId:'after-overrun',tokens:1,costNanos:null,epoch:'new',at}),code('sentinel.provider.envelopeOverdrawn'));
+});

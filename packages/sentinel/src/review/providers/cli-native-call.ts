@@ -2,16 +2,17 @@
 import { spawn } from 'node:child_process';
 import type { Writable } from 'node:stream';
 import { writeFile } from 'node:fs/promises';
-import { nativeClaudeSetup, cleanupNativeClaudeSetup, nativeRuntimeHelper, type NativeClaudeRuntime, type NativeTiming } from './cli-native-profile.js';
+import { nativeClaudeSetup, cleanupNativeClaudeSetup, nativeRuntimeHelper } from './cli-native-profile.js';
 import { openNativeClaudeProxy } from './cli-native-proxy.js';
 import { readNativeLogin } from './cli-native-helper.js';
 import { discardNativeClaudeToken, sendNativeClaudeToken } from './cli-native-auth.js';
-import { NativeClaudeDecoder, type NativeReviewWire } from './cli-native-wire.js';
+import { NativeClaudeDecoder } from './cli-native-wire.js';
 import type { ParsedReply } from './kinds.js';
+import { beginNativeCall, finishNativeCall, assertNativeLoginActive, type NativeCallAuthority } from './broker.js';
 import { fail, ProviderError } from './errors.js';
 
-export async function nativeClaudeCall(runtime: NativeClaudeRuntime, wire: NativeReviewWire,
-  limits: NativeTiming & { maxResponseBytes: number; maxOutputTokens: number }): Promise<ParsedReply> {
+export async function nativeClaudeCall(authority: NativeCallAuthority): Promise<ParsedReply> {
+  const { runtime, wire, limits } = beginNativeCall(authority);
   const boundary = () => {
     if (limits.signal?.aborted) fail('sentinel.provider.canceled', 'native call canceled');
     if (Date.now() >= limits.deadlineAt) fail('sentinel.provider.timeout', 'original native call deadline elapsed');
@@ -26,7 +27,7 @@ export async function nativeClaudeCall(runtime: NativeClaudeRuntime, wire: Nativ
     const prompt = `${setup.ownedRoot}/system.txt`;
     await writeFile(prompt, wire.system, { flag: 'wx', mode: 0o400 }); boundary();
     // Whole native login JSON remains only in the fixed no-UI helper. Only its access token crosses an anonymous FD.
-    token = await readNativeLogin(helper, limits); boundary();
+    token = await readNativeLogin(helper, limits, authority); boundary(); assertNativeLoginActive(authority);
     const currentSetup = setup, currentToken = token;
     const reply = await new Promise<ParsedReply>((resolve, reject) => {
       // Fixed shell text only lowers the core limit and execs sandbox-exec; caller bytes are separate argv.
@@ -56,7 +57,8 @@ export async function nativeClaudeCall(runtime: NativeClaudeRuntime, wire: Nativ
       child.once('spawn', () => {
         if (limits.signal?.aborted || Date.now() >= limits.deadlineAt) { limits.signal?.aborted ? cancel() : stop(new ProviderError('sentinel.provider.timeout', 'original native deadline elapsed', 'possible')); return; }
         void sendNativeClaudeToken(currentToken, child.stdio[3] as Writable, limits.deadlineAt, limits.signal).then(() => {
-          if (failure || limits.signal?.aborted || Date.now() >= limits.deadlineAt) { if (!failure) cancel(); return; }
+          if (failure || limits.signal?.aborted || Date.now() >= limits.deadlineAt) { if (!failure) limits.signal?.aborted ? cancel() : stop(new ProviderError('sentinel.provider.timeout', 'original native deadline elapsed', 'possible')); return; }
+          try { assertNativeLoginActive(authority); } catch { stop(new ProviderError('sentinel.provider.notAdmitted', 'native reservation authority ended', 'possible')); return; }
           delivered = true; child.stdin!.end(wire.stdin);
         }).catch(e => stop(new ProviderError(e instanceof ProviderError ? e.code : 'sentinel.provider.credentialUnavailable', 'native descriptor delivery refused', 'possible')));
       });
@@ -72,6 +74,7 @@ export async function nativeClaudeCall(runtime: NativeClaudeRuntime, wire: Nativ
     });
     boundary(); return reply;
   } finally {
+    finishNativeCall(authority);
     if (token) discardNativeClaudeToken(token);
     await proxy.close();
     if (setup) await cleanupNativeClaudeSetup(setup);

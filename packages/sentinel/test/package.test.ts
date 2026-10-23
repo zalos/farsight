@@ -74,6 +74,11 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'review/providers/credentials.js': ['@farsight/core/dist/keychain.js'],
   'review/providers/errors.js': ['@farsight/core/dist/strings-sentinel-providers.js'],
   'review/providers/transport.js': ['node:http', 'node:https'],
+  // Fixed native CLI boundary: exact helper and executable, anonymous token FD, owned fixed TLS egress only.
+  'review/providers/cli-native-call.js': ['node:child_process', 'node:fs/promises'],
+  'review/providers/cli-native-helper.js': ['node:child_process', 'node:crypto', 'node:fs', 'node:fs/promises', 'node:path', 'node:url'],
+  'review/providers/cli-native-profile.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:path'],
+  'review/providers/cli-native-proxy.js': ['node:dns/promises', 'node:net'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
   'policy/admission.js': ['@farsight/core/dist/grants.js'],
   'policy/adoption.js': ['node:fs', 'node:os', 'node:path'],

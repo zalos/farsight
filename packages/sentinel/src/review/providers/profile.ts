@@ -13,6 +13,7 @@ import { snapshot } from '../../policy/immutable.js';
 import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.js';
 import { toNanos } from './decimal.js';
 import { fail } from './errors.js';
+import { CLAUDE_NATIVE_PROFILE } from './cli-native-profile.js';
 
 export type ProviderKind = ProviderSettings['kind'];
 
@@ -38,6 +39,7 @@ export interface ProviderBinding {
   readonly kind: ProviderKind;
   readonly origin: EndpointOrigin;
   readonly credential: KeychainRef | null;
+  readonly nativeProfile?: ProviderSettings['nativeProfile'];
   readonly disclosure: 'local-only' | 'hosted';
   readonly model: string;
   readonly limits: ModelLimits;
@@ -109,6 +111,18 @@ export function bindProvider(policy: EffectivePolicy, providerId: string, modelI
   const limits = checkLimits(profile.limits);
   checkOrigin(settings.endpoint, settings.disclosure);
 
+  const native = settings.kind === 'claude-cli';
+  if (native) {
+    const p = settings.nativeProfile;
+    if (!p || p.id !== CLAUDE_NATIVE_PROFILE.id || p.executableDigest !== CLAUDE_NATIVE_PROFILE.executableDigest
+      || !/^sha256:[a-f0-9]{64}$/.test(p.helperDigest) || !/^sha256:[a-f0-9]{64}$/.test(p.profileDigest)
+      || settings.endpoint !== 'https://api.anthropic.com' || settings.disclosure !== 'hosted' || settings.credential !== null
+      || profile.model !== 'claude-haiku-4-5-20251001' || limits.contextTokens !== 200000
+      || limits.maxRequestBytes > 65536 || limits.maxOutputTokens > 4096 || limits.maxMessages > 32
+      || settings.budget.maxTokens === null || settings.budget.maxCost !== null || settings.budget.currency !== null) {
+      fail('sentinel.provider.invalidProfile', 'the adopted native CLI profile is missing or outside its fixed bounds');
+    }
+  } else if (settings.nativeProfile !== undefined) fail('sentinel.provider.invalidProfile', 'native profile belongs only to the fixed CLI kind');
   const pricing = profile.pricing;
   if (pricing === null || pricing === undefined) return fail('sentinel.provider.unpriced', 'the model gives no rate schedule and no local no-fee basis');
   if (pricing.kind === 'no-fee') {
@@ -117,10 +131,13 @@ export function bindProvider(policy: EffectivePolicy, providerId: string, modelI
     if (toNanos(pricing.inputPerMillion) === null || toNanos(pricing.outputPerMillion) === null) fail('sentinel.provider.invalidProfile', 'rates are decimal amounts');
     if (!/^[A-Z]{3}$/.test(pricing.currency) || pricing.currency !== settings.budget.currency) fail('sentinel.provider.invalidProfile', 'the rate currency must be the provider budget\u2019s');
     if (!text(pricing.source) || !DATE.test(String(pricing.asOf))) fail('sentinel.provider.invalidProfile', 'a rate schedule names its source and date');
+  } else if (pricing.kind === 'subscription-quota') {
+    if (!native || pricing.basis !== 'owner-subscription') fail('sentinel.provider.unpriced', 'subscription quota belongs only to the adopted native CLI');
   } else {
     fail('sentinel.provider.invalidProfile', 'unknown pricing kind');
   }
 
+  if (native && pricing.kind !== 'subscription-quota') fail('sentinel.provider.unpriced', 'native CLI requires explicit subscription quota');
   const terms = profile.terms ?? null;
   if (settings.disclosure === 'hosted') {
     if (!terms || !text(terms.retention) || !['not-used', 'used', 'unknown'].includes(terms.training) || !text(terms.source) || !DATE.test(String(terms.recordedAt))) {
@@ -136,6 +153,7 @@ export function bindProvider(policy: EffectivePolicy, providerId: string, modelI
 
   const body = {
     providerId: settings.id, modelId: profile.id, kind: settings.kind, origin: settings.endpoint, credential: settings.credential,
+    ...(settings.nativeProfile ? { nativeProfile: settings.nativeProfile } : {}),
     disclosure: settings.disclosure, model: profile.model, limits, pricing, terms, capability: cap, settingsBudget: settings.budget,
   };
   const binding: ProviderBinding = snapshot({ ...body, digest: canonicalDigest(body), policyRevision: policy.revision });

@@ -46,7 +46,7 @@ const PATHS = {
   'openai-compatible': { chat: '/v1/chat/completions', list: '/v1/models' },
 } as const;
 
-export const chatPath = (kind: ProviderKind) => PATHS[kind].chat;
+export const chatPath = (kind: ProviderKind) => kind === 'claude-cli' ? fail('sentinel.provider.invalidProfile', 'native CLI has no HTTP chat path') : PATHS[kind].chat;
 
 const object = (v: unknown): Record<string, unknown> | null => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null);
 const count = (v: unknown): number | null => (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null);
@@ -54,6 +54,7 @@ const modelName = (v: unknown): string | null => (typeof v === 'string' && v.len
 
 /** The one request body for a chat call. */
 export function chatBody(kind: ProviderKind, model: string, messages: readonly ChatMessage[], maxOutputTokens: number, contextTokens: number): unknown {
+  if (kind === 'claude-cli') return fail('sentinel.provider.invalidProfile', 'native CLI uses its retained versioned wire');
   const msgs = messages.map(m => ({ role: m.role, content: m.content }));
   if (kind === 'ollama') return { model, messages: msgs, stream: false, options: { num_predict: maxOutputTokens, num_ctx: contextTokens } };
   return { model, messages: msgs, stream: false, n: 1, max_tokens: maxOutputTokens };
@@ -61,6 +62,7 @@ export function chatBody(kind: ProviderKind, model: string, messages: readonly C
 
 /** Reads one chat reply. Throws malformedResponse for a shape that is not this kind's reply. */
 export function parseReply(kind: ProviderKind, json: unknown): ParsedReply {
+  if (kind === 'claude-cli') return fail('sentinel.provider.invalidProfile', 'native CLI uses its fixed stream decoder');
   const bad = (d: string) => fail('sentinel.provider.malformedResponse', d, 'possible');
   const r = object(json) ?? bad('not an object');
   if (kind === 'ollama') {
@@ -104,6 +106,7 @@ export interface ProbeRequest {
  * model is listed. The caller must already be allowed to contact this origin; the probe sends no source.
  */
 export async function probeCapability(p: ProbeRequest): Promise<CapabilityRecord> {
+  if (p.kind === 'claude-cli') return fail('sentinel.provider.capabilityUntested', 'native CLI qualification uses fixed executable and helper bytes, not a listing');
   const { json } = await exchange({ origin: p.origin, method: 'GET', path: PATHS[p.kind].list, credential: p.credential ?? null,
     timeoutMs: p.timeoutMs, maxResponseBytes: p.maxResponseBytes, ...(p.signal ? { signal: p.signal } : {}) });
   const r = object(json);
