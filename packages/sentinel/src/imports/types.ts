@@ -42,7 +42,7 @@ export const IMPORT_FORMATS = Object.freeze(['sarif-2.1.0', 'zap-traditional-jso
 export type ImportFormat = typeof IMPORT_FORMATS[number];
 
 /** The adapter's own identity: a different version may read the same bytes differently, so it is part of the output. */
-export const IMPORT_ADAPTER = Object.freeze({ id: 'sentinel.import.reports', version: '2' });
+export const IMPORT_ADAPTER = Object.freeze({ id: 'sentinel.import.reports', version: '3' });
 
 /** The three attributes a Set-Cookie line can show. Integrity and confidentiality are never derived from a report. */
 export const COOKIE_PROPERTIES = Object.freeze(['cookie-secure', 'cookie-http-only', 'cookie-same-site'] as const);
@@ -97,6 +97,9 @@ export class ImportBudget {
 
   /** `limits` may only lower a ceiling. `clock` is a monotonic nanosecond clock, replaceable only by tests. */
   constructor(limits: Partial<ImportLimits> = {}, clock: () => bigint = process.hrtime.bigint) {
+    // Invalid knobs use the existing typed refusal, never Object.entries' raw TypeError. Undefined means the
+    // optional limits were omitted; an explicitly undefined field still fails the finite-integer check below.
+    if (limits === null || typeof limits !== 'object' || Array.isArray(limits)) throw new ImportRefusal('sentinel.import.budgetExhausted');
     const merged = { ...IMPORT_CEILINGS } as ImportLimits;
     for (const [k, v] of Object.entries(limits) as [keyof ImportLimits, number][]) {
       if (!Object.hasOwn(IMPORT_CEILINGS, k) || !Number.isSafeInteger(v) || v < 0) throw new ImportRefusal('sentinel.import.budgetExhausted');

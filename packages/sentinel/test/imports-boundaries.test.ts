@@ -142,5 +142,5 @@ test('limit names are own known ceilings; objectMembers stays per object under a
   assert.throws(() => new ImportBudget({ constructor: 1 } as any), ImportRefusal);
   assert.throws(() => new ImportBudget({ toString: 1 } as any), ImportRefusal);
   assert.equal((parseStrictJson(Buffer.from('[{"a":1},{"b":2}]'), new ImportBudget({ objectMembers: 1 })).value as any[]).length, 2);
-  const result = normalize(report()); assert.equal(result.document.adapter.version, '2');
+  const result = normalize(report()); assert.equal(result.document.adapter.version, '3');
 });

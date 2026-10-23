@@ -8,7 +8,7 @@
 // producer stays unknown, never assumed. `@generated` and `created` are when the report was made, not when any message
 // was observed. Sequence steps are pass/fail claims of the tool and are never read as exchanges.
 import { Collector, bounded, type RequestInfo, type ResponseInfo } from './collect.js';
-import { hostAgrees, originOf, parseHead, parseRequestLine, parseStatusLine, type RequestLine, type StatusLine } from './http.js';
+import { absoluteTarget, hostAgrees, originOf, parseHead, parseRequestLine, parseStatusLine, type RequestLine, type StatusLine } from './http.js';
 import { ImportRefusal, isObject, type Json, type JsonObject } from './types.js';
 
 const PAYLOAD = ['request-header', 'request-body', 'response-header', 'response-body'];
@@ -132,6 +132,7 @@ function exchange(c: Collector, inst: JsonObject, ip: string, uri: string | null
   if (typeof rh === 'string') {
     const head = parseHead<RequestLine>(rh, parseRequestLine, c.budget);
     if (!head.ok) request = { ok: false, reason: head.code };
+    else if (head.headers.filter(h => h.lower === 'cookie').length > 1) request = { ok: false, reason: 'sentinel.import.headerAmbiguous' };
     else if (head.start.method !== method || !consistentTarget(head.start.target, uri, head.headers)) request = { ok: false, reason: 'sentinel.import.requestInconsistent' };
     else request = {
       ok: true, method: head.start.method, target: head.start.target, origin: originOf(uri!),
@@ -150,9 +151,10 @@ function exchange(c: Collector, inst: JsonObject, ip: string, uri: string | null
 
 /** An origin-form request is consistent only with the absolute instance URI AND its single recorded Host. */
 function consistentTarget(target: string, uri: string | null, headers: readonly import('./http.js').HeaderLine[]): boolean {
-  if (uri === null || originOf(uri) === undefined || uri.includes('#')) return false;
-  if (target === uri) return hostAgrees(headers, uri, false);
-  if (!target.startsWith('/') || target.startsWith('//') || target.includes('#')) return false;
-  const absolute = new URL(uri);
-  return target === `${absolute.pathname}${absolute.search}` && hostAgrees(headers, uri, true);
+  const instance = uri === null ? undefined : absoluteTarget(uri);
+  if (!instance) return false;
+  const absolute = absoluteTarget(target);
+  if (absolute) return absolute.origin === instance.origin && absolute.pathQuery === instance.pathQuery && hostAgrees(headers, uri!, false);
+  if (!target.startsWith('/') || target.startsWith('//')) return false;
+  return target === instance.pathQuery && hostAgrees(headers, uri!, true);
 }

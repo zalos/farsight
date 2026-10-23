@@ -13,7 +13,7 @@ export const TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 /** A field value: visible ASCII, obs-text, space and tab; no other control character. */
 const FIELD_VALUE = /^[\t\x20-\x7e\x80-\uffff]*$/;
 const STATUS = /^HTTP\/([0-9])(?:\.([0-9]))? ([0-9]{3})(?: [\t\x20-\x7e\x80-\uffff]*)?$/;
-const REQUEST = /^([!#$%&'*+\-.^_`|~0-9A-Za-z]+) ([\x21-\x7e]+) HTTP\/([0-9])\.([0-9])$/;
+const REQUEST = /^([!#$%&'*+\-.^_`|~0-9A-Za-z]+) ([\x21-\x7e]+) HTTP\/([0-9])(?:\.([0-9]))?$/;
 
 export function validFieldValue(v: string): boolean { return FIELD_VALUE.test(v); }
 
@@ -66,16 +66,31 @@ export function parseHead<T>(text: string, first: (line: string) => T | ImportUn
   return { ok: true, start: start as T, headers };
 }
 
-/**
- * The origin an absolute http(s) request target names, as text; undefined for an origin-form target (`/path`), a
- * target with user information, or anything else. Never dereferenced.
- */
-export function originOf(target: string): string | undefined {
-  if (!/^https?:\/\/[^\s/?#@]+(?:[/?#][\x21-\x7e]*)?$/i.test(target)) return undefined;
+/** An absolute target's canonical origin and ORIGINAL path/query spelling. The authority may differ in ordinary
+ * scheme/host case or an explicit default port; URL parsing must not rewrite the path or query to make it fit.
+ * No credentials, fragment, backslash, control, invalid percent escape or WHATWG dot-segment rewrite is accepted. */
+export function absoluteTarget(target: string): { readonly origin: string; readonly pathQuery: string } | undefined {
+  if (!/^[\x21-\x7e]+$/.test(target) || target.includes('\\')) return undefined;
+  const parts = /^(https?):\/\/([^/?#]+)([/?][^#]*)?$/i.exec(target);
+  if (!parts || parts[2]!.includes('@')) return undefined;
+  const tail = parts[3] ?? '';
+  // URI path/query octets stay literal. In particular, '+' is not space and percent escapes are not decoded.
+  if (!/^(?:[A-Za-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*$/i.test(tail)) return undefined;
+  const question = tail.indexOf('?');
+  const path = (question === -1 ? tail : tail.slice(0, question)) || '/';
+  const query = question === -1 ? '' : tail.slice(question);
   let url: URL;
   try { url = new URL(target); } catch { return undefined; }
   if (url.username || url.password || (url.protocol !== 'http:' && url.protocol !== 'https:')) return undefined;
-  return url.origin;
+  // URL removes dot segments, including encoded dots: those rewrites cannot establish a raw target match. Query
+  // serialization may escape legal apostrophes or drop an empty '?'; never use it for comparison or reconstruction.
+  if (url.pathname !== path) return undefined;
+  return { origin: url.origin, pathQuery: path + query };
+}
+
+/** The origin named by a supported raw absolute target, never inferred from the caller's manifest. */
+export function originOf(target: string): string | undefined {
+  return absoluteTarget(target)?.origin;
 }
 
 /** A canonical origin as a manifest must state it: `scheme://host[:port]`, exactly as URL serializes it. */
@@ -90,11 +105,12 @@ export function hostAgrees(headers: readonly HeaderLine[], target: string, requi
   const hosts = headers.filter(h => h.lower === 'host');
   if (hosts.length === 0) return !required;
   if (hosts.length !== 1) return false;
-  let absolute: URL;
-  try { absolute = new URL(target); } catch { return false; }
+  const absolute = absoluteTarget(target);
+  if (!absolute) return false;
   const host = hosts[0]!.value;
   if (!/^[\x21-\x7e]+$/.test(host) || /[/?#@\\]/.test(host)) return false;
   // Compare canonical authorities (case and default ports), without accepting path/userinfo normalization.
-  const origin = originOf(`${absolute.protocol}//${host}`);
+  const scheme = absolute.origin.slice(0, absolute.origin.indexOf(':'));
+  const origin = originOf(`${scheme}://${host}`);
   return origin !== undefined && origin === absolute.origin;
 }

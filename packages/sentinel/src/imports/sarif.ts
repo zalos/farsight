@@ -321,6 +321,8 @@ function headersOk(c: Collector, hs: readonly { name: string; value: string }[])
 function protocolOk(o: JsonObject, p: string): boolean {
   const v = o.protocol;
   if (v !== undefined && typeof v !== 'string') return malformed(`${p}/protocol`);
+  // A supplied version with the wrong JSON type/grammar makes the imported document malformed. A well-formed
+  // unsupported version, or a status outside supported response semantics, instead leaves that exchange unknown.
   const version = o.version;
   if (version !== undefined && (typeof version !== 'string' || !/^[0-9]+(?:\.[0-9]+)?$/.test(version))) return malformed(`${p}/version`);
   return (v === undefined || v.toUpperCase() === 'HTTP' || v.toUpperCase() === 'HTTPS')
