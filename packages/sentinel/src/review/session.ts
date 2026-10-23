@@ -19,6 +19,10 @@ import { parseEnvelope, validateEnvelope } from '../validate.js';
 import type { ChatMessage } from './providers/kinds.js';
 import { EvidenceBroker, type DisclosureFilter, type EvidenceItem, type EvidenceLimits, type EvidenceScope, type ToolRequest, type ToolResult } from './evidence.js';
 import { reviewFail, type ReplyRejectionCode, type ReviewFrontierCode } from './errors.js';
+import type {ReviewInstructionsEnvelope,ReviewRequestEnvelope,ReviewProviderSelection} from '../contracts/instructions.js';
+import {instructionManifest,renderedInstructions,instructionArtifacts,type PreparedInstructions,type InstructionArtifact} from './instructions.js';
+import {canonicalJsonBytes} from '../store/objects.js';
+import {sha256Digest} from '../policy/digest.js';
 import { promptDigest, type PromptArtifact } from './prompts.js';
 import { validateReply, type FinalAssessment, type Verdict } from './validator.js';
 
@@ -34,6 +38,7 @@ export interface CallerReply {
 /** A model call. `kind` says whether a real provider stood behind it: mock replies can never qualify anything. */
 export interface ModelCaller {
   readonly kind: 'mock' | 'provider';
+  readonly selection?:Readonly<ReviewProviderSelection>;
   call(req: { operationId: string; messages: readonly ChatMessage[]; maxOutputTokens: number; signal?: AbortSignal }): Promise<CallerReply>;
 }
 
@@ -63,6 +68,9 @@ export interface SessionSpec {
   readonly adapterId: string;
   readonly adapterDigest: Digest;
   readonly prompt: PromptArtifact;
+  readonly instructions?:PreparedInstructions;
+  readonly segmentId?:string;
+  readonly requestedSelection?:Readonly<ReviewProviderSelection>;
   readonly scope: EvidenceScope;
   readonly limits: EvidenceLimits;
   readonly budget: SessionBudget;
@@ -88,6 +96,7 @@ export type ReviewRecord = ReviewRecordEnvelope;
 export interface SessionResult {
   readonly record: ReviewRecord;
   readonly observations: readonly ObservationEnvelope[];
+  readonly privateArtifacts?:readonly InstructionArtifact[];
 }
 
 const CHECKPOINT_SCHEMA = 'sentinel-review-checkpoint/draft-1';
@@ -125,10 +134,12 @@ export class FileCheckpointStore implements CheckpointStore {
 
 /** The digest a checkpoint is bound to: scope, files with their content ids, rules, limits, budget, prompt, tools. */
 export function specDigest(spec: SessionSpec): Digest {
+  if((spec.segmentId!==undefined||spec.requestedSelection!==undefined)&&!spec.instructions)reviewFail('sentinel.review.invalidInput','new segment selection requires a prepared instruction binding');
   return canonicalDigest({
     sessionId: spec.sessionId, kind: spec.kind, runId: spec.runId, adapterId: spec.adapterId, adapterDigest: spec.adapterDigest,
     prompt: promptDigest(spec.prompt), scope: spec.scope, limits: spec.limits, budget: spec.budget, producerRuleId: spec.producerRuleId,
     rule: spec.rule ?? null, tools: [...spec.tools].sort(),
+    ...(spec.instructions?{instructions:instructionManifest(spec.instructions).digest,segmentId:spec.segmentId??spec.sessionId,...(spec.requestedSelection?{requestedSelection:spec.requestedSelection}:{})}:{}),
   }) as Digest;
 }
 
@@ -193,8 +204,15 @@ function checkSpec(spec: SessionSpec): void {
 
 /** Runs (or resumes) one session to a final assessment or a stated stop. */
 export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Promise<SessionResult> {
+  const {instructions:prepared,...plain}=spec;spec={...snapshot(plain),...(prepared?{instructions:prepared}:{})};
   checkSpec(spec);
   const now = opts.now ?? Date.now;
+  const manifest=spec.instructions?instructionManifest(spec.instructions):undefined;
+  if(manifest&&(manifest.prompt.id!==spec.prompt.id||manifest.prompt.revision!==spec.prompt.version||manifest.prompt.digest!==sha256Digest(Buffer.from(spec.prompt.text))))reviewFail('sentinel.review.integrity','the prepared instructions name another base prompt');
+  const system=spec.instructions?renderedInstructions(spec.instructions):spec.prompt.text;
+  const selection=opts.caller.selection;
+  if(manifest&&opts.caller.kind==='provider'&&(!spec.requestedSelection||!selection))reviewFail('sentinel.review.invalidInput','instruction-bound provider sessions seal their requested selection');
+  if(spec.requestedSelection&&canonicalDigest(selection??null)!==canonicalDigest(spec.requestedSelection))reviewFail('sentinel.review.integrity','the caller selection changed');
   const digest = specDigest(spec);
   const broker = new EvidenceBroker(spec.scope, spec.limits, opts.read, opts.withhold);
   const tools = new Set(spec.tools);
@@ -204,8 +222,10 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
     const checked = validateEnvelope('checkpoint', cp);
     if (!checked.ok) reviewFail('sentinel.review.checkpoint', `the checkpoint does not validate: ${checked.errors[0]?.path} ${checked.errors[0]?.message}`);
     if (cp.sessionId !== spec.sessionId || cp.specDigest !== digest) reviewFail('sentinel.review.checkpoint', 'the checkpoint is for another scope, prompt, budget or tool set');
-    if (cp.messages[0]!.content !== spec.prompt.text) reviewFail('sentinel.review.checkpoint', 'the checkpoint does not start with this session\u2019s prompt');
+    if(canonicalDigest(cp.instructions??null)!==canonicalDigest(manifest??null))reviewFail('sentinel.review.checkpoint','the checkpoint instruction binding changed');
+    if (cp.messages[0]!.content !== system) reviewFail('sentinel.review.checkpoint', 'the checkpoint does not start with this session\u2019s prompt');
     if (cp.messages[1]!.role !== 'user' || cp.messages[1]!.content !== taskMessage(spec).content) reviewFail('sentinel.review.checkpoint', 'the checkpoint\u2019s task is not this session\u2019s');
+    if(manifest)for(const r of cp.requests??[]){if(r.runId!==spec.runId||r.snapshotId!==spec.scope.snapshotId||r.sourceId!==spec.scope.sourceId||r.segmentId!==(spec.segmentId??spec.sessionId)||r.scopeDigest!==canonicalDigest(spec.scope)||canonicalDigest(r.selection??null)!==canonicalDigest(spec.requestedSelection??null)||canonicalDigest(r.messages)!==canonicalDigest(cp.messages.slice(0,r.messages.length)))reviewFail('sentinel.review.checkpoint','retained request differs from this exact session transcript');}
     // The transcript is re-derived, never trusted: every slice from the snapshot bytes under the current disclosure
     // filter, and every tool result rebuilt from those slices and compared with what was saved.
     const withheld = await broker.restore(cp.served, cp.toolCalls);
@@ -219,7 +239,8 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
     broker.chargeRestored(rebuilt!.servedBytes);
   } else {
     cp = { schema: CHECKPOINT_SCHEMA, sessionId: spec.sessionId, specDigest: digest, startedAt: stamp(now()),
-      messages: [{ role: 'system', content: spec.prompt.text }, taskMessage(spec)], served: [], toolCalls: 0, invalid: 0, inputBytes: 0,
+      messages: [{ role: 'system', content: system }, taskMessage(spec)],
+      ...(manifest?{instructions:manifest,requests:[]}:{}), served: [], toolCalls: 0, invalid: 0, inputBytes: 0,
       operations: [], identity: null, final: null, stopped: null };
     await opts.checkpoints.save(cp);
   }
@@ -235,6 +256,8 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
   };
   const stop = (code: ReviewFrontierCode) => save({ ...cp!, stopped: code });
 
+  // A prepared request survived without a settled checkpoint. Do not invent dispatch certainty or replay it.
+  if(cp.requests&&cp.requests.length===cp.operations.length+1&&!cp.final&&!cp.stopped){const request=cp.requests[cp.operations.length]!,bytes=Buffer.byteLength(JSON.stringify(request.messages));await save({...cp,inputBytes:cp.inputBytes+bytes,operations:[...cp.operations,{operationId:request.operationId,request:digestOf(request) as Digest,state:'unsettled',inputBytes:bytes,outcome:'failed'}],stopped:'sentinel.review.frontier.uncertainUsage'});}
   while (!cp.final && !cp.stopped) {
     const step = cp.operations.length;
     if (step >= spec.budget.maxSteps) { await stop('sentinel.review.frontier.steps'); break; }
@@ -243,9 +266,17 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
     const bytes = Buffer.byteLength(JSON.stringify(cp.messages));
     if (cp.inputBytes + bytes > spec.budget.maxInputBytes) { await stop('sentinel.review.frontier.budget'); break; }
     const operationId = `${spec.sessionId}.op${step + 1}`;
+    let request:ReviewRequestEnvelope|undefined;
+    const messagesToSend=snapshot(cp.messages);
+    if(manifest){
+      if(spec.requestedSelection&&canonicalDigest(opts.caller.selection??null)!==canonicalDigest(spec.requestedSelection))reviewFail('sentinel.review.integrity','the caller selection changed');
+      const body={schema:'sentinel-review-request/draft-1' as const,sessionId:spec.sessionId,runId:spec.runId,attemptId:spec.attemptId,snapshotId:spec.scope.snapshotId,sourceId:spec.scope.sourceId,segmentId:spec.segmentId??spec.sessionId,operationId,specDigest:digest,instructionDigest:manifest.digest,scopeDigest:canonicalDigest(spec.scope) as Digest,...(spec.requestedSelection?{selection:{...spec.requestedSelection}}:{}),messages:messagesToSend};
+      request={...body,digest:digestOf(body) as Digest};await save({...cp,requests:[...cp.requests!,request]});if(cp.stopped)break;
+    }
+    const requestRef=request?{request:digestOf(request) as Digest}:{};
     let reply: CallerReply;
     try {
-      reply = await opts.caller.call({ operationId, messages: cp.messages, maxOutputTokens: spec.budget.maxOutputTokens, ...(opts.signal ? { signal: opts.signal } : {}) });
+      reply = await opts.caller.call({ operationId, messages: messagesToSend, maxOutputTokens: spec.budget.maxOutputTokens, ...(opts.signal ? { signal: opts.signal } : {}) });
     } catch (error) {
       const e = (error ?? {}) as CallerFailure;
       // An operation the ledger already holds (a crash between its call and its checkpoint) is never re-sent: its
@@ -256,11 +287,11 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
             : e.code === 'sentinel.provider.reservationState' || e.spend === 'possible' ? 'sentinel.review.frontier.uncertainUsage' : 'sentinel.review.frontier.modelError';
       if (code === 'sentinel.review.frontier.fenced') throw error;
       await save({ ...cp, inputBytes: cp.inputBytes + (e.spend === 'possible' ? bytes : 0),
-        operations: [...cp.operations, { operationId, state: 'unsettled', inputBytes: bytes, outcome: 'failed' }], stopped: code });
+        operations: [...cp.operations, { operationId,...requestRef, state: 'unsettled', inputBytes: bytes, outcome: 'failed' }], stopped: code });
       break;
     }
     const messages: ChatMessage[] = [...cp.messages, { role: 'assistant', content: reply.content }];
-    const op = { operationId, state: 'settled' as const, inputBytes: bytes, usage: { inputTokens: reply.usage.inputTokens, outputTokens: reply.usage.outputTokens } };
+    const op = { operationId,...requestRef,...(manifest?{identity:snapshot(reply.identity)}:{}), state: 'settled' as const, inputBytes: bytes, usage: { inputTokens: reply.usage.inputTokens, outputTokens: reply.usage.outputTokens } };
     // A reply that arrives after the deadline or a cancel is recorded (it was charged) and not acted on.
     const late: ReviewFrontierCode | null = opts.signal?.aborted ? 'sentinel.review.frontier.canceled'
       : now() - startedAt > spec.budget.deadlineMs ? 'sentinel.review.frontier.deadline' : null;
@@ -325,7 +356,7 @@ function finish(spec: SessionSpec, cp: ReviewCheckpoint, broker: EvidenceBroker,
         id: `obs-${canonicalDigest({ session: spec.sessionId, i, c }).slice(7, 39)}`,
         snapshotId,
         producer: { kind: 'model-review', adapterId: spec.adapterId, adapterDigest: spec.adapterDigest, attemptId: spec.attemptId,
-          model: cp.identity!, promptDigest: promptDigest(spec.prompt) as Digest },
+          model: cp.identity!, promptDigest: (spec.instructions?instructionManifest(spec.instructions).assembled.digest:promptDigest(spec.prompt)) as Digest },
         producerRuleId: spec.producerRuleId,
         ...(spec.rule ? { rule: { familyId: spec.rule.familyId, revisionDigest: spec.rule.revisionDigest } } : {}),
         originalSeverity: 'unrated',
@@ -342,7 +373,7 @@ function finish(spec: SessionSpec, cp: ReviewCheckpoint, broker: EvidenceBroker,
   }
   const body = {
     schema: 'sentinel-review-record/draft-1' as const, sessionId: spec.sessionId, kind: spec.kind, runId: spec.runId, attemptId: spec.attemptId,
-    snapshotId, sourceId, specDigest: cp.specDigest, promptDigest: promptDigest(spec.prompt) as Digest, model: cp.identity, callerKind,
+    snapshotId, sourceId, specDigest: cp.specDigest,...(spec.instructions?{instructions:{manifest:digestOf(instructionManifest(spec.instructions)) as Digest,digest:instructionManifest(spec.instructions).digest,assembled:instructionManifest(spec.instructions).assembled.content,sourcePacket:canonicalDigest(spec.scope) as Digest,segmentId:spec.segmentId??spec.sessionId,...(spec.requestedSelection?{selection:{...spec.requestedSelection}}:{})}}:{}), promptDigest: (spec.instructions?instructionManifest(spec.instructions).assembled.digest:promptDigest(spec.prompt)) as Digest, model: cp.identity, callerKind,
     outcome: completed ? 'completed' as const : 'unfinished' as const, verdict: completed ? cp.final!.verdict : null,
     inspected, notInspected, frontiers, operations: cp.operations,
     totals: { steps: cp.operations.length, toolCalls: served.toolCalls, inputBytes: cp.inputBytes,
@@ -355,5 +386,7 @@ function finish(spec: SessionSpec, cp: ReviewCheckpoint, broker: EvidenceBroker,
     digest: digestOf({ ...body, inspected: body.inspected.map(i => ({ ...i, ranges: i.ranges.map(r => [r[0], r[1]]) })) }) as Digest };
   const checked = validateEnvelope('review', record);
   if (!checked.ok) reviewFail('sentinel.review.integrity', `the review record does not validate: ${checked.errors[0]?.path} ${checked.errors[0]?.message}`);
-  return Object.freeze({ record: snapshot(record), observations: Object.freeze(observations) });
+  const privateArtifacts:InstructionArtifact[]=[];
+  if(spec.instructions){privateArtifacts.push(...instructionArtifacts(spec.instructions));privateArtifacts.push({id:canonicalDigest(spec.scope) as Digest,bytes:canonicalJsonBytes(spec.scope),schema:'application/json',links:spec.scope.files.map(f=>f.content as Digest)});for(const value of [instructionManifest(spec.instructions),...(cp.requests??[])]){const bytes=canonicalJsonBytes(value);privateArtifacts.push({id:digestOf(value) as Digest,bytes,schema:value.schema,links:value.schema==='sentinel-review-instructions/draft-1'?[value.prompt.content,value.assembled.content,...value.skills.flatMap(s=>[s.content,...s.resources.map(r=>r.content)])]:[instructionManifest(spec.instructions).assembled.content,canonicalDigest(spec.scope) as Digest,digestOf(instructionManifest(spec.instructions)) as Digest]});}}
+  return Object.freeze({ record: snapshot(record), observations: Object.freeze(observations),...(spec.instructions?{privateArtifacts:Object.freeze(privateArtifacts)}:{}) });
 }

@@ -9,14 +9,16 @@ import type { AttemptUsage, Digest, ObservationEnvelope, ScopedReason, WorkEnvel
 import type { ModelBroker, ModelEnvelope } from './providers/broker.js';
 import type { BudgetLedger } from './providers/budget.js';
 import { fromNanos } from './providers/decimal.js';
-import type { ProviderBinding } from './providers/profile.js';
+import {isProviderBinding,type ProviderBinding} from './providers/profile.js';
 import { providerCaller } from './caller.js';
 import { LedgerCheckpointStore } from './checkpoints.js';
 import { reviewFail } from './errors.js';
 import { GENERAL_ADAPTER_DIGEST, GENERAL_ADAPTER_ID } from './general.js';
 import { GUIDED_ADAPTER_DIGEST, GUIDED_ADAPTER_ID } from './guided.js';
-import { runSession, type ReviewRecord, type SessionSpec } from './session.js';
+import {canonicalDigest} from '../policy/digest.js';
+import { runSession,specDigest, type ReviewRecord, type SessionSpec } from './session.js';
 import { isReviewWork } from './stage.js';
+import type {InstructionArtifact} from './instructions.js';
 import type { DisclosureFilter } from './evidence.js';
 
 export interface ModelOperationContext {
@@ -34,6 +36,7 @@ export interface ModelOperationOutcome {
   /** Canonical records for the attempt's publication: the review record, then its observations. */
   readonly records: readonly { readonly value: ReviewRecord | ObservationEnvelope; readonly schema: string }[];
   readonly usage: AttemptUsage;
+  readonly privateArtifacts?:readonly InstructionArtifact[];
   readonly frontiers: readonly ScopedReason[];
   /** Always none: agentic review never covers a check. */
   readonly coverage: readonly [];
@@ -60,12 +63,15 @@ export function createModelReviewOperation(deps: ModelOperationDeps) {
         reviewFail('sentinel.review.integrity', 'the unit names another review implementation');
       }
       if (ctx.spec.runId !== ctx.work.runId || ctx.spec.runId !== deps.envelope.runId) reviewFail('sentinel.review.integrity', 'the unit, its spec and the envelope name different runs');
+      const sealed=specDigest(ctx.spec);if(ctx.work.inputFingerprint!==sealed||ctx.work.influenceManifest!==canonicalDigest({spec:sealed,kind:ctx.spec.kind,sessionId:ctx.spec.sessionId}))reviewFail('sentinel.review.integrity','the review spec differs from its planned work binding');
       if (ctx.spec.attemptId !== ctx.attemptId) reviewFail('sentinel.review.integrity', 'the spec is for another attempt');
       const checkpoints = new LedgerCheckpointStore(deps.ledger, ctx.epoch, deps.now);
-      const { record, observations } = await runSession(ctx.spec, { caller: providerCaller(deps.broker, deps.envelope, deps.binding), checkpoints, read: ctx.read,
+      const originalCaller=providerCaller(deps.broker,deps.envelope,deps.binding);
+      const caller=ctx.spec.instructions?{...originalCaller,get selection(){const b=deps.binding();if(!isProviderBinding(b))return reviewFail('sentinel.review.integrity','the requested provider binding is not genuine');return Object.freeze({providerId:b.providerId,modelId:b.modelId,bindingDigest:b.digest as Digest})}}:originalCaller;
+      const { record, observations,privateArtifacts } = await runSession(ctx.spec, { caller, checkpoints, read: ctx.read,
         ...(ctx.withhold ? { withhold: ctx.withhold } : {}), ...(ctx.signal ? { signal: ctx.signal } : {}) });
       return Object.freeze({ records: [{ value: record, schema: 'sentinel-review-record/draft-1' }, ...observations.map(o => ({ value: o, schema: 'sentinel-observation/draft-1' }))],
-        usage: usageOf(deps.ledger, deps.envelope.id, record), frontiers: record.frontiers, coverage: [] as const });
+        ...(privateArtifacts?{privateArtifacts}:{}),usage: usageOf(deps.ledger, deps.envelope.id, record), frontiers: record.frontiers, coverage: [] as const });
     },
   });
 }

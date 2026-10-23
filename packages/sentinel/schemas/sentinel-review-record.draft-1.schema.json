@@ -37,6 +37,9 @@
         "promptDigest": {
           "$ref": "#/definitions/Digest"
         },
+        "instructions": {
+          "$ref": "#/definitions/ReviewInstructionBinding"
+        },
         "model": {
           "anyOf": [
             {
@@ -206,6 +209,62 @@
       "description": "A SHA-256 content address, lower-case hex.",
       "pattern": "^sha256:[0-9a-f]{64}$"
     },
+    "ReviewInstructionBinding": {
+      "type": "object",
+      "properties": {
+        "manifest": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "digest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "assembled": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "sourcePacket": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "segmentId": {
+          "$ref": "#/definitions/Id"
+        },
+        "selection": {
+          "$ref": "#/definitions/ReviewProviderSelection"
+        }
+      },
+      "required": [
+        "manifest",
+        "digest",
+        "assembled",
+        "sourcePacket",
+        "segmentId"
+      ],
+      "additionalProperties": false
+    },
+    "ArtifactId": {
+      "$ref": "#/definitions/Digest",
+      "description": "An immutable object-store identity: the digest of canonical uncompressed bytes."
+    },
+    "ReviewProviderSelection": {
+      "type": "object",
+      "properties": {
+        "providerId": {
+          "$ref": "#/definitions/Id"
+        },
+        "modelId": {
+          "$ref": "#/definitions/Id"
+        },
+        "bindingDigest": {
+          "$ref": "#/definitions/Digest"
+        }
+      },
+      "required": [
+        "providerId",
+        "modelId",
+        "bindingDigest"
+      ],
+      "additionalProperties": false,
+      "description": "One exact Sentinel request sent to the caller. Its identity is the request bytes, not a claim about vendor internals."
+    },
     "ModelIdentity": {
       "type": "object",
       "properties": {
@@ -296,10 +355,6 @@
       "pattern": "^(?![/])(?![\\s\\S]*[/]$)(?!([\\s\\S]*[/])?\\.{1,2}([/]|$))(?![\\s\\S]*[/][/])[^\\\\\\u0000]+$",
       "maxLength": 4096
     },
-    "ArtifactId": {
-      "$ref": "#/definitions/Digest",
-      "description": "An immutable object-store identity: the digest of canonical uncompressed bytes."
-    },
     "LineNumber": {
       "type": "integer",
       "description": "A 1-based source line.",
@@ -338,6 +393,14 @@
     "ReviewOperation": {
       "type": "object",
       "properties": {
+        "request": {
+          "$ref": "#/definitions/ArtifactId",
+          "description": "Exact retained request for instruction-bound sessions only."
+        },
+        "identity": {
+          "$ref": "#/definitions/ModelIdentity",
+          "description": "Reported identity of this reply, never inferred from instruction text."
+        },
         "operationId": {
           "$ref": "#/definitions/Id"
         },
