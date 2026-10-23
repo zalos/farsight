@@ -45,6 +45,15 @@ function check(config: ReviewModelsSettings) {
   }
 }
 
+/** Pure public-stage release gate; retained provider binding remains available for later qualification. */
+export function assertNativeClaudeReviewEnabled(policy: EffectivePolicy, providerId: string): void {
+  if (!isEffectivePolicy(policy)) fail('sentinel.provider.notTrusted', 'review execution needs the genuine current policy');
+  if (policy.settings.providers.find(p => p.id === providerId)?.kind === 'claude-cli'
+    && policy.settings.nativeClaudeReviewEnabled !== true) {
+    fail('sentinel.provider.nativeClaudeDisabled', 'native Claude execution is deferred until separately enabled and qualified');
+  }
+}
+
 /** Deterministic execution never chooses or probes a model. Agentic resolution alone makes no call or receipt. */
 export function resolveReviewModel(policy: EffectivePolicy, stage: 'deterministic', segmentId?: string): Readonly<{ stage: 'deterministic'; model: 'not-applicable' }>;
 export function resolveReviewModel(policy: EffectivePolicy, stage: ReviewModelStage, segmentId: string): Readonly<ResolvedReviewModel>;
@@ -58,6 +67,7 @@ export function resolveReviewModel(policy: EffectivePolicy, stage: ReviewModelSt
   const specific = config.segments.find(x => x.stage === stage && x.segmentId === segmentId);
   const selected: ReviewStageModelSelection | undefined = specific ?? config.stages.find(x => x.stage === stage);
   if (!selected) return fail('sentinel.provider.capabilityMissing', 'no configured model for this review segment');
+  assertNativeClaudeReviewEnabled(policy, selected.providerId);
   const provider = policy.settings.providers.find(x => x.id === selected.providerId);
   if (provider?.disclosure === 'hosted' && isApiKind(provider.kind)
     && policy.settings.hostedApiReviewEnabled !== true) {

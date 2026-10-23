@@ -960,6 +960,12 @@ Preparation includes review stages from genuinely adopted model selections even 
 request a review adapter; the frozen profile records code availability, while dispatch still requires the exact
 model binding, receipt and admission.
 
+Native Claude execution is deferred for this release. `nativeClaudeReviewEnabled` defaults to false when
+absent, and public stage selection and existing-plan start refuse before confirmation, credentials or launch.
+The implementation and the following future qualification instructions are retained. Explicitly adopting
+`nativeClaudeReviewEnabled: true` only opens that release gate; it does not prove runtime qualification,
+authentication or successful inference. Copilot qualification is separate; no provider fallback occurs.
+
 First obtain data for the owner configuration, without reading a credential or starting a process:
 
 ```sh
@@ -975,6 +981,7 @@ the provider below in `workspace/.farsight/sentinel/settings.json`, retaining th
 ```json
 {
   "hostedApiReviewEnabled": false,
+  "nativeClaudeReviewEnabled": false,
   "providers": [{
     "id": "native-claude", "kind": "claude-cli", "endpoint": "https://api.anthropic.com",
     "credential": null, "disclosure": "hosted",

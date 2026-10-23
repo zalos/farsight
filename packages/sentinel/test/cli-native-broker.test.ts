@@ -8,14 +8,14 @@ import { BudgetLedger, ModelBroker, bindProvider, envelopeIntent } from '../dist
 import { issueReceipt } from '../dist/policy/owner-receipts.js';
 import { nativeClaudeCall } from '../dist/review/providers/cli-native-call.js';
 import { readNativeLogin } from '../dist/review/providers/cli-native-helper.js';
-import { resolveReviewModel } from '../dist/review/providers/selection.js';
+import { assertNativeClaudeReviewEnabled, resolveReviewModel } from '../dist/review/providers/selection.js';
 import { CLAUDE_NATIVE_PROFILE } from '../dist/review/providers/cli-native-profile.js';
 import { D, NOW, TERMS, LIMITS, scratchDir } from './provider-helpers.ts';
 const model = 'claude-haiku-4-5-20251001';
 const budget = { maxTokens: 200000, maxCost: null, currency: null };
 const profile = { id: CLAUDE_NATIVE_PROFILE.id, executableDigest: CLAUDE_NATIVE_PROFILE.executableDigest, helperDigest: D('synthetic-helper'), profileDigest: D('synthetic-profile') };
 function policy(over: Record<string, unknown> = {}, modelOver: Record<string, unknown> = {}) {
-  return effectivePolicy({ trust: 'adopted', settings: { ...structuredClone(DEFAULT_SETTINGS),
+  return effectivePolicy({ trust: 'adopted', settings: { ...structuredClone(DEFAULT_SETTINGS),nativeClaudeReviewEnabled:true,
     grants: [{ actions: ['paid.admit'], principals: ['human'], confirm: 'never', scope: { providers: ['native-claude'] } }],
     reviewModels: { stages: [{ stage: 'guided', providerId: 'native-claude', modelId: 'haiku' }], segments: [] },
     providers: [{ id: 'native-claude', kind: 'claude-cli', endpoint: 'https://api.anthropic.com', credential: null, disclosure: 'hosted', nativeProfile: profile, budget,
@@ -24,7 +24,7 @@ function policy(over: Record<string, unknown> = {}, modelOver: Record<string, un
   } as any, settingsDigest: D(JSON.stringify([over,modelOver])), repoConfig: null, repoConfigDigest: null });
 }
 const code = (c: string) => (e: any) => e?.code === c;
-test('owner-adopted native CLI resolves while hosted API flag is absent; deterministic remains not applicable', () => {
+test('explicitly enabled owner-adopted native CLI resolves while hosted API flag is absent; deterministic remains not applicable', () => {
   const p = policy(), r = resolveReviewModel(p, 'guided', 'segment-1');
   assert.equal(r.binding.kind, 'claude-cli'); assert.equal(r.binding.model, model); assert.equal(r.binding.pricing.kind, 'subscription-quota');
   assert.deepEqual(resolveReviewModel(p, 'deterministic'), { stage: 'deterministic', model: 'not-applicable' });
@@ -78,4 +78,16 @@ test('published settings schema keeps provider kinds and accounting bases as exp
   assert.deepEqual(schema.definitions.ProviderSettings.properties.kind.enum,['ollama','openai-compatible','claude-cli']);
   assert.deepEqual(schema.definitions.ModelCapability.properties.kind.enum,['ollama','openai-compatible','claude-cli']);
   assert.deepEqual(schema.definitions.ModelPricing.properties.kind.enum,['rates','no-fee','subscription-quota']);
+});
+
+// No credential, receipt or process is needed to evaluate the release flag.
+test('public native Claude defaults off for stage/segment choices and opt-in never enables another provider',()=>{
+ const opted=policy();for(const flag of [undefined,false]){const settings={...structuredClone(opted.settings)};if(flag===undefined)delete settings.nativeClaudeReviewEnabled;else settings.nativeClaudeReviewEnabled=flag;const p=effectivePolicy({trust:'adopted',settings,settingsDigest:D(JSON.stringify(settings)),repoConfig:null,repoConfigDigest:null});
+  assert.throws(()=>resolveReviewModel(p,'guided','segment-1'),code('sentinel.provider.nativeClaudeDisabled'));
+  assert.throws(()=>assertNativeClaudeReviewEnabled(p,'native-claude'),code('sentinel.provider.nativeClaudeDisabled'));
+  assert.deepEqual(resolveReviewModel(p,'deterministic'),{stage:'deterministic',model:'not-applicable'});
+  assert.equal(bindProvider(p,'native-claude','haiku').kind,'claude-cli','retained implementation is not deleted');
+ }
+ assert.equal(resolveReviewModel(opted,'guided','segment-1').binding.kind,'claude-cli');
+ assert.throws(()=>assertNativeClaudeReviewEnabled({...opted} as any,'native-claude'),code('sentinel.provider.notTrusted'));
 });

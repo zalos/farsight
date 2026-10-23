@@ -48,6 +48,10 @@
         "hostedApiReviewEnabled": {
           "type": "boolean",
           "description": "Hosted API review is paused when absent or false; explicit adoption is required to enable public dispatch."
+        },
+        "nativeClaudeReviewEnabled": {
+          "type": "boolean",
+          "description": "Native Claude execution is deferred when absent or false; enabling does not establish runtime qualification."
         }
       },
       "required": [

@@ -1,3 +1,4 @@
+import {assertNativeClaudeReviewEnabled} from '../review/providers/selection.js';
 import {reviewRuntime} from './review-adapter.js';
 import { preparePathTask, acceptPathTask, type PathTaskCandidate } from './path-task.js';
 import { readPathRequestFile } from './path-request-file.js';
@@ -282,6 +283,7 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
     if (policy.revision !== plan.policyRevision) return result('run', 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts: { planId: plan.runId } });
     if(plan.modelConflict)return result('run','configuration-failure',{reasonCode:'sentinel.provider.bindingChanged',facts:{limitation:'one-model-binding-per-run'}});
     const admittedReview=await loadPlan(store,plan.runId,plan.revision),reviews=admittedReview.plan.units.filter(u=>u.review).map(u=>({kind:u.stage,segmentId:u.review!.segmentId,selection:u.review!.selection,terms:u.review!.terms,instructions:u.review!.instructionDigest,skills:'none-selected',vendorInstructions:'unobserved'}));
+    for(const review of reviews)assertNativeClaudeReviewEnabled(policy,review.selection.providerId);
     if(reviews.length&&(!options.confirmModels||!options.confirm))return result('run','awaiting-confirmation',{reasonCode:'sentinel.service.needsOwnerConfirm',facts:{runId:plan.runId,modelReviews:reviews,requiredFlag:'--confirm-models'}});
     const binding = runWriteBinding(ws, 'run.start', plan, { storeId: store.storeId, runId: plan.runId });
     const decided = decide(ws, policy, binding.intent, binding.stateDigest, options.confirm, options.now);

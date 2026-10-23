@@ -228,6 +228,8 @@ export interface SettingsEnvelope {
   reviewModels?: ReviewModelsSettings;
   /** Hosted API review is paused when absent or false; explicit adoption is required to enable public dispatch. */
   hostedApiReviewEnabled?: boolean;
+  /** Native Claude execution is deferred when absent or false; enabling does not establish runtime qualification. */
+  nativeClaudeReviewEnabled?: boolean;
 }
 
 /** A repository's request to suppress a finding. Recorded and refused: approval is an owner disposition. */

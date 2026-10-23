@@ -2116,3 +2116,10 @@ instruction text, hidden model authority or provider call is added. Endpoint/cod
 where the qualified inspection does not supply them. Full and baseline comparison reports are explicitly
 regenerated through the existing canonical renderer for the exact selected runs. Linked whole-run preparation
 keeps its existing owner receipt; per-work browser rerun, settings editing and custom stages remain unavailable.
+
+ADR48 release qualification gate: optional owner-adopted `nativeClaudeReviewEnabled` defaults false when
+absent. Public native-Claude stage resolution and existing admitted review selections at foreground start
+refuse before run confirmation/receipt effects, credentials or process launch. The direct retained binding
+library remains available for subsequent qualification. Explicit true does not grant policy, prove native
+readiness or bypass other gates. Hosted API pause retains its separate flag and refusal; no automatic provider
+substitution is introduced. This release prioritizes separately qualified Copilot CLI.
