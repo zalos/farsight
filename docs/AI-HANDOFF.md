@@ -2,33 +2,42 @@
 
 ## Sentinel CLI and owner UI release candidate — 2026-10-23
 
-Draft [#183](https://github.com/zalos/farsight/pull/183) integrates durable preparation, separate browser owner
-confirmation, retained reports, configured review operations and exact instruction identity, plus independent
-Farsight/Sentinel npm tarballs. Six actual clean npm-only consumers passed 87 checks with zero failures or pending
-gates at the integrated `517e81ea` checkpoint. That check includes initialization preservation, source-removed
-reports and the installed companion handshake; it does not establish live model execution or final graph behavior.
+[#183](https://github.com/zalos/farsight/pull/183) merged as `657e8c4b`: durable preparation, separate browser
+owner confirmation, the process graph, retained reports and independently installable Farsight/Sentinel npm
+tarballs. Genuine source and installed-browser flows covered parent/child selection, expanded stage evidence,
+separately confirmed execution, reports and reconnect; six clean npm-only consumers passed 87 checks at the
+integrated `517e81ea` checkpoint. The baseline-change delivery race has a reproduced failure and passing correction.
 
-Independent Claude source reviews cleared the owner refusal recovery, model disclosure gate, native credential
-boundary and integration seams. Preparation freezes shipped review operations before capture; model execution
-still requires separate foreground admission. Hosted APIs remain paused and disabled by default. The native
-Claude validation host refused credential authorization before any model process or provider request; there has
-been no successful live model call. Resolve that authorization and qualify the installed path, or explicitly gate
-the native feature before release. Do not turn a refused call into a successful CLI qualification.
+[#190](https://github.com/zalos/farsight/pull/190) adds foreground Copilot CLI review. Its clean `551090cc`
+package passed an actual installed public CLI scan using pinned Copilot 1.0.103 on macOS arm64 and explicit
+`gpt-6-luna`: three confirmed calls, captured source delivered to the model, a cited model-review observation in
+the private instruction report, exact retained prompt/messages/model and empty additional-skills selection,
+report regeneration after source removal, and terminal replay with no new dispatch. All ten observed
+container-boundary loads recorded zero connection attempts. No local model or hosted API was used. The ordinary
+report still truthfully records partial coverage and no deterministic scanner findings; the private review result
+is not a completed security verdict. The earlier two-turn run correctly stopped unfinished after listing and
+requesting source; new plans allow three turns within the same 120-second deadline, without increasing an
+existing owner's token budget. Original failures remain separate from the final pass.
 
-The owner chose a working process graph for this release and custom stage creation afterward
-([#181](https://github.com/zalos/farsight/issues/181)). Fine-grained browser reruns, configuration editing and richer
-privacy-qualified entry metadata remain [#182](https://github.com/zalos/farsight/issues/182). The graph passed genuine source and npm-installed browser flows, including retained parent/child selection,
-expandable stage inputs, separately confirmed execution and exact report delivery. A delayed-delivery regression
-reproduced an old comparison repaint after a baseline change; the corrected browser discards it and a fresh
-comparison still succeeds. Resource values have explicit units and exact-byte tips. Final integrated measurements,
-selected CI and publication remain pending. CI exposed outdated historical-refusal, MCP-tool-list and host-session
-assertions, plus a rebuilt-tarball provenance mismatch. Their precise corrections retain the authority checks and
-complete package hash; only the original artifact build timestamp is reused. A Mac-only browser evidence path was
-also made portable with cleanup on failure. Original failures are retained separately from corrected passes. The earlier native memory-attribution investigation remains historically unresolved. Merged #169 adds a
-qualified exact-container witness; missing evidence still yields a failed unidentified exit. The lead treats the
-remaining bounded-attribution limitation as nonblocking under current passing isolation/recovery gates, tracked in
-[#184](https://github.com/zalos/farsight/issues/184); this supersedes the older blanket hold, not its retained failures.
-The broader plan is still open; see the scoped release ledger and linked issues.
+SOL implemented the changes; independent Claude source reviews found no remaining blockers in the final
+credential boundary, proxy, output decoding and three-turn correction. The native adapter passed build/types and
+79 focused controls with zero skips before the separately tested planning correction. The exact installed native
+command also passed a bounded source-free check. Publication still requires final PR CI, squash merge, the
+release PR and published-URL npm acceptance; do not infer a published release from this local qualification.
+
+Pure agentic review can run on the host without Docker under explicitly adopted `hostedReviewSecretScan:
+when-selected` when no external scanners are selected. Selected external scanners remain container-only with no
+host fallback. Native Claude and hosted APIs remain disabled by default. Browser/service starts refuse model
+execution requiring the foreground native adapter; this qualification is for the owner CLI. The approved native
+credential policy is not confined to one Keychain item, and OS certificate services can fetch outside the child
+proxy; README and ADR48 record the limits. Other CLI versions, models and platforms remain unqualified.
+
+Custom stage creation is deferred to [#181](https://github.com/zalos/farsight/issues/181); granular browser reruns,
+configuration editing and richer entry details remain [#182](https://github.com/zalos/farsight/issues/182).
+The broader plan, Spring sample, Fable polish, code walkthroughs and API qualification remain in the
+[scoped release ledger](proposals/farsight-sentinel/execution-progress.md). Historical native memory attribution
+remains a nonblocking limitation under passing isolation/recovery gates ([#184](https://github.com/zalos/farsight/issues/184));
+missing evidence still yields a failed unidentified exit. This release does not complete the original full plan.
 
 ## Sentinel owner decisions integration — 2026-10-23
 

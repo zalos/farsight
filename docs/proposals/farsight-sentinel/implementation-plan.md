@@ -2,10 +2,13 @@
 
 > Owner update (2026-10-23): prioritize CLI adapters and the owner UX. Hosted API work and live validation are paused; preserve the existing implementation behind an adopted `hostedApiReviewEnabled` flag, default false for the new stage workflow. Enforce it in dispatch and show unavailability in the UI. Keep the hosted-only acceptance gate recorded for resumption; CLI-only validation and retained prompt/skill provenance continue.
 
-**Status:** PR 00 merged as [#118](https://github.com/zalos/farsight/pull/118) at `0c8c747`, 2026-10-19.
-Execution preparation reviewed against main `46018cb` on 2026-10-21; implementation has not started.
-The owner confirmed container-only external scanners with no host fallback. Exact capabilities remain subject
-to the gates below; preparation does not approve scanner installation, provider calls or implementation dispatch.
+**Current status (2026-10-23):** implementation has reached the scoped first CLI/UX release candidate. The
+[execution progress ledger](execution-progress.md) records merged foundations, final Copilot qualification and
+remaining release gates. The full backlog below remains open where its individual acceptance gates are unmet.
+**Historical preparation baseline:** PR 00 merged as [#118](https://github.com/zalos/farsight/pull/118) at `0c8c747`,
+2026-10-19; execution preparation was reviewed against main `46018cb` on 2026-10-21.
+The owner confirmed container-only external scanners with no host fallback, and later explicitly allowed host CLI
+execution for pure agentic phases. Exact supported providers/platforms remain subject to qualification.
 **Original baseline:** application `4fce1c8`; proposal merged in PR #117 at `04c3c63` (authored as `354a184`).
 
 Build Sentinel as an optional local security-analysis service with one durable execution ledger, immutable
