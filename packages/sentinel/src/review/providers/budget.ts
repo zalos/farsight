@@ -82,6 +82,35 @@ CREATE TABLE IF NOT EXISTS reservation_events (
   from_state TEXT, to_state TEXT NOT NULL, detail TEXT NOT NULL, at TEXT NOT NULL) STRICT;
 `;
 
+// Recognize only this package's exact historical schemas before changing a database. Unknown DDL is refused;
+// a legacy row has genuinely unobserved provider provenance, never a guessed binding or provider id.
+const ddl = (sql: string) => sql.replace(/IF NOT EXISTS /g, '').replace(/\s+/g, '').replace(/;$/, '');
+const expectedTables = new Map([...SCHEMA.matchAll(/CREATE TABLE IF NOT EXISTS ([a-z_]+) \([\s\S]*?\) STRICT;/g)]
+  .map(m => [m[1]!, ddl(m[0])]));
+const oldEnvelope = expectedTables.get('envelopes')!.replace('provider_idTEXTNOTNULL,', '');
+const migratedEnvelope = oldEnvelope.replace(')STRICT', ',provider_idTEXT)STRICT');
+type SchemaDb = InstanceType<typeof import('node:sqlite')['DatabaseSync']>;
+function knownSchema(db: SchemaDb): 'empty' | 'legacy' | 'current' {
+  const objects = db.prepare("SELECT name, type, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name LIMIT 65").all() as { name: string; type: string; tbl_name: string; sql: string | null }[];
+  if (objects.length === 0) return 'empty';
+  if (objects.length > 5 || objects.some(o => o.type !== 'table' || !expectedTables.has(o.name) || !o.sql)) {
+    return fail('sentinel.provider.ledgerInvalid', 'unknown budget ledger schema');
+  }
+  const names = new Set(objects.map(o => o.name));
+  if (!['envelopes', 'reservations', 'reservation_events'].every(n => names.has(n))
+    || names.has('fenced_epochs') !== names.has('review_checkpoints')) return fail('sentinel.provider.ledgerInvalid', 'incomplete budget ledger schema');
+  let legacy = false;
+  for (const object of objects) {
+    const actual = ddl(object.sql!);
+    if (object.name === 'envelopes') {
+      if (actual === oldEnvelope) legacy = true;
+      else if (actual !== expectedTables.get(object.name) && actual !== migratedEnvelope) return fail('sentinel.provider.ledgerInvalid', 'unknown envelope schema');
+    } else if (actual !== expectedTables.get(object.name)) return fail('sentinel.provider.ledgerInvalid', 'unknown reservation or checkpoint schema');
+  }
+  if (db.prepare('PRAGMA foreign_key_check').get()) return fail('sentinel.provider.ledgerInvalid', 'budget ledger foreign keys are invalid');
+  return legacy ? 'legacy' : 'current';
+}
+
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const id = (v: unknown, what: string) => { if (typeof v !== 'string' || !ID.test(v)) fail('sentinel.provider.ledgerInvalid', `${what} is not an id`); };
 const tokens = (v: unknown, what: string) => { if (typeof v !== 'number' || !Number.isSafeInteger(v) || v < 0) fail('sentinel.provider.ledgerInvalid', `${what} must be a whole number`); };
@@ -101,9 +130,19 @@ export class BudgetLedger {
     let db: Db;
     try { db = new sqlite.DatabaseSync(path, { enableForeignKeyConstraints: true, timeout: options.busyTimeoutMs ?? 10_000, defensive: true }); }
     catch { return fail('sentinel.provider.ledgerInvalid', 'the ledger file could not be opened'); }
-    db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;');
-    db.exec('BEGIN IMMEDIATE');
-    try { db.exec(SCHEMA); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); db.close(); throw e; }
+    try {
+      // The first check is read-only: malformed existing files are not changed even to switch journal mode.
+      knownSchema(db);
+      db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;');
+      db.exec('BEGIN IMMEDIATE');
+      const shape = knownSchema(db); // serialized again with writers before schema or row mutations
+      if (shape === 'legacy') db.exec('ALTER TABLE envelopes ADD COLUMN provider_id TEXT');
+      db.exec(SCHEMA); knownSchema(db);
+      db.exec('COMMIT');
+    } catch {
+      if (db.isTransaction) db.exec('ROLLBACK'); db.close();
+      return fail('sentinel.provider.ledgerInvalid', 'budget ledger schema is unknown or could not be migrated');
+    }
     return new BudgetLedger(db);
   }
 
@@ -294,14 +333,14 @@ export class BudgetLedger {
   }
 
   /** Envelopes, newest first, at most `limit` (1–200), optionally for one run. */
-  listEnvelopes(options: { runId?: string; limit: number }): { id: string; runId: string; providerId: string; bindingDigest: string; receiptDigest: string | null; currency: string; createdAt: string; totals: EnvelopeTotals }[] {
+  listEnvelopes(options: { runId?: string; limit: number }): { id: string; runId: string; providerId: string | null; bindingDigest: string; receiptDigest: string | null; currency: string; createdAt: string; totals: EnvelopeTotals }[] {
     if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 200) fail('sentinel.provider.ledgerInvalid', 'list 1–200 envelopes');
     if (options.runId !== undefined) id(options.runId, 'the run');
     return this.#tx(() => {
       const rows = options.runId === undefined
         ? this.#all('SELECT * FROM envelopes ORDER BY created_at DESC, id LIMIT ?', options.limit)
         : this.#all('SELECT * FROM envelopes WHERE run_id = ? ORDER BY created_at DESC, id LIMIT ?', options.runId, options.limit);
-      return rows.map(r => ({ id: r.id as string, runId: r.run_id as string, providerId: r.provider_id as string, bindingDigest: r.binding_digest as string, receiptDigest: (r.receipt_digest as string | null) ?? null,
+      return rows.map(r => ({ id: r.id as string, runId: r.run_id as string, providerId: (r.provider_id as string | null) ?? null, bindingDigest: r.binding_digest as string, receiptDigest: (r.receipt_digest as string | null) ?? null,
         currency: r.currency as string, createdAt: r.created_at as string, totals: this.#totals(r.id as string) }));
     });
   }
