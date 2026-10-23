@@ -21,7 +21,7 @@ import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.j
 import type { BudgetLedger, Reservation } from './budget.js';
 import { resolveCredential, type CredentialSource, type Secret } from './credentials.js';
 import { costOf, toNanos, fromNanos } from './decimal.js';
-import { ProviderError, NativeCredentialError, type NativeAuthDiagnostic, fail } from './errors.js';
+import { ProviderError, NativeCredentialError, NativeCopilotError, copilotFailureEvent, type NativeCopilotDiagnostic, type NativeAuthDiagnostic, fail } from './errors.js';
 import { chatBody, chatPath, parseReply, type ChatMessage, type FinishReason, type ReplyIdentity } from './kinds.js';
 import { isProviderBinding, type ProviderBinding } from './profile.js';
 import { exchange } from './transport.js';
@@ -97,11 +97,13 @@ export interface ModelReply {
 export class ModelCallError extends ProviderError {
   readonly reservation: Reservation | null;
   readonly nativeAuth?: Readonly<NativeAuthDiagnostic>;
+  readonly nativeCopilot?: Readonly<NativeCopilotDiagnostic>;
   constructor(cause: ProviderError, reservation: Reservation | null) {
     super(cause.code, '', cause.spend);
     this.message = cause.message;
     this.reservation = reservation;
     if (cause instanceof NativeCredentialError) this.nativeAuth = cause.nativeAuth;
+    if (cause instanceof NativeCopilotError) this.nativeCopilot = cause.nativeCopilot;
   }
 }
 
@@ -297,7 +299,7 @@ export class ModelBroker {
       }
     } catch (error) {
       const e = error instanceof ProviderError ? error : new ProviderError('sentinel.provider.malformedResponse', 'unexpected failure', 'possible');
-      const after = e.spend === 'none' ? ledger.releaseUnsent(res.id, stamp(this.#now()), 'no-connection') : ledger.markUncertain(res.id, stamp(this.#now()), e.code);
+      const after = e.spend === 'none' ? ledger.releaseUnsent(res.id, stamp(this.#now()), 'no-connection') : ledger.markUncertain(res.id, stamp(this.#now()), e instanceof NativeCopilotError?copilotFailureEvent(e):e.code);
       throw new ModelCallError(e, after);
     } finally { if (nativeAuthority) finishNativeCall(nativeAuthority); if(copilotAuthority)finishCopilotCall(copilotAuthority); }
 

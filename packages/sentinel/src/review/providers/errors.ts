@@ -57,3 +57,24 @@ export class NativeCredentialError extends ProviderError {
     this.nativeAuth = Object.freeze({ ...diagnostic });
   }
 }
+
+/** Fixed diagnostic metadata only. Never the native event/error text, paths, hosts or authentication data. */
+export interface NativeCopilotDiagnostic {
+ readonly schema:'sentinel-copilot-failure/1';readonly phase:'setup'|'spawn'|'stream'|'exit'|'usage-read'|'usage';
+ readonly reason:'output-unavailable'|'process-error'|'process-exit'|'stdin-error'|'canceled'|'deadline'|'response-bound'|'invalid-json'|'invalid-event'|'disallowed-event'|'session-identity'|'visible-message'|'result'|'usage-file'|'usage-shape'|'usage-model'|'usage-count'|'usage-tokens';
+ readonly exitCode:number|null;readonly signal:null|'SIGKILL'|'SIGTERM'|'SIGABRT'|'SIGSEGV'|'other';
+ readonly eventClass:'none'|'session-start'|'visible'|'result'|'lifecycle'|'unknown';readonly frames:number;readonly stdoutBytes:number;readonly stderrBytes:number;
+ readonly connections:number;readonly upstreamBytes:number;readonly downstreamBytes:number;readonly proxyEnded:'open'|'closed'|'canceled'|'deadline'|'bounds'|'refused'|'unreachable';
+}
+export class NativeCopilotError extends ProviderError {
+ readonly nativeCopilot:Readonly<NativeCopilotDiagnostic>;
+ constructor(code:ProviderErrorCode,spend:Spend,diagnostic:NativeCopilotDiagnostic){super(code,'closed Copilot failure diagnostic',spend);
+ const d=diagnostic;if(!d||Object.keys(d).sort().join()!=='connections,downstreamBytes,eventClass,exitCode,frames,phase,proxyEnded,reason,schema,signal,stderrBytes,stdoutBytes,upstreamBytes'||d.schema!=='sentinel-copilot-failure/1'||!['setup','spawn','stream','exit','usage-read','usage'].includes(d.phase)||!['output-unavailable','process-error','process-exit','stdin-error','canceled','deadline','response-bound','invalid-json','invalid-event','disallowed-event','session-identity','visible-message','result','usage-file','usage-shape','usage-model','usage-count','usage-tokens'].includes(d.reason)||!['none','session-start','visible','result','lifecycle','unknown'].includes(d.eventClass)||!['open','closed','canceled','deadline','bounds','refused','unreachable'].includes(d.proxyEnded)||(d.exitCode!==null&&(!Number.isInteger(d.exitCode)||d.exitCode<0||d.exitCode>255))||(d.signal!==null&&!['SIGKILL','SIGTERM','SIGABRT','SIGSEGV','other'].includes(d.signal))||[d.frames,d.stdoutBytes,d.stderrBytes,d.connections,d.upstreamBytes,d.downstreamBytes].some(n=>!Number.isInteger(n)||n<0||n>2147483647))throw new ProviderError('sentinel.provider.malformedResponse','invalid closed diagnostic',spend);
+ this.nativeCopilot=Object.freeze({...d})}
+}
+/** Bounded existing ledger event, not a second log or authority channel. */
+export function copilotFailureEvent(error:NativeCopilotError):string {
+ const d=error.nativeCopilot;
+ const value=error.code+'|copilot1:'+JSON.stringify([d.phase,d.reason,d.exitCode,d.signal,d.eventClass,d.frames,d.stdoutBytes,d.stderrBytes,d.connections,d.upstreamBytes,d.downstreamBytes,d.proxyEnded]);
+ if(value.length>200)return error.code+'|copilot1:diagnostic-bound';return value;
+}
