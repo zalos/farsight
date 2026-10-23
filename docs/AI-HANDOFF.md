@@ -1,5 +1,32 @@
 # Farsight — shared Codex / Claude memory
 
+## Sentinel owner decisions integration — 2026-10-23
+
+The isolated owner-decisions candidate extends retained report imports and bounded path reports. An owner can
+propose and separately approve a decision against an actual accepted finding, inspect its history, and read the
+same conservative evaluation in JSON, Markdown, offline HTML and SARIF. Approval is not proof of remediation:
+expiry, changed evidence and invalidated assertions reopen the finding. Metadata pages do not claim evaluated
+validity. Secret-bearing ancestry withholds private rationale and source details through the canonical report fold.
+
+Independent Claude source review approved the owner workflow, retained-publication boundary and final integration
+corrections. The final runtime `6c19aa45` passed 13 owner-report controls and eight path-owner neighbors without
+skips. Its actual fresh npm-only consumer passed 95 commands, native privacy, source removal and retained reports;
+container cleanup checked the exact ledger store identity and waited for the owned service to exit naturally.
+The earlier offline install failed because the required SDK version was not cached; normal fresh npm installation
+passed. These are separate observations, not a retried runtime failure. A later prerequisite merge preserved the
+runtime, and the two path catalog-definition corrections changed only help definitions.
+
+Main `9fb78333` and candidate `6c19aa45` ingested the same source: identical 10,585 nodes, 22,494 edges, source
+digest `ecc51755fd03` and 41,627,648-byte databases. Graph bytes were 30,227,370 and 30,227,376, differing only in
+build/run metadata. Fresh front-door, Map and code-map screenshots were inspected: zero page errors and five known
+missing design-image fixture responses. The isolated server was stopped by its recorded PID; the primary checkout,
+dogfood graph and global installations were unchanged.
+
+PR CI and merge remain the gate for this candidate. Service-owned imports, the bounded cookie validation story,
+entry-point source walkthroughs and the complete owner GUI remain open. Hosted API execution is paused behind an
+explicit default-off flag in the separate model-selection integration; the existing implementation is retained.
+CLI model adapters, per-stage provider/model selection and exact prompt/skill records are the current priority.
+
 ## Sentinel permission-checked MCP controls candidate — 2026-10-23
 
 The next isolated ADR48 slice adds start/resume, pause and cancel to the installed SDK adapter through separate
