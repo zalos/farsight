@@ -161,7 +161,9 @@ observe issuance, valid/tampered/absent-cookie requests and a seeded bypass usin
 This finite qualification breaks the PR20 → PR26 → general PR29/30 dependency cycle; it does not ship general
 runtime support or prove cryptographic algorithms, key strength or confidentiality. Broader mandatory properties
 need their own qualified semantic producer. Imported labels, absent alerts and owner assertions do not replace it.
-This is a planning dependency, not authorization for new targets, acquisition, requests or spend.
+Qualification stays within the owner-authorized original local fixture/sample and runs only in Linux containers,
+with no arbitrary targets, new acquisition or external spend. Implementation awaits its design and acceptance
+gates, not another user permission; this planning dependency is not implemented runtime support.
 
 The configured provider/model track (21/22/23b/25b), later selection/reuse (27/28), general Java/runtime work
 (29/30), Fable, npm-only documentation and final release remain in the owner's full 01–30 scope. PR26 is an

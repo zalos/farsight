@@ -541,8 +541,9 @@ Linux-container fixture/observer, rather than waiting for general PR29/30. Bind 
 configuration and target; cover issuance, valid/tampered/absent-cookie requests and a seeded bypass with an explicit
 protected-action oracle. Record finite property-specific behavior only. SARIF/ZAP labels or absent alerts do not
 prove cryptographic verification/decryption, algorithm strength or confidentiality; any broader required property
-needs a qualified semantic producer. This planning dependency does not authorize new targets, acquisition or live
-requests, and does not count as implemented managed-runtime support.
+needs a qualified semantic producer. Qualification stays within the owner-authorized original local fixture/sample,
+only in Linux containers, with no arbitrary targets, new acquisition or external spend. Implementation awaits design
+and acceptance gates, not another user permission; this planning dependency is not implemented managed-runtime support.
 
 Approval uses PR 06's three verdicts and owner receipt. Expose proposed/denied/awaiting-confirmation/applied
 outcomes explicitly; exit 4 means confirmation required. API/MCP callers cannot set `who: human` or satisfy

@@ -574,8 +574,7 @@ export/replay or the final combined release gate, and it adds no Git-history sca
 ### Captured-source framework inspection
 
 This bounded owner-command slice merged in PR #160. The four framework libraries and retained inspection are
-available within their supported shapes; ordinary-layout capture repairs and broader framework qualification
-remain separate gates.
+available within their supported shapes; broader framework qualification remains a separate gate.
 
 The owner may promote `builtin:framework-controls` and add `sentinel.controls.authentication`,
 `sentinel.controls.authorization` and `sentinel.controls.input-validation` to adopted `mandatoryRules`.
@@ -595,15 +594,16 @@ hard memory, CPU or process limit; it runs only Sentinel's shipped code. The wor
 build and installed dependency bytes/lookups. Reinstalling, moving or changing those bytes requires a new plan.
 Public GUI configuration and policy assessment remain separate work.
 
-On merged main at PR #160, canonical working-copy capture omits the workspace's private `.farsight` directory by owner policy.
-The Express and Spring libraries conservatively retain a source-incomplete frontier for that omitted scope; they
-may leave route control answers unknown even when the visible application is simple. The report shows that boundary
-and keeps required coverage incomplete. Captures with owner state outside the source can establish the supported
-facts; this integration does not broaden the libraries' absence proofs or treat the omitted scope as empty.
-A separate, unmerged capture-boundary correction is under review. Its acceptance requires capturing source around
-the exact owned store: an indexed open Express route may establish `does-not-apply`, a guarded route retains
-`unknown/refusalUnproven`, and neither gains an artificial `sourceIncomplete` from a blanket folder exclusion.
-Captured hidden source may still have a valid `routeNotInGraph` parser frontier. None establishes protection.
+Canonical working-copy capture excludes only the exact held store, rather than every folder named `.farsight`.
+Workspace settings are ordinary privately retained capture inputs; capturing them never adopts them as trusted
+policy. An arbitrary hidden folder gets no exemption from capture. Trust state and the service runtime folder
+must remain outside the workspace. Original retained snapshots keep the boundaries recorded when they were made;
+new capture behavior does not reinterpret an earlier omission as empty source.
+
+On supported indexed Express routes, an open route may establish `does-not-apply`, while a guarded route retains
+cited `unknown/refusalUnproven`; neither inherits an artificial `sourceIncomplete` from a blanket folder exclusion.
+Captured hidden source may still have a valid `routeNotInGraph` parser frontier. Genuine exclusions and parser gaps
+remain visible, and none of these control facts establishes protection.
 
 ## Remaining product and release gates
 
