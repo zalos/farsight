@@ -267,3 +267,28 @@ The individual Pattern, OSV and IaC qualification jobs select their own installe
 `SENTINEL_PACKAGE_ENGINE=pattern|osv|iac`; all four asset manifests and their exact bytes are still checked. A local package smoke
 with `SENTINEL_ISOLATION=1` and no selector executes all four workers. Each native job must observe its own worker
 success marker, so a missing or failed selected engine cannot pass as an asset-only check.
+
+
+## Isolation failure observations
+
+The ordinary `sentinel-isolation` job retains bounded optional observations alongside its unchanged seven-file
+native command, default concurrency and strict assertions. Forwarding controls and an actual-runner journal-argv
+preflight run first. `runner-provenance.json` records the commit, runner ImageOS/ImageVersion, kernel and Docker
+client/server components (including containerd and runc). Missing provenance or an unsupported journal option
+fails that preflight visibly. The always-run artifact upload retains traces and both TAP files for three days;
+upload failure is visible. No privileged monitor, new image or production termination inference is added.
+
+Each trace covers only its exact owned container and bounded time window. It records command/attached-client
+ordering, raw daemon inspection before any delayed-OOM mask, exact child cgroup identity/counters where readable,
+and filtered unprivileged journal results. Journal `matched`, `no-match-visible` and `unavailable` are separate;
+all remain limited by the runner account's visibility. Exact-ID filtering can omit relevant records. An increase
+in a persistent daemon-parent cgroup counter cannot attribute a concurrent kill to the child. Dropped records,
+expired windows and unavailable sensors remain explicit; without an exact child window, its cause stays unknown.
+Traces are diagnostic evidence, not scanner results.
+
+On recurrence, preserve the original failing TAP and artifact before cleanup/expiry. Compare client kill requests
+with actual client exit and daemon events, and exact child cgroup observations with terminal daemon state. A kill
+request after reaping is not an actual signal. Exit 137, fixture wording, parent counters or no visible journal
+matches never prove OOM. If child counters and daemon state disagree, record that discrepancy without changing the
+production conservative result or native assertion. A passing run does not explain a historical failure. Do not
+blindly rerun a failed gate or claim release clearance; retain the unresolved cause for an explicit owner decision.
