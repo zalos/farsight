@@ -16,8 +16,14 @@ The owner narrowed this push to a verified CLI scan using the cheapest qualified
 - [#176](https://github.com/zalos/farsight/issues/176): original Spring sample and managed runtime qualification.
 - [#177](https://github.com/zalos/farsight/issues/177): further UX polish, configuration editing and Fable review.
 - [#178](https://github.com/zalos/farsight/issues/178): broad model evaluation and fenced external review claims.
+- [#179](https://github.com/zalos/farsight/issues/179): further budget and recovery controls.
+- [#180](https://github.com/zalos/farsight/issues/180): additional release recovery and platform checks.
+- [#181](https://github.com/zalos/farsight/issues/181): custom stage creation, explicitly deferred by the owner until after the working graph release.
+- [#182](https://github.com/zalos/farsight/issues/182): granular browser reruns, configuration editing and richer privacy-qualified entry details.
 
 Release validation must still demonstrate the public CLI path, exact retained instruction/model identity, the browser's separate confirmation and report flow, and clean npm-only consumers. A preview's incomplete required coverage is never a successful security verdict. Release readiness is recorded after those checks; this scope change does not complete the full plan.
+
+Draft [#183](https://github.com/zalos/farsight/pull/183) joins preparation, the owner interface, configured review operations and the npm release path. Six clean npm consumers passed all 87 checks at `517e81ea`; final graph, selected CI and published-asset acceptance remain open. Native CLI validation stopped at operating-system authorization before any model launch or provider request. No live inference is qualified.
 
 ## Checkpoint — 2026-10-23
 
