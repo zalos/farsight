@@ -69,7 +69,8 @@ test('control schema vocabulary pins supported outcomes and rejects altered exit
   assert.equal(validateEnvelope('controloutcome',{...projected,facts:{}}).ok,false);
  }
  // Import command additions do not expand the closed run-control contract.
- const control=controlOutcome(result('run','submitted'));
+ const control=controlOutcome(result('run','submitted',{facts:{state:'completed',joined:true}}));
+ assert.ok(validateEnvelope('controloutcome',control).ok,'the negative controls start from a valid control result');
  for(const outcome of ['accepted','abandoned','read','delivery-failed'] as const){
   assert.equal(validateEnvelope('controloutcome',{...control,outcome,exitCode:OUTCOME_EXIT_CODES[outcome]}).ok,false);
  }
