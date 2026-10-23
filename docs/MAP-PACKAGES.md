@@ -297,11 +297,11 @@ delivery.
 `scripts/test-sentinel-scanner-consumer.mjs` cover the public command path, strict asset boundaries and installed
 npm-only detached execution. These are executable internals, not new JavaScript package exports.
 
-Sentinel's read-only service slice (ADR 48) lives in `src/contracts/service.ts` (five additive wire documents),
+Sentinel's service slice (ADR 48) lives in `src/contracts/service.ts` (five read documents plus separate control capability/outcome documents),
 `src/service/readonly.ts` (held-owner immutable inspection pages and canonical report delivery buffers),
-`src/service/mcp.ts` (lazy SDK stdio adapter) and `src/store/read-budget.ts` (private physical-read accounting).
+`src/service/mcp.ts` (lazy SDK stdio adapter), `src/service/controls.ts` (safe control result/capability projections) and `src/store/read-budget.ts` (private physical-read accounting).
 `service/full-report.ts` shares one canonical fold between legacy all-format reports and one-format delivery;
 `service/owner-service.ts` reuses its existing held store. `transport/ipc.ts` adds socket-local cancellation of
 unsettled read preparation without changing the handshake. `scripts/test-sentinel-mcp-consumer.mjs` installs only
 the tarball with npm and exercises the real SDK, retained framework reports and, under explicit native opt-in,
-genuine local-container secret privacy. The package starts no MCP process or SDK import at ordinary library import.
+genuine local-container secret privacy. `scripts/test-sentinel-mcp-controls-consumer.mjs` exercises real adopted grants, owner CLI confirmation, same-run pause/resume/cancel and lost-response reconnect without replay. Controls reuse the existing service admission; the package starts no MCP process or SDK import at ordinary library import.

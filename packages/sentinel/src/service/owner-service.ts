@@ -37,6 +37,7 @@ import { assertSupportedRules, canonicalResult, currentPlan, rerunEnvelopeOf } f
 import { loadPlan } from '../execution/plans.js';
 import { publicRegistry, scannerExecution } from './scanner-profile.js';
 import { ReadonlyViews, READONLY_OPERATIONS } from './readonly.js';
+import { controlCapabilities } from './controls.js';
 import { recordRunFailure, runFailureCode } from './run-failure.js';
 
 export type ServiceErrorCode =
@@ -153,6 +154,10 @@ export class OwnerService {
       }
     }
     switch (op) {
+      case 'service.control-capabilities': {
+        fields(body, []);
+        return controlCapabilities(this.#store.storeId, this.#store.epoch);
+      }
       case 'service.info': {
         fields(body, []);
         return { storeId: this.#store.storeId, epoch: this.#store.epoch, pid: process.pid, active: [...this.#active.keys()],

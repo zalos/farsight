@@ -14,7 +14,7 @@
     "test:cli:package": "pnpm pack:cli && node scripts/test-farsight-package.mjs",
     "test:cli:package:absent": "node scripts/test-farsight-package-absent.mjs",
     "pack:sentinel": "pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs",
-    "test:sentinel:package": "pnpm pack:sentinel && node scripts/test-sentinel-package.mjs && node scripts/test-sentinel-framework-consumer.mjs && node scripts/test-sentinel-mcp-consumer.mjs",
+    "test:sentinel:package": "pnpm pack:sentinel && node scripts/test-sentinel-package.mjs && node scripts/test-sentinel-framework-consumer.mjs && node scripts/test-sentinel-mcp-consumer.mjs && node scripts/test-sentinel-mcp-controls-consumer.mjs",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck && pnpm e2e:typecheck",
     "test": "pnpm -r test && pnpm test:scripts",

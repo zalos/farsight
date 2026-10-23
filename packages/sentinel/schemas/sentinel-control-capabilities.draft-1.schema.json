@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/ControlCapabilities",
+  "definitions": {
+    "ControlCapabilities": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-control-capabilities/draft-1"
+        },
+        "apiRevision": {
+          "type": "number",
+          "const": 1
+        },
+        "storeId": {
+          "$ref": "#/definitions/Id"
+        },
+        "epoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 3,
+          "items": [
+            {
+              "type": "string",
+              "const": "run.start"
+            },
+            {
+              "type": "string",
+              "const": "run.pause"
+            },
+            {
+              "type": "string",
+              "const": "run.cancel"
+            }
+          ],
+          "maxItems": 3
+        },
+        "resultSchema": {
+          "type": "string",
+          "const": "sentinel-control-outcome/draft-1"
+        },
+        "authorization": {
+          "type": "string",
+          "const": "adopted-agent-grant-or-owner-cli-receipt"
+        },
+        "ownerConfirmation": {
+          "type": "string",
+          "const": "owner-cli"
+        },
+        "limitationKey": {
+          "type": "string",
+          "const": "sentinel.service.controlLimits"
+        }
+      },
+      "required": [
+        "schema",
+        "apiRevision",
+        "storeId",
+        "epoch",
+        "operations",
+        "resultSchema",
+        "authorization",
+        "ownerConfirmation",
+        "limitationKey"
+      ],
+      "additionalProperties": false,
+      "description": "Additive control negotiation; the original read-only capabilities document remains unchanged."
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-control-capabilities.draft-1.schema.json",
+  "title": "sentinel-control-capabilities/draft-1"
+}

@@ -1,5 +1,30 @@
 # Farsight — shared Codex / Claude memory
 
+## Sentinel permission-checked MCP controls candidate — 2026-10-23
+
+The next isolated ADR48 slice adds start/resume, pause and cancel to the installed SDK adapter through separate
+control capability negotiation. The original read capability schema, socket handshake, owner service responses,
+store, worker and canonical report folds remain intact. Ordinary adopted agent grants decide admission; human-only
+defaults deny. Actual owner CLI confirmation issues the existing exact one-use receipt. MCP accepts no receipt,
+confirm or caller identity, and a future HTTP bridge remains an agent. This CLI-only confirmation is an interim
+limitation, not completion of the graphical workflow.
+
+The control response preserves canonical outcomes, exit codes and three cataloged permission verdicts without raw
+facts or diagnostics. Resume continues the same run, duplicate starts join, and terminal replay starts no work.
+Requested/submitted is intent or acceptance: existing status/wait establishes lifecycle state. A lost response is
+uncertain; reconnect reads state without automatic write replay. Older services keep the eight read tools and omit
+only the three controls. The installed consumer also withholds one actual accepted start response and verifies
+reconnect and unchanged completed attempts, without modifying installed package bytes.
+
+Affected service/read/delivery/budget/contract/package validation passed 99 controls with zero skips; two genuine
+local-container retained-secret privacy controls passed with zero skips. Package/selector/workflow controls,
+types, schemas and catalog checks passed. The npm-only package exercised 16 typed exports, 28 contract types and
+schemas and 63 fixtures. Exact immutable artifacts and final installed evidence belong in the private review
+handoff; this candidate is not independently approved or merged yet. No C preparation implementation is included.
+Configuration saving, durable preparation/reconnect, linked rerun tools, in-browser owner confirmation, service-owned
+imports and the full GUI remain separate work. The original native release hold and bounded pending-wait shutdown
+note are unchanged.
+
 **This repo is public.** Client material, session handoffs and review evidence live outside it (a private folder the
 owner keeps); never add a client name, a site/org URL, an email, a keychain account name or an absolute home path
 here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@example.com`,

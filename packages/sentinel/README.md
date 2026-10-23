@@ -634,7 +634,7 @@ containers with no host fallback, product cleanup review, truthful npm-only inst
 versioned tarballs installed separately and together from their published URLs. See the execution-progress ledger
 for each merged slice and its remaining acceptance.
 
-## Read-only MCP inspection (draft)
+## MCP inspection and run controls (draft)
 
 Start the existing owner service separately, then connect an MCP client with:
 
@@ -646,8 +646,9 @@ farsight-sentinel mcp --workspace /path/to/workspace
 
 The eight read tools negotiate the service's actual capabilities, describe/status/wait for a run, open a saved
 stage/work/attempt view, page its inputs/outputs, and open/read a full report. MCP never starts a service or opens
-its own store; an older service without these operations is explicitly unavailable. Prepare, run, pause, cancel,
-retry and selected rerun still use the owner's existing CLI confirmation. Model, evidence-read and graphical
+its own store; an older service without these operations is explicitly unavailable. Three additional tools—
+`sentinel_run_start`, `sentinel_run_pause` and `sentinel_run_cancel`—appear only after separate control capability
+negotiation. Preparation, retry and selected rerun remain CLI operations. Model, raw evidence-read and graphical
 controls are not exposed here.
 
 Inspection rows use temporary handles instead of source names, paths, arguments and evidence hashes. A
@@ -673,3 +674,28 @@ its TTL. Stop/crash/restart loses buffers explicitly. A final sequence change at
 can still return retryable `viewChanged` after the bounded two-generation preparation, without a third attempt.
 The optional install includes the SDK’s transitive dependency set even though ordinary import/CLI execution does
 not load the MCP module; SDK 1.31.0 and its required zod 3.25.76 peer are exact normal dependencies.
+
+### Run control authority and confirmation
+
+`sentinel_run_start` accepts only `planId`; pause and cancel accept only `runId`. Start resumes the same paused or
+interrupted run; it does not prepare a new scan. These tools reuse the existing service admission and return a
+sanitized canonical outcome, three permission verdicts and state when known. An adopted ordinary agent grant may
+admit a control; human-only defaults deny it. An awaiting-confirmation outcome performs no work and does not queue
+an action for later automatic execution. `submitted` or `requested` means accepted, not completed: read status or
+wait for the actual run state. Starting an already ended run returns its existing result without more work.
+
+Owner confirmation remains a real command-line step, for example `farsight-sentinel run <planId> --detach --confirm`,
+`pause <runId> --confirm` or `cancel <runId> --confirm`. That owner process issues a single-use receipt bound to the
+actual workspace, store, run, plan, policy and action; the service verifies and consumes it. MCP accepts no receipt,
+confirmation, actor or channel field. A connection is always an agent, including a future HTTP bridge. A browser
+confirmation button cannot mint human authority. This interim CLI path does not complete GUI confirmation.
+
+The existing `service.capabilities` document continues to negotiate reads and retains `controlsSupported:false`
+for backward compatibility. New clients separately request `service.control-capabilities`; its exact schema names
+only start, pause and cancel and states the authority limitation. An older service's unknown operation omits only
+these controls. A reconnect rechecks control support before dispatch. No connection, discovery document or view
+handle grants execution permission. The legacy CLI service responses and handshake stay unchanged.
+
+A lost or canceled mutation response is uncertain: the service may already have accepted it. Reconnect and read
+status; the adapter never automatically repeats a write, and disconnecting does not roll back accepted work.
+Separate read views and report deliveries remain usable within their original channel and absolute lifetimes.

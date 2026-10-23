@@ -1,4 +1,4 @@
-// Read-only service documents. Handles select sanitized immutable views, never store/launch authority.
+// Service read documents and separately negotiated control projections. Handles never grant store/launch authority.
 import type { Count, Id, Ordinal, Timestamp, Digest, CatalogKey } from './common.js';
 import type { ReportCount } from './report.js';
 import type { PlanStage } from './plan.js';
@@ -117,4 +117,34 @@ export interface DeliveryChunk {
   nextOffset: Count | null;
   formatDigest: Digest;
   totalBytes: Count;
+}
+
+/** Additive control negotiation; the original read-only capabilities document remains unchanged. */
+export interface ControlCapabilities {
+  schema: 'sentinel-control-capabilities/draft-1';
+  apiRevision: 1;
+  storeId: Id;
+  epoch: Id;
+  operations: ['run.start', 'run.pause', 'run.cancel'];
+  resultSchema: 'sentinel-control-outcome/draft-1';
+  authorization: 'adopted-agent-grant-or-owner-cli-receipt';
+  ownerConfirmation: 'owner-cli';
+  limitationKey: 'sentinel.service.controlLimits';
+}
+
+/** The canonical command vocabulary; tests pin it to cli/outcome.ts without another verdict fold. */
+export type ControlCommandOutcome =
+  | 'satisfied' | 'finding-policy-failed' | 'required-coverage-incomplete' | 'configuration-failure' | 'awaiting-confirmation'
+  | 'submitted' | 'requested' | 'unavailable' | 'prepared' | 'kept' | 'answered' | 'refused';
+export interface ControlAdmissionVerdict { allowed: boolean; asked: boolean; reasonCode: CatalogKey }
+/** Sanitized projection of the existing CommandResult; no producer facts or authority tokens. */
+export interface ControlOutcome {
+  schema: 'sentinel-control-outcome/draft-1';
+  outcome: ControlCommandOutcome;
+  /** @asType integer @minimum 0 @maximum 4 */
+  exitCode: number;
+  verdicts: { policy: ControlAdmissionVerdict; capability: ControlAdmissionVerdict; credential: ControlAdmissionVerdict };
+  reasonCode?: CatalogKey;
+  state: RunState | 'interrupted' | 'awaiting-first-execution' | null;
+  joined?: boolean;
 }
