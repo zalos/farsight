@@ -32,6 +32,8 @@ const ENVELOPES = {
   inspectionpage: ['sentinel-inspection-page/draft-1', 'InspectionPage'],
   reportdelivery: ['sentinel-report-delivery/draft-1', 'ReportDelivery'],
   deliverychunk: ['sentinel-delivery-chunk/draft-1', 'DeliveryChunk'],
+  controlcapabilities: ['sentinel-control-capabilities/draft-1', 'ControlCapabilities'],
+  controloutcome: ['sentinel-control-outcome/draft-1', 'ControlOutcome'],
 
 };
 

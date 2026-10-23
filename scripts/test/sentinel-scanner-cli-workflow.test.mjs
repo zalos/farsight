@@ -40,3 +40,13 @@ test('full-report native acceptance builds its context-ingestion dependency and 
 test('framework inspection privacy and genuine installed delivery remain mandatory in native acceptance',()=>{
  assert.ok(workflow.includes('test/framework-report-secrets.test.ts'));assert.ok(workflow.includes('node scripts/test-sentinel-framework-consumer.mjs'));assert.ok(workflow.includes('framework-delivery/clean.html'));assert.ok(workflow.includes('framework-delivery/secret.html'));
 });
+
+test('SDK run controls remain in the native service zero-skip list and installed package hook',()=>{
+ const serviceWorkflow=readFileSync(new URL('.github/workflows/ci.yml',root),'utf8');
+ const service=serviceWorkflow.slice(serviceWorkflow.indexOf('    name: sentinel-service'),serviceWorkflow.indexOf('\n  e2e:'));
+ assert.ok(service.includes('test/service-mcp-controls.test.ts'));
+ for(const counter of ['skipped','fail','cancelled'])assert.ok(service.includes(`grep -qx '# ${counter} 0' service.tap`));
+ const manifest=JSON.parse(readFileSync(new URL('package.json',root),'utf8'));
+ assert.ok(manifest.scripts['test:sentinel:package'].endsWith('&& node scripts/test-sentinel-mcp-controls-consumer.mjs'));
+ assert.equal(selected(['scripts/test-sentinel-mcp-controls-consumer.mjs']),true,'changing the consumer selects package/native acceptance');
+});

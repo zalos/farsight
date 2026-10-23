@@ -8,7 +8,7 @@ import type {
   ReportCount, ReportEnvelope, RunEnvelope, SnapshotEnvelope, WorkEnvelope, FindingPlace, HelloMessage,
   WelcomeMessage, RefuseMessage, RulePackManifest, RuleLockEnvelope, SettingsEnvelope, RepoConfigEnvelope,
   EffectivePolicyEnvelope, AdoptionEnvelope, ReceiptEnvelope, AdmissionEnvelope, ControlFactsEnvelope, Rights, Budget,
-  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope, ServiceCapabilities, RunInspection, InspectionPage, ReportDelivery, DeliveryChunk,
+  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope, ServiceCapabilities, RunInspection, InspectionPage, ReportDelivery, DeliveryChunk, ControlCapabilities, ControlOutcome,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
 import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf } from './planner/identity.js';
@@ -41,6 +41,8 @@ export interface EnvelopeTypes {
   inspectionpage: InspectionPage;
   reportdelivery: ReportDelivery;
   deliverychunk: DeliveryChunk;
+  controlcapabilities: ControlCapabilities;
+  controloutcome: ControlOutcome;
 
 }
 
@@ -720,6 +722,11 @@ const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   inspectionpage: () => [],
   reportdelivery: () => [],
   deliverychunk: () => [],
+  controlcapabilities: () => [],
+  controloutcome: (v, out) => {
+    const exits = { ...POLICY_EXIT_CODES, submitted: 0, requested: 0, unavailable: 3, prepared: 0, kept: 0, answered: 0, refused: 3 };
+    if (v.exitCode !== exits[v.outcome]) out.add(err('/exitCode', 'exit code does not match the canonical command outcome'));
+  },
 
 };
 

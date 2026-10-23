@@ -1,0 +1,8 @@
+{
+  "schema": "sentinel-control-outcome/draft-1", "outcome": "configuration-failure", "exitCode": 3,
+  "verdicts": {
+    "policy": {"allowed": false, "asked": true, "reasonCode": "sentinel.admission.noGrant"},
+    "capability": {"allowed": true, "asked": true, "reasonCode": "sentinel.admission.capabilityAvailable"},
+    "credential": {"allowed": true, "asked": true, "reasonCode": "sentinel.admission.credentialLocalOnly"}
+  }, "reasonCode": "sentinel.admission.noGrant", "state": null
+}

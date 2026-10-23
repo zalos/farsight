@@ -1,0 +1,144 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/ControlOutcome",
+  "definitions": {
+    "ControlOutcome": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-control-outcome/draft-1"
+        },
+        "outcome": {
+          "$ref": "#/definitions/ControlCommandOutcome"
+        },
+        "exitCode": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "verdicts": {
+          "type": "object",
+          "properties": {
+            "policy": {
+              "$ref": "#/definitions/ControlAdmissionVerdict"
+            },
+            "capability": {
+              "$ref": "#/definitions/ControlAdmissionVerdict"
+            },
+            "credential": {
+              "$ref": "#/definitions/ControlAdmissionVerdict"
+            }
+          },
+          "required": [
+            "policy",
+            "capability",
+            "credential"
+          ],
+          "additionalProperties": false
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RunState"
+            },
+            {
+              "type": "string",
+              "const": "interrupted"
+            },
+            {
+              "type": "string",
+              "const": "awaiting-first-execution"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "joined": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "schema",
+        "outcome",
+        "exitCode",
+        "verdicts",
+        "state"
+      ],
+      "additionalProperties": false,
+      "description": "Sanitized projection of the existing CommandResult; no producer facts or authority tokens."
+    },
+    "ControlCommandOutcome": {
+      "type": "string",
+      "enum": [
+        "satisfied",
+        "finding-policy-failed",
+        "required-coverage-incomplete",
+        "configuration-failure",
+        "awaiting-confirmation",
+        "submitted",
+        "requested",
+        "unavailable",
+        "prepared",
+        "kept",
+        "answered",
+        "refused"
+      ],
+      "description": "The canonical command vocabulary; tests pin it to cli/outcome.ts without another verdict fold."
+    },
+    "ControlAdmissionVerdict": {
+      "type": "object",
+      "properties": {
+        "allowed": {
+          "type": "boolean"
+        },
+        "asked": {
+          "type": "boolean"
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        }
+      },
+      "required": [
+        "allowed",
+        "asked",
+        "reasonCode"
+      ],
+      "additionalProperties": false
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "RunState": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ActiveRunState"
+        },
+        {
+          "type": "string",
+          "const": "completed"
+        }
+      ]
+    },
+    "ActiveRunState": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "running",
+        "pausing",
+        "paused",
+        "canceling",
+        "canceled"
+      ]
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-control-outcome.draft-1.schema.json",
+  "title": "sentinel-control-outcome/draft-1"
+}

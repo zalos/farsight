@@ -1,0 +1,8 @@
+{
+  "schema": "sentinel-control-capabilities/draft-1", "apiRevision": 1,
+  "storeId": "store-example", "epoch": "epoch-example",
+  "operations": ["run.start", "run.pause", "run.cancel"],
+  "resultSchema": "sentinel-control-outcome/draft-1",
+  "authorization": "adopted-agent-grant-or-owner-cli-receipt", "ownerConfirmation": "owner-cli",
+  "limitationKey": "sentinel.service.controlLimits"
+}
