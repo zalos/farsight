@@ -40,10 +40,10 @@ async function fixture(t:any,mode:'deny'|'confirm'|'allow'='deny'){
  const {plan}=await loadPlan(store,runId,planned.disclosure.revision);
  const attemptCount=()=>plan.units.reduce((n,u)=>n+store.ledger.listAttempts({id:u.id,revision:u.revision}).length,0);
  const service=new OwnerService(store,ws),ownerNonce=newOwnerNonce(),address=runtimeAddress({storePath:store.storePath,ownerNonce,sources:[path]});
- const requests:string[]=[],clients:Client[]=[];let legacy=false,foreign=false,afterControl:((op:string,value:any)=>Promise<void>)|undefined;
+ const requests:string[]=[],clients:Client[]=[];let legacy=false,foreign=false,afterControl:((op:string,value:any)=>Promise<unknown>)|undefined;
  const socket=await listenOwnerSocket(address,{storeId:store.storeId,ownerNonce},async(op,body,by,ctx)=>{
   if(legacy&&op==='service.control-capabilities')throw new ServiceError('sentinel.service.unknownOperation');
-  requests.push(op);const value=await service.handle(op,body,by,ctx);if(foreign&&op==='service.control-capabilities')return {...value as any,storeId:'store-foreign'};if(actions.includes(op))await afterControl?.(op,value);return value;
+  requests.push(op);const value=await service.handle(op,body,by,ctx);if(foreign&&op==='service.control-capabilities')return {...value as any,storeId:'store-foreign'};if(actions.includes(op)){const changed=await afterControl?.(op,value);if(changed!==undefined)return changed;}return value;
  });
  // Same production private descriptor layout, naming this actually held store and genuine listening socket.
  writePrivateFileAtomic(join(ws.trustDir,'services'),createHash('sha256').update(ws.storePath).digest('hex').slice(0,32)+'.json',Buffer.from(JSON.stringify({schema:'sentinel-service/draft-1',storePath:ws.storePath,storeId:store.storeId,ownerNonce,address,pid:process.pid,startedAt:new Date().toISOString()})),'sentinel.receipt.storeUnsafe');
@@ -122,4 +122,15 @@ test('older control negotiation leaves all eight reads; reconnect downgrade refu
  await c.close();f.setLegacy(false);c=await f.connect();assert.equal((await c.listTools()).tools.length,11);
  f.setLegacy(true);const v=await f.call(c,'sentinel_run_start',{planId:f.runId});assert.equal(v.error.code,'sentinel.service.operationUnavailable');assert.equal(f.requests.filter(op=>op==='run.start').length,0);
  f.setLegacy(false);f.setForeign(true);assert.equal((await f.call(c,'sentinel_run_start',{planId:f.runId})).error.code,'sentinel.service.operationUnavailable');assert.equal(f.requests.filter(op=>op==='run.start').length,0,'foreign negotiation cannot dispatch to the held run');
+});
+
+
+test('unreadable control response after dispatch is outcome-unknown while genuine accepted work completes',{timeout:60000},async t=>{
+ const f=await fixture(t,'allow');let c=await f.connect();
+ f.setGate(async(op,value)=>op==='run.start'?{...value,outcome:'not-a-command-outcome',facts:{diagnostic:'PRIVATE-RESPONSE'}}:undefined);
+ const response=await c.callTool({name:'sentinel_run_start',arguments:{planId:f.runId}});
+ await f.state(c,'completed');assert.equal(f.requests.filter(op=>op==='run.start').length,1,'no automatic write replay');
+ assert.equal(response.isError,true);assert.doesNotMatch(JSON.stringify(response),/PRIVATE-RESPONSE/);
+ const safe=response.structuredContent as any;assert.equal(safe.error.retryable,false);assert.equal(safe.error.code,'sentinel.service.controlOutcomeUnknown');
+ await c.close();f.setGate(undefined);c=await f.connect();assert.equal((await f.call(c,'sentinel_run_status',{runId:f.runId})).state,'completed');assert.equal(f.requests.filter(op=>op==='run.start').length,1);
 });

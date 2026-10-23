@@ -4,7 +4,7 @@ import { OUTCOME_EXIT_CODES } from '../cli/outcome.js';
 import { RUN_STATES, type ControlCapabilities, type ControlOutcome, type ControlAdmissionVerdict } from '../contracts/index.js';
 
 export const CONTROL_OPERATIONS = Object.freeze(['run.start', 'run.pause', 'run.cancel'] as const);
-const invalid = () => Object.assign(new Error('sentinel.service.operationUnavailable'), { code: 'sentinel.service.operationUnavailable' });
+const invalid = () => Object.assign(new Error('sentinel.service.controlOutcomeUnknown'), { code: 'sentinel.service.controlOutcomeUnknown' });
 const catalog = (v: unknown): string => {
   if (typeof v !== 'string' || !v.startsWith('sentinel.') || !Object.hasOwn(STRINGS, v)) throw invalid();
   return v;
