@@ -68,8 +68,10 @@ function check(plan: PlanRevision, ruleLock: RuleLockEnvelope | null, policy: Ef
 }
 
 /** Admit an exact plan revision with what it pins. Returns the ledger's record. */
-export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest): Promise<PlanRecord> {
-  store.assertHeld();
+export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest, stillWithin?: () => void): Promise<PlanRecord> {
+  // Internal preparation fence only, never a persisted/public request field. Legacy callers retain their behavior.
+  const checkpoint = () => { store.assertHeld(); stillWithin?.(); };
+  checkpoint();
   const plan = structuredClone(request.plan);
   const ruleLock = request.ruleLock ? structuredClone(request.ruleLock) : null;
   if (request.policy !== null && !isEffectivePolicy(request.policy)) refuse('the policy is accepted only as effectivePolicy returned it');
@@ -94,6 +96,7 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest)
   }
   const pinned = [ids.profile.id, ...(ids.ruleLock ? [ids.ruleLock.id] : []), ...(ids.policy ? [ids.policy.id] : []), ...(ids.selection ? [ids.selection.id] : [])];
   const stageId = `plan.${plan.runId}.${plan.revision}.${plan.digest.slice(7, 23)}`.slice(0, 128);
+  checkpoint();
   store.ledger.registerStaging(stageId, [
     { id: ids.plan.id, schema: 'sentinel-plan/draft-1', privacy: 'source-derived', links: pinned },
     { id: ids.profile.id, schema: profile.schema, privacy: 'metadata' },
@@ -102,11 +105,17 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest)
     ...(selection ? [{ id: ids.selection!.id, schema: SELECTION_SCHEMA, privacy: 'metadata' as const }] : []),
   ]);
   try {
-    const receipts = [await store.objects.putCanonicalJson(plan, { expect: ids.plan }), await store.objects.putCanonicalJson(profile, { expect: ids.profile })];
-    if (ruleLock) receipts.push(await store.objects.putCanonicalJson(ruleLock, { expect: ids.ruleLock! }));
-    if (policy) receipts.push(await store.objects.putCanonicalJson(policy, { expect: ids.policy! }));
-    if (selection) receipts.push(await store.objects.putCanonicalJson(selection, { expect: ids.selection! }));
-    store.assertHeld();
+    const write = async (value: unknown, expect: { id: ArtifactId; rawSize: number }) => {
+      checkpoint();
+      const receipt = await store.objects.putCanonicalJson(value, { expect });
+      checkpoint();
+      return receipt;
+    };
+    const receipts = [await write(plan, ids.plan), await write(profile, ids.profile)];
+    if (ruleLock) receipts.push(await write(ruleLock, ids.ruleLock!));
+    if (policy) receipts.push(await write(policy, ids.policy!));
+    if (selection) receipts.push(await write(selection, ids.selection!));
+    checkpoint();
     return store.ledger.admitPlan({ runId: plan.runId, revision: plan.revision, kind: plan.kind, digest: plan.digest, previous: plan.previous,
       plan: ids.plan.id, ruleLock: ids.ruleLock?.id ?? null, policy: ids.policy?.id ?? null, profile: ids.profile.id, selection: ids.selection?.id ?? null,
       snapshotId: plan.pins.snapshotId, stageIds: [stageId], receipts });

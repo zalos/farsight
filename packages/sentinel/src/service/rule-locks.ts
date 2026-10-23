@@ -40,11 +40,15 @@ export class RuleLockBook {
   readonly #revisions: string;
 
   readonly #hooks: PublishHooks;
+  readonly #repairReads: boolean;
+  readonly #stillWithin: (() => void) | undefined;
   /** The trust folder's parent: every folder from here down is synced into its parent when a record is published. */
   readonly #base: string;
 
   /** `trustDir` is the owner's private Sentinel state (adoption, receipts). `hooks` is a crash-test seam only. */
-  constructor(trustDir: string, options: { hooks?: PublishHooks } = {}) {
+  constructor(trustDir: string, options: { hooks?: PublishHooks; repairReads?: boolean; stillWithin?: () => void } = {}) {
+    this.#repairReads = options.repairReads !== false;
+    this.#stillWithin = options.stillWithin;
     this.#hooks = options.hooks ?? {};
     this.#base = dirname(trustDir);
     this.#dir = join(trustDir, 'rules');
@@ -65,7 +69,9 @@ export class RuleLockBook {
 
   /** One link's target, or null when the link does not exist. */
   #link(name: string): string | null {
-    const bytes = safely(() => readPublished(dirname(join(this.#dir, name)), basename(name), MAX_POINTER_BYTES));
+    this.#stillWithin?.();
+    const bytes = safely(() => readPublished(dirname(join(this.#dir, name)), basename(name), MAX_POINTER_BYTES, { repairTemporaryAliases: this.#repairReads }));
+    this.#stillWithin?.();
     if (!bytes) return null;
     let v: { schema?: unknown; digest?: unknown };
     try { v = JSON.parse(bytes.toString('utf8')); } catch { throw new ServiceError('sentinel.service.recordUnsafe'); }
@@ -82,7 +88,9 @@ export class RuleLockBook {
   /** One stored revision, verified: its bytes must be the lock that digest names. */
   read(digest: string): RuleLockEnvelope {
     if (!DIGEST.test(digest)) throw new ServiceError('sentinel.service.recordUnsafe');
-    const bytes = safely(() => readPublished(this.#revisions, `${digest.slice(7)}.json`, MAX_LOCK_BYTES));
+    this.#stillWithin?.();
+    const bytes = safely(() => readPublished(this.#revisions, `${digest.slice(7)}.json`, MAX_LOCK_BYTES, { repairTemporaryAliases: this.#repairReads }));
+    this.#stillWithin?.();
     if (!bytes) throw new ServiceError('sentinel.service.recordUnsafe');
     let value: unknown;
     try { value = JSON.parse(bytes.toString('utf8')); } catch { throw new ServiceError('sentinel.service.recordUnsafe'); }
@@ -135,7 +143,9 @@ export class RuleLockBook {
   /** The exact validated file bytes, for the trusted driver; never a live pack folder. */
   readPackFiles(packDigest: string): ReadonlyMap<string, Uint8Array> {
     if (!DIGEST.test(packDigest)) throw new ServiceError('sentinel.service.recordUnsafe');
-    const bytes = safely(() => readPublished(join(this.#dir, 'packs'), `${packDigest.slice(7)}.json`, Math.ceil(MAX_PACK_BYTES * 1.4) + 65536));
+    this.#stillWithin?.();
+    const bytes = safely(() => readPublished(join(this.#dir, 'packs'), `${packDigest.slice(7)}.json`, Math.ceil(MAX_PACK_BYTES * 1.4) + 65536, { repairTemporaryAliases: this.#repairReads }));
+    this.#stillWithin?.();
     if (!bytes) throw new ServiceError('sentinel.service.packUnavailable');
     let v: { schema?: unknown; packDigest?: unknown; files?: unknown };
     try { v = JSON.parse(bytes.toString('utf8')); } catch { throw new ServiceError('sentinel.service.recordUnsafe'); }

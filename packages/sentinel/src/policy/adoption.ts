@@ -11,7 +11,7 @@ import { canonicalDigest, sha256Digest } from './digest.js';
 import { PolicyError, policyFail } from './errors.js';
 import { intentDigest, receiptAuthority, type ConsumedReceipt } from './receipts.js';
 import { MAX_SETTINGS_BYTES, parseRepoConfig, parseSettings, type PolicyInputs } from './settings.js';
-import { ensurePrivateDir, overlaps, prospectiveCanonical, readCheckoutFile, readPrivateFile, writePrivateFileAtomic } from './user-state.js';
+import { assertPrivateDir, ensurePrivateDir, overlaps, prospectiveCanonical, readCheckoutFile, readPrivateFile, writePrivateFileAtomic } from './user-state.js';
 
 /** Where the settings file lives in a workspace. */
 export const SETTINGS_PATH = '.farsight/sentinel/settings.json';
@@ -46,11 +46,12 @@ export function workspaceIdentity(workspace: string): WorkspaceIdentity {
   return Object.freeze({ path: workspace, digest: canonicalDigest({ kind: 'sentinel-workspace/1', path: workspace, dev: String(st.dev), ino: String(st.ino) }) });
 }
 
-function checkedTrustDir(trustDir: string, workspace: WorkspaceIdentity): string {
+function checkedTrustDir(trustDir: string, workspace: WorkspaceIdentity, readOnly = false): string {
   // Before anything is created: a trust folder that is, contains or lies inside the checkout is refused with the
   // checkout untouched.
   assertTrustOutside(trustDir, workspace.path);
-  ensurePrivateDir(trustDir, 'sentinel.policy.trustDirUnsafe');
+  if (readOnly) assertPrivateDir(trustDir, 'sentinel.policy.trustDirUnsafe');
+  else ensurePrivateDir(trustDir, 'sentinel.policy.trustDirUnsafe');
   const real = realpathSync.native(trustDir);
   if (real !== trustDir) policyFail('sentinel.policy.trustDirUnsafe', 'the trust folder passes through a link or is not its canonical spelling');
   if (overlaps(real, workspace.path)) policyFail('sentinel.policy.trustDirInsideWorkspace', 'the trust folder must be outside the checkout');
@@ -115,17 +116,26 @@ export function adoptSettings(options: { workspace: string; trustDir: string; re
  * `adopted` settings are returned; every other state yields `settings: null`, so the defaults apply.
  */
 export function loadPolicyInputs(options: { workspace: string; trustDir: string }): PolicyInputs {
+  return readPolicyInputs(options, false);
+}
+
+/** Internal preparation preflight, not the policy facade: existing adopted bytes only, no mkdir or alias repair. */
+export function loadPolicyInputsReadOnly(options: { workspace: string; trustDir: string }): PolicyInputs {
+  return readPolicyInputs(options, true);
+}
+
+function readPolicyInputs(options: { workspace: string; trustDir: string }, readOnly: boolean): PolicyInputs {
   const ws = workspaceIdentity(options.workspace);
-  const dir = checkedTrustDir(options.trustDir, ws);
-  const repoBytes = readCheckoutFile(join(ws.path, REPO_CONFIG_PATH), MAX_SETTINGS_BYTES, 'sentinel.policy.settingsUnreadable');
+  const dir = checkedTrustDir(options.trustDir, ws, readOnly);
+  const repoBytes = readCheckoutFile(join(ws.path, REPO_CONFIG_PATH), MAX_SETTINGS_BYTES, 'sentinel.policy.settingsUnreadable', { nonblocking: readOnly });
   const repoConfig: RepoConfigEnvelope | null = repoBytes ? parseRepoConfig(repoBytes) : null;
   const repoConfigDigest = repoBytes ? sha256Digest(repoBytes) : null;
   const base = { repoConfig, repoConfigDigest };
 
-  const bytes = readCheckoutFile(join(ws.path, SETTINGS_PATH), MAX_SETTINGS_BYTES, 'sentinel.policy.settingsUnreadable');
+  const bytes = readCheckoutFile(join(ws.path, SETTINGS_PATH), MAX_SETTINGS_BYTES, 'sentinel.policy.settingsUnreadable', { nonblocking: readOnly });
   if (!bytes) return { trust: 'missing', settings: null, settingsDigest: null, ...base };
   const digest = sha256Digest(bytes);
-  const recordBytes = readPrivateFile(join(dir, adoptionFile(ws)), 64 * 1024, 'sentinel.policy.trustDirUnsafe');
+  const recordBytes = readPrivateFile(join(dir, adoptionFile(ws)), 64 * 1024, 'sentinel.policy.trustDirUnsafe', { repairTemporaryAliases: !readOnly });
   let trust: SettingsTrust = 'not-adopted';
   if (recordBytes) {
     let record: unknown;

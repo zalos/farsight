@@ -144,7 +144,7 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   // The run is what it would read and do: the captured inventory (not the capture's time), the lock, the policy and
   // the profile. The same content under the same terms plans to the same run.
   const key = { inventory: snapshot.inventoryDigest, lock: current.digest, policy: options.policy.revision, profile: profile.digest, parent: options.parentId ?? null };
-  const runId = options.parentId ? rerunIdOf(store, key, true) : `run-${digest(key).slice(7, 39)}`;
+  const runId = workspaceRunIdentity(store, key);
   const latest = store.ledger.latestPlan(runId);
   const analysisFor = (boot: PlanRevision, evidence: BootstrapEvidence) => {
     const inventory = boot.units.find(u => u.stage === 'inventory')!;
@@ -395,6 +395,13 @@ export async function previewRerun(store: SentinelStore, parentId: string, selec
   const planned = await selectedRerun(store, parentId, [...chosen], terms);
   if ('reasonCode' in planned) return planned;
   return planned.preview;
+}
+
+/** Internal shared identity calculation; it reads no source or live capability and grants no admission. */
+export function workspaceRunIdentity(store: SentinelStore, key: {
+  readonly inventory: string; readonly lock: string; readonly policy: string; readonly profile: string; readonly parent: string | null;
+}): string {
+  return key.parent ? rerunIdOf(store, key, true) : `run-${digest(key).slice(7, 39)}`;
 }
 
 /**

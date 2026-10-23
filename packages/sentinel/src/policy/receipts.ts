@@ -68,9 +68,27 @@ export class ReceiptBook {
    * is spent only when every check passes; a second spend, from any process, is refused.
    */
   consume(receiptId: string, given: ReceiptBinding, now: Date): ConsumedReceipt {
+    const receipt = this.#validate(receiptId, given, now, true);
+    if (!createPrivateFileOnce(this.#dir, `${receiptId}.spent`, Buffer.from(stamp(now)), STORE)) {
+      policyFail('sentinel.receipt.alreadyUsed', 'the receipt was already used');
+    }
+    const frozen = snapshot(receipt);
+    const digest = canonicalDigest(frozen);
+    const out: ConsumedReceipt = Object.freeze({ receipt: frozen, digest });
+    consumed.set(out, Object.freeze({ action: frozen.action, intentDigest: frozen.intentDigest, digest }));
+    return out;
+  }
+
+  /** Pure preflight only: no directory, alias repair, spend, receipt body or consumed authority is returned.
+   * A successful check does not reserve the receipt; consume is still the atomic final spend. */
+  check(receiptId: string, given: ReceiptBinding, now: Date): void {
+    this.#validate(receiptId, given, now, false);
+  }
+
+  #validate(receiptId: string, given: ReceiptBinding, now: Date, repairTemporaryAliases: boolean): ReceiptEnvelope {
     const binding = snapshot(given);
     if (!ID.test(receiptId)) policyFail('sentinel.receipt.unknown', 'not a receipt id');
-    const bytes = readPrivateFile(join(this.#dir, `${receiptId}.json`), MAX_RECEIPT_BYTES, STORE);
+    const bytes = readPrivateFile(join(this.#dir, `${receiptId}.json`), MAX_RECEIPT_BYTES, STORE, { repairTemporaryAliases });
     if (!bytes) return policyFail('sentinel.receipt.unknown', 'no receipt with this id was issued here');
     let value: unknown;
     try { value = JSON.parse(bytes.toString('utf8')); } catch { return policyFail('sentinel.receipt.unknown', 'the receipt record is not JSON'); }
@@ -84,13 +102,9 @@ export class ReceiptBook {
     }
     if (receipt.stateDigest !== binding.stateDigest) policyFail('sentinel.receipt.mismatch', 'the state changed since the receipt was given');
     if (receipt.policyRevision !== binding.policyRevision) policyFail('sentinel.receipt.mismatch', 'the policy changed since the receipt was given');
-    if (!createPrivateFileOnce(this.#dir, `${receiptId}.spent`, Buffer.from(stamp(now)), STORE)) {
+    if (readPrivateFile(join(this.#dir, `${receiptId}.spent`), 128, STORE, { repairTemporaryAliases }) !== undefined) {
       policyFail('sentinel.receipt.alreadyUsed', 'the receipt was already used');
     }
-    const frozen = snapshot(receipt);
-    const digest = canonicalDigest(frozen);
-    const out: ConsumedReceipt = Object.freeze({ receipt: frozen, digest });
-    consumed.set(out, Object.freeze({ action: frozen.action, intentDigest: frozen.intentDigest, digest }));
-    return out;
+    return receipt;
   }
 }

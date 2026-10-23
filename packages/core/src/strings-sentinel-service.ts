@@ -6,6 +6,13 @@ import type { StringEntry } from './strings.js';
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
 
 export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
+  'sentinel.preparation.expired': same('the preparation deadline has passed', 'Discovery, capture, bootstrap, inspection delay and prepared analysis share the original preparation deadline. Explicitly authorize a fresh linked child over retained inputs; starting never resets the deadline.'),
+  'sentinel.preparation.canceled': same('preparation was canceled', 'The original preparation signal stopped further acceptance. This does not prove uncertain producer cleanup or erase retained inputs.'),
+  'sentinel.preparation.changed': same('the preparation inputs changed; review them again', 'The original held store, workspace, full adopted configuration, promoted lock, profile, recorded parent or pinned snapshot no longer matches. No caller digest substitutes for these actual inputs.'),
+  'sentinel.preparation.unavailable': same('preparation prerequisites are unavailable', 'Preparation requires adopted settings, an exact promoted lock and the same fixed execution profile. Readiness checks never download or silently substitute missing assets.'),
+  'sentinel.preparation.invalid': same('the retained preparation cannot be continued safely', 'Its original timing, bounded input data or private held-owner binding is invalid or cannot be established. No new deadline or caller authority is inferred.'),
+  'sentinel.preparation.retentionRequired': same('retained preparation history needs explicit owner maintenance', 'The bounded preparation journal is full. No terminal history or unknown snapshot is automatically deleted. Explicit owner pruning remains a release prerequisite.'),
+
   'sentinel.service.viewExpired': same('the saved view expired; open it again', 'This private immutable view was expired, evicted or belonged to an earlier service. Open a new inspection; pages never silently switch to live records.'),
   'sentinel.service.viewInvalid': same('the page does not belong to this view', 'A view, filter or cursor did not match its private store, epoch and channel binding. Nothing outside the saved view was read.'),
   'sentinel.service.viewChanged': same('the saved results changed; open a fresh view', 'The owner, run revision, snapshot or global ledger sequence changed while the read was prepared. No partial view or delivery was installed.'),

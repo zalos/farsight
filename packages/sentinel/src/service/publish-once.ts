@@ -94,7 +94,10 @@ export class UnsafeRecordError extends Error {
  * an alias, recognised by its exact temporary pattern and the same file, is removed here. Any other second name is
  * refused. Returns undefined when the record does not exist.
  */
-export function readPublished(dir: string, name: string, maxBytes: number): Buffer | undefined {
+export function readPublished(dir: string, name: string, maxBytes: number, options: {
+  /** Pure preparation preflight refuses an unfinished publication, without deleting its alias. */
+  readonly repairTemporaryAliases?: boolean;
+} = {}): Buffer | undefined {
   const path = join(dir, name);
   let fd: number;
   // Inspect the opened object before reading. A substituted FIFO must not wait for a writer before fstat can refuse it.
@@ -108,6 +111,7 @@ export function readPublished(dir: string, name: string, maxBytes: number): Buff
     if (UID !== undefined && st.uid !== UID) throw new UnsafeRecordError('another account\'s');
     if ((st.mode & 0o077) !== 0) throw new UnsafeRecordError('open to other accounts');
     if (st.nlink > 1) {
+      if (options.repairTemporaryAliases === false) throw new UnsafeRecordError('the record has another name');
       const temp = new RegExp(`^\\.${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.[0-9a-f]{16}\\.tmp$`);
       for (const entry of readdirSync(dir)) {
         if (!temp.test(entry)) continue;
