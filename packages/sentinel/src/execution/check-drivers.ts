@@ -19,6 +19,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { PathRequestEnvelope } from '../contracts/pathrequest.js';
 import type { ArtifactId, Digest, Id, WorkRef } from '../contracts/common.js';
 import type { CaptureEntry } from '../contracts/snapshot.js';
 import type { AnalysisArtifact, ParserIndex, ParserResult } from '../snapshot/parser.js';
@@ -67,6 +68,8 @@ export interface DriverContext {
   readonly signal: AbortSignal;
   /** Coordinator-owned retained evidence, only when the registered driver opts in. */
   readonly analysis: RetainedAnalysis | null;
+  /** Canonical data from the genuine admitted plan only; this field grants no authority. */
+  readonly pathRequest?: Readonly<PathRequestEnvelope>;
   readonly plan: Readonly<PlanEnvelope>;
   readonly unit: Readonly<PlanWork>;
   readonly checks: readonly Readonly<PlanCheck>[];

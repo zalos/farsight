@@ -1583,8 +1583,8 @@ validated plan, current revision and original source/owner checks; a read-only p
 `retained-bootstrap.ts` and `retained-analysis.ts` share verification mechanics while retaining those different
 entry authorities. Execution's body-read behavior is unchanged.
 
-The closed internal descriptor table currently names `framework-controls` and `bounded-paths`; the latter cannot
-register until its real worker and driver ship. No caller selects a worker path or export. Framework definitions
+The closed internal descriptor table names `framework-controls` and `bounded-paths`; each resolves its shipped
+fixed worker and driver through the same installed closure contract. No caller selects a worker path or export. Framework definitions
 import the actual pure support modules, and report reads/imports/help do not resolve assets, load the worker or
 load the native parser. Already accepted reports remain readable with worker assets absent; a new execution still
 requires the installed assets and exact registration identity.
@@ -1605,6 +1605,80 @@ supervisor outcome remains unchanged. Cancellation, deadlines, cleanup, ownershi
 failures keep their existing precedence. Exit 71 from another worker, a container or after protocol activity keeps
 its ordinary failure meaning. Catalog wording says startup verification refused, since that observation alone
 does not establish that files changed or that no process started.
+
+45. **Canonical structural path requests are pinned source-derived data; owner-confirmed deep imports remain a separate acceptance boundary (2026-10-22).**
+
+A structural path request has the closed `sentinel-path-request/draft-1` contract: the exact recorded ancestor run,
+revision and plan digest; captured snapshot and source; sorted unique exact node pairs; sorted allowed call/http/render
+edge kinds; and explicit depth, fan-out and visit bounds matching the bounded-path library. At most 10,000 pairs and
+one MiB of serialized request are accepted; the byte/count bounds apply before parsing or expensive processing.
+Queries are data, never executable code, a grant or proof of flow. The request's canonical artifact identity is the
+optional `PlanPins.pathRequest`; absent pins preserve every old plan's canonical bytes and bootstrap revisions reject
+this pin. A path unit's influence and input fingerprint include the request identity. Other sources stay unavailable
+rather than reading another source's query, and no request supplies the missing interprocedural-flow capability.
+Changed queries, bounds, adopted terms or terminal generation give a different linked task identity.
+
+Admission must prove the actual current ancestor revision, allowed ended state and exact source/capture through the
+same retained bootstrap/source authority used by canonical execution. The request is staged as source-derived with
+the plan, linked to the exact admitted ancestor and accepted operation/parser closure; callers cannot supply those
+links or turn copied artifact JSON into authority. Execution rechecks the pin and uses sealed retained bytes, never
+today's workspace or an unpinned prepare-only parameter. The internal admission seam requires the genuine
+owner-bound read proof, validates the request's exact path unit fingerprints and included source bodies, and derives
+all retention links itself before staging. Proof construction and closure revalidation are separate bounded read
+passes; both retain the original absolute deadline and signal. Repeated pre-write assertions check that proof without
+copying its large source view or minting execution authority. Execution holds every unrelated unit. Authenticated
+request ancestor edges and genuine selected-rerun edges retain their recorded revisions; a parent id alone grants
+nothing. Mixed request pins and legacy rerun selections refuse explicitly. An explicit rerun of actual active path
+units prepares a new request pinned to that ended path task's executed revision, with the same exact queries and
+bounds; it never invents legacy parent-unit mappings. Retry selects only unpublished active units, never held
+checks; a successful task has nothing to retry. A non-ended task joins/resumes without a new generation.
+
+The owner command is `paths <ancestorRunId> --request <file>`: adopted policy preflight precedes the one bounded,
+non-following regular-file read. It proves the ended ancestor before task writes, discloses exact queries, bounds,
+held required checks and prerequisites, then consumes the existing exact preparation receipt when required.
+Acceptance atomically retains the request and proven closure before creating the linked planned run. It does not
+launch: `run <childRunId>` requires separate current `run.start` admission. A prepared path task
+starts its absolute run deadline at admission; a later start after expiry holds every unit with `runDeadline` and
+publishes nothing. This timing statement applies to path tasks, not every legacy plan/run path. Identical pending/running/paused
+preparation joins; completed/canceled tasks permit a new explicit generation. Admission-before-run recovery
+reconciles only the exact retained candidate, and accepted publication survives coordinator death without being
+accepted twice. A pending pause follows legal running/pausing/paused transitions without launch, preserving its
+original creation/deadline; cancellation wins over a pending pause.
+
+Minimal and full JSON, Markdown, offline HTML and SARIF share the authenticated accepted structural section.
+Readback checks actual publication, succeeded owned attempt, exact invocation/job/assignment, immutable request,
+retained source closure, raw worker result and normalized records. It does not run a second search or independently
+reverify a no-path claim. Every rendering first applies accepted current, explicit baseline, authenticated request
+and selected-ancestor secret privacy, including canceled ancestors and executed revisions with merely admitted
+successors. Query/node/edge/site/span details are withheld together; ancestor findings and coverage never become
+child findings. Counts describe the pinned query's outcomes separately from security gaps. A missing recorded
+secret match is not proof of secret absence. Each retained structural section has a cooperative 120-second
+proof/readback bound, so a large or slow valid closure can be refused without launching or refreshing its producer.
+
+The shipped `bounded-paths` worker has one explicit sealed job naming its request and the four original retained
+roles. A source unit admits at most 1,018 entries before the six fixed roles/job/request, within the existing 1,024
+start-input cap. No worker enumerates JSON to discover a job. `DriverContext.pathRequest` is data supplied only
+from the coordinator's genuine admitted plan. The driver binds the exact work, attempt, assignment, source, profile,
+sealed input set and derived job before normalization; output graph, path steps, sites, cycles and producer identity
+are checked against the original parser evidence. Only the exact promoted shipped rule selected by owner policy
+can plan this task. Registration does not alter adopted settings, requested families or default stages.
+
+Sentinel's rule evidence vocabulary adds `call-path`: a retained bounded structural query result, including an
+explicit no-path or frontier outcome. This is not a new Farsight evidence class, security finding, data-flow fact or
+clearance. Structural task completion gives no required security coverage, and unrelated required checks remain
+gaps. The worker enforces one budget over all queries: 64 MiB decoded/cache bytes, 1,024 distinct reads, one million
+visits, four million traversal/index steps and four MiB output. Limits can only tighten. These are cooperative
+accounting limits, not hard heap or RSS claims. The coordinator preserves its original unit prepare-to-accept
+cancellation/deadline; a separately bounded normalization pass records its own graph-validation counters without
+re-running the queries or re-reading bodies. Worker usage, normalization usage, proof and admission revalidation
+are separately stated; none claims a single combined quota.
+
+Deep imports retain ADR 36's separate owner `evidence.import` receipt boundary and tool-scope-only observations.
+A consumed in-process receipt cannot be reconstructed from serialized JSON; durable import acceptance and its crash
+behavior require their own reviewed transaction and retained closure. No scanner attempt or executed coverage is
+fabricated for an import, and no deep engine, build, network permission, model call or target execution is inferred
+from an analyzer's mode. This decision reserves the owner boundary; durable import implementation follows the first
+canonical structural-path slice rather than being implied by the library contract.
 
 46. **Sentinel captures everything but the exact store it holds, and keeps run scratch in a lease inside that store (2026-10-22).**
 A working-copy capture leaves out one folder only: the store this process holds, at its exact canonical path and

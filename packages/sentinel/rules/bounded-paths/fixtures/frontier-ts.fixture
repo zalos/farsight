@@ -1,0 +1,2 @@
+export function entry(next:()=>unknown){return next()}
+export function sink(){return 1}

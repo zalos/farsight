@@ -82,7 +82,8 @@ const indexes = new WeakMap<object, WeakMap<object, Map<string, GraphIndex>>>();
  * One index per (artifact, parser index) pair and edge-kind set. The pair is the identity: call sites and bodies come
  * from the parser index, so an index cached for one pair is never served for another.
  */
-function indexOf(analysis: PathAnalysis, kinds: readonly PathEdgeKind[]): GraphIndex {
+function indexOf(analysis: PathAnalysis, kinds: readonly PathEdgeKind[], control?: PathTraversalControl): GraphIndex {
+  control?.boundary();
   let perIndex = indexes.get(analysis.artifact);
   if (!perIndex) indexes.set(analysis.artifact, perIndex = new WeakMap());
   let perArtifact = perIndex.get(analysis.index);
@@ -93,13 +94,14 @@ function indexOf(analysis: PathAnalysis, kinds: readonly PathEdgeKind[]): GraphI
   const hit = perArtifact.get(key);
   if (hit && hit.stamp === stamp) return hit;
   const graph = analysis.artifact.graph;
-  const nodes = new Map(graph.nodes.map(n => [n.id, n]));
+  const nodes = new Map(graph.nodes.map(n => {control?.step();return [n.id, n] as const}));
   const out = new Map<string, GraphEdge[]>();
-  const traversed = graph.edges.filter(e => (kinds as readonly string[]).includes(e.kind));
-  for (const e of traversed) out.set(e.from, [...out.get(e.from) ?? [], e]);
+  const traversed = graph.edges.filter(e => {control?.step();return (kinds as readonly string[]).includes(e.kind)});
+  for (const e of traversed) {control?.step();const list=out.get(e.from)??[];list.push(e);out.set(e.from,list)}
   for (const list of out.values()) list.sort((a, b) => (a.to < b.to ? -1 : a.to > b.to ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const sites = new Map<string, PathSite[]>();
   for (const o of analysis.index.occurrences) {
+    control?.step();
     if (!o.byteSpan) continue;
     const list = sites.get(o.edgeId) ?? [];
     if (list.length < MAX_SITES) list.push({ relativePath: o.path, content: o.content, span: { startByte: o.byteSpan.startByte, endByte: o.byteSpan.endByte }, occurrenceId: o.occurrenceId });
@@ -111,7 +113,7 @@ function indexOf(analysis: PathAnalysis, kinds: readonly PathEdgeKind[]): GraphI
     edges: traversed.map(e => [e.id, e.kind, e.from, e.to, e.resolution?.status ?? null, !!e.meta?.deferred, !!e.meta?.inactive]).sort((a, b) => (String(a[0]) < String(b[0]) ? -1 : 1)),
     complete: analysis.artifact.analysis.complete,
   });
-  const { cycleOf, cycles } = stronglyConnected(nodes, out);
+  const { cycleOf, cycles } = stronglyConnected(nodes, out, control);
   const bodies = new Map<string, { path: string; content: string; startByte: number; endByte: number; hasEndLine: boolean }>();
   for (const n of analysis.index.nodes) {
     if (n.byteSpan) bodies.set(n.nodeId, { path: n.path, content: n.content, startByte: n.byteSpan.startByte, endByte: n.byteSpan.endByte, hasEndLine: n.endLine !== undefined });
@@ -119,6 +121,7 @@ function indexOf(analysis: PathAnalysis, kinds: readonly PathEdgeKind[]): GraphI
   const callEdges = new Set(graph.edges.filter(e => e.kind === 'calls').map(e => e.id));
   const callSites = new Map<string, number[]>();
   for (const o of analysis.index.occurrences) {
+    control?.step();
     if (!o.byteSpan || !callEdges.has(o.edgeId)) continue;
     const list = callSites.get(o.path) ?? [];
     if (!list.includes(o.byteSpan.startByte)) list.push(o.byteSpan.startByte);
@@ -132,7 +135,7 @@ function indexOf(analysis: PathAnalysis, kinds: readonly PathEdgeKind[]): GraphI
 }
 
 /** Tarjan's algorithm, iterative; only components that are cycles are kept. */
-function stronglyConnected(nodes: ReadonlyMap<string, GraphNode>, out: ReadonlyMap<string, readonly GraphEdge[]>) {
+function stronglyConnected(nodes: ReadonlyMap<string, GraphNode>, out: ReadonlyMap<string, readonly GraphEdge[]>, control?: PathTraversalControl) {
   const index = new Map<string, number>();
   const low = new Map<string, number>();
   const onStack = new Set<string>();
@@ -146,6 +149,7 @@ function stronglyConnected(nodes: ReadonlyMap<string, GraphNode>, out: ReadonlyM
     const work: { v: string; i: number; next: string[] }[] = [{ v: root, i: 0, next: succ(root) }];
     index.set(root, counter); low.set(root, counter); counter++; stack.push(root); onStack.add(root);
     while (work.length) {
+      control?.step();
       const top = work[work.length - 1]!;
       if (top.i < top.next.length) {
         const w = top.next[top.i++]!;
@@ -229,13 +233,14 @@ async function accountedFor(ix: GraphIndex, accounted: Accounted, id: string, re
 /** The name a call edge's target is called by: the last segment of its id (`path::Class.method` → `method`). */
 const calleeName = (id: string) => id.split('::').pop()!.split('.').pop()!;
 
-async function search(ix: GraphIndex, accounted: Accounted, q: PathQuery, bounds: PathBounds, complete: boolean, read: (content: string) => Promise<Uint8Array>): Promise<{ result: PathQueryResult; reasons: Set<PathReason> }> {
+async function search(ix: GraphIndex, accounted: Accounted, q: PathQuery, bounds: PathBounds, complete: boolean, read: (content: string) => Promise<Uint8Array>, control?: PathTraversalControl): Promise<{ result: PathQueryResult; reasons: Set<PathReason> }> {
   const reasons = new Set<PathReason>();
   if (!complete) reasons.add('sentinel.paths.analysisIncomplete');
   if (!ix.nodes.has(q.from) || !ix.nodes.has(q.to)) {
     reasons.add('sentinel.paths.unknownNode');
     return { result: { from: q.from, to: q.to, outcome: 'not-reached-bounded', paths: [], frontierReasons: [...reasons].sort(), visited: 0 }, reasons };
   }
+  control?.visit();
   const parent = new Map<string, GraphEdge | null>([[q.from, null]]);
   let frontier = [q.from];
   let depth = 0;
@@ -244,12 +249,15 @@ async function search(ix: GraphIndex, accounted: Accounted, q: PathQuery, bounds
     if (depth >= bounds.maxDepth) { reasons.add('sentinel.paths.depthLimit'); break; }
     const next: string[] = [];
     for (const v of frontier) {
+      control?.boundary();
       const body = await accountedFor(ix, accounted, v, read);
+      control?.boundary();
       if (body.reason) reasons.add(body.reason);
       if (body.opaque) continue;
       const edges = ix.out.get(v) ?? [];
       if (edges.length > bounds.maxFanout) reasons.add('sentinel.paths.fanoutLimit');
       for (const e of edges.slice(0, bounds.maxFanout)) {
+        control?.step();
         if (e.meta?.inactive) { reasons.add('sentinel.paths.inactiveEdge'); continue; }
         // An unresolved call could reach anything: the search cannot continue through it, and absence is unknown.
         if (e.resolution?.status === 'unresolved' || !ix.nodes.has(e.to)) { reasons.add('sentinel.paths.unresolvedCall'); continue; }
@@ -258,6 +266,7 @@ async function search(ix: GraphIndex, accounted: Accounted, q: PathQuery, bounds
         if (e.kind === 'calls' && e.to !== v && body.locals.has(calleeName(e.to))) { reasons.add('sentinel.paths.shadowedCall'); continue; }
         if (parent.has(e.to)) continue;
         if (parent.size >= bounds.maxVisited) { reasons.add('sentinel.paths.visitLimit'); break; }
+        control?.visit();
         parent.set(e.to, e);
         if (e.to === q.to) { found = true; break; }
         next.push(e.to);
@@ -299,6 +308,16 @@ export interface PathRequest {
 
 /** Bounded call paths for each query, as a validated `sentinel-paths/draft-1` envelope. */
 export async function boundedCallPaths(request: PathRequest): Promise<PathEvidenceEnvelope> {
+  return callPaths(request);
+}
+
+/** Internal worker observer only, deliberately absent from the public analysis facade. Creates no authority. */
+export interface PathTraversalControl { boundary():void; step():void; visit():void; result(value:unknown):void }
+export async function controlledCallPaths(request: PathRequest, control: PathTraversalControl): Promise<PathEvidenceEnvelope> {
+  return callPaths(request,control);
+}
+async function callPaths(request: PathRequest, control?: PathTraversalControl): Promise<PathEvidenceEnvelope> {
+  control?.boundary();
   const { analysis } = request;
   if (!analysis?.artifact?.graph || !analysis.index) throw new PathError('sentinel.paths.invalidInput', 'the parser evidence for one source is required');
   // The paths are about one snapshot's source: the parser evidence must be for exactly that snapshot and source.
@@ -320,7 +339,7 @@ export async function boundedCallPaths(request: PathRequest): Promise<PathEviden
   }
   if (!Array.isArray(request.queries) || request.queries.length > MAX_QUERIES) throw new PathError('sentinel.paths.invalidInput', `at most ${MAX_QUERIES} queries`);
   const bounds = boundsOf(request.bounds);
-  const ix = indexOf(analysis, bounds.edgeKinds);
+  const ix = indexOf(analysis, bounds.edgeKinds, control);
   const complete = analysis.artifact.analysis.complete === true;
   if (typeof request.readContent !== 'function') throw new PathError('sentinel.paths.invalidInput', 'readContent is required');
   const cache = new Map<string, Promise<Uint8Array>>();
@@ -339,8 +358,10 @@ export async function boundedCallPaths(request: PathRequest): Promise<PathEviden
   const limitations = new Set<PathReason>(['sentinel.paths.notDataFlow', 'sentinel.paths.graphOnly']);
   const cyclesMet = new Set<number>();
   for (const q of request.queries) {
+    control?.step();
     if (typeof q?.from !== 'string' || typeof q?.to !== 'string' || !q.from || !q.to || q.from === q.to) throw new PathError('sentinel.paths.invalidInput', 'each query names two different node ids');
-    const { result, reasons } = await search(ix, accounted, q, bounds, complete, read);
+    const { result, reasons } = await search(ix, accounted, q, bounds, complete, read, control);
+    control?.boundary();control?.result(result);
     results.push(result);
     for (const r of reasons) if (frontiers.length < 10_000) frontiers.push({ scopeId: q.from, reasonCode: r });
     for (const p of result.paths) {
@@ -359,5 +380,46 @@ export async function boundedCallPaths(request: PathRequest): Promise<PathEviden
   };
   const valid = validateEnvelope('paths', envelope);
   if (!valid.ok) throw new PathError('sentinel.paths.invalidInput', `the paths do not fit their contract: ${valid.errors[0]?.code} at ${valid.errors[0]?.path}`);
+  control?.boundary();
   return valid.value as PathEvidenceEnvelope;
+}
+
+
+/** Package-internal output qualification against original parser identities. This checks reported graph, paths,
+ * sites and cycles; it does not rerun queries or turn a structural document into accepted producer authority. */
+export function assertPathEvidence(evidence: PathEvidenceEnvelope, analysis: PathAnalysis, control: PathTraversalControl): void {
+  const refuse=()=>{throw new PathError('sentinel.paths.unbound','reported paths differ from original retained parser evidence')};
+  control.boundary();
+  const ix=indexOf(analysis,evidence.bounds.edgeKinds,control);
+  if(evidence.graphDigest!==ix.graphDigest||evidence.boundsDigest!==digestOf(evidence.bounds)||
+    evidence.producer.implementation!==PATHS_IMPLEMENTATION||evidence.producer.digest!==sha({implementation:PATHS_IMPLEMENTATION,reasons:PATH_REASON_CODES})||
+    !evidence.limitationKeys.includes('sentinel.paths.notDataFlow')||!evidence.limitationKeys.includes('sentinel.paths.graphOnly')||
+    evidence.limitationKeys.some(r=>!PATH_REASON_CODES.includes(r as PathReason)))return refuse();
+  const queryFrom=new Set(evidence.results.map(r=>r.from));
+  if(evidence.frontiers.some(f=>!queryFrom.has(f.scopeId)||!PATH_REASON_CODES.includes(f.reasonCode as PathReason)))return refuse();
+  const cyclesMet=new Set<number>();
+  for(const result of evidence.results){
+    control.step();
+    if(result.visited>evidence.bounds.maxVisited||result.frontierReasons.some(r=>!PATH_REASON_CODES.includes(r as PathReason)))return refuse();
+    if(result.outcome==='reached'?(result.paths.length!==1||result.frontierReasons.length!==0):result.paths.length!==0)return refuse();
+    if(result.outcome==='not-reached-complete'&&(!ix.nodes.has(result.from)||!ix.nodes.has(result.to)||analysis.artifact.analysis.complete!==true||result.frontierReasons.length!==0))return refuse();
+    if(result.outcome==='not-reached-bounded'&&result.frontierReasons.length===0)return refuse();
+    for(const path of result.paths){
+      if(path.steps.length>evidence.bounds.maxDepth)return refuse();
+      const nodes=[result.from];
+      for(const step of path.steps){
+        control.step();
+        const edge=(ix.out.get(step.from)??[]).find(e=>e.id===step.edgeId);
+        if(!edge||nodes[nodes.length-1]!==step.from||edge.to!==step.to||edge.kind!==step.kind||edge.resolution?.status==='unresolved'||edge.meta?.inactive||
+          step.resolution!==(edge.resolution?.status==='heuristic'?'heuristic':'resolved')||step.deferred!==!!edge.meta?.deferred||
+          canonicalJson(step.sites)!==canonicalJson(ix.sites.get(edge.id)??[]))return refuse();
+        nodes.push(step.to);
+      }
+      if(nodes[nodes.length-1]!==result.to||path.id!==digestOf({nodes,edges:path.steps.map(s=>s.edgeId)})||canonicalJson(path.cyclic)!==canonicalJson(nodes.filter(n=>ix.cycleOf.has(n))))return refuse();
+      for(const n of path.cyclic)cyclesMet.add(ix.cycleOf.get(n)!);
+    }
+  }
+  const cycles=[...cyclesMet].sort((a,b)=>a-b).slice(0,MAX_CYCLES).map(i=>({members:ix.cycles[i]!.slice(0,1000)}));
+  if(canonicalJson(evidence.cycles)!==canonicalJson(cycles))return refuse();
+  control.boundary();
 }

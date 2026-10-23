@@ -1,0 +1,52 @@
+{
+  "schema": "sentinel-rulepack/draft-1",
+  "packId": "sentinel-bounded-paths",
+  "version": "0.1.0",
+  "rights": {
+    "spdx": "MIT",
+    "origin": "sentinel-original"
+  },
+  "rules": [
+    {
+      "familyId": "sentinel.paths.call-reachability",
+      "revision": 1,
+      "titleKey": "sentinel.paths.rule.callReachability",
+      "applicability": {
+        "languages": [
+          "typescript",
+          "javascript",
+          "java"
+        ],
+        "scopeKind": "repository"
+      },
+      "requires": [
+        "source-bytes",
+        "call-occurrence"
+      ],
+      "implementation": {
+        "adapterId": "bounded-paths",
+        "rulePath": "detectors/retained-call-query.json"
+      },
+      "meaning": "candidate",
+      "severity": "info",
+      "evidenceRequired": [
+        "call-path"
+      ],
+      "limitationKeys": [
+        "sentinel.paths.notDataFlow",
+        "sentinel.paths.graphOnly"
+      ],
+      "mappings": {
+        "cwe": []
+      },
+      "fixtures": {
+        "positive": [
+          "fixtures/reached-ts.fixture"
+        ],
+        "negative": [
+          "fixtures/frontier-ts.fixture"
+        ]
+      }
+    }
+  ]
+}

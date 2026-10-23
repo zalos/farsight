@@ -328,3 +328,13 @@ real SIGKILL; it is not an installed CLI crash qualification. The public transfe
 unmodified installed package. The native scanner job additionally selects `evidence-privacy.test.ts` with zero
 skips and requires the installed consumer's genuine current/baseline/selected secret-privacy result. Existing MCP,
 framework, scanner, observer and full recovery gates remain selected.
+
+## Retained structural-path verification
+
+Ordinary installed package checks include `scripts/test-sentinel-paths-consumer.mjs`: actual owner preparation,
+separate run confirmation, retained source-removed reports, selected rerun, required security gaps and strict
+installed worker assets. The native scanner job also runs this consumer and selects `path-report-secrets.test.ts`
+for real current/baseline/request-ancestor privacy with zero skips. The browser-provisioned e2e job explicitly runs
+the one `path-report-browser.test.ts` case, requiring one pass and zero failures/skips, and retains its TAP report.
+It reads and prints clean/withheld HTML offline with JavaScript disabled after the source/store are removed.
+Neither structural completion nor its test count supplies security coverage or independently re-proves no path.

@@ -1,3 +1,9 @@
+import { preparePathTask, acceptPathTask, type PathTaskCandidate } from './path-task.js';
+import { readPathRequestFile } from './path-request-file.js';
+import { selectedSecretPrivacy } from '../reports/selected-privacy.js';
+import { pathUnitsFor } from '../analysis/paths/admission.js';
+import { pathRequestOf, PathRequestError } from '../analysis/paths/request.js';
+import { ExecutionError } from '../execution/errors.js';
 import { publicRegistry } from './scanner-profile.js';
 // The owner's local operations: adopt settings, plan, run in the foreground, bounded status and the preview report.
 // Each runs in the owner's own process (the owner CLI entrypoint) against the workspace's store; the requester is
@@ -221,10 +227,17 @@ export async function followWorkspaceRun(ws: Workspace, options: { mode: 'retry'
   const adopted = adoptedPolicy(ws);
   if ('refusal' in adopted) return adopted.refusal;
   const { policy } = adopted;
-  const decided = decide(ws, policy, intentOf('capture.source', sha(Buffer.from(ws.path)), ['local-artifacts']), policy.revision, options.confirm, options.now);
-  if (!decided.admitted) return decided.result;
-  const verdicts = printed(decided.record);
+  const intent=intentOf('capture.source',sha(Buffer.from(ws.path)),['local-artifacts']);
+  const preflight=admit({intent,requestedBy:OWNER as {principal:'human';channel:'owner-cli'},policy,stateDigest:policy.revision,now:options.now,
+    capability:()=>({available:true,detail:'policy preflight only'}),credential:()=>({basis:'local-only' as const,detail:'no provider contacted'})});
+  if(!preflight.record.verdicts.policy.allowed)return result(options.mode,'configuration-failure',{verdicts:printed(preflight.record),reasonCode:preflight.record.verdicts.policy.reasonCode});
   return withStore(ws, async store => {
+    const parent=store.ledger.getRun(options.runId);
+    const recorded=parent?await loadPlan(store,options.runId,parent.planRevision):null;
+    if(recorded?.pathRequest)return followPathTaskIn(store,ws,recorded,policy,options);
+    const decided=decide(ws,policy,intent,policy.revision,options.confirm,options.now);
+    if(!decided.admitted)return decided.result;
+    const verdicts=printed(decided.record);
     let stages = [...(options.stages ?? [])];
     if (options.mode === 'retry') {
       // The units that did not publish: what a retry runs again. A selected rerun's held units were never chosen, so
@@ -579,3 +592,61 @@ export async function fullReportIn(ws: Workspace, options: FullReportOptions): P
 }
 
 export { PolicyError };
+
+
+/** Prepare one retained structural task only. The exact owner decision precedes admission; execution separately
+ * requires run.start. No-confirm/denied/malformed requests create no plan, run, work, attempt or staging records. */
+export async function prepareWorkspacePaths(ws:Workspace,options:{ancestorRunId:string;requestFile:string;confirm:boolean;now:Date;signal?:AbortSignal}):Promise<CommandResult>{
+  const adopted=adoptedPolicy(ws);if('refusal'in adopted)return adopted.refusal;
+  const policy=adopted.policy,signal=options.signal??new AbortController().signal,deadlineAt=performance.now()+120000;
+  const boundary=()=>{
+    if(signal.aborted)throw new ExecutionError('sentinel.execution.canceled',{reason:'structural preparation canceled'});
+    if(performance.now()>=deadlineAt)throw new ExecutionError('sentinel.execution.deadlineExceeded',{reason:'structural preparation deadline'});
+    const current=adoptedPolicy(ws);if('refusal'in current||current.policy.revision!==policy.revision)throw new ExecutionError('sentinel.execution.planInvalid',{reason:'the owner policy changed during structural preparation'});
+  };
+  const workspace=workspaceIdentity(ws.path).digest;
+  const preflight=admit({intent:intentOf('capture.source',workspace,['local-artifacts']),requestedBy:OWNER as {principal:'human';channel:'owner-cli'},policy,stateDigest:policy.revision,now:options.now,
+    capability:()=>({available:true,detail:'policy preflight only; no caller file or execution backend read'}),credential:()=>({basis:'local-only' as const,detail:'no provider contacted'})});
+  if(!preflight.record.verdicts.policy.allowed)return result('paths','configuration-failure',{verdicts:printed(preflight.record),reasonCode:preflight.record.verdicts.policy.reasonCode});
+  const request=readPathRequestFile(options.requestFile,boundary);
+  if(request.value.ancestor.runId!==options.ancestorRunId)throw new PathRequestError('unbound');
+  return withStore(ws,async store=>{
+    const terms={trustDir:trustFolder(ws),policy,now:options.now};
+    const candidate=await preparePathTask(store,request.value,terms,{signal,deadlineAt,stillWithin:boundary});
+    return decidePathTaskIn(store,ws,candidate,policy,{command:'paths',confirm:options.confirm,now:options.now});
+  });
+}
+
+
+async function decidePathTaskIn(store:SentinelStore,ws:Workspace,candidate:PathTaskCandidate,policy:EffectivePolicy,options:{command:'paths'|'retry'|'rerun';confirm:boolean;now:Date;parentSelection?:string[]}):Promise<CommandResult>{
+    const terms={trustDir:trustFolder(ws),policy,now:options.now},workspace=workspaceIdentity(ws.path).digest;
+    // Current ancestor and its authenticated request/selection edges are used only as a privacy withholding flag.
+    // The reader authenticates accepted secret publications even when that ended ancestor was canceled.
+    const ancestor=await loadPlan(store,candidate.request.value.ancestor.runId,candidate.request.value.ancestor.revision);
+    const privacy=await selectedSecretPrivacy(store,candidate.request.value.ancestor.runId,ancestor,true);candidate.boundary();
+    const preview=privacy.hasMatches?{...candidate.preview,queries:candidate.preview.queries.map(()=>({detailsWithheld:true})),detailLoss:'sentinel.report.withheld.secretRun'}:candidate.preview;
+    const facts={runId:candidate.plan.runId,planId:candidate.plan.runId,revision:1,planDigest:candidate.plan.digest,snapshotId:candidate.request.value.snapshotId,request:candidate.request.id,generation:candidate.generation,
+      parentId:candidate.request.value.ancestor.runId,unitIds:candidate.preview.selected,preview:{...preview,...(options.parentSelection?{parentSelection:options.parentSelection}:{})},effects:['local-artifacts'],executionRequires:'run.start',usage:candidate.usage};
+    const intent=intentOf('capture.source',candidate.plan.digest,['local-artifacts'],[`sentinel.workspace:${workspace}`,`sentinel.store:${store.storeId}`,`sentinel.request:${candidate.request.id}`]);
+    const decided=decide(ws,policy,intent,sha(canonicalJsonBytes({candidate:candidate.stateDigest,parentSelection:options.parentSelection??null})),options.confirm,options.now);
+    if(!decided.admitted)return {...decided.result,command:options.command,facts:{...decided.result.facts,...facts}};
+    candidate.boundary();
+    const accepted=await acceptPathTask(store,candidate,terms);
+    return result(options.command,accepted.outcome,{verdicts:printed(decided.record),facts});
+}
+async function followPathTaskIn(store:SentinelStore,ws:Workspace,admitted:Awaited<ReturnType<typeof loadPlan>>,policy:EffectivePolicy,options:{mode:'retry'|'rerun';runId:string;stages?:readonly string[];confirm:boolean;now:Date}):Promise<CommandResult>{
+ const parent=store.ledger.getRun(options.runId)!;
+ if(parent.state!=='completed'&&parent.state!=='canceled')return result(options.mode,'kept',{facts:{runId:parent.id,planDigest:admitted.plan.digest,state:parent.state,joined:true,executionRequires:'run.start'}});
+ const original=pathRequestOf(admitted.pathRequest),active=pathUnitsFor(admitted.plan,original),chosen=[...(options.stages?.length?options.stages:active)].sort();
+ if(new Set(chosen).size!==chosen.length||chosen.some(id=>!active.has(id)))return result(options.mode,'configuration-failure',{reasonCode:'sentinel.service.stageUnknown',facts:{runId:parent.id}});
+ const selected=options.mode==='retry'?chosen.filter(id=>{const unit=admitted.plan.units.find(u=>u.id===id)!;return !store.ledger.getPublication(unit)}):chosen;
+ if(!selected.length)return result(options.mode,'refused',{reasonCode:'sentinel.service.nothingToRetry',facts:{runId:parent.id}});
+ // The shipped structural unit contains all pairs of its one bound source. A distinct request rerun keeps that
+ // exact unit's queries/bounds, with a genuine immediate request ancestor; no legacy parentUnit map is invented.
+ if(selected.length!==active.size)return result(options.mode,'configuration-failure',{reasonCode:'sentinel.service.selectionStale',facts:{runId:parent.id}});
+ const request=pathRequestOf({...original.value,ancestor:{runId:parent.id,revision:parent.planRevision,planDigest:admitted.plan.digest}});
+ const signal=new AbortController().signal,deadlineAt=performance.now()+120000;
+ const stillWithin=()=>{const current=adoptedPolicy(ws);if('refusal'in current||current.policy.revision!==policy.revision)throw new ExecutionError('sentinel.execution.planInvalid',{reason:'the owner policy changed during structural rerun preparation'})};
+ const candidate=await preparePathTask(store,request.value,{trustDir:trustFolder(ws),policy,now:options.now},{signal,deadlineAt,stillWithin});
+ return decidePathTaskIn(store,ws,candidate,policy,{command:options.mode,confirm:options.confirm,now:options.now,parentSelection:selected});
+}

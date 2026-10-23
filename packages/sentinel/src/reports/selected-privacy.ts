@@ -12,8 +12,8 @@ import { validateEnvelope } from '../validate.js';
 import { secretObservation } from './accepted-secrets.js';
 
 const refuse = (reason: string): never => { throw new ExecutionError('sentinel.execution.bootstrapEvidence', { reason }); };
-export async function selectedSecretPrivacy(store: SentinelStore, runId: string, admitted: AdmittedPlan): Promise<{ names: string[]; hasMatches: boolean }> {
-  if (!admitted.selection) return { names: [], hasMatches: false };
+export async function selectedSecretPrivacy(store: SentinelStore, runId: string, admitted: AdmittedPlan, includeCurrent = false): Promise<{ names: string[]; hasMatches: boolean }> {
+  if (!admitted.selection && !admitted.pathRequest && !includeCurrent) return { names: [], hasMatches: false };
   const evidence = await retainedBootstrapForReport(store, runId, admitted);
   const names = new Set<string>();
   let hasMatches = false;
@@ -22,7 +22,8 @@ export async function selectedSecretPrivacy(store: SentinelStore, runId: string,
     try { return JSON.parse(new TextDecoder('utf8', { fatal: true }).decode(await store.readArtifact(id))); }
     catch { return refuse('accepted selected privacy records are unavailable or invalid'); }
   };
-  for (const pin of evidence.selectedAncestors) {
+  const pins=[...(includeCurrent?[{runId,revision:admitted.plan.revision,planDigest:admitted.plan.digest}]:[]),...evidence.selectedAncestors];
+  for (const pin of pins) {
     const id = pin.runId;
     const ancestor = await loadPlan(store, id, pin.revision), plan = ancestor.plan;
     if (plan.digest !== pin.planDigest) return refuse('selected privacy plan is not its proven ancestor revision');

@@ -261,7 +261,7 @@ export interface ProofTiming {
 declare const proofBrand: unique symbol;
 export interface RetainedSourceProof { readonly [proofBrand]: true }
 
-export type ClosureRole = 'plan' | 'profile' | 'rule-lock' | 'policy' | 'selection' | 'influence' | 'invocation' | 'output'
+export type ClosureRole = 'plan' | 'profile' | 'rule-lock' | 'policy' | 'selection' | 'path-request' | 'influence' | 'invocation' | 'output'
   | 'analysis-result' | 'analysis-index' | 'analysis-artifact' | 'snapshot-manifest' | 'snapshot-materialization' | 'source-content';
 export interface ClosureEntry { readonly id: ArtifactId; readonly role: ClosureRole }
 
@@ -347,7 +347,7 @@ export async function retainedSourceForAdmission(store: SentinelStore, ancestorI
     };
     const planRecord = (a: AdmittedPlan) => {
       add(a.record.plan, 'plan'); add(a.record.profile, 'profile'); add(a.record.ruleLock, 'rule-lock');
-      add(a.record.policy, 'policy'); add(a.record.selection, 'selection');
+      add(a.record.policy, 'policy'); add(a.record.selection, 'selection'); add(a.plan.pins.pathRequest, 'path-request');
     };
     const load = budget.planLoader(planRecord);
     const admitted = await load(ancestor.runId, ancestor.revision);
@@ -419,10 +419,10 @@ function copyView(state: ProofState): ReadonlyRetainedSource {
 }
 
 /**
- * A copy of a proof minted by this module for exactly this genuine store, owner, epoch and recorded ancestor. The
+ * Access an existing proof for exactly this genuine store, owner, epoch and recorded ancestor. The
  * original deadline and cancellation stay in force: a later call can only tighten them, never reset or extend them.
  */
-export function readRetainedSourceProof(store: SentinelStore, proof: RetainedSourceProof, ancestorIn: RetainedSourceAncestor, timing: ProofTiming): ReadonlyRetainedSource {
+function accessRetainedSourceProof(store: SentinelStore, proof: RetainedSourceProof, ancestorIn: RetainedSourceAncestor, timing: ProofTiming) {
   const state = (proof !== null && typeof proof === 'object') ? proofs.get(proof) : undefined;
   if (!state || store !== state.store) return fail('not a retained-source proof for this store');
   const { signal, deadlineAt, stillWithin } = timing;
@@ -436,7 +436,18 @@ export function readRetainedSourceProof(store: SentinelStore, proof: RetainedSou
   check();
   const ancestor = exactAncestor(ancestorIn);
   if (!same(ancestor, state.ancestor)) fail('the proof is for another ancestor');
-  const view = copyView(state);
+  return {state,check};
+}
+
+/** Checks an existing genuine proof without cloning its source view. This mints or exposes no authority. */
+export function assertRetainedSourceProof(store: SentinelStore, proof: RetainedSourceProof, ancestor: RetainedSourceAncestor, timing: ProofTiming): void {
+  accessRetainedSourceProof(store,proof,ancestor,timing);
+}
+
+/** Return independent source-view copies, with the original fences checked again after copying. */
+export function readRetainedSourceProof(store: SentinelStore, proof: RetainedSourceProof, ancestor: RetainedSourceAncestor, timing: ProofTiming): ReadonlyRetainedSource {
+  const {state,check}=accessRetainedSourceProof(store,proof,ancestor,timing);
+  const view=copyView(state);
   check();
   return view;
 }

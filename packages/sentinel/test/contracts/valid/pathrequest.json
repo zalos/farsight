@@ -1,0 +1,24 @@
+{
+  "schema": "sentinel-path-request/draft-1",
+  "ancestor": {
+    "runId": "run-parent",
+    "revision": 2,
+    "planDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "snapshotId": "snapshot-example",
+  "sourceId": "example",
+  "queries": [
+    {
+      "from": "example::src/entry.ts::entry",
+      "to": "example::src/sink.ts::sink"
+    }
+  ],
+  "bounds": {
+    "edgeKinds": [
+      "calls"
+    ],
+    "maxDepth": 12,
+    "maxFanout": 256,
+    "maxVisited": 50000
+  }
+}
