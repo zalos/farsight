@@ -95,7 +95,75 @@ try {
  let publications=0,attempts=0;cursor=beforeAttempt;for(;;){const status=await call('status',crashId,'--after',String(cursor),'--limit','1000');for(const e of status.body.facts.events){publications+=Number(e.kind==='work-published');attempts+=Number(e.kind==='attempt-started')}cursor=status.body.facts.cursor;if(!status.body.facts.more)break}
  assert.equal(publications,1,'the resumed inspection publishes once');assert.ok(attempts>=2,'the interrupted attempt is not reused as a success');
  assert.equal(JSON.parse(await full(crashId,'json')).inspections.length,1);
- console.log(JSON.stringify({consumer:'framework',distFiles:files.length,closureEntries:closure.length,entryBytes:entry.length,runMs:Math.round(performance.now()-started),sourceRemovedSelected:true,crashRecovered:true,officialSarif:Boolean(official)}));
+ // CP-B: accepted retained reporting needs no worker asset; new registration and execution still require it.
+ for(const owned of [...servicePids]){process.kill(owned,'SIGTERM');await gone(owned);servicePids.delete(owned)}
+ renameSync(join(ws,'src'),join(scratch,'final-source-away'));
+ const normalize=text=>text.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z/g,'<report-time>').replace(/(as of )\S+( \(ledger sequence)/,'$1<report-time>$2');
+ const legacy={};for(const format of ['json','md','html','sarif'])legacy[format]=normalize(await full(id,format));
+ const minimalBefore=normalize(JSON.stringify(await call('report',id)));
+ const workerPath=join(installed,'dist/frameworks/controls/worker.mjs'),gatePath=join(installed,'dist/execution/launch-gate.mjs');
+ const driverPath=join(installed,'dist/frameworks/controls/driver.mjs'),manifestPath=join(installed,'package.json');
+ const manifestBytes=readFileSync(manifestPath),manifest=JSON.parse(manifestBytes);
+ assert.ok(existsSync(driverPath)&&existsSync(workerPath)&&existsSync(gatePath));
+ assert.ok(!Object.hasOwn(manifest.sentinel.assets,'frameworks/controls/driver'));
+ const refusalDir=join(scratch,'refused-entries');mkdirSync(refusalDir,{mode:0o700});
+ const registration=async()=>c.exec(process.execPath,['--input-type=module','-e',`
+   import assert from 'node:assert/strict';import{readdirSync}from'node:fs';
+   const{frameworkControlsAdapter}=await import(${JSON.stringify('file://'+driverPath)});
+   assert.throws(()=>frameworkControlsAdapter({entryDir:${JSON.stringify(refusalDir)}}),e=>e.code==='sentinel.execution.adapterInvalid');
+   assert.deepEqual(readdirSync(${JSON.stringify(refusalDir)}),[]);
+ `],{cwd:ws,env});
+ renameSync(workerPath,workerPath+'.held');writeFileSync(workerPath.replace(/\.mjs$/,'.js'),readFileSync(workerPath+'.held'));
+ try{
+  for(const format of ['json','md','html','sarif'])assert.equal(normalize(await full(id,format)),legacy[format],`missing-worker retained ${format}`);
+  assert.equal(normalize(JSON.stringify(await call('report',id))),minimalBefore,'missing-worker minimal report');
+  await registration();
+ }finally{rmSync(workerPath.replace(/\.mjs$/,'.js'));renameSync(workerPath+'.held',workerPath)}
+ for(const fault of ['missing-pin','wrong-path','wrong-sha']){
+  const changed=JSON.parse(manifestBytes);if(fault==='missing-pin')delete changed.sentinel.assets['frameworks/controls/worker'];
+  if(fault==='wrong-path')changed.sentinel.assets['frameworks/controls/worker'].path='dist/frameworks/controls/worker.js';
+  if(fault==='wrong-sha')changed.sentinel.assets['frameworks/controls/worker'].sha256='0'.repeat(64);
+  writeFileSync(manifestPath,JSON.stringify(changed));try{await registration()}finally{writeFileSync(manifestPath,manifestBytes)}
+ }
+ // Actual installed dist shadow/link and missing fixed-export controls keep the same whole-dist boundary.
+ const freshRefusal=async()=>c.exec(process.execPath,['--input-type=module','-e',`
+  import assert from 'node:assert/strict';let refused=false;
+  try{const{frameworkControlsAdapter}=await import(${JSON.stringify('file://'+driverPath)});frameworkControlsAdapter({entryDir:${JSON.stringify(refusalDir)}})}catch{refused=true}
+  assert.ok(refused,'the changed installed build cannot register');
+ `],{cwd:ws,env});
+ const shadow=join(installed,'dist/node_modules');mkdirSync(shadow);
+ try{await freshRefusal()}finally{rmSync(shadow,{recursive:true})}
+ const driverHeld=driverPath+'.held';renameSync(driverPath,driverHeld);
+ try{await freshRefusal()}finally{renameSync(driverHeld,driverPath)}
+ const workerOriginal=readFileSync(workerPath),withoutExport=workerOriginal.toString().replace(/^  runFrameworkControlsWorker\n/m,'');
+ assert.notEqual(withoutExport,workerOriginal.toString(),'the real emitted fixed export was removed');
+ const changedManifest=JSON.parse(manifestBytes);changedManifest.sentinel.assets['frameworks/controls/worker'].sha256=createHash('sha256').update(withoutExport).digest('hex');
+ writeFileSync(workerPath,withoutExport);writeFileSync(manifestPath,JSON.stringify(changedManifest));
+ try{
+  const exportEntries=join(scratch,'missing-export-entries');mkdirSync(exportEntries,{mode:0o700});
+  const created=await c.exec(process.execPath,['--input-type=module','-e',`const{frameworkControlsAdapter}=await import(${JSON.stringify('file://'+driverPath)});console.log(frameworkControlsAdapter({entryDir:${JSON.stringify(exportEntries)}}).definition.module)`],{cwd:ws,env});
+  const refused=await c.exec(process.execPath,[created.stdout.trim()],{cwd:ws,env}).then(r=>({code:0,...r}),e=>e);
+  assert.equal(refused.code,71);assert.equal(refused.stdout,'');
+ }finally{writeFileSync(workerPath,workerOriginal);writeFileSync(manifestPath,manifestBytes)}
+ const hook=join(scratch,'import-audit.mjs');writeFileSync(hook,`
+  import assert from 'node:assert/strict';import Module,{registerHooks}from'node:module';
+  const load=Module._load;Module._load=function(s,...rest){assert.ok(!String(s).includes('oxc-parser'));return load.call(this,s,...rest)};
+  registerHooks({load(url,context,next){assert.ok(!/frameworks\\/controls\\/worker\\.mjs|oxc-parser/.test(url));return next(url,context)}});
+ `);
+ await c.exec(process.execPath,['--import',hook,bin,'--help'],{cwd:ws,env});
+ // A fresh real plan/run qualifies the installed launch-gate path and rejects a .js substitute.
+ renameSync(join(scratch,'final-source-away'),join(ws,'src'));
+ writeFileSync(join(ws,'src/routes.ts'),"import express from 'express';const app=express();app.get('/gate',(_q,r)=>r.send('example'));\n");
+ const gatePlan=await call('plan');assert.equal(gatePlan.status,0,JSON.stringify(gatePlan));
+ renameSync(gatePath,gatePath+'.held');writeFileSync(gatePath.replace(/\.mjs$/,'.js'),readFileSync(gatePath+'.held'));
+ try{
+  const refused=await call('run',gatePlan.body.facts.planId);assert.equal(refused.body.outcome,'configuration-failure',JSON.stringify(refused));
+  assert.ok(['sentinel.execution.adapterInvalid','sentinel.execution.planInvalid'].includes(refused.body.facts.error),JSON.stringify(refused));
+  if(refused.body.facts.error==='sentinel.execution.planInvalid')assert.match(refused.body.facts.reason,/another digest than the profile recorded/);
+  assert.equal(refused.body.facts.runOutcome,null,'no worker run is admitted through a .js substitute');
+ }
+ finally{rmSync(gatePath.replace(/\.mjs$/,'.js'));renameSync(gatePath+'.held',gatePath)}
+ console.log(JSON.stringify({consumer:'framework',distFiles:files.length,closureEntries:closure.length,entryBytes:entry.length,runMs:Math.round(performance.now()-started),sourceRemovedSelected:true,crashRecovered:true,officialSarif:Boolean(official),strictAssets:true,missingWorkerLegacyReports:true}));
 }finally{
  for(const pid of servicePids){try{process.kill(pid,'SIGTERM')}catch{}await gone(pid)}
  // A killed service can leave sealed readonly inputs. Only this consumer's scratch is unlocked, after its exact

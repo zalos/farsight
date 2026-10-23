@@ -12,9 +12,8 @@ import { inputFingerprintOf } from '../execution/supervisor.js';
 import { surfacesFromIndex } from '../planner/planner.js';
 import { retainedBootstrapForReport } from '../execution/retained-bootstrap.js';
 import { validateEnvelope } from '../validate.js';
-import { CONTROLS_MODELED_VERSIONS, CONTROLS_SUPPORTED_RULES } from '../frameworks/controls/driver.js';
+import { CONTROLS_MODELED_VERSIONS, CONTROLS_SUPPORTED_RULES, CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_MEDIA, CONTROLS_OUTPUT_SCHEMA } from '../frameworks/controls/definitions.js';
 import { FRAMEWORKS, CONTROL_FAMILIES, INSPECTED_PROPERTIES, inspect, inspectionReport, libraryPresent, type LibraryOutcome } from '../frameworks/controls/facts.js';
-import { CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_MEDIA, CONTROLS_OUTPUT_SCHEMA } from '../frameworks/controls/worker.js';
 
 export async function acceptedInspection(store: SentinelStore, admitted: AdmittedPlan, unit: PlanWork,
   evidence: Awaited<ReturnType<typeof retainedBootstrapForReport>>, refuse: (reason: string) => never): Promise<ReportControlInspection> {

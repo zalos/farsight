@@ -20,30 +20,11 @@ import { analyzeExpress } from '../express/index.js';
 import { analyzeNest } from '../nest/index.js';
 import { analyzeNext } from '../next/index.js';
 import { analyzeSpring } from '../spring/index.js';
-import { FRAMEWORKS, type FrameworkName, type InspectedProperty, type LibraryOutcome } from './facts.js';
+import { FRAMEWORKS, type FrameworkName, type LibraryOutcome } from './facts.js';
 
-export const FRAMEWORK_CONTROLS_ADAPTER_ID = 'framework-controls';
-export const CONTROLS_JOB_SCHEMA = 'sentinel-framework-controls-job/draft-1';
-export const CONTROLS_OUTPUT_SCHEMA = 'sentinel-framework-controls-output/draft-1';
-export const CONTROLS_OUTPUT_MEDIA = 'application/vnd.sentinel.framework-controls+json';
-
-/** The job the driver seals for one unit: what to read, nothing else. */
-export interface ControlsJob {
-  readonly schema: typeof CONTROLS_JOB_SCHEMA;
-  readonly snapshotId: string;
-  readonly sourceId: string;
-  readonly snapshot: ArtifactId;
-  readonly analysis: { readonly artifact: ArtifactId; readonly result: ArtifactId; readonly index: ArtifactId };
-  readonly properties: readonly InspectedProperty[];
-  /** Spring profiles: none selected, so profile-conditioned chains stay unknown. */
-  readonly environment: { readonly activeProfiles: null };
-}
-
-export interface ControlsOutput {
-  readonly schema: typeof CONTROLS_OUTPUT_SCHEMA;
-  readonly job: ArtifactId;
-  readonly libraries: readonly LibraryOutcome[];
-}
+import { FRAMEWORK_CONTROLS_ADAPTER_ID, CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_SCHEMA, CONTROLS_OUTPUT_MEDIA, type ControlsJob, type ControlsOutput } from './definitions.js';
+export { FRAMEWORK_CONTROLS_ADAPTER_ID, CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_SCHEMA, CONTROLS_OUTPUT_MEDIA } from './definitions.js';
+export type { ControlsJob, ControlsOutput } from './definitions.js';
 
 const P = 'sentinel-worker/draft-1';
 const hex = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');

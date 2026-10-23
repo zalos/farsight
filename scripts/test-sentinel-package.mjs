@@ -60,6 +60,9 @@ try {
   // The launch gate ships as its own file, and enforces its authorization from the installed tarball: without the
   // exact line the adapter never loads; with it, it does (src/execution/launch-gate.ts).
   const gate = join(installed, 'dist', 'execution', 'launch-gate.mjs');
+  const controlsDriver = join(installed, 'dist', 'frameworks', 'controls', 'driver.mjs');
+  assert.ok(existsSync(controlsDriver), 'the descriptor driver is a fixed internal dist entry');
+  assert.ok(!Object.hasOwn(pkg.sentinel.assets, 'frameworks/controls/driver'), 'the fixed driver is pinned by the dist closure, not the started-asset inventory');
   // Required whenever the source package can start built-in workers (it has the supervisor).
   const startsWorkers = existsSync(join(sourceDir, 'src', 'execution', 'supervisor.ts'));
   if (startsWorkers) assert.ok(existsSync(gate), 'the launch gate is shipped as dist/execution/launch-gate.mjs');

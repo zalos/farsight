@@ -14,7 +14,9 @@ import { createAdapterRegistry } from '../dist/execution/registry.js';
 import { createExecutionService } from '../dist/execution/service.js';
 import { readPackDirectory, validatePack } from '../dist/rules/index.js';
 import { surfacesFromIndex } from '../dist/planner/index.js';
-import { CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_SCHEMA, FRAMEWORK_CONTROLS_ADAPTER_ID, inspect, inspectSealed, writeClosureEntry } from '../dist/frameworks/controls/index.js';
+import { WorkerSession } from '../dist/execution/protocol.js';
+import { writeBuiltinClosureEntry } from '../dist/frameworks/controls/closure.js';
+import { CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_SCHEMA, FRAMEWORK_CONTROLS_ADAPTER_ID, inspect, inspectSealed } from '../dist/frameworks/controls/index.js';
 import { commitRepo, needsStore, openCaptureStore, scratch } from './snapshot-helpers.ts';
 import { ORDER } from './express-fixtures.ts';
 
@@ -70,7 +72,7 @@ async function child(fx: Awaited<ReturnType<typeof sealed>>, limits: Record<stri
   // The registered module is the generated entry that pins and checks the worker's whole byte closure.
   const entryDir = join(fx.dir, `entry-${n}`);
   mkdirSync(entryDir, { mode: 0o700 });
-  const MODULE = writeClosureEntry(entryDir).module;
+  const MODULE = writeBuiltinClosureEntry(entryDir, 'framework-controls').module;
   const registry = createAdapterRegistry([{ id: FRAMEWORK_CONTROLS_ADAPTER_ID, version: '0.1.0', kind: 'built-in' as const, isolation: 'child' as const, module: MODULE,
     limits: { timeoutMs: 60_000, cancelGraceMs: 1_000, helloTimeoutMs: 10_000, ...limits } }]);
   const scratchRoot = join(fx.dir, `exec-${n}`);
@@ -149,18 +151,28 @@ test('the child is killed at its deadline and publishes nothing', needsStore, as
   assert.ok(o.exit, 'the worker process was reaped');
 });
 
-test('a cancel stops the child within its grace, killing it if it does not answer; nothing is published', needsStore, async t => {
+test('cancel after genuine start dispatch reaps the framework child and accepts no output', needsStore, async t => {
   const fx = await sealed(t, wide(150, 40));
   const c = new AbortController();
-  const pending = child(fx, { cancelGraceMs: 200 }, 'cancel', c.signal);
-  setTimeout(() => c.abort(), 400);
-  const t0 = Date.now();
-  const o = await pending;
+  const receive = WorkerSession.prototype.receive;
+  let t0 = 0;
+  t.mock.method(WorkerSession.prototype, 'receive', function (message: any) {
+    const step = receive.call(this, message);
+    if (step.send.some(m => m.type === 'start')) {
+      t0 = Date.now();
+      const timer = setTimeout(() => c.abort(), 400);
+      t.after(() => clearTimeout(timer));
+    }
+    return step;
+  });
+  const o = await child(fx, { cancelGraceMs: 200 }, 'cancel', c.signal);
+  assert.ok(t0 > 0, 'the genuine hello produced a dispatched start');
   assert.equal(o.state, 'canceled', JSON.stringify({ state: o.state, code: o.code }));
   assert.equal(o.result, undefined);
   assert.deepEqual(o.outputs, []);
   assert.ok(o.exit, 'the worker process was reaped');
-  assert.equal(o.detail?.forced, true, 'the worker does not answer a cancel mid-analysis: it is killed after the grace');
+  // Start dispatch proves running protocol, not entry into analysis or whether exit beats the grace. The unchanged
+  // execution-protocol ack/ignore-cancel control separately requires forced termination for an unresponsive worker.
   assert.ok(Date.now() - t0 < 1_400, 'stopped well before the job would have finished');
 });
 
