@@ -3,7 +3,7 @@ import type { Digest, Id } from './common.js';
 import type { ReportCount } from './report.js';
 import type { NormalizedImport } from '../imports/normalize.js';
 export interface ImportViewEnvelope {
-  schema:'sentinel-import-view/draft-1'; kind:'imported-report'; authority:'owner-associated-imported-claims';
+  schema:'sentinel-import-view/draft-1'; kind:'imported-report'; authority:'owner-associated-imported-claims';disclosure:'owner-local';
   candidateDigest:Digest; root:Digest; withheld:boolean;
   limitation:'accepted-secret-match'|'privacy-unassessed-canceled-run'|null;
   limitationKey:'sentinel.evidence.importedClaims';

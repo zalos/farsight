@@ -452,8 +452,9 @@ export async function main(argv: string[]): Promise<number> {
   const parsed = parseArgs(argv);
   jsonOut = parsed.ok ? parsed.parsed.json : parsed.json;
   if (!parsed.ok) {
-    errOut(argv.find(a=>a!=='--json')==='evidence'?word('sentinel.evidence.inputRefused'):word(parsed.code, { detail: parsed.detail }));
-    return finish(result('unknown', 'refused', { reasonCode: parsed.code }));
+    const evidence=argv.find(a=>a!=='--json')==='evidence',code=evidence?'sentinel.evidence.inputRefused':parsed.code;
+    errOut(evidence?word(code):word(code, { detail: parsed.detail }));
+    return finish(result(evidence?'evidence':'unknown', 'refused', { reasonCode: code }));
   }
   const p = parsed.parsed;
   try {

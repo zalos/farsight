@@ -32,22 +32,34 @@ function refused(command:string,code:string,phase:Phase='preflight',facts:Record
 }
 function count(n:number,unit:string):ReportCount{return{n,unit,scope:'sentinel.evidence.countScope',source:'accepted report-import normalized projection'}}
 export function publicImportView(view:Awaited<ReturnType<typeof readAcceptedReportImport>>):ImportViewEnvelope {
-  const doc:ImportViewEnvelope={...view,kind:'imported-report',authority:'owner-associated-imported-claims',limitation:view.limitation as ImportViewEnvelope['limitation'],schema:'sentinel-import-view/draft-1',limitationKey:'sentinel.evidence.importedClaims',
+  const doc:ImportViewEnvelope={...view,kind:'imported-report',authority:'owner-associated-imported-claims',disclosure:'owner-local',limitation:view.limitation as ImportViewEnvelope['limitation'],schema:'sentinel-import-view/draft-1',limitationKey:'sentinel.evidence.importedClaims',
     counts:{claims:count(view.counts.claims,'sentinel.evidence.claims'),exchanges:count(view.counts.exchanges,'sentinel.evidence.exchanges'),cookies:count(view.counts.cookies,'sentinel.evidence.cookies')}};
   for(const c of Object.values(doc.counts)){c.source=`accepted report import ${doc.candidateDigest}`;c.recheck={cli:`farsight-sentinel evidence read ${doc.candidateDigest} --json`};}
   if(!validateEnvelope('importview',doc).ok)throw Error('import projection unavailable');return doc;
 }
-/** Called only after exact retained authority/privacy validation. Output bounds are independent of persistence. */
+/** Bounded readable JSON. Expansion is counted while constructing, before delivery or export. */
+function prettyJson(value:unknown):string {
+  const parts:string[]=[];let bytes=0;
+  const add=(text:string)=>{bytes+=Buffer.byteLength(text);if(bytes>IMPORT_CLI_LIMITS.outputBytes)throw new OutputLimitError();parts.push(text)};
+  const visit=(v:any,depth:number)=>{
+    if(depth>96)throw new OutputLimitError();
+    if(v===null||typeof v!=='object'){add(JSON.stringify(v).replaceAll('\u2028','\\u2028').replaceAll('\u2029','\\u2029'));return;}
+    const array=Array.isArray(v),keys=array?v.map((_:unknown,i:number)=>i):Object.keys(v);
+    add(array?'[':'{');
+    for(let n=0;n<keys.length;n++){add((n?',':'')+'\n'+'  '.repeat(depth+1));const key=keys[n]!;if(!array)add(JSON.stringify(key)+': ');visit(v[key],depth+1);}
+    if(keys.length)add('\n'+'  '.repeat(depth));add(array?']':'}');
+  };
+  visit(value,0);return parts.join('');
+}
+/** Called only after exact retained authority/privacy validation. These are owner-local projections. */
 export function renderImportDocument(document:ImportViewEnvelope|ImportPageEnvelope,format:'json'|'md'):string {
-  const raw=JSON.stringify(document);
-  if(Buffer.byteLength(raw)>IMPORT_CLI_LIMITS.outputBytes)throw new OutputLimitError();
-  if(format==='json')return raw;
+  const raw=prettyJson(document);if(format==='json')return raw;
   const counts='counts'in document?Object.values(document.counts):[document.count];
   const tips=counts.map(c=>`${sentinelWord(c.unit,{n:c.n})} (${sentinelWord(c.scope)}). ${SENTINEL_CLI_STRINGS[c.unit]!.define}`).join('\n');
   const parts=[`${sentinelWord('sentinel.evidence.importedClaims')}\n\n${tips}\n\n`];let size=Buffer.byteLength(parts[0]!);
-  for(let i=0;i<raw.length;i+=4096){const part=raw.slice(i,i+4096).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('\u2028','\\u2028').replaceAll('\u2029','\\u2029');
-    size+=Buffer.byteLength(part);if(size+5>IMPORT_CLI_LIMITS.outputBytes)throw new OutputLimitError();parts.push(part);}
-  return parts[0]+'    '+parts.slice(1).join('')+'\n';
+  // CommonMark indented code is inert; entity escaping here would corrupt the retained strings.
+  for(const line of raw.split('\n')){const part='    '+line+'\n';size+=Buffer.byteLength(part);if(size>IMPORT_CLI_LIMITS.outputBytes)throw new OutputLimitError();parts.push(part);}
+  return parts.join('');
 }
 async function ancestorFor(store:SentinelStore,runId:string,sourceId:string):Promise<RetainedSourceAncestor>{
   const run=store.ledger.getRun(runId);
@@ -103,7 +115,7 @@ export async function ownerEvidenceCommand(ws:Workspace,p:ParsedCommand):Promise
   const action=p.args.action,target=p.args.target,command=`evidence.${action}`,value=(key:string)=>typeof p.flags[key]==='string'?p.flags[key] as string:undefined;
   const confirm=p.flags['--confirm']===true,format=value('--format')??'json',out=value('--out'),baselineRunId=value('--baseline'),sourceId=value('--source'),expect=value('--expect-candidate');
   if(!target||!['import','read','list','abandon'].includes(action??'')||!['json','md'].includes(format)||
-    (value('--disclosure')!==undefined&&!['private','shareable'].includes(value('--disclosure')!))||
+    Object.hasOwn(p.flags,'--disclosure')||
     (baselineRunId!==undefined&&!ID.test(baselineRunId))||(expect!==undefined&&!DIGEST.test(expect))||(value('--predecessor')!==undefined&&!generatedOperation.test(value('--predecessor')!))||
     ((action==='import'||action==='list')&&(!sourceId||!ID.test(sourceId)||!ID.test(target)))||
     (action==='read'&&!DIGEST.test(target))||(action==='abandon'&&!generatedOperation.test(target))||
@@ -166,10 +178,10 @@ export async function ownerEvidenceCommand(ws:Workspace,p:ParsedCommand):Promise
       text=renderImportDocument(document,format as'json'|'md');
       const combined=result(success.command,success.outcome,{...('reasonCode'in success?{reasonCode:success.reasonCode}:{}),verdicts:success.verdicts,facts:{...success.facts,document}});
       // Acknowledgement has a separate small cap; fully serialized document+wrapper has the output cap.
-      if(Buffer.byteLength(JSON.stringify(combined))>IMPORT_CLI_LIMITS.outputBytes)throw new OutputLimitError();
+      if(evidenceWire({result:combined,...(!p.json?{text}:{})},p.json).result.outcome==='delivery-failed')throw new OutputLimitError();
       if(out){writeNewFile(resolve(out),text);return{result:ack(command,success.outcome,{...success.facts,delivery:'written'})}}
       return{result:combined,...(!p.json?{text}:{})};
     }catch(error){return{result:ack(command,'delivery-failed',{...success.facts,delivery:'refused'},error instanceof OutputLimitError?'outputTooLarge':'deliveryRefused')}}
-  }catch{return{result:metadata.acceptance==='accepted'?ack(command,'delivery-failed',{...metadata,delivery:'refused'},'deliveryRefused'):refused(command,'sourceUnavailable',phase,metadata)}}
+  }catch(error){const cause=(error as{code?:unknown})?.code;const facts=typeof cause==='string'&&['sentinel.execution.canceled','sentinel.execution.deadlineExceeded','sentinel.execution.analysisUnavailable','sentinel.receipt.expired','sentinel.receipt.mismatch','sentinel.receipt.alreadyUsed'].includes(cause)?{...metadata,cause}:metadata;return{result:metadata.acceptance==='accepted'?ack(command,'delivery-failed',{...metadata,delivery:'refused'},'deliveryRefused'):refused(command,'sourceUnavailable',phase,facts)}}
   finally{try{store.close()}catch{/* A close failure cannot roll back a verified publication or expose raw errors. */}}
 }

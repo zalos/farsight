@@ -17,6 +17,10 @@
           "type": "string",
           "const": "owner-associated-imported-claims"
         },
+        "disclosure": {
+          "type": "string",
+          "const": "owner-local"
+        },
         "candidateDigest": {
           "$ref": "#/definitions/Digest"
         },
@@ -76,6 +80,7 @@
         "schema",
         "kind",
         "authority",
+        "disclosure",
         "candidateDigest",
         "root",
         "withheld",

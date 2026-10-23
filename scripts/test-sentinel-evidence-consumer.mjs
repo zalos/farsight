@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// Public npm-only owner imports. Product work uses only the installed executable. Readonly SQLite below observes
-// one real pending stage so this harness can SIGKILL its OWN import process; it never writes/mints store authority.
+// Public npm-only owner imports cover the happy path. A SEPARATE matching built-private-module crash fixture
+// holds the existing default-off after-stage hook before a real SIGKILL. Readonly SQLite observes genuine state;
+// the harness never writes ledger rows or mints acceptance authority.
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {existsSync,mkdirSync,readFileSync,readdirSync,realpathSync,renameSync,writeFileSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {npmConsumer} from './npm-consumer.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),version=JSON.parse(readFileSync(join(root,'packages/sentinel/package.json'))).version;
 const artifact=resolve(process.argv[2]??join(root,'build/sentinel',`farsight-sentinel-${version}.tgz`));
@@ -44,16 +44,34 @@ try{
  do{await delay(1000);after=await call(...importing(detachedId));if(after.body.reasonCode!=='sentinel.evidence.ownerBusy')break}while(Date.now()<end);
  assert.equal(after.status,4,'natural owner release, without service activity or forced stop');
  const detachedAccepted=await call(...importing(detachedId),'--confirm');assert.equal(detachedAccepted.status,0);assert.equal((await call('evidence','read',candidate)).status,0,'source-gone parent read');
- // Original bounded report large enough to observe a real fixed stage before its asynchronous object writes end.
- const heavy={version:'2.1.0',runs:[{tool:{driver:{name:'original-interrupted-import'}},results:Array.from({length:5000},(_,i)=>({ruleId:`original-${i}`,message:{text:Array.from({length:8},(_,j)=>createHash('sha256').update(`original fixture ${i}:${j}`).digest('hex')).join('')}}))}]};
- writeFileSync(reportPath,JSON.stringify(heavy));
- const child=spawn(bin,[...importing(detachedId),'--confirm','--json'],{cwd:ws,env,stdio:['ignore','pipe','pipe']});ownedPids.add(child.pid);children.set(child.pid,child);
- child.stdout.resume();child.stderr.resume();let exit;const exited=new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',(code,signal)=>{exit={code,signal};resolve(exit)})});
- const db=new DatabaseSync(ledger,{readOnly:true});let pending;
- try{const until=Date.now()+30000;while(Date.now()<until&&!exit){pending=db.prepare("SELECT o.id,o.identity FROM evidence_operations o JOIN staging s ON s.evidence_operation_id=o.id WHERE o.run_id=? AND o.state='open' ORDER BY o.created_at DESC LIMIT 1").get(detachedId);if(pending){child.kill('SIGKILL');break}await delay(1)}}finally{db.close()}
- if(!pending&&!exit)child.kill('SIGKILL');await exited;ownedPids.delete(child.pid);assert.ok(pending,'observed the actual import stage');assert.equal(exit.signal,'SIGKILL');
- const stopped=new DatabaseSync(ledger,{readOnly:true});try{assert.equal(stopped.prepare('SELECT state FROM evidence_operations WHERE id=?').get(pending.id).state,'open');assert.equal(stopped.prepare('SELECT count(*) AS n FROM evidence_acceptances WHERE operation_id=?').get(pending.id).n,0)}finally{stopped.close()}
- const identity=JSON.parse(pending.identity),receipt=join(env.XDG_STATE_HOME,'farsight/sentinel/trust/receipts',identity.receiptId+'.spent');assert.ok(existsSync(receipt),'genuine consumed receipt before process death');
+ // Separate controlled crash fixture uses matching built private modules, not an installed public API,
+ // public flag, report input or altered package. Public happy flow and abandon still use the installed executable.
+ // It signals and holds the genuine after-stage boundary, removing commit-vs-poll timing assumptions.
+ const privateDist=join(root,'packages/sentinel/dist');
+ assert.ok(existsSync(join(privateDist,'evidence/test-hooks.js')),'build matching private fixture modules first');
+ async function privatePending(name){
+  const marker=join(dir,name+'-stage-ready'),harness=join(dir,name+'-stage-crash.mjs');
+  writeFileSync(reportPath,JSON.stringify({version:'2.1.0',runs:[{tool:{driver:{name}},results:[]}]}));
+  writeFileSync(harness,`import {writeFileSync} from 'node:fs';\nimport {evidenceIo} from ${JSON.stringify(pathToFileURL(join(privateDist,'evidence/test-hooks.js')).href)};\nevidenceIo.after=point=>{if(point==='after-stage'){writeFileSync(${JSON.stringify(marker)},'after-stage',{flag:'wx',mode:0o600});Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,120000);throw Error('private controlled hold expired')}};\nawait import(${JSON.stringify(pathToFileURL(join(privateDist,'cli.js')).href)});\n`);
+  const child=spawn(process.execPath,[harness,...importing(detachedId),'--confirm','--json'],{cwd:ws,env,stdio:['ignore','pipe','pipe']});ownedPids.add(child.pid);children.set(child.pid,child);
+  child.stdout.resume();child.stderr.resume();let exit;const exited=new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',(code,signal)=>{exit={code,signal};resolve(exit)})});
+  const until=Date.now()+30000;while(!existsSync(marker)&&!exit&&Date.now()<until)await delay(10);
+  assert.ok(existsSync(marker),'private built hook reached genuine after-stage');assert.equal(readFileSync(marker,'utf8'),'after-stage');
+  const db=new DatabaseSync(ledger,{readOnly:true});let pending;
+  try{pending=db.prepare("SELECT o.id,o.identity FROM evidence_operations o JOIN staging s ON s.evidence_operation_id=o.id WHERE o.run_id=? AND o.state='open'").get(detachedId);assert.ok(pending,'genuine pending stage while own process is held');}finally{db.close()}
+  child.kill('SIGKILL');await exited;ownedPids.delete(child.pid);assert.equal(exit.signal,'SIGKILL');
+  const stopped=new DatabaseSync(ledger,{readOnly:true});try{assert.equal(stopped.prepare('SELECT state FROM evidence_operations WHERE id=?').get(pending.id).state,'open');assert.equal(stopped.prepare('SELECT count(*) AS n FROM evidence_acceptances WHERE operation_id=?').get(pending.id).n,0)}finally{stopped.close()}
+  const identity=JSON.parse(pending.identity),receipt=join(env.XDG_STATE_HOME,'farsight/sentinel/trust/receipts',identity.receiptId+'.spent');assert.ok(existsSync(receipt),'genuine consumed receipt before process death');return pending;
+ }
+ const transferred=await privatePending('original-controlled-transfer');
+ const transfer=await call(...importing(detachedId),'--predecessor',transferred.id,'--confirm');assert.equal(transfer.status,0);assert.equal(transfer.body.facts.reused,false);
+ const transferDb=new DatabaseSync(ledger,{readOnly:true});try{
+  assert.equal(transferDb.prepare('SELECT state FROM evidence_operations WHERE id=?').get(transferred.id).state,'superseded');
+  const accepted=transferDb.prepare('SELECT a.operation_id,o.identity FROM evidence_acceptances a JOIN evidence_operations o ON o.id=a.operation_id WHERE a.candidate_digest=?').get(transfer.body.facts.candidateDigest);assert.notEqual(accepted.operation_id,transferred.id);assert.equal(transferDb.prepare('SELECT state FROM evidence_operations WHERE id=?').get(accepted.operation_id).state,'accepted');
+  for(const role of ['raw','manifest','normalized','candidate'])assert.equal(JSON.parse(transferred.identity).publication.roles[role],JSON.parse(accepted.identity).publication.roles[role]);
+  assert.equal(transferDb.prepare('SELECT count(*) AS n FROM staging WHERE evidence_operation_id IN (?,?)').get(transferred.id,accepted.operation_id).n,0);
+ }finally{transferDb.close()}
+ const pending=await privatePending('original-controlled-abandon');
  assert.equal((await call('evidence','abandon',pending.id)).status,4);const abandoned=await call('evidence','abandon',pending.id,'--confirm');assert.equal(abandoned.status,0);assert.equal(abandoned.body.facts.objectBytesDeleted,false);
  const checked=new DatabaseSync(ledger,{readOnly:true});try{assert.equal(checked.prepare('SELECT count(*) AS n FROM staging WHERE evidence_operation_id=?').get(pending.id).n,0);assert.equal(checked.prepare('SELECT state FROM evidence_operations WHERE id=?').get(pending.id).state,'aborted')}finally{checked.close()}
  // Optional native current/baseline/selected privacy through this same installed owner executable.
@@ -76,13 +94,14 @@ try{
   const cleanImport=await call(...importing(cleanPlan.body.facts.planId),'--confirm');assert.equal(cleanImport.status,0);assert.equal(cleanImport.body.facts.document.withheld,false);
   renameSync(join(ws,'src'),join(dir,'source-away-again'));
   const baseline=await call('evidence','read',cleanImport.body.facts.candidateDigest,'--baseline',selectedId);assert.equal(baseline.status,0);assert.equal(baseline.body.facts.document.document,null);assert.equal(JSON.stringify(baseline).includes(value),false);
-  for(const profile of ['private','shareable']){const read=await call('evidence','read',secretImport.body.facts.candidateDigest,'--disclosure',profile);assert.equal(read.status,0);assert.equal(JSON.stringify(read).includes(value),false)}
+  for(const format of ['json','md']){const read=await call('evidence','read',secretImport.body.facts.candidateDigest,'--format',format);assert.equal(read.status,0);assert.equal(JSON.stringify(read).includes(value),false)}
+  for(const flagValue of ['private','shareable','original-private-value']){const refused=await call('evidence','read',secretImport.body.facts.candidateDigest,'--disclosure',flagValue);assert.equal(refused.status,3);assert.equal(refused.body.reasonCode,'sentinel.evidence.inputRefused');assert.equal(JSON.stringify(refused.body).includes(flagValue),false)}
   const records=new DatabaseSync(ledger,{readOnly:true});try{for(const row of records.prepare('SELECT envelope,final_envelope FROM attempts').all()){const worker=JSON.parse(row.final_envelope??row.envelope).worker;if(worker.kind==='owned-container'){assert.equal(worker.ownershipLabels.store,JSON.parse(pending.identity).storeId);ownContainers.push(worker.containerId)}}}finally{records.close()}
   ownContainers=[...new Set(ownContainers)];assert.ok(ownContainers.length>=2);
   for(const id of ownContainers){assert.match(id,/^[0-9a-f]{64}$/);const listed=await c.exec('docker',['container','ls','--all','--no-trunc','--filter','id='+id,'--format','{{.ID}}']);assert.equal(listed.stdout.trim(),'','exact own accepted container was removed')}
   nativePrivacy=true;
  }
- console.log('sentinel evidence consumer ok: '+JSON.stringify({installed:true,sourceGone:true,detachedBusy:true,naturalRelease:true,interruptedPending:true,explicitAbandon:true,nativePrivacy,ownContainers}));
+ console.log('sentinel evidence consumer ok: '+JSON.stringify({installed:true,sourceGone:true,detachedBusy:true,naturalRelease:true,privateControlledCrash:true,installedTransfer:true,interruptedPending:true,explicitAbandon:true,nativePrivacy,ownContainers}));
 }finally{
  // Only processes whose handles/descriptors were recorded inside this consumer's own private workspace.
  for(const pid of ownedPids){

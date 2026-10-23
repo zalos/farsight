@@ -66,12 +66,13 @@ test('genuine current/baseline/selected accepted secret evidence withholds the w
   for(const id of [parent,child,clean]){
     const imported=cli('import',id,'--source',anchors.get(id)!,'--report',files.reportPath,'--manifest',files.manifestPath,'--confirm');
     assert.equal(imported.status,0);assert.equal(imported.body.facts.reused,true);
-    for(const profile of ['private','shareable'])for(const format of ['json','md']){
-      const read=cli('read',candidates.get(id)!,'--disclosure',profile,'--format',format);
+    for(const format of ['json','md']){
+      const read=cli('read',candidates.get(id)!,'--format',format);
       assert.equal(read.status,0);assert.equal(read.body.facts.document.withheld,id!==clean);
       if(id!==clean){absent(JSON.stringify(read.body),'public current/selected projection',GENERIC_VALUE);absent(JSON.stringify(read.body),'public current/selected filename');}
     }
   }
+  for(const value of ['private','shareable','original-private-value']){const refused=cli('read',candidates.get(parent)!,'--disclosure',value);assert.equal(refused.status,3);assert.equal(refused.body.reasonCode,'sentinel.evidence.inputRefused');assert.equal(JSON.stringify(refused.body).includes(value),false);}
   const publicBaseline=cli('read',candidates.get(clean)!,'--baseline',child);assert.equal(publicBaseline.status,0);assert.equal(publicBaseline.body.facts.document.document,null);absent(JSON.stringify(publicBaseline.body),'public baseline-only',GENERIC_VALUE);
   const exportPath=join(dir,VALUE+'.md'),exported=cli('read',candidates.get(parent)!,'--format','md','--out',exportPath);
   assert.equal(exported.status,0);absent(JSON.stringify(exported.body),'public export acknowledgement');absent(readFileSync(exportPath,'utf8'),'public exported Markdown',GENERIC_VALUE);

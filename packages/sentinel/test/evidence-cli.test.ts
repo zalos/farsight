@@ -91,11 +91,11 @@ test('recorded acceptance with failed readback has a bounded uncertain acknowled
  const read=call(s,'read',String(output.result.facts.candidateDigest));assert.equal(read.status,0);assert.equal(names(s).filter(n=>n.endsWith('.spent')).length,spent);
 });
 
-test('render bound is exact for compact JSON; Markdown neutralizes source HTML and always labels imported claims',()=>{
+test('render bound is exact for pretty JSON; Markdown preserves data in inert indented code',()=>{
  const base:any=JSON.parse(readFileSync(new URL('./contracts/valid/importview.json',import.meta.url),'utf8'));
- const size=Buffer.byteLength(JSON.stringify({...base,document:''}));base.document='x'.repeat(IMPORT_CLI_LIMITS.outputBytes-size);
+ const size=Buffer.byteLength(JSON.stringify({...base,document:''},null,2));base.document='x'.repeat(IMPORT_CLI_LIMITS.outputBytes-size);
  assert.equal(Buffer.byteLength(renderImportDocument(base,'json')),IMPORT_CLI_LIMITS.outputBytes);base.document+='x';assert.throws(()=>renderImportDocument(base,'json'),/too large/);
- base.document='</pre><script>original</script>\n```';const md=renderImportDocument(base,'md');assert.equal(md.includes('<script>'),false);assert.ok(md.includes('&lt;script&gt;'));assert.match(md,/no control or coverage/);
+ base.document='</pre><script>original</script>\n```';const md=renderImportDocument(base,'md');assert.ok(md.includes('<script>'));assert.equal(md.includes('&lt;script&gt;'),false);assert.deepEqual(JSON.parse(md.split('\n').filter(l=>l.startsWith('    ')).map(l=>l.slice(4)).join('\n')),base);assert.match(md,/no control or coverage/);
 });
 
 

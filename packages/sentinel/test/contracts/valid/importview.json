@@ -27,5 +27,6 @@
       "source": "accepted report-import projection"
     }
   },
-  "document": null
+  "document": null,
+  "disclosure": "owner-local"
 }
