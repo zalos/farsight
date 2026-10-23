@@ -558,6 +558,16 @@ provider/model selection per stage and entry-point review plus a linked rerun, a
 outputs and usage certainty. Mocks support regression checks but do not substitute for these real transport
 gates. Missing approved configuration/credentials leaves qualification open, never triggers local fallback.
 
+Every model-enabled stage/scan segment retains a versioned instruction manifest: exact Sentinel-rendered
+prompt/message bytes and template identity, ordered selected skills with version/content digest and the actual
+captured text/resources included, source packet identity, configured provider/model and CLI version/profile,
+reported identity, outputs and usage certainty. Distinguish selected, loaded and rendered skills. Preserve these
+private artifacts after source removal, apply run-wide secret withholding to their projections, and exclude
+credentials and private reasoning. Disable ambient instructions where qualified; label vendor-hidden instructions
+as unobserved rather than inventing their contents. A prompt, skill or model change binds a new linked rerun
+and retains prior results. Deterministic stages show these choices as not applicable. The GUI displays the same
+manifest and evidence as the CLI and permits authorized inspection and rerun through the existing owner flow.
+
 No silent retries of ambiguous paid calls. A retry policy states its maximum attempts and additional reservation.
 Model aliases and host-reported identity are recorded at their actual strength, not inferred from response text.
 Store concise reasons and evidence, not private chain-of-thought. Provider terms are endpoint-specific records,

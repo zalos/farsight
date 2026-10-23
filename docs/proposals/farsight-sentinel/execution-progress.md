@@ -175,6 +175,17 @@ All planned packages progress to the end of the backlog, then the end gates belo
   on 2026-10-22. Implementation, dependency gates and empirical qualification remain pending; design approval
   is not execution evidence or permission for a broader target.
 
+## Delivery focus — owner direction 2026-10-23
+
+Prioritize a usable CLI-adapter and UX workflow today: configure provider/model per review stage or scan segment,
+retain and inspect the exact prompt and ordered skills used, view captured inputs/outputs, and perform a linked
+rerun with prior results intact. SOL implements; Claude reviews; the lead owns integration and acceptance.
+Complete the active prerequisite, privacy and preparation corrections, then concentrate workers on CLI profiles,
+retained instruction/entry-point artifacts and the real owner UI. Broader cookie, differential and release-only
+expansion must not delay this usable workflow; their existing end gates remain recorded and are not waived.
+Validate actual hosted-only and supported CLI-only operation with local inference absent/forbidden. Unsupported
+profiles and missing approved credentials remain visible, and mocks never become transport qualification.
+
 ## Current integration critical path
 
 The bounded planner-authentication correction (#162), exact capture boundary (#163) and shared retained-source /
@@ -246,13 +257,13 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 | 19 | Finding identity, comparison, standalone report | 10–18 | in progress | Identity stable under movement; standalone HTML/Markdown/JSON readable offline | Owner-command slice merged as [#155](https://github.com/zalos/farsight/pull/155), `63ecf4f0`, after all required/selected CI; accepted-publication and owner-context binding, conservative secret withholding, installed five-engine comparison, official SARIF and offline-browser checks passed; framework inspection projection merged #160 (`assessment: none`); path/decision/import projection, CLI/MCP/GUI parity and clean-recipient replay/delivery remain open |
 | 19a | Retained entry-point code walkthroughs | 18, 19 context/disclosure | pending | Complete selected captured bodies; explicit branches/boundaries; private safe Markdown; pinned web parity and source-gone replay | Owner requirement added 2026-10-23 after Astra source/plan review; existing live web enrichment and PR 18 shortest paths do not satisfy this gate; implementation not started |
 | 20 | Dispositions, assertions, runtime-evidence import | 19 | in progress | Decisions bound to scoped evidence and expiry | Reviewed pure kernel `b4ded90c`; Stage-A parser/privacy/budget corrections independently approved at `a8f0da3d`; private atomic import acceptance/readback/transfer/abandonment checkpoint `d666f0cd` independently approved with real crash and native privacy controls; public owner imports are independently reviewed and integrated at `41897d55`, with 200 affected checks and actual npm-only acceptance passing; merge/CI remain pending. Genuine finding-bound decisions, service-owned import, expiry/reopening, report integration and the qualified cookie story remain open |
-| 21 | Company-approved API/CLI and optional local providers | 08, 09, 07 for container CLI | in progress | Redirects, truncation, cancellation, unpriced endpoints handled | Provider transport/budget library merged #156; owner extended scope 2026-10-23 to company policy, hosted-only/CLI-only operation and qualified Claude/Copilot CLI adapters; these and trusted owner admission, configured selection, recovery and disclosure integration remain open; no CLI-provider support claim yet |
+| 21 | Company-approved API/CLI and optional local providers | 08, 09, 07 for container CLI | in progress | Redirects, truncation, cancellation, unpriced endpoints handled | Provider transport/budget library merged #156; owner extended scope 2026-10-23 to company policy, hosted-only/CLI-only operation and qualified Claude/Copilot CLI adapters; these and trusted owner admission, configured selection, recovery and disclosure integration remain open; no CLI-provider support claim yet; exact per-segment prompt/skill manifest is now required |
 | 22 | Guided and general model review | 18–21, 19a input | in progress | E5/E8 under configured budgets and accepted thresholds; live evaluation awaits the second-model configuration | Private model checkpoint and settings exist; deadline/cancel/disclosure/quote/budget and authority corrections, independent verification, exact citations/adversarial controls and the two-model 600-evaluation gate remain open |
 | 23a | Deterministic MCP and placed evidence | 20, schema with 24 | in progress | Read access cannot mutate or admit paid work | Read-only service/MCP merged #166 (`cce989d4`) after independent review, installed SDK/native privacy, graph/browser acceptance and fifteen final checks; existing-run controls merged #167 (`919e26c6`) with eighteen passing final checks; durable preparation, configuration, host placement and full canonical parity remain open |
 | 23b | Fenced external review claims | 22, 23a | pending | Cross-workspace, expired and duplicate submissions fail | — |
 | 24 | Optional Farsight host bridge | 09, 20 | pending | Origin/body/path guards, version mismatch, absent service handled | — |
 | 25 | Deterministic GUI and placement | 23a, 24, 19a delivery | pending | CLI/MCP/GUI agree; configure → preview → run → stage I/O → rerun → compare demonstrated | — |
-| 25b | Model review and disclosure in the GUI | 22, 25 | pending | Policy-aware API/CLI/local provider/model picker for stages and entry points; review never changes deterministic totals | — |
+| 25b | Model review and disclosure in the GUI | 22, 25 | pending | Policy-aware API/CLI/local provider/model picker for stages and entry points; review never changes deterministic totals; inspect actual prompt/skills and rerun with retained outputs | — |
 | 26 | Replay, retention, packaging, deterministic release gate | 01–20 including 19a, 23a, 24, 25 | in progress | Restored bundle works without the checkout; accepted E1–E4/E7/E8 | Private packaging/bundle/retention prework exists; complete retained closure, safe restore, explicit pin/prune, installed CLI/MCP/bridge/GUI replay, standalone recipient report and both independent tarballs remain open |
 | 27 | Conservative differential selection | 26 | pending | Every reuse justified by explicit dependencies | — |
 | 28 | Differential/full audit and enablement | 27 | pending | Zero unexplained differences vs full scans | — |

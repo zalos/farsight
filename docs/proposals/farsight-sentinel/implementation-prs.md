@@ -650,6 +650,16 @@ PR 23b handles externally coordinated agents/claims separately; managed CLI outp
 Agent-requested follow-on stages are proposals under the actual transport principal; effectful/paid admission
 still requires its applicable owner receipt, which the model channel cannot mint or satisfy.
 
+Each model-enabled stage or scan segment has an explicit configured provider/model selection and a retained
+instruction manifest. Preserve the exact Sentinel-rendered prompt and message bytes, template identity/version,
+ordered selected skills with their version/content digest and captured text/resources actually included, source
+packet identity, CLI executable/version/profile, requested versus reported model, bounded output and usage
+certainty. Store private prompt/skill artifacts under the same run-wide withholding and disclosure policy as
+source; credentials and private reasoning are never part of them. Distinguish selected skills from skills actually
+loaded/rendered. Ambient instructions are disabled or explicitly identified as unobserved; never claim to have
+captured a vendor's hidden instructions. Changing model, prompt or skills creates a newly bound linked rerun,
+with previous inputs and outputs retained. Deterministic stages label model/skills as not applicable.
+
 
 **Done when:** mocked redirects, oversized/truncated output, cancellation, malformed identity, unpriced endpoint
 and concurrent budget reservations behave correctly. Hosted-only/CLI-only operation works with local models
@@ -790,6 +800,11 @@ Show company-permitted hosted API, approved CLI and optional local choices, with
 unavailable options. Local-model prohibition applies before discovery/startup; no automatic fallback. Preview availability, disclosure
 and budget changes before admission; changing a model creates a linked rerun over the selected retained inputs.
 Show requested versus reported actual model identity and preserve both outputs for comparison.
+
+A segment detail shows the exact prompt used and the ordered skill names/versions/digests, with an authorized
+retained-content view or a clear withheld reason. The user can inspect captured inputs and outputs, change the
+per-segment model or instruction selection, preview the changed scope/disclosure/budget, and start a linked
+rerun. Choices are real configured capabilities; unavailable profiles cannot become enabled by a UI toggle.
 
 **Done when:** enabling review does not change deterministic totals, absent provider states are clear, canceled
 paid calls retain uncertainty, and business/code registers explain the same evidence limits. Run applicable
