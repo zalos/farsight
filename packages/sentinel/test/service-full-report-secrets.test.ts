@@ -8,7 +8,8 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore } from '../dist/store/index.js';
-import { workspaceOf, adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, scratchUnder, removeScratch } from '../dist/service/local.js';
+import { workspaceOf, adoptedPolicy, adoptWorkspaceSettings, promoteRulePack } from '../dist/service/local.js';
+import { scratchUnder, removeScratch } from './lease-helpers.ts';
 import { initWorkspace } from '../dist/cli/init.js';
 import { planWorkspaceCanonical } from '../dist/service/canonical.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
@@ -51,7 +52,7 @@ async function publishedSecrets(t: any, mode: string) {
   const adopted = adoptedPolicy(ws); assert.ok('policy' in adopted);
   const store = await openStore(ws.storePath);
   t.after(() => { try { store.close(); } catch { /* closed */ } unlock(dir); rmSync(dir, { recursive: true, force: true }); });
-  const work = scratchUnder(ws);
+  const work = scratchUnder(store);
   t.after(() => removeScratch(work));
   const prepared = await planWorkspaceCanonical(store, { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() });
   const runId = prepared.disclosure.runId;

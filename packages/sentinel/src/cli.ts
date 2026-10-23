@@ -6,7 +6,7 @@ import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { REPORT_FORMATS, type ReportFormat } from './service/full-report.js';
 import {
-  adoptWorkspaceSettings, confirmForService, currentRules, followWorkspaceRun, promoteRulePack, planWorkspace, previewReport, runPlan, describeRun, runStatus, workspaceOf, PolicyError, fullReportIn,
+  adoptWorkspaceSettings, confirmForService, currentRules, followWorkspaceRun, promoteRulePack, planWorkspace, previewReport, runPlan, describeRun, runStatus, workspaceOf, checkWorkspaceLayout, PolicyError, fullReportIn,
   type Workspace,
 } from './service/local.js';
 import { connectService, readServiceDescriptor, serveWorkspace } from './service/owner-service.js';
@@ -153,7 +153,10 @@ function init(p: ParsedCommand): number {
 /** The workspace a command acts on: --workspace or the current folder, by its canonical path. */
 function workspaceFor(p: ParsedCommand) {
   const given = typeof p.flags['--workspace'] === 'string' ? p.flags['--workspace'] : process.cwd();
-  return workspaceOf(realpathSync.native(given));
+  const ws = workspaceOf(realpathSync.native(given));
+  // Before any command touches trust state or starts a service: trust state never lives in the captured checkout.
+  checkWorkspaceLayout(ws);
+  return ws;
 }
 
 /** Prints a service result: JSON whole, or its outcome words, reason and the facts a reader needs. */

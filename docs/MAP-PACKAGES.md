@@ -206,10 +206,12 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   process), `src/service/canonical.ts` (plan and run through the canonical planner, admission and coordinator; results from the
   ledger; `selectedRerun` plans a strict-subset rerun, ADR 43), `src/execution/selection.ts` (the admitted
   `sentinel-rerun-selection/draft-1` record and its check), `src/service/owner-service.ts` (the background service: socket, descriptor, receipts bound to their instance,
-  one run at a time, pause/cancel/wait), `src/service/launch.ts` (the one process the CLI starts: its own `serve`),
+  one run at a time, pause/cancel/wait), `src/service/scratch-lease.ts` (a run's scratch lease inside the held store,
+  released only on scoped stopped-consumer proof, ADR 46), `src/service/launch.ts` (the one process the CLI starts: its own `serve`),
   `src/service/rule-locks.ts` + `publish-once.ts` (the owner's lock revisions, packs and chain links, published whole),
   `src/service/trusted-profile.ts` (the shipped registry and execution profile), `src/service/package-paths.ts`, `src/adapters/preview-detector.ts`
-  (the one original coded check), `src/transport/ipc.ts` (the owner socket and handshake) and `src/reports/preview.ts`;
+  (the one original coded check), `src/transport/ipc.ts` (the owner socket and handshake; a reached runtime folder inside
+  the workspace is refused) and `src/reports/preview.ts`;
   `scripts/test-sentinel-preview-consumer.mjs` runs the npm-only path from the packed tarball, including a selected rerun
   with the source gone; `test/selected-rerun.test.ts` and, with `SENTINEL_ISOLATION=1`, `test/selected-rerun-containers.test.ts`.
 

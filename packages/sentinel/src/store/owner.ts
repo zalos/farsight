@@ -41,6 +41,8 @@ export interface StoreOwner {
   /** Unique per acquisition (`epoch-<uuid>`); the coordinatorEpoch that fences work started under another owner. */
   readonly epoch: Id;
   readonly filesystem: FilesystemIdentity;
+  /** The store folder's `dev:ino` seen at acquisition; assertHeld() re-checks the folder still has it. */
+  readonly rootIdentity: FileIdentity;
   /** The checked SQLite runtime; ledger code opens its connection through `runtime.sqlite`. */
   readonly runtime: SqliteRuntime;
   /** False once closed, closing or lost. Cheap; does not re-check identity (assertHeld does). */
@@ -219,6 +221,7 @@ class Owner implements StoreOwner {
   }
 
   get storePath(): string { return this.layout.root; }
+  get rootIdentity(): FileIdentity { return this.#rootIdentity; }
   get held(): boolean { return this.#state === 'held'; }
 
   assertHeld(): void {

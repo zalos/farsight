@@ -27,6 +27,7 @@ export const SENTINEL_STORE_STRINGS: Record<string, StringEntry> = {
   'sentinel.store.ownerLost': same('this process no longer holds the store lock', 'The lock behind this ownership handle is no longer held, so work under it must stop.'),
   'sentinel.store.resourceCloseFailed': same('a store resource failed to close before the lock was released', 'Resources registered with the owner close before its lock is released. One of them failed; the lock was still released.'),
   'sentinel.store.ioFailure': same('the store could not be read or written ({operation})', 'An operating system error stopped a store operation. The error code is recorded; no partial ownership is kept.'),
+  'sentinel.store.scratchUnsafe': same('the store\'s scratch folder is not a private folder of this user ({path})', 'Scratch for a run lives inside the store this process holds, in folders it makes itself, closed to everyone else. A link, another user\'s folder or one open to others is refused, never changed or followed.'),
 };
 
 export function sentinelStoreWord(key: string, values: Record<string, string | number> = {}): string {

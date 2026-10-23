@@ -21,7 +21,7 @@ export const SNAPSHOT_ERROR_CODES = Object.freeze([
   'sentinel.capture.invalidRequest', 'sentinel.capture.rootNotCanonical', 'sentinel.capture.rootUnreadable',
   'sentinel.capture.notRepository', 'sentinel.capture.gitUnsupported', 'sentinel.capture.revisionUnresolved',
   'sentinel.capture.unstable', 'sentinel.capture.manifestTooLarge', 'sentinel.capture.contractInvalid',
-  'sentinel.capture.notSnapshot', 'sentinel.capture.restoreTargetUnsafe', 'sentinel.capture.restoreIntegrity', 'sentinel.capture.locationUnresolved',
+  'sentinel.capture.notSnapshot', 'sentinel.capture.storeAliased', 'sentinel.capture.restoreTargetUnsafe', 'sentinel.capture.restoreIntegrity', 'sentinel.capture.locationUnresolved',
 ] as const);
 export type SnapshotErrorCode = typeof SNAPSHOT_ERROR_CODES[number];
 

@@ -6,7 +6,8 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore } from '../dist/store/index.js';
-import { workspaceOf, adoptWorkspaceSettings, adoptedPolicy, promoteRulePack, scratchUnder, removeScratch } from '../dist/service/local.js';
+import { workspaceOf, adoptWorkspaceSettings, adoptedPolicy, promoteRulePack } from '../dist/service/local.js';
+import { scratchUnder, removeScratch } from './lease-helpers.ts';
 import { initWorkspace } from '../dist/cli/init.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
 import { adoptScannerAsset } from '../dist/service/scanner-assets.js';
@@ -38,7 +39,7 @@ for (const hasSecret of [true, false]) test('Pattern-only child respects ' + (ha
   for (const pack of ['pattern', 'secrets']) assert.equal(promoteRulePack(ws, { packDir: realpathSync.native(builtinPackDir(pack)!), confirm: true, now: new Date() }).outcome, 'prepared');
   for (const id of ['pattern-semgrep', 'secrets-gitleaks']) assert.equal((await adoptScannerAsset(ws, { kind: 'tool', id, confirm: true, now: new Date() })).outcome, 'prepared');
   const adopted = adoptedPolicy(ws); assert.ok('policy' in adopted);
-  const store = await openStore(ws.storePath), work = scratchUnder(ws);
+  const store = await openStore(ws.storePath), work = scratchUnder(store);
   t.after(() => { try { store.close(); } catch { /* closed for the actual CLI read below */ } removeScratch(work); unlock(dir); rmSync(dir, { recursive: true, force: true }); });
   const terms = { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() };
   const parentId = (await planWorkspaceCanonical(store, terms)).disclosure.runId;
@@ -179,7 +180,7 @@ for (const hasSecret of [true, false]) test(`a canceled parent with an accepted 
   for (const pack of ['pattern', 'secrets']) assert.equal(promoteRulePack(ws, { packDir: realpathSync.native(builtinPackDir(pack)!), confirm: true, now: new Date() }).outcome, 'prepared');
   for (const id of ['pattern-semgrep', 'secrets-gitleaks']) assert.equal((await adoptScannerAsset(ws, { kind: 'tool', id, confirm: true, now: new Date() })).outcome, 'prepared');
   const adopted = adoptedPolicy(ws); assert.ok('policy' in adopted);
-  const store = await openStore(ws.storePath), work = scratchUnder(ws);
+  const store = await openStore(ws.storePath), work = scratchUnder(store);
   t.after(() => { try { store.close(); } catch { /* closed for the actual CLI read below */ } removeScratch(work); unlock(dir); rmSync(dir, { recursive: true, force: true }); });
   const terms = { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() };
 

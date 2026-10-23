@@ -24,7 +24,8 @@ export type StoreErrorCode =
   | 'sentinel.store.ownerClosed'
   | 'sentinel.store.ownerLost'
   | 'sentinel.store.resourceCloseFailed'
-  | 'sentinel.store.ioFailure';
+  | 'sentinel.store.ioFailure'
+  | 'sentinel.store.scratchUnsafe';
 
 /** Every code, in catalog order; a test pins it against the catalog so the two cannot drift. */
 export const STORE_ERROR_CODES: readonly StoreErrorCode[] = Object.freeze([
@@ -34,7 +35,7 @@ export const STORE_ERROR_CODES: readonly StoreErrorCode[] = Object.freeze([
   'sentinel.store.pathPermissions', 'sentinel.store.ancestorUnsafe', 'sentinel.store.filesystemUnsupported',
   'sentinel.store.fileUnsafe', 'sentinel.store.identityChanged', 'sentinel.store.lockFileCorrupt', 'sentinel.store.ownedElsewhere',
   'sentinel.store.ownershipUncertain', 'sentinel.store.ownerClosed', 'sentinel.store.ownerLost',
-  'sentinel.store.resourceCloseFailed', 'sentinel.store.ioFailure',
+  'sentinel.store.resourceCloseFailed', 'sentinel.store.ioFailure', 'sentinel.store.scratchUnsafe',
 ] as const);
 
 export type StoreErrorDetail = Record<string, string | number | boolean | null | readonly string[]>;

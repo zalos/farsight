@@ -22,7 +22,10 @@ try {
  const ws=join(scratch,'workspace');mkdirSync(join(ws,'src'),{recursive:true});
  writeFileSync(join(ws,'package.json'),JSON.stringify({name:'original-inspection-example',version:'1.0.0',dependencies:{express:'4.21.2'}}));
  writeFileSync(join(ws,'package-lock.json'),JSON.stringify({name:'original-inspection-example',lockfileVersion:3,packages:{'':{dependencies:{express:'4.21.2'}},'node_modules/express':{version:'4.21.2',resolved:'https://registry.npmjs.org/express/-/express-4.21.2.tgz'}}}));
- writeFileSync(join(ws,'src/routes.ts'),"import express from 'express'; const app=express(); app.get('/original', (_req,res)=>res.send('example'));\n");
+ // An original guarded route beside an otherwise identical one with no control, and arbitrary application files
+ // under .farsight: the canonical capture leaves out only the held store, so nothing here is a capture gap.
+ writeFileSync(join(ws,'src/routes.ts'),"import express from 'express';\nconst app=express();\nfunction requireUser(req,res,next){ if(!req.user) return res.status(401).end(); next(); }\napp.get('/open', (_req,res)=>res.send('example'));\napp.get('/guarded', requireUser, (_req,res)=>res.send('example'));\n");
+ mkdirSync(join(ws,'.farsight/custom'),{recursive:true});writeFileSync(join(ws,'.farsight/custom/notes.md'),'# original notes kept with the application\n');
  const env={...c.env,HOME:join(scratch,'home'),XDG_STATE_HOME:join(scratch,'owner')};mkdirSync(env.HOME);
  const bin=c.bin('farsight-sentinel');
  const call=async(...args)=>{try{const r=await c.exec(bin,[...args,'--json'],{cwd:ws,env});return{status:0,body:JSON.parse(r.stdout)}}catch(e){if(typeof e.code!=='number')throw e;return{status:e.code,body:JSON.parse(e.stdout)}}};
@@ -39,6 +42,18 @@ try {
  const cleanJson=await full(id,'json'),cleanHtml=await full(id,'html');
  if(process.env.FARSIGHT_FRAMEWORK_EVIDENCE){mkdirSync(process.env.FARSIGHT_FRAMEWORK_EVIDENCE,{recursive:true,mode:0o700});writeFileSync(join(process.env.FARSIGHT_FRAMEWORK_EVIDENCE,'clean.json'),cleanJson,{mode:0o600});writeFileSync(join(process.env.FARSIGHT_FRAMEWORK_EVIDENCE,'clean.html'),cleanHtml,{mode:0o600});}
  const before=JSON.parse(cleanJson);assert.equal(before.inspections.length,1);assert.equal(before.findings.length,0);assert.equal(before.inspections[0].assessment,'none');
+ // The ordinary installed layout states the modeled answers with no capture gap: no control before /open's handler
+ // (does-not-apply, never a missing-control finding), and /guarded's cited refusal the pack cannot prove (unknown).
+ const inspection=before.inspections[0];
+ assert.equal(JSON.stringify(inspection).includes('sourceIncomplete'),false,'no capture gap in the default installed layout');
+ const answer=(route,property)=>inspection.rows.find(r=>r.surfaceId===`workspace::route::${route}`&&r.property===property);
+ for(const p of ['authentication','authorization']){
+  assert.deepEqual([answer('GET /open',p)?.state,answer('GET /open',p)?.verdict],['established','does-not-apply'],`/open ${p}`);
+  assert.deepEqual([answer('GET /guarded',p)?.state,answer('GET /guarded',p)?.reasonCode],['partial','sentinel.express.refusalUnproven'],`/guarded ${p}`);
+ }
+ // The run's scratch lease lived inside the held store and was released once its consumers were proven stopped.
+ assert.deepEqual(readdirSync(join(ws,'.farsight/sentinel/store/scratch')),[],'no scratch lease left after a clean run');
+ assert.equal(existsSync(join(ws,'.farsight/sentinel/scratch')),false,'nothing beside the store');
  assert.match(await full(id,'md'),/Framework control inspection/);assert.match(await full(id,'html'),/Framework control inspection/);const sarif=JSON.parse(await full(id,'sarif'));checkSarif(sarif);assert.deepEqual(sarif.runs[0].properties.inspections,before.inspections);assert.equal(sarif.runs[0].results.length,0);
  const entries=join(env.XDG_STATE_HOME,'farsight/sentinel/trust/adapters/framework-controls');
  const names=readdirSync(entries).filter(n=>n.endsWith('.mjs'));assert.equal(names.length,1);
@@ -90,17 +105,24 @@ try {
  let inFlight=false;for(let i=0;i<100;i++){const status=await call('status',crashId,'--after',String(beforeAttempt),'--limit','1000');const events=status.body.facts.events;
   if(events.some(e=>e.kind==='attempt-started')&&!events.some(e=>e.kind==='work-published')&&status.body.facts.state==='running'){inFlight=true;break}
   if(status.body.facts.state==='completed')break;await new Promise(r=>setTimeout(r,10));}
- assert.ok(inFlight,'the real installed inspection reached an unpublished in-flight attempt');process.kill(pid,'SIGKILL');await gone(pid);servicePids.delete(pid);
+ assert.ok(inFlight,'the real installed inspection reached an unpublished in-flight attempt');
+ const storeScratch=join(ws,'.farsight/sentinel/store/scratch');
+ const crashLeases=readdirSync(storeScratch,{withFileTypes:true}).filter(e=>e.isDirectory()).flatMap(epoch=>readdirSync(join(storeScratch,epoch.name),{withFileTypes:true}).filter(e=>e.isDirectory()&&e.name.startsWith('w-')).map(e=>join(storeScratch,epoch.name,e.name)));
+ assert.equal(crashLeases.length,1,'one active service lease before the owned crash');
+ const crashedLease=crashLeases[0],leaseIdentity=lstatSync(crashedLease,{bigint:true});
+ process.kill(pid,'SIGKILL');await gone(pid);servicePids.delete(pid);
  const resumed=await call('run',crashId);assert.equal(resumed.body.facts.state,'completed',JSON.stringify(resumed));
  let publications=0,attempts=0;cursor=beforeAttempt;for(;;){const status=await call('status',crashId,'--after',String(cursor),'--limit','1000');for(const e of status.body.facts.events){publications+=Number(e.kind==='work-published');attempts+=Number(e.kind==='attempt-started')}cursor=status.body.facts.cursor;if(!status.body.facts.more)break}
  assert.equal(publications,1,'the resumed inspection publishes once');assert.ok(attempts>=2,'the interrupted attempt is not reused as a success');
  assert.equal(JSON.parse(await full(crashId,'json')).inspections.length,1);
- console.log(JSON.stringify({consumer:'framework',distFiles:files.length,closureEntries:closure.length,entryBytes:entry.length,runMs:Math.round(performance.now()-started),sourceRemovedSelected:true,crashRecovered:true,officialSarif:Boolean(official)}));
+ const retainedLease=lstatSync(crashedLease,{bigint:true});assert.deepEqual([retainedLease.dev,retainedLease.ino],[leaseIdentity.dev,leaseIdentity.ino],'prior-epoch lease remains private after real service recovery');
+ console.log(JSON.stringify({consumer:'framework',distFiles:files.length,closureEntries:closure.length,entryBytes:entry.length,runMs:Math.round(performance.now()-started),sourceRemovedSelected:true,crashRecovered:true,crashLeaseRetained:true,officialSarif:Boolean(official)}));
 }finally{
  for(const pid of servicePids){try{process.kill(pid,'SIGTERM')}catch{}await gone(pid)}
- // A killed service can leave sealed readonly inputs. Only this consumer's scratch is unlocked, after its exact
- // recorded services stopped; links are never followed and a bounded rm retry handles delayed directory removal.
- const orphan=join(realpathSync.native(c.scratch),'workspace/.farsight/sentinel/scratch');
+ // A killed service can leave sealed readonly inputs in its retained scratch lease, inside the store. Only this
+ // consumer's store scratch is unlocked, after its exact recorded services stopped; links are never followed and a
+ // bounded rm retry handles delayed directory removal.
+ const orphan=join(realpathSync.native(c.scratch),'workspace/.farsight/sentinel/store/scratch');
  const unlock=p=>{const st=lstatSync(p);if(st.isSymbolicLink())return;if(st.isDirectory()){chmodSync(p,0o700);for(const n of readdirSync(p))unlock(join(p,n))}else chmodSync(p,0o600)};
  if(existsSync(orphan))unlock(orphan);
  rmSync(c.scratch,{recursive:true,force:true,maxRetries:5,retryDelay:100});
