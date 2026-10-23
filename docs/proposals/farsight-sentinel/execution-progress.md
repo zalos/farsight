@@ -25,6 +25,20 @@ Release validation must still demonstrate the public CLI path, exact retained in
 
 Draft [#183](https://github.com/zalos/farsight/pull/183) joins preparation, the owner interface, configured review operations and the npm release path. Six clean npm consumers passed all 87 checks at `517e81ea`; final graph, selected CI and published-asset acceptance remain open. Native CLI validation stopped at operating-system authorization before any model launch or provider request. No live inference is qualified.
 
+## Current native attribution disposition — 2026-10-23
+
+The earlier blanket release hold below is superseded for the scoped first release by the reviewed product witness
+merged in [#169](https://github.com/zalos/farsight/pull/169), `995dac64`. Its exact-container cgroup observation
+qualified with 108 native controls and ten diagnostic controls, all without skips, including an actual memory kill
+with the daemon observation deliberately masked. The bounded observer may still miss teardown; without an
+affirmative daemon or own-cgroup witness, the product keeps the failed `workerExited` result and publishes no
+successful work. Container memory enforcement is separate from that attribution.
+
+The historical failures remain unexplained; later passing runs do not diagnose them. The lead classifies that
+remaining diagnostic limitation as nonblocking, tracked in [#184](https://github.com/zalos/farsight/issues/184),
+conditional on the final current isolation, recovery and installed-consumer gates passing. No universal OOM capture,
+new platform, native model execution or other release gate is qualified by this disposition.
+
 ## Checkpoint — 2026-10-23
 
 The bounded retained-source/fixed-worker seam merged as #164 (`2587763a`) after all sixteen final checks passed.

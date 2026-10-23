@@ -20,8 +20,11 @@ The owner chose a working process graph for this release and custom stage creati
 privacy-qualified entry metadata remain [#182](https://github.com/zalos/farsight/issues/182). Current graph browser
 acceptance, final integrated measurements, selected CI and publication remain pending. The first CI run exposed
 an outdated historical-refusal assertion and a rebuilt-tarball provenance mismatch; preserve those failures and
-record the corrected evidence separately. The earlier native memory-attribution investigation below is also not
-resolved merely by later passing CI. The broader plan is still open; see the scoped release ledger and linked issues.
+record the corrected evidence separately. The earlier native memory-attribution investigation remains historically unresolved. Merged #169 adds a
+qualified exact-container witness; missing evidence still yields a failed unidentified exit. The lead treats the
+remaining bounded-attribution limitation as nonblocking under current passing isolation/recovery gates, tracked in
+[#184](https://github.com/zalos/farsight/issues/184); this supersedes the older blanket hold, not its retained failures.
+The broader plan is still open; see the scoped release ledger and linked issues.
 
 ## Sentinel owner decisions integration — 2026-10-23
 
