@@ -4,6 +4,7 @@ import { createServer, createConnection, isIP, type Socket } from 'node:net';
 import { lookup } from 'node:dns/promises';
 import { fail } from './errors.js';
 import {COPILOT_DESTINATIONS} from './cli-copilot-profile.js';
+import {canonicalDigest} from '../../policy/digest.js';
 import type { NativeTiming } from './cli-native-profile.js';
 
 export interface NativeProxyLimits extends NativeTiming { readonly maxUpstreamBytes: number; readonly maxDownstreamBytes: number }
@@ -65,6 +66,9 @@ export async function openNativeCopilotProxy(limits: NativeProxyLimits) {
   for (const cap of [limits.maxUpstreamBytes, limits.maxDownstreamBytes]) {
     if (!Number.isSafeInteger(cap) || cap < 1 || cap > WIRE_CEILING) return fail('sentinel.provider.invalidProfile', 'native egress byte bounds');
   }
+  // Closed structural diagnostics only. Never retain raw headers, unlisted hosts, TLS payloads or auth data.
+  const diagnostics:Readonly<Record<string,string|number|boolean>>[]=[];
+  const note=(value:Readonly<Record<string,string|number|boolean>>)=>{if(diagnostics.length<24)diagnostics.push(Object.freeze({...value}));};
   const sockets = new Set<Socket>();
   let connections = 0, upstreamWireBytes = 0, downstreamWireBytes = 0, endedBy: NativeProxyEnd = 'open', closed = false;
   let ready = false;
@@ -112,10 +116,16 @@ export async function openNativeCopilotProxy(limits: NativeProxyLimits) {
       const hostHeaders = lines.slice(1).filter(x => /^host:/i.test(x));
       const target = /^CONNECT ([a-z0-9.-]+):443 HTTP\/1\.1$/.exec(lines[0]??'');
       const host = target?.[1];
-      if(!host||!hosts.has(host)){shutdown('refused');return;}
+      const publicHost=host&&hosts.has(host)?host:'unlisted';
+      const authorityShape=hostHeaders.length===0?'missing':hostHeaders.length!==1?'multiple':hostHeaders[0]!.replace(/^host:\s*/i,'')===host+':443'?'host-port':hostHeaders[0]!.replace(/^host:\s*/i,'')===host?'host-only':'other';
+      note({phase:'connect',target:publicHost,...(host&&publicHost==='unlisted'?{unlistedTargetDigest:canonicalDigest({host})}:{}),requestIsConnect:lines[0]?.startsWith('CONNECT ')===true,http11:lines[0]?.endsWith(' HTTP/1.1')===true,hostHeaders:hostHeaders.length,hostShape:authorityShape,headerLines:lines.length-1});
+      if(!host){note({phase:'refusal',reason:'connect-target'});shutdown('refused');return;}
+      // An unlisted connection has no destination authority. Refuse that socket without DNS
+      // or forwarding, while independently validated allowlisted TLS connections retain their original bounds.
+      if(!hosts.has(host)){note({phase:'refusal',reason:'connect-target'});socket.destroy();return;}
       const authority=host+':443';
       if (lines[0] !== `CONNECT ${authority} HTTP/1.1` || hostHeaders.length !== 1 || hostHeaders[0]!.replace(/^host:\s*/i, '') !== authority
-        || lines.slice(1).some(x => !/^[A-Za-z0-9-]+:[\x20-\x7e]*$/.test(x))) { shutdown('refused'); return; }
+        || lines.slice(1).some(x => !/^[A-Za-z0-9-]+:[\x20-\x7e]*$/.test(x))) { note({phase:'refusal',reason:authorityShape==='host-port'?'connect-header-syntax':'connect-host-shape'});shutdown('refused'); return; }
       const head = Buffer.from(header.subarray(split + 4)); header = Buffer.alloc(0);
       socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
       let hello = Buffer.alloc(0);
@@ -125,7 +135,7 @@ export async function openNativeCopilotProxy(limits: NativeProxyLimits) {
         hello = Buffer.concat([hello, chunk]);
         const result = nativeCopilotClientHello(hello,host);
         if (result === 'incomplete') return;
-        if (result === 'refused') { shutdown('refused'); return; }
+        if (result === 'refused') {note({phase:'refusal',reason:'tls-client-hello',bytes:hello.length,contentType:hello[0]??-1,recordMajor:hello[1]??-1,recordMinor:hello[2]??-1,recordBytes:hello.length>=5?hello.readUInt16BE(3):-1,handshakeType:hello[5]??-1});shutdown('refused'); return; }
         socket.removeListener('data', readHello); socket.pause();
         void lookup(host, { all: true }).then(addresses => {
         if (!alive()) return;
@@ -162,7 +172,7 @@ export async function openNativeCopilotProxy(limits: NativeProxyLimits) {
   if (!address || typeof address === 'string') { shutdown('unreachable'); return fail('sentinel.provider.unreachable', 'owned native egress listener unavailable'); }
   return Object.freeze({
     port: address.port,
-    observation: () => Object.freeze({ connections, upstreamWireBytes, downstreamWireBytes, endedBy }),
+    observation: () => Object.freeze({ connections, upstreamWireBytes, downstreamWireBytes, endedBy,diagnostics:Object.freeze([...diagnostics]) }),
     async close() { shutdown('closed'); if (server.listening) await new Promise<void>(resolve => server.close(() => resolve())); },
   });
 }
