@@ -6,12 +6,13 @@ import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { ContainerBackend, createArgs, validateContainer, LABELS, ISOLATION_POLICY, isolationQualification } from '../dist/execution/isolation.js';
 import { createAdapterRegistry, DEFAULT_ADAPTER_LIMITS } from '../dist/execution/registry.js';
 import { createExecutionService } from '../dist/execution/service.js';
 import { delayedOomInspects } from './container-state-fixtures.ts';
+import { diagnosticRunner, preserveDiagnosticOutcome } from './helpers/isolation-diagnostic.ts';
 import { isExecutionError } from '../dist/execution/errors.js';
 import { inputs, removeScratch, runAttempt, scratch, storeIn, work, WORKER } from './execution-helpers.ts';
 
@@ -124,6 +125,52 @@ const backendDocker = () => ['/usr/bin/docker', '/usr/local/bin/docker', '/opt/h
 const absent = (id: string) => /no such (container|object)/i.test(docker('inspect', '--type', 'container', id).stderr);
 const canary = (text: string) => JSON.parse(/canary (\{.*\})/.exec(text)?.[1] ?? '{}');
 
+// Optional bounded observations of these original attempts. The suite command, expectations, worker bytes,
+// delayed mask, grants and test-file concurrency stay unchanged. Tracing perturbs timing; hooks retain evidence
+// even when an original assertion fails, and a passing trace cannot explain a historical failure.
+const tracing = process.env.SENTINEL_ISOLATION_DIAGNOSTIC === '1';
+let traceCount = 0;
+function traceContext(t: any, kind: string) {
+  let trace: ReturnType<typeof diagnosticRunner> | undefined, outcome: any, error: any, facts: any;
+  let saved: Promise<void> | undefined;
+  const flush = () => !tracing ? Promise.resolve() : saved ??= preserveDiagnosticOutcome(retain,message=>t.diagnostic(`native diagnostic unavailable ${kind}: ${message}`));
+  async function retain() {
+    const directory = process.env.SENTINEL_DIAGNOSTIC_OUT!;
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    const report = { kind, workerSha256: createHash('sha256').update(source).digest('hex'), image: CANARY_IMAGE, backend: facts,
+      outcome: outcome && { state: outcome.state, code: outcome.code, detail: outcome.detail, exit: outcome.exit,
+        container: outcome.container, cleanup: outcome.cleanup, stopConfirmed: outcome.stopConfirmed, protocol: outcome.protocol,
+        diagnostics: { bytes: outcome.diagnostics.bytes, truncated: outcome.diagnostics.truncated },
+        invocationLimits: outcome.invocation?.record?.limits },
+      error: error && { name: error.name, code: error.code },
+      trace: trace ? await trace.finish() : { unavailable: 'backend wrapper not reached' } };
+    writeFileSync(join(directory, `${kind}.json`), JSON.stringify(report, null, 2)+'\n', { mode: 0o600, flag: 'wx' });
+    t.diagnostic(`retained native diagnostic ${kind}: ${JSON.stringify({ code: outcome?.code, container: outcome?.container?.id, traceDropped: (report.trace as any).dropped })}`);
+  }
+  if (tracing) {
+    assert.ok(process.env.SENTINEL_DIAGNOSTIC_OUT, 'explicit private evidence directory required');
+    assert.ok(++traceCount <= 4, 'only the original three memory calls and plain SIGKILL are observed');
+    t.after(flush);
+  }
+  return {
+    flush,
+    wrapRunner: (real: any) => tracing ? (trace = diagnosticRunner(real)).runner : real,
+    result: (value: any) => { outcome = value; return value; },
+    failed: (value: any) => { error = value; },
+    backend: (value: any) => { facts = value; },
+  };
+}
+async function observedAttempt(t: any, kind: string, registry: any, attempt: any) {
+  if (!tracing) return runAttempt(store, s.work, registry, attempt, true);
+  const context = traceContext(t, kind);
+  try {
+    const service = await createExecutionService(store, { scratchRoot: s.work, registry, containers: true, wrapRunner: context.wrapRunner });
+    context.backend(service.backend?.facts);
+    return context.result(await service.run(attempt));
+  } catch (error) { context.failed(error); throw error; }
+  finally { await context.flush(); }
+}
+
 // Keep a failing native runner honest: report bounded daemon event facts, rather than infer OOM from 137.
 function memoryEvidence(t: any, outcome: any) {
   if (outcome.code === 'sentinel.execution.resourceExceeded') return;
@@ -187,7 +234,8 @@ test('host-file canary: no host path, sibling file, daemon socket or writable in
 });
 
 test('resource canaries: memory, processes and temporary storage are bounded', { skip }, async t => {
-  const memory = await run('memory', { memoryBytes: 64 * 1024 * 1024 });
+  const memory = await observedAttempt(t, 'ordinary-memory', registryFor('memory', { memoryBytes: 64 * 1024 * 1024 }),
+    { adapterId: 'canary-memory', attemptId: `attempt-c${++n}`, work, inputs: captured });
   memoryEvidence(t, memory);
   assert.equal(memory.code, 'sentinel.execution.resourceExceeded', JSON.stringify({ code: memory.code, c: memory.container?.state }));
   assert.equal(memory.container?.state?.oomKilled, true);
@@ -203,18 +251,22 @@ test('resource canaries: memory, processes and temporary storage are bounded', {
 
 test('a real OOM whose first inspect flags are delayed settles before owned cleanup; plain SIGKILL stays unidentified', { skip }, async t => {
   let delayed!: ReturnType<typeof delayedOomInspects>;
+  const context = traceContext(t, 'delayed-memory');
   t.after(() => t.diagnostic(`delayed-OOM raw inspect trace ${JSON.stringify({ terminalReads: delayed?.terminalReads(), observations: delayed?.observations })}`));
   const service = await createExecutionService(store, { scratchRoot: s.work, registry: registryFor('memory', { memoryBytes: 64 * 1024 * 1024 }), containers: true,
-    wrapRunner: real => (delayed = delayedOomInspects(real)).runner,
+    wrapRunner: real => (delayed = delayedOomInspects(context.wrapRunner(real))).runner,
   });
-  const memory = await service.run({ adapterId: 'canary-memory', attemptId: `delayed-oom-${++n}`, work, inputs: captured });
+  context.backend(service.backend?.facts);
+  const memory = await service.run({ adapterId: 'canary-memory', attemptId: `delayed-oom-${++n}`, work, inputs: captured })
+    .then(context.result, error => { context.failed(error); throw error; }).finally(context.flush);
   memoryEvidence(t, memory);
   assert.equal(memory.code, 'sentinel.execution.resourceExceeded', JSON.stringify(memory.container?.state));
   assert.equal(memory.container?.state?.oomKilled, true);
   assert.equal(delayed.observations.filter(o => o.masked).length, 2, 'exactly the first two terminal observations were hidden');
   assert.ok(delayed.observations.some(o => !o.masked && o.rawOomKilled), 'the final classification required a real affirmative daemon observation after the delayed flags');
   assert.equal(memory.cleanup, 'removed-owned-container');
-  const killed = await run('self-sigkill');
+  const killed = await observedAttempt(t, 'plain-sigkill', registryFor('self-sigkill'),
+    { adapterId: 'canary-self-sigkill', attemptId: `attempt-c${++n}`, work, inputs: captured });
   assert.equal(killed.container?.state?.exitCode, 137);
   assert.equal(killed.container?.state?.oomKilled, false);
   assert.equal(killed.code, 'sentinel.execution.workerExited');
@@ -388,7 +440,9 @@ test('an ambiguous create is reconciled by its owner nonce, and nothing else is 
 test('a work resource policy lowers the container limits, and the kernel enforces them', { skip }, async t => {
   const policy = (p: Record<string, number>) => ({ deadlineMs: 120_000, memoryBytes: 2_147_483_648, cpuQuota: 2, maxPids: 128, maxOutputBytes: 4_194_304, ...p });
   const runWith = (behaviour: string, resources: Record<string, number>) =>
-    runAttempt(store, s.work, registryFor(behaviour), { adapterId: `canary-${behaviour}`, attemptId: `attempt-p${++n}`, work, inputs: captured, resources: policy(resources) }, true);
+    (behaviour === 'memory' ? observedAttempt(t, 'policy-memory', registryFor(behaviour),
+      { adapterId: `canary-${behaviour}`, attemptId: `attempt-p${++n}`, work, inputs: captured, resources: policy(resources) }) :
+      runAttempt(store, s.work, registryFor(behaviour), { adapterId: `canary-${behaviour}`, attemptId: `attempt-p${++n}`, work, inputs: captured, resources: policy(resources) }, true));
   // The adapter allows 256 MiB; the policy's 64 MiB is what the container gets, and the worker is stopped by it.
   const memory = await runWith('memory', { memoryBytes: 64 * 1024 * 1024 });
   memoryEvidence(t, memory);

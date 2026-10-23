@@ -268,6 +268,8 @@ The individual Pattern, OSV and IaC qualification jobs select their own installe
 with `SENTINEL_ISOLATION=1` and no selector executes all four workers. Each native job must observe its own worker
 success marker, so a missing or failed selected engine cannot pass as an asset-only check.
 
+## Read-only MCP verification
+
 The read-only MCP slice (ADR 48) runs its genuine owner-store/socket/budget controls in the service job's explicit
 zero-skip list. Ordinary `test:sentinel:package` also installs the tarball with npm and drives the real SDK through
 preview and framework reports, source-removed selected replay, reconnect and restart expiry. The native scanner
@@ -282,3 +284,30 @@ test-process clocks advance over view/delivery absolute expiry without changing 
 public clock input. They prove retained buffers survive the idle cutoff, then expire and release the held store
 even with an open idle MCP socket. The installed SDK consumer asserts exact SDK/zod versions, status-only request
 shape and retryable inspection contention.
+
+## Isolation failure observations
+
+The ordinary `sentinel-isolation` job retains bounded optional observations alongside its unchanged seven-file
+native command, default concurrency and strict assertions. Forwarding controls and an actual-runner journal-argv
+preflight run first. `runner-provenance.json` records the commit, runner ImageOS/ImageVersion, kernel and Docker
+client/server components (including containerd and runc). Missing provenance or an unsupported journal option
+fails that preflight visibly. A red preflight is an observation-infrastructure failure, not a native isolation
+result: preserve it and correct the probe in a reviewed new commit, never an unchanged failed-job retry.
+The always-run artifact upload retains traces and both TAP files for three days;
+upload failure is visible. No privileged monitor, new image or production termination inference is added.
+
+Each trace covers only its exact owned container and bounded time window. It records command/attached-client
+ordering, raw daemon inspection before any delayed-OOM mask, exact child cgroup identity/counters where readable,
+and filtered unprivileged journal results. Journal `matched`, `no-match-visible` and `unavailable` are separate;
+all remain limited by the runner account's visibility. Exact-ID filtering can omit relevant records. An increase
+in a persistent daemon-parent cgroup counter cannot attribute a concurrent kill to the child. Dropped records,
+expired windows and unavailable sensors remain explicit; without an exact child window, its cause stays unknown.
+Traces are diagnostic evidence, not scanner results. The observer adds work and changes timing; its merge is
+the comparison boundary, so observed pass/failure rates are not directly comparable with earlier runs.
+
+On recurrence, preserve the original failing TAP and artifact before cleanup/expiry. Compare client kill requests
+with actual client exit and daemon events, and exact child cgroup observations with terminal daemon state. A kill
+request after reaping is not an actual signal. Exit 137, fixture wording, parent counters or no visible journal
+matches never prove OOM. If child counters and daemon state disagree, record that discrepancy without changing the
+production conservative result or native assertion. A passing run does not explain a historical failure. Do not
+blindly rerun a failed gate or claim release clearance; retain the unresolved cause for an explicit owner decision.

@@ -167,10 +167,41 @@ jobs:
         run: docker pull ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
       - name: Build Sentinel and its workspace closure
         run: pnpm --filter '@farsight/sentinel...' build
+      - name: Check bounded observation forwarding and journal classifications
+        working-directory: packages/sentinel
+        run: |
+          set -o pipefail
+          node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=30000 \
+            --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=isolation-diagnostic-controls.tap \
+            test/isolation-diagnostic-controls.test.ts
+          grep -qx '# skipped 0' isolation-diagnostic-controls.tap
+          grep -qx '# fail 0' isolation-diagnostic-controls.tap
+          grep -qx '# cancelled 0' isolation-diagnostic-controls.tap
+      - name: Record native runner provenance and preflight actual journal argv
+        working-directory: packages/sentinel
+        env:
+          SENTINEL_DIAGNOSTIC_OUT: ${{ runner.temp }}/sentinel-isolation-observation
+        run: |
+          node --disable-warning=ExperimentalWarning --experimental-strip-types --input-type=module <<'NODE'
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          import { diagnosticProvenance } from './test/helpers/isolation-diagnostic.ts';
+          const out = process.env.SENTINEL_DIAGNOSTIC_OUT;
+          mkdirSync(out, { recursive: true, mode: 0o700 });
+          try {
+            const identity = { commit: process.env.GITHUB_SHA, ...await diagnosticProvenance() };
+            writeFileSync(join(out, 'runner-provenance.json'), JSON.stringify(identity, null, 2), { flag: 'wx', mode: 0o600 });
+          } catch (error) {
+            writeFileSync(join(out, 'runner-preflight-failure.json'), JSON.stringify({ commit: process.env.GITHUB_SHA, reason: 'preflightUnavailable', journal: error.journal ?? null }, null, 2), { flag: 'wx', mode: 0o600 });
+            throw error;
+          }
+          NODE
       - name: Isolation canaries and the worker protocol, nothing skipped
         working-directory: packages/sentinel
         env:
           SENTINEL_ISOLATION: '1'
+          SENTINEL_ISOLATION_DIAGNOSTIC: '1'
+          SENTINEL_DIAGNOSTIC_OUT: ${{ runner.temp }}/sentinel-isolation-observation
         run: |
           set -o pipefail
           node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=300000 \
@@ -185,6 +216,18 @@ jobs:
           set -o pipefail
           pnpm pack:sentinel
           node scripts/test-sentinel-secrets-consumer.mjs
+
+      - name: Preserve bounded isolation observations and test outcomes
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sentinel-isolation-observation-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 3
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/sentinel-isolation-observation/
+            packages/sentinel/isolation.tap
+            packages/sentinel/isolation-diagnostic-controls.tap
 
   # Sentinel's crash recovery smoke (PR 08): one real SIGKILL at each coordinator boundary, then a fresh process
   # recovers and finishes the run. SENTINEL_RECOVERY_SMOKE=1 fails on a missing prerequisite, and the job fails if
