@@ -950,7 +950,8 @@ accepted or resumable work stay protected; reconnect never automatically replays
 The fixed Copilot profile uses GitHub Copilot CLI 1.0.103 on macOS arm64 and explicit model `gpt-6-luna`.
 The executable and complete matching external runtime must already be installed; Sentinel verifies their pins,
 copies only the recorded code closure into private temporary storage and refuses changed or missing code.
-Profile revision4 fixes all three runtime tool-source exclusions, preserves vendor stored-OAuth detection, and projects only
+Profile revision6 binds silent rendered text/model-default reasoning, preserves all three runtime tool-source exclusions
+and vendor stored-OAuth detection, and projects only
 the current native selected-account host/login into private state;
 old profile adoption must be refreshed from capabilities. It never downloads or redistributes Copilot. Local code discovery does not establish account access, model
 availability, authentication or inference. There is no silent model, provider or version fallback. Other Copilot models are not yet qualified or enabled;
@@ -972,7 +973,7 @@ provider below, retain the other initialized settings, and replace owner-reviewe
     "id": "native-copilot", "kind": "copilot-cli", "endpoint": "https://api.githubcopilot.com",
     "credential": null, "disclosure": "hosted",
     "copilotProfile": { "id": "COPY_DISCOVERED_ID", "executableDigest": "COPY_DISCOVERED_DIGEST", "runtimeDigest": "COPY_DISCOVERED_DIGEST", "profileDigest": "COPY_DISCOVERED_DIGEST" },
-    "budget": { "maxTokens": 544000, "maxCost": null, "currency": null },
+    "budget": { "maxTokens": 816000, "maxCost": null, "currency": null },
     "models": [{
       "id": "luna", "model": "gpt-6-luna",
       "limits": { "maxRequestBytes": 65536, "maxResponseBytes": 16384, "timeoutMs": 60000, "maxOutputTokens": 512, "contextTokens": 272000, "maxMessages": 32, "templateTokensPerMessage": 8 },
@@ -1000,9 +1001,12 @@ farsight-sentinel report RUN_ID --workspace ./workspace --instructions --json
 ```
 
 The Gitleaks image must already be installed at its adopted pin. Review the exact selection/disclosure/budget
-before confirming. One exact model binding per run is supported. This Copilot profile seals at most two Sentinel
-model turns per review unit, with at most 60 seconds per invocation and 120 seconds for the whole unit. If more
+before confirming. One exact model binding per run is supported. New Copilot review plans seal at most three Sentinel
+model turns per review unit for a list/read/final exchange, with at most 60 seconds per invocation and 120 seconds for the whole unit. If more
 reads/turns are needed, inspection stays unfinished; no source extent is silently declared complete.
+The example token budget covers three full-context reservations in the worst case; it is not an upfront minimum
+for three small calls because each confirmed call settles actual usage. Existing adopted budgets are never expanded
+automatically. Their remaining balance governs every new reservation; insufficient balance refuses before another call.
 
 Copilot's `max-ai-credits 30` is a **soft** vendor limit. It is not a hard spend, token or hidden-model-call ceiling.
 The output-token setting is a request, not a provider-enforced cap; original deadlines and combined response bytes

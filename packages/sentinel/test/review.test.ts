@@ -586,3 +586,17 @@ test('the E5 corpus: opaque label-independent markers, canary = three comment li
   assert.match(Object.values(java.clean)[0] as string, /\{ "sh", "-c", "convert " \+ r\.getParameter/, 'request text sits in the shell command string');
   for (const id of ['ts-command.vulnerable', 'ts-command.safe']) assert.match(corpus.cases.find((c: any) => c.id === id).rule.text, /shell/);
 });
+
+
+test('a genuine list/read/cited-final session fits three replies; the same two-reply session stays unfinished', async () => {
+  const path='src/original.ts',source='export function executeUserInput(userInput: string) { return eval(userInput); }\n';
+  for(const maxSteps of [2,3]){
+    const f=files({[path]:source}),plan=partitionInventory({id:'snap-three',entries:f.members.map(m=>({sourceId:'web',kind:'file',disposition:'included',generated:false,...m}))} as any,'web',{maxFiles:1,maxBytes:1024});
+    const sp=generalSpec({runId:'run-three-'+maxSteps,attemptId:'att-three',plan,partitionId:plan.partitions[0]!.id,limits:LIMITS,budget:{...BUDGET,maxSteps,deadlineMs:120000}});
+    const model=scripted([()=>JSON.stringify({action:'list'}),()=>JSON.stringify({action:'read',path,startLine:1,endLine:40}),(messages)=>{const served=JSON.parse(messages[messages.length-1]!.content);assert.equal(served.evidence[0].text,source);return JSON.stringify({action:'final',verdict:'finding',claims:[{statement:'The function evaluates its input as code.',citations:lastEvidence(messages),cwe:'CWE-95'}],inspected:[path]})}]);
+    const out=await runSession(sp,{caller:model.caller,checkpoints:new MemoryCP(),read:f.read});
+    assert.equal(model.ops.length,maxSteps);assert.equal(out.record.operations.length,maxSteps);assert.equal(out.record.totals.toolCalls,2);assert(f.reads.length>0,'the broker hash-reads the captured source');
+    if(maxSteps===2){assert.equal(out.record.outcome,'unfinished');assert.equal(out.record.verdict,null);assert(out.record.frontiers.some(f=>f.reasonCode==='sentinel.review.frontier.steps'));assert.equal(out.observations.length,0)}
+    else{assert.equal(out.record.outcome,'completed');assert.equal(out.record.verdict,'finding');assert.equal(out.observations.length,1);assert.equal(out.observations[0]!.evidence[0]!.relativePath,path);assert.deepEqual(out.record.operations.map(o=>o.outcome),['tool','tool','final'])}
+  }
+});

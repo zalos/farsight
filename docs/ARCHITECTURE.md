@@ -2146,8 +2146,8 @@ intermediate activity remains unobserved, and one reported request is not proof 
 
 Genuine current complete Gitleaks coverage precedes hosted disclosure and model admission. Exact prompt,
 semantic messages, wire, selected model and explicit empty additional-skills selection are retained before
-dispatch. The fixed profile permits two Sentinel turns per review unit, original client deadlines and bounded
-response bytes; vendor AI credits are soft, hidden model work is unobserved, and uncertain usage stays charged
+dispatch. New Copilot review plans permit at most three Sentinel turns per review unit within the same 120-second
+overall deadline, original per-call deadlines and bounded response bytes; vendor AI credits are soft, hidden model work is unobserved, and uncertain usage stays charged
 possible on the same ledger. Code-only qualification and auth-free startup do not qualify account access or
 real inference. Other models and platforms require separate qualification; no fallback is introduced.
 
