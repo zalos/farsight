@@ -402,6 +402,8 @@ every rendering. No recorded secret match means only that the accepted evidence 
 that the source contains no secrets. A clean projection preserves useful captured call sites. Retained structural
 readback has a cooperative 120-second proof/readback bound for each accepted section and can refuse a large or
 slow valid closure; reading a report does not launch a worker.
+A prepared path task's absolute run deadline starts at admission. Starting after expiry holds its units with
+`runDeadline` and publishes nothing; waiting does not renew the budget.
 
 One fixed worker budget covers all queries: 64 MiB decoded/cache bytes, 1,024 distinct reads, one million visits,
 four million indexing/traversal steps and four MiB output, within the remaining original unit deadline. A source may

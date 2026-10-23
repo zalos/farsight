@@ -1624,7 +1624,9 @@ The owner command is `paths <ancestorRunId> --request <file>`: adopted policy pr
 non-following regular-file read. It proves the ended ancestor before task writes, discloses exact queries, bounds,
 held required checks and prerequisites, then consumes the existing exact preparation receipt when required.
 Acceptance atomically retains the request and proven closure before creating the linked planned run. It does not
-launch: `run <childRunId>` requires separate current `run.start` admission. Identical pending/running/paused
+launch: `run <childRunId>` requires separate current `run.start` admission. A prepared path task
+starts its absolute run deadline at admission; a later start after expiry holds every unit with `runDeadline` and
+publishes nothing. This timing statement applies to path tasks, not every legacy plan/run path. Identical pending/running/paused
 preparation joins; completed/canceled tasks permit a new explicit generation. Admission-before-run recovery
 reconciles only the exact retained candidate, and accepted publication survives coordinator death without being
 accepted twice. A pending pause follows legal running/pausing/paused transitions without launch, preserving its

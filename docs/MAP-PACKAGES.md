@@ -337,5 +337,9 @@ worker reads, decoded/cache bytes and query work; `worker.ts` is the fixed super
 binds normalization to the genuine coordinator context and original parser graph; `definitions.ts` is pure shared
 identity data. `rules/bounded-paths/` defines the exact promoted structural family with `call-path` rule evidence,
 and `service/path-adapter.ts` gates availability without adopting policy. Tests in `path-worker-inputs.test.ts` and
-`path-driver.test.ts` exercise the genuine child and completed/canceled ancestor acceptance. Canonical owner
-dispatch, selected path-task reruns and report projection remain required integration gates.
+`path-driver.test.ts` exercise the genuine child and completed/canceled ancestor acceptance. `service/path-task.ts`
+owns canonical generation/admission; `path-request-file.ts` bounds the caller file and `path-report.ts` authenticates
+retained results. The owner CLI prepares the task and separately starts it, with retry/selected rerun and all-format
+report delivery through the existing service. `scripts/test-sentinel-paths-consumer.mjs` exercises the actual installed
+workflow, strict worker assets and source-removed reports; native privacy and offline browser tests remain separate
+explicit zero-skip checks. No structural outcome counts as data flow, a security finding or independent absence proof.
