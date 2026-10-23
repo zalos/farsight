@@ -53,3 +53,27 @@ test('optional requested scanner without a tool pin remains visible as a gap, no
  const{snapshot}=await captureWithBudget(f.store,{mode:'working-copy',sources:[{sourceId:'workspace',repositoryId:'local-workspace',root:f.ws.path}]},new GitReadBudget(),()=>clock.stillWithin());const identity=await resolvePreparationRun(f.store,resolved,snapshot.id,clock);const result=await planPreparedWorkspaceCanonical(f.store,identity,{scratchRoot:lease.path,wrapRunner:lease.wrapRunner});
  assert.equal(result.outcome,'prepared');const admitted=await loadPlan(f.store,identity.runId,2);assert.equal(admitted.plan.pins.rules.length,rules.length);assert.ok(admitted.plan.checks.some(g=>g.state==='unsupported'&&g.reasonCode==='sentinel.plan.adapterNotRegistered'));assert.equal(admitted.plan.units.some(u=>u.stage==='check'),false);
 });
+
+
+test('configured model operations freeze before capture without model or credential activity', needsStore, async t => {
+ const f=await preparationFixture(t),{trustedPolicy}=await import('./provider-helpers.ts');
+ const path=join(f.ws.path,'.farsight/sentinel/settings.json'),settings=JSON.parse(readFileSync(path,'utf8'));
+ settings.providers=structuredClone(trustedPolicy().settings.providers.filter(p=>p.id==='local-review'));
+ settings.providers[0].models[0].capability.revision=null;
+ settings.reviewModels={stages:[{stage:'general',providerId:'local-review',modelId:'review'}],segments:[]};
+ writeFileSync(path,JSON.stringify(settings));
+ const {adoptWorkspaceSettings}=await import('../dist/service/local.js');
+ assert.equal(adoptWorkspaceSettings(f.ws,{confirm:true,now:new Date()}).outcome,'prepared');
+ const clock=clockFor(f.store),initial=resolvePreparationInputs(f.store,{workspace:f.ws.path,trustDir:f.ws.trustDir,registry:f.registry});
+ const lease=openScratchLease(f.store);t.after(()=>releaseScratchLease(f.store,lease));
+ const resolved=await discoverPreparationProfile(f.store,initial,clock,lease),bytes=preparationResolvedBytes(f.store,resolved);
+ const {snapshot}=await captureWithBudget(f.store,{mode:'working-copy',sources:[{sourceId:'workspace',repositoryId:'local-workspace',root:f.ws.path}]},new GitReadBudget(),()=>clock.stillWithin());
+ const identity=await resolvePreparationRun(f.store,resolved,snapshot.id,clock);
+ const result=await planPreparedWorkspaceCanonical(f.store,identity,{scratchRoot:lease.path,wrapRunner:lease.wrapRunner});
+ assert.equal(result.outcome,'prepared');const admitted=await loadPlan(f.store,identity.runId,2);
+ assert.deepEqual(admitted.profile,JSON.parse(bytes.toString()).profile);
+ const reviews=admitted.plan.units.filter(u=>u.review);assert.ok(reviews.length>0);
+ assert.ok(reviews.every(u=>u.stage==='review-general'));
+ assert.ok(reviews.every(u=>f.store.ledger.getPublication(u)===null),'preparation never runs model work');
+ assert.deepEqual(preparationResolvedBytes(f.store,resolved),bytes,'the frozen profile remains exact');
+});

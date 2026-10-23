@@ -16,6 +16,7 @@ import { openSnapshot } from '../snapshot/materialize.js';
 import { RuleLockBook, type CurrentLock } from './rule-locks.js';
 import type { ValidatedPack } from '../rules/index.js';
 import { externalDrivers, publicProfile } from './scanner-profile.js';
+import { hasConfiguredReviews, REVIEW_ADAPTERS } from './review-adapter.js';
 import { frameworkAvailable, FRAMEWORK_CONTROLS_ADAPTER_ID } from './framework-adapter.js';
 import { foundationProfile, OPERATIONS, type TrustedProfile } from './trusted-profile.js';
 import { PREVIEW_DETECTOR_ID } from '../adapters/preview-detector.js';
@@ -111,10 +112,14 @@ export function checkPreparationProfile(store: SentinelStore, value: Preparation
     || answers.some(a => !intended.includes(a.adapterId) || a.available !== available.has(a.adapterId)
       || (a.available ? a.reasonCode !== null : !['sentinel.preparation.toolMissing','sentinel.preparation.databaseMissing','sentinel.preparation.databaseMismatch','sentinel.assets.missing','sentinel.execution.imageMissing','sentinel.execution.isolationUnavailable','sentinel.execution.backendUnqualified','sentinel.plan.toolMismatch'].includes(a.reasonCode!)))) return refuse();
   if (answers.length && answers.length !== intended.length) return refuse();
+  // Fixed in-process review operations are part of the shipped registry. This records code availability only;
+  // native qualification and model authority remain separate foreground owner actions. Freeze before capture.
+  const reviewIds = hasConfiguredReviews(original.policy) ? REVIEW_ADAPTERS.map(a => a.id) : [];
+  const fixedAvailable = new Set([...available, ...reviewIds]);
   const registry = createAdapterRegistry(original.registry.ids.filter(id =>
-    id === PREVIEW_DETECTOR_ID || (Object.values(OPERATIONS) as readonly string[]).includes(id) || available.has(id)
+    id === PREVIEW_DETECTOR_ID || (Object.values(OPERATIONS) as readonly string[]).includes(id) || fixedAvailable.has(id)
   ).map(id => original.registry.get(id) as AdapterDefinition));
-  const profile = publicProfile(registry, available, original.packs);
+  const profile = publicProfile(registry, fixedAvailable, original.packs);
   const resolvedBytes = canonicalJsonBytes({ schema: 'sentinel-preparation-resolved/1', initial: value.digest,
     profile: profile.record, availability: answers.length ? answers : intended.map(adapterId => ({ adapterId,
       available: available.has(adapterId), reasonCode: available.has(adapterId) ? null : 'sentinel.assets.missing' })) });
