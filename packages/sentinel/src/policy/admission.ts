@@ -94,7 +94,13 @@ function grantMiss(g: SentinelGrant, intent: ActionIntent): string | null {
   return null;
 }
 
-export function admit(req: AdmissionRequest): AdmissionResult {
+export function admit(req: AdmissionRequest): AdmissionResult { return decideAdmission(req, false); }
+
+/** Package-internal stricter path for a service acting on an owner's real receipt. It only adds a requirement;
+ * ordinary admit and its public facade remain unchanged. No request JSON can set this internal choice. */
+export function admitRequiringReceipt(req: AdmissionRequest): AdmissionResult { return decideAdmission(req, true); }
+
+function decideAdmission(req: AdmissionRequest, requireReceipt: boolean): AdmissionResult {
   const { policy } = req;
   if (!isEffectivePolicy(policy)) policyFail('sentinel.policy.settingsInvalid', 'admission decides only under effectivePolicy’s own result');
   // The exact request decided on: a private frozen copy, so the caller cannot change it between verdicts.
@@ -103,7 +109,7 @@ export function admit(req: AdmissionRequest): AdmissionResult {
   const stateDigest = req.stateDigest;
   const digest = intentDigest(intent);
   let policyVerdict: AdmissionVerdict;
-  let requiresConfirmation = false;
+  let requiresConfirmation = requireReceipt;
   const owner = OWNER.has(intent.action);
   if (owner && (requestedBy.principal !== 'human' || requestedBy.channel !== 'owner-cli')) {
     policyVerdict = verdict(false, 'sentinel.admission.ownerOnly', 'only the owner, through the local CLI, may take this action');
@@ -117,7 +123,7 @@ export function admit(req: AdmissionRequest): AdmissionResult {
         miss: g => grantMiss(g, intent),
       });
       policyVerdict = verdict(d.verdict.allowed, d.verdict.allowed ? 'sentinel.admission.granted' : 'sentinel.admission.noGrant', d.verdict.reason);
-      requiresConfirmation = d.requiresConfirmation || owner;
+      requiresConfirmation = requireReceipt || d.requiresConfirmation || owner;
     }
   }
 

@@ -24,6 +24,11 @@ function assertOwnerOnly(st: Stats, what: string, code: PolicyErrorCode): void {
 export function ensurePrivateDir(dir: string, code: PolicyErrorCode): void {
   if (!isAbsolute(dir) || normalize(dir) !== dir) policyFail(code, 'a user-state folder is an absolute, normalised path');
   try { mkdirSync(dir, { recursive: true, mode: 0o700 }); } catch (e) { policyFail(code, `the user-state folder cannot be created (${errno(e) ?? 'error'})`, e); }
+  assertPrivateDir(dir, code);
+}
+
+/** Requires an existing private directory, without making or repairing anything. */
+export function assertPrivateDir(dir: string, code: PolicyErrorCode): void {
   let st: Stats;
   try { st = lstatSync(dir); } catch (e) { return policyFail(code, `the user-state folder cannot be inspected (${errno(e) ?? 'error'})`, e); }
   if (st.isSymbolicLink() || !st.isDirectory()) policyFail(code, 'the user-state folder is not a directory');
@@ -31,9 +36,12 @@ export function ensurePrivateDir(dir: string, code: PolicyErrorCode): void {
 }
 
 /** Reads a private regular file, or undefined when it does not exist. Never follows a link. */
-export function readPrivateFile(path: string, maxBytes: number, code: PolicyErrorCode): Buffer | undefined {
+export function readPrivateFile(path: string, maxBytes: number, code: PolicyErrorCode, options: {
+  /** Pure preflight must refuse a pending alias instead of repairing a prior writer's publication. */
+  readonly repairTemporaryAliases?: boolean;
+} = {}): Buffer | undefined {
   let fd: number;
-  try { fd = openSync(path, FS.O_RDONLY | NOFOLLOW); } catch (e) {
+  try { fd = openSync(path, FS.O_RDONLY | NOFOLLOW | (options.repairTemporaryAliases === false ? (FS.O_NONBLOCK ?? 0) : 0)); } catch (e) {
     if (errno(e) === 'ENOENT') return undefined;
     if (errno(e) === 'ELOOP') return policyFail(code, 'a user-state file is a symbolic link');
     return policyFail(code, `a user-state file cannot be opened (${errno(e) ?? 'error'})`, e);
@@ -41,7 +49,7 @@ export function readPrivateFile(path: string, maxBytes: number, code: PolicyErro
   try {
     let st = fstatSync(fd);
     if (!st.isFile()) policyFail(code, 'a user-state entry is not a regular file');
-    if (st.nlink > 1) {
+    if (st.nlink > 1 && options.repairTemporaryAliases !== false) {
       // createPrivateFileOnce links a synced temporary name to the final one and then removes it; between the two,
       // or after a crash there, the record also has that temporary name. Only that exact alias of this same file is
       // removed; any other second name is refused.
@@ -56,9 +64,9 @@ export function readPrivateFile(path: string, maxBytes: number, code: PolicyErro
 }
 
 /** Reads a regular file of a checkout (settings), refusing links; owner checks do not apply to checkout files. */
-export function readCheckoutFile(path: string, maxBytes: number, code: PolicyErrorCode): Buffer | undefined {
+export function readCheckoutFile(path: string, maxBytes: number, code: PolicyErrorCode, options: { readonly nonblocking?: boolean } = {}): Buffer | undefined {
   let fd: number;
-  try { fd = openSync(path, FS.O_RDONLY | NOFOLLOW); } catch (e) {
+  try { fd = openSync(path, FS.O_RDONLY | NOFOLLOW | (options.nonblocking ? (FS.O_NONBLOCK ?? 0) : 0)); } catch (e) {
     if (errno(e) === 'ENOENT') return undefined;
     if (errno(e) === 'ELOOP') return policyFail(code, 'the file is a symbolic link');
     return policyFail(code, `the file cannot be opened (${errno(e) ?? 'error'})`, e);

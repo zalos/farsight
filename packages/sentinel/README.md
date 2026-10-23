@@ -827,3 +827,59 @@ qualified enforcement evidence. Changing evidence or expiry reopens the issue; h
 Clean private reports may include rationale, while shareable reports omit it. A relevant accepted secret match
 withholds source-derived owner detail in both profiles. These local commands return busy while a service owns
 the store; they never stop or impersonate it. Service-owned/browser decision confirmation remains unavailable.
+
+### Durable local preparation (draft)
+
+Preparation separates source capture and parser/inventory bootstrap from executing checks. Start the owner service
+with the existing `serve` command after adopting workspace settings and promoting the requested shipped rule pack.
+The service holds the store throughout; these commands connect to it and never start a competing local owner:
+
+```sh
+farsight-sentinel prepare preview --workspace . --json
+farsight-sentinel prepare --workspace . --confirm --json
+farsight-sentinel prepare status --workspace . --json
+# Once status says prepared, use its actual runId for a separate permission-checked start:
+farsight-sentinel run <runId> --workspace . --detach --confirm --json
+```
+
+The pure preview reports configured rule counts, fixed stages and effects. It does not capture source or claim
+that scanner assets are ready. `prepare --confirm` confirms that exact configured workspace, rule lock, policy,
+registry and limits through the real owner CLI's existing receipt book. The CLI obtains a fresh preview for that
+confirmation call; an earlier displayed preview is informative. Direct service acceptance instead requires its
+still-current preview ID and refuses changed configuration. A private discovery key is saved before
+acceptance is sent; after a lost response, use `prepare status` rather than automatically sending a new preparation.
+The owner CLI serializes confirmed key replacement with a private qualified SQLite mutex. Contention refuses immediately; process death releases the lock without deleting its file. Pending, captured, expired captured, missing or ambiguous saved requests are never overwritten. A terminal prepared lookup may be replaced by a newly confirmed unlinked request, which captures current source again. Edited input names a new run; unchanged inventory returns the existing run with its original snapshot and deadline, retaining the new capture as unused evidence. Explicit linked requests instead reuse the selected completed/canceled parent snapshot. An explicit `--request-key` is supported for a caller that persists its own opaque key before requesting work.
+Keys must be random and persisted by the caller; they identify retained requests and grant no permission. A new preview replaces the earlier preview for the same fixed service channel, so concurrent clients can invalidate each other’s preview without admitting work. Status returns catalog reasons and safe identities,
+not paths, source text, profile objects, raw hashes or receipt bindings. The prepared revision is historical;
+`run.inspect` through the service reports the run's actual current revision and work.
+
+After admission, readiness resolves once before capture. A missing scanner image, tool or database stays an
+explicit retained gap, including whether the requested adapter was unavailable; it is not silently disabled or
+presented as supported. Required capture, parse and inventory prerequisites and unsafe promotion provenance still
+refuse. Readiness never downloads assets, and a changed configuration invalidates the request. The initial full
+registry remains bound while the frozen planner profile excludes unavailable adapters using existing gap semantics.
+Status readiness is the retained preparation answer, not a current machine inventory.
+
+`acceptedAt`, `deadlineAt` and `runDeadlineAt` show the original absolute ceiling. The same 600-second preparation
+budget covers discovery, capture, bootstrap, inspection delay and the later check run. Starting a prepared run does
+not restart the clock; an existing bootstrap run's earlier deadline can tighten it. An unchanged inventory with an already recorded analysis is disclosed as already prepared with its original deadline, even after that deadline; disclosure does not renew or start the run. Cooperative checkpoints check immediately
+before admission commits, not that disk COMMIT or one physical read will finish before a hard wall deadline.
+
+Startup under a newly held epoch durably marks an earlier nonterminal preparation interrupted. A task whose genuine preparation has settled can be marked interrupted before an explicit new operation; an active preparation or run is never retired this way. Only exact owned journal-writer temporaries are settled at owner startup: an unrenamed update never replaces its old canonical record, and an exact temporary hardlink alias is removed without touching unknown names. This recovery visits at most 1,024 entries per journal folder (four times the 256 terminal-record cap) and fences the held owner before each deletion. A corrupt journal or failed interruption write disables preparation alone; existing run controls, inspection and report delivery remain available. Inspect and repair the preparation data, then restart the owner service to recheck it. This changes journal status only and never proves a worker stopped, authorizes cleanup or resumes work. No startup or reconnect automatically resumes preparation. `prepare resume --confirm` explicitly admits continuation
+of an associated captured snapshot after an owner restart, under fresh current permission and the original clock.
+It does not recapture source. The current CLI/MCP request timeout bounds pre-acceptance resume proof to 30 seconds; timeout or disconnection aborts that unsettled proof without accepting or spending its receipt. This transport limit may prevent continuation of larger retained inputs even with preparation time remaining. An interruption before durable captured association requires a fresh authorized
+request; uncertain files are retained. `prepare cancel --confirm` controls the exact preparation, separately from
+`cancel <runId>` for an analysis run. In this draft, canceling an inactive interrupted preparation does not revoke a retained captured checkpoint; it can still offer explicit resume. A terminal abandonment/cleanup contract remains separate work. A genuine completed/canceled parent can be selected with `prepare --parent
+<runId> --confirm` to prepare a pinned linked child with fresh authority. If preparation expires after capture but
+before any real run record exists, this slice refuses safely: retrying that retained preparation under a new clock
+requires a later reviewed contract and is not supplied by inventing a parent or recapturing silently.
+
+The separate preparation capability document negotiates `configuration.preview` and `prepare.accept/status/resume/
+cancel` without changing the original read/control handshake. Five corresponding SDK tools use ordinary adopted
+agent permissions; MCP cannot pass a receipt, actor or confirmation field. Only the real owner CLI can issue an
+owner receipt. Browser configuration, trusted GUI confirmation, stage selection and selected rerun configuration
+remain separate work. The private journal retains at most 256 terminal requests and refuses further creation with
+`sentinel.preparation.retentionRequired`; it never prunes history or sweeps uncertain leftovers automatically.
+Explicit owner retention maintenance remains a release gate for this bounded draft.
+
+A fresh independent confirmed request may replace the CLI lookup for a terminal prepared, failed or canceled request, or an interrupted request explicitly reported nonresumable. The old journal/run stays discoverable under its original key. A live, resumable, missing or ambiguous lookup still refuses replacement. This does not reset an expired captured preparation or silently recapture it.

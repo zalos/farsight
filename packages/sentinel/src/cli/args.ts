@@ -7,7 +7,7 @@ export const COMMANDS = {
   help: null, version: null, capabilities: null, validate: null, init: null, settings: null,
   plan: null, paths: null, run: null, status: null, report: null, wait: null, pause: null, resume: null, cancel: null, serve: null,
   retry: null, rerun: null,
-  rules: null, assets: null, mcp: null, evidence: null, decision: null,
+  rules: null, assets: null, mcp: null, evidence: null, decision: null, prepare: null,
   compare: null, bundle: 'PR 26',
 } as const satisfies Record<string, string | null>;
 export type CommandName = keyof typeof COMMANDS;
@@ -53,6 +53,7 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   mcp: { flags: STORE, positional: [], min: 0 },
   decision:{flags:{...COMMON,...STORE,'--confirm':'boolean','--finding':'value','--proposal':'value','--baseline':'value','--after':'value','--limit':'value'},positional:['action','target'],min:2},
   evidence:{flags:{...COMMON,...STORE,'--confirm':'boolean','--source':'value','--report':'value','--manifest':'value','--expect-candidate':'value','--predecessor':'value','--baseline':'value','--format':'value','--out':'value','--after':'value','--limit':'value'},positional:['action','target'],min:2},
+  prepare: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--request-key': 'value', '--parent': 'value' }, positional: ['action'], min: 0 },
   bundle: { flags: COMMON, positional: [], min: 0 },
 };
 

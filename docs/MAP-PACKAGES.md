@@ -356,3 +356,13 @@ runs genuine Gitleaks current/baseline/selected/canceled cases in the explicit z
 `scripts/test-sentinel-decisions-consumer.mjs` installs the tarball with npm alone and exercises public decisions,
 source removal, owner-service contention and all-format reports, adding current/baseline/selected privacy under
 native opt-in. Its recorded command outcome does not qualify service-owned writes or installed crash windows.
+
+Sentinel's durable preparation extension adds `contracts/preparation.ts`, `service/preparation-{clock,inputs,
+discovery,journal,controller,projection,client,key-lock}.ts` and private `store/admission-fence.ts`. The held service owns the
+journal/controller; the client only connects to that owner and uses real CLI receipt confirmation. Input/profile
+proofs remain opaque in process, captured continuation reuses canonical bootstrap/planning, and a private scoped
+veto checks actual ledger acceptance boundaries without changing public store callbacks. The SDK adds separately
+negotiated preparation tools. `test/preparation-*.test.ts` and `scripts/test-sentinel-preparation-consumer.mjs`
+exercise genuine admission, no hidden preview writes, original deadlines, actual owner crash and installed source-gone
+continuation before separate check execution. Native provenance/image readiness runs in the existing pinned scanner
+gate, apart from the zero-skip pure service gate. These modules add no arbitrary runtime package exports.

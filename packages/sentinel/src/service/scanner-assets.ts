@@ -51,15 +51,20 @@ function recordFor(trustDir:string,entry:LockedTool|LockedDatabase):HeldAsset{
   ||r.receipt.stateDigest!==canonicalDigest({lock:r.previousLock,metadata:r.metadataDigest}))bad();
  return r;
 }
+/** Internal preparation guard: an existing promoted pin must retain its actual owner provenance. Missing
+ * provenance is not ordinary local image/database unavailability. Legacy asset callers keep their defaults. */
+export function assertPreparationAssetProvenance(trustDir:string,entries:readonly(LockedTool|LockedDatabase)[]):void{
+ for(const entry of entries){try{recordFor(trustDir,entry);}catch(error){if(error instanceof ScannerAssetError&&error.code==='sentinel.assets.missing')bad();throw error;}}
+}
 export function heldDatabases(trustDir:string,lock:RuleLockEnvelope){return lock.databases.map(entry=>{const held=recordFor(trustDir,entry);
  const path=join(folder(trustDir,'objects'),entry.snapshotDigest.slice(7));const b=readAsset(path,MAX_ARCHIVE);if(digest(b)!==entry.snapshotDigest)bad();
  return{databaseId:entry.databaseId,snapshotDigest:entry.snapshotDigest,path,record:held.metadata};});}
-export async function installedAdapters(trustDir:string,lock:RuleLockEnvelope,ids:readonly string[],scratch:string,wrapRunner?:(runner:DockerRunner)=>DockerRunner):Promise<ReadonlySet<string>>{
+export async function installedAdapters(trustDir:string,lock:RuleLockEnvelope,ids:readonly string[],scratch:string,wrapRunner?:(runner:DockerRunner)=>DockerRunner,signal?:AbortSignal):Promise<ReadonlySet<string>>{
  const all=externalDrivers();const selected=[...new Set(ids)].filter(id=>all.has(id));if(!selected.length)return new Set();
- const backend=await ContainerBackend.connect({privateDir:scratch,...(wrapRunner?{wrapRunner}:{})});const out=new Set<string>();
+ const backend=await ContainerBackend.connect({privateDir:scratch,...(wrapRunner?{wrapRunner}:{}),...(signal?{signal}:{})});const out=new Set<string>();
  for(const id of selected){const def=all.get(id)!.definition;const tool=lock.tools.filter(t=>t.adapterId===id);
   if(tool.length!==1||tool[0]!.version!==def.version||tool[0]!.artifactDigest!==def.image.split('@')[1])throw new ScannerAssetError('sentinel.assets.missing');
-  recordFor(trustDir,tool[0]!);const image=await backend.inspectImage(def.image);if(tool[0]!.platform!==`linux-${image.architecture}`)bad();
+  recordFor(trustDir,tool[0]!);const image=await backend.inspectImage(def.image,signal);if(tool[0]!.platform!==`linux-${image.architecture}`)bad();
   if(id==='advisories-osv'&&!lock.databases.some(d=>d.databaseId==='osv:npm'||d.databaseId==='osv:Maven'))throw new ScannerAssetError('sentinel.assets.missing');
   if(id==='iac-trivy'&&!lock.databases.some(d=>d.databaseId==='trivy-checks'&&d.snapshotDigest===TRIVY_CHECKS_BUNDLE.layer))throw new ScannerAssetError('sentinel.assets.missing');
   out.add(id);

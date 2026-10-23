@@ -11,6 +11,7 @@ import type {
   AttemptEnvelope, AttemptUsage, Id, RunEnvelope, RunOutcome, RunState, WorkEnvelope, WorkRef,
 } from '../contracts/index.js';
 import { canonicalJson, digestOf } from './ledger-json.js';
+import { admissionFenceCheckpoint } from './admission-fence.js';
 import { LEDGER_MIGRATIONS, migrateLedger, type LedgerGuard } from './migrations.js';
 import {
   ARTIFACT_CODECS, ARTIFACT_PRIVACY, LedgerError, MAX_ARTIFACT_BYTES, MAX_EVENT_PAGE, MAX_SNAPSHOT_ARTIFACTS,
@@ -485,7 +486,7 @@ export class Ledger {
   }
 
   /** One short IMMEDIATE transaction. The body is synchronous; a returned promise is refused and rolled back. */
-  #transaction<T>(body: () => T, fence: boolean, commitPoint?: LedgerFailpoint): T {
+  #transaction<T>(body: () => T, fence: boolean, commitPoint?: LedgerFailpoint, admission = false): T {
     if (this.#closed) throw new LedgerError('sentinel.store.closed', 'the ledger is closed');
     this.#db.exec('BEGIN IMMEDIATE');
     try {
@@ -502,6 +503,7 @@ export class Ledger {
         throw new LedgerError('sentinel.store.asyncTransaction', 'a ledger transaction body must be synchronous');
       }
       if (commitPoint) this.#failpoint(commitPoint);
+      if (admission) admissionFenceCheckpoint(this.#owner);
       this.#db.exec('COMMIT');
       return result;
     } catch (error) {
@@ -539,7 +541,7 @@ export class Ledger {
         JSON.stringify(result ?? null), this.epoch, this.#now());
       }
       return result;
-    }, true, commitPoint);
+    }, true, commitPoint, operation === 'admitSnapshot' || operation === 'admitPlan' || operation === 'publish');
   }
 
   #event(kind: LedgerEventKind, runId: Id | null, work: WorkRef | null, payload: Record<string, unknown>): number {
@@ -942,6 +944,7 @@ export class Ledger {
     // the stage registered before any byte was written keeps it pinned against collection until this commit.
     // The transaction then requires that same stage to still be open, so the verification still holds at commit.
     this.#verifyReceipts(receipts, 'publication');
+    admissionFenceCheckpoint(this.#owner);
     return this.#mutate('publish', request, input.idempotency, () => {
       const { runId, runState } = this.#fenceAttempt(ref, input.attemptId);
       if (!PUBLISHING_RUN_STATES.includes(runState)) {
@@ -1061,6 +1064,7 @@ export class Ledger {
     // Verified before the transaction (it reads every object); the open stages keep them pinned until the commit,
     // which requires the same stages to be open still.
     this.#verifyReceipts(receipts, 'snapshot admission');
+    admissionFenceCheckpoint(this.#owner);
     return this.#mutate('admitSnapshot', request, input.idempotency, () => {
       if (this.#get('SELECT 1 AS x FROM snapshots WHERE id = ?', input.snapshotId)) {
         throw new LedgerError('sentinel.store.conflict', 'a snapshot with this id was already admitted');
@@ -1179,6 +1183,7 @@ export class Ledger {
     const required = [input.plan, input.profile, ...(input.ruleLock ? [input.ruleLock] : []), ...(input.policy ? [input.policy] : []), ...(selection ? [selection] : [])];
     if (new Set(required).size !== required.length) throw invalid('the plan and its pinned artifacts are distinct artifacts');
     const stage = this.#checkUnboundStages(input.stageIds, input.receipts, 'plan admission');
+    admissionFenceCheckpoint(this.#owner);
     const request = { runId: input.runId, revision: input.revision, kind: input.kind, digest: input.digest, previous: input.previous,
       plan: input.plan, ruleLock: input.ruleLock, policy: input.policy, profile: input.profile, snapshotId: input.snapshotId,
       ...(selection ? { selection } : {}), stageIds: stage.stageIds, receipts: stage.receipts.map(r => ({ ...r })) };

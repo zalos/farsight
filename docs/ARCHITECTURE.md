@@ -1868,6 +1868,41 @@ record uses planned → running → pausing → paused without launching work or
 skips that pause branch and wins. Genuine canonical selected-child and actual owner-service setup gates qualify
 both branches without depending on the later path worker.
 
+ADR48 preparation extension: a fixed configured-workspace preparation occupies the held OwnerService task slot.
+Four closed draft documents (`PreparationCapabilities`, `ConfigurationPreview`, `PreparationStatus`,
+`PreparationOutcome`) negotiate five operations separately from existing reads and run controls. A pure preview
+pins full intended configuration/lock/registry/limits and a fixed readiness recipe before effects. Genuine
+admission precedes lazy private journal creation. Owner confirmation uses readonly receipt check, durable admitting,
+actual one-use consume and durable accepted; ordinary adopted agent grants do not spend an owner receipt. The
+stricter package-internal admission entry can only add confirmation and preserves ordinary admit defaults.
+
+Resolved readiness is bound write-once before capture, retaining exact missing-asset reasons and existing required/
+optional planner gap semantics. Required bootstrap prerequisites and unsafe provenance refuse. A captured association,
+not a temporary file or digest alone, permits explicit freshly authorized pinned continuation after restart. Original
+accepted time spans all phases and the prepared run; earlier existing-row deadlines cannot be reset. Private
+owner-bound admission vetoes run after physical verification and immediately before COMMIT for this preparation's
+snapshot/plan/publication effects. They grant no authority and leave failure records/cleanup writable after expiry.
+No hard filesystem/RSS/COMMIT latency bound or automatic orphan cleanup is claimed.
+
+The CLI saves lookup data before dispatch; response loss is outcomeUnknown and status discovery never replays a
+write. The real SDK cannot submit human identity/confirmation/receipt fields. Ephemeral preview TTL is absolute;
+retained request/config/readiness records are private bounded data, not capabilities. Captured preparation that
+expires before a genuine run exists remains unsupported for fresh-clock retained retry. The 256-terminal cap
+refuses rather than silently pruning; explicit owner retention maintenance and GUI confirmation remain open.
+
+ADR48 preparation correction: a newly held owner durably interrupts previous-epoch nonterminal journal data;
+the same controller may reconcile only its genuinely settled task, with no active service run. A failed write
+refuses new admission. This is status, never proof of worker death, revocation, cleanup or automatic resume.
+The real CLI serializes confirmed saved-key check/status/save/dispatch using a qualified SQLite EXCLUSIVE
+sidecar, immediate busy refusal and existing canonical private-file checks. It contains no approval/ledger rows,
+is never unlinked or reclaimed by PID/age, and kernel process death releases its lock. Captured/pending/ambiguous keys remain retained. A terminal prepared lookup can be replaced by an explicitly
+confirmed fresh source capture, while linked requests deliberately use the parent snapshot. Equal inventory may
+return the existing run without changing its original snapshot/deadline; the new capture remains unused evidence.
+Only exact private journal-writer temporaries are settled under the held owner before preparation use. Unrenamed
+updates do not become accepted state, exact nlink2 canonical aliases are removed, and unknown names remain.
+Recovery is bounded and checks ownership before each destructive operation. Corruption disables preparation
+alone, preserving unrelated inspection, report and run controls.
+
 
 42. **Sentinel owner decisions are source-bound adjudications, with one retained evaluation across reports (2026-10-23).**
 The executable exposes `decision propose`, `approve`, `read` and `list`. A proposal names one real accepted

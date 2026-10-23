@@ -18,6 +18,8 @@ export interface WorktreeSource {
   readonly store: HeldStoreRoot | undefined;
   /** An explicitly permitted local Git LFS object folder. */
   readonly lfsObjects: string | undefined;
+  /** Internal preparation fence; never read from a captured request. */
+  readonly stillWithin?: () => void;
 }
 
 const OPEN_FLAGS = FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0);
@@ -91,6 +93,7 @@ export function enumerateWorktree(inv: Inventory, src: WorktreeSource): void {
 }
 
 function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dirStat: Stats, chain: Chain): void {
+  src.stillWithin?.();
   verifyChain(chain);
   let names: Buffer[];
   try {
@@ -119,6 +122,7 @@ function walk(inv: Inventory, src: WorktreeSource, rel: string, abs: Buffer, dir
   inv.listed(src.sourceId, rel);
 
   for (const child of children) {
+    src.stillWithin?.();
     const path = joinPath(rel, child.check.name);
     const st = lstatOrUndefined(child.abs);
     inv.release();

@@ -41,6 +41,8 @@ import type { BootstrapEvidence } from '../execution/bootstrap.js';
 import { publicRegistry, publicProfile, scannerExecution, externalDrivers, publicAvailability } from './scanner-profile.js';
 import { checkPlanDatabases } from './scanner-assets.js';
 import { recordRunFailure, runFailureFacts } from './run-failure.js';
+import { withAsyncAdmissionFence } from '../store/admission-fence.js';
+import { preparationRunContext, recordPreparationBootstrap, type PreparationRunIdentity } from './preparation-inputs.js';
 import { SELECTION_SCHEMA, selectionClosure, unitIdentity, unitsToRun, type RerunSelection } from '../execution/selection.js';
 
 const digest = (v: unknown) => `sha256:${createHash('sha256').update(canonicalJsonBytes(v)).digest('hex')}`;
@@ -119,32 +121,53 @@ const backendOf = (wrapRunner: WrapRunner | undefined) => (wrapRunner ? { backen
  * Plans the workspace canonically (see the file header). Planning the same content under the same lock, policy and
  * profile again is the same run: its admitted analysis is disclosed again (`kept`), nothing is captured twice.
  */
-export async function planWorkspaceCanonical(store: SentinelStore, options: {
+interface WorkspacePlanOptions {
   workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; wrapRunner?: WrapRunner; registry?: AdapterRegistry; parentId?: string | null; now: Date;
   /** Re-plan over this admitted snapshot instead of capturing again (a retry of the run that pinned it). */
   snapshotId?: string;
   /** Test seam: the trusted profile to plan under (the shipped one by default). */
   profile?: TrustedProfile;
+}
+export async function planWorkspaceCanonical(store: SentinelStore, options: WorkspacePlanOptions): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure }> {
+  return planWorkspaceCanonicalInner(store, options);
+}
+/** Private continuation from an opaque captured preparation, never a request-supplied profile or snapshot. */
+export async function planPreparedWorkspaceCanonical(store: SentinelStore, identity: PreparationRunIdentity, options: {
+  scratchRoot: string; wrapRunner?: WrapRunner; onCoordinator?: (coordinator: Coordinator) => void;
 }): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure }> {
+  const prepared = preparationRunContext(store, identity);
+  return withAsyncAdmissionFence(store, () => prepared.clock.stillWithin(), () => planWorkspaceCanonicalInner(store, {
+    workspace: prepared.workspace, trustDir: prepared.trustDir, policy: prepared.policy, registry: prepared.registry,
+    scratchRoot: options.scratchRoot, wrapRunner: options.wrapRunner, parentId: prepared.parent?.runId ?? null,
+    now: new Date(prepared.clock.acceptedAt), snapshotId: identity.snapshotId,
+  }, { identity, onCoordinator: options.onCoordinator }));
+}
+async function planWorkspaceCanonicalInner(store: SentinelStore, options: WorkspacePlanOptions, preparation?: {
+  identity: PreparationRunIdentity; onCoordinator?: (coordinator: Coordinator) => void;
+}): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure }> {
+  const prepared = preparation ? preparationRunContext(store, preparation.identity) : null;
+  const checkpoint = () => { if (preparation) preparationRunContext(store, preparation.identity); else store.assertHeld(); };
+  const within = prepared ? () => prepared.clock.stillWithin() : undefined;
   const book = new RuleLockBook(options.trustDir);
-  const current = book.current();
+  const current = prepared?.current ?? book.current();
   if (!current) throw new ServiceError('sentinel.service.noRuleLock');
-  const packs = book.packsOf(current.lock);
+  const packs = prepared?.packs ?? book.packsOf(current.lock);
   const registry = options.registry ?? publicRegistry(options.trustDir);
   const ids = [...new Set(packs.flatMap(p => p.manifest.rules.filter(r => options.policy.rules.includes(r.familyId)).map(r => r.implementation.adapterId)))].filter(id => externalDrivers().has(id));
-  const available = options.profile ? new Set<string>() : await publicAvailability(options.trustDir, current.lock, packs, ids, options.scratchRoot, options.wrapRunner);
-  const profile = options.profile ?? publicProfile(registry, available, packs);
-  const snapshot = options.snapshotId !== undefined
+  const available = prepared || options.profile ? new Set<string>() : await publicAvailability(options.trustDir, current.lock, packs, ids, options.scratchRoot, options.wrapRunner);
+  const profile = prepared?.profile ?? options.profile ?? publicProfile(registry, available, packs);
+  const snapshot = prepared?.snapshot ?? (options.snapshotId !== undefined
     ? (await openSnapshot(store, options.snapshotId)).snapshot
     : (await captureSnapshot(store, {
       // No folder is left out by name: `.farsight` is ordinary source. Only the exact store this process holds is
       // excluded (snapshot/capture.ts), and the run's scratch lives inside it (scratch-lease.ts).
       mode: 'working-copy', sources: [{ sourceId: WORKSPACE_SOURCE, repositoryId: 'local-workspace', root: options.workspace }],
-    })).snapshot;
+    })).snapshot);
+  checkpoint();
   // The run is what it would read and do: the captured inventory (not the capture's time), the lock, the policy and
   // the profile. The same content under the same terms plans to the same run.
   const key = { inventory: snapshot.inventoryDigest, lock: current.digest, policy: options.policy.revision, profile: profile.digest, parent: options.parentId ?? null };
-  const runId = options.parentId ? rerunIdOf(store, key, true) : `run-${digest(key).slice(7, 39)}`;
+  const runId = workspaceRunIdentity(store, key);
   const latest = store.ledger.latestPlan(runId);
   const analysisFor = (boot: PlanRevision, evidence: BootstrapEvidence) => {
     const inventory = boot.units.find(u => u.stage === 'inventory')!;
@@ -172,18 +195,24 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
         assertSupportedRules(expected);
         if (!options.profile) checkPlanDatabases(expected, current.lock);
       } catch {
+        within?.();
         throw new ServiceError('sentinel.service.planChanged', { runId });
       }
-      store.assertHeld();
+      checkpoint();
       store.ledger.advanceRunPlan(runId, expected.revision);
       return { outcome: 'kept', disclosure: disclose(expected) };
     }
     const revision = active?.planRevision ?? latest.revision;
-    return { outcome: 'kept', disclosure: disclose((await loadPlan(store, runId, revision)).plan) };
+    const kept = (await loadPlan(store, runId, revision)).plan;
+    checkpoint();
+    return { outcome: 'kept', disclosure: disclose(kept) };
   }
 
   const boot = latest ? (await loadPlan(store, runId, 1)).plan : planBootstrap({ runId, sourceIds: [WORKSPACE_SOURCE], profile: profile.planner });
-  if (!latest) await admitPlan(store, { plan: boot, ruleLock: null, policy: null, profile: profile.record });
+  checkpoint();
+  if (!latest) await admitPlan(store, { plan: boot, ruleLock: null, policy: null, profile: profile.record }, within, prepared ? checkpoint : undefined);
+  if (preparation) await recordPreparationBootstrap(store, preparation.identity);
+  checkpoint();
   const recorded = store.ledger.getRun(runId)?.envelope;
   const run: RunEnvelope = recorded ?? {
     schema: 'sentinel-run/draft-1', id: runId, parentId: options.parentId ?? null, baselineId: null, snapshotId: snapshot.id, planRevision: 1,
@@ -194,7 +223,14 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   // A run whose bootstrap already ended without publishing is finished: it is not run again. Planning the same
   // content again names it, and `rerun` plans a new run after it.
   const ended = recorded && (store.ledger.getRun(runId)?.state === 'completed' || store.ledger.getRun(runId)?.state === 'canceled');
-  const booted = ended ? undefined : await (await Coordinator.open({ store, runId, ...(recorded ? {} : { run }), registry, scratchRoot: options.scratchRoot, ...backendOf(options.wrapRunner) })).run();
+  let booted: RunSummary | undefined;
+  if (!ended) {
+    const coordinator = await Coordinator.open({ store, runId, ...(recorded ? {} : { run }), registry, scratchRoot: options.scratchRoot, ...backendOf(options.wrapRunner) });
+    preparation?.onCoordinator?.(coordinator);
+    within?.();
+    booted = await coordinator.run();
+  }
+  checkpoint();
   if (!booted || booted.kind !== 'bootstrap' || booted.published < boot.units.length) throw new ServiceError('sentinel.service.bootstrapFailed', { runId });
 
   const inventory = boot.units.find(u => u.stage === 'inventory')!;
@@ -203,7 +239,9 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   // Before admission: a shipped check adapter runs only the exact rules it implements.
   assertSupportedRules(analysis);
   if (!options.profile) checkPlanDatabases(analysis, current.lock);
-  await admitPlan(store, { plan: analysis, ruleLock: current.lock, policy: options.policy, profile: profile.record });
+  checkpoint();
+  await admitPlan(store, { plan: analysis, ruleLock: current.lock, policy: options.policy, profile: profile.record }, within, prepared ? checkpoint : undefined);
+  checkpoint();
   store.ledger.advanceRunPlan(runId, analysis.revision);
   return { outcome: 'prepared', disclosure: disclose(analysis) };
 }
@@ -395,6 +433,13 @@ export async function previewRerun(store: SentinelStore, parentId: string, selec
   const planned = await selectedRerun(store, parentId, [...chosen], terms);
   if ('reasonCode' in planned) return planned;
   return planned.preview;
+}
+
+/** Internal shared identity calculation; it reads no source or live capability and grants no admission. */
+export function workspaceRunIdentity(store: SentinelStore, key: {
+  readonly inventory: string; readonly lock: string; readonly policy: string; readonly profile: string; readonly parent: string | null;
+}): string {
+  return key.parent ? rerunIdOf(store, key, true) : `run-${digest(key).slice(7, 39)}`;
 }
 
 /**

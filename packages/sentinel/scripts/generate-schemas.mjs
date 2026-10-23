@@ -35,6 +35,10 @@ const ENVELOPES = {
   deliverychunk: ['sentinel-delivery-chunk/draft-1', 'DeliveryChunk'],
   controlcapabilities: ['sentinel-control-capabilities/draft-1', 'ControlCapabilities'],
   controloutcome: ['sentinel-control-outcome/draft-1', 'ControlOutcome'],
+  preparationcapabilities: ['sentinel-preparation-capabilities/draft-1', 'PreparationCapabilities'],
+  configurationpreview: ['sentinel-configuration-preview/draft-1', 'ConfigurationPreview'],
+  preparationstatus: ['sentinel-preparation-status/draft-1', 'PreparationStatus'],
+  preparationoutcome: ['sentinel-preparation-outcome/draft-1', 'PreparationOutcome'],
 
   decisioninput:['sentinel-decision-input/draft-1','OwnerDecisionInput'],
   decisionview:['sentinel-decision-view/draft-1','DecisionViewEnvelope'],

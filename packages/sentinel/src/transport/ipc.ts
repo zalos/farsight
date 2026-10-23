@@ -308,7 +308,7 @@ function serveConnection(socket: Socket, identity: ServiceIdentity, handler: Ser
       if (id === undefined || typeof f.op !== 'string' || f.type !== 'request' || inflight.has(id) || inflight.size >= 128) { refuse('sentinel.ipc.frameMalformed'); return; }
       const granted = by;
       inflight.add(id);
-      const read = f.op === 'run.inspect' || f.op === 'report.open' ? new AbortController() : undefined;
+      const read = f.op === 'run.inspect' || f.op === 'report.open' || f.op === 'prepare.resume' ? new AbortController() : undefined;
       if (read) reads.set(id, read);
       Promise.resolve()
         .then(() => handler(f.op as string, refuseActorClaims(f.body), granted, read ? { signal: read.signal } : undefined))
@@ -423,7 +423,7 @@ export async function connectOwnerSocket(address: RuntimeAddress, expect: Servic
       const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
       return new Promise((resolve, reject) => {
         const settle = (fn: () => void) => { clearTimeout(timer); options.signal?.removeEventListener('abort', onAbort); pending.delete(id); fn(); };
-        const cancelRead = () => { if ((op === 'run.inspect' || op === 'report.open') && !socket.destroyed) { try { socket.write(encodeFrame({ type: 'cancel', id })); } catch { /* connection failure already rejects */ } } };
+        const cancelRead = () => { if ((op === 'run.inspect' || op === 'report.open' || op === 'prepare.resume') && !socket.destroyed) { try { socket.write(encodeFrame({ type: 'cancel', id })); } catch { /* connection failure already rejects */ } } };
         const timer = setTimeout(() => { cancelRead(); settle(() => reject(new IpcError('sentinel.ipc.timeout'))); }, timeoutMs);
         const onAbort = () => { cancelRead(); settle(() => reject(new IpcError('sentinel.ipc.canceled'))); };
         options.signal?.addEventListener('abort', onAbort, { once: true });

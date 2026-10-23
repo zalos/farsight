@@ -9,7 +9,7 @@ import type {
   ReportCount, ReportEnvelope, RunEnvelope, SnapshotEnvelope, WorkEnvelope, FindingPlace, HelloMessage,
   WelcomeMessage, RefuseMessage, RulePackManifest, RuleLockEnvelope, SettingsEnvelope, RepoConfigEnvelope,
   EffectivePolicyEnvelope, AdoptionEnvelope, ReceiptEnvelope, AdmissionEnvelope, ControlFactsEnvelope, Rights, Budget,
-  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope, ServiceCapabilities, RunInspection, InspectionPage, ReportDelivery, DeliveryChunk, ControlCapabilities, ControlOutcome, ImportViewEnvelope, ImportPageEnvelope, OwnerDecisionInput, DecisionViewEnvelope, DecisionPageEnvelope, PathRequestEnvelope,
+  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope, ServiceCapabilities, RunInspection, InspectionPage, ReportDelivery, DeliveryChunk, ControlCapabilities, ControlOutcome, ImportViewEnvelope, ImportPageEnvelope, OwnerDecisionInput, DecisionViewEnvelope, DecisionPageEnvelope, PathRequestEnvelope, PreparationCapabilities, ConfigurationPreview, PreparationStatus, PreparationOutcome,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
 import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf } from './planner/identity.js';
@@ -45,6 +45,10 @@ export interface EnvelopeTypes {
   deliverychunk: DeliveryChunk;
   controlcapabilities: ControlCapabilities;
   controloutcome: ControlOutcome;
+  preparationcapabilities: PreparationCapabilities;
+  configurationpreview: ConfigurationPreview;
+  preparationstatus: PreparationStatus;
+  preparationoutcome: PreparationOutcome;
 
   decisioninput: OwnerDecisionInput;
   decisionview: DecisionViewEnvelope;
@@ -766,6 +770,15 @@ const importpage:Check<ImportPageEnvelope>=(v,out)=>{
   if(v.count.n!==v.items.length)out.add(err('/count','page count counts returned metadata rows only'));
   for(const i of duplicates(v.items,x=>x.operationId))out.add(err(`/items/${i}`,'one row per operation'));
 };
+// Exact public timestamp arithmetic keeps fractions that Date.parse truncates.
+const timestampNanos = (value: string): bigint | null => {
+ if(!isCalendarTimestamp(value))return null;
+ const millis=Date.parse(value.slice(0,19)+'Z');if(!Number.isSafeInteger(millis))return null;
+ const whole = BigInt(millis)*1_000_000n;
+ const fraction = value.slice(19,-1).replace(/^\./,'');
+ return whole + BigInt(fraction.padEnd(9,'0'));
+};
+
 const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   snapshot, run, work, attempt, observation, coverage, disposition, report, protocol,
   rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan, paths, pathrequest, deepimport, importview, importpage, decisioninput, decisionview, decisionpage,
@@ -774,6 +787,24 @@ const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   inspectionpage: () => [],
   reportdelivery: () => [],
   deliverychunk: () => [],
+  preparationcapabilities: () => [],
+  configurationpreview: (v, out) => {
+    const end=timestampNanos(v.expiresAt),start=timestampNanos(v.createdAt);
+    if (end===null||start===null||end <= start || end-start>30_000_000_000n) out.add(err('/expiresAt', 'preview expiry exceeds its original bound'));
+  },
+  preparationstatus: (v, out) => {
+    if (!v.found) return;
+    const end=timestampNanos(v.deadlineAt),start=timestampNanos(v.acceptedAt),runEnd=timestampNanos(v.runDeadlineAt);
+    if (end===null||start===null||runEnd===null||end<=start||end-start>600_000_000_000n||runEnd>end) out.add(err('/deadlineAt', 'preparation timing must preserve the original bound'));
+    if(v.phase==='prepared'&&(!v.runId||v.preparedRevision===null||v.preparedRevision<2))out.add(err('/preparedRevision','prepared requires an actual analysis revision'));
+    for(const [i,a]of v.availability.entries())if(a.available?(a.reasonCode!==null):(a.reasonCode===null))out.add(err(`/availability/${i}`,'readiness answer and reason differ'));
+  },
+  preparationoutcome: (v, out) => {
+    const exits = {submitted:0,requested:0,kept:0,answered:0,'configuration-failure':3,'awaiting-confirmation':4,unavailable:3,refused:3};
+    if(v.status){const nested=new Bounded();INVARIANTS.preparationstatus(v.status,nested);for(const error of nested.list)out.add({...error,path:'/status'+error.path});}
+    if(v.exitCode!==exits[v.outcome])out.add(err('/exitCode','exit code differs from the canonical command outcome'));
+    if(['submitted','requested','kept'].includes(v.outcome)&&(!v.status||!v.status.found))out.add(err('/status','an accepted preparation outcome requires its actual retained status'));
+  },
   controlcapabilities: () => [],
   controloutcome: (v, out) => {
     const exits = { ...POLICY_EXIT_CODES, submitted: 0, requested: 0, unavailable: 3, prepared: 0, kept: 0, answered: 0, refused: 3 };

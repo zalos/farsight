@@ -58,6 +58,13 @@ test('no Farsight package depends on or imports Sentinel', () => {
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // Exact-owned native memory witness: bounded fixed proc/cgroup reads and one filesystem notification watcher.
   'execution/cgroup-memory.js': ['node:fs'],
+
+  'service/preparation-key-lock.js': ['node:path'],
+  'service/preparation-client.js': ['node:crypto', 'node:path'],
+  'service/preparation-projection.js': ['@farsight/core/dist/strings.js'],
+  'service/preparation-controller.js': ['node:crypto', 'node:path', 'node:timers/promises'],
+  'service/preparation-journal.js': ['node:crypto', 'node:fs', 'node:path'],
+  'service/preparation-clock.js': ['node:perf_hooks'],
   'service/controls.js': ['@farsight/core/dist/strings.js'],
   'service/readonly.js': ['@farsight/core/dist/strings.js', 'node:crypto', 'node:perf_hooks'],
   'service/mcp.js': ['@farsight/core/dist/strings-sentinel-service.js', '@farsight/core/dist/strings.js', '@modelcontextprotocol/sdk/server/index.js', '@modelcontextprotocol/sdk/server/stdio.js', '@modelcontextprotocol/sdk/types.js'],
@@ -191,6 +198,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'evidence/audit.js': ['node:fs', 'node:path'],
   'store/ledger-json.js': ['node:crypto'],
   // Scope-local counters and a monotonic clock; neither performs I/O or starts work on import.
+    'store/admission-fence.js': ['node:async_hooks'],
   'store/read-budget.js': ['node:async_hooks', 'node:perf_hooks', 'node:timers/promises'],
   'store/ledger.js': ['node:fs', 'node:path'],
   'store/migrations.js': ['node:crypto', 'node:fs', 'node:path'],

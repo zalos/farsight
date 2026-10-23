@@ -19,6 +19,7 @@ import { isEffectivePolicy, type EffectivePolicy } from '../policy/settings.js';
 import { lockDigest } from '../rules/lock.js';
 import type { SentinelStore } from '../store/index.js';
 import { canonicalJsonBytes } from '../store/objects.js';
+import { withAdmissionFence } from '../store/admission-fence.js';
 import type { PlanRecord } from '../store/store-types.js';
 import { validateEnvelope } from '../validate.js';
 import { ExecutionError } from './errors.js';
@@ -75,8 +76,10 @@ function check(plan: PlanRevision, ruleLock: RuleLockEnvelope | null, policy: Ef
 }
 
 /** Admit an exact plan revision with what it pins. Returns the ledger's record. */
-export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest): Promise<PlanRecord> {
-  store.assertHeld();
+export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest, stillWithin?: () => void, beforeAdmission?: () => void): Promise<PlanRecord> {
+  // Internal preparation fence only, never a persisted/public request field. Legacy callers retain their behavior.
+  const checkpoint = () => { store.assertHeld(); stillWithin?.(); };
+  checkpoint();
   const plan = structuredClone(request.plan);
   const ruleLock = request.ruleLock ? structuredClone(request.ruleLock) : null;
   if (request.policy !== null && !isEffectivePolicy(request.policy)) refuse('the policy is accepted only as effectivePolicy returned it');
@@ -105,6 +108,7 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest)
   const pinned = [ids.profile.id, ...(ids.ruleLock ? [ids.ruleLock.id] : []), ...(ids.policy ? [ids.policy.id] : []), ...(ids.selection ? [ids.selection.id] : []),...(path?[path.request.id]:[])];
   const stageId = `plan.${plan.runId}.${plan.revision}.${plan.digest.slice(7, 23)}`.slice(0, 128);
   path?.boundary();
+  checkpoint();
   store.ledger.registerStaging(stageId, [
     { id: ids.plan.id, schema: 'sentinel-plan/draft-1', privacy: 'source-derived', links: pinned },
     { id: ids.profile.id, schema: profile.schema, privacy: 'metadata' },
@@ -114,7 +118,7 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest)
     ...(path?[{id:path.request.id,schema:PATH_REQUEST_SCHEMA,privacy:'source-derived' as const,links:path.links}]:[]),
   ]);
   const put = async (value:unknown, expect: {id:ArtifactId;rawSize:number}) => {
-    path?.boundary();const receipt=await store.objects.putCanonicalJson(value,{expect});path?.boundary();return receipt;
+    checkpoint();path?.boundary();const receipt=await store.objects.putCanonicalJson(value,{expect});path?.boundary();checkpoint();return receipt;
   };
   try {
     const receipts = [await put(plan, ids.plan), await put(profile, ids.profile)];
@@ -123,10 +127,12 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest)
     if (selection) receipts.push(await put(selection, ids.selection!));
     if(path) receipts.push(await put(path.request.value,{id:path.request.id,rawSize:canonicalJsonBytes(path.request.value).length}));
     path?.boundary();
-    store.assertHeld();
-    return store.ledger.admitPlan({ runId: plan.runId, revision: plan.revision, kind: plan.kind, digest: plan.digest, previous: plan.previous,
+    checkpoint();
+    beforeAdmission?.(); checkpoint();
+    const admit = () => store.ledger.admitPlan({ runId: plan.runId, revision: plan.revision, kind: plan.kind, digest: plan.digest, previous: plan.previous,
       plan: ids.plan.id, ruleLock: ids.ruleLock?.id ?? null, policy: ids.policy?.id ?? null, profile: ids.profile.id, selection: ids.selection?.id ?? null,
       snapshotId: plan.pins.snapshotId, stageIds: [stageId], receipts });
+    return stillWithin ? withAdmissionFence(store, checkpoint, admit) : admit();
   } catch (error) {
     try { store.assertHeld(); store.ledger.abortStaging(stageId); } catch { /* recovery aborts a stage left open */ }
     throw error;
