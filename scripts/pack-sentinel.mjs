@@ -105,6 +105,13 @@ for (const stem of ['frameworks/controls', 'analysis/paths']) {
   if (!existsSync(driver)) fail(`packages/sentinel/src/${stem}/driver.ts is missing; the built-in worker requires its fixed driver.`);
   entries.set(`${stem}/driver`, driver);
 }
+// The fixed coordinator review operation is hashed by its own path at registry creation.
+// It must remain a real installed entry even when its shared implementation is split into chunks.
+if (existsSync(join(dir, 'src/service/review-adapter.ts'))) {
+  const dispatch = join(dir, 'src/review/dispatch.ts');
+  if (!existsSync(dispatch)) fail('packages/sentinel/src/review/dispatch.ts is missing; the model registry requires its fixed operation.');
+  entries.set('review/dispatch', dispatch);
+}
 // `types` first: TypeScript takes the first condition that matches.
 const exportsMap = Object.fromEntries(jsExports.map(([subpath, file, types]) => [subpath, { types: `./${rel(types)}`, import: `./${entryFor(file)}` }]));
 exportsMap['./package.json'] = './package.json';

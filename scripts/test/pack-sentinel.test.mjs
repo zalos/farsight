@@ -485,3 +485,18 @@ for (const stem of ['frameworks/controls','analysis/paths']) test(`a shipped ${s
     assert.deepEqual(readdirSync(join(root, 'build/sentinel')).sort(), before);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('a configured review registry ships its fixed operation entry and refuses a missing one', () => {
+  const root = workspace();
+  try {
+    write(root, 'packages/sentinel/src/service/review-adapter.ts', 'export const reviews = true;\n');
+    const refused = node(root, 'pack-sentinel.mjs');
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /review\/dispatch.ts is missing/);
+    write(root, 'packages/sentinel/src/review/dispatch.ts', 'export const operation = true;\n');
+    const packed = node(root, 'pack-sentinel.mjs');
+    assert.equal(packed.status, 0, packed.stderr);
+    assert.ok(existsSync(join(root, 'build/sentinel/package/dist/review/dispatch.mjs')));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

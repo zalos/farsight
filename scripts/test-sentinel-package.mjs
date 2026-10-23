@@ -65,6 +65,9 @@ try {
     assert.ok(existsSync(controlsDriver), 'the descriptor driver is a fixed internal dist entry');
     assert.ok(!Object.hasOwn(pkg.sentinel.assets, 'frameworks/controls/driver'), 'the fixed driver is pinned by the dist closure, not the started-asset inventory');
   }
+  if (existsSync(join(sourceDir, 'src/service/review-adapter.ts'))) {
+    assert.ok(existsSync(join(installed, 'dist/review/dispatch.mjs')), 'the model registry operation is a fixed installed entry');
+  }
   // Required whenever the source package can start built-in workers (it has the supervisor).
   const startsWorkers = existsSync(join(sourceDir, 'src', 'execution', 'supervisor.ts'));
   if (startsWorkers) assert.ok(existsSync(gate), 'the launch gate is shipped as dist/execution/launch-gate.mjs');
