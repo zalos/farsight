@@ -63,3 +63,19 @@ test('fresh current monetary ledger retains its existing reserve/dispatch/settle
   ledger = await BudgetLedger.open(path); t.after(() => ledger.close());
   assert.equal(ledger.totals('new-env').chargedTokens, 30); assert.equal(ledger.totals('new-env').chargedCostNanos, 300n);
 });
+
+test('whitespace inside a quoted CHECK literal is an unknown schema, not removable formatting', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'sentinel-budget-literal-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const path = join(root, 'altered.db');
+  const source = new DatabaseSync(new URL('./fixtures/model-budget/legacy-6c.db', import.meta.url), { readOnly: true });
+  const schema = source.prepare("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as { name: string; sql: string }[]; source.close();
+  const altered = new DatabaseSync(path);
+  for (const row of schema) altered.exec(row.name === 'reservations' ? row.sql.replace("'held'", "'held '") : row.sql);
+  altered.close();
+  const before = await readFile(path);
+  let accepted = false;
+  try { const ledger = await BudgetLedger.open(path); ledger.close(); accepted = true; }
+  catch (error: any) { assert.equal(error.code, 'sentinel.provider.ledgerInvalid'); }
+  assert.equal(accepted, false, 'a different SQL literal must be refused');
+  assert.deepEqual(await readFile(path), before, 'refusal must not mutate the unknown database');
+});

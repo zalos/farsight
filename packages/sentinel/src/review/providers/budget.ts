@@ -84,11 +84,26 @@ CREATE TABLE IF NOT EXISTS reservation_events (
 
 // Recognize only this package's exact historical schemas before changing a database. Unknown DDL is refused;
 // a legacy row has genuinely unobserved provider provenance, never a guessed binding or provider id.
-const ddl = (sql: string) => sql.replace(/IF NOT EXISTS /g, '').replace(/\s+/g, '').replace(/;$/, '');
-const expectedTables = new Map([...SCHEMA.matchAll(/CREATE TABLE IF NOT EXISTS ([a-z_]+) \([\s\S]*?\) STRICT;/g)]
-  .map(m => [m[1]!, ddl(m[0])]));
-const oldEnvelope = expectedTables.get('envelopes')!.replace('provider_idTEXTNOTNULL,', '');
-const migratedEnvelope = oldEnvelope.replace(')STRICT', ',provider_idTEXT)STRICT');
+function ddl(sql: string): string {
+  // Tokenize instead of deleting whitespace: both literal contents and token boundaries are semantic.
+  // Unknown comments/quoting/operators refuse; this recognizes only the package's emitted DDL vocabulary.
+  const out: string[] = []; let end = 0;
+  const token = /'(?:''|[^'])*'|"(?:""|[^"])*"|[A-Za-z_][A-Za-z0-9_]*|[0-9]+|>=|<=|<>|!=|[(),;=<>+*-]/g;
+  for (const match of sql.matchAll(token)) {
+    if (/\S/.test(sql.slice(end, match.index))) return fail('sentinel.provider.ledgerInvalid', 'unknown budget ledger DDL');
+    out.push(match[0]); end = match.index! + match[0].length;
+  }
+  if (/\S/.test(sql.slice(end))) return fail('sentinel.provider.ledgerInvalid', 'unknown budget ledger DDL');
+  if (out[0] === 'CREATE' && out[1] === 'TABLE' && out.slice(2, 5).join(' ') === 'IF NOT EXISTS') out.splice(2, 3);
+  if (out.at(-1) === ';') out.pop();
+  return JSON.stringify(out);
+}
+const rawTables = new Map([...SCHEMA.matchAll(/CREATE TABLE IF NOT EXISTS ([a-z_]+) \([\s\S]*?\) STRICT;/g)]
+  .map(m => [m[1]!, m[0]]));
+const expectedTables = new Map([...rawTables].map(([name, sql]) => [name, ddl(sql)]));
+const oldEnvelopeSql = rawTables.get('envelopes')!.replace('provider_id TEXT NOT NULL, ', '');
+const oldEnvelope = ddl(oldEnvelopeSql);
+const migratedEnvelope = ddl(oldEnvelopeSql.replace(/\) STRICT;$/, ', provider_id TEXT) STRICT;'));
 type SchemaDb = InstanceType<typeof import('node:sqlite')['DatabaseSync']>;
 function knownSchema(db: SchemaDb): 'empty' | 'legacy' | 'current' {
   const objects = db.prepare("SELECT name, type, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name LIMIT 65").all() as { name: string; type: string; tbl_name: string; sql: string | null }[];
