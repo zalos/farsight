@@ -1681,3 +1681,31 @@ and delivery caches are global insertion-order quotas, so another same-account c
 The SDK’s express/hono/cors/jose and other dependencies enlarge the optional installed supply-chain surface, despite
 lazy loading keeping the MCP entry out of ordinary imports. Its required zod peer is pinned exactly 3.25.76 beside
 SDK 1.31.0; lazy execution does not imply a smaller installation.
+
+
+ADR48 control extension: `service.control-capabilities` is a separate additive closed document, preserving the
+original read capability schema and its literal controlsSupported:false. The lazy SDK adapter advertises start,
+pause and cancel only after that negotiation and checks it again before each dispatch, including reconnects.
+Closed runtime arguments reject confirmation, receipts and caller identity fields even when a client ignores the
+advertised SDK schema. The existing OwnerService admission remains the only execution decision: an ordinary
+adopted agent grant or a genuine owner CLI receipt consumed by the legacy service operation. MCP receives no
+receipt and cannot confirm; a future HTTP bridge is also an agent. GUI owner confirmation remains an explicit
+unbuilt boundary, not a browser boolean or transport label.
+
+The control result is a schema-checked projection of the existing canonical CommandResult vocabulary, exit code,
+three cataloged permission verdicts and known lifecycle state, with no raw facts, IDs, hashes or diagnostics.
+Requested/submitted is intent or acceptance; existing status/wait establishes the result. Resume starts the same
+recorded run, duplicate start joins and terminal replay returns the existing result. Neither response loss nor
+MCP cancellation rolls back accepted service work; reconnect reads status without automatic mutation replay.
+The retained read scopes do not wrap control execution. Preparation/configuration/rerun and raw evidence access
+remain separate slices. A genuine npm-only SDK consumer exercises both grant and owner CLI paths and loses one
+actual accepted start response before reconnecting, without changing installed service/adapter bytes.
+
+
+ADR48 control correction: after a control dispatch, an unreadable/unknown response or transport loss is
+nonretryable controlOutcomeUnknown, not proof that the action was unavailable. The existing canonical state is
+queried after reconnect; no write is automatically repeated. Per-call negotiation permits a new service epoch on
+the same genuine store with fresh admission, while A2 handles remain epoch-bound. A setup pause on a planned
+record uses planned → running → pausing → paused without launching work or renewing time/budget; pending cancel
+skips that pause branch and wins. Genuine canonical selected-child and actual owner-service setup gates qualify
+both branches without depending on the later path worker.

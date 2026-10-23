@@ -45,7 +45,7 @@ try{
  const toolList=(await client.listTools()).tools;assert.deepEqual(Object.keys(toolList.find(t=>t.name==='sentinel_run_status').inputSchema.properties),['runId']);
  const noEvents=await client.callTool({name:'sentinel_run_status',arguments:{runId:childId,after:0,limit:1}});assert.equal(noEvents.isError,true);assert.equal(noEvents.structuredContent.error.code,'sentinel.service.requestInvalid');
  const copies=await Promise.all([1,2].map(()=>client.callTool({name:'sentinel_run_inspect',arguments:{runId:childId}})));assert.equal(copies.filter(x=>!x.isError).length,1);const busy=copies.find(x=>x.isError);assert.equal(busy.structuredContent.error.code,'sentinel.service.inspectBusy');assert.equal(busy.structuredContent.error.retryable,true);
- assert.deepEqual(toolList.map(t=>t.name).sort(),['sentinel_service_info','sentinel_run_describe','sentinel_run_status','sentinel_run_wait','sentinel_run_inspect','sentinel_view_page','sentinel_report_open','sentinel_delivery_read'].sort());
+ assert.deepEqual(toolList.map(t=>t.name).sort(),['sentinel_service_info','sentinel_run_describe','sentinel_run_status','sentinel_run_wait','sentinel_run_inspect','sentinel_view_page','sentinel_report_open','sentinel_delivery_read','sentinel_run_start','sentinel_run_pause','sentinel_run_cancel'].sort());
  const caps=await tool('sentinel_service_info');assert.equal(caps.controlsSupported,false);assert.ok(sentinel.validateEnvelope('servicecapabilities',caps).ok);
  const start=performance.now(),view=await tool('sentinel_run_inspect',{runId:childId}),inspectMs=performance.now()-start;
  assert.ok(sentinel.validateEnvelope('runinspection',view).ok);let cursor,seen=0;
@@ -69,7 +69,7 @@ try{
  ({client,stderr}=await connect());assert.equal(await bytes(saved),savedBytes,'reconnect preserves exact delivery');
  await client.close();clients.delete(client);await stop(service);services.delete(service);service=serving();({client,stderr}=await ready());
  const expired=await client.callTool({name:'sentinel_delivery_read',arguments:{deliveryId:saved.deliveryId,offset:0}});assert.equal(expired.isError,true);assert.equal(expired.structuredContent.error.code,'sentinel.service.deliveryExpired');
- const unavailable=await client.callTool({name:'sentinel_run_start',arguments:{planId:parent}});assert.equal(unavailable.isError,true);assert.equal(unavailable.structuredContent.error.code,'sentinel.service.operationUnavailable');
+ const unavailable=await client.callTool({name:'sentinel_run_start',arguments:{planId:parent}});assert.ok(!unavailable.isError);assert.equal(unavailable.structuredContent.outcome,'configuration-failure');assert.equal(unavailable.structuredContent.reasonCode,'sentinel.admission.noGrant');
  // A second genuine public plan uses the shipped framework worker; application bytes are never executed.
  await client.close();clients.delete(client);await stop(service);services.delete(service);
  mkdirSync(join(ws,'src'));writeFileSync(join(ws,'package.json'),JSON.stringify({name:'original-mcp-example',version:'1.0.0',dependencies:{express:'4.21.2'}}));
@@ -120,7 +120,7 @@ try{
  const idleReport=await tool('sentinel_report_open',{runId:frameworkId,format:'json'}),idleBytes=await bytes(idleReport),idleView=await tool('sentinel_run_inspect',{runId:frameworkId});
  await wait(16000);assert.equal(service.exitCode,null,'actual saved buffers retain owner beyond detached idle cutoff');assert.equal(await bytes(idleReport),idleBytes);assert.equal((await tool('sentinel_view_page',{viewId:idleView.viewId,collection:'works'})).viewId,idleView.viewId);
  assert.equal(stderr(),'');
- console.log(JSON.stringify({schema:'sentinel-mcp-consumer/draft-1',npmOnly:true,sdk:'1.31.0',zod:'3.25.76',statusOnly:true,inspectBusy:true,ordinaryImportWithoutSdk:true,retainedPastDetachedIdle:true,sourceGone:true,selected:true,comparison:true,reconnect:true,restartExpired:true,controlsAbsent:true,frameworkSourceGone:true,nativeSecrets:native,sarifParity:'semantic',otherFormatParity:'exact',inspectMs,formats:measure}));
+ console.log(JSON.stringify({schema:'sentinel-mcp-consumer/draft-1',npmOnly:true,sdk:'1.31.0',zod:'3.25.76',statusOnly:true,inspectBusy:true,ordinaryImportWithoutSdk:true,retainedPastDetachedIdle:true,sourceGone:true,selected:true,comparison:true,reconnect:true,restartExpired:true,controlsNegotiated:true,defaultControlsDenied:true,frameworkSourceGone:true,nativeSecrets:native,sarifParity:'semantic',otherFormatParity:'exact',inspectMs,formats:measure}));
 }finally{
  for(const client of clients)await client.close().catch(()=>{});for(const child of services)await stop(child);
  c.cleanup();

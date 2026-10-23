@@ -49,6 +49,8 @@ export const ENVELOPES = {
   inspectionpage: { schema: 'sentinel-inspection-page/draft-1', type: 'InspectionPage' },
   reportdelivery: { schema: 'sentinel-report-delivery/draft-1', type: 'ReportDelivery' },
   deliverychunk: { schema: 'sentinel-delivery-chunk/draft-1', type: 'DeliveryChunk' },
+  controlcapabilities: { schema: 'sentinel-control-capabilities/draft-1', type: 'ControlCapabilities' },
+  controloutcome: { schema: 'sentinel-control-outcome/draft-1', type: 'ControlOutcome' },
 } as const;
 
 export type EnvelopeKind = keyof typeof ENVELOPES;

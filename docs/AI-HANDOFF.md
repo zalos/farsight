@@ -1,5 +1,51 @@
 # Farsight — shared Codex / Claude memory
 
+## Sentinel permission-checked MCP controls candidate — 2026-10-23
+
+The next isolated ADR48 slice adds start/resume, pause and cancel to the installed SDK adapter through separate
+control capability negotiation. The original read capability schema, socket handshake, owner service responses,
+store, worker and canonical report folds remain intact. Ordinary adopted agent grants decide admission; human-only
+defaults deny. Actual owner CLI confirmation issues the existing exact one-use receipt. MCP accepts no receipt,
+confirm or caller identity, and a future HTTP bridge remains an agent. This CLI-only confirmation is an interim
+limitation, not completion of the graphical workflow.
+
+The control response preserves canonical outcomes, exit codes and three cataloged permission verdicts without raw
+facts or diagnostics. Resume continues the same run, duplicate starts join, and terminal replay starts no work.
+Requested/submitted is intent or acceptance: existing status/wait establishes lifecycle state. A lost response is
+uncertain; reconnect reads state without automatic write replay. Older services keep the eight read tools and omit
+only the three controls. The installed consumer also withholds one actual accepted start response and verifies
+reconnect and unchanged completed attempts, without modifying installed package bytes.
+
+Affected service/read/delivery/budget/contract/package validation passed 99 controls with zero skips; two genuine
+local-container retained-secret privacy controls passed with zero skips. Package/selector/workflow controls,
+types, schemas and catalog checks passed. The npm-only package exercised 16 typed exports, 28 contract types and
+schemas and 63 fixtures. Exact immutable artifacts and final installed evidence belong in the private review
+handoff. Independent Claude review approved both the original control slice and final `0e0ee9e5` correction;
+root retained byte-identical production source while preserving main's observation and capability-test fixes.
+No C preparation implementation is included. Selected CI and merge remain the final candidate gate.
+The supplemental correction preserves the original run creation time and budget while honoring a pause during
+planned-run setup through legal states, without starting a worker; pending cancellation wins. An unreadable or lost
+response after control dispatch is nonretryable controlOutcomeUnknown, with status/readback guidance, rather than
+proof the action was unavailable. Genuine unchanged baseline probes reproduced both failures; the corrected
+coordinator/selected-rerun/service union passed 99 controls with zero skips and the installed SDK consumer passed
+an actual accepted-response corruption case without replay. Same-store epoch changes require fresh per-call
+admission; old read handles still expire.
+
+Combined acceptance: the complete workspace build, Sentinel typecheck, generated schemas, catalog lint (4,477
+entries), eight preserved workflow controls and 100 affected lifecycle/read/control/contract/package controls
+passed with zero test skips. The actual npm-only SDK control consumer passed on the integrated artifact, whose
+SHA-256 remains `fd41f994c15295af8d36679d2a4dc7d336d219da552301c4e4a932f6faae47af`.
+Main `cce989d4` and integrated runtime `dee88c22` ingested the same 1,735 frozen files at `6d56021f`: identical
+9,941 nodes, 20,514 edges, source digest `3937d97a5875` and 38,191,104-byte databases. Graph bytes were
+27,874,530 and 27,874,536; only build/run metadata changed. Fresh front-door, Map and code-map screenshots were
+inspected with no page errors or failed requests; the same five missing-fixture-image 404 responses remain.
+The isolated server was stopped by its recorded PID and its port verified clear. Primary checkout, dogfood graph
+and global installations remain untouched.
+
+Configuration saving, durable preparation/reconnect, linked rerun tools, in-browser owner confirmation, service-owned
+imports and the full GUI remain separate work. The original native release hold and bounded pending-wait shutdown
+note are unchanged.
+
 **This repo is public.** Client material, session handoffs and review evidence live outside it (a private folder the
 owner keeps); never add a client name, a site/org URL, an email, a keychain account name or an absolute home path
 here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@example.com`,
@@ -31,8 +77,10 @@ requests, with five known missing-fixture-image responses. The exact temporary s
 checkout, dogfood graph and global installations remain unchanged. PR #166's first validation found two stale
 capability tests that still treated MCP as unavailable. The precise expectation correction preserves every future
 unavailable capability and the store-facade checks; both complete files pass 36 tests with one intentional
-unqualified-host negative skipped on the qualified host. The original failure is retained. Fresh selected CI on
-the corrected commit remains required before merge.
+unqualified-host negative skipped on the qualified host. The original failure is retained. Independent review
+approved the exact correction; all fifteen final checks passed on `864242d7`, including full recovery, native
+isolation and installed scanners. PR [#166](https://github.com/zalos/farsight/pull/166) merged as `cce989d4`
+with the same reviewed tree. Its normal post-merge CI also passed. This does not clear the historical native hold.
 
 The separate observation PR [#165](https://github.com/zalos/farsight/pull/165), head `62f50c2c`, merged as
 `6ae1a194` after independent approval and all thirteen selected checks passed. Its first required native job passed 106 original tests and ten diagnostic controls, with zero failures,
