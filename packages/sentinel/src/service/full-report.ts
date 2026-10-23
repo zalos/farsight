@@ -9,6 +9,8 @@
 // Placement is optional and owner-confirmed: an application graph the owner supplies is pinned (reports/context.ts)
 // only with the owner's spent `context.pin` receipt and only when it binds to the captured bytes; its inputs are the
 // files as they are on disk now, so a graph made after the source changed does not bind.
+import { acceptedPaths } from './path-report.js';
+import type { ReportStructuralPaths } from '../contracts/report.js';
 import { createHash, createHmac } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
@@ -68,6 +70,7 @@ export interface RunAssessment {
   readonly units: readonly PlanWork[];
   readonly observations: readonly ObservationEnvelope[];
   readonly inspections: readonly ReportControlInspection[];
+  readonly structuralPaths: readonly ReportStructuralPaths[];
   readonly coverage: readonly CoverageEnvelope[];
   readonly plannedChecks: readonly PlannedCheck[];
   readonly inventory: { readonly included: number; readonly seenByNoStage: number; readonly unknownScopeBoundaries: number };
@@ -325,8 +328,10 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
       relevantLimits: sha(canonicalJson({ resources: admitted.profile.resources, databases: plan.pins.databases })),
     });
   }
+  const structuralPaths:ReportStructuralPaths[]=[];
+  for(const unit of plan.units.filter(u=>u.adapterId==='bounded-paths'))if(store.ledger.getPublication(unit))structuralPaths.push(await acceptedPaths(store,admitted,unit,unbound));
   return {
-    runId, planRevision: run.planRevision, snapshot, checks: plan.checks, units: plan.units, observations, inspections, coverage, plannedChecks, inventory,
+    runId, planRevision: run.planRevision, snapshot, checks: plan.checks, units: plan.units, observations, inspections, structuralPaths, coverage, plannedChecks, inventory,
     analyses: evidence.analyses, conditions, ledgerSequence: lastSequence(store, runId), ruleLock: admitted.ruleLock,
     withheldKey: e => locationKeyOf(e), withheldFiles: nameWithheld, secretTokens, selectedAncestors: evidence.selectedAncestors,
   };
@@ -394,6 +399,11 @@ const TRUSTED = new RegExp('^(?:' + [
   String.raw`inspections\.\*\.rows\.\*\.(?:property|state|verdict|reasonCode|claims\.\*\.(?:framework|verdict))`,
   String.raw`inspections\.\*\.checks\.\*\.(?:checkId|familyId|state|reasons\.\*)`,
   String.raw`inspections\.\*\.frontiers\.\*\.reasonCode`,
+  // Fixed structural-query vocabulary and content identities only; node/edge/source/site text is withheld.
+  String.raw`structuralPaths\.\*\.(?:artifact|attemptId|request|job|limitationKey|statementKey|detailLoss|work\.(?:id|revision)|ancestor\.(?:runId|revision|planDigest))`,
+  String.raw`structuralPaths\.\*\.evidence\.(?:schema|analysisFingerprint|graphDigest|boundsDigest|establishes|limitationKeys\.\*|producer\.(?:implementation|digest)|bounds\.edgeKinds\.\*)`,
+  String.raw`structuralPaths\.\*\.evidence\.results\.\*\.(?:outcome|frontierReasons\.\*|paths\.\*\.(?:id|steps\.\*\.(?:kind|resolution)))`,
+  String.raw`structuralPaths\.\*\.evidence\.frontiers\.\*\.reasonCode`,
   String.raw`historical\.\*\.(?:baselineFindingId|ruleFamilyId|severity|label|reasonCode|match\.kind|match\.baselineFindingIds\.\*)`,
   PLACE + String.raw`\.(?:binding|limitationKeys\.\*|context\.(?:artifact|sourceBindingReceipt|projectionVersion))`,
   PLACE + String.raw`\.counts\.[A-Za-z]+\.` + COUNT,
@@ -420,6 +430,7 @@ const REBUILT = /^(?:findings\.\*\.(?:title|explanation)\.(?:business|code)|hist
  */
 export function withholdSecretRun(input: any, words: ReadonlyMap<string, { title: { business: string; code: string }; explanation: { business: string; code: string } }>): any {
   const doc = structuredClone(input);
+  for(const section of doc.structuralPaths??[]){section.detailLoss=SECRET_RUN_WITHHELD;for(const r of section.evidence.results)for(const p of r.paths)for(const step of p.steps)step.sites=[];}
   const fixed = STRINGS[SECRET_RUN_WITHHELD]!;
   const generic = (severity: string) => `A ${severity === 'info' ? 'recorded' : severity} issue the checks found`;
   const places: any[] = [];
@@ -755,7 +766,7 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
   const build = await buildReport({
     id: reportIdOf(runId, req.baselineRunId), run: { id: runId, snapshotId: current.snapshot.id, planRevision: current.planRevision },
     ledgerSequence: current.ledgerSequence, evaluatedAt: now.toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z'), catalogVersion: 'draft-1',
-    disclosure: req.disclosure, inspections: current.inspections, observations: current.observations, coverage: current.coverage, plannedChecks: current.plannedChecks,
+    disclosure: req.disclosure, inspections: current.inspections, structuralPaths:current.structuralPaths, observations: current.observations, coverage: current.coverage, plannedChecks: current.plannedChecks,
     inventory: current.inventory, readContent, withheldFiles: current.withheldFiles, ...(contexts ? { contexts } : {}), rules: ruleWords(req.trustDir, current.ruleLock),
     ...(comparison ? { comparison } : {}),
   }, currentFindings ?? await findingsOf(current.observations, readContent, { withheldKey: current.withheldKey }));

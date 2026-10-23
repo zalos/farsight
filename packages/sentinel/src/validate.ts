@@ -364,6 +364,14 @@ const report: Check<ReportEnvelope> = (v, out) => {
   countErrors(out, '/counts/plannedChecks', v.counts.plannedChecks);
   countErrors(out, '/counts/seenByNoStage', v.counts.seenByNoStage);
   countErrors(out, '/counts/unknownScopeBoundaries', v.counts.unknownScopeBoundaries);
+  const pathQueries=(v.structuralPaths??[]).flatMap(p=>p.evidence.results);
+  if(pathQueries.length&&!v.counts.pathQueries)out.add(err('/counts/pathQueries','structural queries are counted separately'));
+  if(v.counts.pathQueries){
+    countErrors(out,'/counts/pathQueries',v.counts.pathQueries,pathQueries.length);
+    const parts=[['sentinel.paths.count.reached','reached'],['sentinel.paths.count.notReachedComplete','not-reached-complete'],['sentinel.paths.count.notReachedBounded','not-reached-bounded']] as const;
+    const breakdown=v.counts.pathQueries.breakdown??[];
+    if(breakdown.length!==parts.length||parts.some(([key,outcome])=>breakdown.filter(p=>p.key===key&&p.n===pathQueries.filter(q=>q.outcome===outcome).length).length!==1))out.add(err('/counts/pathQueries/breakdown','structural outcome parts match the reported queries'));
+  }
   if (v.completeness === 'complete' && v.gaps.length) out.add(err('/completeness', 'a report with coverage gaps is partial'));
   if (v.completeness === 'complete' && (v.counts.seenByNoStage.n > 0 || v.counts.unknownScopeBoundaries.n > 0)) out.add(err('/completeness', 'a report with unread files or unlisted folders is partial'));
   for (const i of duplicates(v.findings, f => f.id)) out.add(err(`/findings/${i}/id`, 'duplicate finding'));

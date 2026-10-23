@@ -968,7 +968,7 @@ Design reconciliation’s `codeOnly` count and `drift` exclude unclaimed pages t
 ### Sentinel report counts (`sentinel-report/draft-1`, folded by `packages/sentinel/src/reports/document.ts`)
 
 PR 19's report fold computes these and every rendering (JSON, Markdown, offline HTML, SARIF) prints them from the
-document, never recomputed. The library is a draft: no scan produces a report yet. Each slot is a
+document, never recomputed. Canonical accepted runs supply the report. Each slot is a
 `ReportCount` with exactly core's `Counted` shape (`n`, optional `of`, `unit`, optional `bizUnit`, `scope`, `source`,
 a `breakdown` of labelled parts that sums to `n`, optional `recheck`); every key is a shared-catalog key
 (`strings-sentinel-report.ts`, or an existing core `count.unit.*`), the three `sentinel.scope.*` scopes are in
@@ -983,6 +983,7 @@ tied to listed rows equals those rows.
 | gaps in the checks | `sentinel.count.gaps` | `sentinel.scope.report` | Checks that did not cover their scope: unsupported, not run, error or partial | `gaps.length` |
 | planned checks | `sentinel.count.plannedChecks` | `sentinel.scope.report` | Every planned check (one rule over one part of the code), whether it ran, was unsupported or was not needed | breakdown and `of` only (no listed rows) |
 | control answers | `sentinel.count.controlAnswers` | `sentinel.scope.report` — accepted source inspections in this report | One row per captured route/page and inspected property, partitioned into established, partial and not run; never a finding or assessment | The three state parts sum to the count; `recheck.cli` regenerates the report |
+| structural call queries | `sentinel.paths.count.queries` | `sentinel.scope.report` — exact requested pairs in authenticated accepted structural task output | Each pair once, broken down as reported by the pinned query: reached, search ended within the graph, or stopped at a frontier. Separate from findings, observations and security coverage | Sum of `structuralPaths[].evidence.results.length`; each outcome part equals its listed rows; `recheck.cli` regenerates the full JSON report |
 | seen by no check | `sentinel.count.seenByNoStage`, printed *n of m captured files* | `sentinel.scope.inventory` — the snapshot's captured inventory before any check ran | The **exact** number of included inventory entries no completed stage covered, out of `of` included entries. Always printed, **including 0**, so an empty result never hides unread files | breakdown and `of` only |
 | folders never listed | `sentinel.count.unknownBoundaries` | `sentinel.scope.inventory` | Directory boundaries whose descendants were never enumerated (excluded, refused, unreadable). Unknown scope: **counted apart, never added to the exact count above and never read as zero files** | breakdown and `of` only |
 | baseline findings not continued | `sentinel.count.historical` | `sentinel.scope.report` | Baseline findings no current finding continues, broken down by comparison label (`sentinel.count.part.resolvedByComparableCheck`, `.removedSurface`, `.unassessedInCurrentScope`, `.changedDetection`, `.incomparableConditions`, `.changedEvidence` for an ambiguous pairing). Only *fixed and rechecked* says the issue is gone | `historical.length`; present only with a baseline |

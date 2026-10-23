@@ -118,6 +118,10 @@
             "controlAnswers": {
               "$ref": "#/definitions/ReportCount",
               "description": "Surface/property answers established, partial or not run; never added to findings."
+            },
+            "pathQueries": {
+              "$ref": "#/definitions/ReportCount",
+              "description": "Structural query outcomes, counted separately from findings and security coverage."
             }
           },
           "required": [
@@ -141,6 +145,13 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/ReportControlInspection"
+          },
+          "maxItems": 10000
+        },
+        "structuralPaths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReportStructuralPaths"
           },
           "maxItems": 10000
         },
@@ -1130,6 +1141,443 @@
       ],
       "additionalProperties": false,
       "description": "A logical work unit at one immutable revision; every reference to work names both."
+    },
+    "ReportStructuralPaths": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "attemptId": {
+          "$ref": "#/definitions/Id"
+        },
+        "request": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "job": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "work": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "ancestor": {
+          "type": "object",
+          "properties": {
+            "runId": {
+              "$ref": "#/definitions/Id"
+            },
+            "revision": {
+              "$ref": "#/definitions/Ordinal"
+            },
+            "planDigest": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "runId",
+            "revision",
+            "planDigest"
+          ],
+          "additionalProperties": false
+        },
+        "evidence": {
+          "$ref": "#/definitions/PathEvidenceEnvelope"
+        },
+        "limitationKey": {
+          "type": "string",
+          "const": "sentinel.paths.notDataFlow"
+        },
+        "statementKey": {
+          "type": "string",
+          "const": "sentinel.paths.report.pinnedQuery"
+        },
+        "detailLoss": {
+          "type": "string",
+          "const": "sentinel.report.withheld.secretRun",
+          "description": "A coarse secret match removes sites/spans and replaces all source-controlled identifiers."
+        }
+      },
+      "required": [
+        "artifact",
+        "attemptId",
+        "request",
+        "job",
+        "sourceId",
+        "work",
+        "ancestor",
+        "evidence",
+        "limitationKey",
+        "statementKey"
+      ],
+      "additionalProperties": false,
+      "description": "A genuine accepted bounded structural query result. The pinned worker reports these outcomes; readback authenticates their producer/closure and graph identities, never independently proves absence or security."
+    },
+    "PathEvidenceEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-paths/draft-1"
+        },
+        "snapshotId": {
+          "$ref": "#/definitions/Id"
+        },
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "analysisFingerprint": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "graphDigest": {
+          "$ref": "#/definitions/Digest",
+          "description": "Digest of the canonical node and edge set the search read."
+        },
+        "bounds": {
+          "$ref": "#/definitions/PathBounds"
+        },
+        "boundsDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "establishes": {
+          "type": "string",
+          "const": "call-reachability"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PathQueryResult"
+          },
+          "maxItems": 10000
+        },
+        "cycles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CallCycle"
+          },
+          "description": "Call cycles met, each as its member nodes (bounded).",
+          "maxItems": 1000
+        },
+        "limitationKeys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CatalogKey"
+          },
+          "maxItems": 64
+        },
+        "frontiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScopedReason"
+          },
+          "maxItems": 10000
+        },
+        "producer": {
+          "type": "object",
+          "properties": {
+            "implementation": {
+              "$ref": "#/definitions/ShortText"
+            },
+            "digest": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "implementation",
+            "digest"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema",
+        "snapshotId",
+        "sourceId",
+        "analysisFingerprint",
+        "graphDigest",
+        "bounds",
+        "boundsDigest",
+        "establishes",
+        "results",
+        "cycles",
+        "limitationKeys",
+        "frontiers",
+        "producer"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-paths/draft-1 — bounded static call paths over one source's parser analysis, keyed by the analysis fingerprint, a digest of the graph read and the bounds. `establishes` is fixed: a path is call reachability, never data flow, taint or protection."
+    },
+    "PathBounds": {
+      "type": "object",
+      "properties": {
+        "edgeKinds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PathEdgeKind"
+          },
+          "maxItems": 3
+        },
+        "maxDepth": {
+          "$ref": "#/definitions/PathDepth",
+          "description": "Edges in the longest path explored."
+        },
+        "maxFanout": {
+          "$ref": "#/definitions/PathFanout",
+          "description": "Outgoing edges followed per node; beyond it the node is a frontier."
+        },
+        "maxVisited": {
+          "$ref": "#/definitions/PathVisits",
+          "description": "Nodes visited per query."
+        }
+      },
+      "required": [
+        "edgeKinds",
+        "maxDepth",
+        "maxFanout",
+        "maxVisited"
+      ],
+      "additionalProperties": false
+    },
+    "PathEdgeKind": {
+      "type": "string",
+      "enum": [
+        "calls",
+        "http",
+        "renders"
+      ],
+      "description": "The edge kinds a path may follow. Guard, validation and test edges are never traversed: they are not calls."
+    },
+    "PathDepth": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64
+    },
+    "PathFanout": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4096
+    },
+    "PathVisits": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
+    },
+    "PathQueryResult": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "$ref": "#/definitions/NodeId"
+        },
+        "to": {
+          "$ref": "#/definitions/NodeId"
+        },
+        "outcome": {
+          "$ref": "#/definitions/PathOutcome"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CallPath"
+          },
+          "description": "The shortest path found, for `reached`.",
+          "maxItems": 1
+        },
+        "frontierReasons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CatalogKey"
+          },
+          "description": "Why a search was bounded: the frontier kinds it met, each once.",
+          "maxItems": 16
+        },
+        "visited": {
+          "$ref": "#/definitions/Count",
+          "description": "Nodes visited."
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "outcome",
+        "paths",
+        "frontierReasons",
+        "visited"
+      ],
+      "additionalProperties": false
+    },
+    "PathOutcome": {
+      "type": "string",
+      "enum": [
+        "reached",
+        "not-reached-complete",
+        "not-reached-bounded"
+      ],
+      "description": "`reached`: a path exists within the bounds. `not-reached-complete`: the search ended with nothing left unexplored and no unresolved or truncated edge on the way, which is still only a statement about the parser's graph. `not-reached-bounded`: the search met a frontier, so absence is not established."
+    },
+    "CallPath": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Digest",
+          "description": "Digest of the node and edge sequence."
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PathStep"
+          },
+          "minItems": 1,
+          "maxItems": 64
+        },
+        "cyclic": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/NodeId"
+          },
+          "description": "Nodes on the path that belong to a call cycle (a strongly connected component of more than one node, or a self call).",
+          "maxItems": 65
+        }
+      },
+      "required": [
+        "id",
+        "steps",
+        "cyclic"
+      ],
+      "additionalProperties": false
+    },
+    "PathStep": {
+      "type": "object",
+      "properties": {
+        "edgeId": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "from": {
+          "$ref": "#/definitions/NodeId"
+        },
+        "to": {
+          "$ref": "#/definitions/NodeId"
+        },
+        "kind": {
+          "$ref": "#/definitions/PathEdgeKind"
+        },
+        "resolution": {
+          "type": "string",
+          "enum": [
+            "resolved",
+            "heuristic"
+          ],
+          "description": "The parser's own resolution of this edge; unresolved edges end a search and are never steps."
+        },
+        "deferred": {
+          "type": "boolean",
+          "description": "The edge was made in a callback stored for later: the call may not happen on this path's request."
+        },
+        "sites": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PathSite"
+          },
+          "description": "Captured call sites for this edge; empty when the parser gave none with an exact span.",
+          "maxItems": 16
+        }
+      },
+      "required": [
+        "edgeId",
+        "from",
+        "to",
+        "kind",
+        "resolution",
+        "deferred",
+        "sites"
+      ],
+      "additionalProperties": false
+    },
+    "PathSite": {
+      "type": "object",
+      "properties": {
+        "relativePath": {
+          "$ref": "#/definitions/RelativePath"
+        },
+        "content": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "span": {
+          "$ref": "#/definitions/ByteSpan"
+        },
+        "occurrenceId": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "relativePath",
+        "content",
+        "span",
+        "occurrenceId"
+      ],
+      "additionalProperties": false,
+      "description": "A call-site citation in captured bytes, from the parser's occurrence index."
+    },
+    "ByteSpan": {
+      "type": "object",
+      "properties": {
+        "startByte": {
+          "$ref": "#/definitions/Count"
+        },
+        "endByte": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "required": [
+        "startByte",
+        "endByte"
+      ],
+      "additionalProperties": false,
+      "description": "Zero-based, half-open UTF-8 byte offsets."
+    },
+    "CallCycle": {
+      "type": "object",
+      "properties": {
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/NodeId"
+          },
+          "minItems": 1,
+          "maxItems": 1000
+        }
+      },
+      "required": [
+        "members"
+      ],
+      "additionalProperties": false
+    },
+    "ScopedReason": {
+      "type": "object",
+      "properties": {
+        "scopeId": {
+          "$ref": "#/definitions/ScopeId"
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        }
+      },
+      "required": [
+        "scopeId",
+        "reasonCode"
+      ],
+      "additionalProperties": false,
+      "description": "A coded reason attached to a scope (a skipped file, an unresolved frontier)."
+    },
+    "ScopeId": {
+      "type": "string",
+      "description": "A scope reference such as `<sourceId>:<relativePath>` or a surface ID. Untrusted protocol data: bounded, free of control characters, never resolved as a filesystem path.",
+      "pattern": "^[A-Za-z0-9][^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]*$",
+      "maxLength": 4300
     },
     "ReportGap": {
       "type": "object",

@@ -26,7 +26,7 @@ export function countText(doc: ReportEnvelope, c: ReportCount, register: Registe
 }
 
 /** The counts every rendering prints, in one order, so their numbers are the document's. */
-export const COUNT_ORDER = ['findings', 'observations', 'coverageGaps', 'plannedChecks', 'seenByNoStage', 'unknownScopeBoundaries', 'historical', 'controlAnswers'] as const;
+export const COUNT_ORDER = ['findings', 'observations', 'coverageGaps', 'plannedChecks', 'seenByNoStage', 'unknownScopeBoundaries', 'historical', 'controlAnswers', 'pathQueries'] as const;
 
 /** Catalog keys are camel-case: `changed-evidence` → `changedEvidence`. */
 export const camel = (s: string) => s.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());

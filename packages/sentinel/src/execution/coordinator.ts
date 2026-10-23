@@ -278,7 +278,10 @@ export class Coordinator {
       if (state === 'pausing') { this.#store.ledger.setRunState(runId, 'paused'); state = 'paused'; }
       if ((state === 'planned' || state === 'paused') && !pauseFirst && !this.#cancelRequested) { this.#store.ledger.setRunState(runId, 'running'); state = 'running'; }
     }
-    if (pauseFirst) {
+    if (pauseFirst && !this.#cancelRequested && this.#runState() !== 'canceling') {
+      // A prepared linked run already has a planned row. Honor a setup pause through the same legal states as an
+      // ordinary start, without admitting any work or changing the original creation time/budget. Cancel wins.
+      if (this.#runState() === 'planned') this.#store.ledger.setRunState(runId, 'running');
       if (this.#runState() === 'running') this.#store.ledger.setRunState(runId, 'pausing');
       this.#pauseRequested = false;
       this.#finishRunState('paused');

@@ -1615,10 +1615,28 @@ all retention links itself before staging. Proof construction and closure revali
 passes; both retain the original absolute deadline and signal. Repeated pre-write assertions check that proof without
 copying its large source view or minting execution authority. Execution holds every unrelated unit. Authenticated
 request ancestor edges and genuine selected-rerun edges retain their recorded revisions; a parent id alone grants
-nothing. Mixed request pins and legacy rerun selections currently refuse explicitly; selected reruns of path tasks
-remain a required integration item. Canonical owner command, lifecycle and report wiring remain implementation
-gates; the internal worker checkpoint does not complete the owner workflow. Public reports must keep call reachability distinct from data flow or protection, retain
-bounds/frontiers and apply current, baseline and proven selected-ancestor privacy to every path-controlled detail.
+nothing. Mixed request pins and legacy rerun selections refuse explicitly. An explicit rerun of actual active path
+units prepares a new request pinned to that ended path task's executed revision, with the same exact queries and
+bounds; it never invents legacy parent-unit mappings. Retry selects only unpublished active units, never held
+checks; a successful task has nothing to retry. A non-ended task joins/resumes without a new generation.
+
+The owner command is `paths <ancestorRunId> --request <file>`: adopted policy preflight precedes the one bounded,
+non-following regular-file read. It proves the ended ancestor before task writes, discloses exact queries, bounds,
+held required checks and prerequisites, then consumes the existing exact preparation receipt when required.
+Acceptance atomically retains the request and proven closure before creating the linked planned run. It does not
+launch: `run <childRunId>` requires separate current `run.start` admission. Identical pending/running/paused
+preparation joins; completed/canceled tasks permit a new explicit generation. Admission-before-run recovery
+reconciles only the exact retained candidate, and accepted publication survives coordinator death without being
+accepted twice. A pending pause follows legal running/pausing/paused transitions without launch, preserving its
+original creation/deadline; cancellation wins over a pending pause.
+
+Minimal and full JSON, Markdown, offline HTML and SARIF share the authenticated accepted structural section.
+Readback checks actual publication, succeeded owned attempt, exact invocation/job/assignment, immutable request,
+retained source closure, raw worker result and normalized records. It does not run a second search or independently
+reverify a no-path claim. Every rendering first applies accepted current, explicit baseline, authenticated request
+and selected-ancestor secret privacy, including canceled ancestors and executed revisions with merely admitted
+successors. Query/node/edge/site/span details are withheld together; ancestor findings and coverage never become
+child findings. Counts describe the pinned query's outcomes separately from security gaps.
 
 The shipped `bounded-paths` worker has one explicit sealed job naming its request and the four original retained
 roles. A source unit admits at most 1,018 entries before the six fixed roles/job/request, within the existing 1,024

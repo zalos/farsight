@@ -1,3 +1,4 @@
+import type { PathEvidenceEnvelope } from './paths.js';
 import type {
   ArtifactId, BoundedText, CatalogKey, Count, Digest, Id, NodeId, Ordinal, RegisterText, RelativePath, SharedCatalogKey, ShortText,
   Timestamp, WorkRef,
@@ -37,6 +38,23 @@ export interface ReportCount {
     /** @maxLength 1024 */
     mcp?: string;
   };
+}
+
+/** A genuine accepted bounded structural query result. The pinned worker reports these outcomes; readback
+ * authenticates their producer/closure and graph identities, never independently proves absence or security. */
+export interface ReportStructuralPaths {
+  artifact: ArtifactId;
+  attemptId: Id;
+  request: ArtifactId;
+  job: ArtifactId;
+  sourceId: Id;
+  work: WorkRef;
+  ancestor: { runId: Id; revision: Ordinal; planDigest: Digest };
+  evidence: PathEvidenceEnvelope;
+  limitationKey: 'sentinel.paths.notDataFlow';
+  statementKey: 'sentinel.paths.report.pinnedQuery';
+  /** A coarse secret match removes sites/spans and replaces all source-controlled identifiers. */
+  detailLoss?: 'sentinel.report.withheld.secretRun';
 }
 
 /** A readable label captured from pinned context, so a recipient never looks one up in today's graph. */
@@ -245,11 +263,15 @@ export interface ReportEnvelope {
     historical?: ReportCount;
     /** Surface/property answers established, partial or not run; never added to findings. */
     controlAnswers?: ReportCount;
+    /** Structural query outcomes, counted separately from findings and security coverage. */
+    pathQueries?: ReportCount;
   };
   /** @maxItems 25000 */
   findings: ReportFinding[];
   /** @maxItems 10000 */
   inspections?: ReportControlInspection[];
+  /** @maxItems 10000 */
+  structuralPaths?: ReportStructuralPaths[];
   /** @maxItems 25000 */
   gaps: ReportGap[];
   /** @maxItems 25000 */

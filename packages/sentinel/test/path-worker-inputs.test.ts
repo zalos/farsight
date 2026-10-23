@@ -3,6 +3,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import childProcess from 'node:child_process';
+import {syncBuiltinESMExports} from 'node:module';
+import {WorkerSession} from '../dist/execution/protocol.js';
 import { mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { canonicalJson } from '@farsight/graph';
@@ -172,21 +175,48 @@ test('all queries share traversal/result budgets and exhaustion returns no parti
   await assert.rejects(invoke({...PATH_EXECUTION_LIMITS,outputBytes:combined.usage.resultBytes-1}),budgetFailure('outputBytes'));
 });
 
-test('the actual fixed built-in path child reads sealed retained bytes after source removal', needsStore, async t => {
+async function fixedChild(t:any,options:any={}){
   const fx=await setup(t),job=fx.add(fx.job),inputDir=join(fx.dir,'sealed'),entryDir=join(fx.dir,'entry'),scratchRoot=join(fx.dir,'exec');
   for(const dir of [inputDir,entryDir,scratchRoot])mkdirSync(dir,{mode:0o700});
   const inputs=[...fx.values].map(([id,bytes])=>{const path=join(inputDir,id.slice(7));writeFileSync(path,bytes,{mode:0o600});return{id,path}});
   const entry=writeBuiltinClosureEntry(entryDir,'bounded-paths');
   const registry=createAdapterRegistry([{id:'bounded-paths',version:'0.1.0',kind:'built-in',isolation:'child',module:entry.module}]);
   const service=await createExecutionService(fx.store,{scratchRoot,registry,containers:false});
-  const outcome=await service.run({adapterId:'bounded-paths',attemptId:'attempt-path',work:{id:'path-work',revision:1},workers:new WorkerFiles(fx.store.storePath),inputs,job});
+  return service.run({adapterId:'bounded-paths',attemptId:'attempt-path',work:{id:'path-work',revision:1},workers:new WorkerFiles(fx.store.storePath),inputs,job,...options});
+}
+test('the actual fixed built-in path child reads sealed retained bytes after source removal', needsStore, async t => {
+  const outcome=await fixedChild(t);
   assert.equal(outcome.state,'succeeded',JSON.stringify({code:outcome.code,detail:outcome.detail}));
   assert.equal(outcome.worker?.kind,'owned-child');
-  assert.equal(outcome.invocation.record.job,job);
+  assert.match(outcome.invocation.record.job,/^sha256:[0-9a-f]{64}$/);
   assert.equal(outcome.outputs.length,1);
   const output=JSON.parse(readFileSync(outcome.outputs[0].path,'utf8'));
+  assert.equal(output.job,outcome.invocation.record.job);
   assert.equal(output.evidence.results[0].outcome,'reached');
   assert.equal(output.evidence.establishes,'call-reachability');
   for(const key of ['coveredChecks','actualReadSet','scannedSet','observations'])assert.deepEqual(outcome.result[key],[]);
   assert.ok(outcome.exit,'the owned child was reaped');
+});
+
+
+test('genuine coalesced start and cancel accepts no path result or outputs',needsStore,async t=>{
+ const c=new AbortController(),receive=WorkerSession.prototype.receive,spawn=childProcess.spawn;let starts=0,owned:any,held:Buffer|undefined,coalesced=0;
+ const spawned=t.mock.method(childProcess,'spawn',function(...args:any[]){const child=(spawn as any).apply(childProcess,args);if(args[2]?.env?.SENTINEL_ADAPTER_ID==='bounded-paths'){assert.equal(owned,undefined);owned=child;const write=child.stdin.write.bind(child.stdin);child.stdin.write=(chunk:any,...rest:any[])=>{let frame:any;try{frame=JSON.parse(Buffer.from(chunk).toString())}catch{}if(frame?.type==='start'){held=Buffer.from(chunk);return true}if(frame?.type==='cancel'&&held){const together=Buffer.concat([held,Buffer.from(chunk)]);assert.ok(together.length<4096);coalesced++;held=undefined;return write(together,...rest)}return write(chunk,...rest)}}return child});syncBuiltinESMExports();
+ const mock=t.mock.method(WorkerSession.prototype,'receive',function(message:any){const step=receive.call(this,message);if(message.type==='hello'&&message.adapterId==='bounded-paths'&&step.send.some(m=>m.type==='start')){starts++;queueMicrotask(()=>c.abort())}return step});
+ try{const outcome=await fixedChild(t,{signal:c.signal});assert.equal(starts,1);assert.equal(coalesced,1);assert.equal(outcome.state,'canceled',JSON.stringify({code:outcome.code,detail:outcome.detail,exit:outcome.exit,diagnostics:outcome.diagnostics}));assert.equal(outcome.result,undefined);assert.deepEqual(outcome.outputs,[]);assert.ok(outcome.exit,'the actual owned child was reaped')}finally{mock.mock.restore();spawned.mock.restore();syncBuiltinESMExports()}
+});
+
+test('actual fixed child EOF exits zero without a result; the supervisor never accepts that as success',needsStore,async t=>{
+ const spawn=childProcess.spawn,receive=WorkerSession.prototype.receive;let owned:any,hellos=0;
+ const spawned=t.mock.method(childProcess,'spawn',function(...args:any[]){const child=(spawn as any).apply(childProcess,args);if(args[2]?.env?.SENTINEL_ADAPTER_ID==='bounded-paths'){assert.equal(owned,undefined);owned=child}return child});syncBuiltinESMExports();
+ const received=t.mock.method(WorkerSession.prototype,'receive',function(message:any){const step=receive.call(this,message);if(message.type==='hello'&&message.adapterId==='bounded-paths'){hellos++;assert.ok(owned?.pid);setImmediate(()=>owned.stdin.end());return{...step,send:step.send.filter(m=>m.type!=='start')}}return step});
+ try{const outcome=await fixedChild(t);assert.equal(hellos,1);assert.equal(outcome.state,'failed');assert.equal(outcome.code,'sentinel.execution.workerExited');assert.equal(outcome.exit.exitCode,0);assert.equal(outcome.exit.exitSignal,null);assert.equal(outcome.result,undefined);assert.deepEqual(outcome.outputs,[])}
+ finally{received.mock.restore();spawned.mock.restore();syncBuiltinESMExports()}
+});
+
+
+test('genuine fixed child cancellation before start accepts no result or output',needsStore,async t=>{
+ const c=new AbortController();let owned=0;
+ const outcome=await fixedChild(t,{signal:c.signal,onWorker(){owned++;c.abort()}});
+ assert.equal(owned,1);assert.equal(outcome.state,'canceled');assert.equal(outcome.result,undefined);assert.deepEqual(outcome.outputs,[]);assert.ok(outcome.exit);
 });

@@ -179,6 +179,13 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   the graph records every call a visited function could make) and `deep/import.ts` (`importDeepAnalysis` for
   attested, bound `sentinel-deep-import/draft-1` documents; `DEEP_ANALYSIS_SUPPORT` states that no engine exists).
   Words in core's `strings-sentinel-analysis.ts`; tests in `test/analysis-paths.test.ts`.
+  ADR 45 adds the closed request (`paths/request.ts`, `contracts/pathrequest.ts`), bounded aggregate budget and
+  explicit sealed-job protocol (`paths/budget.ts`, `protocol.ts`), fixed builtin `worker.ts`/`driver.ts`, and pure
+  shared output checks (`output.ts`). `service/path-request-file.ts` reads one bounded owner file after policy
+  preflight; `path-task.ts` prepares/admits exact linked retained tasks; `path-report.ts` authenticates their accepted
+  publications. `reports/structural-paths.ts` formats the shared privacy-projected section. Owner lifecycle,
+  process-kill recovery, native secret ancestry and byte/protocol tests live in `test/path-*.test.ts`; the actual
+  npm-only workflow is `scripts/test-sentinel-paths-consumer.mjs`. No new public authority factory or loader ships.
   `src/frameworks/express/` is the Express 4.21.2 pack (PR 15, ADR 31), exported as `./frameworks/express`:
   `syntax.ts` (Oxc over captured bytes, exact UTF-8 spans), `modules.ts` (bindings, imports, exports, relative
   resolution), `model.ts` (applications, routers, layers in order, open objects), `effects.ts` (refusal, pass-through,

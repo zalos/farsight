@@ -9,7 +9,7 @@ import { canonicalJson } from '@farsight/graph';
 import { STRINGS } from '@farsight/core/dist/strings.js';
 import type {
   ArtifactId, CoverageEnvelope, FindingPlace, ObservationEnvelope, ReportCount, ReportDefinition, ReportEnvelope, ReportEvidence,
-  ReportFinding, ReportGap, ReportControlInspection, ReportHistoricalFinding, RegisterText,
+  ReportFinding, ReportGap, ReportControlInspection, ReportStructuralPaths, ReportHistoricalFinding, RegisterText,
 } from '../contracts/index.js';
 import { validateEnvelope } from '../validate.js';
 import { correlate, type Finding } from '../findings/correlate.js';
@@ -62,6 +62,7 @@ export interface ReportInput {
   readonly observations: readonly ObservationEnvelope[];
   readonly coverage: readonly CoverageEnvelope[];
   readonly inspections?: readonly ReportControlInspection[];
+  readonly structuralPaths?: readonly ReportStructuralPaths[];
   /** Every check the plan holds, with the files it was to cover; a planned check without a coverage record is a gap. */
   readonly plannedChecks: readonly PlannedCheck[];
   readonly inventory: { readonly included: number; readonly seenByNoStage: number; readonly unknownScopeBoundaries: number };
@@ -221,6 +222,12 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
   const rc = (n: number, unit: string, scope: string, extra: Partial<ReportCount> = {}): ReportCount => ({ n, unit, scope, source: REPORT_SOURCE, ...extra });
   const historicalParts = [...new Set(historical.map(h => h.label))].sort().map(l => ({ key: labelPartKey(l), n: historical.filter(h => h.label === l).length }));
   const inspections = input.inspections?.length ? structuredClone([...input.inspections]) : undefined;
+  const structuralPaths=input.structuralPaths?.length?structuredClone([...input.structuralPaths]):undefined;
+  const queries=structuralPaths?.flatMap(p=>p.evidence.results)??[];
+  if(structuralPaths){
+    for(const k of ['heading','pinnedQuery','queryLine','stepLine','reached','notReachedComplete','notReachedBounded'])used.add(`sentinel.paths.report.${k}`);
+    for(const p of structuralPaths){used.add(p.limitationKey);for(const key of p.evidence.limitationKeys)used.add(key);for(const r of p.evidence.results)for(const key of r.frontierReasons)used.add(key)}
+  }
   const answers = inspections?.flatMap(i => i.rows) ?? [];
   if (inspections) {
     for(const key of ['reportHeading','libraryLine','versionItem','checkLine','answerLine','frontierLine','noVersion'])used.add(`sentinel.controls.${key}`);
@@ -238,6 +245,7 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
     plannedChecks: rc(input.plannedChecks.length, 'sentinel.count.plannedChecks', 'sentinel.scope.report'),
     seenByNoStage: rc(input.inventory.seenByNoStage, 'sentinel.count.seenByNoStage', 'sentinel.scope.inventory', { of: input.inventory.included }),
     unknownScopeBoundaries: rc(input.inventory.unknownScopeBoundaries, 'sentinel.count.unknownBoundaries', 'sentinel.scope.inventory'),
+    ...(structuralPaths?{pathQueries:rc(queries.length,'sentinel.paths.count.queries','sentinel.scope.report',{recheck:{cli:`farsight-sentinel report ${input.run.id} --full --format json`},breakdown:['reached','not-reached-complete','not-reached-bounded'].map(outcome=>({key:`sentinel.paths.count.${camel(outcome)}`,n:queries.filter(q=>q.outcome===outcome).length}))})}:{}),
     ...(inspections ? { controlAnswers: rc(answers.length, 'sentinel.count.controlAnswers', 'sentinel.scope.report', {
       recheck: { cli: `farsight-sentinel report ${input.run.id} --json` }, breakdown: ['established', 'partial', 'not-run'].map(state => ({ key: `sentinel.count.control.${state === 'not-run' ? 'notRun' : state}`, n: answers.filter(r => r.state === state).length })) }) } : {}),
     ...(input.comparison ? { historical: rc(historical.length, 'sentinel.count.historical', 'sentinel.scope.report', historicalParts.length ? { breakdown: historicalParts } : {}) } : {}),
@@ -266,6 +274,7 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
     closure.add(i.artifact);
     for (const id of Object.values(i.analysis)) closure.add(id);
   }
+  for(const p of structuralPaths??[]){closure.add(p.artifact);closure.add(p.request);closure.add(p.job);for(const r of p.evidence.results)for(const path of r.paths)for(const step of path.steps)for(const site of step.sites)closure.add(site.content)}
   const document: ReportEnvelope = {
     schema: 'sentinel-report/draft-1', id: input.id, run: input.run, ledgerSequence: input.ledgerSequence, evaluatedAt: input.evaluatedAt,
     catalogVersion: input.catalogVersion,
@@ -273,7 +282,7 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
     // Complete only when every planned check covered its scope and every captured file was seen and listed.
     completeness: gaps.length || input.inventory.seenByNoStage > 0 || input.inventory.unknownScopeBoundaries > 0 ? 'partial' : 'complete',
     baseline: input.comparison ? { reportId: input.comparison.baselineReportId } : null,
-    counts, findings: reportFindings, gaps, decisions: [], ...(inspections ? { inspections } : {}),
+    counts, findings: reportFindings, gaps, decisions: [], ...(inspections ? { inspections } : {}), ...(structuralPaths?{structuralPaths}:{}),
     ...(input.comparison ? { historical } : {}),
     definitions, artifactClosure: [...closure].sort(),
   };

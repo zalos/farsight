@@ -27,10 +27,13 @@ export async function runBoundedPathsWorker():Promise<void> {
   process.stdin.on('end',()=>{canceled.abort();process.exit(0)});
   const next=async()=>{while(!queue.length)await new Promise<void>(resolve=>{wake=resolve});return queue.shift()};
   send({protocol:P,type:'hello',supported:[P],adapterId:process.env.SENTINEL_ADAPTER_ID,adapterDigest:process.env.SENTINEL_ADAPTER_DIGEST});
-  if((await next()).type!=='welcome')process.exit(9);
-  const start=await next();
+  const welcome=await next();if(welcome.type==='cancel')process.exit(0);if(welcome.type!=='welcome')process.exit(9);
+  const start=await next();if(start.type==='cancel')process.exit(0);
   if(start.type!=='start'||process.env.SENTINEL_ADAPTER_ID!==PATHS_ADAPTER_ID||!Array.isArray(start.inputs)||start.inputs.length>PATHS_PROTOCOL_INPUT_LIMIT||!ID.test(start.job)||!start.inputs.includes(start.job))process.exit(3);
   const binding={attemptId:start.attemptId,work:start.work,coordinatorEpoch:start.coordinatorEpoch};let sequence=0;started=true;
+  // Stream chunks are not message boundaries: start and cancel can be decoded before the awaits above resume.
+  // Consume that already queued cancel before any job read, rather than leaving it behind the selected start.
+  if(queue.some(value=>value.type==='cancel')){canceled.abort();send({protocol:P,type:'cancel-ack',...binding,seq:sequence++});process.exit(0)}
   const absolute=Date.parse(start.deadlineAt);if(!Number.isFinite(absolute))process.exit(3);
   let budget:PathExecutionBudget|undefined;
   try{

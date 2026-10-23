@@ -128,4 +128,9 @@ test('request and generation identity changes for changed exact queries, bounds,
   invalid(() => pathRequestRunId(original, terms, -1));
   assert.equal(pathRequestRunId(original, { ...terms, structuralPaths: 'ignored' } as any), id, 'extra caller fields cannot override the request digest');
   invalid(() => pathRequestRunId(original, { ...terms, policyDigest: { toString: () => terms.policyDigest } } as any));
+  const selected=pathRequestRunId(original,terms,0,['unit-b','unit-a']);
+  assert.equal(pathRequestRunId(original,terms,0,['unit-a','unit-b']),selected);
+  assert.notEqual(selected,id);
+  for(const units of [[],['repeat','repeat'],Array.from({length:1025},(_,i)=>String(i)),Array.from({length:17},(_,i)=>String(i)+'x'.repeat(65530))])invalid(()=>pathRequestRunId(original,terms,0,units));
+  assert.ok(pathRequestRunId(original,terms,0,Array.from({length:1024},(_,i)=>String(i))));
 });

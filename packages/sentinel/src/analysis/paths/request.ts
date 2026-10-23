@@ -14,9 +14,11 @@ export const PATHS_RESERVED_INPUTS = 6;
 export const PATHS_ADAPTER_ID = 'bounded-paths';
 
 export class PathRequestError extends Error {
+  readonly code: 'sentinel.paths.unbound' | 'sentinel.paths.invalidInput';
   constructor(readonly reason: 'invalid' | 'too-large' | 'unbound') {
     super(reason === 'unbound' ? 'sentinel.paths.unbound' : 'sentinel.paths.invalidInput');
     this.name = 'PathRequestError';
+    this.code=reason==='unbound'?'sentinel.paths.unbound':'sentinel.paths.invalidInput';
   }
 }
 
@@ -49,10 +51,11 @@ export function parsePathRequest(document: string | Uint8Array): CanonicalPathRe
 
 
 /** The linked task's deterministic request/generation identity, still data rather than execution authority. */
-export function pathRequestRunId(request: unknown, terms: { ruleLockDigest: Digest; policyDigest: Digest; profileDigest: Digest }, generation = 0): string {
+export function pathRequestRunId(request: unknown, terms: { ruleLockDigest: Digest; policyDigest: Digest; profileDigest: Digest }, generation = 0, unitSet?: readonly string[]): string {
   if (!Number.isSafeInteger(generation) || generation < 0 || generation > 2_147_483_647) throw new PathRequestError('invalid');
   const { ruleLockDigest, policyDigest, profileDigest } = terms;
   for (const value of [ruleLockDigest, policyDigest, profileDigest]) if (typeof value !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(value)) throw new PathRequestError('invalid');
+  if(unitSet!==undefined&&(!Array.isArray(unitSet)||!unitSet.length||unitSet.length>1024||unitSet.some(x=>typeof x!=='string'||x.length>65536)||new Set(unitSet).size!==unitSet.length||unitSet.reduce((n,x)=>n+Buffer.byteLength(x,'utf8'),0)>MAX_PATH_REQUEST_BYTES))throw new PathRequestError('invalid');
   const canonical = pathRequestOf(request);
-  return `run-${digestOf({ structuralPaths: canonical.id, ruleLockDigest, policyDigest, profileDigest, generation }).slice(7, 39)}`;
+  return `run-${digestOf({ structuralPaths: canonical.id, ruleLockDigest, policyDigest, profileDigest, generation, ...(unitSet?{unitSet:[...unitSet].sort()}:{}) }).slice(7, 39)}`;
 }
