@@ -949,10 +949,16 @@ accepted or resumable work stay protected; reconnect never automatically replays
 
 Configured review stages use the same admitted plan, coordinator attempts and model budget ledger as ordinary
 runs. They establish model claims or unfinished inspection, never deterministic coverage or mitigation. Hosted
-HTTP APIs are off by default; no local model server is required for the fixed native CLI path. The currently
+HTTP APIs are off by default; that flag does not make native Claude local inference. Native Claude sends source
+to a hosted model and still requires source-disclosure, network and paid-inference admission, plus the complete
+current-source secret scan described below. No local model server is required for this native CLI path. The currently
 supported native profile is Claude Code 2.1.282 on macOS arm64 and the requested Haiku model below. Other
 versions/platforms refuse. Account authentication and actual inference need separate qualification; successfully
 hashing a local binary does not establish either, and a login refusal never means the user is logged out.
+
+Preparation includes review stages from genuinely adopted model selections even when its recipe does not
+request a review adapter; the frozen profile records code availability, while dispatch still requires the exact
+model binding, receipt and admission.
 
 First obtain data for the owner configuration, without reading a credential or starting a process:
 
@@ -1017,7 +1023,12 @@ a vendor received it. Vendor hidden instructions, internal reasoning and vendor 
 stages use the bundled prompt with **no additional skills selected**; there is no vendor discovery. The explicit
 prepared-instruction library can retain selected skills without granting execution authority.
 
-Hosted review requires an actually complete accepted current-source Gitleaks scan, exact captured entries and no skipped scope before any model receipt, login read or call. Missing, held, unsupported or partial secret scans refuse; no matches alone is insufficient. The Gitleaks image must already be installed at its adopted pin; planning acquires nothing.
+Hosted review, including native Claude even with `hostedApiReviewEnabled: false`, requires one genuinely accepted
+current-source Gitleaks repository publication covering every captured entry, with complete coverage and no skipped
+scope, before any model receipt, login read or call. Per-file or partial publications cannot be combined to satisfy
+this gate, and an ancestor scan cannot replace the current scan. Missing, held, unsupported or partial secret scans
+refuse; no matches alone is insufficient. The Gitleaks image must already be installed at its adopted pin; planning
+acquires nothing.
 
 Known current or retained-ancestor secrets withhold optional model work and private trace delivery. Missing
 privacy or publication proof refuses rather than exposing raw data. The default report excludes private traces;
