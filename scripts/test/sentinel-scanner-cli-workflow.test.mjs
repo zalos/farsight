@@ -52,5 +52,8 @@ test('SDK run controls remain in the native service zero-skip list and installed
 });
 
 test('accepted imports have a zero-skip genuine privacy gate and npm-only public owner consumer',()=>{
+ const manifest=JSON.parse(readFileSync(new URL('package.json',root),'utf8'));
+ assert.ok(manifest.scripts['test:sentinel:package'].includes('node scripts/test-sentinel-evidence-consumer.mjs'));
+ assert.equal(selected(['scripts/test-sentinel-evidence-consumer.mjs']),true);
  assert.ok(workflow.includes('test/evidence-privacy.test.ts'));assert.ok(workflow.includes('node scripts/test-sentinel-evidence-consumer.mjs | tee evidence-consumer.log'));assert.ok(workflow.includes(`grep -q '"nativePrivacy":true' evidence-consumer.log`));
 });

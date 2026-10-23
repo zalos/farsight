@@ -305,3 +305,13 @@ Sentinel's service slice (ADR 48) lives in `src/contracts/service.ts` (five read
 unsettled read preparation without changing the handshake. `scripts/test-sentinel-mcp-consumer.mjs` installs only
 the tarball with npm and exercises the real SDK, retained framework reports and, under explicit native opt-in,
 genuine local-container secret privacy. `scripts/test-sentinel-mcp-controls-consumer.mjs` exercises real adopted grants, owner CLI confirmation, same-run pause/resume/cancel and lost-response reconnect without replay. Controls reuse the existing service admission; the package starts no MCP process or SDK import at ordinary library import.
+
+Sentinel owner report imports (ADR 47) are executable internals. `imports/` bounds and normalizes SARIF/ZAP,
+HTTP exchanges and cookie statements; `evidence/owner-cli.ts` supplies preview, confirmation, read/list and explicit
+abandon through genuine local ownership. `owner-context.ts` binds the executed source proof; `import-operation.ts`,
+`accept.ts`, `audit.ts`, `reader.ts` and `abandon.ts` enforce the receipt, immutable candidate, acceptance and recovery
+boundaries. `store/evidence-binding.ts` holds private permits; migration 6 and the existing ledger own stages,
+operations, acceptances and referenced roots. `contracts/import-view.ts` describes projected views/pages, with
+words in the existing Sentinel CLI/service catalogs and count scopes in core. `scripts/test-sentinel-evidence-consumer.mjs`
+qualifies the actual npm-only owner commands and separately identifies its matching built-private crash fixture.
+Imported claims never become scanner execution, coverage or qualified mitigation evidence.

@@ -1002,3 +1002,20 @@ A work is one admitted unit; an attempt is one recorded attempt for those units;
 association (the same captured file used by two units counts twice); an output is one recorded attempt/output
 association, with `accepted` separately stating whether that exact attempt owns the accepted publication.
 A reference-only prerequisite adds no row or count. Pagination never recomputes these totals from current work.
+
+### Sentinel imported-report counts (`sentinel-import-view/draft-1`, `sentinel-import-page/draft-1`)
+
+The owner `evidence` commands project the accepted import separately from scan findings. The public view reuses
+`ReportCount` and the two-register catalog. Whole-document withholding preserves counts and generated structural
+identities while removing caller-controlled text; these counts never imply a successful scan or mitigation.
+
+| Count | Unit key | Scope | Source and meaning | Recheck |
+|---|---|---|---|---|
+| imported claims | `sentinel.evidence.claims` | `sentinel.evidence.countScope` — one accepted imported report | Authenticated normalized `claims.length`, before document withholding | `farsight-sentinel evidence read <candidateDigest> --json` |
+| imported exchanges | `sentinel.evidence.exchanges` | same accepted import | Authenticated normalized `exchanges.length`; imported statements, not independently observed requests | same read command |
+| imported cookies | `sentinel.evidence.cookies` | same accepted import | Authenticated normalized `cookies.length`; imported records, not cryptographic or session-safety proof | same read command |
+| import operations in this page | `sentinel.evidence.operations` | `sentinel.evidence.pageScope` — returned metadata page only | Returned `items.length` from the bounded operation page, including its actual states; not the full history or verified payload availability | `farsight-sentinel evidence list <runId> --source <sourceId> --json` with the same cursor/limit |
+
+The private list query uses stable generated operation identity, explicit binding predicate and limit, at most
+100 rows. Metadata says `not-evaluated`; it does not perform a full payload/privacy proof for every historic
+operation. Read one candidate to obtain a currently validated, privacy-projected import.

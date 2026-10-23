@@ -1625,6 +1625,77 @@ captures several sources checks them all (`assertTrustOutside`). Farsight's code
 route under `.farsight` is captured and read by a framework pack but has no graph surface: it is a cited
 `routeNotInGraph` frontier, never a fact. Number 45 is reserved for the path protocol.
 
+47. **Sentinel records owner-associated report imports in its existing ledger, separately from worker execution (2026-10-23).**
+The internal report-import path accepts bounded SARIF and ZAP data as caller-stated claims. A retained source
+proof binds the exact executed run revision, snapshot, source and accepted inventory/parse closure. The trusted
+owner Workspace supplies the current adopted policy and receipt directory; nothing in an imported report supplies
+that authority. The current implementation supports the existing default Workspace layout. The owner executable exposes
+`evidence import`, `read`, `list` and `abandon`. Deep-engine execution, a qualified observation producer and
+mitigation decisions remain separate work.
+
+Migration 6 adds evidence operations and append-only acceptances to the same SQLite ledger, and associates each
+pending stage with its operation. Private permits bind the genuine held owner, epoch, exact candidate, prior
+acceptance head and consumed `evidence.import` receipt. Generic worker publication, generic staging and report pins
+cannot accept these stages. Candidate identity covers the retained source closure, workspace/store binding, exact
+raw and manifest bytes, normalized data and adapter version. It excludes receipt choice and acknowledgement time;
+the completed acceptance root separately binds the actual operation and authority audit, without a hash cycle.
+
+Shared policy preflight precedes caller-file reads. Normalization, byte/layout limits and the full authority-audit
+size are checked before spending. Once the shared admission consumes the exact receipt, the operation registers
+its six-role stage before writing objects. Acceptance verifies the complete object and link closure and atomically
+records the artifacts, acceptance, event and terminal operation while releasing its stage. Accepted roots become
+ordinary referenced roots for reachability. Every imported payload keeps at least source-derived privacy; captured
+source keeps its stronger floor.
+
+Receipt spending and SQLite commit are separate durable effects. An interruption before publication may leave a
+spent receipt and no operation row; the result does not promise the spend can be undone. A lost acknowledgement
+revalidates the one existing acceptance before another spend. Resuming an older pending candidate requires fresh
+confirmation and a new current-epoch operation; its complete stage is pinned before the old stage is released.
+The original receipt and admission remain in the immutable old operation for independent audit, even if obsolete
+unaccepted payload blobs are later pruned. Unknown pending operations are retained. Explicit `evidence.abandon`
+requires its own current owner receipt for one exact older pending identity and stage set; it releases only that
+stage association, records the complete audit, and deletes no physical object.
+
+Retained reads independently verify the acceptance, terminal event, exact closure and normalized bytes, supported
+adapter, and local issued-and-spent authority at the original decision time. Expiry today does not erase valid past
+acceptance. Reopening reconstructs read authority only; serialized receipts or imported bundles cannot reconstruct
+a launch or acceptance permit. Final proof checks preserve the original owner, epoch, source context, deadline and
+cancellation signal after asynchronous reads. Known secret findings in current, baseline or selected ancestry
+withhold all imported text; canceled runs remain unassessed. Imports do not contribute scanner execution, coverage,
+deployment, cryptographic or mitigation credit.
+
+Fixed limits are 64 open operations per store, 256 historical operations per binding, one stage per operation,
+six payload roles, 2,048 source-closure artifacts, 4,096 links, 40 MiB payload bytes and 512 KiB operation identity.
+Existing 16 MiB per-object limits and the 16 KiB complete authority-audit limit also apply. These are cooperative
+bounded operations, not process-memory or operating-system confinement guarantees. Recovery pages old generic
+stages in SQL by stable identity, leaving operation-associated evidence stages to their explicit domain recovery.
+
+The initial public command acquires the genuine local owner before touching caller report files. If a detached
+service holds the workspace, it returns a typed busy result; it neither steals ownership nor stops the service.
+Unexpired MCP read buffers may retain that owner for five minutes. This local-only command is an interim delivery
+boundary: the continuous GUI needs separately reviewed receipt transport against the service that already owns
+the store. A generic RPC cannot identify itself as the human owner.
+
+Preview returns an exact candidate digest; optional expected-candidate matching refuses stale bytes before receipt
+issuance or spending. Confirmation repeats the bounded proofs under the original absolute 120-second operation
+deadline. With a prior accepted head, one command can perform up to five complete source proofs; an earlier
+three-proof warm-cache measurement is not a worst-case C1 capacity promise. A verified acceptance and its
+metadata remain true if subsequent rendering or file delivery fails. The small acknowledgement and the complete
+serialized document have separate 16 KiB and 32 MiB limits, including command wrappers. Output is validated and
+bounded before one no-overwrite file creation or stdout delivery; overflow refuses rather than truncates.
+The new-file export is not crash-atomic: I/O or process failure may leave a new partial file.
+
+The public data-only `sentinel-import-view/draft-1` and `sentinel-import-page/draft-1` schemas support projected
+JSON and readable indented-code Markdown, preserving the payload's original characters. One fixed owner-local
+disclosure is explicit; a clean imported document is not guaranteed safe to share. There is no shareable flag.
+They expose imported claims and honest withholding, never original report bytes or receipts. A default 50 / maximum 100-row metadata page uses a bounded SQL query and a binding-specific cursor;
+its availability is explicitly not evaluated, rather than implying that every payload was revalidated. Ordering
+is by stable generated operation identity, not chronology. Import/list require a completed run; reading an already
+accepted canceled-run import remains wholly withheld. The read
+command independently revalidates one acceptance and its current privacy. Claim, exchange and cookie counts
+name one accepted import; operation counts name only the returned page. Neither contributes scanner findings,
+coverage or mitigation totals.
+
 48. **Sentinel exposes bounded retained reads through its existing owner service and the MCP SDK (2026-10-22).**
 The first PR 23a slice is read-only: `service.capabilities`, `run.inspect`, `view.page`, `report.open` and
 `delivery.read` are additive operations on the existing versioned socket. The MCP command lazily imports exactly

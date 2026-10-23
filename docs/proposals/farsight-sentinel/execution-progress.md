@@ -13,9 +13,10 @@ Read-only service/MCP merged as [#166](https://github.com/zalos/farsight/pull/16
 review and all fifteen final checks passed, including native isolation, installed scanners and full recovery.
 Its first validation found two stale capability expectations; the precise correction passed both complete files
 (36 passed, one intentional unqualified-host negative skipped) before fresh selected CI. The original failure is
-retained. Actual owner paths and usable decisions/imports remain active product work. The next reviewed control
-slice adds existing-run start/resume, pause and cancel, including legal pending-pause transitions and explicit
-uncertainty after a lost accepted response. Durable preparation, saved configuration, real browser confirmation,
+retained. Existing-run MCP controls merged as [#167](https://github.com/zalos/farsight/pull/167), `919e26c6`,
+after independent review and all eighteen selected checks, including full recovery and installed scanners. They
+provide start/resume, pause and cancel, legal pending-pause transitions and explicit uncertainty after a lost
+accepted response. Actual owner paths and usable decisions/imports remain active product work. Durable preparation, saved configuration, real browser confirmation,
 service-owned imports and the complete scan GUI still require their own acceptance. A private source review or
 storage checkpoint is not a public command.
 Post-merge native isolation failed two of 106 tests, with unidentified exit 137 and no daemon OOM witness. That
