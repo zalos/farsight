@@ -3,10 +3,11 @@ import {STRINGS} from '@farsight/core/dist/strings.js';
 import {validateEnvelope} from '../validate.js';
 import type {ConfigurationPreview,PreparationCapabilities,PreparationOutcome,PreparationStatus} from '../contracts/preparation.js';
 import {controlOutcome} from './controls.js';
+import {externalDrivers} from './scanner-profile.js';
 import {FRAMEWORK_CONTROLS_ADAPTER_ID} from '../frameworks/controls/definitions.js';
 const invalid=():never=>{throw Object.assign(new Error('sentinel.preparation.invalid'),{code:'sentinel.preparation.invalid'});};
 const catalog=(v:unknown):void=>{if(typeof v!=='string'||!Object.hasOwn(STRINGS,v))return invalid();};
-const adapters=new Set(['pattern-semgrep','advisories-osv','iac-trivy','ci-zizmor','secrets-gitleaks',FRAMEWORK_CONTROLS_ADAPTER_ID]);
+const adapters=new Set([...externalDrivers().keys(),FRAMEWORK_CONTROLS_ADAPTER_ID]);
 const outcomes=new Set(['submitted','requested','kept','answered','configuration-failure','awaiting-confirmation','unavailable','refused']);
 export function preparationCapabilities(value:unknown):PreparationCapabilities{
  const checked=validateEnvelope('preparationcapabilities',value);if(!checked.ok)return invalid();return checked.value;

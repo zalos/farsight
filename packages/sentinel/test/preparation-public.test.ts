@@ -30,6 +30,7 @@ test('public preparation schemas preserve original timing and reject altered aut
  const load=(kind:string)=>JSON.parse(readFileSync(new URL(`./contracts/valid/${kind}.json`,import.meta.url),'utf8'));
  const preview=load('configurationpreview'),status=load('preparationstatus'),outcome=load('preparationoutcome');
  for(const [kind,value]of[['configurationpreview',preview],['preparationstatus',status],['preparationoutcome',outcome]]as const)assert.equal(validateEnvelope(kind,value).ok,true);
+ for(const timestamp of ['2026-13-23T12:00:00Z','2026-02-30T12:00:00Z','2026-10-23T25:00:00Z']){assert.doesNotThrow(()=>validateEnvelope('configurationpreview',{...preview,expiresAt:timestamp}));assert.equal(validateEnvelope('configurationpreview',{...preview,expiresAt:timestamp}).ok,false);}
  assert.equal(validateEnvelope('configurationpreview',{...preview,expiresAt:'2026-10-23T12:00:30.001Z'}).ok,false);
  assert.equal(validateEnvelope('preparationstatus',{...status,runDeadlineAt:'2026-10-23T12:10:00.001Z'}).ok,false);
  assert.equal(validateEnvelope('preparationstatus',{...status,preparedRevision:null}).ok,false);
@@ -104,4 +105,31 @@ test('MCP awaiting-confirmation is answered by actual owner CLI for the same sav
  const awaiting=await f.call(c,'sentinel_prepare_accept',{requestKey:key,previewId:preview.id});assert.equal(awaiting.outcome,'awaiting-confirmation');assert.equal(readdirSync(f.store.storePath).includes('preparation'),false);
  const owner=await f.owner('prepare','--request-key',key,'--confirm');assert.equal(owner.outcome,'submitted');const ended=await f.final(key);assert.equal(ended.facts.phase,'prepared',JSON.stringify(ended));
  const found=await f.call(c,'sentinel_prepare_status',{requestKey:key});assert.equal(found.status.preparationId,owner.facts.preparationId);assert.equal(found.status.runId,ended.facts.runId);assert.equal('confirmation'in found.status,false);
+});
+
+test('lost accepted ACK cannot let a second owner CLI overwrite the saved resumable request key',{...needsStore,timeout:60000},async t=>{
+ const f=await fixture(t),{ObjectStore}=await import('../dist/store/objects.js'),read=ObjectStore.prototype.read;let saw!:()=>void,release!:()=>void,gated=false;
+ const observed=new Promise<void>(r=>saw=r),held=new Promise<void>(r=>release=r);const mock=t.mock.method(ObjectStore.prototype,'read',async function(this:any,...args:any[]){const bytes=await(read as any).apply(this,args);if(!gated&&bytes.toString('utf8').includes('sentinel-snapshot/draft-1')){gated=true;saw();await held;}return bytes;});
+ try{f.setAfter(async(op,v)=>op==='prepare.accept'?{...v,outcome:'lost-ack'}:undefined);const first=await f.owner('prepare','--confirm','--request-key',key);assert.equal(first.reasonCode,'sentinel.preparation.outcomeUnknown');await observed;f.setAfter(undefined);
+ const path=join(f.ws.trustDir,readdirSync(f.ws.trustDir).find(n=>/^preparation-client-.*\.json$/.test(n))!),before=readFileSync(path);
+ const second=await f.owner('prepare','--confirm','--request-key','public_second_request_0002');assert.notEqual(second.outcome,'submitted');assert.ok(readFileSync(path).equals(before),'saved original key must survive busy/unknown second acceptance');assert.equal(f.requests.filter(x=>x==='prepare.accept').length,1);
+ }finally{release();mock.mock.restore();}
+});
+
+test('two actual owner CLIs contend immediately; killing the mutex holder releases it without losing its key',{...needsStore,timeout:60000},async t=>{
+ const f=await fixture(t);let saw!:()=>void,release!:()=>void;const observed=new Promise<void>(r=>saw=r),held=new Promise<void>(r=>release=r);
+ f.setAfter(async(op,v)=>{if(op==='prepare.accept'){assert.equal(v.outcome,'submitted');saw();await held;}});
+ const child=execFile(process.execPath,[cli,'prepare','--confirm','--request-key',key,'--workspace',f.ws.path,'--json'],{env:{...process.env,XDG_STATE_HOME:join(f.dir,'owner')},timeout:30000});
+ const exited=new Promise<void>(resolve=>child.once('close',()=>resolve()));child.on('error',()=>{});
+ try{await observed;const path=join(f.ws.trustDir,readdirSync(f.ws.trustDir).find(n=>/^preparation-client-.*\.json$/.test(n))!),before=readFileSync(path);
+ const start=performance.now(),second=await f.owner('prepare','--confirm','--request-key','public_concurrent_request_0002');assert.equal(second.reasonCode,'sentinel.preparation.busy');assert.ok(performance.now()-start<5000);assert.equal(f.requests.filter(x=>x==='prepare.accept').length,1);assert.ok(readFileSync(path).equals(before));
+ child.kill('SIGKILL');await exited;release();f.setAfter(undefined);await f.final();const retained=await f.owner('prepare','--confirm','--request-key','public_concurrent_request_0003');assert.equal(retained.outcome,'kept');assert.equal(retained.reasonCode,'sentinel.preparation.alreadyPrepared');assert.equal(retained.facts.found,true);assert.ok(readFileSync(path).equals(before));
+ }finally{release();if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await exited;}
+});
+
+test('ambiguous saved-key status cannot be replaced and reconnect to an older service removes preparation tools',{...needsStore,timeout:60000},async t=>{
+ const f=await fixture(t);assert.equal((await f.owner('prepare','--confirm','--request-key',key)).outcome,'submitted');await f.final();const path=join(f.ws.trustDir,readdirSync(f.ws.trustDir).find(n=>/^preparation-client-.*\.json$/.test(n))!),before=readFileSync(path),client=await f.connect();
+ f.setAfter(async(op)=>op==='prepare.status'?{command:'prepare',outcome:'answered',exitCode:0,verdicts:null,facts:{schema:'sentinel-preparation-status/draft-1',found:false}}:undefined);
+ const refused=await f.owner('prepare','--confirm','--request-key','public_unknown_request_0002');assert.notEqual(refused.outcome,'submitted');assert.ok(readFileSync(path).equals(before));f.setAfter(undefined);f.setLegacy(true);
+ assert.equal((await f.call(client,'sentinel_prepare_status',{requestKey:key})).error.code,'sentinel.service.operationUnavailable');assert.equal(f.requests.filter(x=>x==='prepare.accept').length,1);
 });

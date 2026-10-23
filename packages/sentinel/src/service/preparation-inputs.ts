@@ -108,7 +108,7 @@ export function checkPreparationProfile(store: SentinelStore, value: Preparation
     || answers.some(a => !a || typeof a !== 'object' || Object.keys(a).sort().join(',') !== 'adapterId,available,reasonCode' || typeof a.available !== 'boolean')
     || new Set(answers.map(a => a.adapterId)).size !== answers.length
     || answers.some(a => !intended.includes(a.adapterId) || a.available !== available.has(a.adapterId)
-      || (a.available ? a.reasonCode !== null : !['sentinel.preparation.toolMissing','sentinel.preparation.databaseMissing','sentinel.assets.missing','sentinel.execution.imageMissing','sentinel.execution.isolationUnavailable','sentinel.execution.backendUnqualified','sentinel.plan.toolMismatch'].includes(a.reasonCode!)))) return refuse();
+      || (a.available ? a.reasonCode !== null : !['sentinel.preparation.toolMissing','sentinel.preparation.databaseMissing','sentinel.preparation.databaseMismatch','sentinel.assets.missing','sentinel.execution.imageMissing','sentinel.execution.isolationUnavailable','sentinel.execution.backendUnqualified','sentinel.plan.toolMismatch'].includes(a.reasonCode!)))) return refuse();
   if (answers.length && answers.length !== intended.length) return refuse();
   const registry = createAdapterRegistry(original.registry.ids.filter(id =>
     id === PREVIEW_DETECTOR_ID || (Object.values(OPERATIONS) as readonly string[]).includes(id) || available.has(id)

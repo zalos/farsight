@@ -56,6 +56,7 @@ test('no Farsight package depends on or imports Sentinel', () => {
 // Every module import outside the package, per built file. A new import fails here until it is reviewed and
 // added; nothing networked, no worker or cluster, and no static node:sqlite import anywhere.
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
+  'service/preparation-key-lock.js': ['node:path'],
   'service/preparation-client.js': ['node:crypto', 'node:path'],
   'service/preparation-projection.js': ['@farsight/core/dist/strings.js'],
   'service/preparation-controller.js': ['node:crypto', 'node:path', 'node:timers/promises'],

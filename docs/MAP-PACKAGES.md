@@ -307,7 +307,7 @@ the tarball with npm and exercises the real SDK, retained framework reports and,
 genuine local-container secret privacy. `scripts/test-sentinel-mcp-controls-consumer.mjs` exercises real adopted grants, owner CLI confirmation, same-run pause/resume/cancel and lost-response reconnect without replay. Controls reuse the existing service admission; the package starts no MCP process or SDK import at ordinary library import.
 
 Sentinel's durable preparation extension adds `contracts/preparation.ts`, `service/preparation-{clock,inputs,
-discovery,journal,controller,projection,client}.ts` and private `store/admission-fence.ts`. The held service owns the
+discovery,journal,controller,projection,client,key-lock}.ts` and private `store/admission-fence.ts`. The held service owns the
 journal/controller; the client only connects to that owner and uses real CLI receipt confirmation. Input/profile
 proofs remain opaque in process, captured continuation reuses canonical bootstrap/planning, and a private scoped
 veto checks actual ledger acceptance boundaries without changing public store callbacks. The SDK adds separately

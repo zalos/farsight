@@ -2,6 +2,7 @@
 import type { SentinelStore } from '../store/index.js';
 import type { ScratchLease } from './scratch-lease.js';
 import type { DockerRunner } from '../execution/isolation.js';
+import { TRIVY_CHECKS_BUNDLE } from '../adapters/trivy/adapter.js';
 import { externalDrivers } from './scanner-profile.js';
 import { installedAdapters, heldDatabases, assertPreparationAssetProvenance, ScannerAssetError } from './scanner-assets.js';
 import { FRAMEWORK_CONTROLS_ADAPTER_ID, frameworkAvailable } from './framework-adapter.js';
@@ -44,6 +45,7 @@ export async function discoverPreparationProfile(store:SentinelStore,inputs:Prep
     const databaseIds=adapterId==='advisories-osv'?['osv:npm','osv:Maven']:adapterId==='iac-trivy'?['trivy-checks']:[];
     assertPreparationAssetProvenance(terms.trustDir,[pin,...terms.current.lock.databases.filter(d=>databaseIds.includes(d.databaseId))]);clock.stillWithin();
     if(databaseIds.some(id=>!terms.current.lock.databases.some(d=>d.databaseId===id)))reason='sentinel.preparation.databaseMissing';
+    else if(adapterId==='iac-trivy'&&!terms.current.lock.databases.some(d=>d.databaseId==='trivy-checks'&&d.snapshotDigest===TRIVY_CHECKS_BUNDLE.layer))reason='sentinel.preparation.databaseMismatch';
     else{
      try{await installedAdapters(terms.trustDir,terms.current.lock,[adapterId],lease.path,wrapRunner,signal);clock.stillWithin();}
      catch(error){clock.stillWithin();if(error instanceof ScannerAssetError&&error.code==='sentinel.assets.missing')throw new ScannerAssetError('sentinel.assets.invalid');const missing=absent(error);if(!missing)throw error;reason=missing;}

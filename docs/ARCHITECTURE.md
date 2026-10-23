@@ -1731,3 +1731,11 @@ write. The real SDK cannot submit human identity/confirmation/receipt fields. Ep
 retained request/config/readiness records are private bounded data, not capabilities. Captured preparation that
 expires before a genuine run exists remains unsupported for fresh-clock retained retry. The 256-terminal cap
 refuses rather than silently pruning; explicit owner retention maintenance and GUI confirmation remain open.
+
+ADR48 preparation correction: a newly held owner durably interrupts previous-epoch nonterminal journal data;
+the same controller may reconcile only its genuinely settled task, with no active service run. A failed write
+refuses new admission. This is status, never proof of worker death, revocation, cleanup or automatic resume.
+The real CLI serializes confirmed saved-key check/status/save/dispatch using a qualified SQLite EXCLUSIVE
+sidecar, immediate busy refusal and existing canonical private-file checks. It contains no approval/ledger rows,
+is never unlinked or reclaimed by PID/age, and kernel process death releases its lock. Captured/ambiguous keys
+remain retained; only an explicit canonical terminal-parent request may replace a prepared key.

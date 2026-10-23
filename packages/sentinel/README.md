@@ -730,8 +730,8 @@ registry and limits through the real owner CLI's existing receipt book. The CLI 
 confirmation call; an earlier displayed preview is informative. Direct service acceptance instead requires its
 still-current preview ID and refuses changed configuration. A private discovery key is saved before
 acceptance is sent; after a lost response, use `prepare status` rather than automatically sending a new preparation.
-An explicit `--request-key` is supported for a caller that persists its own opaque key before requesting work.
-Keys identify retained requests; they grant no permission. Status returns catalog reasons and safe identities,
+The owner CLI serializes confirmed key replacement with a private qualified SQLite mutex. Contention refuses immediately; process death releases the lock without deleting its file. Pending, captured, expired captured, missing or ambiguous saved requests are never overwritten. An already prepared request returns its retained run; an explicit linked request must name that run after it ends. An explicit `--request-key` is supported for a caller that persists its own opaque key before requesting work.
+Keys must be random and persisted by the caller; they identify retained requests and grant no permission. A new preview replaces the earlier preview for the same fixed service channel, so concurrent clients can invalidate each other’s preview without admitting work. Status returns catalog reasons and safe identities,
 not paths, source text, profile objects, raw hashes or receipt bindings. The prepared revision is historical;
 `run.inspect` through the service reports the run's actual current revision and work.
 
@@ -747,11 +747,11 @@ budget covers discovery, capture, bootstrap, inspection delay and the later chec
 not restart the clock; an existing run's earlier deadline can tighten it. Cooperative checkpoints check immediately
 before admission commits, not that disk COMMIT or one physical read will finish before a hard wall deadline.
 
-No startup or reconnect automatically resumes preparation. `prepare resume --confirm` explicitly admits continuation
+Startup under a newly held epoch durably marks an earlier nonterminal preparation interrupted. A task whose genuine preparation has settled can be marked interrupted before an explicit new operation; an active preparation or run is never retired this way. A failed interruption write refuses new work. This changes journal status only and never proves a worker stopped, authorizes cleanup or resumes work. No startup or reconnect automatically resumes preparation. `prepare resume --confirm` explicitly admits continuation
 of an associated captured snapshot after an owner restart, under fresh current permission and the original clock.
-It does not recapture source. An interruption before durable captured association requires a fresh authorized
+It does not recapture source. The current CLI/MCP request timeout bounds pre-acceptance resume proof to 30 seconds; timeout or disconnection aborts that unsettled proof without accepting or spending its receipt. This transport limit may prevent continuation of larger retained inputs even with preparation time remaining. An interruption before durable captured association requires a fresh authorized
 request; uncertain files are retained. `prepare cancel --confirm` controls the exact preparation, separately from
-`cancel <runId>` for an analysis run. A genuine completed/canceled parent can be selected with `prepare --parent
+`cancel <runId>` for an analysis run. In this draft, canceling an inactive interrupted preparation does not revoke a retained captured checkpoint; it can still offer explicit resume. A terminal abandonment/cleanup contract remains separate work. A genuine completed/canceled parent can be selected with `prepare --parent
 <runId> --confirm` to prepare a pinned linked child with fresh authority. If preparation expires after capture but
 before any real run record exists, this slice refuses safely: retrying that retained preparation under a new clock
 requires a later reviewed contract and is not supplied by inventing a parent or recapturing silently.

@@ -7,7 +7,7 @@ import { boundOwner } from '../store/owner-binding.js';
 export const PREPARATION_LIMIT_MS = 600_000;
 export type PreparationErrorCode = 'sentinel.preparation.expired' | 'sentinel.preparation.canceled'
   | 'sentinel.preparation.changed' | 'sentinel.preparation.unavailable' | 'sentinel.preparation.invalid'
-  | 'sentinel.preparation.retentionRequired' | 'sentinel.preparation.busy';
+  | 'sentinel.preparation.retentionRequired' | 'sentinel.preparation.busy' | 'sentinel.preparation.ownerRestarted';
 export class PreparationError extends Error {
   constructor(readonly code: PreparationErrorCode) { super(code); this.name = 'PreparationError'; }
 }

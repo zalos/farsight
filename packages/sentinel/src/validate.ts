@@ -719,8 +719,10 @@ const deepimport: Check<DeepImportEnvelope> = (v, out) => {
 };
 
 // Exact public timestamp arithmetic keeps fractions that Date.parse truncates.
-const timestampNanos = (value: string): bigint => {
- const whole = BigInt(Date.parse(value.slice(0,19)+'Z'))*1_000_000n;
+const timestampNanos = (value: string): bigint | null => {
+ if(!isCalendarTimestamp(value))return null;
+ const millis=Date.parse(value.slice(0,19)+'Z');if(!Number.isSafeInteger(millis))return null;
+ const whole = BigInt(millis)*1_000_000n;
  const fraction = value.slice(19,-1).replace(/^\./,'');
  return whole + BigInt(fraction.padEnd(9,'0'));
 };
@@ -735,11 +737,13 @@ const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   deliverychunk: () => [],
   preparationcapabilities: () => [],
   configurationpreview: (v, out) => {
-    if (timestampNanos(v.expiresAt) <= timestampNanos(v.createdAt) || timestampNanos(v.expiresAt)-timestampNanos(v.createdAt)>30_000_000_000n) out.add(err('/expiresAt', 'preview expiry exceeds its original bound'));
+    const end=timestampNanos(v.expiresAt),start=timestampNanos(v.createdAt);
+    if (end===null||start===null||end <= start || end-start>30_000_000_000n) out.add(err('/expiresAt', 'preview expiry exceeds its original bound'));
   },
   preparationstatus: (v, out) => {
     if (!v.found) return;
-    if (timestampNanos(v.deadlineAt)<=timestampNanos(v.acceptedAt)||timestampNanos(v.deadlineAt)-timestampNanos(v.acceptedAt)>600_000_000_000n||timestampNanos(v.runDeadlineAt)>timestampNanos(v.deadlineAt)) out.add(err('/deadlineAt', 'preparation timing must preserve the original bound'));
+    const end=timestampNanos(v.deadlineAt),start=timestampNanos(v.acceptedAt),runEnd=timestampNanos(v.runDeadlineAt);
+    if (end===null||start===null||runEnd===null||end<=start||end-start>600_000_000_000n||runEnd>end) out.add(err('/deadlineAt', 'preparation timing must preserve the original bound'));
     if(v.phase==='prepared'&&(!v.runId||v.preparedRevision===null||v.preparedRevision<2))out.add(err('/preparedRevision','prepared requires an actual analysis revision'));
     for(const [i,a]of v.availability.entries())if(a.available?(a.reasonCode!==null):(a.reasonCode===null))out.add(err(`/availability/${i}`,'readiness answer and reason differ'));
   },
