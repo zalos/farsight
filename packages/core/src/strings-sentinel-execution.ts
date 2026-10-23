@@ -2,7 +2,7 @@ import type { StringEntry } from './strings.js';
 
 // Sentinel worker execution (PR 07): the bounded worker protocol, the trusted adapter registry, container
 // isolation and the supervisor. Each key is the stable reason code an ExecutionError or a worker outcome carries;
-// the professional text is its message. Both registers carry the same words until the PR 09 vocabulary freeze.
+// the professional text is its message. Startup refusals also have a business-register explanation.
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
 
 export const SENTINEL_EXECUTION_STRINGS: Record<string, StringEntry> = {
@@ -28,6 +28,11 @@ export const SENTINEL_EXECUTION_STRINGS: Record<string, StringEntry> = {
   'sentinel.execution.deadlineExceeded': same('the worker did not finish before its deadline', 'Every attempt has a deadline. A worker still running at the deadline is stopped and the attempt ends without a result.'),
   'sentinel.execution.canceled': same('the attempt was canceled', 'Cancellation was asked for. The worker was told to stop and, if it did not stop in time, was stopped.'),
   'sentinel.execution.resourceExceeded': same('the worker exceeded its memory limit', 'The container runtime stopped the worker because it used more memory than the attempt allows.'),
+  'sentinel.execution.closureRefused': {
+    professional: 'the built-in worker’s startup verification refused to run it',
+    hud: 'Sentinel’s built-in check stopped at its startup check, before checking anything',
+    define: 'Before it does any work, the built-in worker checks its installed files and entry point against what was registered. When that check fails it ends with no result. Reinstall or re-register Sentinel and plan again.',
+  },
   'sentinel.execution.workerExited': same('the worker stopped without a valid result', 'The worker ended, or ended with an error, before it delivered a result that passed every check.'),
   'sentinel.execution.cleanupFailed': same('the worker container could not be confirmed removed: {container}', 'After every attempt its container is removed by its exact identity and its absence is confirmed. When that cannot be confirmed the attempt is recorded as needing cleanup.'),
   'sentinel.execution.reconciliationPending': same('the container runtime may still create this attempt\u2019s container: {name}', 'A create request ended without a confirmed answer, so the container may appear later. Its name and ownership labels are kept so recovery can find and remove it; the attempt does not succeed and absence is never assumed.'),

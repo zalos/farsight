@@ -1493,8 +1493,13 @@ Unused workspace fixture generators are byte-pinned data, not worker entry point
 bytes require this audit and test pins to be reviewed. No arbitrary computed external loader is supported. In the canonical tarball, the fixed `dist/frameworks/controls/worker.mjs` is a separately hashed package asset.
 The closure pins every regular file and folder listing in the package's real `dist` tree, rejects inner links and
 nested dependency shadows there, and resolves all declared installed dependencies from every emitted module folder.
-Generated require aliases are therefore not a completeness boundary. The own-package resolver starts from this
-module and walks a bounded number of parents; it never pins the consumer's tree. Private generated entries live
+Generated require aliases are therefore not a completeness boundary. The own-package resolver starts inside the
+compiled `dist` tree and requires Sentinel's own manifest immediately above it. Only genuinely absent manifests
+inside dist allow walking upward; missing, unreadable, malformed, linked or foreign own manifests refuse rather
+than selecting an enclosing workspace. The valid own package name selects workspace `.js` or installed `.mjs`
+layout. Installed worker and launch-gate paths and SHA-256 pins are mandatory, copied and deeply frozen; no `.js`
+sibling substitutes for a missing installed asset. The driver is one fixed internal packer entry, pinned by the
+whole dist closure, without a public export or asset-manifest entry. The resolver never pins the consumer's tree. Private generated entries live
 under the owner's trust directory, outside dist, with full entry-source SHA-256 names. They are atomically published
 without replacement. Relative manifest labels still contain absolute resolution and target-path values: the closure digest and generated
 entry are both installation-bound. A second installation has another identity; moving or changing an installation requires a new
@@ -1507,8 +1512,12 @@ the launch gate with only the worker environment and its sealed inputs (the job,
 parser artifact, result and index, and its captured files, each read only by id and checked against its digest). The
 deadline, cancel and the stdout, stderr and output budgets are enforced by killing the process; memory, CPU and
 process counts are not hard limits on this path and the child is not network-isolated. It is Sentinel's own code, it
-opens no connection, and it installs, builds, imports and runs nothing from the target. The job is the one input
-whose JSON names the job schema; none or two are refused with `sentinel.controls.jobInvalid`. A pack that throws is
+opens no connection, and it installs, builds, imports and runs nothing from the target. The coordinator selects
+`prepared.binding.derived.job` for a closed built-in identity, and the supervisor requires that artifact to be one
+of the exact sealed inputs before spawning. Only then do the invocation and start carry the optional `job` field.
+The worker requires that explicit role and reads its named retained closure, never searching captured JSON for
+a job schema. An absent or invalid job refuses with `sentinel.controls.jobInvalid`; unrelated job-shaped JSON
+cannot replace the selected job or deny the inspection. External adapters cannot receive this role. A pack that throws is
 recorded as `libraryRefused`, never its message. The worker claims no coverage; `facts.ts` derives it.
 
 Inspection is not assessment. `applies` and `does-not-apply` both mean only that a pack established, within its exact
@@ -1548,3 +1557,38 @@ offline HTML and SARIF properties. Facts create no SARIF results. The minimal sc
 privacy-projected section instead of raw controls envelopes. Every new source-controlled identity, version and
 frontier passes through the coarse secret-run projection before rendering; required partial checks remain gaps.
 Per-surface execution and assessment policy (PR 20) remain separate work. Words are `strings-sentinel-framework-controls.ts`; the pack is `rules/framework-controls/`.
+
+The shared retained-source verifier is an internal read boundary, not a new graph contract or public factory.
+It proves the exact admitted inventory and parse publications, operation ownership, profile, influence manifest,
+lineage and complete included content-hash closure. The read-only proof binds its original owner and epoch,
+recorded run revision, deadline and cancellation signal; access can only tighten those bounds. It exposes a
+source-filtered view with the original manifest identity and verifies every distinct included body hash. Caller
+limits are independently copied, validated and frozen, can only lower fixed ceilings, and bound byte accounting,
+reads, lineage depth and cooperative elapsed time. Final copies are prepared before the last owner/deadline fence.
+These are cooperative read bounds, not a hard RSS or I/O limit. Execution still separately requires its genuine
+validated plan, current revision and original source/owner checks; a read-only proof grants no execution authority.
+`retained-bootstrap.ts` and `retained-analysis.ts` share verification mechanics while retaining those different
+entry authorities. Execution's body-read behavior is unchanged.
+
+The closed internal descriptor table currently names `framework-controls` and `bounded-paths`; the latter cannot
+register until its real worker and driver ship. No caller selects a worker path or export. Framework definitions
+import the actual pure support modules, and report reads/imports/help do not resolve assets, load the worker or
+load the native parser. Already accepted reports remain readable with worker assets absent; a new execution still
+requires the installed assets and exact registration identity.
+
+For new framework records, normalization requires the computed sealed job id, invocation job, prepared execution
+binding's derived job and output job to be identical. Report readback treats any own `job` key as the strict form,
+including malformed or null values. It reconstructs the exact binding from proven plan/work and original retained
+identities, verifies the exact sealed input set, and requires the accepted canonical content by its hash. Equivalent
+accepted content fixes the same authority fields; this is not a claim of a separate per-attempt record link. An
+invocation without the job key deliberately retains the original legacy readback path. Unrelated preview and
+external start/invocation forms remain unchanged.
+
+A framework startup verification refusal is final, without refreshing identity or retrying. Only the closed
+built-in descriptor, current trusted driver and adapter id/digest, genuine failed owned-child `workerExited`, exit
+71 with no signal, zero protocol frames and bytes, and no result or outputs qualify. The coordinator records
+`sentinel.execution.closureRefused` with the original code, exit, pre-hello phase and adapter identity; the raw
+supervisor outcome remains unchanged. Cancellation, deadlines, cleanup, ownership and other protocol or output
+failures keep their existing precedence. Exit 71 from another worker, a container or after protocol activity keeps
+its ordinary failure meaning. Catalog wording says startup verification refused, since that observation alone
+does not establish that files changed or that no process started.

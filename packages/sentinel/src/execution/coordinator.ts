@@ -13,7 +13,7 @@
 // and inventory units run as the coordinator's own operations (bootstrap.ts); an analysis revision's check units
 // run as workers, and what each covered is recorded as canonical coverage records (coverage.ts) that PR 06's
 // evaluateRequiredCoverage alone turns into the run's outcome.
-import { BUILTIN_WORKERS } from './builtin-workers.js';
+import { BUILTIN_WORKERS, closureRefusalOf } from './builtin-workers.js';
 import { deepFreeze } from '../policy/immutable.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -581,7 +581,8 @@ export class Coordinator {
       } else if (attemptId && this.#deadlinePassed && !this.#cancelRequested) {
         this.#end(ref, attemptId, 'failed', 'sentinel.execution.runDeadline', outcome.detail);
       } else if (attemptId) {
-        this.#end(ref, attemptId, outcome.state === 'canceled' ? 'canceled' : 'failed', outcome.code ?? 'sentinel.execution.workerExited', outcome.detail);
+        const refusal = closureRefusalOf(executable.adapter, driver, outcome);
+        this.#end(ref, attemptId, outcome.state === 'canceled' ? 'canceled' : 'failed', refusal?.code ?? outcome.code ?? 'sentinel.execution.workerExited', refusal?.detail ?? outcome.detail);
       } else {
         this.#unstarted(ref, outcome.code ?? 'sentinel.execution.workerExited', outcome.detail);
       }

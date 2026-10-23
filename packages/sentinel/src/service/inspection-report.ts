@@ -77,6 +77,8 @@ export async function acceptedInspection(store: SentinelStore, admitted: Admitte
       derived: { job: invocation.job, auxiliary,
         analysis: { inventory: unit.dependencies[0]!, ...expectedAnalysis } },
     };
+    // Exact canonical content fixes every authority field. Equivalent accepted content suffices; this lookup does
+    // not claim a per-attempt record link beyond the accepted invocation and work already proven above.
     const accepted = await read(bindingId(expected));
     if (!same(accepted, expected) || accepted.derived?.job !== invocation.job) return refuse('inspection has no exact accepted execution binding');
   }

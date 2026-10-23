@@ -3,7 +3,8 @@
 // executes Sentinel's trusted code, never this application's code. Set FARSIGHT_NPM_OFFLINE_CACHE for offline use.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -102,6 +103,21 @@ try {
  const legacy={};for(const format of ['json','md','html','sarif'])legacy[format]=normalize(await full(id,format));
  const minimalBefore=normalize(JSON.stringify(await call('report',id)));
  const workerPath=join(installed,'dist/frameworks/controls/worker.mjs'),gatePath=join(installed,'dist/execution/launch-gate.mjs');
+ // The actual installed gate and registered closure entry, after registration. These child controls prove the
+ // whole-dist/manifest startup fence, independently of the earlier pre-execution profile and resolver fences.
+ for(const part of ['worker','gate','manifest']){
+  const target=part==='worker'?workerPath:part==='gate'?gatePath:join(installed,'package.json'),original=readFileSync(target);
+  try{
+   if(part==='manifest'){const pkg=JSON.parse(original);pkg.description+=' startup verification probe';writeFileSync(target,JSON.stringify(pkg));}
+   else writeFileSync(target,Buffer.concat([original,Buffer.from('\n// installed startup verification probe\n')]));
+   const token=randomUUID();
+   const child=spawnSync(process.execPath,['--import',gatePath,join(entries,name),'/unused-input','/unused-output',`--sentinel-token=${token}`],
+    {cwd:ws,env:{SENTINEL_INPUT:'/unused-input',SENTINEL_OUTPUT:'/unused-output',SENTINEL_ADAPTER_ID:'framework-controls',SENTINEL_ADAPTER_DIGEST:'unused-before-hello'},
+     input:`sentinel-launch ${token}\n`,encoding:'utf8',timeout:10000});
+   assert.equal(child.error,undefined);assert.equal(child.status,71,part);assert.equal(child.signal,null);assert.equal(child.stdout,'',part+' has zero protocol bytes');assert.equal(child.stderr,'',part+' has no raw diagnostic');
+  }finally{writeFileSync(target,original)}
+ }
+
  const driverPath=join(installed,'dist/frameworks/controls/driver.mjs'),manifestPath=join(installed,'package.json');
  const manifestBytes=readFileSync(manifestPath),manifest=JSON.parse(manifestBytes);
  assert.ok(existsSync(driverPath)&&existsSync(workerPath)&&existsSync(gatePath));
@@ -185,7 +201,7 @@ try {
   assert.equal(refused.body.facts.runOutcome,null,'no worker run is admitted through a .js substitute');
  }
  finally{rmSync(gatePath.replace(/\.mjs$/,'.js'));renameSync(gatePath+'.held',gatePath)}
- console.log(JSON.stringify({consumer:'framework',distFiles:files.length,closureEntries:closure.length,entryBytes:entry.length,runMs:Math.round(performance.now()-started),sourceRemovedSelected:true,crashRecovered:true,officialSarif:Boolean(official),strictAssets:true,missingWorkerLegacyReports:true,nestedManifestRefused:true,installedManifestImportPure:true}));
+ console.log(JSON.stringify({consumer:'framework',distFiles:files.length,closureEntries:closure.length,entryBytes:entry.length,runMs:Math.round(performance.now()-started),sourceRemovedSelected:true,crashRecovered:true,officialSarif:Boolean(official),strictAssets:true,missingWorkerLegacyReports:true,nestedManifestRefused:true,installedManifestImportPure:true,installedWorkerGateManifestStartupRefused:true}));
 }finally{
  for(const pid of servicePids){try{process.kill(pid,'SIGTERM')}catch{}await gone(pid)}
  // A killed service can leave sealed readonly inputs. Only this consumer's scratch is unlocked, after its exact

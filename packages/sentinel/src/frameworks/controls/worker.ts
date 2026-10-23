@@ -6,7 +6,8 @@
 // runs nothing from the target: the libraries read captured bytes and the retained parser evidence as data.
 //
 // Inputs (sealed, by content id): one job, the snapshot envelope, the source's retained parser artifact, result and
-// index, and the source's captured files. The start names the coordinator-selected job explicitly; it must be sealed. Every input it reads is checked against its id. Output: one document with each library's control-fact
+// index, and the source's captured files. The start names the coordinator-selected job explicitly; it must be
+// sealed. Every input it reads is checked against its id. Output: one document with each library's control-fact
 // envelopes and frontiers, or the fixed reason a library refused its inputs. The worker claims no coverage: the
 // coordinator's driver derives it from this document (facts.ts).
 import { createHash } from 'node:crypto';
