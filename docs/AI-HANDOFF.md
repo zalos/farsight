@@ -8,48 +8,53 @@ Farsight was dogfooded on.
 
 ## Sentinel capture boundary and owned scratch — 2026-10-22
 
-PR #160 (bounded framework inspection) merged as `0b1f74a7`. Branch `codex/sentinel-owned-capture`, from exactly
-that commit, implements ADR 46 and is not yet pushed or merged:
+PR #160 (bounded framework inspection) merged as `0b1f74a7`. The capture candidate on
+`codex/sentinel-capture-acceptance` starts from that commit and implements ADR 46; its final CI and merge remain
+open. SOL owns implementation and corrections, Claude performs independent review, and the lead owns integration
+and the definition of done.
 
-- A working-copy capture leaves out only the store this process holds, at its exact canonical folder with its
-  acquired identity and a live hold check. An alias refuses (`capture.storeAliased`), a source inside the store
-  refuses, a look-alike store exempts nothing, and committed trees get no live-store exemption.
-- The canonical plan no longer leaves `.farsight` out by name. Settings are captured as bounded data and never become
-  policy. Retained snapshots keep their recorded boundaries; the same content now plans as a new run.
-- Owner commands and the service take their scratch from a lease at `<store>/scratch/<epoch>/w-…`, made along a
-  chain whose hold and folders are re-checked at every step.
-- After SOL's independent review of `60d846ab` (six adversarial failures), release removes only the client
-  configuration folders the execution layer made for that lease, once its clients have exited. Any other child
-  (attempt, prep, restore, parser, unknown) keeps the lease, and a running client keeps even an empty one.
-- Release is bounded from its first read and fenced before every destructive step. Path-based removal under an
-  active same-account race is detection, not confinement. Earlier epochs' leases are retained, never swept.
-- Trust state is checked against the workspace by its prospective path before anything is made. The service refuses
-  a reached runtime-folder candidate inside the workspace (`ipc.runtimeDirInsideSource`) before it makes anything;
-  the disjoint long-path `/tmp` fallback is kept.
+- Working-copy capture excludes only the held store at its exact canonical path and acquired identity. Store
+  replacement, aliases, a source inside the store, or lost ownership refuse capture. A look-alike store exempts
+  nothing; committed-tree capture has no live-store exemption.
+- `.farsight` is ordinary bounded captured data, including ignored settings and local caches. Those private bytes
+  never become trusted policy. Earlier snapshots keep their recorded boundaries.
+- Scratch lives at `<store>/scratch/<epoch>/w-…`. Creation and every destructive cleanup action re-check the hold
+  and recorded folder chain. Cleanup removes only the exact client configuration associated by its creator, after
+  its clients exit. Unknown, preparation, attempt and restore data remains; a live client keeps even an empty lease.
+- Enumeration is bounded from its first read. Retained old leases survive restart and are not swept; only current
+  service retention is reported. Path-based same-account race checks detect replacement, not filesystem confinement.
+- Prospective trust and selected runtime paths are checked before effects and must remain outside the workspace.
 
-On the default layout the Express inspection answers without a capture gap: an open route is established
-does-not-apply, and a guarded route is a cited refusalUnproven unknown.
+On supported indexed Express routes, an open route establishes does-not-apply and a guarded route remains a cited
+refusalUnproven unknown, without the former artificial sourceIncomplete gap. Hidden routes the parser does not
+index remain routeNotInGraph, and a captured settings file seen by no check can make the full report partial.
+These are accepted limits of the inspection; none establishes protection or requires expanding the parser here.
 
-Found and left for an owner decision:
-- Farsight's code parser lists no hidden folder, so a route under `.farsight` is a cited `routeNotInGraph`
-  frontier, never a fact.
-- A minimal workspace's full report is partial, because the captured settings file is seen by no check.
-- The coordinator's drive can throw while units are still in flight, and attempts are recorded only after spawn.
-  That is why release never trusts a settled promise.
+Validation (Node 24, pnpm 9, isolated worktrees):
 
-Validation (Node 24, pnpm 9, isolated worktree):
-- builds and typechecks of core and Sentinel;
-- core 404 tests passed;
-- the Sentinel suite ran once: 1,143 tests, 1,002 passed, 0 failed, 141 skipped (the opt-in container and scanner
-  isolation cases);
-- catalog lint passed.
+- Affected build/typecheck, schema drift and catalog checks passed; the author's core suite passed 404 tests.
+- Final capture, layout, owner identity, scratch and preparation-crash controls: 28 passed, zero skipped.
+- The actual npm-only installed consumer passed with the existing pinned Gitleaks image: canonical inspection,
+  official SARIF, withholding, source-removed selected rerun and actual service/worker kill-and-resume. Old lease
+  identity survives recovery. Offline clean and withheld reports had no requests or page/console errors.
+- Main and candidate ingested the same 1,689 frozen files: identical 9,670 nodes, 19,978 edges, digest
+  `78b9d1d62bdc`, and 37,093,376-byte databases. Graph bytes changed 27,127,953 → 27,127,959 through build/run
+  metadata only. The front door, Map and code map rendered with no page errors or failed requests; five known
+  fixture-image 404s were recorded. All screenshots were inspected.
+- Independent Claude source review approved the scoped capture behavior. Its documentation/comment findings are
+  corrected, including the private local-state capture and retained-lease limitations.
 
-The installed npm-only consumer script was updated, but it could not install offline here: the local npm cache lacks
-a dependency, and nothing was downloaded. The same canonical flow through the workspace CLI produced the asserted
-rows and left the store's scratch empty.
+Historical failures remain distinct from those passes. The author's later full Sentinel run had 1,143 tests:
+1,000 passed, two failed, 141 skipped. The failures were a durable normalized-write test that did not reach its
+injected boundary and a framework cancellation test that expected forced termination. A controlled two-file rerun
+passed those two cases but exposed a separate driver-signal/deadline mismatch (22 passed, one failed). PR #161
+corrects unit/run deadline notification and makes durable-write boundary tests deterministic; the framework test's
+cancellation timing assumption is being reviewed with the fixed-worker seam. Passing an isolated retry does not
+close the original failed run.
 
-Remaining: independent SOL verification, root real-ingest and browser measurement, the installed consumer and
-container cases in CI, and the merge. Nothing was installed globally, and no server or primary checkout was touched.
+Remaining for this capture candidate: exact-head selected CI and merge, and qualification limits such as an actual
+Linux bind-mount alias. The complete fixed-worker seam, path/decision owner commands and full GUI remain later
+work. Nothing was installed globally, and the primary checkout and its live server were untouched.
 
 ## Framework canonical wiring checkpoint — 2026-10-22
 
