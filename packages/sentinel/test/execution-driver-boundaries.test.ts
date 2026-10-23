@@ -144,23 +144,56 @@ test('opening rebinds a driver to the actual registry and admitted implementatio
 });
 
 for (const phase of ['invocation', 'result', 'normalized-record'] as const) {
-  test(`unit deadline includes durable ${phase} writes`, async t => {
+  test(`unit deadline includes durable ${phase} writes`, { timeout: 30_000 }, async t => {
     const f = await setup(t, { deadlineMs: 1000 });
     const d = driver(f.p);
+    const coordinator = await Coordinator.open(options(f, d));
+    // Keep a real watchdog independent of the controlled notification clock below.
+    const realTimeout = setTimeout;
+    const realClearTimeout = clearTimeout;
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
+    const deadline = new AbortController();
+    t.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 1000 ? deadline.signal : timeout(ms));
+    let elapsed = 0;
+    t.mock.method(performance, 'now', () => elapsed);
     const original = ObjectStore.prototype.putCanonicalJson;
-    let delayed = false;
-    ObjectStore.prototype.putCanonicalJson = async function(value: any, opts: any) {
+    let reached = false;
+    let written = false;
+    t.mock.method(ObjectStore.prototype, 'putCanonicalJson', async function(value: any, opts: any) {
       const match = phase === 'invocation' ? value?.format === 'sentinel-invocation/draft-1'
         : phase === 'result' ? value?.type === 'result' : value?.schema === 'sentinel-test-driver-record/draft-1';
-      if (!delayed && match) { delayed = true; await delay(1200); }
-      return original.call(this, value, opts);
-    };
-    t.after(() => { ObjectStore.prototype.putCanonicalJson = original; });
-    const summary = await (await Coordinator.open(options(f, d))).run();
-    assert.ok(delayed);
+      const selected = !reached && match;
+      if (selected) reached = true;
+      const receipt = await original.call(this, value, opts);
+      if (selected) {
+        written = true;
+        // The actual awaited durable write completes across the modeled unit boundary.
+        elapsed = 1001;
+        deadline.abort();
+      }
+      return receipt;
+    });
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    const guard = new Promise<never>((_, reject) => {
+      watchdog = realTimeout(() => {
+        t.mock.timers.reset();
+        t.mock.restoreAll();
+        coordinator.cancel();
+        reject(new Error(`durable ${phase} boundary was not reached within the real watchdog`));
+      }, 25_000);
+    });
+    const running = coordinator.run();
+    let summary;
+    try { summary = await Promise.race([running, guard]); }
+    catch (error) { await running; throw error; }
+    finally { realClearTimeout(watchdog); }
+    assert.ok(reached, JSON.stringify(summary.failures));
+    assert.ok(written, JSON.stringify(summary.failures));
     assert.equal(f.store.ledger.getPublication({ id: f.p.ids.A, revision: 1 }), null);
     assert.ok(summary.failures.some(e => e.code === 'sentinel.execution.deadlineExceeded'));
-    if (phase !== 'invocation') await assertFailedAttemptKeepsInvocation(f);
+    if (phase === 'invocation') assert.deepEqual(f.store.ledger.listAttempts({ id: f.p.ids.A, revision: 1 }), []);
+    else await assertFailedAttemptKeepsInvocation(f);
     assertNoScratch(f);
   });
 }
