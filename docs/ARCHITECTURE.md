@@ -1624,3 +1624,60 @@ multi-source `captureSnapshot` API knows no trust or runtime state and checks on
 captures several sources checks them all (`assertTrustOutside`). Farsight's code parser lists no hidden folder, so a
 route under `.farsight` is captured and read by a framework pack but has no graph surface: it is a cited
 `routeNotInGraph` frontier, never a fact. Number 45 is reserved for the path protocol.
+
+48. **Sentinel exposes bounded retained reads through its existing owner service and the MCP SDK (2026-10-22).**
+The first PR 23a slice is read-only: `service.capabilities`, `run.inspect`, `view.page`, `report.open` and
+`delivery.read` are additive operations on the existing versioned socket. The MCP command lazily imports exactly
+SDK 1.31.0 as Sentinel's own dependency, connects to that existing service, and exposes these reads plus sanitized
+existing describe/status/wait. It never opens a competing store or starts the service. An older service's
+`unknownOperation` means unavailable. Starting, pausing, canceling, preparing and rerunning remain owner CLI
+operations with their existing confirmation and admission; a transport connection is not a human confirmation.
+
+Inspection copies one admitted revision under the actual held owner, with bounded synchronous copying and
+cooperative object reads. All source/work/input/influence/invocation/output identities and implementation digests
+become random view-local handles, with private mappings and no evidence-read endpoint. Rows contain fixed stage
+and state vocabulary, scoped counts, accepted-publication status and cataloged error codes, never paths, producer
+labels, arguments or raw diagnostics. A prerequisite outside that admitted plan is explicitly `reference-only`:
+a retained bootstrap/reuse reference, not a missing row or permission to expand ancestry. Historical plan revisions are
+labeled; status/outcome explicitly describe the current recorded run, not a second historical status fold. Pages retain the original immutable sequence while workers move on.
+
+The internal store facade meters every physical object-body read, including failed representations and repeats,
+through a genuine-owner/store-bound AsyncLocalStorage scope. Limits are 128 MiB each encoded and decoded, 10,000
+reads and 20 seconds from the original monotonic start. Nested scopes only tighten; unrelated contexts/stores are
+not charged. Declared sizes are reserved before reads and final checks preserve the first typed limit, abort,
+deadline or owner error through legacy catches. Budgeted reads yield to the event loop before and after the existing
+synchronous verified read, so socket cancellation can be observed between reads. This neither interrupts a read or
+fold nor imposes a hard filesystem, RSS or CPU limit. SQLite row reads and trust-folder rule/pack/lock/report-key
+reads are outside the object-body meter. Detached callbacks inherit the closed scope and cannot keep reading.
+
+Full-report generation reuses the canonical fold and disclosure/privacy checks, rendering only the requested
+format plus canonical JSON for document identity. Legacy `fullReport` keeps all four renderings. Baseline identity
+comes from that same assessment. Global ledger drift allows at most one fresh generation within the original
+scope/counters/deadline, preserving the first current/baseline run, recorded revision and snapshot. Further drift
+returns retryable `viewChanged`; a changed requested run refuses. There is no automatic retry loop. Only after the
+scope returns successfully may the service allocate an immutable delivery, perform a final synchronous owner,
+signal, original-deadline, current/baseline revision/snapshot and sequence fence, and install it without an await.
+Failure installs nothing and evicts no prior delivery. The delivery identifies exact format bytes/hash, canonical
+document hash, evaluation time, disclosure, catalog and unavailable context; report ID alone is not its identity.
+
+Provisional finite ceilings are advertised: 2,000 units, 10,000 attempts and 8 MiB per view, eight views/64 MiB total,
+60-second absolute TTL, 128 rows/256 KiB per serialized page and 4,096 cursors per view; one report generation,
+32 MiB per delivery, four deliveries/64 MiB total and five-minute absolute TTL. Raw byte chunks default to 16 KiB,
+maximum 64 KiB, and base64 chunks may split a UTF-8 character. Reads never renew expiry. Reconnects in the same
+fixed channel kind retain handles; another channel, store, epoch, service restart or expiry cannot reuse them.
+Channel kind is not a principal identity or a cross-account authentication claim. Cancel frames address only an
+unsettled read request on their own socket; unknown/finished IDs do nothing, duplicates cannot replace controllers,
+and disconnect aborts unsettled preparation while accepted work and prior immutable deliveries remain intact.
+Capabilities describe shipped library support separately from untested asset readiness. Mutating MCP tools, model
+execution, policy decisions, evidence reads and the graphical interface remain outside this slice.
+
+ADR48 implementation refinements: live unexpired read buffers count as activity for the existing detached idle
+policy, without renewing TTLs; a connection by itself does not. After service.stop waits for accepted run tasks,
+listener.close destroys only that listener’s accepted sockets, so an idle client cannot prevent store release.
+An explicit simultaneous inspection is retryable inspectBusy, whereas projectionLimit remains a permanent size
+refusal. MCP status deliberately accepts runId only and returns status/outcome; existing CLI event pagination is
+unchanged. The final installation sequence fence can refuse viewChanged without adding a third generation. View
+and delivery caches are global insertion-order quotas, so another same-account channel can cause early eviction.
+The SDK’s express/hono/cors/jose and other dependencies enlarge the optional installed supply-chain surface, despite
+lazy loading keeping the MCP entry out of ordinary imports. Its required zod peer is pinned exactly 3.25.76 beside
+SDK 1.31.0; lazy execution does not imply a smaller installation.

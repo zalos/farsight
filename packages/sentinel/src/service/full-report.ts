@@ -34,6 +34,7 @@ import { STRINGS } from '@farsight/core/dist/strings.js';
 import { RuleLockBook } from './rule-locks.js';
 import { acceptedInspection } from './inspection-report.js';
 import { ReportKeyError, withheldLocationKey } from './report-key.js';
+import { readBudgetCheckpoint, withStoreReadBudget, type ReadBudgetOptions, type ReadBudgetUsage } from '../store/read-budget.js';
 
 /** The scanner adapters whose accepted records this report reads, and the preview detector's own findings. */
 const SECRETS_ADAPTER = 'secrets-gitleaks';
@@ -47,10 +48,12 @@ export type ReportFormat = (typeof REPORT_FORMATS)[number];
 export const MAX_CONTEXT_BYTES = 64 * 1024 * 1024;
 
 export class FullReportError extends Error {
-  constructor(readonly code: 'sentinel.report.runNotReportable' | 'sentinel.report.evidenceUnbound' | 'sentinel.report.contextInvalid' | 'sentinel.report.outExists',
+  readonly retryable: boolean;
+  constructor(readonly code: 'sentinel.report.runNotReportable' | 'sentinel.report.evidenceUnbound' | 'sentinel.report.contextInvalid' | 'sentinel.report.outExists' | 'sentinel.report.viewChanged' | 'sentinel.report.deliveryLimit',
     readonly facts: Readonly<Record<string, unknown>> = {}) {
     super(code);
     this.name = 'FullReportError';
+    this.retryable = code === 'sentinel.report.viewChanged';
   }
 }
 
@@ -688,16 +691,20 @@ export function contextIntentFor(snapshot: SnapshotEnvelope, sourceId: string, r
   return { inputs, intent: contextPinIntent({ snapshot, sourceId, repo, graph, inputs })! };
 }
 
-export interface FullReport {
+export interface ReportAssessmentIdentity { readonly runId: string; readonly planRevision: number; readonly snapshotId: string; readonly ledgerSequence: number }
+interface ReportDocument {
   readonly document: any;
+  readonly currentIdentity: ReportAssessmentIdentity;
+  readonly baselineIdentity?: ReportAssessmentIdentity;
+  readonly comparison?: Comparison;
+  readonly context: { readonly binding: PinnedContext['binding']; readonly reasons: readonly string[] } | null;
+  readonly withheldForSecrets: boolean;
+}
+export interface FullReport extends ReportDocument {
   readonly json: string;
   readonly markdown: string;
   readonly html: string;
   readonly sarif: unknown;
-  readonly comparison?: Comparison;
-  readonly context: { readonly binding: PinnedContext['binding']; readonly reasons: readonly string[] } | null;
-  /** The run, its baseline or a proven same-capture selected ancestor has accepted secret matches. */
-  readonly withheldForSecrets: boolean;
 }
 
 /**
@@ -713,7 +720,7 @@ async function knownSecretMatches(store: SentinelStore, assessment: RunAssessmen
 }
 
 /** Builds the full report of a completed run, optionally placed and compared, from accepted evidence alone. */
-export async function fullReport(req: FullReportRequest): Promise<FullReport> {
+async function reportDocument(req: FullReportRequest): Promise<ReportDocument> {
   const { store, runId, now } = req;
   const current = await assessRun(store, runId, { trustDir: req.trustDir });
   const sourceIds = [...new Set(current.snapshot.entries.map(e => e.sourceId))];
@@ -729,8 +736,10 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
   let comparison: { baselineReportId: string; result: Comparison; baselineFindings: Map<string, BaselineFindingSummary> } | undefined;
   let currentFindings: readonly Finding[] | undefined;
   let baselineSecret: boolean | undefined;
+  let baselineIdentity: ReportAssessmentIdentity | undefined;
   if (req.baselineRunId) {
     const baseline = await assessRun(store, req.baselineRunId, { trustDir: req.trustDir });
+    baselineIdentity = assessmentIdentity(baseline);
     baselineSecret = await knownSecretMatches(store, baseline);
     const b = await sideOf(store, baseline);
     const c = await sideOf(store, current);
@@ -752,6 +761,7 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
     }]));
     comparison = { baselineReportId: reportIdOf(req.baselineRunId), result, baselineFindings };
   }
+  readBudgetCheckpoint(store);
   const build = await buildReport({
     id: reportIdOf(runId, req.baselineRunId), run: { id: runId, snapshotId: current.snapshot.id, planRevision: current.planRevision },
     ledgerSequence: current.ledgerSequence, evaluatedAt: now.toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z'), catalogVersion: 'draft-1',
@@ -759,18 +769,96 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
     inventory: current.inventory, readContent, withheldFiles: current.withheldFiles, ...(contexts ? { contexts } : {}), rules: ruleWords(req.trustDir, current.ruleLock),
     ...(comparison ? { comparison } : {}),
   }, currentFindings ?? await findingsOf(current.observations, readContent, { withheldKey: current.withheldKey }));
+  readBudgetCheckpoint(store);
   // Accepted secret matches in either run or its proven same-capture selected ancestry make every source/context
   // string unproved (the scanner reports whole lines), so all of it is withheld. Clean ancestry keeps normal detail.
   const secretRun = (baselineSecret ?? false) || await knownSecretMatches(store, current);
+  readBudgetCheckpoint(store);
   const doc = secretRun ? withholdSecretRun(build.document, ruleWords(req.trustDir, current.ruleLock)) : build.document;
+  readBudgetCheckpoint(store);
   const valid = validateEnvelope('report', doc);
+  readBudgetCheckpoint(store);
   if (!valid.ok) throw new FullReportError('sentinel.report.evidenceUnbound', { reason: 'the withheld report does not fit its contract' });
   return {
     withheldForSecrets: secretRun,
-    document: doc, json: canonicalJson(doc), markdown: renderMarkdown(doc), html: renderHtml(doc), sarif: toSarif(doc),
+    document: doc, currentIdentity: assessmentIdentity(current), ...(baselineIdentity ? { baselineIdentity } : {}),
     ...(comparison ? { comparison: comparison.result } : {}),
     context: pinned ? { binding: pinned.binding, reasons: [...pinned.reasons] } : null,
   };
+}
+
+const assessmentIdentity = (a: RunAssessment): ReportAssessmentIdentity => Object.freeze({ runId: a.runId, planRevision: a.planRevision, snapshotId: a.snapshot.id, ledgerSequence: a.ledgerSequence });
+
+/** The existing library/CLI behavior: the one canonical projection rendered in all four formats. */
+export async function fullReport(req: FullReportRequest): Promise<FullReport> {
+  const built = await reportDocument(req);
+  readBudgetCheckpoint(req.store);
+  const json = canonicalJson(built.document); readBudgetCheckpoint(req.store);
+  const markdown = renderMarkdown(built.document); readBudgetCheckpoint(req.store);
+  const html = renderHtml(built.document); readBudgetCheckpoint(req.store);
+  const sarif = toSarif(built.document); readBudgetCheckpoint(req.store);
+  return { ...built, json, markdown, html, sarif };
+}
+
+export interface FullReportFormat extends ReportDocument {
+  readonly format: ReportFormat;
+  readonly text: string;
+  readonly documentDigest: string;
+  readonly formatDigest: string;
+  readonly formatBytes: number;
+  readonly readUsage: ReadBudgetUsage;
+  /** A2 must recheck this synchronous fence after awaiting this result and before installing delivery bytes. */
+  readonly generationSequence: number;
+}
+/** Internal service preparation, not delivery installation: returns only after the read scope's final fence. */
+export async function fullReportFormat(req: FullReportRequest, format: ReportFormat, options: ReadBudgetOptions = {}): Promise<FullReportFormat> {
+  if (!REPORT_FORMATS.includes(format)) throw new FullReportError('sentinel.report.evidenceUnbound', { reason: 'unsupported report format' });
+  const store = req.store;
+  const bounded = await withStoreReadBudget(store, options, async () => {
+    // Pin the requested executed identities once: an unrelated retry must not adopt a changed current/baseline run.
+    const expected = [req.runId, ...(req.baselineRunId ? [req.baselineRunId] : [])].map(runId => {
+      const row = store.ledger.getRun(runId);
+      if (!row || row.state !== 'completed') throw new FullReportError('sentinel.report.runNotReportable', { runId, state: row?.state ?? null });
+      return { runId, planRevision: row.planRevision, snapshotId: row.envelope.snapshotId };
+    });
+    // Both generations spend the same counters, signal and original deadline. Only global sequence drift retries.
+    for (let generation = 0; generation < 2; generation++) {
+      const sequence = store.ledger.currentSequence();
+      const built = await reportDocument(req);
+      readBudgetCheckpoint(store);
+      const json = canonicalJson(built.document); readBudgetCheckpoint(store);
+      const documentDigest = sha(json); readBudgetCheckpoint(store);
+      let text: string;
+      if (format === 'json') text = `${json}\n`;
+      else if (format === 'md') text = renderMarkdown(built.document);
+      else if (format === 'html') text = renderHtml(built.document);
+      else text = `${JSON.stringify(toSarif(built.document), null, 2)}\n`;
+      readBudgetCheckpoint(store);
+      const formatBytes = Buffer.byteLength(text, 'utf8');
+      if (formatBytes > 32 * 1024 * 1024) throw new FullReportError('sentinel.report.deliveryLimit', { reason: 'the report rendering exceeds the delivery byte limit' });
+      const formatDigest = sha(text); readBudgetCheckpoint(store);
+      store.assertHeld();
+      const actual = [built.currentIdentity, ...(built.baselineIdentity ? [built.baselineIdentity] : [])];
+      for (const identity of expected) {
+        const assessed = actual.find(a => a.runId === identity.runId);
+        const current = store.ledger.getRun(identity.runId);
+        if (!assessed || assessed.planRevision !== identity.planRevision || assessed.snapshotId !== identity.snapshotId
+          || !current || current.state !== 'completed' || current.planRevision !== identity.planRevision || current.envelope.snapshotId !== identity.snapshotId) {
+          throw new FullReportError('sentinel.report.evidenceUnbound', { reason: 'the report run changed during generation' });
+        }
+      }
+      readBudgetCheckpoint(store);
+      if (store.ledger.currentSequence() !== sequence) {
+        if (generation === 0) continue;
+        throw new FullReportError('sentinel.report.viewChanged', { generations: 2 });
+      }
+      readBudgetCheckpoint(store);
+      return { ...built, format, text, documentDigest, formatDigest, formatBytes, generationSequence: sequence };
+    }
+    throw new FullReportError('sentinel.report.viewChanged', { generations: 2 });
+  });
+  // A2 may install immutable delivery bytes only after this function returns, with its own no-await final fence.
+  return Object.freeze({ ...bounded.value, readUsage: bounded.usage });
 }
 
 export const reportIdOf = (runId: string, baselineRunId?: string) =>

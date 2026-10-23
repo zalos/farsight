@@ -159,6 +159,9 @@ importers:
       '@farsight/graph':
         specifier: workspace:*
         version: link:../graph
+      '@modelcontextprotocol/sdk':
+        specifier: 1.31.0
+        version: 1.31.0(zod@3.25.76)
       '@types/node':
         specifier: 26.1.0
         version: 26.1.0
@@ -171,6 +174,9 @@ importers:
       oxc-parser:
         specifier: 0.138.0
         version: 0.138.0
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
 
   packages/server:
     dependencies:

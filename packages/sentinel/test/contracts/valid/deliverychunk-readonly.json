@@ -1,0 +1,9 @@
+{
+  "schema": "sentinel-delivery-chunk/draft-1",
+  "deliveryId": "delivery-example",
+  "offset": 0,
+  "base64": "e30=",
+  "nextOffset": null,
+  "formatDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "totalBytes": 2
+}

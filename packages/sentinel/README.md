@@ -633,3 +633,43 @@ requires the complete installed CLI/MCP/GUI/report journey, original Java/Spring
 containers with no host fallback, product cleanup review, truthful npm-only instructions and both independently
 versioned tarballs installed separately and together from their published URLs. See the execution-progress ledger
 for each merged slice and its remaining acceptance.
+
+## Read-only MCP inspection (draft)
+
+Start the existing owner service separately, then connect an MCP client with:
+
+```sh
+farsight-sentinel serve --workspace /path/to/workspace --idle-ms 0
+# In the MCP client's stdio configuration:
+farsight-sentinel mcp --workspace /path/to/workspace
+```
+
+The eight read tools negotiate the service's actual capabilities, describe/status/wait for a run, open a saved
+stage/work/attempt view, page its inputs/outputs, and open/read a full report. MCP never starts a service or opens
+its own store; an older service without these operations is explicitly unavailable. Prepare, run, pause, cancel,
+retry and selected rerun still use the owner's existing CLI confirmation. Model, evidence-read and graphical
+controls are not exposed here.
+
+Inspection rows use temporary handles instead of source names, paths, arguments and evidence hashes. A
+`reference-only` prerequisite is a retained bootstrap/reuse reference outside this view, not a missing work row.
+The plan rows remain at their stated revision/sequence while work continues. `historical` labels older plan rows;
+status/outcome describe the current recorded run, not a reconstructed historical status. Reopen for a newer view; expiration and a
+service restart require reopening. Reconnecting in the same fixed channel kind preserves unexpired handles.
+Full reports use the canonical shareable projection and secret-withholding rules. Exact delivery identity includes
+the immutable bytes/hash, canonical document hash, evaluation time, disclosure and context, not report ID alone.
+Read raw chunks in order and decode UTF-8 after joining them. Capabilities advertise provisional finite page,
+cache, byte, read-count and cooperative time limits. A busy store may return retryable `viewChanged`; the adapter
+never silently loops or returns a partial report. Cancel/disconnect interrupts unsettled read preparation between
+synchronous operations; it does not stop an accepted scan or provide a hard filesystem/RSS timeout.
+
+The MCP status tool accepts only `runId` and returns a lifecycle/outcome summary; it does not page events. The
+owner CLI retains its separate event pagination. Simultaneous inspection returns retryable `inspectBusy`, distinct
+from a plan that exceeds projection limits.
+
+Unexpired saved views or deliveries retain a detached service past its ordinary idle cutoff, only until their
+absolute TTLs. Reads never renew those TTLs, and a connection alone cannot keep the owner alive. Caches are global
+to the service: insertion-order count/byte eviction can remove another same-account client’s saved handle before
+its TTL. Stop/crash/restart loses buffers explicitly. A final sequence change at the no-await installation fence
+can still return retryable `viewChanged` after the bounded two-generation preparation, without a third attempt.
+The optional install includes the SDK’s transitive dependency set even though ordinary import/CLI execution does
+not load the MCP module; SDK 1.31.0 and its required zod 3.25.76 peer are exact normal dependencies.

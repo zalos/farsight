@@ -8,7 +8,7 @@ import type {
   ReportCount, ReportEnvelope, RunEnvelope, SnapshotEnvelope, WorkEnvelope, FindingPlace, HelloMessage,
   WelcomeMessage, RefuseMessage, RulePackManifest, RuleLockEnvelope, SettingsEnvelope, RepoConfigEnvelope,
   EffectivePolicyEnvelope, AdoptionEnvelope, ReceiptEnvelope, AdmissionEnvelope, ControlFactsEnvelope, Rights, Budget,
-  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope,
+  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope, ServiceCapabilities, RunInspection, InspectionPage, ReportDelivery, DeliveryChunk,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
 import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf } from './planner/identity.js';
@@ -36,6 +36,12 @@ export interface EnvelopeTypes {
   plan: PlanEnvelope;
   paths: PathEvidenceEnvelope;
   deepimport: DeepImportEnvelope;
+  servicecapabilities: ServiceCapabilities;
+  runinspection: RunInspection;
+  inspectionpage: InspectionPage;
+  reportdelivery: ReportDelivery;
+  deliverychunk: DeliveryChunk;
+
 }
 
 /** Stable error codes; message text is safe context, never raw input. */
@@ -709,6 +715,12 @@ const deepimport: Check<DeepImportEnvelope> = (v, out) => {
 const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   snapshot, run, work, attempt, observation, coverage, disposition, report, protocol,
   rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan, paths, deepimport,
+  servicecapabilities: () => [],
+  runinspection: () => [],
+  inspectionpage: () => [],
+  reportdelivery: () => [],
+  deliverychunk: () => [],
+
 };
 
 /**

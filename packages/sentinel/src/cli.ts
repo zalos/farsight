@@ -61,6 +61,7 @@ function help(): string {
     `  ${word('sentinel.cli.usageReport')}`,
     `  ${word('sentinel.cli.usageFullReport')}`,
     `  ${word('sentinel.cli.usageServe')}`,
+    `  ${word('sentinel.service.mcpUsage')}`,
     `  ${word('sentinel.cli.usageRules')}`,
     `  ${word('sentinel.cli.usageAssets')}`,
     `  ${word('sentinel.cli.usageFollow')}`,
@@ -474,6 +475,7 @@ async function dispatch(p: ParsedCommand): Promise<number> {
       out(word('sentinel.cli.version', { version: facts.version, draft: facts.contracts })); return 0;
     }
     case 'capabilities': return capabilities(p);
+    case 'mcp': return (await import('./service/mcp.js')).runMcp(workspaceFor(p));
     case 'validate': return validate(p);
     case 'init': return init(p);
     case 'settings': case 'plan': case 'run': case 'status': case 'report': case 'compare':

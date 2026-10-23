@@ -6,12 +6,90 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Sentinel read-only MCP final integration — 2026-10-23
+
+Independent Claude review approved the read-only service/MCP correction `d35e2d04`; root integrated it as
+`8a04048b` with progress documentation only. Immutable work/attempt/input/output views and report deliveries use
+the real held owner and canonical report/privacy fold. No mutation, actor override, automatic service startup or
+raw artifact reader is exposed. An unexpired view or delivery retains the detached service only until its original
+absolute TTL; a connection alone does not. Contention is retryable, MCP status accepts only its run id, and the
+SDK peer is pinned. Preparation, execution controls, the bridge and scan GUI remain open.
+
+The original 3012 candidate failed all three unchanged lifetime/contention regression probes; the correction
+passed 22 initial focused controls and 46 final lifecycle/socket/detached-run/contracts controls, two native
+privacy controls and 14 workflow controls, all without skips. These groups overlap and are not a unique total.
+Build, types, schema drift and catalog checks passed. The exact d35 npm tarball is 1,133,673 bytes, SHA-256
+`372231b034cd84c5e69c5295f350f358580fceddaf2b89c0fc35f95e3446511f`; the installed official SDK flow passes
+source-removed native privacy, clean retained reports, same-channel reconnect/restart expiry and a real 16-second
+quiet interval across the detached owner's 15-second idle cutoff. Ordinary import/help also works with the SDK
+removed. The draft package has no embedded commit field; the retained source/artifact manifest binds the commit.
+
+Main `2587763a` and integrated `8a04048b` ingested the same 1,724 frozen files: identical 9,886 nodes, 20,445 edges,
+source digest `22d37a423759` and 38,006,784-byte databases. Graph bytes changed 27,727,777 → 27,727,783 only through
+build/run metadata. Fresh front-door, Map and code-map screenshots were inspected: no page errors or failed
+requests, with five known missing-fixture-image responses. The exact temporary server was stopped. The primary
+checkout, dogfood graph and global installations remain unchanged. PR #166's first validation found two stale
+capability tests that still treated MCP as unavailable. The precise expectation correction preserves every future
+unavailable capability and the store-facade checks; both complete files pass 36 tests with one intentional
+unqualified-host negative skipped on the qualified host. The original failure is retained. Fresh selected CI on
+the corrected commit remains required before merge.
+
+The separate observation PR [#165](https://github.com/zalos/farsight/pull/165), head `62f50c2c`, merged as
+`6ae1a194` after independent approval and all thirteen selected checks passed. Its first required native job passed 106 original tests and ten diagnostic controls, with zero failures,
+skips or cancellations. The CI merge reference has the exact PR tree. Both real journal preflight queries passed;
+all three memory cases have exact-container kernel OOM records and own-cgroup counter increases, while plain
+SIGKILL remains an unidentified exit. All four traces have zero dropped records. The full twenty-repetition recovery matrix and installed scanner
+workflow also passed. This qualifies this observer run, not the three historical failures. No failed job was retried;
+release remains held and the temporary diagnostic workflow will not merge.
+
+## Sentinel read-only service integration and native investigation — 2026-10-23
+
+PR #164 merged as `2587763a` with the exact independently reviewed `36f44104` tree. All sixteen final checks
+passed, including native isolation, installed scanners and the twenty-repetition recovery matrix. The first
+validation failure was a stale strict package-import audit; its exact correction passed before those final checks.
+
+Post-merge native CI did fail: [run 39888758431](https://github.com/zalos/farsight/actions/runs/39888758431)
+passed 104 of 106 tests, with two memory canaries exiting 137 without a daemon OOM witness. Other main checks and
+installed scanners passed. Production retained an unidentified worker exit, as required; exit 137 is not OOM proof.
+This was the third recurrence, and that failed job was not retried.
+
+One separately reviewed test-only diagnostic preserved the original command, concurrency, limits and assertions.
+[Run 39893066846](https://github.com/zalos/farsight/actions/runs/39893066846), candidate `9350ccfa`, passed all
+106 native tests and eight diagnostic controls with zero skips. Each of its three memory cases had an exact
+container-cgroup kill counter and a daemon OOM event; its ordinary forced exit had neither. These observations
+do not diagnose the earlier failures. The bounded kernel-journal query used an invalid option and was explicitly
+unavailable. The temporary recovery-workflow replacement must never merge. No unchanged retry or release
+clearance follows from this passing diagnostic; the investigation and next validation gate remain open.
+
+The first read-only service/MCP candidate `3012c306` reuses the actual owner service and canonical report fold.
+Independent Claude source review found no blocking safety issue. SOL is correcting detached-service lifetime,
+retryable inspection contention, the status tool's advertised inputs and the exact SDK peer dependency before
+the PR. Public controls, plan preparation through MCP, the bridge and scan GUI are separate remaining work.
+The frozen candidate passed 72 affected checks, 28 transport/legacy checks and two native privacy checks, each
+with zero skips. Actual offline npm-only consumers exercised SDK delivery, source-removed framework and selected
+secret ancestry, reconnect, restart expiry and strict installed-worker recovery. Installed SARIF regeneration
+parity is semantic; its delivered-byte digest is exact. Same-evaluation held-service parity covers all four exact
+legacy renderings. No official SARIF-schema result is claimed for these particular package runs.
+
+Main `2587763a` and candidate `3012c306` ingested the same 1,722 frozen files: identical 9,880 nodes, 20,434 edges,
+source digest `49a29835dc0f` and 37,974,016-byte databases. Graph bytes changed 27,712,742 → 27,712,748 through
+build/run metadata only. Three fresh screenshots were inspected: no page errors or failed requests; five known
+missing-fixture-image responses. The isolated viewer was stopped by its verified process identity. These numbers
+describe this checkpoint, not unmeasured subsequent changes; primary checkout and dogfood graph were untouched.
+
+In parallel, the private report-import acceptance checkpoint `d666f0cd` passed independent source review. Its
+last delta passed 29 acceptance/process-crash controls and one genuine two-engine privacy case without skips.
+Migration 6 is unshipped; main has migrations 1–5. This is storage/authority groundwork, not a public import or
+mitigation command. Actual retained owner paths, usable decisions/imports, deterministic service/bridge/full GUI,
+configured model work, final Fable review, Java/Spring container qualification, npm initialization and release
+remain required. SOL implements, Claude independently reviews, and root owns integration and the definition of done.
+
 ## Sentinel retained source and fixed worker integration — 2026-10-22
 
 The isolated shared-proof candidate extends ADR 44 over merged main `d79a9b3a`. Independent Claude reviews
 approved the bounded read-only source proof, strict own-package resolver and immutable asset pins, explicit sealed
 job identity and legacy report compatibility, and terminal startup verification classification. SOL implements;
-Claude reviews; the lead owns integration and final acceptance. This candidate has not yet merged.
+Claude reviews; the lead owns integration and final acceptance. This historical candidate subsequently merged as #164; see the newer checkpoint above.
 
 The read proof is bound to the original held owner, executed revision, source closure, deadline and signal.
 Aggregate byte/read/depth/time bounds are cooperative and can only tighten; the proof grants no execution authority.

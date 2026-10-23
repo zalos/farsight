@@ -268,6 +268,22 @@ The individual Pattern, OSV and IaC qualification jobs select their own installe
 with `SENTINEL_ISOLATION=1` and no selector executes all four workers. Each native job must observe its own worker
 success marker, so a missing or failed selected engine cannot pass as an asset-only check.
 
+## Read-only MCP verification
+
+The read-only MCP slice (ADR 48) runs its genuine owner-store/socket/budget controls in the service job's explicit
+zero-skip list. Ordinary `test:sentinel:package` also installs the tarball with npm and drives the real SDK through
+preview and framework reports, source-removed selected replay, reconnect and restart expiry. The native scanner
+job additionally selects `service-readonly-native.test.ts` and the installed MCP consumer with native opt-in:
+current/baseline/selected secret withholding uses the already provisioned pinned Gitleaks image. Native missing
+assets fail; ordinary validation explicitly skips those two native controls. SARIF consumer rerendering from
+canonical-key-sorted parsed JSON compares semantic values; exact delivered format hashes are always checked,
+and the genuine same-evaluation held-service tests compare all four legacy rendering bytes exactly.
+
+The read-only lifetime controls spawn a real detached owner with the production 15-second idle policy; private
+test-process clocks advance over view/delivery absolute expiry without changing a production limit or adding a
+public clock input. They prove retained buffers survive the idle cutoff, then expire and release the held store
+even with an open idle MCP socket. The installed SDK consumer asserts exact SDK/zod versions, status-only request
+shape and retryable inspection contention.
 
 ## Isolation failure observations
 

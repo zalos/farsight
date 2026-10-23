@@ -24,6 +24,7 @@ import {
 } from './objects.js';
 import { acquireStoreOwner, type StoreOwner } from './owner.js';
 import { bindOwner } from './owner-binding.js';
+import { budgetedObjectRead, readBudgetCheckpoint, readBudgetFailure } from './read-budget.js';
 import type { FilesystemIdentity } from './paths.js';
 import { SQLITE_RELEASE_POLICY, qualificationFor, type QualifiedRuntime, type QualificationStatus, type SqliteReleasePolicy } from './runtime.js';
 import {
@@ -177,7 +178,10 @@ const identityOf = (bytes: Uint8Array): ObjectIdentityRef => {
 
 function facade(owner: StoreOwner, ledger: Ledger, store: ObjectStore): SentinelStore {
   const ledgerView = Object.freeze(Object.fromEntries(
-    LEDGER_METHODS.map(name => [name, (ledger[name] as (...args: unknown[]) => unknown).bind(ledger)]),
+    LEDGER_METHODS.map(name => [name, (...args: unknown[]) => {
+      try { return (ledger[name] as (...args: unknown[]) => unknown).apply(ledger, args); }
+      catch (error) { readBudgetFailure(sentinel, error); throw error; }
+    }]),
   )) as unknown as StoreLedger;
 
   // The registered identity is checked by the object store before any byte is written.
@@ -191,9 +195,18 @@ function facade(owner: StoreOwner, ledger: Ledger, store: ObjectStore): Sentinel
     put: async (bytes: Uint8Array, options?: PutObjectOptions) => toLedgerReceipt(await store.put(bytes, putOptions(options))),
     putCanonicalJson: async (value: unknown, options?: PutObjectOptions) =>
       toLedgerReceipt(await store.putCanonicalJson(value, putOptions(options))),
-    read: (ref: StoredObject) => store.read(objectRef(ref)),
-    readCanonicalJson: (ref: StoredObject) => store.readCanonicalJson(objectRef(ref)),
-    check: (ref: StoredObject) => store.check(objectRef(ref)),
+    read: (ref: StoredObject) => {
+      const captured = objectRef(ref);
+      return budgetedObjectRead(sentinel, { rawSize: captured.rawSize!, storedSize: captured.encodedSize! }, () => store.read(captured));
+    },
+    readCanonicalJson: (ref: StoredObject) => {
+      const captured = objectRef(ref);
+      return budgetedObjectRead(sentinel, { rawSize: captured.rawSize!, storedSize: captured.encodedSize! }, () => store.readCanonicalJson(captured));
+    },
+    check: (ref: StoredObject) => {
+      const captured = objectRef(ref);
+      return budgetedObjectRead(sentinel, { rawSize: captured.rawSize!, storedSize: captured.encodedSize! }, () => store.check(captured));
+    },
   });
 
   const runtime: StoreRuntimeFacts = Object.freeze({
@@ -213,11 +226,11 @@ function facade(owner: StoreOwner, ledger: Ledger, store: ObjectStore): Sentinel
     get held() { return owner.held; },
     assertHeld: () => owner.assertHeld(),
     async readArtifact(id: ArtifactId): Promise<Buffer> {
-      const recorded = ledger.objectsOf(id);
+      const recorded = ledgerView.objectsOf(id);
       if (recorded.length === 0) throw new LedgerError('sentinel.store.notFound', 'no accepted artifact has that id');
       let last: unknown;
       for (const receipt of recorded) {
-        try { return await store.read(objectRef(receipt)); } catch (error) { last = error; }
+        try { return await objects.read(receipt); } catch (error) { readBudgetCheckpoint(sentinel); last = error; }
       }
       throw last;
     },
