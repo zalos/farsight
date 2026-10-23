@@ -275,7 +275,9 @@ The ordinary `sentinel-isolation` job retains bounded optional observations alon
 native command, default concurrency and strict assertions. Forwarding controls and an actual-runner journal-argv
 preflight run first. `runner-provenance.json` records the commit, runner ImageOS/ImageVersion, kernel and Docker
 client/server components (including containerd and runc). Missing provenance or an unsupported journal option
-fails that preflight visibly. The always-run artifact upload retains traces and both TAP files for three days;
+fails that preflight visibly. A red preflight is an observation-infrastructure failure, not a native isolation
+result: preserve it and correct the probe in a reviewed new commit, never an unchanged failed-job retry.
+The always-run artifact upload retains traces and both TAP files for three days;
 upload failure is visible. No privileged monitor, new image or production termination inference is added.
 
 Each trace covers only its exact owned container and bounded time window. It records command/attached-client
@@ -284,7 +286,8 @@ and filtered unprivileged journal results. Journal `matched`, `no-match-visible`
 all remain limited by the runner account's visibility. Exact-ID filtering can omit relevant records. An increase
 in a persistent daemon-parent cgroup counter cannot attribute a concurrent kill to the child. Dropped records,
 expired windows and unavailable sensors remain explicit; without an exact child window, its cause stays unknown.
-Traces are diagnostic evidence, not scanner results.
+Traces are diagnostic evidence, not scanner results. The observer adds work and changes timing; its merge is
+the comparison boundary, so observed pass/failure rates are not directly comparable with earlier runs.
 
 On recurrence, preserve the original failing TAP and artifact before cleanup/expiry. Compare client kill requests
 with actual client exit and daemon events, and exact child cgroup observations with terminal daemon state. A kill
