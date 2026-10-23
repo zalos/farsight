@@ -5,7 +5,7 @@
 // digest is the `input` an owner receipt confirms, so a changed origin, credential, disclosure, model, limit, price,
 // term or capability needs a new confirmation. Nothing here contacts a provider or reads a credential.
 import type {
-  EndpointOrigin, Id, KeychainRef, ModelCapability, ModelLimits as ContractModelLimits, ModelPricing as ContractModelPricing, ModelSettings,
+  Digest, EndpointOrigin, Id, KeychainRef, ModelCapability, ModelLimits as ContractModelLimits, ModelPricing as ContractModelPricing, ModelSettings,
   ProviderSettings, ProviderTerms as ContractProviderTerms,
 } from '../../contracts/index.js';
 import { canonicalDigest } from '../../policy/digest.js';
@@ -22,6 +22,13 @@ export type ModelPricing = ContractModelPricing;
 export type ProviderTerms = ContractProviderTerms;
 export type CapabilityRecord = ModelCapability;
 export type ModelProfile = ModelSettings;
+
+/** Audit data sampled from a current genuine binding; never a capability or admission input. */
+export interface ProviderSelection {
+  readonly providerId: Id;
+  readonly modelId: Id;
+  readonly bindingDigest: Digest;
+}
 
 /** The checked, frozen union of the adopted provider and one of its models. Only `bindProvider` makes one. */
 export interface ProviderBinding {

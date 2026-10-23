@@ -4,6 +4,7 @@
 import type { BoundedText, CatalogKey, Count, DecimalAmount, Digest, Id, ScopeId, ShortText, Timestamp } from './common.js';
 import type { DecisionChannel } from './disposition.js';
 import type { RuleCapability, RuleFamilyId, Severity } from './rules.js';
+import type { ReviewModelsSettings } from './review-providers.js';
 
 /** Every action the Sentinel gate decides. */
 export type SentinelAction =
@@ -219,6 +220,10 @@ export interface SettingsEnvelope {
   agentActions: 'confirm' | 'allow';
   /** @maxItems 16 */
   providers: ProviderSettings[];
+  /** Optional owner-adopted agentic model choices. Absent keeps legacy settings bytes unchanged. */
+  reviewModels?: ReviewModelsSettings;
+  /** Hosted API review is paused when absent or false; explicit adoption is required to enable public dispatch. */
+  hostedApiReviewEnabled?: boolean;
 }
 
 /** A repository's request to suppress a finding. Recorded and refused: approval is an owner disposition. */
