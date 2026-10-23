@@ -699,3 +699,13 @@ handle grants execution permission. The legacy CLI service responses and handsha
 A lost or canceled mutation response is uncertain: the service may already have accepted it. Reconnect and read
 status; the adapter never automatically repeats a write, and disconnecting does not roll back accepted work.
 Separate read views and report deliveries remain usable within their original channel and absolute lifetimes.
+
+A control dispatched without a readable canonical response returns nonretryable
+`sentinel.service.controlOutcomeUnknown`, even if the work subsequently completes. Read status after reconnect;
+`operationUnavailable` describes a refusal before control dispatch. A new owner epoch on the same genuine store
+can negotiate controls again and must perform fresh admission for each call; old inspection/delivery handles still
+expire on restart. A changed store cannot reuse the original MCP control negotiation.
+
+A pause received during setup of a genuinely planned run records the legal running → pausing → paused sequence
+without launching a worker or changing its original creation time/budget. If cancellation is also pending,
+cancellation wins. These lifecycle controls use the existing coordinator rather than a second MCP state machine.

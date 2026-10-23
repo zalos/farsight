@@ -1700,3 +1700,12 @@ MCP cancellation rolls back accepted service work; reconnect reads status withou
 The retained read scopes do not wrap control execution. Preparation/configuration/rerun and raw evidence access
 remain separate slices. A genuine npm-only SDK consumer exercises both grant and owner CLI paths and loses one
 actual accepted start response before reconnecting, without changing installed service/adapter bytes.
+
+
+ADR48 control correction: after a control dispatch, an unreadable/unknown response or transport loss is
+nonretryable controlOutcomeUnknown, not proof that the action was unavailable. The existing canonical state is
+queried after reconnect; no write is automatically repeated. Per-call negotiation permits a new service epoch on
+the same genuine store with fresh admission, while A2 handles remain epoch-bound. A setup pause on a planned
+record uses planned → running → pausing → paused without launching work or renewing time/budget; pending cancel
+skips that pause branch and wins. Genuine canonical selected-child and actual owner-service setup gates qualify
+both branches without depending on the later path worker.

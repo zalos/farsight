@@ -65,6 +65,7 @@ export async function runMcp(ws:Workspace):Promise<number>{
     annotations:{readOnlyHint:!CONTROL_OPERATIONS.includes(op as any),destructiveHint:CONTROL_OPERATIONS.includes(op as any),idempotentHint:!CONTROL_OPERATIONS.includes(op as any)&&!['run.inspect','report.open'].includes(op),openWorldHint:false}}))}));
   server.setRequestHandler(CallToolRequestSchema,async(request,extra)=>{
     const tool=available.find(t=>t[0]===request.params.name);
+    let controlDispatched=false;
     try{
       if(!tool)throw fail('sentinel.service.operationUnavailable');
       const args=request.params.arguments??{};
@@ -83,12 +84,13 @@ export async function runMcp(ws:Workspace):Promise<number>{
         const offered=validateEnvelope('controlcapabilities',await connected.request('service.control-capabilities',{}));
         if(!offered.ok||offered.value.storeId!==initial.storeId||offered.value.storeId!==connected.storeId)throw fail('sentinel.service.operationUnavailable');
       }
+      if(CONTROL_OPERATIONS.includes(tool[1] as any)){if(extra.signal.aborted)throw fail('sentinel.ipc.canceled');controlDispatched=true;}
       const value=await connected.request(tool[1],args,{signal:extra.signal,timeoutMs:30000});
       let safe:unknown;
       if(tool[4]){const checked=validateEnvelope(tool[4],tool[4]==='controloutcome'?controlOutcome(value):value);if(!checked.ok)throw fail('sentinel.service.operationUnavailable');safe=checked.value;}
       else safe=legacyProjection(tool[1],value);
       return {content:[{type:'text' as const,text:JSON.stringify(safe)}],...(safe&&typeof safe==='object'?{structuredContent:safe as Record<string,unknown>}: {})};
-    }catch(error){const code=knownCode((error as any)?.code),retryable=['sentinel.service.viewChanged','sentinel.report.viewChanged','sentinel.service.deliveryBusy','sentinel.service.inspectBusy'].includes(code);
+    }catch(error){const code=controlDispatched?'sentinel.service.controlOutcomeUnknown':knownCode((error as any)?.code),retryable=['sentinel.service.viewChanged','sentinel.report.viewChanged','sentinel.service.deliveryBusy','sentinel.service.inspectBusy'].includes(code);
       const safe={error:{code,retryable}};return {isError:true,content:[{type:'text' as const,text:sentinelServiceWord(code)}],structuredContent:safe};}
   });
   const ended=new Promise<void>(resolve=>{server.onclose=()=>{client?.close();resolve();};});
