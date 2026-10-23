@@ -22,7 +22,7 @@ try {
  const ws=join(scratch,'workspace');mkdirSync(join(ws,'src'),{recursive:true});
  writeFileSync(join(ws,'package.json'),JSON.stringify({name:'original-inspection-example',version:'1.0.0',dependencies:{express:'4.21.2'}}));
  writeFileSync(join(ws,'package-lock.json'),JSON.stringify({name:'original-inspection-example',lockfileVersion:3,packages:{'':{dependencies:{express:'4.21.2'}},'node_modules/express':{version:'4.21.2',resolved:'https://registry.npmjs.org/express/-/express-4.21.2.tgz'}}}));
- // An original protected route beside an otherwise identical one with no control, and arbitrary application files
+ // An original guarded route beside an otherwise identical one with no control, and arbitrary application files
  // under .farsight: the canonical capture leaves out only the held store, so nothing here is a capture gap.
  writeFileSync(join(ws,'src/routes.ts'),"import express from 'express';\nconst app=express();\nfunction requireUser(req,res,next){ if(!req.user) return res.status(401).end(); next(); }\napp.get('/open', (_req,res)=>res.send('example'));\napp.get('/guarded', requireUser, (_req,res)=>res.send('example'));\n");
  mkdirSync(join(ws,'.farsight/custom'),{recursive:true});writeFileSync(join(ws,'.farsight/custom/notes.md'),'# original notes kept with the application\n');
@@ -105,12 +105,18 @@ try {
  let inFlight=false;for(let i=0;i<100;i++){const status=await call('status',crashId,'--after',String(beforeAttempt),'--limit','1000');const events=status.body.facts.events;
   if(events.some(e=>e.kind==='attempt-started')&&!events.some(e=>e.kind==='work-published')&&status.body.facts.state==='running'){inFlight=true;break}
   if(status.body.facts.state==='completed')break;await new Promise(r=>setTimeout(r,10));}
- assert.ok(inFlight,'the real installed inspection reached an unpublished in-flight attempt');process.kill(pid,'SIGKILL');await gone(pid);servicePids.delete(pid);
+ assert.ok(inFlight,'the real installed inspection reached an unpublished in-flight attempt');
+ const storeScratch=join(ws,'.farsight/sentinel/store/scratch');
+ const crashLeases=readdirSync(storeScratch,{withFileTypes:true}).filter(e=>e.isDirectory()).flatMap(epoch=>readdirSync(join(storeScratch,epoch.name),{withFileTypes:true}).filter(e=>e.isDirectory()&&e.name.startsWith('w-')).map(e=>join(storeScratch,epoch.name,e.name)));
+ assert.equal(crashLeases.length,1,'one active service lease before the owned crash');
+ const crashedLease=crashLeases[0],leaseIdentity=lstatSync(crashedLease,{bigint:true});
+ process.kill(pid,'SIGKILL');await gone(pid);servicePids.delete(pid);
  const resumed=await call('run',crashId);assert.equal(resumed.body.facts.state,'completed',JSON.stringify(resumed));
  let publications=0,attempts=0;cursor=beforeAttempt;for(;;){const status=await call('status',crashId,'--after',String(cursor),'--limit','1000');for(const e of status.body.facts.events){publications+=Number(e.kind==='work-published');attempts+=Number(e.kind==='attempt-started')}cursor=status.body.facts.cursor;if(!status.body.facts.more)break}
  assert.equal(publications,1,'the resumed inspection publishes once');assert.ok(attempts>=2,'the interrupted attempt is not reused as a success');
  assert.equal(JSON.parse(await full(crashId,'json')).inspections.length,1);
- console.log(JSON.stringify({consumer:'framework',distFiles:files.length,closureEntries:closure.length,entryBytes:entry.length,runMs:Math.round(performance.now()-started),sourceRemovedSelected:true,crashRecovered:true,officialSarif:Boolean(official)}));
+ const retainedLease=lstatSync(crashedLease,{bigint:true});assert.deepEqual([retainedLease.dev,retainedLease.ino],[leaseIdentity.dev,leaseIdentity.ino],'prior-epoch lease remains private after real service recovery');
+ console.log(JSON.stringify({consumer:'framework',distFiles:files.length,closureEntries:closure.length,entryBytes:entry.length,runMs:Math.round(performance.now()-started),sourceRemovedSelected:true,crashRecovered:true,crashLeaseRetained:true,officialSarif:Boolean(official)}));
 }finally{
  for(const pid of servicePids){try{process.kill(pid,'SIGTERM')}catch{}await gone(pid)}
  // A killed service can leave sealed readonly inputs in its retained scratch lease, inside the store. Only this
