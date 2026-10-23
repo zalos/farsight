@@ -31,7 +31,7 @@ function artifactDigest(path,snapshot){
  }finally{if(out!==undefined)closeSync(out);closeSync(fd)}
 }
 const artifactScope=mkdtempSync(join(tmpdir(),'sentinel-import-artifact-')),snapshot=join(artifactScope,'input.tgz');
-let c,artifactSha256;
+let c,artifactSha256,provenanceMatched=false;
 try{
  artifactSha256=artifactDigest(artifact,snapshot);
  const options={cwd:root,timeout:COMMAND_MS,maxBuffer:DIAGNOSTIC_BYTES,stdio:['ignore','pipe','pipe']};
@@ -39,9 +39,14 @@ try{
  execFileSync(process.execPath,[join(root,'scripts/pack-sentinel.mjs')],options);
  const repacked=join(root,'build/sentinel','farsight-sentinel-'+version+'.tgz');
  assert.equal(artifactDigest(repacked),artifactSha256,'private build/input artifact mismatch');
+ provenanceMatched=true;
  // Install the original snapshot, never the potentially overwritten default output.
  c=await npmConsumer('sentinel-import-', [snapshot]);
-}catch(error){rmSync(artifactScope,{recursive:true,force:true});throw error}
+}catch(error){
+ if(!provenanceMatched&&existsSync(snapshot))console.error('consumer provenance failure; original private snapshot retained: '+snapshot);
+ else rmSync(artifactScope,{recursive:true,force:true});
+ throw error;
+}
 
 const ownedPids=new Set(),serviceRecords=new Map(),children=new Map();const delay=ms=>new Promise(r=>setTimeout(r,ms));
 try{
