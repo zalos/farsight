@@ -52,6 +52,38 @@ async function assertFailedAttemptKeepsInvocation(f: any) {
   assert.equal(invocation.adapter.digest, f.p.registry.get('test-covering-ok').digest);
 }
 
+test('elapsed unit deadline aborts the driver signal before a delayed timer notification', async t => {
+  const f = await setup(t, { deadlineMs: 1000 });
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  const delayedTimer = new AbortController();
+  t.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 1000 ? delayedTimer.signal : timeout(ms));
+  const monotonicNow = performance.now.bind(performance);
+  let elapsed = 0;
+  t.mock.method(performance, 'now', () => monotonicNow() + elapsed);
+  let signal: AbortSignal | undefined;
+  let notifications = 0;
+  const d = driver(f.p, {
+    async prepare(ctx: any) {
+      if (ctx.unit.id === f.p.ids.A) {
+        signal = ctx.signal;
+        signal!.addEventListener('abort', () => { notifications++; }, { once: true });
+        assert.equal(signal!.aborted, false);
+        // The clock can pass its boundary before the event loop delivers the timeout event.
+        elapsed += 1001;
+      }
+      return { job: { unit: ctx.unit.id }, auxiliary: [] };
+    },
+  });
+  const summary = await (await Coordinator.open(options(f, d))).run();
+  assert.equal(delayedTimer.signal.aborted, false);
+  assert.equal(f.store.ledger.getPublication({ id: f.p.ids.A, revision: 1 }), null);
+  assert.deepEqual(f.store.ledger.listAttempts({ id: f.p.ids.A, revision: 1 }), []);
+  assert.ok(summary.failures.some(e => e.code === 'sentinel.execution.deadlineExceeded'));
+  assert.equal(signal?.aborted, true);
+  assert.equal(notifications, 1);
+  assertNoScratch(f);
+});
+
 for (const phase of ['prepare', 'normalize'] as const) {
   test(`one unit deadline includes driver ${phase}`, async t => {
     const f = await setup(t, { deadlineMs: 1000 });

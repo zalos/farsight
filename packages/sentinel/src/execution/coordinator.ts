@@ -479,11 +479,16 @@ export class Coordinator {
       const t0 = performance.now();
       const unitDeadlineAt = t0 + work.resources.deadlineMs;
       const unitDeadline = AbortSignal.timeout(work.resources.deadlineMs);
-      const signal = AbortSignal.any([this.#cancel.signal, this.#deadline.signal, unitDeadline]);
+      const elapsedDeadline = new AbortController();
+      const signal = AbortSignal.any([this.#cancel.signal, this.#deadline.signal, unitDeadline, elapsedDeadline.signal]);
       stillWithin = () => {
         if (this.#cancel.signal.aborted) throw new ExecutionError('sentinel.execution.canceled', { reason: 'canceled before acceptance' });
         if (this.#deadlinePassed || Date.now() >= this.#runDeadline) throw new ExecutionError('sentinel.execution.runDeadline', { reason: 'the run deadline passed before acceptance' });
-        if (unitDeadline.aborted || performance.now() >= unitDeadlineAt) throw new ExecutionError('sentinel.execution.deadlineExceeded', { deadlineMs: work.resources.deadlineMs, elapsedMs: Math.round(performance.now() - t0) });
+        if (unitDeadline.aborted || performance.now() >= unitDeadlineAt) {
+          // The monotonic boundary can precede delivery of the timeout event; notify driver work before refusing.
+          elapsedDeadline.abort();
+          throw new ExecutionError('sentinel.execution.deadlineExceeded', { deadlineMs: work.resources.deadlineMs, elapsedMs: Math.round(performance.now() - t0) });
+        }
       };
       stillWithin();
       // A trusted check driver prepares the exact job and auxiliary inputs; the source inputs stay the plan's own.
