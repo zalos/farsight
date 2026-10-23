@@ -1,3 +1,4 @@
+import {validateEnvelope} from '../validate.js';
 // One held owner's bounded, sanitized read views. These maps are private delivery buffers, never store authority.
 import { randomBytes } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
@@ -100,12 +101,12 @@ export class ReadonlyViews {
             if(unit.dependencies.length>1024)throw new ReadonlyError('sentinel.service.projectionLimit');
             const ref={id:unit.id,revision:unit.revision},wk=workKey(ref);workKeys.add(wk);
             const work=this.store.ledger.getWork(ref);
-            if(work&&(work.runId!==plan.runId||work.envelope.planRevision!==revision||work.envelope.inputFingerprint!==unit.inputFingerprint||work.envelope.stage.implementationDigest!==unit.implementationDigest||!WORK_STATES.includes(work.state as any)))throw new ReadonlyError('sentinel.service.viewInvalid');
+            if(work&&(!validateEnvelope('work',work.envelope).ok||work.runId!==plan.runId||work.envelope.planRevision!==revision||work.envelope.inputFingerprint!==unit.inputFingerprint||work.envelope.stage.implementationDigest!==unit.implementationDigest||!WORK_STATES.includes(work.state as any)))throw new ReadonlyError('sentinel.service.viewInvalid');
             const publication=work?this.store.ledger.getPublication(ref):null;
             append('works',{kind:'work',workKey:wk,revision:unit.revision,stage:unit.stage,prerequisites:unit.dependencies.map(ref=>({workKey:workKey(ref),revision:ref.revision,binding:unitRefs.has(`${ref.id}\0${ref.revision}`)?'in-view':'reference-only'})),
               disposition:selection?(selection.selected.some(s=>s.unit===unit.id)?'selected':selection.downstream.includes(unit.id)?'downstream':'held'):'planned',
               recordedWork:work?{state:work.state as any,influenceKey:key('influence',work.envelope.influenceManifest),activeAttemptKey:work.activeAttemptId?key('attempt',work.activeAttemptId):null}:null,
-              inputCount:unit.inputs.length,implementationKey:key('implementation',unit.implementationDigest)});
+              inputCount:unit.inputs.length,implementationKey:key('implementation',unit.implementationDigest),...(work?{resources:{...work.envelope.resources}}:{})});
             for(const input of unit.inputs)append('inputs',{kind:'input',workKey:wk,sourceKey:key('source',input.sourceId),inputKey:key('input',`${input.sourceId}\0${input.relativePath}`),contentKey:key('artifact',input.content)});
             const attempts=work?this.store.ledger.countAttempts(ref):0;totalAttempts+=attempts;
             if(totalAttempts>READONLY_LIMITS.viewAttempts)throw new ReadonlyError('sentinel.service.projectionLimit');

@@ -2103,3 +2103,16 @@ cannot establish a clean result. Lists are bounded metadata only, not evaluated 
 64 KiB, history to 1,024 entries/32 MiB, a page to 100 entries and a report to 50 evaluated decisions, with
 explicit unavailable/partial outcomes. Local owner commands return busy while the service holds the store;
 service-owned and browser confirmation, qualified cookie enforcement and deleting retention remain separate work.
+
+ADR48 recorded process extension: the paired owner panel lists at most 64 newest retained runs by insertion
+order, using private session-local lookup handles with a one-minute lookup lifetime. The list is a physically
+bounded held-ledger read, never an arbitrary artifact or source endpoint. Selecting a retained CLI run is read-only.
+The graph folds canonical inspection prerequisites once into bounded top-to-bottom levels; independent nodes
+may be eligible together, without claiming observed parallel execution. Earlier bootstrap and current plan
+revisions remain distinct. Expanded work reads bounded immutable attempt/input/output pages. Recorded work
+resource grants are shown separately from the present scheduler default: historical aggregate concurrency was
+not retained. Accepted model/instruction identities use the existing authenticated privacy projection; no
+instruction text, hidden model authority or provider call is added. Endpoint/code labels remain unavailable
+where the qualified inspection does not supply them. Full and baseline comparison reports are explicitly
+regenerated through the existing canonical renderer for the exact selected runs. Linked whole-run preparation
+keeps its existing owner receipt; per-work browser rerun, settings editing and custom stages remain unavailable.
