@@ -13,6 +13,7 @@
 // and inventory units run as the coordinator's own operations (bootstrap.ts); an analysis revision's check units
 // run as workers, and what each covered is recorded as canonical coverage records (coverage.ts) that PR 06's
 // evaluateRequiredCoverage alone turns into the run's outcome.
+import { BUILTIN_WORKERS, closureRefusalOf } from './builtin-workers.js';
 import { deepFreeze } from '../policy/immutable.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -508,6 +509,7 @@ export class Coordinator {
       let invocation: { digest: string; record: InvocationRecord } | undefined;
       outcome = await this.#service.run({
         adapterId: executable.adapter!.id, attemptId: id, work: ref, inputs,
+        ...(prepared && executable.adapter!.kind === 'built-in' && Object.hasOwn(BUILTIN_WORKERS, executable.adapter!.id) ? { job: prepared.binding.derived!.job } : {}),
         assignment: { checks: executable.checks.map(c => c.id), scopes: [...executable.unit.scopes], inputScopes: executable.inputScopes.map(x => ({ input: x.input, scopes: [...x.scopes] })) },
         signal, intents: this.#intents, workers: this.#workers, resources,
         ...(this.#hooks ? { hooks: { at: (b: 'before-spawn' | 'after-spawn') => this.#hooks!.at?.(b, { work: ref, attemptId: id }) } } : {}),
@@ -544,7 +546,7 @@ export class Coordinator {
           // A driver normalizes the verified result (before the work folder is released) into the coverage view
           // and records published with it; without one, the result's own coverage claims are read.
           const out = deepFreeze(outcome);
-          const normalized = driver ? await driver.normalize(prepared!.context, { outcome: out, result: out.result!, outputs: out.outputs, workDir: out.workDir, job: prepared!.job,
+          const normalized = driver ? await driver.normalize(prepared!.context, { outcome: out, result: out.result!, outputs: out.outputs, workDir: out.workDir, job: prepared!.job, binding: deepFreeze(binding),
             output: (oid: ArtifactId) => {
               const o = out.outputs.find(x => x.id === oid);
               if (!o) throw new ExecutionError('sentinel.execution.outputMismatch', { reason: 'not a verified output' });
@@ -588,7 +590,8 @@ export class Coordinator {
       } else if (attemptId && this.#deadlinePassed && !this.#cancelRequested) {
         this.#end(ref, attemptId, 'failed', 'sentinel.execution.runDeadline', outcome.detail);
       } else if (attemptId) {
-        this.#end(ref, attemptId, outcome.state === 'canceled' ? 'canceled' : 'failed', outcome.code ?? 'sentinel.execution.workerExited', outcome.detail);
+        const refusal = closureRefusalOf(executable.adapter, driver, outcome);
+        this.#end(ref, attemptId, outcome.state === 'canceled' ? 'canceled' : 'failed', refusal?.code ?? outcome.code ?? 'sentinel.execution.workerExited', refusal?.detail ?? outcome.detail);
       } else {
         this.#unstarted(ref, outcome.code ?? 'sentinel.execution.workerExited', outcome.detail);
       }

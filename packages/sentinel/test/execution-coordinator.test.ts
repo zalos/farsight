@@ -515,3 +515,16 @@ test('the run budget bounds the whole run: running work is stopped at the deadli
     assert.equal(summary.published, 0);
   } finally { store.close(); }
 });
+
+
+test('an unrelated built-in exit 71 remains workerExited and retries within the existing policy', async () => {
+  const s=fresh('unrelated-exit71'),store=await storeIn(s.root);
+  try {
+    const p=await syntheticPlan(store,s.root,{A:'exit71-before-hello'});
+    const summary=await(await open(store,p,s)).run();
+    assert.equal(summary.outcome,'execution-failure');assert.equal(store.ledger.countAttempts({id:p.ids.A,revision:1}),3);
+    const attempts=store.ledger.listAttempts({id:p.ids.A,revision:1});
+    assert.deepEqual(attempts.map((a:any)=>store.ledger.getAttempt(a.id).envelope.error.code),Array(3).fill('sentinel.execution.workerExited'));
+    assert.equal(summary.failures.some((f:any)=>f.code==='sentinel.execution.closureRefused'),false);
+  }finally{store.close()}
+});

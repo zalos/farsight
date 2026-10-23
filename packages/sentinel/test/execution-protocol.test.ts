@@ -269,3 +269,24 @@ test('a guard that cannot confirm container removal makes the owner close report
   assert.equal(outcome.cleanup, 'cleanup-failed');
   removeScratch(other.root);
 });
+
+test('job roles are refused for external and nonclosed workers before any spawn boundary', async () => {
+  const external = createAdapterRegistry([{ id: 'tool', version: '1', kind: 'external', isolation: 'container', image: `example/tool@sha256:${'a'.repeat(64)}`, command: ['tool'] }]);
+  let spawned = 0;
+  await assert.rejects(runAttempt(store, s.work, external, { adapterId: 'tool', attemptId: 'external-job', work, inputs: captured,
+    job: captured[0]!.id, hooks: { at() { spawned++; } } }), is('sentinel.execution.adapterInvalid'));
+  await assert.rejects(run('progress-then-ok', {}, { job: captured[0]!.id, hooks: { at() { spawned++; } } }), is('sentinel.execution.adapterInvalid'));
+  assert.equal(spawned, 0);
+});
+
+test('legacy start bytes omit the optional job key exactly; explicit roles are carried unchanged', () => {
+  const binding = { attemptId: 'att', work: { id: 'w', revision: 1 }, coordinatorEpoch: 'epoch', adapterId: 'a',
+    adapterDigest: `sha256:${'a'.repeat(64)}`, inputFingerprint: `sha256:${'b'.repeat(64)}`, inputs: [`sha256:${'c'.repeat(64)}`], deadlineAt: '2099-01-01T00:00:00Z' };
+  const hello = { protocol: 'sentinel-worker/draft-1', type: 'hello', supported: ['sentinel-worker/draft-1'], adapterId: 'a', adapterDigest: binding.adapterDigest } as const;
+  const legacy = new WorkerSession(binding).receive(hello as any).send[1];
+  const expected = '{"protocol":"sentinel-worker/draft-1","type":"start","attemptId":"att","work":{"id":"w","revision":1},"coordinatorEpoch":"epoch","seq":0,"inputFingerprint":"sha256:' + 'b'.repeat(64) + '","inputs":["sha256:' + 'c'.repeat(64) + '"],"deadlineAt":"2099-01-01T00:00:00Z"}\n';
+  assert.equal(encodeFrame(legacy).toString(), expected);
+  const explicit = new WorkerSession({ ...binding, job: binding.inputs[0] }).receive(hello as any).send[1] as any;
+  assert.equal(explicit.job, binding.inputs[0]);
+  assert.deepEqual(new FrameDecoder().push(encodeFrame(explicit)), [explicit]);
+});

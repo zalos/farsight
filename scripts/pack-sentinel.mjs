@@ -83,6 +83,13 @@ for (const [asset, needs] of ASSETS) {
   if (!existsSync(source)) fail(`packages/sentinel/src/${asset}.ts is missing; the launch gate must ship with the package.`);
   entries.set(asset, source);
 }
+// A fixed internal dist member for the built-in descriptor. It is byte-pinned with the whole dist closure, not a
+// public export or a separately started asset, so it has no sentinel.assets entry.
+if (existsSync(join(dir, 'src/frameworks/controls/worker.ts'))) {
+  const driver = join(dir, 'src/frameworks/controls/driver.ts');
+  if (!existsSync(driver)) fail('packages/sentinel/src/frameworks/controls/driver.ts is missing; the built-in worker requires its fixed driver.');
+  entries.set('frameworks/controls/driver', driver);
+}
 // `types` first: TypeScript takes the first condition that matches.
 const exportsMap = Object.fromEntries(jsExports.map(([subpath, file, types]) => [subpath, { types: `./${rel(types)}`, import: `./${entryFor(file)}` }]));
 exportsMap['./package.json'] = './package.json';

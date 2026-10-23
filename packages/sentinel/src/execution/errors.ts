@@ -15,7 +15,7 @@ export const EXECUTION_ERROR_CODES = Object.freeze([
   'sentinel.execution.commandFailed', 'sentinel.execution.scratchUnsafe', 'sentinel.execution.reconciliationPending',
   'sentinel.execution.stderrBudget', 'sentinel.execution.planInvalid', 'sentinel.execution.durabilityFailed',
   'sentinel.execution.journalUnreadable', 'sentinel.execution.cleanupObligation', 'sentinel.execution.dependencyFailed',
-  'sentinel.execution.runDeadline',
+  'sentinel.execution.runDeadline', 'sentinel.execution.closureRefused',
   'sentinel.execution.notSelected',
   'sentinel.execution.bootstrapEvidence', 'sentinel.execution.analysisUnavailable',
 ] as const);

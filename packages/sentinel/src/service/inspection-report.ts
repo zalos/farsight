@@ -8,13 +8,13 @@ import type { SentinelStore } from '../store/index.js';
 import type { AdmittedPlan } from '../execution/plans.js';
 import { verifyWorkEnvelope, capturedInputsOf } from '../planner/boundary.js';
 import { coverageRecords, scopeIndex } from '../execution/coverage.js';
+import { bindingId, EXECUTION_BINDING_SCHEMA, type ExecutionBinding } from '../execution/plan.js';
 import { inputFingerprintOf } from '../execution/supervisor.js';
 import { surfacesFromIndex } from '../planner/planner.js';
 import { retainedBootstrapForReport } from '../execution/retained-bootstrap.js';
 import { validateEnvelope } from '../validate.js';
-import { CONTROLS_MODELED_VERSIONS, CONTROLS_SUPPORTED_RULES } from '../frameworks/controls/driver.js';
+import { CONTROLS_MODELED_VERSIONS, CONTROLS_SUPPORTED_RULES, CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_MEDIA, CONTROLS_OUTPUT_SCHEMA } from '../frameworks/controls/definitions.js';
 import { FRAMEWORKS, CONTROL_FAMILIES, INSPECTED_PROPERTIES, inspect, inspectionReport, libraryPresent, type LibraryOutcome } from '../frameworks/controls/facts.js';
-import { CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_MEDIA, CONTROLS_OUTPUT_SCHEMA } from '../frameworks/controls/worker.js';
 
 export async function acceptedInspection(store: SentinelStore, admitted: AdmittedPlan, unit: PlanWork,
   evidence: Awaited<ReturnType<typeof retainedBootstrapForReport>>, refuse: (reason: string) => never): Promise<ReportControlInspection> {
@@ -59,6 +59,29 @@ export async function acceptedInspection(store: SentinelStore, admitted: Admitte
   if (pub.outputs.some(o => o.schema === 'sentinel-driver-finding/draft-1')) return refuse('inspection facts cannot be findings');
   const output = await read(only(CONTROLS_OUTPUT_MEDIA).id);
   if (output?.schema !== CONTROLS_OUTPUT_SCHEMA || !invocation.inputs.includes(output.job)) return refuse('inspection output names an unsealed job');
+  if (Object.hasOwn(invocation, 'job')) {
+    if (typeof invocation.job !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(invocation.job)
+      || !invocation.inputs.includes(invocation.job) || output.job !== invocation.job || unit.dependencies.length !== 1) return refuse('inspection invocation has an invalid job role');
+    const sourceInputs = [...new Set(unit.inputs.map(i => i.content))].sort();
+    const auxiliary = [
+      { role: 'analysis-result', id: a.result }, { role: 'analysis-index', id: a.index },
+      { role: 'analysis-artifact', id: a.artifact }, { role: 'snapshot-manifest', id: evidence.record.manifest },
+    ];
+    const sealedInputs = [...new Set([...sourceInputs, invocation.job, ...auxiliary.map(a => a.id)])].sort();
+    if (!same([...invocation.inputs].sort(), sealedInputs)) return refuse('inspection job role differs from its exact sealed input set');
+    const expected: ExecutionBinding = {
+      schema: EXECUTION_BINDING_SCHEMA, plan: { runId, revision: plan.revision, digest: plan.digest }, work: { id: unit.id, revision: unit.revision },
+      influenceManifest: row.envelope.influenceManifest, adapter: { id: unit.adapterId!, digest },
+      inputs: sealedInputs, protocolFingerprint: invocation.inputFingerprint, inputFingerprint: row.envelope.inputFingerprint,
+      sourceInputs,
+      derived: { job: invocation.job, auxiliary,
+        analysis: { inventory: unit.dependencies[0]!, ...expectedAnalysis } },
+    };
+    // Exact canonical content fixes every authority field. Equivalent accepted content suffices; this lookup does
+    // not claim a per-attempt record link beyond the accepted invocation and work already proven above.
+    const accepted = await read(bindingId(expected));
+    if (!same(accepted, expected) || accepted.derived?.job !== invocation.job) return refuse('inspection has no exact accepted execution binding');
+  }
   const job = await read(output.job);
   const binding = { plan: plan.digest, snapshot: plan.pins.snapshotId, unit: { id: unit.id, revision: unit.revision, inputFingerprint: unit.inputFingerprint }, checks: checks.map(c => ({ id: c.id, familyId: c.familyId, revision: c.ruleRevision, scope: c.scopeId })) };
   if (job?.schema !== CONTROLS_JOB_SCHEMA || job.snapshotId !== plan.pins.snapshotId || job.sourceId !== unit.sourceId

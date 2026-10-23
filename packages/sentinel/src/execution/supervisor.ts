@@ -1,3 +1,4 @@
+import { BUILTIN_WORKERS } from './builtin-workers.js';
 // The supervisor runs one attempt of one work revision under the current store owner, and returns a checked
 // outcome. It never publishes: PR 08's scheduler records the outcome in the ledger.
 //
@@ -60,6 +61,7 @@ export interface AttemptRequest {
   attemptId: Id;
   work: WorkRef;
   inputs: readonly CapturedInput[];
+  job?: ArtifactId;
   /** A private (0700, this user's) folder; the attempt works in a new folder inside it. */
   scratchRoot: string;
   /** Required for external adapters; built-in workers run without one. */
@@ -143,6 +145,7 @@ export interface InvocationRecord {
   limits: TrustedAdapter['limits'];
   inputFingerprint: Digest;
   inputs: ArtifactId[];
+  job?: ArtifactId;
   deadlineAt: string;
   assignment?: { checks: Id[]; scopes: ScopeId[]; inputScopes?: Array<{ input: ArtifactId; scopes: ScopeId[] }> };
 }
@@ -165,6 +168,14 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   const adapter = registry.get(request.adapterId);
   // A bootstrap operation is the coordinator's own work over the store; nothing is started for it.
   if (adapter.kind === 'operation') throw new ExecutionError('sentinel.execution.adapterInvalid', { reason: 'an operation is not a worker' });
+  const hasJob = Object.hasOwn(request, 'job');
+  const job = hasJob ? request.job : undefined;
+  if (hasJob && (adapter.kind !== 'built-in' || !Object.hasOwn(BUILTIN_WORKERS, adapter.id))) {
+    throw new ExecutionError('sentinel.execution.adapterInvalid', { reason: 'a job role requires a closed built-in worker' });
+  }
+  if (hasJob && (typeof job !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(job) || !request.inputs.some(input => input.id === job))) {
+    throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'the job is not a sealed input' });
+  }
   if (adapter.kind === 'external' && !request.backend) {
     // No backend means no isolation, and there is no host fallback.
     throw new ExecutionError('sentinel.execution.isolationUnavailable', { reason: 'no container backend' });
@@ -197,13 +208,14 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     coordinatorEpoch: owner.epoch, adapter: { id: adapter.id, version: adapter.version, digest: adapter.digest },
     isolation: adapter.isolation, ...(image ? { image: { reference: image.reference, id: image.id, architecture: image.architecture } } : {}),
     argv, environmentNames, limits, inputFingerprint, inputs: [...inputs].sort(), deadlineAt,
+    ...(hasJob ? { job: job! } : {}),
     ...(request.assignment ? { assignment: { checks: [...request.assignment.checks], scopes: [...request.assignment.scopes],
       ...(request.assignment.inputScopes ? { inputScopes: request.assignment.inputScopes.map(x => ({ input: x.input, scopes: [...x.scopes] })) } : {}) } } : {}),
   };
   const invocationDigest = sha256(canonicalJsonBytes(record));
   const session = new WorkerSession({
     attemptId: request.attemptId, work: request.work, coordinatorEpoch: owner.epoch, adapterId: adapter.id,
-    adapterDigest: adapter.digest, inputFingerprint, inputs, deadlineAt, ...(request.assignment ? { assignment: request.assignment } : {}),
+    adapterDigest: adapter.digest, inputFingerprint, inputs, deadlineAt, ...(hasJob ? { job: job! } : {}), ...(request.assignment ? { assignment: request.assignment } : {}),
   });
   const outcome: WorkerOutcome = {
     state: 'failed', attemptId: request.attemptId, work: { ...request.work }, coordinatorEpoch: owner.epoch,

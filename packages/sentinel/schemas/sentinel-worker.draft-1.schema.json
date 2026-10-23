@@ -321,6 +321,10 @@
           },
           "maxItems": 1024
         },
+        "job": {
+          "$ref": "#/definitions/ArtifactId",
+          "description": "Coordinator-selected job among the sealed inputs, for closed built-in workers only."
+        },
         "deadlineAt": {
           "$ref": "#/definitions/Timestamp"
         },
