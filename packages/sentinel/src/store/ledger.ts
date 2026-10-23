@@ -20,6 +20,12 @@ import {
   type StagedArtifact, type VerifiedObject,
 } from './store-types.js';
 
+import { bindEvidenceLedger, unbindEvidenceLedger, type EvidenceOperations, type EvidenceAcceptance, type AbandonTarget } from './evidence-binding.js';
+import { EVIDENCE_LIMITS, readEvidencePermit, readPublicationPermit, publicationCommitBoundary, verifyPredecessorAudit, type EvidenceIdentity, type EvidencePermit } from '../evidence/import-operation.js';
+
+import { readAbandonPermit, abandonCommitBoundary, type AbandonPermit } from '../evidence/abandon.js';
+import { evidencePoint } from '../evidence/test-hooks.js';
+
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 const CATALOG_KEY = /^sentinel\.[a-z][A-Za-z0-9]*(\.[a-z][A-Za-z0-9]*)+$/;
 const MAX_ERROR_DETAIL_BYTES = 4096;
@@ -159,6 +165,7 @@ export async function openLedger(owner: LedgerOwner, options: OpenLedgerOptions 
     });
     guard.assertHeld();
     const ledger = new Ledger(db, owner, path, migration, now, failpoint, options.objects);
+    ledger.bindEvidenceDomain();
     owner.registerResource(ledger);
     return ledger;
   } catch (error) {
@@ -178,6 +185,7 @@ export class Ledger {
   readonly storeId: Id;
   readonly migration: MigrationReport;
   #closed = false;
+  #evidence: EvidenceOperations | undefined;
 
   /** @internal Use openLedger(). */
   constructor(
@@ -200,9 +208,262 @@ export class Ledger {
 
   close(): void {
     if (this.#closed) return;
+    if (this.#evidence) unbindEvidenceLedger(this.#owner, this.#evidence);
     this.#closed = true;
     if (this.#db.isTransaction) this.#db.exec('ROLLBACK');
     this.#db.close();
+  }
+
+  /** @internal Called only by openLedger. A second registration is refused; close invalidates old views. */
+  bindEvidenceDomain(): void {
+    if (this.#evidence || this.#closed) throw new LedgerError('sentinel.store.conflict', 'evidence domain is already bound or closed');
+    const domain: EvidenceOperations = Object.freeze({
+      page: (binding:string,after:string|null,limit:number) => {
+        checkDigest(binding,'evidence binding');if(after!==null)checkId(after,'cursor');
+        if(!Number.isSafeInteger(limit)||limit<1||limit>101)throw invalid('evidence page limit');
+        return this.#read(()=>this.#all(`SELECT o.id,o.candidate_digest,o.state,a.root_id,a.previous_candidate FROM evidence_operations o
+          LEFT JOIN evidence_acceptances a ON a.operation_id=o.id WHERE o.binding_digest=? AND (? IS NULL OR o.id>?) ORDER BY o.id LIMIT ?`,binding,after,after,limit).map(r=>{
+          const state=String(r.state);if(!['open','accepted','superseded','aborted'].includes(state))throw invalid('evidence page state');
+          checkId(String(r.id),'operation');checkDigest(String(r.candidate_digest),'candidate');
+          if(r.root_id!==null)checkDigest(String(r.root_id),'root');if(r.previous_candidate!==null)checkDigest(String(r.previous_candidate),'previous');
+          return {operationId:String(r.id),candidateDigest:String(r.candidate_digest),state:state as 'open'|'accepted'|'superseded'|'aborted',
+            root:r.root_id===null?null:String(r.root_id),previous:r.previous_candidate===null?null:String(r.previous_candidate)};
+        }));
+      },
+      head: (binding: string) => { checkDigest(binding, 'evidence binding'); return this.#read(() => this.#evidenceHead(binding)); },
+      begin: (permit: EvidencePermit) => this.#beginEvidence(permit),
+      stage: (permit: EvidencePermit) => this.#stageEvidence(permit),
+      abort: (permit: EvidencePermit) => this.#abortEvidence(permit),
+      transfer: (permit: EvidencePermit, predecessor: string) => this.#transferEvidence(permit, predecessor),
+      publish: (permit: EvidencePermit, receipts: readonly ObjectReceipt[]) => this.#publishEvidence(permit, receipts),
+      acceptance: (id: string) => { checkDigest(id, 'candidate'); return this.#read(() => this.#evidenceAcceptance(id)); },
+      abandonTarget: (id: string) => { checkId(id, 'operation'); return this.#read(() => this.#abandonTarget(id)); },
+      abandon: (permit: AbandonPermit) => this.#abandonEvidence(permit),
+      operation: (id: string) => {
+        checkId(id, 'operation');
+        return this.#read(() => { const r = this.#get('SELECT * FROM evidence_operations WHERE id = ?', id);
+          if (!r) return null;
+          const event = r.terminal_sequence === null ? null : this.#get('SELECT kind,coordinator_epoch,run_id,payload FROM events WHERE sequence = ?',Number(r.terminal_sequence));
+          const identity = this.#evidenceIdentity(r);
+          if (event && event.run_id !== identity.ancestor.runId) throw new LedgerError('sentinel.store.corruptRecord', 'evidence terminal event belongs to another run');
+          return { identity, state:String(r.state),epoch:String(r.coordinator_epoch),
+            terminal:event ? {sequence:Number(r.terminal_sequence),kind:String(event.kind),epoch:String(event.coordinator_epoch),payload:JSON.parse(String(event.payload))} : null }; });
+      },
+    });
+    bindEvidenceLedger(this.#owner, domain, () => this.#closed);
+    this.#evidence = domain;
+  }
+
+  #evidenceIdentity(row: Row): EvidenceIdentity {
+    const fail = (): never => { throw new LedgerError('sentinel.store.corruptRecord', 'evidence operation identity differs from its ledger anchor'); };
+    if (typeof row.identity !== 'string' || Buffer.byteLength(row.identity) > EVIDENCE_LIMITS.identityBytes) fail();
+    let i: EvidenceIdentity;
+    try { i = JSON.parse(String(row.identity)) as EvidenceIdentity; } catch { return fail(); }
+    if (!i || i.schema !== 'sentinel-report-import-operation/1' || !i.ancestor || i.id !== row.id || i.storeId !== this.storeId
+      || i.storeId !== row.store_id || i.epoch !== row.coordinator_epoch || i.nonce !== row.nonce || row.domain !== 'report-import'
+      || i.ancestor.runId !== row.run_id || i.ancestor.revision !== row.plan_revision || i.ancestor.planDigest !== row.plan_digest
+      || i.ancestor.snapshotId !== row.snapshot_id || i.ancestor.sourceId !== row.source_id || i.bindingDigest !== row.binding_digest
+      || i.candidateDigest !== row.candidate_digest || i.receiptId !== row.receipt_id || i.receiptDigest !== row.receipt_digest
+      || !Array.isArray(i.artifacts) || i.artifacts.length > EVIDENCE_LIMITS.artifacts || !Array.isArray(i.closure) || i.closure.length > EVIDENCE_LIMITS.closure) fail();
+    return i;
+  }
+
+  #evidenceHead(binding: string): string | null {
+    const row = this.#get('SELECT candidate_digest FROM evidence_acceptances WHERE binding_digest = ? ORDER BY sequence DESC LIMIT 1', binding);
+    return row ? String(row.candidate_digest) : null;
+  }
+  #evidenceFence(i: EvidenceIdentity): void {
+    // Capability/source proof was checked immediately before BEGIN. Recheck the immutable ledger anchor and head
+    // in the same transaction, without invoking foreign callbacks or opening nested read transactions.
+    const run = this.#get('SELECT snapshot_id,plan_revision,state FROM runs WHERE id = ?', i.ancestor.runId);
+    const plan = this.#get('SELECT digest,snapshot_id FROM plans WHERE run_id = ? AND revision = ?', i.ancestor.runId, i.ancestor.revision);
+    if (i.epoch !== this.epoch || i.storeId !== this.storeId || !run || !plan || run.snapshot_id !== i.ancestor.snapshotId
+      || run.plan_revision !== i.ancestor.revision || (run.state !== 'completed' && run.state !== 'canceled')
+      || plan.digest !== i.ancestor.planDigest || plan.snapshot_id !== i.ancestor.snapshotId || this.#evidenceHead(i.bindingDigest) !== i.priorHead) {
+      throw new LedgerError('sentinel.store.stagingMismatch', 'the exact retained evidence anchor or acceptance head changed');
+    }
+    this.#assertOwner();
+  }
+  #insertEvidence(i: EvidenceIdentity, predecessor: string | null): number {
+    this.#evidenceFence(i);
+    if (this.#get("SELECT 1 AS x FROM events WHERE kind = 'evidence-abandoned' AND json_extract(payload,'$.receipt.id') = ?",i.receiptId)) throw new LedgerError('sentinel.store.conflict','receipt already applied');
+    if (Number(this.#get("SELECT count(*) AS n FROM evidence_operations WHERE state = 'open'")?.n) - (predecessor === null ? 0 : 1) >= EVIDENCE_LIMITS.openOperations
+      || Number(this.#get('SELECT count(*) AS n FROM evidence_operations WHERE binding_digest = ?', i.bindingDigest)?.n) >= EVIDENCE_LIMITS.historyPerBinding) throw invalid('evidence operation limit');
+    const sequence = this.#event('evidence-opened', i.ancestor.runId, null, { operationId: i.id, predecessor });
+    this.#run(`INSERT INTO evidence_operations (id,store_id,coordinator_epoch,nonce,domain,run_id,plan_revision,plan_digest,
+      snapshot_id,source_id,binding_digest,candidate_digest,receipt_id,receipt_digest,predecessor_id,state,identity,opened_sequence,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'open',?,?,?)`, i.id, i.storeId, i.epoch, i.nonce, 'report-import', i.ancestor.runId, i.ancestor.revision,
+      i.ancestor.planDigest, i.ancestor.snapshotId, i.ancestor.sourceId, i.bindingDigest, i.candidateDigest, i.receiptId, i.receiptDigest,
+      predecessor, canonicalJson(i), sequence, this.#now());
+    return sequence;
+  }
+  #ownedEvidence(i: EvidenceIdentity): Row {
+    this.#evidenceFence(i);
+    const row = this.#get('SELECT * FROM evidence_operations WHERE id = ?', i.id);
+    if (!row || row.state !== 'open' || row.coordinator_epoch !== this.epoch || canonicalJson(this.#evidenceIdentity(row)) !== canonicalJson(i)) {
+      throw new LedgerError('sentinel.store.stagingMismatch', 'no open operation belongs to this exact capability');
+    }
+    return row;
+  }
+  #beginEvidence(permit: EvidencePermit): { operationId: string; sequence: number } {
+    const i = readEvidencePermit(permit, this.#owner);
+    return this.#transaction(() => ({ operationId: i.id, sequence: this.#insertEvidence(i, null) }), true);
+  }
+  #insertEvidenceStage(i: EvidenceIdentity): string {
+    const stageId = `evidence-stage-${i.nonce}`;
+    if (Number(this.#get('SELECT count(*) AS n FROM staging WHERE evidence_operation_id = ?', i.id)?.n) >= EVIDENCE_LIMITS.stagesPerOperation) throw invalid('evidence stage limit');
+    const ids = new Set(i.artifacts.map(a => a.id)), closure = new Set(i.closure);
+    for (const a of i.artifacts) for (const link of a.links ?? []) {
+      if (ids.has(link)) continue;
+      // Merely accepted elsewhere is insufficient: it must belong to this genuine retained source proof.
+      if (!closure.has(link) || !this.#get('SELECT 1 AS x FROM artifacts WHERE id = ?', link)) throw new LedgerError('sentinel.store.stagingMismatch', 'evidence links require their authorized source closure');
+    }
+    this.#run('INSERT INTO staging (stage_id,coordinator_epoch,created_at,evidence_operation_id) VALUES (?,?,?,?)', stageId, this.epoch, this.#now(), i.id);
+    for (const a of i.artifacts) {
+      this.#run('INSERT INTO staging_artifacts (stage_id,artifact_id,schema,privacy) VALUES (?,?,?,?)', stageId, a.id, a.schema, a.privacy);
+      for (const link of new Set(a.links ?? [])) this.#run('INSERT INTO staging_links (stage_id,parent_id,child_id) VALUES (?,?,?)', stageId, a.id, link);
+    }
+    return stageId;
+  }
+  #stageEvidence(permit: EvidencePermit): { stageId: string; sequence: number } {
+    const i = readEvidencePermit(permit, this.#owner);
+    return this.#transaction(() => { this.#ownedEvidence(i); const stageId = this.#insertEvidenceStage(i);
+      return { stageId, sequence: this.#event('evidence-staged', i.ancestor.runId, null, { operationId: i.id, stageId }) }; }, true, 'staging:before-commit');
+  }
+  #abortEvidence(permit: EvidencePermit): { operationId: string; sequence: number } {
+    const i = readEvidencePermit(permit, this.#owner);
+    return this.#transaction(() => { this.#ownedEvidence(i);
+      this.#run('DELETE FROM staging WHERE evidence_operation_id = ?', i.id);
+      const sequence = this.#event('evidence-aborted', i.ancestor.runId, null, { operationId: i.id });
+      this.#run("UPDATE evidence_operations SET state = 'aborted', terminal_sequence = ? WHERE id = ?", sequence, i.id);
+      this.#assertOwner(); return { operationId: i.id, sequence }; }, true);
+  }
+  #transferEvidence(permit: EvidencePermit, predecessorId: string): { operationId: string; stageId: string; sequence: number } {
+    checkId(predecessorId, 'predecessor');
+    const i = readEvidencePermit(permit, this.#owner);
+    const before = this.#read(() => this.#get('SELECT identity FROM evidence_operations WHERE id = ?', predecessorId));
+    if (!before) throw new LedgerError('sentinel.store.stagingMismatch', 'missing predecessor');
+    verifyPredecessorAudit(permit, JSON.parse(String(before.identity)) as EvidenceIdentity);
+    return this.#transaction(() => {
+      const prior = this.#get('SELECT * FROM evidence_operations WHERE id = ?', predecessorId);
+      if (!prior || prior.state !== 'open' || prior.coordinator_epoch === this.epoch || prior.store_id !== this.storeId
+        || prior.candidate_digest !== i.candidateDigest || prior.binding_digest !== i.bindingDigest) throw new LedgerError('sentinel.store.stagingMismatch', 'transfer requires the same candidate of an older open operation');
+      const stages = this.#all('SELECT stage_id FROM staging WHERE evidence_operation_id = ? ORDER BY stage_id LIMIT ?', predecessorId, EVIDENCE_LIMITS.stagesPerOperation + 1);
+      if (stages.length !== 1) throw new LedgerError('sentinel.store.stagingMismatch', 'transfer requires the exact sealed import stage');
+      // Compare all persisted metadata, not an epoch/name claim. This slice admits one fixed role closure per op.
+      const old = this.#evidenceIdentity(prior);
+      if (canonicalJson(old.closure) !== canonicalJson(i.closure)
+        || (old.publication ? !i.publication || canonicalJson({ ...old.publication.roles, admission: null }) !== canonicalJson({ ...i.publication.roles, admission: null }) : canonicalJson(old.artifacts) !== canonicalJson(i.artifacts))) throw new LedgerError('sentinel.store.stagingMismatch', 'transfer closure differs');
+      const staged = this.#all('SELECT artifact_id,schema,privacy FROM staging_artifacts WHERE stage_id = ? ORDER BY artifact_id', String(stages[0]!.stage_id));
+      const expected = old.artifacts.map(a => ({ artifact_id: a.id, schema: a.schema, privacy: a.privacy })).sort((a,b) => a.artifact_id < b.artifact_id ? -1 : 1);
+      const links = this.#all('SELECT parent_id,child_id FROM staging_links WHERE stage_id = ? ORDER BY parent_id,child_id', String(stages[0]!.stage_id));
+      const expectedLinks = old.artifacts.flatMap(a => (a.links ?? []).map(child_id => ({ parent_id: a.id, child_id }))).sort((a,b) => a.parent_id.localeCompare(b.parent_id) || a.child_id.localeCompare(b.child_id));
+      if (canonicalJson(staged) !== canonicalJson(expected) || canonicalJson(links) !== canonicalJson(expectedLinks)) throw new LedgerError('sentinel.store.stagingMismatch', 'transfer stage differs from the sealed candidate');
+      this.#insertEvidence(i, predecessorId);
+      const stageId = this.#insertEvidenceStage(i); // dual pin exists before any old pin can be released
+      this.#assertOwner();
+      if (i.publication) publicationCommitBoundary(permit, this.#owner);
+      this.#run('DELETE FROM staging WHERE evidence_operation_id = ?', predecessorId);
+      const sequence = this.#event('evidence-transferred', i.ancestor.runId, null, { operationId: i.id, predecessor: predecessorId, stageId });
+      this.#run("UPDATE evidence_operations SET state = 'superseded', terminal_sequence = ? WHERE id = ?", sequence, predecessorId);
+      return { operationId: i.id, stageId, sequence };
+    }, true);
+  }
+
+  #evidenceAcceptance(candidate: string): EvidenceAcceptance | null {
+    const a = this.#get('SELECT * FROM evidence_acceptances WHERE candidate_digest = ?', candidate);
+    if (!a) return null;
+    const op = this.#get('SELECT * FROM evidence_operations WHERE id = ?', String(a.operation_id));
+    const event = this.#get('SELECT kind,coordinator_epoch,run_id,payload FROM events WHERE sequence = ?', Number(a.sequence));
+    if (!op || op.state !== 'accepted' || op.terminal_sequence !== a.sequence || op.candidate_digest !== candidate || !event) throw new LedgerError('sentinel.store.corruptRecord', 'acceptance lost its terminal operation or event');
+    const i = this.#evidenceIdentity(op);
+    if (a.coordinator_epoch !== i.epoch || a.binding_digest !== i.bindingDigest || a.previous_candidate !== i.priorHead || a.root_id !== i.publication?.root
+      || event.run_id !== i.ancestor.runId) throw new LedgerError('sentinel.store.corruptRecord', 'evidence acceptance anchor differs');
+    if (!Array.isArray(i.artifacts) || i.artifacts.length > EVIDENCE_LIMITS.artifacts || !Array.isArray(i.closure) || i.closure.length > EVIDENCE_LIMITS.closure) throw invalid('evidence metadata bounds');
+    const links: Array<{parent:string;child:string}> = [];
+    for (const artifact of i.artifacts) {
+      const rows = this.#all('SELECT child_id FROM artifact_links WHERE parent_id = ? ORDER BY child_id LIMIT ?', artifact.id, EVIDENCE_LIMITS.links + 1);
+      if (rows.length > EVIDENCE_LIMITS.links) throw invalid('evidence links');
+      for (const row of rows) links.push({ parent: artifact.id, child: String(row.child_id) });
+    }
+    const floors = [...new Set([...i.artifacts.map(v => v.id), ...i.closure])].map(id => {
+      const row = this.#get('SELECT privacy_floor FROM artifacts WHERE id = ?', id);
+      if (!row) throw new LedgerError('sentinel.store.corruptRecord', 'accepted evidence closure lost an artifact');
+      return { id, privacy: String(row.privacy_floor) };
+    });
+    return { candidateDigest: candidate, operationId: String(a.operation_id), root: String(a.root_id), bindingDigest: String(a.binding_digest),
+      previous: a.previous_candidate === null ? null : String(a.previous_candidate), sequence: Number(a.sequence), epoch: String(a.coordinator_epoch),
+      acceptedAt: String(a.accepted_at), identity: i, event: { kind: String(event.kind), epoch: String(event.coordinator_epoch), payload: JSON.parse(String(event.payload)) }, links, floors };
+  }
+  #publishEvidence(permit: EvidencePermit, given: readonly ObjectReceipt[]): EvidenceAcceptance {
+    const i = readPublicationPermit(permit, this.#owner), publication = i.publication!;
+    if (!Array.isArray(given) || given.length !== i.artifacts.length) throw invalid('evidence receipt count');
+    given.forEach(r => this.#checkReceipt(r));
+    const receipts = [...given].sort((a,b) => a.id < b.id ? -1 : 1);
+    if (new Set(receipts.map(r => r.id)).size !== i.artifacts.length) throw invalid('duplicate evidence receipts');
+    this.#verifyReceipts(receipts, 'evidence publication');
+    // Recheck after all object I/O and again at commit, rather than trusting worker/caller supplied metadata.
+    readPublicationPermit(permit, this.#owner);
+    return this.#transaction(() => {
+      this.#ownedEvidence(i);
+      const target = this.#abandonTarget(i.id, true);
+      if (target.stages.length !== 1 || target.epoch !== this.epoch) throw new LedgerError('sentinel.store.stagingMismatch', 'publication requires the exact current operation stage');
+      const actual = target.stages[0]!.artifacts;
+      const expected = [...i.artifacts].map(a => ({ id:a.id,schema:a.schema,privacy:a.privacy,links:[...(a.links ?? [])].sort() })).sort((a,b) => a.id < b.id ? -1 : 1);
+      if (canonicalJson(actual) !== canonicalJson(expected) || canonicalJson(receipts.map(r=>r.id).sort()) !== canonicalJson(expected.map(a=>a.id))) throw new LedgerError('sentinel.store.stagingMismatch','the evidence stage, exact payload and receipts differ');
+      const staged = new Map(actual.map(a => [a.id, { artifact_id:a.id,schema:a.schema,privacy:a.privacy }]));
+      for (const artifact of expected) {
+        for (const old of this.#all('SELECT child_id FROM artifact_links WHERE parent_id = ?', artifact.id)) {
+          if (!artifact.links.includes(String(old.child_id))) throw new LedgerError('sentinel.store.stagingMismatch', 'an existing payload has an unexpected link');
+        }
+      }
+      const sequence = this.#event('evidence-accepted', i.ancestor.runId, null, { operationId:i.id,candidateDigest:i.candidateDigest,root:publication.root,bindingDigest:i.bindingDigest,previous:i.priorHead });
+      this.#acceptArtifacts(receipts, staged, sequence);
+      for (const artifact of expected) for (const child of artifact.links) this.#run('INSERT OR IGNORE INTO artifact_links(parent_id,child_id) VALUES (?,?)', artifact.id, child);
+      this.#run(`INSERT INTO evidence_acceptances(candidate_digest,operation_id,root_id,binding_digest,previous_candidate,sequence,coordinator_epoch,accepted_at)
+        VALUES (?,?,?,?,?,?,?,?)`, i.candidateDigest,i.id,publication.root,i.bindingDigest,i.priorHead,sequence,this.epoch,this.#now());
+      this.#run("UPDATE evidence_operations SET state = 'accepted', terminal_sequence = ? WHERE id = ?", sequence,i.id);
+      this.#run('DELETE FROM staging WHERE evidence_operation_id = ?', i.id);
+      evidencePoint('before-commit');
+      publicationCommitBoundary(permit, this.#owner);
+      return this.#evidenceAcceptance(i.candidateDigest)!;
+    }, true);
+  }
+  #abandonTarget(id: string, allowCurrent = false): AbandonTarget {
+    const row = this.#get('SELECT * FROM evidence_operations WHERE id = ?', id);
+    if (!row || row.store_id !== this.storeId || row.domain !== 'report-import' || row.state !== 'open' || (!allowCurrent && row.coordinator_epoch === this.epoch)) throw new LedgerError('sentinel.store.stagingMismatch', 'only an exact older pending import operation may be abandoned');
+    const identity = this.#evidenceIdentity(row);
+    const stageRows = this.#all('SELECT stage_id,coordinator_epoch,work_id,attempt_id FROM staging WHERE evidence_operation_id = ? ORDER BY stage_id LIMIT ?', id, EVIDENCE_LIMITS.stagesPerOperation + 1);
+    if (stageRows.length > EVIDENCE_LIMITS.stagesPerOperation || !Array.isArray(identity.artifacts) || identity.artifacts.length > EVIDENCE_LIMITS.artifacts) throw invalid('evidence stage bounds');
+    const stages = stageRows.map(stage => {
+      if (stage.coordinator_epoch !== row.coordinator_epoch || stage.work_id !== null || stage.attempt_id !== null) throw invalid('evidence stage domain');
+      const rows = this.#all('SELECT artifact_id,schema,privacy FROM staging_artifacts WHERE stage_id = ? ORDER BY artifact_id LIMIT ?', String(stage.stage_id), EVIDENCE_LIMITS.artifacts + 1);
+      if (rows.length > EVIDENCE_LIMITS.artifacts) throw invalid('evidence artifacts');
+      const artifacts = rows.map(a => {
+        const links = this.#all('SELECT child_id FROM staging_links WHERE stage_id = ? AND parent_id = ? ORDER BY child_id LIMIT ?', String(stage.stage_id),String(a.artifact_id),EVIDENCE_LIMITS.links + 1);
+        if (links.length > EVIDENCE_LIMITS.links) throw invalid('evidence links');
+        return { id:String(a.artifact_id),schema:String(a.schema),privacy:String(a.privacy),links:links.map(l=>String(l.child_id)) };
+      });
+      const expected = identity.artifacts.map(a=>({id:a.id,schema:a.schema,privacy:a.privacy,links:[...(a.links ?? [])].sort()})).sort((a,b)=>a.id<b.id?-1:1);
+      if (canonicalJson(artifacts) !== canonicalJson(expected)) throw new LedgerError('sentinel.store.stagingMismatch','pending stage differs from its immutable operation');
+      return { stageId:String(stage.stage_id),epoch:String(stage.coordinator_epoch),artifacts };
+    });
+    return { identity,state:String(row.state),epoch:String(row.coordinator_epoch),stageDigest:digestOf(stages),stages };
+  }
+  #abandonEvidence(permit: AbandonPermit): {operationId:string;sequence:number} {
+    const authority = readAbandonPermit(permit,this.#owner);
+    return this.#transaction(() => {
+      const target = this.#abandonTarget(authority.operationId);
+      if (target.stageDigest !== authority.stageDigest || digestOf(target.identity) !== authority.identityDigest || target.epoch !== authority.oldEpoch) throw new LedgerError('sentinel.store.stagingMismatch','the pending import changed since confirmation');
+      if (this.#get('SELECT 1 AS x FROM evidence_operations WHERE receipt_id = ?',authority.receipt.id)
+        || this.#get("SELECT 1 AS x FROM events WHERE kind = 'evidence-abandoned' AND json_extract(payload,'$.receipt.id') = ?",authority.receipt.id)) throw new LedgerError('sentinel.store.conflict','receipt already applied');
+      abandonCommitBoundary(permit,this.#owner);
+      this.#run('DELETE FROM staging WHERE evidence_operation_id = ?',authority.operationId);
+      const sequence=this.#event('evidence-abandoned',target.identity.ancestor.runId,null,authority as unknown as Record<string,unknown>);
+      this.#run("UPDATE evidence_operations SET state = 'aborted',terminal_sequence = ? WHERE id = ?",sequence,authority.operationId);
+      evidencePoint('abandon-before-commit'); abandonCommitBoundary(permit,this.#owner);
+      return {operationId:authority.operationId,sequence};
+    },true);
   }
 
   // ---- transactions ----
@@ -608,7 +869,7 @@ export class Ledger {
           // An unbound stage (a capture's) may link to an artifact another open unbound stage of this epoch holds:
           // they are accepted together by admitSnapshot. An attempt's stage may not.
           if (!target && this.#get(`SELECT 1 AS x FROM staging_artifacts sa JOIN staging s ON s.stage_id = sa.stage_id
-            WHERE sa.artifact_id = ? AND s.attempt_id IS NULL AND s.coordinator_epoch = ?`, l, this.epoch)) continue;
+            WHERE sa.artifact_id = ? AND s.attempt_id IS NULL AND s.coordinator_epoch = ? ${this.migration.to >= 6 ? 'AND s.evidence_operation_id IS NULL' : ''}`, l, this.epoch)) continue;
           throw new LedgerError('sentinel.store.stagingMismatch', 'a link names an artifact that is neither staged nor stored');
         }
       }
@@ -631,9 +892,10 @@ export class Ledger {
   abortStaging(stageId: StageId): { stageId: StageId; sequence: number } {
     checkId(stageId, 'stage id');
     return this.#transaction(() => {
-      const row = this.#get(`SELECT s.work_id, s.work_revision, w.run_id FROM staging s
+      const row = this.#get(`SELECT s.work_id, s.work_revision, w.run_id ${this.migration.to >= 6 ? ', s.evidence_operation_id' : ''} FROM staging s
         LEFT JOIN work_units w ON w.id = s.work_id AND w.revision = s.work_revision WHERE s.stage_id = ?`, stageId);
       if (!row) throw new LedgerError('sentinel.store.notFound', 'no such stage');
+      if (row.evidence_operation_id != null) throw new LedgerError('sentinel.store.stagingMismatch', 'evidence stages require their private operation');
       this.#run('DELETE FROM staging WHERE stage_id = ?', stageId);
       const work = row.work_id === null ? null : { id: String(row.work_id), revision: Number(row.work_revision) };
       const runId = row.run_id === null ? null : String(row.run_id);
@@ -685,10 +947,10 @@ export class Ledger {
       if (!PUBLISHING_RUN_STATES.includes(runState)) {
         throw new LedgerError('sentinel.store.wrongState', `the run is ${runState}; publication is revoked`);
       }
-      const stage = this.#get('SELECT coordinator_epoch, work_id, work_revision, attempt_id FROM staging WHERE stage_id = ?',
+      const stage = this.#get(`SELECT coordinator_epoch, work_id, work_revision, attempt_id ${this.migration.to >= 6 ? ', evidence_operation_id' : ''} FROM staging WHERE stage_id = ?`,
         input.stageId);
       if (!stage) throw new LedgerError('sentinel.store.stagingMismatch', 'no such stage');
-      if (stage.coordinator_epoch !== this.epoch || stage.work_id !== ref.id || stage.work_revision !== ref.revision
+      if (stage.evidence_operation_id != null || stage.coordinator_epoch !== this.epoch || stage.work_id !== ref.id || stage.work_revision !== ref.revision
         || stage.attempt_id !== input.attemptId) {
         throw new LedgerError('sentinel.store.stagingMismatch', 'the stage belongs to another attempt or epoch');
       }
@@ -805,9 +1067,9 @@ export class Ledger {
       }
       const staged = new Map<string, Row>();
       for (const stageId of stageIds) {
-        const stage = this.#get('SELECT coordinator_epoch, work_id, attempt_id FROM staging WHERE stage_id = ?', stageId);
+        const stage = this.#get(`SELECT coordinator_epoch, work_id, attempt_id ${this.migration.to >= 6 ? ', evidence_operation_id' : ''} FROM staging WHERE stage_id = ?`, stageId);
         if (!stage) throw new LedgerError('sentinel.store.stagingMismatch', 'no such stage');
-        if (stage.coordinator_epoch !== this.epoch || stage.work_id !== null || stage.attempt_id !== null) {
+        if (stage.evidence_operation_id != null || stage.coordinator_epoch !== this.epoch || stage.work_id !== null || stage.attempt_id !== null) {
           throw new LedgerError('sentinel.store.stagingMismatch', 'a snapshot is admitted only from unbound stages of this epoch');
         }
         for (const row of this.#all('SELECT artifact_id, schema, privacy FROM staging_artifacts WHERE stage_id = ?', stageId)) {
@@ -1038,9 +1300,9 @@ export class Ledger {
     const staged = new Map<string, Row>();
     const links: Array<[string, string]> = [];
     for (const stageId of stageIds) {
-      const stage = this.#get('SELECT coordinator_epoch, work_id, attempt_id FROM staging WHERE stage_id = ?', stageId);
+      const stage = this.#get(`SELECT coordinator_epoch, work_id, attempt_id ${this.migration.to >= 6 ? ', evidence_operation_id' : ''} FROM staging WHERE stage_id = ?`, stageId);
       if (!stage) throw new LedgerError('sentinel.store.stagingMismatch', 'no such stage');
-      if (stage.coordinator_epoch !== this.epoch || stage.work_id !== null || stage.attempt_id !== null) {
+      if (stage.evidence_operation_id != null || stage.coordinator_epoch !== this.epoch || stage.work_id !== null || stage.attempt_id !== null) {
         throw new LedgerError('sentinel.store.stagingMismatch', 'records are accepted only from unbound stages of this epoch');
       }
       for (const row of this.#all('SELECT artifact_id, schema, privacy FROM staging_artifacts WHERE stage_id = ?', stageId)) {
@@ -1166,10 +1428,20 @@ export class Ledger {
     return Number(this.#read(() => this.#get('SELECT count(*) AS n FROM attempts WHERE work_id = ? AND work_revision = ?', ref.id, ref.revision))?.n ?? 0);
   }
 
-  /** Stages still open (registered, neither published nor aborted), oldest first, at most `limit` (≤ 500). */
-  listOpenStages(limit = 500): Array<{ stageId: Id; epoch: Id; work: WorkRef | null; attemptId: Id | null; createdAt: string }> {
+  /** Unfiltered legacy reads remain oldest-first; recovery uses a stable ID cursor and SQL domain/epoch filters. */
+  listOpenStages(limit = 500, filter?: { after?: string; epochNot?: string; domain?: 'generic' | 'evidence' }): Array<{ stageId: Id; epoch: Id; work: WorkRef | null; attemptId: Id | null; createdAt: string }> {
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_EVENT_PAGE) throw invalid(`limit is 1..${MAX_EVENT_PAGE}`);
-    return this.#read(() => this.#all('SELECT stage_id, coordinator_epoch, work_id, work_revision, attempt_id, created_at FROM staging ORDER BY created_at, stage_id LIMIT ?', limit))
+    const where: string[] = [], params: SQLInputValue[] = [];
+    if (filter) {
+      if (filter.after !== undefined) { checkId(filter.after, 'stage cursor'); where.push('stage_id > ?'); params.push(filter.after); }
+      if (filter.epochNot !== undefined) { checkId(filter.epochNot, 'epoch'); where.push('coordinator_epoch <> ?'); params.push(filter.epochNot); }
+      if (filter.domain !== undefined) {
+        if (filter.domain !== 'generic' && filter.domain !== 'evidence') throw invalid('staging domain');
+        where.push(this.migration.to >= 6 ? `evidence_operation_id IS ${filter.domain === 'generic' ? '' : 'NOT '}NULL` : filter.domain === 'generic' ? '1' : '0');
+      }
+    }
+    return this.#read(() => this.#all(`SELECT stage_id, coordinator_epoch, work_id, work_revision, attempt_id, created_at FROM staging
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY ${filter ? 'stage_id' : 'created_at, stage_id'} LIMIT ?`, ...params, limit))
       .map(r => ({ stageId: String(r.stage_id), epoch: String(r.coordinator_epoch),
         work: r.work_id === null ? null : { id: String(r.work_id), revision: Number(r.work_revision) },
         attemptId: r.attempt_id === null ? null : String(r.attempt_id), createdAt: String(r.created_at) }));
@@ -1219,7 +1491,7 @@ export class Ledger {
         sequence,
         // Accepted references: publication outputs and links, and every admitted snapshot's manifest and materialization.
         referenced: col(`SELECT artifact_id FROM artifact_refs UNION SELECT manifest_id FROM snapshots
-          UNION SELECT materialization_id FROM snapshots ${this.migration.to >= 4 ? 'UNION SELECT plan_id FROM plans' : ''} ORDER BY 1`),
+          UNION SELECT materialization_id FROM snapshots ${this.migration.to >= 4 ? 'UNION SELECT plan_id FROM plans' : ''} ${this.migration.to >= 6 ? 'UNION SELECT root_id FROM evidence_acceptances' : ''} ORDER BY 1`),
         staged: col('SELECT DISTINCT artifact_id FROM staging_artifacts ORDER BY artifact_id'),
         reports: col('SELECT DISTINCT artifact_id FROM report_artifacts ORDER BY artifact_id'),
         retained: [...retained].sort(),

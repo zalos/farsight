@@ -61,9 +61,9 @@ test('arguments: each command takes only its own flags; typos and repeats are re
 test('outcomes: Sentinel exit codes, and no confirmation or submission can read as a finished scan', () => {
   assert.deepEqual(OUTCOME_EXIT_CODES, {
     'satisfied': 0, 'finding-policy-failed': 1, 'required-coverage-incomplete': 2, 'configuration-failure': 3, 'awaiting-confirmation': 4,
-    submitted: 0, requested: 0, answered: 0, prepared: 0, kept: 0, unavailable: 3, refused: 3,
+    read: 0, accepted: 0, abandoned: 0, 'delivery-failed': 3, submitted: 0, requested: 0, answered: 0, prepared: 0, kept: 0, unavailable: 3, refused: 3,
   });
-  for (const o of ['awaiting-confirmation', 'submitted', 'requested', 'unavailable', 'prepared', 'kept', 'answered', 'refused', 'configuration-failure'] as const) {
+  for (const o of ['read','accepted','abandoned','delivery-failed','awaiting-confirmation', 'submitted', 'requested', 'unavailable', 'prepared', 'kept', 'answered', 'refused', 'configuration-failure'] as const) {
     assert.equal(isFinalPolicyResult(o), false, o);
   }
   for (const o of ['satisfied', 'finding-policy-failed', 'required-coverage-incomplete'] as const) assert.equal(isFinalPolicyResult(o), true);

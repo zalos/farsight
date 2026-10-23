@@ -38,6 +38,10 @@ export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
   'sentinel.service.tool.sentinel_report_open': same('Prepare an exact shareable report delivery for a completed run, optionally with a baseline.', 'A read-only tool over the configured held owner service. No receipt, caller identity, arbitrary path or artifact read is accepted.'),
   'sentinel.service.tool.sentinel_delivery_read': same('Read a bounded raw-byte chunk of an exact report delivery as base64.', 'A read-only tool over the configured held owner service. No receipt, caller identity, arbitrary path or artifact read is accepted.'),
 
+  'sentinel.outcome.read': same('retained data read', 'The owner read a projected document or a bounded metadata page. This is not a scan result.'),
+  'sentinel.outcome.accepted': same('import accepted', 'An owner-associated imported report was retained and verified. No scan or coverage verdict follows.'),
+  'sentinel.outcome.abandoned': same('pending pins released', 'Exactly one older import operation was abandoned; retained object bytes were not deleted.'),
+  'sentinel.outcome.deliveryFailed': same('delivery failed', 'The command did not deliver its requested output. Its acknowledgement separately states whether an acceptance is already retained.'),
   'sentinel.capability.localCoordinator': same('canonical local scheduling and isolated worker execution are built; runtime prerequisites are verified before use', 'The coordinator accepts only the admitted plan and exact trusted drivers, and the external worker backend requires a qualified local runtime and existing pinned image. This feature listing does not claim any check ran.'),
 
   'sentinel.report.scannerRun': same('Run: {run}', 'The exact durable run whose accepted publications this report reads.'),

@@ -35,6 +35,8 @@ const ENVELOPES = {
   controlcapabilities: ['sentinel-control-capabilities/draft-1', 'ControlCapabilities'],
   controloutcome: ['sentinel-control-outcome/draft-1', 'ControlOutcome'],
 
+  importview: ['sentinel-import-view/draft-1','ImportViewEnvelope'],
+  importpage: ['sentinel-import-page/draft-1','ImportPageEnvelope'],
 };
 
 const generator = createGenerator({

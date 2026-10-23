@@ -55,14 +55,24 @@ async function fixture(t:any,mode:'deny'|'confirm'|'allow'='deny'){
  return {store,runId,service,requests,connect,call,state,owner,attemptCount,setLegacy:(v:boolean)=>legacy=v,setForeign:(v:boolean)=>foreign=v,setGate:(v:typeof afterControl)=>afterControl=v};
 }
 
-test('control schema vocabulary agrees with canonical outcomes and rejects altered exit codes/facts',()=>{
+test('control schema vocabulary pins supported outcomes and rejects altered exit codes/facts',()=>{
+ const supported=[
+  'satisfied','finding-policy-failed','required-coverage-incomplete','configuration-failure','awaiting-confirmation',
+  'submitted','requested','unavailable','prepared','kept','answered','refused',
+ ] as const;
  const defs=(schemaOf('controloutcome') as any).definitions;
- assert.deepEqual([...defs.ControlCommandOutcome.enum].sort(),Object.keys(OUTCOME_EXIT_CODES).sort());
- for(const outcome of Object.keys(OUTCOME_EXIT_CODES) as Array<keyof typeof OUTCOME_EXIT_CODES>){
+ assert.deepEqual([...defs.ControlCommandOutcome.enum].sort(),[...supported].sort());
+ for(const outcome of supported){
   const projected=controlOutcome(result('run',outcome,{facts:{state:'completed',joined:true,path:'private-source',digest:'private-digest',receipt:'private-receipt'}}));
   assert.equal(projected.exitCode,OUTCOME_EXIT_CODES[outcome]);assert.ok(validateEnvelope('controloutcome',projected).ok);
   assert.doesNotMatch(JSON.stringify(projected),/private-/);assert.equal(validateEnvelope('controloutcome',{...projected,exitCode:(projected.exitCode+1)%5}).ok,false);
   assert.equal(validateEnvelope('controloutcome',{...projected,facts:{}}).ok,false);
+ }
+ // Import command additions do not expand the closed run-control contract.
+ const control=controlOutcome(result('run','submitted',{facts:{state:'completed',joined:true}}));
+ assert.ok(validateEnvelope('controloutcome',control).ok,'the negative controls start from a valid control result');
+ for(const outcome of ['accepted','abandoned','read','delivery-failed'] as const){
+  assert.equal(validateEnvelope('controloutcome',{...control,outcome,exitCode:OUTCOME_EXIT_CODES[outcome]}).ok,false);
  }
 });
 

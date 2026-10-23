@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "ExampleDAST",
+          "version": "1.2.0",
+          "informationUri": "https://example.test/tool",
+          "rules": [
+            {
+              "id": "cookie-flags",
+              "shortDescription": {
+                "text": "Cookie flags"
+              }
+            },
+            {
+              "id": "example-pass"
+            }
+          ]
+        }
+      },
+      "artifacts": [
+        {
+          "location": {
+            "uri": "src/app.ts"
+          },
+          "hashes": {
+            "sha-256": "ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB"
+          }
+        }
+      ],
+      "webRequests": [
+        {
+          "index": 0,
+          "protocol": "HTTP",
+          "version": "1.1",
+          "target": "https://app.example.test/account",
+          "method": "GET",
+          "headers": {
+            "Cookie": "sid=synthetic-session-value"
+          }
+        }
+      ],
+      "webResponses": [
+        {
+          "index": 0,
+          "protocol": "HTTP",
+          "version": "1.1",
+          "statusCode": 200,
+          "headers": {
+            "Set-Cookie": "acct=v1; Secure; SameSite=Strict; Expires=Fri, 22 Oct 2027 10:00:00 GMT"
+          }
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "cookie-flags",
+          "ruleIndex": 0,
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Session cookie flags observed"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "index": 0
+                },
+                "region": {
+                  "byteOffset": 10,
+                  "byteLength": 5,
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "codeFlows": [
+            {
+              "threadFlows": [
+                {
+                  "locations": []
+                }
+              ]
+            }
+          ],
+          "webRequest": {
+            "protocol": "HTTP",
+            "version": "1.1",
+            "target": "https://app.example.test/login",
+            "method": "POST",
+            "headers": {
+              "Host": "app.example.test"
+            }
+          },
+          "webResponse": {
+            "protocol": "HTTP",
+            "version": "1.1",
+            "statusCode": 200,
+            "headers": {
+              "Set-Cookie": "sid=synthetic-session-value; Path=/; Secure; HttpOnly; SameSite=Lax"
+            }
+          }
+        },
+        {
+          "ruleId": "cookie-flags",
+          "message": {
+            "text": "Account cookie"
+          },
+          "webRequest": {
+            "index": 0
+          },
+          "webResponse": {
+            "index": 0
+          }
+        },
+        {
+          "ruleId": "example-pass",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "No issue"
+          }
+        },
+        {
+          "ruleId": "cookie-flags",
+          "message": {
+            "text": "Response only"
+          },
+          "webResponse": {
+            "statusCode": 200,
+            "headers": {
+              "Set-Cookie": "solo=1; Secure"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

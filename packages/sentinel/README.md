@@ -726,3 +726,45 @@ expire on restart. A changed store cannot reuse the original MCP control negotia
 A pause received during setup of a genuinely planned run records the legal running → pausing → paused sequence
 without launching a worker or changing its original creation time/budget. If cancellation is also pending,
 cancellation wins. These lifecycle controls use the existing coordinator rather than a second MCP state machine.
+
+## Owner-associated report imports (draft)
+
+Associate a bounded SARIF 2.1.0 or supported ZAP report with one completed run and its retained source. The manifest
+is data describing the producer and tested scope; it supplies no execution or owner authority. Configure and adopt
+the explicit human grants for `evidence.import` (and `evidence.abandon` when needed) before use.
+
+```sh
+farsight-sentinel evidence import <completed-run> --source workspace --report report.json --manifest manifest.json --json
+# Confirm exactly the candidate digest returned by preview:
+farsight-sentinel evidence import <completed-run> --source workspace --report report.json --manifest manifest.json --expect-candidate <digest> --confirm --json
+farsight-sentinel evidence read <candidate-digest> --format md --out imported-report.md
+farsight-sentinel evidence list <completed-run> --source workspace --limit 50 --json
+```
+
+A minimal SARIF manifest describes what the producer actually tested (do not copy a scope it did not test):
+
+```json
+{"schema":"sentinel-import-manifest/draft-1","format":"sarif-2.1.0","producer":{"name":null,"version":null},"tested":{"origins":["https://example.test"],"methods":["GET"],"properties":["cookie-secure"],"directions":["outbound"]}}
+```
+
+The repository also carries original SARIF/ZAP examples in `test/fixtures/imports/`. Preview checks policy before
+opening caller files. Confirmation checks the exact bytes and retained executed context again. `--predecessor`
+names one older interrupted import for a newly confirmed transfer; `evidence abandon <operation-id> --confirm`
+releases only its old pending stage and removes no physical object. A spent receipt may survive an interrupted
+publication; acceptance history and retry outcomes remain explicit.
+
+These commands acquire the genuine local store owner. A running service returns `sentinel.evidence.ownerBusy`;
+the command does not stop it. Unexpired MCP buffers may retain ownership for five minutes, and ongoing use can
+retain it longer. Service-owned import and browser confirmation are still separate delivery work.
+
+Readback works from retained evidence after source removal. JSON and Markdown share a fixed `owner-local`
+disclosure; known current, baseline or selected-ancestor secret evidence withholds the whole imported document.
+No recorded secret match is not an absence proof, and a clean import is not guaranteed safe to share. Imported
+claims, exchanges and cookies retain their own counts and never increase scanner coverage or mitigation credit.
+List pages contain operation metadata, ordered by stable generated identity, with payload availability explicitly
+not evaluated. Read one candidate for its current validated projection.
+
+Commands share an absolute 120-second cooperative proof budget. Rendered output is limited to 32 MiB, including
+the command wrapper; it refuses rather than truncates. File output creates one private new file without overwrite.
+It is not crash-atomic and a failed write can leave a partial new file. Delivery failure does not undo an accepted
+import. No report-controlled executable, raw receipt, or original report bytes are exposed by these commands.
