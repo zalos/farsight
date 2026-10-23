@@ -52,6 +52,78 @@ async function assertFailedAttemptKeepsInvocation(f: any) {
   assert.equal(invocation.adapter.digest, f.p.registry.get('test-covering-ok').digest);
 }
 
+test('elapsed unit deadline aborts the driver signal before a delayed timer notification', async t => {
+  const f = await setup(t, { deadlineMs: 1000 });
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  const delayedTimer = new AbortController();
+  t.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 1000 ? delayedTimer.signal : timeout(ms));
+  const monotonicNow = performance.now();
+  let elapsed = 0;
+  t.mock.method(performance, 'now', () => monotonicNow + elapsed);
+  let signal: AbortSignal | undefined;
+  let notifications = 0;
+  const d = driver(f.p, {
+    async prepare(ctx: any) {
+      if (ctx.unit.id === f.p.ids.A) {
+        signal = ctx.signal;
+        signal!.addEventListener('abort', () => { notifications++; }, { once: true });
+        assert.equal(signal!.aborted, false);
+        // The clock can pass its boundary before the event loop delivers the timeout event.
+        elapsed += 1001;
+      }
+      return { job: { unit: ctx.unit.id }, auxiliary: [] };
+    },
+  });
+  const summary = await (await Coordinator.open(options(f, d))).run();
+  assert.equal(delayedTimer.signal.aborted, false);
+  assert.equal(f.store.ledger.getPublication({ id: f.p.ids.A, revision: 1 }), null);
+  assert.deepEqual(f.store.ledger.listAttempts({ id: f.p.ids.A, revision: 1 }), []);
+  assert.ok(summary.failures.some(e => e.code === 'sentinel.execution.deadlineExceeded'));
+  assert.equal(signal?.aborted, true);
+  assert.equal(signal?.reason?.name, 'TimeoutError');
+  assert.equal(notifications, 1);
+  assertNoScratch(f);
+});
+
+for (const canceled of [false, true]) {
+  test(`elapsed run deadline notifies the driver with delayed timer delivery${canceled ? ', preserving cancellation first' : ''}`, { timeout: 10_000 }, async t => {
+    const f = await setup(t, {}, 1000);
+    const wallNow = Date.parse(f.p.run.createdAt);
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: wallNow });
+    let elapsed = 0;
+    t.mock.method(Date, 'now', () => wallNow + elapsed);
+    let signal: AbortSignal | undefined;
+    let notifications = 0;
+    let coordinator: Coordinator;
+    const d = driver(f.p, {
+      async prepare(ctx: any) {
+        if (ctx.unit.id === f.p.ids.A) {
+          signal = ctx.signal;
+          signal!.addEventListener('abort', () => { notifications++; }, { once: true });
+          assert.equal(signal!.aborted, false);
+          elapsed = 1001;
+          if (canceled) coordinator.cancel();
+        }
+        return { job: { unit: ctx.unit.id }, auxiliary: [] };
+      },
+    });
+    coordinator = await Coordinator.open(options(f, d));
+    const summary = await coordinator.run();
+    assert.equal(f.store.ledger.getPublication({ id: f.p.ids.A, revision: 1 }), null);
+    assert.deepEqual(f.store.ledger.listAttempts({ id: f.p.ids.A, revision: 1 }), []);
+    assert.equal(signal?.aborted, true);
+    assert.equal(notifications, 1);
+    if (canceled) {
+      assert.equal(summary.state, 'canceled');
+      assert.ok(summary.failures.some(e => e.code === 'sentinel.execution.canceled'));
+      assert.equal(summary.failures.some(e => e.code === 'sentinel.execution.runDeadline'), false);
+    } else {
+      assert.ok(summary.failures.some(e => e.code === 'sentinel.execution.runDeadline'));
+    }
+    assertNoScratch(f);
+  });
+}
+
 for (const phase of ['prepare', 'normalize'] as const) {
   test(`one unit deadline includes driver ${phase}`, async t => {
     const f = await setup(t, { deadlineMs: 1000 });
@@ -112,23 +184,56 @@ test('opening rebinds a driver to the actual registry and admitted implementatio
 });
 
 for (const phase of ['invocation', 'result', 'normalized-record'] as const) {
-  test(`unit deadline includes durable ${phase} writes`, async t => {
+  test(`unit deadline includes durable ${phase} writes`, { timeout: 30_000 }, async t => {
     const f = await setup(t, { deadlineMs: 1000 });
     const d = driver(f.p);
+    const coordinator = await Coordinator.open(options(f, d));
+    // Keep a real watchdog independent of the controlled notification clock below.
+    const realTimeout = setTimeout;
+    const realClearTimeout = clearTimeout;
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
+    const deadline = new AbortController();
+    t.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 1000 ? deadline.signal : timeout(ms));
+    let elapsed = 0;
+    t.mock.method(performance, 'now', () => elapsed);
     const original = ObjectStore.prototype.putCanonicalJson;
-    let delayed = false;
-    ObjectStore.prototype.putCanonicalJson = async function(value: any, opts: any) {
+    let reached = false;
+    let written = false;
+    t.mock.method(ObjectStore.prototype, 'putCanonicalJson', async function(value: any, opts: any) {
       const match = phase === 'invocation' ? value?.format === 'sentinel-invocation/draft-1'
         : phase === 'result' ? value?.type === 'result' : value?.schema === 'sentinel-test-driver-record/draft-1';
-      if (!delayed && match) { delayed = true; await delay(1200); }
-      return original.call(this, value, opts);
-    };
-    t.after(() => { ObjectStore.prototype.putCanonicalJson = original; });
-    const summary = await (await Coordinator.open(options(f, d))).run();
-    assert.ok(delayed);
+      const selected = !reached && match;
+      if (selected) reached = true;
+      const receipt = await original.call(this, value, opts);
+      if (selected) {
+        written = true;
+        // The actual awaited durable write completes across the modeled unit boundary.
+        elapsed = 1001;
+        deadline.abort();
+      }
+      return receipt;
+    });
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    const guard = new Promise<never>((_, reject) => {
+      watchdog = realTimeout(() => {
+        t.mock.timers.reset();
+        t.mock.restoreAll();
+        coordinator.cancel();
+        reject(new Error(`durable ${phase} boundary was not reached within the real watchdog`));
+      }, 25_000);
+    });
+    const running = coordinator.run();
+    let summary;
+    try { summary = await Promise.race([running, guard]); }
+    catch (error) { await running; throw error; }
+    finally { realClearTimeout(watchdog); }
+    assert.ok(reached, JSON.stringify(summary.failures));
+    assert.ok(written, JSON.stringify(summary.failures));
     assert.equal(f.store.ledger.getPublication({ id: f.p.ids.A, revision: 1 }), null);
     assert.ok(summary.failures.some(e => e.code === 'sentinel.execution.deadlineExceeded'));
-    if (phase !== 'invocation') await assertFailedAttemptKeepsInvocation(f);
+    if (phase === 'invocation') assert.deepEqual(f.store.ledger.listAttempts({ id: f.p.ids.A, revision: 1 }), []);
+    else await assertFailedAttemptKeepsInvocation(f);
     assertNoScratch(f);
   });
 }
