@@ -6,8 +6,7 @@
 // runs nothing from the target: the libraries read captured bytes and the retained parser evidence as data.
 //
 // Inputs (sealed, by content id): one job, the snapshot envelope, the source's retained parser artifact, result and
-// index, and the source's captured files. The job is the one input whose JSON names this job schema; any other count is
-// refused. Every input it reads is checked against its id. Output: one document with each library's control-fact
+// index, and the source's captured files. The start names the coordinator-selected job explicitly; it must be sealed. Every input it reads is checked against its id. Output: one document with each library's control-fact
 // envelopes and frontiers, or the fixed reason a library refused its inputs. The worker claims no coverage: the
 // coordinator's driver derives it from this document (facts.ts).
 import { createHash } from 'node:crypto';
@@ -97,17 +96,15 @@ export async function runFrameworkControlsWorker(): Promise<void> {
   const refuse = (code: string) => { send({ protocol: P, type: 'diagnostic', ...binding, seq: seq++, code }); process.exit(3); };
   const inputs = new Set<string>((start.inputs ?? []) as string[]);
   const read = sealedReader(IN, inputs);
-  // The job by its own schema, exactly once: a captured file cannot stand in for it unseen, and two are refused.
-  const jobs: { id: string; job: ControlsJob }[] = [];
-  for (const id of inputs) {
-    let value: any;
-    try { value = json(read(id)); } catch { continue; }
-    if (value?.schema === CONTROLS_JOB_SCHEMA) jobs.push({ id, job: value });
-  }
-  if (jobs.length !== 1) return refuse('sentinel.controls.jobInvalid');
+  // The coordinator alone selects the job role; unrelated captured JSON is never inspected as a job.
+  if (typeof start.job !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(start.job) || !inputs.has(start.job)) return refuse('sentinel.controls.jobInvalid');
   let libraries: LibraryOutcome[];
-  try { libraries = await inspectSealed(jobs[0]!.job, read); } catch { return refuse('sentinel.controls.jobInvalid'); }
-  const doc = Buffer.from(JSON.stringify({ schema: CONTROLS_OUTPUT_SCHEMA, job: jobs[0]!.id, libraries } satisfies ControlsOutput));
+  try {
+    const job = json(read(start.job)) as ControlsJob;
+    if (job?.schema !== CONTROLS_JOB_SCHEMA) return refuse('sentinel.controls.jobInvalid');
+    libraries = await inspectSealed(job, read);
+  } catch { return refuse('sentinel.controls.jobInvalid'); }
+  const doc = Buffer.from(JSON.stringify({ schema: CONTROLS_OUTPUT_SCHEMA, job: start.job, libraries } satisfies ControlsOutput));
   const h = hex(doc);
   writeFileSync(`${OUT}/${h}`, doc);
   send({

@@ -105,6 +105,7 @@ export function frameworkControlsAdapter(options: { readonly entryDir: string; r
       }
       const jobBytes = canonicalJsonBytes(job);
       const jobId = sha256(jobBytes);
+      if (verified.outcome.invocation.record.job !== jobId || verified.binding?.derived?.job !== jobId) invalid('the invocation and prepared binding must name the exact job');
       const sealedJob = verified.sealed(jobId);
       if (!sealedJob || !Buffer.from(sealedJob).equals(jobBytes)) invalid('the recorded job is not its sealed bytes');
       if (!Object.isFrozen(verified.outcome) || verified.outcome.result !== verified.result) invalid('normalization needs the exact frozen supervisor outcome');

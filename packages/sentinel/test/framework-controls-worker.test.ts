@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { captureSnapshot } from '../dist/snapshot/index.js';
 import { parseSnapshot } from '../dist/snapshot/parser.js';
 import { canonicalJson } from '../dist/store/ledger-json.js';
@@ -14,8 +14,9 @@ import { createAdapterRegistry } from '../dist/execution/registry.js';
 import { createExecutionService } from '../dist/execution/service.js';
 import { readPackDirectory, validatePack } from '../dist/rules/index.js';
 import { surfacesFromIndex } from '../dist/planner/index.js';
+import { WorkerFiles } from '../dist/execution/recovery.js';
 import { WorkerSession } from '../dist/execution/protocol.js';
-import { writeBuiltinClosureEntry } from '../dist/frameworks/controls/closure.js';
+import { writeClosureEntry, writeBuiltinClosureEntry } from '../dist/frameworks/controls/closure.js';
 import { CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_SCHEMA, FRAMEWORK_CONTROLS_ADAPTER_ID, inspect, inspectSealed } from '../dist/frameworks/controls/index.js';
 import { commitRepo, needsStore, openCaptureStore, scratch } from './snapshot-helpers.ts';
 import { ORDER } from './express-fixtures.ts';
@@ -68,17 +69,28 @@ async function sealed(t: any, files: Record<string, string>, jobs = 1, other?: R
   return { store, dir, inputs: ids, job: job(0), surfaces: surfacesFromIndex(parsed.index as any).map(s => s.nodeId), read: (id: string) => readFileSync(ids.find(i => i.id === id)!.path) };
 }
 
-async function child(fx: Awaited<ReturnType<typeof sealed>>, limits: Record<string, number> = {}, n = 'a', signal?: AbortSignal) {
+async function child(fx: Awaited<ReturnType<typeof sealed>>, limits: Record<string, number> = {}, n = 'a', signal?: AbortSignal, options: { omitJob?: boolean; job?: unknown; reverse?: boolean; audit?: string } = {}) {
   // The registered module is the generated entry that pins and checks the worker's whole byte closure.
   const entryDir = join(fx.dir, `entry-${n}`);
   mkdirSync(entryDir, { mode: 0o700 });
-  const MODULE = writeBuiltinClosureEntry(entryDir, 'framework-controls').module;
+  let MODULE: string;
+  if (options.audit) {
+    const wrapper = join(entryDir, 'audit', 'controls', 'worker.mjs');
+    mkdirSync(join(entryDir, 'audit', 'controls'), { recursive: true });
+    writeFileSync(wrapper, `import fs from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
+import {runFrameworkControlsWorker as run} from ${JSON.stringify(pathToFileURL(fileURLToPath(new URL('../dist/frameworks/controls/worker.js', import.meta.url))).href)};
+const read=fs.readFileSync;fs.readFileSync=function(path,...rest){if(typeof path==='string'&&/[/]input[/][0-9a-f]{64}$/.test(path))fs.appendFileSync(${JSON.stringify(options.audit)},path.slice(-64)+'\\n');return read.call(this,path,...rest)};syncBuiltinESMExports();
+export async function runFrameworkControlsWorker(){await run()}
+`);
+    MODULE = writeClosureEntry(entryDir, wrapper).module;
+  } else MODULE = writeBuiltinClosureEntry(entryDir, 'framework-controls').module;
   const registry = createAdapterRegistry([{ id: FRAMEWORK_CONTROLS_ADAPTER_ID, version: '0.1.0', kind: 'built-in' as const, isolation: 'child' as const, module: MODULE,
     limits: { timeoutMs: 60_000, cancelGraceMs: 1_000, helloTimeoutMs: 10_000, ...limits } }]);
   const scratchRoot = join(fx.dir, `exec-${n}`);
   mkdirSync(scratchRoot, { mode: 0o700 });
   const service = await createExecutionService(fx.store, { scratchRoot, registry, containers: false });
-  return service.run({ adapterId: FRAMEWORK_CONTROLS_ADAPTER_ID, attemptId: `attempt-${n}`, work, inputs: fx.inputs, ...(signal ? { signal } : {}) } as any);
+  return service.run({ adapterId: FRAMEWORK_CONTROLS_ADAPTER_ID, attemptId: `attempt-${n}`, work, workers: new WorkerFiles(fx.store.storePath), inputs: options.reverse ? [...fx.inputs].reverse() : fx.inputs, ...(!options.omitJob ? { job: Object.hasOwn(options, 'job') ? options.job : `sha256:${sha(canonicalJson(fx.job))}` } : {}), ...(signal ? { signal } : {}) } as any);
 }
 
 // The plan's repository-scoped checks for source `app`: one per family.
@@ -190,16 +202,17 @@ test('another source in the snapshot manifest is identity only: facts and reads 
   assert.ok(frontiers.every((f: any) => !f.scopeId.startsWith('other')));
 });
 
-test('two job-shaped inputs are refused with a fixed code; nothing is published', needsStore, async t => {
+test('a second job-shaped sealed input cannot replace or deny the explicitly selected job', needsStore, async t => {
   const fx = await sealed(t, ORDER, 2);
   const o = await child(fx, {}, 'twojobs');
-  assert.notEqual(o.state, 'succeeded');
-  assert.equal(o.result, undefined);
-  assert.deepEqual(o.outputs, []);
-  // The worker sends hello and its one fixed diagnostic (sentinel.controls.jobInvalid), then exits with its refusal status.
-  assert.equal(o.code, 'sentinel.execution.workerExited');
-  assert.equal(o.detail?.exitCode, 3);
-  assert.equal(o.protocol.frames, 2);
+  assert.equal(o.state, 'succeeded', JSON.stringify({ code: o.code, detail: o.detail }));
+  assert.equal(o.invocation.record.job, `sha256:${sha(canonicalJson(fx.job))}`);
+  const output = JSON.parse(readFileSync(o.outputs[0].path, 'utf8'));
+  assert.equal(output.job, o.invocation.record.job);
+  const permuted = await child(fx, {}, 'permuted', undefined, { reverse: true });
+  assert.equal(permuted.state, 'succeeded');
+  assert.deepEqual(JSON.parse(readFileSync(permuted.outputs[0].path, 'utf8')), output);
+
 });
 
 test('the shipped pack validates: three inspection families, candidate meaning, no framework gate, no finding evidence', () => {
@@ -235,4 +248,67 @@ test('the actual launch gate excludes native-library overrides from the worker e
     if (previous === undefined) delete process.env.NAPI_RS_NATIVE_LIBRARY_PATH;
     else process.env.NAPI_RS_NATIVE_LIBRARY_PATH = previous;
   }
+});
+
+
+test('a framework start without an explicit job refuses even with one job-shaped input', needsStore, async t => {
+  const fx = await sealed(t, ORDER);
+  const diagnostics: string[] = [];
+  const receive = WorkerSession.prototype.receive;
+  t.mock.method(WorkerSession.prototype, 'receive', function(m: any) { if (m.type === 'diagnostic') diagnostics.push(m.code); return receive.call(this, m); });
+  const o = await child(fx, {}, 'absent-job', undefined, { omitJob: true });
+  assert.deepEqual(diagnostics, ['sentinel.controls.jobInvalid']);
+  assert.equal(Object.hasOwn(o.invocation.record, 'job'), false);
+  assert.equal(o.code, 'sentinel.execution.workerExited');
+  assert.equal(o.detail?.exitCode, 3);
+  assert.equal(o.protocol.frames, 2);
+  assert.equal(o.result, undefined);
+  assert.deepEqual(o.outputs, []);
+});
+
+test('malformed and unsealed jobs refuse before creating a worker', needsStore, async t => {
+  const fx = await sealed(t, ORDER);
+  let spawned = 0;
+  // The real session would receive hello if a child existed.
+  const receive = WorkerSession.prototype.receive;
+  t.mock.method(WorkerSession.prototype, 'receive', function(m: any) { spawned++; return receive.call(this, m); });
+  for (const [i, job] of [null, undefined, 7, 'x', `sha256:${'f'.repeat(64)}`].entries()) {
+    await assert.rejects(child(fx, {}, `invalid-${i}`, undefined, { job }), (e: any) => e.code === 'sentinel.execution.inputMismatch');
+  }
+  assert.equal(spawned, 0);
+  assert.deepEqual(new WorkerFiles(fx.store.storePath).list().records, [], 'no worker journal entry was made');
+});
+
+test('a selected captured JSON input with another schema is not a trusted job', needsStore, async t => {
+  const fx = await sealed(t, { ...ORDER, 'job.json': JSON.stringify({ schema: 'hostile', properties: [] }) });
+  const wrong = fx.inputs.find(i => fx.read(i.id).toString().includes('"hostile"'))!;
+  assert.ok(wrong);
+  const o = await child(fx, {}, 'wrong-schema', undefined, { job: wrong.id });
+  assert.equal(o.detail?.exitCode, 3);
+  assert.deepEqual(o.outputs, []);
+});
+
+
+test('the real worker reads the selected job and its named closure, never unrelated sealed JSON', needsStore, async t => {
+  const fx = await sealed(t, ORDER, 2);
+  const jobId = `sha256:${sha(canonicalJson(fx.job))}`;
+  const otherJob = fx.inputs.find(i => i.id !== jobId && fx.read(i.id).toString().includes('"copy":1'))!;
+  assert.ok(otherJob);
+  const audit = join(fx.dir, 'sealed-reads');
+  const o = await child(fx, {}, 'audit', undefined, { audit });
+  assert.equal(o.state, 'succeeded', JSON.stringify({ code:o.code, detail:o.detail, diagnostics:o.diagnostics }));
+  const reads = readFileSync(audit, 'utf8').trim().split('\n').map(h => `sha256:${h}`);
+  assert.equal(reads[0], jobId, 'the role, rather than an input enumeration, selects the first read');
+  for (const id of [jobId, fx.job.snapshot, ...Object.values(fx.job.analysis)]) assert.ok(reads.includes(id));
+  assert.equal(reads.includes(otherJob.id), false);
+  assert.ok(reads.every(id => fx.inputs.some(input => input.id === id)));
+});
+
+
+test('corrupt selected job bytes refuse before any framework child starts', needsStore, async t => {
+  const fx = await sealed(t, ORDER);
+  const job = fx.inputs.find(i => i.id === `sha256:${sha(canonicalJson(fx.job))}`)!;
+  writeFileSync(job.path, '{"schema":"corrupt-original"}');
+  await assert.rejects(child(fx, {}, 'corrupt-job'), (e: any) => e.code === 'sentinel.execution.inputMismatch');
+  assert.deepEqual(new WorkerFiles(fx.store.storePath).list().records, []);
 });
