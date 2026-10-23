@@ -2,8 +2,9 @@
 // packer's shared chunk layout. Installed workers and the launch gate have exact manifest paths and byte pins.
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
-import { dirname, join, relative, sep } from 'node:path';
+import { basename, dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { snapshot } from '../policy/immutable.js';
 import { ExecutionError } from './errors.js';
 import { builtinWorker, type BuiltinWorkerId } from './builtin-workers.js';
 
@@ -15,17 +16,30 @@ let layout: PackageLayout | undefined;
 /** Internal installation layout; no file is discovered or read merely by importing this module. */
 export function packageLayout(): PackageLayout {
   if (layout) return layout;
-  for (let dir = dirname(fileURLToPath(import.meta.url)), i = 0; i < 16; dir = dirname(dir), i++) {
-    let pkg: any;
-    try { pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')); } catch { /* not here */ }
-    if (pkg?.name === '@farsight/sentinel' || pkg?.name === 'farsight-sentinel') {
-      const installed = pkg.name === 'farsight-sentinel';
-      if (installed && (!plain(pkg.sentinel) || !Object.hasOwn(pkg.sentinel, 'assets') || !plain(pkg.sentinel.assets))) invalid('the shipped asset manifest is unavailable');
-      return (layout = Object.freeze({ root: dir, installed, extension: installed ? '.mjs' : '.js', assets: installed ? pkg.sentinel.assets : Object.freeze({}) }));
+  const start = dirname(fileURLToPath(import.meta.url));
+  let dist = start;
+  for (let i = 0; basename(dist) !== 'dist' && i < 16 && dirname(dist) !== dist; i++) dist = dirname(dist);
+  if (basename(dist) !== 'dist') return invalid('the Sentinel module is outside its compiled dist tree');
+  const ownRoot = dirname(dist);
+  for (let dir = start; ; dir = dirname(dir)) {
+    const manifest = join(dir, 'package.json');
+    let st;
+    try { st = lstatSync(manifest); } catch (error) {
+      // Only an actually absent boundary permits looking above dist. Existing but unreadable, malformed or foreign
+      // manifests must never turn an installed copy into an enclosing workspace's unpinned .js layout.
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return invalid('the Sentinel package manifest is unreadable');
+      if (dir === ownRoot) return invalid('the Sentinel package manifest is missing');
+      continue;
     }
-    if (dirname(dir) === dir) break;
+    if (dir !== ownRoot) return invalid('an unexpected package boundary is inside the shipped dist tree');
+    if (!st.isFile() || st.isSymbolicLink()) return invalid('the Sentinel package manifest is unsafe');
+    let pkg: any;
+    try { pkg = JSON.parse(readFileSync(manifest, 'utf8')); } catch { return invalid('the Sentinel package manifest is unreadable or malformed'); }
+    if (!plain(pkg) || (pkg.name !== '@farsight/sentinel' && pkg.name !== 'farsight-sentinel')) return invalid('the nearest package is not Sentinel');
+    const installed = pkg.name === 'farsight-sentinel';
+    if (installed && (!plain(pkg.sentinel) || !Object.hasOwn(pkg.sentinel, 'assets') || !plain(pkg.sentinel.assets))) invalid('the shipped asset manifest is unavailable');
+    return (layout = Object.freeze({ root: dir, installed, extension: installed ? '.mjs' : '.js', assets: installed ? snapshot(pkg.sentinel.assets) : Object.freeze({}) }));
   }
-  return invalid('the Sentinel package root was not found');
 }
 
 export function packageRoot(): string { return packageLayout().root; }

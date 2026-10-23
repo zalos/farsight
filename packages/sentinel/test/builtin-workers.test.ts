@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { BUILTIN_WORKERS, builtinWorker } from '../dist/execution/builtin-workers.js';
 import { builtinWorkerFiles } from '../dist/execution/assets.js';
-import { writeBuiltinClosureEntry, writeClosureEntry } from '../dist/frameworks/controls/closure.js';
+import { CLOSURE_REFUSED, writeBuiltinClosureEntry, writeClosureEntry } from '../dist/frameworks/controls/closure.js';
 import { CONTROLS_MODELED_VERSIONS } from '../dist/frameworks/controls/definitions.js';
 import { NEXT_SUPPORT } from '../dist/frameworks/next/support.js';
 import { EXPRESS_SUPPORT } from '../dist/frameworks/express/support.js';
@@ -20,8 +20,9 @@ function scratch(t: any) { const p = realpathSync(mkdtempSync(join(tmpdir(), 'se
 
 // Unmodified compiled resolver in an inert layout fixture. Actual packed npm-only acceptance qualifies the emitted
 // installed layout separately; these controls enumerate malformed paths/manifests without touching a real install.
-async function layoutFixture(t: any, change: (root: string, manifest: any) => void = () => {}) {
-  const root = scratch(t), dist = join(root, 'dist');
+async function layoutFixture(t: any, change: (root: string, manifest: any) => void = () => {}, rootIn?: string) {
+  const root = rootIn ?? scratch(t), dist = join(root, 'dist');
+  mkdirSync(root, { recursive: true });
   const compiled = join(import.meta.dirname, '../dist');
   for (const rel of ['execution/assets.js', 'execution/builtin-workers.js', 'execution/errors.js', 'policy/immutable.js']) {
     mkdirSync(dirname(join(dist, rel)), { recursive: true }); cpSync(join(compiled, rel), join(dist, rel));
@@ -41,7 +42,7 @@ async function layoutFixture(t: any, change: (root: string, manifest: any) => vo
 test('built-in descriptors are a frozen own-property closed set; unavailable paths never register', t => {
   assert.deepEqual(Object.keys(BUILTIN_WORKERS), ['framework-controls', 'bounded-paths']);
   assert.ok(Object.isFrozen(BUILTIN_WORKERS) && Object.isFrozen(BUILTIN_WORKERS['framework-controls']));
-  assert.equal(BUILTIN_WORKERS['framework-controls'].closureRefusalExit, 71);
+  assert.equal(BUILTIN_WORKERS['framework-controls'].closureRefusalExit, CLOSURE_REFUSED);
   assert.ok(!Object.hasOwn(BUILTIN_WORKERS['bounded-paths'], 'closureRefusalExit'));
   const out = scratch(t);
   for (const id of ['x', '__proto__', 'constructor', null, 1, {}, 'bounded-paths']) {
@@ -112,4 +113,38 @@ test('production source never imports the generic fixture helpers', () => {
   for (const file of readdirSync(src, { recursive: true }).map(String).filter(f => f.endsWith('.ts') && !f.endsWith('controls/closure.ts'))) {
     assert.ok(!/import[^;]*\b(?:workerClosure|writeClosureEntry|closureEntrySource)\b[^;]*from/.test(readFileSync(join(src, file), 'utf8')), file);
   }
+});
+
+
+for (const fault of ['missing', 'malformed', 'wrong-name', 'unreadable', 'non-file', 'dangling-link']) {
+  test(`nested installed ${fault} own manifest never falls back to enclosing workspace`, async t => {
+    const outer = scratch(t), inner = join(outer, 'node_modules/farsight-sentinel');
+    writeFileSync(join(outer, 'package.json'), JSON.stringify({ name: '@farsight/sentinel', type: 'module' }));
+    for (const stem of ['frameworks/controls/worker', 'frameworks/controls/driver', 'execution/launch-gate']) {
+      const path = join(outer, `dist/${stem}.js`); mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, '// outer workspace decoy\n');
+    }
+    const m = await layoutFixture(t, undefined, inner);
+    const manifest = join(inner, 'package.json');
+    if (fault === 'missing') rmSync(manifest);
+    if (fault === 'malformed') writeFileSync(manifest, '{broken own package');
+    if (fault === 'wrong-name') writeFileSync(manifest, JSON.stringify({ name: 'some-other-package', type: 'module' }));
+    if (fault === 'unreadable') {
+      // A directory is an existing boundary whose bytes cannot be read as a manifest, even under a privileged test uid.
+      rmSync(manifest); mkdirSync(manifest);
+    }
+    if (fault === 'non-file') { rmSync(manifest); symlinkSync(join(outer, 'package.json'), manifest); }
+    if (fault === 'dangling-link') { rmSync(manifest); symlinkSync(join(inner, 'missing-manifest'), manifest); }
+    assert.throws(() => m.packageLayout(), invalid, 'the existing own boundary refuses');
+    assert.throws(() => m.builtinWorkerFiles('framework-controls'), invalid, 'outer unpinned .js decoys cannot substitute');
+  });
+}
+
+test('returned installed pins are copied and deeply frozen; mutation cannot authorize changed bytes', async t => {
+  const m = await layoutFixture(t), own = m.packageLayout(), stem = 'frameworks/controls/worker';
+  const worker = m.builtinWorkerFiles('framework-controls').worker;
+  const changed = '// changed installed worker bytes\n'; writeFileSync(worker, changed);
+  assert.ok(Object.isFrozen(own) && Object.isFrozen(own.assets) && Object.isFrozen(own.assets[stem]));
+  assert.throws(() => { own.assets[stem].sha256 = sha(changed); }, TypeError);
+  assert.throws(() => { own.assets[stem] = { path: `dist/${stem}.mjs`, sha256: sha(changed) }; }, TypeError);
+  assert.throws(() => m.builtinWorkerFiles('framework-controls'), invalid);
 });

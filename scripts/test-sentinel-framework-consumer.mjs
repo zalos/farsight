@@ -132,7 +132,12 @@ try {
   assert.ok(refused,'the changed installed build cannot register');
  `],{cwd:ws,env});
  const shadow=join(installed,'dist/node_modules');mkdirSync(shadow);
- try{await freshRefusal()}finally{rmSync(shadow,{recursive:true})}
+ try{await c.exec(process.execPath,['--input-type=module','-e',`
+  import assert from 'node:assert/strict';import{readdirSync}from'node:fs';
+  const{frameworkControlsAdapter}=await import(${JSON.stringify('file://'+driverPath)});
+  assert.throws(()=>frameworkControlsAdapter({entryDir:${JSON.stringify(refusalDir)}}),{message:'the shipped dist tree contains a dependency shadow'});
+  assert.deepEqual(readdirSync(${JSON.stringify(refusalDir)}),[]);
+ `],{cwd:ws,env})}finally{rmSync(shadow,{recursive:true})}
  const driverHeld=driverPath+'.held';renameSync(driverPath,driverHeld);
  try{await freshRefusal()}finally{renameSync(driverHeld,driverPath)}
  const workerOriginal=readFileSync(workerPath),withoutExport=workerOriginal.toString().replace(/^  runFrameworkControlsWorker\n/m,'');
@@ -145,8 +150,25 @@ try {
   const refused=await c.exec(process.execPath,[created.stdout.trim()],{cwd:ws,env}).then(r=>({code:0,...r}),e=>e);
   assert.equal(refused.code,71);assert.equal(refused.stdout,'');
  }finally{writeFileSync(workerPath,workerOriginal);writeFileSync(manifestPath,manifestBytes)}
+ // Genuine npm install nested inside a workspace-shaped consumer: malformed/wrong own manifests cannot select
+ // the enclosing unpinned .js decoys. Import first so the assertion exercises our resolver, not Node's loader.
+ await c.exec(process.execPath,['--input-type=module','-e',`
+  import assert from 'node:assert/strict';import{readFileSync,writeFileSync,mkdirSync,rmSync,readdirSync}from'node:fs';import{join,dirname}from'node:path';
+  const{frameworkControlsAdapter}=await import(${JSON.stringify('file://'+driverPath)});
+  const own=${JSON.stringify(manifestPath)},outer=${JSON.stringify(join(c.dir,'package.json'))},outerDist=${JSON.stringify(join(c.dir,'dist'))};
+  const ownBytes=readFileSync(own),outerBytes=readFileSync(outer);
+  try{
+   writeFileSync(outer,JSON.stringify({name:'@farsight/sentinel',type:'module'}));
+   for(const stem of ['frameworks/controls/worker','frameworks/controls/driver','execution/launch-gate']){const p=join(outerDist,stem+'.js');mkdirSync(dirname(p),{recursive:true});writeFileSync(p,'// outer decoy\\n')}
+   for(const broken of [null,'{invalid',JSON.stringify({name:'some-other-package',type:'module'})]){
+    if(broken===null)rmSync(own);else writeFileSync(own,broken);assert.throws(()=>frameworkControlsAdapter({entryDir:${JSON.stringify(refusalDir)}}),e=>e.code==='sentinel.execution.adapterInvalid');
+    assert.deepEqual(readdirSync(${JSON.stringify(refusalDir)}),[]);
+   }
+  }finally{writeFileSync(own,ownBytes);writeFileSync(outer,outerBytes);rmSync(outerDist,{recursive:true,force:true})}
+ `],{cwd:ws,env});
  const hook=join(scratch,'import-audit.mjs');writeFileSync(hook,`
-  import assert from 'node:assert/strict';import Module,{registerHooks}from'node:module';
+  import assert from 'node:assert/strict';import fs from'node:fs';import Module,{registerHooks,syncBuiltinESMExports}from'node:module';
+  const read=fs.readFileSync;fs.readFileSync=function(path,...rest){assert.notEqual(String(path),${JSON.stringify(manifestPath)},'no installed Sentinel manifest read at import/help');return read.call(this,path,...rest)};syncBuiltinESMExports();
   const load=Module._load;Module._load=function(s,...rest){assert.ok(!String(s).includes('oxc-parser'));return load.call(this,s,...rest)};
   registerHooks({load(url,context,next){assert.ok(!/frameworks\\/controls\\/worker\\.mjs|oxc-parser/.test(url));return next(url,context)}});
  `);
@@ -163,7 +185,7 @@ try {
   assert.equal(refused.body.facts.runOutcome,null,'no worker run is admitted through a .js substitute');
  }
  finally{rmSync(gatePath.replace(/\.mjs$/,'.js'));renameSync(gatePath+'.held',gatePath)}
- console.log(JSON.stringify({consumer:'framework',distFiles:files.length,closureEntries:closure.length,entryBytes:entry.length,runMs:Math.round(performance.now()-started),sourceRemovedSelected:true,crashRecovered:true,officialSarif:Boolean(official),strictAssets:true,missingWorkerLegacyReports:true}));
+ console.log(JSON.stringify({consumer:'framework',distFiles:files.length,closureEntries:closure.length,entryBytes:entry.length,runMs:Math.round(performance.now()-started),sourceRemovedSelected:true,crashRecovered:true,officialSarif:Boolean(official),strictAssets:true,missingWorkerLegacyReports:true,nestedManifestRefused:true,installedManifestImportPure:true}));
 }finally{
  for(const pid of servicePids){try{process.kill(pid,'SIGTERM')}catch{}await gone(pid)}
  // A killed service can leave sealed readonly inputs. Only this consumer's scratch is unlocked, after its exact
