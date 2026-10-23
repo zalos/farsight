@@ -535,6 +535,16 @@ source/timestamp/target/scope and never fetching a target. An imported pass is n
 resolution or expiry reopens only affected scope; untrusted config/model cannot self-approve; imported evidence
 cannot exceed its proven scope. **Demo:** the same historical report remains unchanged while today's report
 shows `reopened: disposition expired`.
+
+**Dependency clarification:** before PR26, qualify the mandatory cookie story with a separately bounded original
+Linux-container fixture/observer, rather than waiting for general PR29/30. Bind accepted source/control/build,
+configuration and target; cover issuance, valid/tampered/absent-cookie requests and a seeded bypass with an explicit
+protected-action oracle. Record finite property-specific behavior only. SARIF/ZAP labels or absent alerts do not
+prove cryptographic verification/decryption, algorithm strength or confidentiality; any broader required property
+needs a qualified semantic producer. Qualification stays within the owner-authorized original local fixture/sample,
+only in Linux containers, with no arbitrary targets, new acquisition or external spend. Implementation awaits design
+and acceptance gates, not another user permission; this planning dependency is not implemented managed-runtime support.
+
 Approval uses PR 06's three verdicts and owner receipt. Expose proposed/denied/awaiting-confirmation/applied
 outcomes explicitly; exit 4 means confirmation required. API/MCP callers cannot set `who: human` or satisfy
 confirmation by passing a boolean. Pin receipts to the decision/evidence digest and consume atomically.

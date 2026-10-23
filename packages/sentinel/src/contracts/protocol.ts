@@ -57,6 +57,8 @@ export interface StartMessage extends AttemptBinding {
   inputFingerprint: Digest;
   /** @maxItems 1024 */
   inputs: ArtifactId[];
+  /** Coordinator-selected job among the sealed inputs, for closed built-in workers only. */
+  job?: ArtifactId;
   deadlineAt: Timestamp;
   /**
    * The plan's checks this attempt is to cover, and the scopes they are over. A result claims coverage only in these

@@ -1493,8 +1493,13 @@ Unused workspace fixture generators are byte-pinned data, not worker entry point
 bytes require this audit and test pins to be reviewed. No arbitrary computed external loader is supported. In the canonical tarball, the fixed `dist/frameworks/controls/worker.mjs` is a separately hashed package asset.
 The closure pins every regular file and folder listing in the package's real `dist` tree, rejects inner links and
 nested dependency shadows there, and resolves all declared installed dependencies from every emitted module folder.
-Generated require aliases are therefore not a completeness boundary. The own-package resolver starts from this
-module and walks a bounded number of parents; it never pins the consumer's tree. Private generated entries live
+Generated require aliases are therefore not a completeness boundary. The own-package resolver starts inside the
+compiled `dist` tree and requires Sentinel's own manifest immediately above it. Only genuinely absent manifests
+inside dist allow walking upward; missing, unreadable, malformed, linked or foreign own manifests refuse rather
+than selecting an enclosing workspace. The valid own package name selects workspace `.js` or installed `.mjs`
+layout. Installed worker and launch-gate paths and SHA-256 pins are mandatory, copied and deeply frozen; no `.js`
+sibling substitutes for a missing installed asset. The driver is one fixed internal packer entry, pinned by the
+whole dist closure, without a public export or asset-manifest entry. The resolver never pins the consumer's tree. Private generated entries live
 under the owner's trust directory, outside dist, with full entry-source SHA-256 names. They are atomically published
 without replacement. Relative manifest labels still contain absolute resolution and target-path values: the closure digest and generated
 entry are both installation-bound. A second installation has another identity; moving or changing an installation requires a new
@@ -1507,8 +1512,12 @@ the launch gate with only the worker environment and its sealed inputs (the job,
 parser artifact, result and index, and its captured files, each read only by id and checked against its digest). The
 deadline, cancel and the stdout, stderr and output budgets are enforced by killing the process; memory, CPU and
 process counts are not hard limits on this path and the child is not network-isolated. It is Sentinel's own code, it
-opens no connection, and it installs, builds, imports and runs nothing from the target. The job is the one input
-whose JSON names the job schema; none or two are refused with `sentinel.controls.jobInvalid`. A pack that throws is
+opens no connection, and it installs, builds, imports and runs nothing from the target. The coordinator selects
+`prepared.binding.derived.job` for a closed built-in identity, and the supervisor requires that artifact to be one
+of the exact sealed inputs before spawning. Only then do the invocation and start carry the optional `job` field.
+The worker requires that explicit role and reads its named retained closure, never searching captured JSON for
+a job schema. An absent or invalid job refuses with `sentinel.controls.jobInvalid`; unrelated job-shaped JSON
+cannot replace the selected job or deny the inspection. External adapters cannot receive this role. A pack that throws is
 recorded as `libraryRefused`, never its message. The worker claims no coverage; `facts.ts` derives it.
 
 Inspection is not assessment. `applies` and `does-not-apply` both mean only that a pack established, within its exact
@@ -1548,3 +1557,70 @@ offline HTML and SARIF properties. Facts create no SARIF results. The minimal sc
 privacy-projected section instead of raw controls envelopes. Every new source-controlled identity, version and
 frontier passes through the coarse secret-run projection before rendering; required partial checks remain gaps.
 Per-surface execution and assessment policy (PR 20) remain separate work. Words are `strings-sentinel-framework-controls.ts`; the pack is `rules/framework-controls/`.
+
+The shared retained-source verifier is an internal read boundary, not a new graph contract or public factory.
+It proves the exact admitted inventory and parse publications, operation ownership, profile, influence manifest,
+lineage and complete included content-hash closure. The read-only proof binds its original owner and epoch,
+recorded run revision, deadline and cancellation signal; access can only tighten those bounds. It exposes a
+source-filtered view with the original manifest identity and verifies every distinct included body hash. Caller
+limits are independently copied, validated and frozen, can only lower fixed ceilings, and bound byte accounting,
+reads, lineage depth and cooperative elapsed time. Final copies are prepared before the last owner/deadline fence.
+These are cooperative read bounds, not a hard RSS or I/O limit. Execution still separately requires its genuine
+validated plan, current revision and original source/owner checks; a read-only proof grants no execution authority.
+`retained-bootstrap.ts` and `retained-analysis.ts` share verification mechanics while retaining those different
+entry authorities. Execution's body-read behavior is unchanged.
+
+The closed internal descriptor table currently names `framework-controls` and `bounded-paths`; the latter cannot
+register until its real worker and driver ship. No caller selects a worker path or export. Framework definitions
+import the actual pure support modules, and report reads/imports/help do not resolve assets, load the worker or
+load the native parser. Already accepted reports remain readable with worker assets absent; a new execution still
+requires the installed assets and exact registration identity.
+
+For new framework records, normalization requires the computed sealed job id, invocation job, prepared execution
+binding's derived job and output job to be identical. Report readback treats any own `job` key as the strict form,
+including malformed or null values. It reconstructs the exact binding from proven plan/work and original retained
+identities, verifies the exact sealed input set, and requires the accepted canonical content by its hash. Equivalent
+accepted content fixes the same authority fields; this is not a claim of a separate per-attempt record link. An
+invocation without the job key deliberately retains the original legacy readback path. Unrelated preview and
+external start/invocation forms remain unchanged.
+
+A framework startup verification refusal is final, without refreshing identity or retrying. Only the closed
+built-in descriptor, current trusted driver and adapter id/digest, genuine failed owned-child `workerExited`, exit
+71 with no signal, zero protocol frames and bytes, and no result or outputs qualify. The coordinator records
+`sentinel.execution.closureRefused` with the original code, exit, pre-hello phase and adapter identity; the raw
+supervisor outcome remains unchanged. Cancellation, deadlines, cleanup, ownership and other protocol or output
+failures keep their existing precedence. Exit 71 from another worker, a container or after protocol activity keeps
+its ordinary failure meaning. Catalog wording says startup verification refused, since that observation alone
+does not establish that files changed or that no process started.
+
+46. **Sentinel captures everything but the exact store it holds, and keeps run scratch in a lease inside that store (2026-10-22).**
+A working-copy capture leaves out one folder only: the store this process holds, at its exact canonical path and
+with the identity the owner acquired, and only while the hold is still checked there (`store/owner-binding.ts`
+`heldStoreRoot`). The store's identity reached under any other name refuses the capture (`capture.storeAliased`), a
+source that is or lies inside the store refuses, and a look-alike store object exempts nothing. A committed tree
+gets no live-store exemption: blobs at the store's path are committed source. No folder is left out by name, so
+`.farsight` is ordinary source in the canonical path and `.farsight/sentinel/settings.json` is captured as bounded
+data that never becomes adopted policy. Snapshots captured under the earlier `.farsight` exclusion keep their
+recorded boundaries; nothing is reinterpreted, and the same content now plans as a new run.
+Every owner command and the background service take their scratch from a lease at
+`<store>/scratch/<epoch>/w-…` (`service/scratch-lease.ts`), made only from a genuine held store, one private level at
+a time, with the hold and every recorded folder re-checked before and after each step and each new folder required
+to resolve to its own path; a folder replaced or linked on the way mints no lease. Release removes only what the
+lease can tie to a consumer it watched stop: a container client configuration folder that is exactly the one the
+execution layer made (path and identity, recorded in `execution/isolation.ts`) for a runner this lease wrapped, once
+no wrapped client is still running. Anything else (an attempt's work or prep folder, a restore, a parser folder, an
+unknown name, a file) keeps the whole lease, whatever the ledger says; their owners remove them when they stop, and
+one left behind is a consumer the lease cannot prove stopped. A running client keeps even an empty lease. Release is
+bounded from its first read (entries, depth, time; listings read incrementally; a caller can only tighten it), and the
+hold, the lease's folders and the folder being changed are checked before every chmod, unlink and rmdir; the first
+change stops the walk and the rest stays, reported partial. A mode is set through a no-follow descriptor; unlink and
+rmdir are path-based, so a same-account process racing paths is detected only when a check observes it — the
+owner-only boundary of ADR 19, not a filesystem confinement. Earlier epochs' leases are retained, never swept, and a
+fresh lease claims nothing about them; global worker recovery is unchanged.
+The trust folder is checked against the captured workspace by its prospective canonical path before anything is
+created, and the service refuses a reached runtime-folder candidate inside the workspace before it makes a folder,
+socket or descriptor (`ipc.runtimeDirInsideSource`); a disjoint long-path base keeps the `/tmp` fallback. The
+multi-source `captureSnapshot` API knows no trust or runtime state and checks only the store boundary; a caller that
+captures several sources checks them all (`assertTrustOutside`). Farsight's code parser lists no hidden folder, so a
+route under `.farsight` is captured and read by a framework pack but has no graph surface: it is a cited
+`routeNotInGraph` frontier, never a fact. Number 45 is reserved for the path protocol.

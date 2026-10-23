@@ -186,10 +186,10 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `pack.ts` (`analyzeExpress`: dispatch simulation into `sentinel-controls/draft-1` facts) and `support.ts`; words in
   core's `strings-sentinel-express.ts`, tests in `test/framework-express.test.ts`.
   `src/frameworks/controls/` runs the four framework packs as one inspection (ADR 44): `worker.ts` (the built-in child
-  adapter over sealed inputs), `closure.ts` (the generated entry that pins and checks the worker's byte closure), `driver.ts` (the trusted check
+  adapter over the explicit sealed job role), `definitions.ts` (pure schemas and actual library support identities), `closure.ts` (the generated entry that pins and checks the worker's byte closure), `driver.ts` (the trusted check
   driver over the coordinator's retained parser evidence), `facts.ts` (control facts → repository-scoped inspection coverage and the `framework-inspection` report,
   never a finding); rule pack `rules/framework-controls/`, words in core's `strings-sentinel-framework-controls.ts`, tests
-  in `test/framework-controls-{facts,worker,closure,driver}.test.ts`. `service/framework-adapter.ts` gates canonical availability on the exact promoted pack; `service/inspection-report.ts` authenticates accepted inspection evidence; `reports/inspection.ts` formats the one disclosed report section. `test/framework-{canonical,report}.test.ts` and the npm-only `scripts/test-sentinel-framework-consumer.mjs` cover this integration.
+  in `test/framework-controls-{facts,worker,closure,driver}.test.ts`. `execution/builtin-workers.ts` holds the closed descriptor table and internal startup-failure classification; `execution/assets.ts` resolves only the compiled package’s own manifest and fixed worker/gate/driver layout. `test/builtin-startup-refusal.test.ts` covers classification exclusions and `test/framework-startup-tamper.test.ts` runs isolated genuine-child tamper controls. `test/framework-job-binding.test.ts` covers exact job roles and accepted-record robustness. `service/framework-adapter.ts` gates canonical availability on the exact promoted pack; `service/inspection-report.ts` authenticates accepted inspection evidence; `reports/inspection.ts` formats the one disclosed report section. `test/framework-{canonical,report}.test.ts` and the npm-only `scripts/test-sentinel-framework-consumer.mjs` cover this integration.
   `test/store-integration.test.ts` drives the facade end to end across processes. Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the
@@ -206,10 +206,12 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   process), `src/service/canonical.ts` (plan and run through the canonical planner, admission and coordinator; results from the
   ledger; `selectedRerun` plans a strict-subset rerun, ADR 43), `src/execution/selection.ts` (the admitted
   `sentinel-rerun-selection/draft-1` record and its check), `src/service/owner-service.ts` (the background service: socket, descriptor, receipts bound to their instance,
-  one run at a time, pause/cancel/wait), `src/service/launch.ts` (the one process the CLI starts: its own `serve`),
+  one run at a time, pause/cancel/wait), `src/service/scratch-lease.ts` (a run's scratch lease inside the held store,
+  released only on scoped stopped-consumer proof, ADR 46), `src/service/launch.ts` (the one process the CLI starts: its own `serve`),
   `src/service/rule-locks.ts` + `publish-once.ts` (the owner's lock revisions, packs and chain links, published whole),
   `src/service/trusted-profile.ts` (the shipped registry and execution profile), `src/service/package-paths.ts`, `src/adapters/preview-detector.ts`
-  (the one original coded check), `src/transport/ipc.ts` (the owner socket and handshake) and `src/reports/preview.ts`;
+  (the one original coded check), `src/transport/ipc.ts` (the owner socket and handshake; a reached runtime folder inside
+  the workspace is refused) and `src/reports/preview.ts`;
   `scripts/test-sentinel-preview-consumer.mjs` runs the npm-only path from the packed tarball, including a selected rerun
   with the source gone; `test/selected-rerun.test.ts` and, with `SENTINEL_ISOLATION=1`, `test/selected-rerun-containers.test.ts`.
 
@@ -286,7 +288,7 @@ Sentinel public scanner dispatch extends the CLI/service boundary: `service/scan
 reviewed external drivers and the exact preview driver (`service/preview-driver.ts`), `service/scanner-assets.ts`
 handles explicit bounded owner acquisition/adoption and receipt-bound private asset records, and
 `reports/scanner.ts` projects only accepted current-plan observations through the shared coverage evaluator.
-`execution/retained-bootstrap.ts` proves report bootstrap lineage against admitted parent plans and accepted coordinator invocations. `reports/accepted-secrets.ts` shares the existing secret-record binding validator; `reports/selected-privacy.ts` inherits only matched-name privacy through that lineage. `service/full-report.ts` builds the full `sentinel-report/draft-1` document of a completed scanner run (and a comparison
+`execution/retained-source.ts` shares bounded accepted-source mechanics and an owner-bound read-only proof, without granting execution authority. `execution/retained-analysis.ts` separately checks the genuine validated execution plan before minting driver access to original auxiliary bytes. `execution/retained-bootstrap.ts` proves report bootstrap lineage against admitted parent plans and accepted coordinator invocations using those shared mechanics. `reports/accepted-secrets.ts` shares the existing secret-record binding validator; `reports/selected-privacy.ts` inherits only matched-name privacy through that lineage. `service/full-report.ts` builds the full `sentinel-report/draft-1` document of a completed scanner run (and a comparison
 with a baseline run) from accepted publications bound to their run, unit and attempt, pins an owner-confirmed
 application graph against the captured bytes, and writes a rendering once (`report --full`, `compare`, ADR 38).
 `test/cli-full-report-e2e.test.ts` (five engines), `test/service-full-report-secrets.test.ts` (real Gitleaks, forged records) and `scripts/test-sentinel-report-browser.mjs` cover the command path and offline

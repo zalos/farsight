@@ -124,10 +124,8 @@ export function beyondPathBounds(rel: string, names: readonly string[]): boolean
   return names.some(n => joinPath(rel, n).length > MAX_PATH);
 }
 
-/** Why a folder is not listed, or undefined when it is listed. */
-export function folderExclusion(policy: CapturePolicy, sourceId: string, path: string, storeRel: string | undefined):
-  CaptureReasonCode | undefined {
-  if (storeRel !== undefined && path === storeRel) return 'sentinel.capture.excludedStore';
+/** Why a folder is not listed by policy, or undefined when it is listed. The held store is the walk's own check. */
+export function folderExclusion(policy: CapturePolicy, sourceId: string, path: string): CaptureReasonCode | undefined {
   if (excludedByPolicy(policy, sourceId, path)) return 'sentinel.capture.excludedByPolicy';
   for (const cache of policy.dependencyCaches) {
     if (path === cache || path.endsWith(`/${cache}`)) return 'sentinel.capture.excludedDependencyCache';

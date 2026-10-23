@@ -26,7 +26,7 @@ export type IpcErrorCode =
   | 'sentinel.ipc.platformUnsupported' | 'sentinel.ipc.pathTooLong' | 'sentinel.ipc.runtimeDirUnsafe'
   | 'sentinel.ipc.socketUnsafe' | 'sentinel.ipc.socketInUse' | 'sentinel.ipc.frameTooLarge'
   | 'sentinel.ipc.frameMalformed' | 'sentinel.ipc.handshakeMismatch' | 'sentinel.ipc.notListening'
-  | 'sentinel.ipc.timeout' | 'sentinel.ipc.canceled' | 'sentinel.ipc.socketIndeterminate';
+  | 'sentinel.ipc.timeout' | 'sentinel.ipc.canceled' | 'sentinel.ipc.socketIndeterminate' | 'sentinel.ipc.runtimeDirInsideSource';
 
 export class IpcError extends Error {
   constructor(readonly code: IpcErrorCode, readonly detail = '') {
@@ -60,6 +60,9 @@ export interface RuntimeAddress {
   readonly socket: string;
 }
 
+/** True when canonical `inner` is `outer` or below it. */
+const within = (inner: string, outer: string) => inner === outer || inner.startsWith(outer.endsWith('/') ? outer : `${outer}/`);
+
 /** A usable base folder from the environment: absolute, canonical, a real folder. */
 function baseOf(value: string | undefined): string | undefined {
   if (!value || !isAbsolute(value)) return undefined;
@@ -74,13 +77,21 @@ function baseOf(value: string | undefined): string | undefined {
  * Chooses (creating if needed) the private runtime folder and socket path for one store owner. Deterministic under a
  * base that fits; otherwise a new unpredictable folder under /tmp, which the store descriptor then records.
  */
-export function runtimeAddress(options: { storePath: string; ownerNonce: string; env?: NodeJS.ProcessEnv; platform?: string }): RuntimeAddress {
+export function runtimeAddress(options: {
+  storePath: string; ownerNonce: string; env?: NodeJS.ProcessEnv; platform?: string;
+  /** The canonical roots the owner captures: the runtime folder is never made inside one. */
+  sources?: readonly string[];
+}): RuntimeAddress {
   const env = options.env ?? process.env;
   const platform = options.platform ?? process.platform;
+  const sources = options.sources ?? [];
   const key = createHash('sha256').update(`${options.storePath}\u0000${options.ownerNonce}`).digest('hex').slice(0, 16);
+  // Each candidate in order, checked before anything is made. A selected folder that would sit inside a captured
+  // source is refused, never quietly replaced by another; a candidate whose socket path is too long falls through.
   for (const base of [baseOf(env.XDG_RUNTIME_DIR), baseOf(env.TMPDIR)]) {
     if (!base) continue;
     const dir = join(base, `fss-${key}`);
+    if (sources.some(s => within(dir, s) || within(s, dir))) throw new IpcError('sentinel.ipc.runtimeDirInsideSource', dir);
     const socket = join(dir, 's');
     if (!fitsSocketPath(socket, platform)) continue;
     try { mkdirSync(dir, { mode: 0o700 }); } catch (e) {
@@ -91,6 +102,8 @@ export function runtimeAddress(options: { storePath: string; ownerNonce: string;
   }
   const tmp = baseOf('/tmp');
   if (!tmp) throw new IpcError('sentinel.ipc.runtimeDirUnsafe', 'no usable temporary folder');
+  // A fresh child of /tmp is inside a source only when /tmp itself is (a source under /tmp gets a new sibling).
+  if (sources.some(s => within(tmp, s))) throw new IpcError('sentinel.ipc.runtimeDirInsideSource', tmp);
   const dir = mkdtempSync(join(tmp, 'fss-'));
   chmodSync(dir, 0o700);
   assertPrivateDir(dir, lstatSync(dir));

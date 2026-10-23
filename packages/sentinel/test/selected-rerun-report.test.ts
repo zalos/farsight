@@ -8,7 +8,8 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore, qualificationFor, SQLITE_RELEASE_POLICY } from '../dist/store/index.js';
-import { adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, scratchUnder, removeScratch, workspaceOf } from '../dist/service/local.js';
+import { adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, workspaceOf } from '../dist/service/local.js';
+import { scratchUnder, removeScratch } from './lease-helpers.ts';
 import { executeRun, planWorkspaceCanonical, rerunRun, previewRerun } from '../dist/service/canonical.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
 import { initWorkspace } from '../dist/cli/init.js';
@@ -37,7 +38,7 @@ async function ranParent(t: any) {
   assert.ok('policy' in adopted);
   const store = await openStore(ws.storePath);
   t.after(() => { try { store.close(); } catch { /* closed */ } });
-  const work = scratchUnder(ws);
+  const work = scratchUnder(store);
   t.after(() => removeScratch(work));
   const planned = await planWorkspaceCanonical(store, { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() });
   const parentId = planned.disclosure.runId;

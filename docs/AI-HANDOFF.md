@@ -6,6 +6,94 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Sentinel retained source and fixed worker integration — 2026-10-22
+
+The isolated shared-proof candidate extends ADR 44 over merged main `d79a9b3a`. Independent Claude reviews
+approved the bounded read-only source proof, strict own-package resolver and immutable asset pins, explicit sealed
+job identity and legacy report compatibility, and terminal startup verification classification. SOL implements;
+Claude reviews; the lead owns integration and final acceptance. This candidate has not yet merged.
+
+The read proof is bound to the original held owner, executed revision, source closure, deadline and signal.
+Aggregate byte/read/depth/time bounds are cooperative and can only tighten; the proof grants no execution authority.
+Closed built-in descriptors name shipped files only. Existing reports remain readable without worker assets,
+while new execution requires the exact installed manifest, launch gate and worker pins. New framework invocations
+bind one explicit sealed job through preparation, execution, normalization and readback; an absent job preserves
+legacy accepted records. An exact silent built-in startup refusal is final without refreshing its registered identity.
+
+Integration validation: the build passed, along with types, schema drift, catalog and twelve packer controls.
+The first affected run passed 229 controls but one test module failed to import a scratch helper removed by #163.
+Adapting that test to the current genuine lease helper preserved its assertions and passed all 27 cases: 256 unique
+affected controls now pass with zero skips. The original failed run remains recorded. The installed npm-only
+consumer passed source-removed replay, genuine service kill/recovery with the old lease retained, strict assets,
+missing-worker legacy reports, pure imports and actual installed worker/gate/manifest startup refusal.
+
+Main `d79a9b3a` and integrated runtime `517b1d57` ingested the same 1,700 frozen files: identical 9,787 nodes,
+20,257 edges, source digest `66af17cd4991` and 37,629,952-byte databases. Graph bytes changed
+27,466,592 → 27,466,598 only through build/run metadata. All three fresh front-door, Map and code-map screenshots
+were inspected: zero page errors or failed requests and five known missing-fixture-image responses. No primary
+checkout build, dogfood graph replacement or global installation occurred.
+
+The startup tamper tests now use separate copied packages; 32 controls passed under normal test-file concurrency,
+with every shared compiled file unchanged. Independent final delta review approved the isolated harness and
+integration; its startup filesystem-status wording correction is applied. Exact-head CI remains before merge. Next is the actual retained
+`paths → run → report` workflow. Durable report-import storage and read-only service/MCP are separate reviewed
+checkpoints, not completed public features. The Astra plan audit keeps the critical sequence focused on owner
+paths/decisions, service/MCP, optional bridge and full scan GUI. Configured model work, the final Fable review,
+original Java/Spring container qualification, npm installation documentation and the release remain required.
+
+## Sentinel capture boundary and owned scratch — 2026-10-22
+
+PR #160 (bounded framework inspection) merged as `0b1f74a7`. Capture correction #163 merged as
+`d79a9b3a` after all sixteen exact-head checks passed on their first run, including the native isolation gate,
+full twenty-repetition recovery matrix and installed five-scanner workflow. It implements ADR 46 and includes
+merged deadline correction #161 (`4cbe1d4d`) and planner correction #162 (`aef9e705`). SOL owns implementation and corrections, Claude performs independent review, and the lead owns integration
+and the definition of done.
+
+- Working-copy capture excludes only the held store at its exact canonical path and acquired identity. Store
+  replacement, aliases, a source inside the store, or lost ownership refuse capture. A look-alike store exempts
+  nothing; committed-tree capture has no live-store exemption.
+- `.farsight` is ordinary bounded captured data, including ignored settings and local caches. Those private bytes
+  never become trusted policy. Earlier snapshots keep their recorded boundaries.
+- Scratch lives at `<store>/scratch/<epoch>/w-…`. Creation and every destructive cleanup action re-check the hold
+  and recorded folder chain. Cleanup removes only the exact client configuration associated by its creator, after
+  its clients exit. Unknown, preparation, attempt and restore data remains; a live client keeps even an empty lease.
+- Enumeration is bounded from its first read. Retained old leases survive restart and are not swept; only current
+  service retention is reported. Path-based same-account race checks detect replacement, not filesystem confinement.
+- Prospective trust and selected runtime paths are checked before effects and must remain outside the workspace.
+
+On supported indexed Express routes, an open route establishes does-not-apply and a guarded route remains a cited
+refusalUnproven unknown, without the former artificial sourceIncomplete gap. Hidden routes the parser does not
+index remain routeNotInGraph, and a captured settings file seen by no check can make the full report partial.
+These are accepted limits of the inspection; none establishes protection or requires expanding the parser here.
+
+Validation (Node 24, pnpm 9, isolated worktrees):
+
+- Affected build/typecheck, schema drift and catalog checks passed; the author's core suite passed 404 tests.
+- Final capture, layout, owner identity, scratch and preparation-crash controls: 28 passed, zero skipped.
+  After merging #161, the combined build and 46 capture/deadline-boundary controls passed with zero skips.
+  After merging #162 (`aef9e705`), the combined build and 53 capture/planner/selected-rerun controls passed with zero skips.
+- The actual npm-only installed consumer passed with the existing pinned Gitleaks image: canonical inspection,
+  official SARIF, withholding, source-removed selected rerun and actual service/worker kill-and-resume. Old lease
+  identity survives recovery. Offline clean and withheld reports had no requests or page/console errors.
+- Main and candidate ingested the same 1,689 frozen files: identical 9,670 nodes, 19,978 edges, digest
+  `78b9d1d62bdc`, and 37,093,376-byte databases. Graph bytes changed 27,127,953 → 27,127,959 through build/run
+  metadata only. The front door, Map and code map rendered with no page errors or failed requests; five known
+  fixture-image 404s were recorded. All screenshots were inspected.
+- Independent Claude source review approved the scoped capture behavior. Its documentation/comment findings are
+  corrected, including the private local-state capture and retained-lease limitations.
+
+Historical failures remain distinct from those passes. The author's later full Sentinel run had 1,143 tests:
+1,000 passed, two failed, 141 skipped. The failures were a durable normalized-write test that did not reach its
+injected boundary and a framework cancellation test that expected forced termination. A controlled two-file rerun
+passed those two cases but exposed a separate driver-signal/deadline mismatch (22 passed, one failed). PR #161
+merged with all selected checks passing, including full recovery and installed scanner acceptance. It corrects
+unit/run deadline notification and makes durable-write boundary tests deterministic; the framework test's
+cancellation timing assumption is being reviewed with the fixed-worker seam. Passing an isolated retry does not
+close the original failed run.
+
+Capture qualification limits include an actual Linux bind-mount alias. The complete fixed-worker seam,
+path/decision owner commands and full GUI remain later work. Nothing was installed globally, and the primary checkout and its live server were untouched.
+
 ## Framework canonical wiring checkpoint — 2026-10-22
 
 The framework integration branch combines the retained analysis seam and bounded worker closure with the selected

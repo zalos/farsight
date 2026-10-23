@@ -4,7 +4,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openStore } from '../dist/store/index.js';
 import { initWorkspace } from '../dist/cli/init.js';
-import { adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, scratchUnder, removeScratch, workspaceOf } from '../dist/service/local.js';
+import { adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, workspaceOf } from '../dist/service/local.js';
+import { scratchUnder, removeScratch } from './lease-helpers.ts';
 import { executeRun, planWorkspaceCanonical } from '../dist/service/canonical.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
 import { adoptScannerAsset } from '../dist/service/scanner-assets.js';
@@ -22,7 +23,7 @@ export async function frameworkFixture(t:any, files:Record<string,string>, optio
  if(options.preview||options.promote===false)assert.equal(promoteRulePack(ws,{packDir:builtinPackDir('foundation-preview')!,confirm:true,now:new Date()}).outcome,'prepared');
  if(options.secrets){assert.equal(promoteRulePack(ws,{packDir:builtinPackDir('secrets')!,confirm:true,now:new Date()}).outcome,'prepared');assert.equal((await adoptScannerAsset(ws,{kind:'tool',id:'secrets-gitleaks',confirm:true,now:new Date()})).outcome,'prepared');}
  const adopted=adoptedPolicy(ws);assert.ok('policy'in adopted);const store=await openStore(ws.storePath);
- t.after(()=>{if(store.held)store.close()});const work=scratchUnder(ws);t.after(()=>removeScratch(work));
+ t.after(()=>{if(store.held)store.close()});const work=scratchUnder(store);t.after(()=>removeScratch(work));
  const terms={workspace:path,trustDir:ws.trustDir,policy:adopted.policy,scratchRoot:work,now:new Date()};
  const planned=await planWorkspaceCanonical(store,terms);const runId=planned.disclosure.runId;
  const admitted=await loadPlan(store,runId,planned.disclosure.revision);

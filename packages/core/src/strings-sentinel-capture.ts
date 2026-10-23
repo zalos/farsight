@@ -9,7 +9,7 @@ export const SENTINEL_CAPTURE_STRINGS: Record<string, StringEntry> = {
   'sentinel.capability.draftCapture': same('draft source capture only', 'A library can capture committed trees and working copies into an immutable snapshot, record what it could not read, and restore it from the store. Nothing parses or scans the snapshot yet.'),
   // ---- entry reasons: recorded, never silently dropped ----
   'sentinel.capture.excludedGitInternals': same('Git internals are not captured', 'The repository\'s own .git folder holds history and configuration, not the source being scanned. It is recorded as a boundary whose contents were not listed.'),
-  'sentinel.capture.excludedStore': same('the Sentinel store is not captured', 'The folder holding Sentinel\'s own records sits inside the source. It is recorded as a boundary and never read as source.'),
+  'sentinel.capture.excludedStore': same('the Sentinel store is not captured', 'The store this capture writes to sits inside the source. Only its exact folder, still held by this process with the identity it was opened with, is recorded as a boundary and never read; a folder that merely looks like a store is ordinary source.'),
   'sentinel.capture.excludedDependencyCache': same('a dependency cache is not captured', 'Installed packages and build-tool caches are downloaded copies, not the repository\'s own source. They are recorded as a boundary whose contents were not listed.'),
   'sentinel.capture.excludedByPolicy': same('excluded by the capture policy', 'The owner\'s capture policy names this path as out of scope. It is recorded as excluded so the gap stays visible.'),
   'sentinel.capture.symlinkNotFollowed': same('a symbolic link is recorded, not followed', 'A link is never followed during capture, so its target is not part of the snapshot. Its existence is recorded.'),
@@ -45,6 +45,7 @@ export const SENTINEL_CAPTURE_STRINGS: Record<string, StringEntry> = {
   'sentinel.capture.notSnapshot': same('the artifact is not a stored snapshot', 'Only an accepted snapshot artifact can be restored.'),
   'sentinel.capture.restoreTargetUnsafe': same('the restore folder must be a new, empty folder given by its canonical path', 'A restore writes a fresh read-only tree. An existing or linked folder could mix it with other files, so it is refused.'),
   'sentinel.capture.restoreIntegrity': same('the restored tree does not match its snapshot: {detail}', 'After writing, every restored file is read back and the tree listed again. A difference means the restore cannot be trusted.'),
+  'sentinel.capture.storeAliased': same('the Sentinel store is reachable under another name: {detail}', 'A folder in the source is the held store under a different path, or the store is no longer the folder it was opened as. Its contents are neither captured nor exempted under that name, so the capture is refused.'),
   'sentinel.capture.locationUnresolved': same('a withheld location does not resolve in this snapshot', 'A citation whose file name is withheld names its file by its place in the captured snapshot. It resolves only in that snapshot, for that source and that exact content; anything else is refused rather than pointed at another file.'),
 };
 

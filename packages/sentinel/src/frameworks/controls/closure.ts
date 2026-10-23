@@ -21,10 +21,10 @@ import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, realpat
 import { createRequire, isBuiltin } from 'node:module';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { frameworkWorkerPath, packageRoot } from '../../execution/assets.js';
+import { builtinWorkerFiles } from '../../execution/assets.js';
+import { builtinWorker, type BuiltinWorkerId } from '../../execution/builtin-workers.js';
 import { publishOnce, readPublished } from '../../service/publish-once.js';
 
-export const FRAMEWORK_CONTROLS_WORKER = frameworkWorkerPath();
 const MAX_CLOSURE_ENTRIES = 20_000;
 const MAX_CLOSURE_FILES = 10_000;
 const MAX_CLOSURE_BYTES = 256 * 1024 * 1024;
@@ -103,7 +103,7 @@ function literalLoads(path: string, bytes: Uint8Array): string[] {
  * The worker's closure as it is on disk now; `extra` modules (the coordinator-side driver) are pinned with theirs.
  * Reads the installed build as data with the pinned parser; nothing from the target is imported or run.
  */
-export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: readonly string[] = []): WorkerClosure {
+function collectClosure(entry: string, extra: readonly string[], packed?: ReturnType<typeof builtinWorkerFiles>): WorkerClosure {
   const out = new Map<string, ClosureEntry>();
   const portable = new Map<string, string>();
   const modulePackages = new Set<string>();
@@ -222,15 +222,16 @@ export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: 
       else visitPackage(packageName(spec), dirname(abs));
     }
   };
-  const packed = entry === FRAMEWORK_CONTROLS_WORKER && entry.endsWith('.mjs');
   if (packed) {
-    const own = realpathSync(packageRoot());
+    const own = realpathSync(packed.layout.root);
     const dist = join(own, 'dist');
-    if (realpathSync(dist) !== dist || realpathSync(entry) !== join(dist, 'frameworks/controls/worker.mjs')
+    if (realpathSync(dist) !== dist || realpathSync(entry) !== join(dist, `${packed.descriptor.asset}.mjs`)
       || extra.some(p => !realpathSync(p).startsWith(dist + sep))) throw new Error('the framework worker is not in the fixed shipped dist tree');
     const manifest = join(own, 'package.json');
     add(manifest, 'file', sha(readPinned(manifest)), 'sentinel/package.json');
     const pkg = JSON.parse(readPinned(manifest).toString('utf8'));
+    if (pkg.name !== 'farsight-sentinel' || pkg.sentinel?.assets?.[packed.descriptor.asset]?.path !== `dist/${packed.descriptor.asset}.mjs`
+      || pkg.sentinel.assets[packed.descriptor.asset].sha256 !== sha(readPinned(entry))) throw new Error('the worker differs from its fixed shipped asset');
     const names = Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies });
     const folders = new Set<string>();
     const walkDist = (path: string) => {
@@ -261,7 +262,7 @@ export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: 
 }
 
 /** The entry module's source: the manifest, the check, then the worker. */
-export function closureEntrySource(closure: WorkerClosure, worker: string = FRAMEWORK_CONTROLS_WORKER): string {
+export function closureEntrySource(closure: WorkerClosure, worker: string, fixedExport: string = 'runFrameworkControlsWorker'): string {
   return `// Generated: the framework inspection worker behind its byte closure (closure ${closure.digest}).
 import { createHash } from 'node:crypto';
 import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync } from 'node:fs';
@@ -278,7 +279,8 @@ for (const [path, kind, value] of CLOSURE) {
   if (!ok) process.exit(${CLOSURE_REFUSED});
 }
 const worker = await import(${JSON.stringify(pathToFileURL(realpathSync(worker)).href)});
-await worker.runFrameworkControlsWorker();
+if (typeof worker[${JSON.stringify(fixedExport)}] !== 'function') process.exit(${CLOSURE_REFUSED});
+await worker[${JSON.stringify(fixedExport)}]();
 `;
 }
 
@@ -287,14 +289,28 @@ await worker.runFrameworkControlsWorker();
  * closure digest, for the adapter definition's `module`. The file name carries the full entry-source SHA-256; an existing file
  * of that name is reused only when its bytes are identical.
  */
-export function writeClosureEntry(dir: string, worker: string = FRAMEWORK_CONTROLS_WORKER, extra: readonly string[] = []): { module: string; closureDigest: string; files: number } {
-  const closure = workerClosure(worker, extra);
-  const source = closureEntrySource(closure, worker);
-  const name = `framework-controls-${sha(source)}.mjs`;
+function publishEntry(dir: string, id: string, closure: WorkerClosure, worker: string, fixedExport: string) {
+  const source = closureEntrySource(closure, worker, fixedExport);
+  const name = `${id}-${sha(source)}.mjs`;
   const module = join(dir, name);
   const bytes = Buffer.from(source);
   if (bytes.length > MAX_ENTRY_BYTES) throw new Error('the generated framework entry exceeds its bound');
   publishOnce(dir, name, bytes);
   if (!readPublished(dir, name, MAX_ENTRY_BYTES)?.equals(bytes)) throw new Error('the generated framework entry is not its exact published bytes');
   return { module, closureDigest: closure.digest, files: closure.entries.length };
+}
+
+/** The only production entry: a closed identity, its shipped worker and fixed driver, with no custom path/export. */
+export function writeBuiltinClosureEntry(dir: string, id: BuiltinWorkerId): { module: string; closureDigest: string; files: number } {
+  builtinWorker(id); // Reject inherited/non-string identities before any filesystem work.
+  const files = builtinWorkerFiles(id);
+  const closure = collectClosure(files.worker, [files.driver], files.layout.installed ? files : undefined);
+  return publishEntry(dir, id, closure, files.worker, files.descriptor.export);
+}
+
+// Internal fixture helpers, imported only by tests, absent from the controls index and package exports. They never
+// take the installed whole-dist branch and cannot be selected by registration or any production caller.
+export function workerClosure(entry: string, extra: readonly string[] = []): WorkerClosure { return collectClosure(entry, extra); }
+export function writeClosureEntry(dir: string, worker: string, extra: readonly string[] = []) {
+  return publishEntry(dir, 'framework-controls', collectClosure(worker, extra), worker, 'runFrameworkControlsWorker');
 }

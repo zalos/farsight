@@ -173,9 +173,12 @@ export class ContainerBackend {
       const docker = options.docker ?? locateDocker();
       const endpoint = await resolveEndpoint(docker, options.signal);
       const config = mkdtempSync(join(options.privateDir, 'docker-config-'));
+      const made = lstatSync(config, { bigint: true });
       runner = clientRunner(docker, { PATH: SAFE_PATH, DOCKER_HOST: endpoint, DOCKER_CONFIG: config });
+      clientConfigs.set(runner, Object.freeze({ path: config, identity: `${made.dev}:${made.ino}` }));
     }
-    // Package-internal fault injection around the real client (lost replies, delayed commits); never in production.
+    // Package-internal instrumentation: scratch leases associate the real client before any other wrapper.
+    // Test fault injection may wrap that associated runner for lost replies or delayed commits.
     if (options.wrapRunner) runner = options.wrapRunner(runner);
     const version = await runner.run(['version', '--format', '{{json .Server}}'], options.signal);
     if (!succeeded(version)) unavailable('docker server unreachable');
@@ -442,6 +445,16 @@ export class ContainerBackend {
 }
 
 /** The production runner: the fixed client, its pinned environment, bounded output, no shell. */
+// The empty client configuration folder each real client runner was made with, by the runner object this module
+// created. Package-internal: a scratch lease (service/scratch-lease.ts) may remove exactly that folder once every
+// client it started has exited. Any other runner (a caller's, a test seam's) has none.
+const clientConfigs = new WeakMap<DockerRunner, { readonly path: string; readonly identity: string }>();
+
+/** The configuration folder (path and `dev:ino` at creation) of a client runner this module made; else undefined. */
+export function clientConfigOf(runner: DockerRunner): { readonly path: string; readonly identity: string } | undefined {
+  return clientConfigs.get(runner);
+}
+
 function clientRunner(docker: string, env: Record<string, string>): DockerRunner {
   const bounds = { env, timeoutMs: 30_000, maxStdoutBytes: 4 * 1024 * 1024, maxStderrBytes: 65_536 };
   return Object.freeze({

@@ -90,12 +90,13 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/gitleaks/normalize.js': ['node:crypto'],
   'adapters/gitleaks/run.js': ['node:fs', 'node:path'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
-  'execution/assets.js': ['node:fs', 'node:path', 'node:url'],
+  'execution/assets.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   'execution/bootstrap.js': ['node:fs', 'node:path'],
   'execution/check-drivers.js': ['node:crypto', 'node:fs', 'node:path'],
   'execution/coordinator.js': ['node:crypto', 'node:fs', 'node:path'],
   'execution/coverage.js': ['node:crypto'],
   'execution/durability.js': ['node:fs'],
+  // Accepted-source hashing moved from retained-analysis into the shared bounded verifier.
   'execution/retained-source.js': ['node:crypto'],
   'execution/plan.js': ['node:crypto', 'node:path'],
   'execution/plans.js': ['node:crypto'],
@@ -153,6 +154,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'service/canonical.js': ['node:crypto'],
   'service/local.js': ['node:crypto', 'node:fs', 'node:path'],
   'service/owner-service.js': ['node:crypto', 'node:fs', 'node:path'],
+  // A run's scratch lease inside the held store: no-follow folder checks and a bounded post-order removal.
+  'service/scratch-lease.js': ['node:crypto', 'node:fs', 'node:path'],
   // Fatal-run diagnostics compose a private journal path; filesystem access stays in reviewed journal helpers.
   'service/run-failure.js': ['node:path'],
   // The owner's rule locks: content-addressed revisions and one pointer in private state, through policy/user-state.
@@ -215,7 +218,6 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
   // The framework inspection worker (ADR 44): sealed inputs by digest, one output file; it runs only as its own entry.
   'frameworks/controls/closure.js': ['node:crypto', 'node:fs', 'node:module', 'node:path', 'node:url', 'require:oxc-parser'],
-  'frameworks/controls/driver.js': ['node:url'],
   'frameworks/controls/worker.js': ['node:crypto', 'node:fs', 'node:url'],
   'frameworks/express/pack.js': ['@farsight/graph', 'node:crypto'],
   'frameworks/express/syntax.js': ['dynamic:oxc-parser'],

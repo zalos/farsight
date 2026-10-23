@@ -5,7 +5,7 @@ import { publicRegistry } from './scanner-profile.js';
 // verdicts) first, and a receipt is issued and spent only here, after the owner's own confirm. The background
 // service (owner-service.ts) reuses the store-level reads below; it holds the store while it runs.
 import { createHash } from 'node:crypto';
-import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ActionEffect, ActionIntent, AdmissionEnvelope } from '../contracts/index.js';
 import {
@@ -13,6 +13,7 @@ import {
   type EffectivePolicy,
 } from '../policy/index.js';
 import { issueReceipt } from '../policy/owner-receipts.js';
+import { assertTrustOutside } from '../policy/adoption.js';
 import { checkPreviewReport, PREVIEW_LIMITATIONS, PREVIEW_REPORT_SCHEMA, type PreviewReport } from '../reports/preview.js';
 import { scannerReportOf, type ScannerReport } from '../reports/scanner.js';
 import { openSnapshot } from '../snapshot/materialize.js';
@@ -30,6 +31,7 @@ import { runFailureFacts } from './run-failure.js';
 import type { AdapterRegistry } from '../execution/registry.js';
 import { assessRun, contextIntentFor, fullReport, FullReportError, readContextGraph, renderingOf, writeNewFile, type ReportFormat } from './full-report.js';
 import type { DisclosureProfile } from '../reports/index.js';
+import { openScratchLease, releaseScratchLease, type ScratchLease, type ScratchRelease } from './scratch-lease.js';
 import { canonicalResult, currentPlan, executeRun, notExecutableHere, rerunRun, planWorkspaceCanonical, previewFindingsOf, type CanonicalDisclosure, type CurrentPlan } from './canonical.js';
 
 export interface Workspace {
@@ -57,7 +59,16 @@ export const printed = (r: AdmissionEnvelope): PrintedVerdicts => Object.freeze(
   credential: Object.freeze({ allowed: r.verdicts.credential.allowed, asked: r.verdicts.credential.asked, reasonCode: r.verdicts.credential.reasonCode }),
 });
 
+/**
+ * Refuses, creating nothing, a layout whose owner trust state would sit in the workspace it captures: the trust
+ * folder is, contains or lies inside the checkout. Called before anything writes trust state or starts a service.
+ */
+export function checkWorkspaceLayout(ws: Workspace): void {
+  assertTrustOutside(ws.trustDir, ws.path);
+}
+
 function trustFolder(ws: Workspace): string {
+  checkWorkspaceLayout(ws);
   mkdirSync(ws.trustDir, { recursive: true, mode: 0o700 });
   return ws.trustDir;
 }
@@ -147,24 +158,25 @@ export function adoptWorkspaceSettings(ws: Workspace, options: { confirm: boolea
 
 // ---- plan ----
 
-export function scratchUnder(ws: Workspace): string {
-  const root = join(ws.path, '.farsight', 'sentinel', 'scratch');
-  mkdirSync(root, { recursive: true, mode: 0o700 });
-  return mkdtempSync(join(root, 'w-'));
+/**
+ * Runs `body` with a fresh scratch lease inside the exact store this process holds (scratch-lease.ts), then releases
+ * it. A lease whose consumers are not all proven stopped is retained, and a result says so; the body's own error is
+ * never replaced by its release.
+ */
+export async function withScratch<T extends CommandResult>(store: SentinelStore, body: (lease: ScratchLease) => Promise<T>): Promise<T> {
+  const lease = openScratchLease(store);
+  let out: T;
+  try { out = await body(lease); } catch (error) {
+    try { releaseScratchLease(store, lease); } catch { /* the original failure is the one reported */ }
+    throw error;
+  }
+  const released = releaseScratchLease(store, lease);
+  return released.removed ? out : { ...out, facts: { ...out.facts, scratchRetained: retainedFact(released) } };
 }
 
-export function removeScratch(dir: string): void {
-  const open = (p: string) => {
-    try { chmodSync(p, 0o700); } catch { return; }
-    for (const name of readdirSync(p)) {
-      const c = join(p, name);
-      const st = lstatSync(c);
-      if (st.isDirectory()) open(c); else if (st.isFile()) chmodSync(c, 0o600);
-    }
-  };
-  open(dir);
-  rmSync(dir, { recursive: true, force: true });
-}
+/** The fact a retained lease leaves in a result: which lease, why, and whether some of it was already removed. */
+export const retainedFact = (r: Extract<ScratchRelease, { removed: false }>) =>
+  Object.freeze({ lease: r.lease, reasonCode: `sentinel.service.scratch.${r.reason}`, partial: r.partial });
 
 async function withStore<T>(ws: Workspace, body: (store: SentinelStore) => Promise<T>): Promise<T> {
   const store = await openStore(ws.storePath);
@@ -184,22 +196,19 @@ export async function planWorkspace(ws: Workspace, options: { confirm: boolean; 
   const { policy } = adopted;
   const decided = decide(ws, policy, intentOf('capture.source', sha(Buffer.from(ws.path)), ['local-artifacts']), policy.revision, options.confirm, options.now);
   if (!decided.admitted) return decided.result;
-  return withStore(ws, async store => {
-    const work = scratchUnder(ws);
+  return withStore(ws, store => withScratch(store, async lease => {
+    let planned;
     try {
-      let planned;
-      try {
-        planned = await planWorkspaceCanonical(store, { workspace: ws.path, trustDir: trustFolder(ws), policy, scratchRoot: work, now: options.now,
-          ...(options.parentId ? { parentId: options.parentId } : {}) });
-      } catch (e) {
-        if (e instanceof ServiceError && (e.code === 'sentinel.service.bootstrapFailed' || e.code === 'sentinel.service.ruleUnsupported')) {
-          return result('plan', 'configuration-failure', { verdicts: printed(decided.record), reasonCode: e.code, facts: { ...e.facts } });
-        }
-        throw e;
+      planned = await planWorkspaceCanonical(store, { workspace: ws.path, trustDir: trustFolder(ws), policy, scratchRoot: lease.path, wrapRunner: lease.wrapRunner, now: options.now,
+        ...(options.parentId ? { parentId: options.parentId } : {}) });
+    } catch (e) {
+      if (e instanceof ServiceError && (e.code === 'sentinel.service.bootstrapFailed' || e.code === 'sentinel.service.ruleUnsupported')) {
+        return result('plan', 'configuration-failure', { verdicts: printed(decided.record), reasonCode: e.code, facts: { ...e.facts } });
       }
-      return { ...result('plan', planned.outcome, { verdicts: printed(decided.record), facts: { ...planned.disclosure } }), disclosure: planned.disclosure };
-    } finally { removeScratch(work); }
-  });
+      throw e;
+    }
+    return { ...result('plan', planned.outcome, { verdicts: printed(decided.record), facts: { ...planned.disclosure } }), disclosure: planned.disclosure };
+  }));
 }
 
 /**
@@ -228,12 +237,11 @@ export async function followWorkspaceRun(ws: Workspace, options: { mode: 'retry'
         if (!stages.length) return result('retry', 'refused', { verdicts, reasonCode: 'sentinel.service.nothingToRetry', facts: { runId: options.runId } });
       }
     }
-    const work = scratchUnder(ws);
-    try {
-      const followed = await rerunRun(store, options.runId, stages, { workspace: ws.path, trustDir: trustFolder(ws), policy, scratchRoot: work, now: options.now });
+    return withScratch(store, async lease => {
+      const followed = await rerunRun(store, options.runId, stages, { workspace: ws.path, trustDir: trustFolder(ws), policy, scratchRoot: lease.path, wrapRunner: lease.wrapRunner, now: options.now });
       if ('reasonCode' in followed) return result(options.mode, 'configuration-failure', { verdicts, reasonCode: followed.reasonCode, facts: { runId: options.runId, ...(followed.facts ?? {}) } });
       return result(options.mode, followed.outcome, { verdicts, facts: { ...followed.disclosure, parentId: options.runId, preview: followed.preview } });
-    } finally { removeScratch(work); }
+    });
   });
 }
 
@@ -265,8 +273,10 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
       // A plan this installation cannot execute (another build's adapters, a rule no shipped adapter implements):
       // refused before anything starts; canonicalResult says why.
       if (await notExecutableHere(store, plan.runId, publicRegistry(ws.trustDir))) return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts, registry:publicRegistry(ws.trustDir), trustDir:ws.trustDir });
-      const work = scratchUnder(ws);
-      try { await executeRun(store, plan.runId, { scratchRoot: work, trustDir: ws.trustDir }); } finally { removeScratch(work); }
+      return withScratch(store, async lease => {
+        await executeRun(store, plan.runId, { scratchRoot: lease.path, wrapRunner: lease.wrapRunner, trustDir: ws.trustDir });
+        return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts, registry:publicRegistry(ws.trustDir), trustDir:ws.trustDir });
+      });
     }
     return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts, registry:publicRegistry(ws.trustDir), trustDir:ws.trustDir });
   });

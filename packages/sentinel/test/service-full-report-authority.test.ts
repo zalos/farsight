@@ -6,7 +6,8 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync, unlinkSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore } from '../dist/store/index.js';
-import { workspaceOf, adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, scratchUnder } from '../dist/service/local.js';
+import { workspaceOf, adoptedPolicy, adoptWorkspaceSettings, promoteRulePack } from '../dist/service/local.js';
+import { scratchUnder } from './lease-helpers.ts';
 import { initWorkspace } from '../dist/cli/init.js';
 import { planWorkspaceCanonical, executeRun } from '../dist/service/canonical.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
@@ -21,6 +22,7 @@ import { createCheckDriverRegistry } from '../dist/execution/check-drivers.js';
 import { createAdapterRegistry } from '../dist/execution/registry.js';
 import { foundationProfile, OPERATIONS } from '../dist/service/trusted-profile.js';
 import { unlock } from './snapshot-helpers.ts';
+import { openSnapshot } from '../dist/snapshot/materialize.js';
 
 // Every report assertion starts with a real owner-held store, admitted canonical plan, worker and publication.
 // Faults are injected only into this test's trusted producer or its own accepted CAS files, never by fabricating
@@ -38,7 +40,7 @@ async function published(t: any, forged: boolean | 'json' | 'utf8' | 'line' | 'o
   const adopted = adoptedPolicy(ws); assert.ok('policy' in adopted);
   const store = await openStore(ws.storePath);
   t.after(() => { store.close(); unlock(dir); rmSync(dir, { recursive: true, force: true }); });
-  const work = scratchUnder(ws);
+  const work = scratchUnder(store);
   const malformed = forged === 'json' || forged === 'utf8' || forged === 'object' || forged === 'shape';
   const worker = join(dir, 'malformed-worker.mjs');
   if (malformed) writeFileSync(worker, 'globalThis.PAYLOAD = ' + JSON.stringify(forged) + '; await import(' + JSON.stringify(new URL('./fixtures/workers/report-malformed-worker.mjs', import.meta.url).href) + ');');
@@ -130,7 +132,7 @@ async function publishedPattern(t: any, mode: string) {
   t.after(() => { store.close(); unlock(dir); rmSync(dir, { recursive: true, force: true }); });
   // Identical bytes at a distinct path remain distinct check scopes, even in one batched worker.
   writeFileSync(join(path, 'src', 'other.ts'), readFileSync(join(path, 'src', 'lookup.ts')));
-  const work = scratchUnder(ws);
+  const work = scratchUnder(store);
   const prepared = await planWorkspaceCanonical(store, { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() });
   const runId = prepared.disclosure.runId;
   const registry = publicRegistry();
@@ -273,10 +275,24 @@ for (const mode of ['object', 'shape', 'duplicate'] as const) test('accepted pre
   await assert.rejects(fullReport({ ...f.request, disclosure: 'shareable' }), (e: any) => e.code === 'sentinel.report.evidenceUnbound');
 });
 
+// `.farsight/sentinel/settings.json` is ordinary captured source now. The preview rule applies to TypeScript,
+// JavaScript and Java source files only, so no check is planned over the settings file: a genuine selection gap,
+// not an accounting error. The report says so; nothing marks those bytes covered.
+async function settingsOnlyUnchecked(f: any, doc: any) {
+  assert.equal(doc.completeness, 'partial');
+  assert.equal(doc.counts.unknownScopeBoundaries.n, 0);
+  const admitted = await loadPlan(f.store, f.runId, 2);
+  const snapshot = (await openSnapshot(f.store, admitted.plan.pins.snapshotId!)).snapshot;
+  const included = snapshot.entries.filter((e: any) => e.kind === 'file' && e.disposition === 'included').map((e: any) => e.relativePath);
+  const planned = new Set(admitted.plan.units.flatMap((u: any) => u.inputs.map((i: any) => i.relativePath)));
+  assert.deepEqual(included.filter((p: string) => !planned.has(p)), ['.farsight/sentinel/settings.json']);
+  assert.equal(doc.counts.seenByNoStage.n, 1);
+}
+
 test('accepted preview retains genuine findings beside unrelated auxiliary JSON', async t => {
   const f = await published(t, 'auxiliary');
   const report = await fullReport({ ...f.request, disclosure: 'shareable' });
-  assert.equal(report.document.completeness, 'complete');
+  await settingsOnlyUnchecked(f, report.document);
   assert.equal(report.document.findings.length, 1);
   assert.equal(report.document.gaps.length, 0);
 });
@@ -284,7 +300,7 @@ test('accepted preview retains genuine findings beside unrelated auxiliary JSON'
 test('accepted preview retains an honest empty findings document', async t => {
   const f = await published(t, false, true);
   const report = await fullReport({ ...f.request, disclosure: 'shareable' });
-  assert.equal(report.document.completeness, 'complete');
+  await settingsOnlyUnchecked(f, report.document);
   assert.equal(report.document.findings.length, 0);
   assert.equal(report.document.gaps.length, 0);
 });

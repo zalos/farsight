@@ -13,9 +13,10 @@
 // One run executes at a time. A second start for the plan being run joins it (one run, never two); a start for a run
 // that already finished prints its result again without executing anything. A run interrupted by the service
 // stopping, however it stopped, is recovered by the coordinator when it is resumed.
-import { mkdirSync, unlinkSync } from 'node:fs';
+import { unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
+import { openScratchLease, releaseScratchLease, type ScratchLease } from './scratch-lease.js';
 import { Coordinator } from '../execution/coordinator.js';
 import type { AdapterRegistry } from '../execution/registry.js';
 import type { RunEnvelope } from '../contracts/run.js';
@@ -29,8 +30,8 @@ import {
   type RuntimeAddress, type ServiceClient,
 } from '../transport/ipc.js';
 import {
-  adoptedPolicy, isFinalRunState, runWriteBinding, printed, receiptBook, removeScratch, reportIn,
-  runStateIn, scratchUnder, statusIn, type Workspace,
+  adoptedPolicy, isFinalRunState, runWriteBinding, printed, receiptBook, reportIn, retainedFact,
+  runStateIn, statusIn, checkWorkspaceLayout, type Workspace,
 } from './local.js';
 import { assertSupportedRules, canonicalResult, currentPlan, rerunEnvelopeOf } from './canonical.js';
 import { loadPlan } from '../execution/plans.js';
@@ -113,6 +114,8 @@ export class OwnerService {
   readonly #active = new Map<string, ActiveRun>();
   /** The last error each run met in this service, kept after its task ended (until a later launch succeeds). */
   readonly #lastError = new Map<string, string>();
+  /** Runs whose scratch lease was retained because a consumer was not proven stopped (scratch-lease.ts). */
+  readonly #scratchRetained = new Map<string, ReturnType<typeof retainedFact>>();
   #idleSince = Date.now();
   #stopping = false;
 
@@ -137,7 +140,8 @@ export class OwnerService {
     switch (op) {
       case 'service.info': {
         fields(body, []);
-        return { storeId: this.#store.storeId, epoch: this.#store.epoch, pid: process.pid, active: [...this.#active.keys()] };
+        return { storeId: this.#store.storeId, epoch: this.#store.epoch, pid: process.pid, active: [...this.#active.keys()],
+          ...(this.#scratchRetained.size ? { scratchRetained: Object.fromEntries(this.#scratchRetained) } : {}) };
       }
       case 'run.start': {
         const f = fields(body, ['planId'], ['receiptId']);
@@ -243,17 +247,17 @@ export class OwnerService {
     const run: ActiveRun = { planId, ...flags, task: Promise.resolve(), opened: new Promise(r => { settle = r; }) };
     this.#active.set(planId, run);
     run.task = (async () => {
-      let work: string | undefined;
+      let lease: ScratchLease | undefined;
       try {
-        work = scratchUnder(this.#ws);
-        const scratch = join(work, 'attempts');
-        mkdirSync(scratch, { mode: 0o700 });
+        lease = openScratchLease(this.#store);
+        const scratch = lease.path;
         // The coordinator executes the run's current admitted revision, under this service's trusted registry.
         const first = this.#store.ledger.getRun(planId) ? undefined : (this.#runEnvelope(planId) ?? await rerunEnvelopeOf(this.#store, planId));
         const admitted = await currentPlan(this.#store, planId);
         if (admitted) assertSupportedRules((await loadPlan(this.#store, planId, admitted.revision)).plan);
-        const assets = this.#drivers ? { drivers: this.#drivers } : await scannerExecution(this.#store, planId, this.#ws.trustDir, scratch, this.#registry);
-        const coordinator = await Coordinator.open({ ...assets, store: this.#store, runId: planId, scratchRoot: scratch, registry: this.#registry, ...(first ? { run: first } : {}) });
+        const assets = this.#drivers ? { drivers: this.#drivers } : await scannerExecution(this.#store, planId, this.#ws.trustDir, scratch, this.#registry, lease.wrapRunner);
+        const coordinator = await Coordinator.open({ ...assets, store: this.#store, runId: planId, scratchRoot: scratch, registry: this.#registry,
+          backendOptions: { wrapRunner: lease.wrapRunner }, ...(first ? { run: first } : {}) });
         run.coordinator = coordinator;
         settle(undefined);
         if (run.cancel) coordinator.cancel();
@@ -270,7 +274,11 @@ export class OwnerService {
         // Before the coordinator opened, nothing was accepted: the start (and any joiner) is refused with this.
         settle(failureOf(e));
       } finally {
-        try { if (work) removeScratch(work); } catch { /* left for an explicit cleanup */ }
+        // Removed only when every consumer is proven stopped; otherwise retained, and the service says so.
+        try {
+          const released = lease ? releaseScratchLease(this.#store, lease) : { removed: true as const };
+          if (released.removed) this.#scratchRetained.delete(planId); else this.#scratchRetained.set(planId, retainedFact(released));
+        } catch { /* left in place for recovery; nothing outside the lease is touched */ }
         this.#active.delete(planId);
         if (run.error) this.#lastError.set(planId, run.error); else this.#lastError.delete(planId);
         if (this.#active.size === 0) this.#idleSince = Date.now();
@@ -408,6 +416,8 @@ export interface ServeOptions {
 
 /** Runs the service for one workspace until it is stopped or idle. Resolves after the store is released. */
 export async function serveWorkspace(ws: Workspace, options: ServeOptions): Promise<void> {
+  // Before the store, the framework entry or the socket: trust state and the runtime folder stay out of the source.
+  checkWorkspaceLayout(ws);
   let store: SentinelStore;
   try { store = await openStore(ws.storePath); } catch (e) {
     if ((e as { code?: unknown }).code === 'sentinel.store.ownedElsewhere') throw new ServiceError('sentinel.service.alreadyServing');
@@ -418,7 +428,7 @@ export async function serveWorkspace(ws: Workspace, options: ServeOptions): Prom
   let inflight = 0;
   let lastRequest = Date.now();
   try {
-    const address = runtimeAddress({ storePath: store.storePath, ownerNonce });
+    const address = runtimeAddress({ storePath: store.storePath, ownerNonce, sources: [ws.path] });
     const socket = await listenOwnerSocket(address, { storeId: store.storeId, ownerNonce }, async (op, body, by) => {
       inflight++;
       try { return await service.handle(op, body, by); } finally { inflight--; lastRequest = Date.now(); }

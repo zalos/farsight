@@ -97,6 +97,7 @@ const awaitStart = async () => { const w = await next(); if (w.type !== 'welcome
 if (behavior === 'linger-ok') { setTimeout(() => {}, 30_000); process.stdout.on('error', () => {}); }
 
 switch (behavior) {
+  case 'exit71-before-hello': process.exit(71);
   case 'no-hello': await sleep(60_000); break;
   case 'message-before-hello': raw('{"protocol":"sentinel-worker/draft-1","type":"progress"}\n'); await sleep(60_000); break;
   case 'old-version': send({ protocol: P, type: 'hello', supported: ['sentinel-worker/draft-9'], adapterId: process.env.SENTINEL_ADAPTER_ID, adapterDigest: process.env.SENTINEL_ADAPTER_DIGEST }); await sleep(60_000); break;

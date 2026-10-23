@@ -14,12 +14,14 @@
 // an explicit prune. Nothing here opens the ledger database or the owner lock; it uses the facade only.
 import { createHash } from 'node:crypto';
 import { lstatSync, realpathSync } from 'node:fs';
-import { isAbsolute, relative, sep } from 'node:path';
+import { isAbsolute, sep } from 'node:path';
 import type { ArtifactId, CaptureEntry, Id, SnapshotEnvelope, SnapshotSource } from '../contracts/index.js';
 import { MAX_ENVELOPE_BYTES } from '../contracts/index.js';
 import { MAX_ARTIFACT_BYTES } from '../store/store-types.js';
 import type { SentinelStore, SnapshotRecord, StoredObject } from '../store/index.js';
 import { canonicalJsonBytes } from '../store/objects.js';
+import { heldStoreRoot, type HeldStoreRoot } from '../store/owner-binding.js';
+import { hasIdentity } from '../store/paths.js';
 import { validateEnvelope } from '../validate.js';
 import { enumerateCommit, trackedBlobs, type SubmoduleRequest } from './committed.js';
 import { SnapshotError } from './errors.js';
@@ -127,13 +129,18 @@ function checkRequest(request: CaptureRequest): CapturePolicy {
   try { return resolvePolicy(request.policy); } catch (e) { return bad((e as Error).message); }
 }
 
-/** The store folder relative to `root` when it lies inside it. */
-function storeInside(root: string, storePath: string): string | undefined {
-  let store: string;
-  try { store = realpathSync.native(storePath); } catch { return undefined; }
-  if (store === root) throw new SnapshotError('sentinel.capture.invalidRequest', 'a source root cannot be the store itself');
-  if (!store.startsWith(root + sep)) return undefined;
-  return relative(root, store).split(sep).join('/');
+/**
+ * The held store as this source's walk sees it. A working copy excludes the store only at its exact canonical folder
+ * with the identity it was acquired with; a source that is the store, lies inside it, or reaches it under another
+ * name is refused. A look-alike store (anything openStore() did not return) has no held root and exempts nothing.
+ */
+function storeBoundary(root: string, held: HeldStoreRoot | undefined): HeldStoreRoot | undefined {
+  if (!held) return undefined;
+  if (root === held.path || root.startsWith(held.path + sep)) {
+    throw new SnapshotError('sentinel.capture.invalidRequest', 'a source root cannot be the store or lie inside it');
+  }
+  if (hasIdentity(root, held.identity)) throw new SnapshotError('sentinel.capture.storeAliased', 'the source root is the store under another name');
+  return held;
 }
 
 /** The Git directories a source explicitly permits outside its root, as the reader's options. */
@@ -171,12 +178,14 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
   const inv = new Inventory(policy);
   const sources: SnapshotSource[] = [];
   const repos: GitRepository[] = [];
+  // Resolved, and the hold checked, once per enumeration; the walk checks it again at the store's folder.
+  const held = heldStoreRoot(store);
   try {
     for (const s of request.sources) {
       const root = canonical(s.root, s.sourceId);
       const st = lstatSync(root);
       if (!st.isDirectory()) throw new SnapshotError('sentinel.capture.rootUnreadable', s.sourceId);
-      const storeRel = storeInside(root, store.storePath);
+      const storeHeld = storeBoundary(root, held);
       if (request.mode === 'committed-tree') {
         const repo = openRepo(root, gitGrants(s), budget);
         repos.push(repo);
@@ -184,7 +193,7 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
         let found;
         try {
           commit = repo.resolveCommit(s.revision ?? 'HEAD');
-          found = enumerateCommit(inv, { sourceId: s.sourceId, repo, commit, lfsObjects: s.lfsObjects, submodules: s.submodules ?? [], storeRel });
+          found = enumerateCommit(inv, { sourceId: s.sourceId, repo, commit, lfsObjects: s.lfsObjects, submodules: s.submodules ?? [] });
         } catch (e) { if (e instanceof CaptureChanged || e instanceof SnapshotError) throw e; return gitFailure(e); }
         sources.push({ sourceId: s.sourceId, repositoryId: s.repositoryId, commit, dirty: false, capturedAt: now() });
         for (const sub of found) {
@@ -201,7 +210,7 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
           }
           try {
             enumerateCommit(inv, { sourceId: sub.request.sourceId, repo: subRepo, commit: sub.commit, lfsObjects: sub.request.lfsObjects,
-              submodules: [], storeRel: storeInside(subRoot, store.storePath) });
+              submodules: [] });
           } catch (e) { if (e instanceof CaptureChanged || e instanceof SnapshotError) throw e; return gitFailure(e); }
           sources.push({ sourceId: sub.request.sourceId, repositoryId: sub.request.repositoryId, commit: sub.commit, dirty: false, capturedAt: now() });
         }
@@ -214,7 +223,7 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
         let commit: string | null = null;
         if (repo) { try { commit = repo.resolveCommit('HEAD'); } catch { commit = null; } }
         const start = inv.entries.length;
-        enumerateWorktree(inv, { sourceId: s.sourceId, root, storeRel, lfsObjects: s.lfsObjects });
+        enumerateWorktree(inv, { sourceId: s.sourceId, root, store: storeHeld, lfsObjects: s.lfsObjects });
         const dirty = commit === null || repo === undefined ? true : differsFromCommit(repo, commit, s.sourceId, inv.entries.slice(start), inv);
         sources.push({ sourceId: s.sourceId, repositoryId: s.repositoryId, commit, dirty, capturedAt: now() });
       }
@@ -367,6 +376,7 @@ async function captureEnumerated(store: CaptureStore, request: CaptureRequest, p
     }
     // 5. A working copy must hold still across the whole capture.
     if (request.mode === 'working-copy') {
+      store.assertHeld();
       const second = enumerate(request, policy, store, now, budget);
       keep(second);
       if (fingerprint(first) !== fingerprint(second)) throw new CaptureChanged('the working copy changed during capture');

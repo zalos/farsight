@@ -19,6 +19,10 @@ import { Coordinator, type RunSummary } from '../execution/coordinator.js';
 import { admitPlan, loadPlan } from '../execution/plans.js';
 import { loadBootstrap } from '../execution/bootstrap.js';
 import type { AdapterRegistry } from '../execution/registry.js';
+import type { DockerRunner } from '../execution/isolation.js';
+
+/** A scratch lease's container client wrapper (scratch-lease.ts), so the lease knows when its clients exited. */
+export type WrapRunner = (runner: DockerRunner) => DockerRunner;
 import { checkProfileRegistry } from '../execution/profile.js';
 import { planAnalysis, planBootstrap, plannerAnalysisFrom, plannerLockFrom, plannerPolicyFrom, plannerSnapshotFrom } from '../planner/index.js';
 import type { EffectivePolicy } from '../policy/index.js';
@@ -109,12 +113,14 @@ export async function currentPlan(store: SentinelStore, runId: string): Promise<
   return Object.freeze({ runId, revision, planDigest: admitted.plan.digest, policyRevision: admitted.plan.pins.policyDigest ?? '', kind: admitted.plan.kind, effects });
 }
 
+const backendOf = (wrapRunner: WrapRunner | undefined) => (wrapRunner ? { backendOptions: { wrapRunner } } : {});
+
 /**
  * Plans the workspace canonically (see the file header). Planning the same content under the same lock, policy and
  * profile again is the same run: its admitted analysis is disclosed again (`kept`), nothing is captured twice.
  */
 export async function planWorkspaceCanonical(store: SentinelStore, options: {
-  workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; registry?: AdapterRegistry; parentId?: string | null; now: Date;
+  workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; wrapRunner?: WrapRunner; registry?: AdapterRegistry; parentId?: string | null; now: Date;
   /** Re-plan over this admitted snapshot instead of capturing again (a retry of the run that pinned it). */
   snapshotId?: string;
   /** Test seam: the trusted profile to plan under (the shipped one by default). */
@@ -126,13 +132,14 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   const packs = book.packsOf(current.lock);
   const registry = options.registry ?? publicRegistry(options.trustDir);
   const ids = [...new Set(packs.flatMap(p => p.manifest.rules.filter(r => options.policy.rules.includes(r.familyId)).map(r => r.implementation.adapterId)))].filter(id => externalDrivers().has(id));
-  const available = options.profile ? new Set<string>() : await publicAvailability(options.trustDir, current.lock, packs, ids, options.scratchRoot);
+  const available = options.profile ? new Set<string>() : await publicAvailability(options.trustDir, current.lock, packs, ids, options.scratchRoot, options.wrapRunner);
   const profile = options.profile ?? publicProfile(registry, available, packs);
   const snapshot = options.snapshotId !== undefined
     ? (await openSnapshot(store, options.snapshotId)).snapshot
     : (await captureSnapshot(store, {
+      // No folder is left out by name: `.farsight` is ordinary source. Only the exact store this process holds is
+      // excluded (snapshot/capture.ts), and the run's scratch lives inside it (scratch-lease.ts).
       mode: 'working-copy', sources: [{ sourceId: WORKSPACE_SOURCE, repositoryId: 'local-workspace', root: options.workspace }],
-      policy: { exclude: { '*': ['.farsight'] } },
     })).snapshot;
   // The run is what it would read and do: the captured inventory (not the capture's time), the lock, the policy and
   // the profile. The same content under the same terms plans to the same run.
@@ -187,7 +194,7 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   // A run whose bootstrap already ended without publishing is finished: it is not run again. Planning the same
   // content again names it, and `rerun` plans a new run after it.
   const ended = recorded && (store.ledger.getRun(runId)?.state === 'completed' || store.ledger.getRun(runId)?.state === 'canceled');
-  const booted = ended ? undefined : await (await Coordinator.open({ store, runId, ...(recorded ? {} : { run }), registry, scratchRoot: options.scratchRoot })).run();
+  const booted = ended ? undefined : await (await Coordinator.open({ store, runId, ...(recorded ? {} : { run }), registry, scratchRoot: options.scratchRoot, ...backendOf(options.wrapRunner) })).run();
   if (!booted || booted.kind !== 'bootstrap' || booted.published < boot.units.length) throw new ServiceError('sentinel.service.bootstrapFailed', { runId });
 
   const inventory = boot.units.find(u => u.stage === 'inventory')!;
@@ -202,14 +209,14 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
 }
 
 /** Executes the run's current admitted revision. The coordinator records coverage and the outcome. */
-export async function executeRun(store: SentinelStore, runId: string, options: { scratchRoot: string; registry?: AdapterRegistry; run?: RunEnvelope; trustDir?: string; drivers?: import('../execution/check-drivers.js').CheckDriverRegistry }): Promise<RunSummary> {
+export async function executeRun(store: SentinelStore, runId: string, options: { scratchRoot: string; wrapRunner?: WrapRunner; registry?: AdapterRegistry; run?: RunEnvelope; trustDir?: string; drivers?: import('../execution/check-drivers.js').CheckDriverRegistry }): Promise<RunSummary> {
   // Again before anything runs: an admitted plan from elsewhere is held to the same exact rules.
   const plan = await currentPlan(store, runId);
   if (plan) assertSupportedRules((await loadPlan(store, runId, plan.revision)).plan);
   const registry = options.registry ?? publicRegistry(options.trustDir);
-  const assets = options.drivers ? { drivers: options.drivers } : await scannerExecution(store, runId, options.trustDir, options.scratchRoot, registry);
+  const assets = options.drivers ? { drivers: options.drivers } : await scannerExecution(store, runId, options.trustDir, options.scratchRoot, registry, options.wrapRunner);
   const run = options.run ?? await rerunEnvelopeOf(store, runId);
-  const coordinator = await Coordinator.open({ ...assets, store, runId, registry, scratchRoot: options.scratchRoot, ...(run ? { run } : {}) });
+  const coordinator = await Coordinator.open({ ...assets, store, runId, registry, scratchRoot: options.scratchRoot, ...backendOf(options.wrapRunner), ...(run ? { run } : {}) });
   try { return await coordinator.run(); } catch (error) {
     try { recordRunFailure(store, runId, error); } catch { /* preserve the original error when the store cannot retain it */ }
     throw error;
@@ -417,6 +424,7 @@ export interface RerunTerms {
   trustDir: string;
   policy: EffectivePolicy;
   scratchRoot: string;
+  wrapRunner?: WrapRunner;
   registry?: AdapterRegistry;
   /** Test seam: the trusted profile to plan under (the shipped one by default). */
   profile?: TrustedProfile;
@@ -429,7 +437,7 @@ async function currentTerms(terms: RerunTerms) {
   const packs = book.packsOf(current.lock);
   const registry = terms.registry ?? publicRegistry(terms.trustDir);
   const ids = [...new Set(packs.flatMap(p => p.manifest.rules.filter(r => terms.policy.rules.includes(r.familyId)).map(r => r.implementation.adapterId)))].filter(id => externalDrivers().has(id));
-  const available = terms.profile ? new Set<string>() : await publicAvailability(terms.trustDir, current.lock, packs, ids, terms.scratchRoot);
+  const available = terms.profile ? new Set<string>() : await publicAvailability(terms.trustDir, current.lock, packs, ids, terms.scratchRoot, terms.wrapRunner);
   const profile = terms.profile ?? publicProfile(registry, available, packs);
   return { current, packs, profile };
 }
@@ -519,7 +527,7 @@ export async function rerunEnvelopeOf(store: SentinelStore, runId: string): Prom
  * (selectedRerun), reusing the parent's published bootstrap, and is admitted with the selection that holds the rest.
  */
 export async function rerunRun(store: SentinelStore, parentId: string, selected: readonly string[], options: {
-  workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; registry?: AdapterRegistry; now: Date; profile?: TrustedProfile;
+  workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; wrapRunner?: WrapRunner; registry?: AdapterRegistry; now: Date; profile?: TrustedProfile;
 }): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure; preview: RerunPreview } | Refusal> {
   const preview = await previewRerun(store, parentId, selected);
   if ('reasonCode' in preview) return preview;
@@ -545,7 +553,7 @@ export async function rerunRun(store: SentinelStore, parentId: string, selected:
  * a new snapshot of changed source is a new `plan`.
  */
 export async function followRun(store: SentinelStore, parentId: string, mode: 'retry', options: {
-  workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; registry?: AdapterRegistry; now: Date;
+  workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; wrapRunner?: WrapRunner; registry?: AdapterRegistry; now: Date;
 }): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure } | { reasonCode: string }> {
   const parent = store.ledger.getRun(parentId);
   if (!parent) return { reasonCode: 'sentinel.service.runUnknown' };

@@ -9,7 +9,6 @@
 // fact mapping, their packages and this file. Normalization reads the worker's one output, checks it against the job
 // and the libraries' envelope contract, derives coverage with `inspect()` over the parser's route and page surfaces,
 // and publishes one inspection report and each library's control-fact envelopes. Nothing here is a finding.
-import { fileURLToPath } from 'node:url';
 import type { ScopedReason } from '../../contracts/common.js';
 import { createAdapterRegistry, type AdapterLimits, type BuiltInAdapterDefinition } from '../../execution/registry.js';
 import { retainedAuxiliary, type CheckDriver, type DriverContext, type NormalizedOutcome, type PreparedJob, type VerifiedAttempt } from '../../execution/check-drivers.js';
@@ -18,29 +17,10 @@ import { canonicalJsonBytes } from '../../store/objects.js';
 import { deepFreeze } from '../../policy/immutable.js';
 import { validateEnvelope } from '../../validate.js';
 import { DriverError, sha256 } from '../../adapters/drivers/common.js';
-import { EXPRESS_SUPPORT } from '../express/support.js';
-import { NEST_PACK } from '../nest/support.js';
-import { NEXT_SUPPORT } from '../next/support.js';
-import { SPRING_SUPPORT } from '../spring/support.js';
-import { writeClosureEntry, FRAMEWORK_CONTROLS_WORKER } from './closure.js';
+import { writeBuiltinClosureEntry } from './closure.js';
 import { CONTROL_FAMILIES, FRAMEWORKS, INSPECTED_PROPERTIES, inspect, inspectionReport, libraryPresent, type FrameworkName, type LibraryOutcome } from './facts.js';
-import { CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_MEDIA, CONTROLS_OUTPUT_SCHEMA, FRAMEWORK_CONTROLS_ADAPTER_ID, type ControlsJob } from './worker.js';
-
-/** The pack's rules at their shipped definition digests (pinned by test against `rules/framework-controls`). */
-export const CONTROLS_SUPPORTED_RULES = Object.freeze([
-  Object.freeze({ familyId: 'sentinel.controls.authentication', revision: 1, definitionDigest: 'sha256:27ab274651c063cc5ac5c84645a8663db47f24f5a438b2a67ebc0b7e45f1d7c7' }),
-  Object.freeze({ familyId: 'sentinel.controls.authorization', revision: 1, definitionDigest: 'sha256:5f13578899efd12b5d149db6d65ca7b78d3f793593c42e6ccea859d8e1e03d13' }),
-  Object.freeze({ familyId: 'sentinel.controls.input-validation', revision: 1, definitionDigest: 'sha256:4dc4ab238c0a5e5c3388058779cb9a17bc5ed0e1d293d16729ce24d8c5e0997e' }),
-]);
-export const CONTROLS_REPORT_SCHEMA = 'sentinel-driver-report/draft-1';
-export const CONTROLS_ENVELOPE_SCHEMA = 'sentinel-controls/draft-1';
-const DRIVER_MODULE = fileURLToPath(import.meta.url);
-
-/** The exact versions each library models, from the libraries themselves. */
-export const CONTROLS_MODELED_VERSIONS: Readonly<Record<FrameworkName, Readonly<Record<string, string>>>> = deepFreeze({
-  next: { ...NEXT_SUPPORT.versions }, express: { express: EXPRESS_SUPPORT.versions.express }, nest: { ...NEST_PACK.versions },
-  spring: { 'spring-boot': SPRING_SUPPORT.versions.springBoot, 'spring-security': SPRING_SUPPORT.versions.springSecurity },
-});
+import { CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_MEDIA, CONTROLS_OUTPUT_SCHEMA, FRAMEWORK_CONTROLS_ADAPTER_ID, CONTROLS_SUPPORTED_RULES, CONTROLS_REPORT_SCHEMA, CONTROLS_ENVELOPE_SCHEMA, CONTROLS_MODELED_VERSIONS, type ControlsJob } from './definitions.js';
+export { CONTROLS_SUPPORTED_RULES, CONTROLS_REPORT_SCHEMA, CONTROLS_ENVELOPE_SCHEMA, CONTROLS_MODELED_VERSIONS } from './definitions.js';
 
 const invalid = (message: string): never => { throw new DriverError('sentinel.drivers.contextInvalid', message); };
 
@@ -96,8 +76,8 @@ export interface FrameworkControlsAdapter {
  * The adapter definition and its driver. `entryDir` is an owner-private folder for the generated closure entry; the
  * definition's module is that entry, so the implementation digest covers the worker's and this driver's closure.
  */
-export function frameworkControlsAdapter(options: { readonly entryDir: string; readonly limits?: Partial<AdapterLimits>; readonly worker?: string }): FrameworkControlsAdapter {
-  const entry = writeClosureEntry(options.entryDir, options.worker ?? FRAMEWORK_CONTROLS_WORKER, [DRIVER_MODULE]);
+export function frameworkControlsAdapter(options: { readonly entryDir: string; readonly limits?: Partial<AdapterLimits> }): FrameworkControlsAdapter {
+  const entry = writeBuiltinClosureEntry(options.entryDir, FRAMEWORK_CONTROLS_ADAPTER_ID);
   const definition: BuiltInAdapterDefinition = Object.freeze({ id: FRAMEWORK_CONTROLS_ADAPTER_ID, version: '0.1.0', kind: 'built-in', isolation: 'child',
     module: entry.module, coverage: 'aggregate', ...(options.limits ? { limits: { ...options.limits } } : {}) });
   const implementationDigest = createAdapterRegistry([definition]).get(definition.id).digest;
@@ -125,6 +105,7 @@ export function frameworkControlsAdapter(options: { readonly entryDir: string; r
       }
       const jobBytes = canonicalJsonBytes(job);
       const jobId = sha256(jobBytes);
+      if (verified.outcome.invocation.record.job !== jobId || verified.binding?.derived?.job !== jobId) invalid('the invocation and prepared binding must name the exact job');
       const sealedJob = verified.sealed(jobId);
       if (!sealedJob || !Buffer.from(sealedJob).equals(jobBytes)) invalid('the recorded job is not its sealed bytes');
       if (!Object.isFrozen(verified.outcome) || verified.outcome.result !== verified.result) invalid('normalization needs the exact frozen supervisor outcome');

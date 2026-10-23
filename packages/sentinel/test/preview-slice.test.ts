@@ -9,7 +9,8 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore, qualificationFor, SQLITE_RELEASE_POLICY } from '../dist/store/index.js';
-import { adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, scratchUnder, removeScratch, workspaceOf } from '../dist/service/local.js';
+import { adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, workspaceOf } from '../dist/service/local.js';
+import { scratchUnder, removeScratch } from './lease-helpers.ts';
 import { canonicalResult, executeRun, planWorkspaceCanonical, previewFindingsOf } from '../dist/service/canonical.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
 import { initWorkspace } from '../dist/cli/init.js';
@@ -47,7 +48,7 @@ test('canonical plan → admitted analysis → coordinator → coverage records 
 
   const store = await openStore(ws.storePath);
   t.after(() => { try { store.close(); } catch { /* closed */ } });
-  const work = scratchUnder(ws);
+  const work = scratchUnder(store);
   try {
     const planned = await planWorkspaceCanonical(store, { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() });
     assert.equal(planned.outcome, 'prepared');
@@ -97,7 +98,7 @@ test('a run whose bootstrap could not publish is finished: planning again names 
   assert.ok('policy' in adopted);
   const store = await openStore(ws.storePath);
   t.after(() => { try { store.close(); } catch { /* closed */ } });
-  const work = scratchUnder(ws);
+  const work = scratchUnder(store);
   try {
     // No bootstrap operation is bound: the stages are held, never run by a generic worker, and the run ends failed.
     const unbound = foundationProfile(foundationRegistry(), { operations: false });
@@ -177,7 +178,7 @@ test('a promoted pack that names the preview detector for any other rule, or for
     const adopted = adoptedPolicy(ws);
     assert.ok('policy' in adopted);
     const store = await openStore(ws.storePath);
-    const work = scratchUnder(ws);
+    const work = scratchUnder(store);
     try {
       await assert.rejects(planWorkspaceCanonical(store, { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() }),
         (e: any) => e.code === 'sentinel.service.ruleUnsupported' && e.facts.unsupported[0].familyId === family, variant);
@@ -226,7 +227,7 @@ test('a run planned by another installation is refused at start, never submitted
 
   const store = await openStore(ws.storePath);
   t.after(() => { try { store.close(); } catch { /* closed */ } });
-  const work = scratchUnder(ws);
+  const work = scratchUnder(store);
   let runId: string;
   try {
     const planned = await planWorkspaceCanonical(store, { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() });

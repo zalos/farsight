@@ -18,7 +18,10 @@ import { createCapabilityTable, planBootstrap, planAnalysis, plannerSnapshotFrom
 import { captureSnapshot } from '../dist/snapshot/index.js';
 import { emptyLock, lockDigest, readPackDirectory, validatePack } from '../dist/rules/index.js';
 import { canonicalJsonBytes } from '../dist/store/objects.js';
-import { CONTROLS_SUPPORTED_RULES, frameworkControlsAdapter, workerClosure, FRAMEWORK_CONTROLS_WORKER } from '../dist/frameworks/controls/index.js';
+import { CONTROLS_SUPPORTED_RULES, frameworkControlsAdapter } from '../dist/frameworks/controls/index.js';
+import { workerClosure } from '../dist/frameworks/controls/closure.js';
+import { builtinWorkerFiles } from '../dist/execution/assets.js';
+const FRAMEWORK_CONTROLS_WORKER = builtinWorkerFiles('framework-controls').worker;
 import { policyView } from './planner-helpers.ts';
 import { commitRepo, needsStore, unlock } from './snapshot-helpers.ts';
 import { scratch, removeScratch, storeIn } from './execution-helpers.ts';
