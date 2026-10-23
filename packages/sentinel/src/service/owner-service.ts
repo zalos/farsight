@@ -164,7 +164,7 @@ export class OwnerService {
       case 'prepare.cancel': return this.#preparations.cancel(body, by);
       case 'prepare.resume': {
         if (context.signal?.aborted) throw new PreparationError('sentinel.preparation.canceled');
-        return this.#preparations.resume(body, by);
+        return this.#preparations.resume(body, by, context.signal);
       }
       case 'prepare.accept': {
         if (context.signal?.aborted) throw new PreparationError('sentinel.preparation.canceled');

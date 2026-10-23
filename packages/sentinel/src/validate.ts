@@ -8,7 +8,7 @@ import type {
   ReportCount, ReportEnvelope, RunEnvelope, SnapshotEnvelope, WorkEnvelope, FindingPlace, HelloMessage,
   WelcomeMessage, RefuseMessage, RulePackManifest, RuleLockEnvelope, SettingsEnvelope, RepoConfigEnvelope,
   EffectivePolicyEnvelope, AdoptionEnvelope, ReceiptEnvelope, AdmissionEnvelope, ControlFactsEnvelope, Rights, Budget,
-  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope, ServiceCapabilities, RunInspection, InspectionPage, ReportDelivery, DeliveryChunk, ControlCapabilities, ControlOutcome,
+  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope, ServiceCapabilities, RunInspection, InspectionPage, ReportDelivery, DeliveryChunk, ControlCapabilities, ControlOutcome, PreparationCapabilities, ConfigurationPreview, PreparationStatus, PreparationOutcome,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
 import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf } from './planner/identity.js';
@@ -43,6 +43,10 @@ export interface EnvelopeTypes {
   deliverychunk: DeliveryChunk;
   controlcapabilities: ControlCapabilities;
   controloutcome: ControlOutcome;
+  preparationcapabilities: PreparationCapabilities;
+  configurationpreview: ConfigurationPreview;
+  preparationstatus: PreparationStatus;
+  preparationoutcome: PreparationOutcome;
 
 }
 
@@ -714,6 +718,13 @@ const deepimport: Check<DeepImportEnvelope> = (v, out) => {
   });
 };
 
+// Exact public timestamp arithmetic keeps fractions that Date.parse truncates.
+const timestampNanos = (value: string): bigint => {
+ const whole = BigInt(Date.parse(value.slice(0,19)+'Z'))*1_000_000n;
+ const fraction = value.slice(19,-1).replace(/^\./,'');
+ return whole + BigInt(fraction.padEnd(9,'0'));
+};
+
 const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   snapshot, run, work, attempt, observation, coverage, disposition, report, protocol,
   rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan, paths, deepimport,
@@ -722,6 +733,22 @@ const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   inspectionpage: () => [],
   reportdelivery: () => [],
   deliverychunk: () => [],
+  preparationcapabilities: () => [],
+  configurationpreview: (v, out) => {
+    if (timestampNanos(v.expiresAt) <= timestampNanos(v.createdAt) || timestampNanos(v.expiresAt)-timestampNanos(v.createdAt)>30_000_000_000n) out.add(err('/expiresAt', 'preview expiry exceeds its original bound'));
+  },
+  preparationstatus: (v, out) => {
+    if (!v.found) return;
+    if (timestampNanos(v.deadlineAt)<=timestampNanos(v.acceptedAt)||timestampNanos(v.deadlineAt)-timestampNanos(v.acceptedAt)>600_000_000_000n||timestampNanos(v.runDeadlineAt)>timestampNanos(v.deadlineAt)) out.add(err('/deadlineAt', 'preparation timing must preserve the original bound'));
+    if(v.phase==='prepared'&&(!v.runId||v.preparedRevision===null||v.preparedRevision<2))out.add(err('/preparedRevision','prepared requires an actual analysis revision'));
+    for(const [i,a]of v.availability.entries())if(a.available?(a.reasonCode!==null):(a.reasonCode===null))out.add(err(`/availability/${i}`,'readiness answer and reason differ'));
+  },
+  preparationoutcome: (v, out) => {
+    const exits = {submitted:0,requested:0,kept:0,answered:0,'configuration-failure':3,'awaiting-confirmation':4,unavailable:3,refused:3};
+    if(v.status){const nested=new Bounded();INVARIANTS.preparationstatus(v.status,nested);for(const error of nested.list)out.add({...error,path:'/status'+error.path});}
+    if(v.exitCode!==exits[v.outcome])out.add(err('/exitCode','exit code differs from the canonical command outcome'));
+    if(['submitted','requested','kept'].includes(v.outcome)&&(!v.status||!v.status.found))out.add(err('/status','an accepted preparation outcome requires its actual retained status'));
+  },
   controlcapabilities: () => [],
   controloutcome: (v, out) => {
     const exits = { ...POLICY_EXIT_CODES, submitted: 0, requested: 0, unavailable: 3, prepared: 0, kept: 0, answered: 0, refused: 3 };

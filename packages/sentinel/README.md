@@ -709,3 +709,57 @@ expire on restart. A changed store cannot reuse the original MCP control negotia
 A pause received during setup of a genuinely planned run records the legal running → pausing → paused sequence
 without launching a worker or changing its original creation time/budget. If cancellation is also pending,
 cancellation wins. These lifecycle controls use the existing coordinator rather than a second MCP state machine.
+
+### Durable local preparation (draft)
+
+Preparation separates source capture and parser/inventory bootstrap from executing checks. Start the owner service
+with the existing `serve` command after adopting workspace settings and promoting the requested shipped rule pack.
+The service holds the store throughout; these commands connect to it and never start a competing local owner:
+
+```sh
+farsight-sentinel prepare preview --workspace . --json
+farsight-sentinel prepare --workspace . --confirm --json
+farsight-sentinel prepare status --workspace . --json
+# Once status says prepared, use its actual runId for a separate permission-checked start:
+farsight-sentinel run <runId> --workspace . --detach --confirm --json
+```
+
+The pure preview reports configured rule counts, fixed stages and effects. It does not capture source or claim
+that scanner assets are ready. `prepare --confirm` confirms that exact configured workspace, rule lock, policy,
+registry and limits through the real owner CLI's existing receipt book. The CLI obtains a fresh preview for that
+confirmation call; an earlier displayed preview is informative. Direct service acceptance instead requires its
+still-current preview ID and refuses changed configuration. A private discovery key is saved before
+acceptance is sent; after a lost response, use `prepare status` rather than automatically sending a new preparation.
+An explicit `--request-key` is supported for a caller that persists its own opaque key before requesting work.
+Keys identify retained requests; they grant no permission. Status returns catalog reasons and safe identities,
+not paths, source text, profile objects, raw hashes or receipt bindings. The prepared revision is historical;
+`run.inspect` through the service reports the run's actual current revision and work.
+
+After admission, readiness resolves once before capture. A missing scanner image, tool or database stays an
+explicit retained gap, including whether the requested adapter was unavailable; it is not silently disabled or
+presented as supported. Required capture, parse and inventory prerequisites and unsafe promotion provenance still
+refuse. Readiness never downloads assets, and a changed configuration invalidates the request. The initial full
+registry remains bound while the frozen planner profile excludes unavailable adapters using existing gap semantics.
+Status readiness is the retained preparation answer, not a current machine inventory.
+
+`acceptedAt`, `deadlineAt` and `runDeadlineAt` show the original absolute ceiling. The same 600-second preparation
+budget covers discovery, capture, bootstrap, inspection delay and the later check run. Starting a prepared run does
+not restart the clock; an existing run's earlier deadline can tighten it. Cooperative checkpoints check immediately
+before admission commits, not that disk COMMIT or one physical read will finish before a hard wall deadline.
+
+No startup or reconnect automatically resumes preparation. `prepare resume --confirm` explicitly admits continuation
+of an associated captured snapshot after an owner restart, under fresh current permission and the original clock.
+It does not recapture source. An interruption before durable captured association requires a fresh authorized
+request; uncertain files are retained. `prepare cancel --confirm` controls the exact preparation, separately from
+`cancel <runId>` for an analysis run. A genuine completed/canceled parent can be selected with `prepare --parent
+<runId> --confirm` to prepare a pinned linked child with fresh authority. If preparation expires after capture but
+before any real run record exists, this slice refuses safely: retrying that retained preparation under a new clock
+requires a later reviewed contract and is not supplied by inventing a parent or recapturing silently.
+
+The separate preparation capability document negotiates `configuration.preview` and `prepare.accept/status/resume/
+cancel` without changing the original read/control handshake. Five corresponding SDK tools use ordinary adopted
+agent permissions; MCP cannot pass a receipt, actor or confirmation field. Only the real owner CLI can issue an
+owner receipt. Browser configuration, trusted GUI confirmation, stage selection and selected rerun configuration
+remain separate work. The private journal retains at most 256 terminal requests and refuses further creation with
+`sentinel.preparation.retentionRequired`; it never prunes history or sweeps uncertain leftovers automatically.
+Explicit owner retention maintenance remains a release gate for this bounded draft.

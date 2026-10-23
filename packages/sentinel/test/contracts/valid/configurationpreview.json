@@ -1,0 +1,46 @@
+{
+  "schema": "sentinel-configuration-preview/draft-1",
+  "id": "prepare-preview-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "createdAt": "2026-10-23T12:00:00.000Z",
+  "expiresAt": "2026-10-23T12:00:30.000Z",
+  "mode": "workspace",
+  "effects": [
+    "local-artifacts"
+  ],
+  "stages": [
+    {
+      "stage": "capture",
+      "required": true
+    },
+    {
+      "stage": "parse",
+      "required": true
+    },
+    {
+      "stage": "inventory",
+      "required": true
+    },
+    {
+      "stage": "check",
+      "required": false
+    }
+  ],
+  "counts": {
+    "selectedRules": {
+      "n": 2,
+      "unit": "sentinel.preparation.count.selectedRules",
+      "bizUnit": "sentinel.preparation.count.selectedRules",
+      "scope": "sentinel.preparation.scope.configuration",
+      "source": "PreparationController.preview.effectivePolicy.rules"
+    },
+    "mandatoryRules": {
+      "n": 1,
+      "unit": "sentinel.preparation.count.mandatoryRules",
+      "bizUnit": "sentinel.preparation.count.mandatoryRules",
+      "scope": "sentinel.preparation.scope.configuration",
+      "source": "PreparationController.preview.adoptedSettings.mandatoryRules"
+    }
+  },
+  "capabilitiesChecked": false,
+  "sourceCaptured": false
+}

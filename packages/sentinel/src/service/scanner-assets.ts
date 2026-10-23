@@ -51,6 +51,11 @@ function recordFor(trustDir:string,entry:LockedTool|LockedDatabase):HeldAsset{
   ||r.receipt.stateDigest!==canonicalDigest({lock:r.previousLock,metadata:r.metadataDigest}))bad();
  return r;
 }
+/** Internal preparation guard: an existing promoted pin must retain its actual owner provenance. Missing
+ * provenance is not ordinary local image/database unavailability. Legacy asset callers keep their defaults. */
+export function assertPreparationAssetProvenance(trustDir:string,entries:readonly(LockedTool|LockedDatabase)[]):void{
+ for(const entry of entries){try{recordFor(trustDir,entry);}catch(error){if(error instanceof ScannerAssetError&&error.code==='sentinel.assets.missing')bad();throw error;}}
+}
 export function heldDatabases(trustDir:string,lock:RuleLockEnvelope){return lock.databases.map(entry=>{const held=recordFor(trustDir,entry);
  const path=join(folder(trustDir,'objects'),entry.snapshotDigest.slice(7));const b=readAsset(path,MAX_ARCHIVE);if(digest(b)!==entry.snapshotDigest)bad();
  return{databaseId:entry.databaseId,snapshotDigest:entry.snapshotDigest,path,record:held.metadata};});}

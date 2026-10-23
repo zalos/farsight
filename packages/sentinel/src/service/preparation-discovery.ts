@@ -3,7 +3,7 @@ import type { SentinelStore } from '../store/index.js';
 import type { ScratchLease } from './scratch-lease.js';
 import type { DockerRunner } from '../execution/isolation.js';
 import { externalDrivers } from './scanner-profile.js';
-import { installedAdapters, heldDatabases } from './scanner-assets.js';
+import { installedAdapters, heldDatabases, assertPreparationAssetProvenance, ScannerAssetError } from './scanner-assets.js';
 import { FRAMEWORK_CONTROLS_ADAPTER_ID, frameworkAvailable } from './framework-adapter.js';
 import { checkPreparationClock, PreparationError, type PreparationClock } from './preparation-clock.js';
 import { preparationTerms, preparationInputBytes, preparationResolvedBytes, checkPreparationProfile,
@@ -36,18 +36,23 @@ export async function discoverPreparationProfile(store:SentinelStore,inputs:Prep
   }else{
    const definition=externalDrivers().get(adapterId)?.definition;
    const pin=terms.current.lock.tools.find(t=>t.adapterId===adapterId);
-   if(!definition||!pin)reason='sentinel.assets.missing';
+   if(!definition||!pin)reason='sentinel.preparation.toolMissing';
    else if(pin.version!==definition.version||pin.artifactDigest!==definition.image.split('@')[1])reason='sentinel.plan.toolMismatch';
    else{
     // Before the source is captured there is no honest ecosystem-specific scope. This fixed recipe requires the
     // shipped OSV stage's complete two-ecosystem offline inputs; partial installations are recorded as a stage gap.
     const databaseIds=adapterId==='advisories-osv'?['osv:npm','osv:Maven']:adapterId==='iac-trivy'?['trivy-checks']:[];
-    if(databaseIds.some(id=>!terms.current.lock.databases.some(d=>d.databaseId===id)))reason='sentinel.assets.missing';
-    else try{
-     await installedAdapters(terms.trustDir,terms.current.lock,[adapterId],lease.path,wrapRunner,signal);clock.stillWithin();
-     if(databaseIds.length)heldDatabases(terms.trustDir,{...terms.current.lock,databases:terms.current.lock.databases.filter(d=>databaseIds.includes(d.databaseId))});
-     clock.stillWithin();
-    }catch(error){clock.stillWithin();const missing=absent(error);if(!missing)throw error;reason=missing;}
+    assertPreparationAssetProvenance(terms.trustDir,[pin,...terms.current.lock.databases.filter(d=>databaseIds.includes(d.databaseId))]);clock.stillWithin();
+    if(databaseIds.some(id=>!terms.current.lock.databases.some(d=>d.databaseId===id)))reason='sentinel.preparation.databaseMissing';
+    else{
+     try{await installedAdapters(terms.trustDir,terms.current.lock,[adapterId],lease.path,wrapRunner,signal);clock.stillWithin();}
+     catch(error){clock.stillWithin();if(error instanceof ScannerAssetError&&error.code==='sentinel.assets.missing')throw new ScannerAssetError('sentinel.assets.invalid');const missing=absent(error);if(!missing)throw error;reason=missing;}
+     if(reason===null&&databaseIds.length){
+      assertPreparationAssetProvenance(terms.trustDir,terms.current.lock.databases.filter(d=>databaseIds.includes(d.databaseId)));clock.stillWithin();
+      try{heldDatabases(terms.trustDir,{...terms.current.lock,databases:terms.current.lock.databases.filter(d=>databaseIds.includes(d.databaseId))});clock.stillWithin();}
+      catch(error){clock.stillWithin();if(error instanceof ScannerAssetError&&error.code==='sentinel.assets.missing')reason='sentinel.preparation.databaseMissing';else throw error;}
+     }
+    }
    }
   }
   if(before?.available&&reason!==null)throw new PreparationError('sentinel.preparation.unavailable');

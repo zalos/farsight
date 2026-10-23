@@ -17,6 +17,7 @@ export type * from './plan.js';
 export type * from './paths.js';
 export type * from './deepimport.js';
 export type * from './service.js';
+export type * from './preparation.js';
 
 /**
  * Every envelope: its kind, the one schema version this build reads and writes, and the generated type.
@@ -51,6 +52,10 @@ export const ENVELOPES = {
   deliverychunk: { schema: 'sentinel-delivery-chunk/draft-1', type: 'DeliveryChunk' },
   controlcapabilities: { schema: 'sentinel-control-capabilities/draft-1', type: 'ControlCapabilities' },
   controloutcome: { schema: 'sentinel-control-outcome/draft-1', type: 'ControlOutcome' },
+  preparationcapabilities: { schema: 'sentinel-preparation-capabilities/draft-1', type: 'PreparationCapabilities' },
+  configurationpreview: { schema: 'sentinel-configuration-preview/draft-1', type: 'ConfigurationPreview' },
+  preparationstatus: { schema: 'sentinel-preparation-status/draft-1', type: 'PreparationStatus' },
+  preparationoutcome: { schema: 'sentinel-preparation-outcome/draft-1', type: 'PreparationOutcome' },
 } as const;
 
 export type EnvelopeKind = keyof typeof ENVELOPES;

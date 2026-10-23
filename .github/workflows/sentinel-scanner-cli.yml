@@ -150,7 +150,7 @@ jobs:
             --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=scanner-cli.tap \
             test/drivers.test.ts test/drivers-boundary.test.ts test/drivers-canonical.test.ts test/drivers-conformance.test.ts \
             test/scanner-assets.test.ts test/scanner-admission.test.ts test/cli-scanners-e2e.test.ts test/cli-full-report-e2e.test.ts test/service-full-report-secrets.test.ts test/sol-report-review.test.ts test/sol-report-redaction-neighbors.test.ts test/report-redaction.test.ts test/sol-report-short-production.test.ts test/sol-report-exemptions.test.ts \
-            test/service-full-report-authority.test.ts test/selected-rerun-containers.test.ts test/selected-rerun-secrets.test.ts test/framework-report-secrets.test.ts test/service-readonly-native.test.ts
+            test/service-full-report-authority.test.ts test/selected-rerun-containers.test.ts test/selected-rerun-secrets.test.ts test/framework-report-secrets.test.ts test/preparation-assets-native.test.ts test/service-readonly-native.test.ts
           grep -Eq '^# tests [1-9][0-9]*$' scanner-cli.tap
           grep -qx '# skipped 0' scanner-cli.tap
           grep -qx '# fail 0' scanner-cli.tap

@@ -1,0 +1,14 @@
+{
+  "schema": "sentinel-preparation-status/draft-1",
+  "found": true,
+  "preparationId": "prep-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "phase": "prepared",
+  "acceptedAt": "2026-10-23T12:00:00.000Z",
+  "deadlineAt": "2026-10-23T12:10:00.000Z",
+  "runDeadlineAt": "2026-10-23T12:10:00.000Z",
+  "captured": true,
+  "runId": "run-cccccccccccccccccccccccccccccccc",
+  "preparedRevision": 2,
+  "checksStartedByPreparation": false,
+  "availability": []
+}

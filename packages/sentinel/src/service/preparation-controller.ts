@@ -35,7 +35,7 @@ const CODES=new Set(['sentinel.preparation.expired','sentinel.preparation.cancel
  'sentinel.preparation.unavailable','sentinel.preparation.invalid','sentinel.preparation.retentionRequired','sentinel.preparation.busy']);
 interface Preview {
  readonly id:string;readonly keyDigest:string;readonly requestDigest:string;readonly inputs:PreparationInputs;
- readonly parent:PreparationParent|null;readonly createdAt:number;readonly channel:string;
+ readonly parent:PreparationParent|null;readonly createdAt:number;readonly started:number;readonly channel:string;
  readonly binding:{intent:ActionIntent;stateDigest:string;policyRevision:string};
 }
 interface Active {
@@ -59,13 +59,14 @@ export class PreparationController {
   store.assertHeld();this.#store=store;this.#ws=ws;this.#registry=registry;this.#runBusy=runBusy;this.#finished=finished;this.#journal=new PreparationJournal(store);
  }
  get busy():boolean{return this.#active!==undefined;}
- capabilities(){return Object.freeze({schema:'sentinel-preparation-capabilities/draft-1',version:1,storeId:this.#store.storeId,epoch:this.#store.epoch,
+ capabilities(){return Object.freeze({schema:'sentinel-preparation-capabilities/draft-1',apiRevision:1,storeId:this.#store.storeId,epoch:this.#store.epoch,
   operations:['configuration.preview','prepare.accept','prepare.status','prepare.resume','prepare.cancel'],preparationMs:PREPARATION_LIMIT_MS,previewMs:PREVIEW_MS,terminalLimit:PREPARATION_TERMINAL_LIMIT,
-  source:'configured-workspace',prerequisites:['capture','parse','inventory'],checksStartSeparately:true,automaticResume:false});}
+  source:'configured-workspace',prerequisites:['capture','parse','inventory'],checksStartSeparately:true,automaticResume:false,limitationKey:'sentinel.preparation.limits'});}
  preview(body:unknown,by:RequestedBy):unknown {
   if(this.#stopping)return invalid();const f=fields(body,['requestKey'],['parentId']),keyDigest=requestKey(f.requestKey);
-  const inputs=resolvePreparationInputs(this.#store,{workspace:this.#ws.path,trustDir:this.#ws.trustDir,registry:this.#registry});
-  const terms=preparationTerms(this.#store,inputs,()=>{});let parent:PreparationParent|null=null;
+  const createdAt=Date.now(),started=performance.now(),stillWithin=()=>{this.#store.assertHeld();if(Date.now()<createdAt||Date.now()>=createdAt+PREVIEW_MS||performance.now()-started>=PREVIEW_MS)throw new PreparationError('sentinel.preparation.changed');};
+  const inputs=resolvePreparationInputs(this.#store,{workspace:this.#ws.path,trustDir:this.#ws.trustDir,registry:this.#registry},stillWithin);
+  const terms=preparationTerms(this.#store,inputs,stillWithin);let parent:PreparationParent|null=null;
   if(f.parentId!==undefined){
    if(!ID.test(f.parentId))return invalid();const run=this.#store.ledger.getRun(f.parentId);if(!run||!['completed','canceled'].includes(run.state))throw new PreparationError('sentinel.preparation.unavailable');
    const plan=this.#store.ledger.getPlan(f.parentId,run.planRevision);if(!plan)throw new PreparationError('sentinel.preparation.unavailable');
@@ -77,17 +78,18 @@ export class PreparationController {
   const effects:ActionIntent['effects']=intended.recipe.requestedAdapters.some((id:string)=>id!==FRAMEWORK_CONTROLS_ADAPTER_ID)?['local-artifacts','tool-execution']:['local-artifacts'];
   const binding={intent:{action:'capture.source' as const,input:requestDigest,effects,budget:{maxTokens:null,maxCost:null,currency:null},
    scope:{profile:SCAN_PROFILE,provider:null,targets:[inputs.digest]}},stateDigest:requestDigest,policyRevision:terms.policy.revision};
-  const now=Date.now(),preview:Preview=Object.freeze({id:`prepare-preview-${randomBytes(16).toString('hex')}`,keyDigest,requestDigest,inputs,parent,createdAt:now,channel:by.channel,binding});
+  stillWithin();const now=createdAt,preview:Preview=Object.freeze({id:`prepare-preview-${randomBytes(16).toString('hex')}`,keyDigest,requestDigest,inputs,parent,createdAt:now,started,channel:by.channel,binding});
   // At most one immutable preview per fixed service channel; a new preview replaces only that channel's preview.
   this.#previews.set(by.channel,preview);
   return{schema:'sentinel-configuration-preview/draft-1',id:preview.id,createdAt:new Date(now).toISOString(),expiresAt:new Date(now+PREVIEW_MS).toISOString(),
    mode:parent?'retry':'workspace',effects,stages:[{stage:'capture',required:true},{stage:'parse',required:true},{stage:'inventory',required:true},{stage:'check',required:false}],
-   requestedRules:terms.policy.rules.length,mandatoryRules:terms.policy.settings.mandatoryRules.length,capabilitiesChecked:false,sourceCaptured:false,
+   counts:{selectedRules:{n:terms.policy.rules.length,unit:'sentinel.preparation.count.selectedRules',bizUnit:'sentinel.preparation.count.selectedRules',scope:'sentinel.preparation.scope.configuration',source:'PreparationController.preview.effectivePolicy.rules'},
+    mandatoryRules:{n:new Set(terms.policy.settings.mandatoryRules).size,unit:'sentinel.preparation.count.mandatoryRules',bizUnit:'sentinel.preparation.count.mandatoryRules',scope:'sentinel.preparation.scope.configuration',source:'PreparationController.preview.adoptedSettings.mandatoryRules'}},capabilitiesChecked:false,sourceCaptured:false,
    ...(by.channel==='local-service'?{confirmation:binding}:{})};
  }
  status(body:unknown,by:RequestedBy):CommandResult {
   const f=fields(body,['requestKey']),record=this.#journal.read(requestKey(f.requestKey));
-  const facts=record?this.#projection(record):{found:false};
+  const facts=record?this.#projection(record):{schema:'sentinel-preparation-status/draft-1',found:false};
   if(record&&by.channel==='local-service'){
    try{(facts as Record<string,unknown>).confirmation={cancel:this.#control(record,'run.cancel',by).binding,
     ...(record.checkpoint!=='none'&&this.#projection(record).phase==='interrupted'?{resume:this.#control(record,'capture.source',by).binding}:{})};}catch{/* status remains readable when current policy cannot confirm a control */}
@@ -100,8 +102,8 @@ export class PreparationController {
   let availability:unknown[]=[];if(record.resolvedDigest){const data=JSON.parse(this.#journal.readBundle(record,'resolved').toString('utf8'));
    if(!Array.isArray(data.availability)||data.availability.length>32)return invalid();availability=data.availability.map((a:any)=>({adapterId:a.adapterId,available:a.available,reasonCode:a.reasonCode}));}
   const recordedRun=record.runId===null?null:this.#store.ledger.getRun(record.runId);
-  return{found:true,availability,preparationId:record.prepId,phase,acceptedAt:record.acceptedAt,deadlineAt:record.deadlineAt,runDeadlineAt:record.runDeadlineAt,
-   captured:record.checkpoint!=='none',runId:recordedRun?record.runId:null,revision:record.planRevision,checksStartedByPreparation:false,
+  return{schema:'sentinel-preparation-status/draft-1',found:true,availability,preparationId:record.prepId,phase,acceptedAt:record.acceptedAt,deadlineAt:record.deadlineAt,runDeadlineAt:record.runDeadlineAt,
+   captured:record.checkpoint!=='none',runId:recordedRun?record.runId:null,preparedRevision:record.planRevision,checksStartedByPreparation:false,
    ...(record.errorCode&&CODES.has(record.errorCode)?{reasonCode:record.errorCode}:{}),
    ...(phase==='interrupted'?{resumeAvailable:record.checkpoint!=='none'&&Date.now()<Date.parse(record.runDeadlineAt),freshRequestRequired:record.checkpoint==='none'}:{})};
  }
@@ -109,8 +111,8 @@ export class PreparationController {
   const old=active.record,next={...old,...patch,ownerEpoch:this.#store.epoch,updatedAt:new Date().toISOString(),recordRevision:old.recordRevision+1};
   active.record=this.#journal.update(next,old.recordRevision);return active.record;
  }
- #request(preview:Preview,by:RequestedBy,receiptId:string|undefined):AdmissionRequest {
-  const terms=preparationTerms(this.#store,preview.inputs,()=>{});
+ #request(preview:Preview,by:RequestedBy,receiptId:string|undefined,stillWithin:()=>void):AdmissionRequest {
+  const terms=preparationTerms(this.#store,preview.inputs,stillWithin);
   return{intent:preview.binding.intent,stateDigest:preview.binding.stateDigest,policy:terms.policy,requestedBy:receiptId?OWNER:by,now:new Date(),
    capability:()=>({available:true,detail:'fixed local preparation recipe; optional scanner readiness is resolved after admission'}),
    credential:()=>({basis:'local-only',detail:'no provider or acquisition is used'})};
@@ -126,16 +128,18 @@ export class PreparationController {
   }
   if(!cached||cached.id!==f.previewId||cached.keyDigest!==keyDigest||Date.now()>=cached.createdAt+PREVIEW_MS)throw new PreparationError('sentinel.preparation.changed');
   if(this.busy||this.#runBusy())throw new PreparationError('sentinel.preparation.busy');
-  assertPreparationInputs(this.#store,cached.inputs,()=>{});
+  const previewWithin=()=>{this.#store.assertHeld();if(Date.now()<cached.createdAt||Date.now()>=cached.createdAt+PREVIEW_MS||performance.now()-cached.started>=PREVIEW_MS)throw new PreparationError('sentinel.preparation.changed');};
+  assertPreparationInputs(this.#store,cached.inputs,previewWithin);
   if(cached.parent){const actual=this.#store.ledger.getRun(cached.parent.runId),plan=this.#store.ledger.getPlan(cached.parent.runId,cached.parent.revision);
    if(!actual||!['completed','canceled'].includes(actual.state)||actual.planRevision!==cached.parent.revision||actual.envelope.snapshotId!==cached.parent.snapshotId||plan?.digest!==cached.parent.planDigest)throw new PreparationError('sentinel.preparation.changed');}
-  const request=this.#request(cached,by,f.receiptId),preflight=admit(request);
+  const request=this.#request(cached,by,f.receiptId,previewWithin),preflight=admit(request);
   if(preflight.record.outcome==='denied')return result('prepare','configuration-failure',{verdicts:printed(preflight.record),reasonCode:preflight.record.verdicts.policy.allowed?preflight.record.verdicts.capability.reasonCode:preflight.record.verdicts.policy.reasonCode});
   if(preflight.record.outcome==='awaiting-confirmation'&&!f.receiptId)return result('prepare','awaiting-confirmation',{verdicts:printed(preflight.record)});
   const book=new ReceiptBook(join(this.#ws.trustDir,'receipts'));
   if(f.receiptId)book.check(f.receiptId,cached.binding,request.now);
   const all=this.#journal.list();if(all.filter(terminalPreparation).length>=PREPARATION_TERMINAL_LIMIT)throw new PreparationError('sentinel.preparation.retentionRequired');
   if(all.some(r=>!terminalPreparation(r)))throw new PreparationError('sentinel.preparation.busy');
+  previewWithin();
   const acceptedAt=new Date().toISOString(),deadlineAt=new Date(Date.parse(acceptedAt)+PREPARATION_LIMIT_MS).toISOString(),abort=new AbortController();
   const clock=preparationClock(this.#store,{acceptedAt,deadlineAt},abort.signal);let decision:AdmissionResult=preflight;
   const given:PreparationRecord={schema:'sentinel-preparation/1',prepId:`prep-${randomBytes(16).toString('hex')}`,requestKeyDigest:keyDigest,requestDigest:cached.requestDigest,
@@ -186,12 +190,15 @@ export class PreparationController {
   else{if(record.ownerEpoch===this.#store.epoch)throw new PreparationError('sentinel.preparation.busy');this.#write(record,{phase:'interrupted',errorCode:'sentinel.preparation.canceled'});}
   return result('prepare','requested',{verdicts:printed(decision.record),facts:this.#projection(this.#journal.read(record.requestKeyDigest)!)});
  }
- async resume(body:unknown,by:RequestedBy):Promise<CommandResult>{
+ async resume(body:unknown,by:RequestedBy,signal?:AbortSignal):Promise<CommandResult>{
   if(this.#stopping)return invalid();const f=fields(body,['requestKey'],['receiptId']);let record=this.#journal.read(requestKey(f.requestKey));if(!record||record.checkpoint==='none')throw new PreparationError('sentinel.preparation.unavailable');
   if(this.#active?.record.prepId===record.prepId)return result('prepare','kept',{facts:{...this.#projection(record),joined:true}});
   if(this.busy||this.#runBusy())throw new PreparationError('sentinel.preparation.busy');
   if(record.phase!=='interrupted'&&(terminalPreparation(record)||record.ownerEpoch===this.#store.epoch))throw new PreparationError('sentinel.preparation.unavailable');
-  const abort=new AbortController(),clock=preparationClock(this.#store,record,abort.signal);
+  const abort=new AbortController(),cancel=()=>abort.abort(new PreparationError('sentinel.preparation.canceled'));
+  if(signal?.aborted)cancel();signal?.addEventListener('abort',cancel,{once:true});
+  try{
+  const clock=preparationClock(this.#store,record,abort.signal);
   const inputs=restorePreparationInputs(this.#store,{workspace:this.#ws.path,trustDir:this.#ws.trustDir,registry:this.#registry},this.#journal.readBundle(record,'config'),this.#journal.readBundle(record,'resolved'),clock);
   const parent=record.parentId===null?null:{runId:record.parentId,revision:record.parentRevision!,planDigest:record.parentPlanDigest!,snapshotId:record.parentSnapshotId!};
   // Source/run closure proof is read-only before journal mutation. A later admission alone is never current.
@@ -206,10 +213,13 @@ export class PreparationController {
    clock.stillWithin();assertPreparationInputs(this.#store,inputs,()=>clock.stillWithin());
    const decision=f.receiptId?admitRequiringReceipt({...preflight.request!,now:new Date(),receipt:{book:preflight.book!,id:f.receiptId}}):preflight.decision!;
    if(decision.record.outcome!=='admitted')throw new PreparationError('sentinel.preparation.invalid');clock.stillWithin();
-   record=this.#write(pending,{phase:'captured',resumeAdmissionDigest:canonicalDigest(decision.record),errorCode:null});
+   record=this.#write(pending,{phase:'captured',resumeAdmissionDigest:canonicalDigest(decision.record),errorCode:null});clock.stillWithin();
+   // Acceptance is durable. Later socket cancellation/ACK loss cannot cancel the accepted owner task.
+   signal?.removeEventListener('abort',cancel);
    const active:Active={record,inputs,clock,abort,task:Promise.resolve(),stopping:false};this.#active=active;active.task=this.#run(active);
    return result('prepare','submitted',{verdicts:printed(decision.record),facts:this.#projection(active.record)});
-  }catch(error){if(pending.phase==='resuming'){try{this.#write(pending,{phase:'interrupted',errorCode:failure(error)});}catch{/* retain uncertainty */}}throw error;}
+  }catch(error){try{const actual=this.#journal.read(record.requestKeyDigest);if(actual?.prepId===record.prepId&&actual.ownerEpoch===this.#store.epoch&&['resuming','captured'].includes(actual.phase))this.#write(actual,{phase:'interrupted',errorCode:failure(error)});}catch{/* retain uncertainty */}throw error;}
+  }finally{signal?.removeEventListener('abort',cancel);}
  }
  async #run(active:Active):Promise<void>{
   let lease:ScratchLease|undefined;const cancel=()=>active.coordinator?.cancel();active.abort.signal.addEventListener('abort',cancel);const timer=setTimeout(()=>active.abort.abort(new PreparationError('sentinel.preparation.expired')),Math.max(1,Date.parse(active.clock.runDeadlineAt)-Date.now()));

@@ -1002,3 +1002,13 @@ A work is one admitted unit; an attempt is one recorded attempt for those units;
 association (the same captured file used by two units counts twice); an output is one recorded attempt/output
 association, with `accepted` separately stating whether that exact attempt owns the accepted publication.
 A reference-only prerequisite adds no row or count. Pagination never recomputes these totals from current work.
+
+### Sentinel configured preparation preview counts (ADR 48)
+
+`ConfigurationPreview.counts` contains configured rule-family counts before capture or readiness discovery.
+`selectedRules` counts each effective requested/mandatory family once, from
+`PreparationController.preview.effectivePolicy.rules`; `mandatoryRules` counts distinct adopted mandatory families,
+from `PreparationController.preview.adoptedSettings.mandatoryRules`. Both use the catalog scope
+`sentinel.preparation.scope.configuration` and their matching two-register unit keys
+`sentinel.preparation.count.selectedRules` / `.mandatoryRules`. They are core `Counted` shapes and do not count
+captured files, executable checks, supported adapters or findings. No exact source-scope claim is made before capture.

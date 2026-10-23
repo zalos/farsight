@@ -30,7 +30,7 @@ test('missing requested scanner becomes an explicit retained gap, not disabled r
  const {adoptWorkspaceSettings}=await import('../dist/service/local.js');assert.equal(adoptWorkspaceSettings(f.ws,{confirm:true,now:new Date()}).outcome,'prepared');
  const clock=clockFor(f.store),initial=resolvePreparationInputs(f.store,{workspace:f.ws.path,trustDir:f.ws.trustDir,registry:f.registry}),lease=openScratchLease(f.store);t.after(()=>releaseScratchLease(f.store,lease));
  const resolved=await discoverPreparationProfile(f.store,initial,clock,lease),data=JSON.parse(preparationResolvedBytes(f.store,resolved).toString());
- assert.deepEqual(data.availability,[{adapterId:'secrets-gitleaks',available:false,reasonCode:'sentinel.assets.missing'}]);assert.equal(f.registry.ids.includes('secrets-gitleaks'),true,'execution registry remains full');
+ assert.deepEqual(data.availability,[{adapterId:'secrets-gitleaks',available:false,reasonCode:'sentinel.preparation.toolMissing'}]);assert.equal(f.registry.ids.includes('secrets-gitleaks'),true,'execution registry remains full');
  const terms=preparationTerms(f.store,resolved,()=>clock.stillWithin());assert.equal(terms.profile.planner.registry.ids.includes('secrets-gitleaks'),false);assert.deepEqual(terms.policy.rules,[...rules].sort());
  const {snapshot}=await captureWithBudget(f.store,{mode:'working-copy',sources:[{sourceId:'workspace',repositoryId:'local-workspace',root:f.ws.path}]},new GitReadBudget(),()=>clock.stillWithin());
  const identity=await resolvePreparationRun(f.store,resolved,snapshot.id,clock),result=await planPreparedWorkspaceCanonical(f.store,identity,{scratchRoot:lease.path,wrapRunner:lease.wrapRunner});
@@ -41,22 +41,15 @@ test('missing requested scanner becomes an explicit retained gap, not disabled r
  assert.throws(()=>checkPreparationProfile(f.store,resolved,new Set(['secrets-gitleaks']),clock),code('sentinel.preparation.changed'));
 });
 
-test('genuine promoted tool with actual missing-image inspect remains a retained gap; corrupt provenance refuses',{
- ...needsStore,skip:process.env.SENTINEL_ISOLATION!=='1'&&'requires the already-present pinned local Gitleaks image; never acquires it',timeout:60000,
-},async t=>{
- const f=await preparationFixture(t,'secrets'),{adoptScannerAsset}=await import('../dist/service/scanner-assets.js');
- assert.equal((await adoptScannerAsset(f.ws,{kind:'tool',id:'secrets-gitleaks',confirm:true,now:new Date()})).outcome,'prepared');
- const {ContainerBackend}=await import('../dist/execution/isolation.js'),original=ContainerBackend.prototype.inspectImage;
- const clock=clockFor(f.store),initial=resolvePreparationInputs(f.store,{workspace:f.ws.path,trustDir:f.ws.trustDir,registry:f.registry}),lease=openScratchLease(f.store);t.after(()=>releaseScratchLease(f.store,lease));
- const ready=await discoverPreparationProfile(f.store,initial,clock,lease);assert.equal(JSON.parse(preparationResolvedBytes(f.store,ready).toString()).availability[0].available,true,'real adopted local pin positive');
- // Fault only the target of the real local image query AFTER adoption. No successful capability/receipt is forged
- // and no shared image is deleted: Docker itself must report this nonexistent content pin missing, without pull.
- let queried=false;const mocked=t.mock.method(ContainerBackend.prototype,'inspectImage',async function(this:InstanceType<typeof ContainerBackend>,reference:string,signal?:AbortSignal){queried=true;return original.call(this,`${reference.slice(0,reference.indexOf('@'))}@sha256:${'0'.repeat(64)}`,signal);});
- const unavailable=await discoverPreparationProfile(f.store,initial,clock,lease);assert.equal(queried,true);
- assert.deepEqual(JSON.parse(preparationResolvedBytes(f.store,unavailable).toString()).availability,[{adapterId:'secrets-gitleaks',available:false,reasonCode:'sentinel.execution.imageMissing'}]);
- await assert.rejects(discoverPreparationProfile(f.store,ready,clock,lease),code('sentinel.preparation.unavailable'),'captured readiness cannot silently downgrade');
- mocked.mock.restore();const terms=preparationTerms(f.store,initial,()=>clock.stillWithin()),tool=terms.current.lock.tools.find(t=>t.adapterId==='secrets-gitleaks')!;
- writeFileSync(join(f.ws.trustDir,'assets','records',`${tool.promotion.receipt.slice(7)}.json`),'{}');
- await assert.rejects(discoverPreparationProfile(f.store,initial,clock,lease),code('sentinel.service.recordUnsafe'));
- assert.equal(f.store.ledger.readEvents({after:0,limit:500}).events.some(e=>e.kind==='snapshot-admitted'),false);
+
+test('optional requested scanner without a tool pin remains visible as a gap, not user-disabled or required',needsStore,async t=>{
+ const f=await preparationFixture(t,'secrets'),{RuleLockBook}=await import('../dist/service/rule-locks.js'),{adoptWorkspaceSettings}=await import('../dist/service/local.js');
+ const book=new RuleLockBook(f.ws.trustDir),rules=book.packsOf(book.current()!.lock).flatMap(p=>p.manifest.rules.map(r=>r.familyId));
+ const path=join(f.ws.path,'.farsight/sentinel/settings.json'),settings=JSON.parse(readFileSync(path,'utf8'));settings.mandatoryRules=[];settings.thresholds.requireCompleteCoverage=false;writeFileSync(path,JSON.stringify(settings));
+ writeFileSync(join(f.ws.path,'sentinel.config.json'),JSON.stringify({schema:'sentinel-repoconfig/draft-1',requestedRules:rules,disabledRules:[],thresholds:{},suppressions:[],providers:[]}));
+ assert.equal(adoptWorkspaceSettings(f.ws,{confirm:true,now:new Date()}).outcome,'prepared');const clock=clockFor(f.store),initial=resolvePreparationInputs(f.store,{workspace:f.ws.path,trustDir:f.ws.trustDir,registry:f.registry}),lease=openScratchLease(f.store);t.after(()=>releaseScratchLease(f.store,lease));
+ const resolved=await discoverPreparationProfile(f.store,initial,clock,lease),terms=preparationTerms(f.store,resolved,()=>clock.stillWithin());assert.deepEqual(terms.policy.rules,[...rules].sort());assert.deepEqual(terms.policy.settings.mandatoryRules,[]);assert.equal(terms.policy.thresholds.requireCompleteCoverage,false);
+ const data=JSON.parse(preparationResolvedBytes(f.store,resolved).toString());assert.deepEqual(data.availability,[{adapterId:'secrets-gitleaks',available:false,reasonCode:'sentinel.preparation.toolMissing'}]);
+ const{snapshot}=await captureWithBudget(f.store,{mode:'working-copy',sources:[{sourceId:'workspace',repositoryId:'local-workspace',root:f.ws.path}]},new GitReadBudget(),()=>clock.stillWithin());const identity=await resolvePreparationRun(f.store,resolved,snapshot.id,clock);const result=await planPreparedWorkspaceCanonical(f.store,identity,{scratchRoot:lease.path,wrapRunner:lease.wrapRunner});
+ assert.equal(result.outcome,'prepared');const admitted=await loadPlan(f.store,identity.runId,2);assert.equal(admitted.plan.pins.rules.length,rules.length);assert.ok(admitted.plan.checks.some(g=>g.state==='unsupported'&&g.reasonCode==='sentinel.plan.adapterNotRegistered'));assert.equal(admitted.plan.units.some(u=>u.stage==='check'),false);
 });

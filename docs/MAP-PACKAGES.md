@@ -305,3 +305,13 @@ Sentinel's service slice (ADR 48) lives in `src/contracts/service.ts` (five read
 unsettled read preparation without changing the handshake. `scripts/test-sentinel-mcp-consumer.mjs` installs only
 the tarball with npm and exercises the real SDK, retained framework reports and, under explicit native opt-in,
 genuine local-container secret privacy. `scripts/test-sentinel-mcp-controls-consumer.mjs` exercises real adopted grants, owner CLI confirmation, same-run pause/resume/cancel and lost-response reconnect without replay. Controls reuse the existing service admission; the package starts no MCP process or SDK import at ordinary library import.
+
+Sentinel's durable preparation extension adds `contracts/preparation.ts`, `service/preparation-{clock,inputs,
+discovery,journal,controller,projection,client}.ts` and private `store/admission-fence.ts`. The held service owns the
+journal/controller; the client only connects to that owner and uses real CLI receipt confirmation. Input/profile
+proofs remain opaque in process, captured continuation reuses canonical bootstrap/planning, and a private scoped
+veto checks actual ledger acceptance boundaries without changing public store callbacks. The SDK adds separately
+negotiated preparation tools. `test/preparation-*.test.ts` and `scripts/test-sentinel-preparation-consumer.mjs`
+exercise genuine admission, no hidden preview writes, original deadlines, actual owner crash and installed source-gone
+continuation before separate check execution. Native provenance/image readiness runs in the existing pinned scanner
+gate, apart from the zero-skip pure service gate. These modules add no arbitrary runtime package exports.

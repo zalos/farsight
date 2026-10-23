@@ -1,0 +1,25 @@
+{
+  "schema": "sentinel-preparation-capabilities/draft-1",
+  "apiRevision": 1,
+  "storeId": "store-example",
+  "epoch": "epoch-example",
+  "operations": [
+    "configuration.preview",
+    "prepare.accept",
+    "prepare.status",
+    "prepare.resume",
+    "prepare.cancel"
+  ],
+  "preparationMs": 600000,
+  "previewMs": 30000,
+  "terminalLimit": 256,
+  "source": "configured-workspace",
+  "prerequisites": [
+    "capture",
+    "parse",
+    "inventory"
+  ],
+  "checksStartSeparately": true,
+  "automaticResume": false,
+  "limitationKey": "sentinel.preparation.limits"
+}

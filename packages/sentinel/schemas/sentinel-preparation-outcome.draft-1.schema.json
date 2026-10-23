@@ -1,0 +1,403 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/PreparationOutcome",
+  "definitions": {
+    "PreparationOutcome": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-preparation-outcome/draft-1"
+        },
+        "outcome": {
+          "$ref": "#/definitions/PreparationCommandOutcome"
+        },
+        "exitCode": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "verdicts": {
+          "type": "object",
+          "properties": {
+            "policy": {
+              "$ref": "#/definitions/ControlAdmissionVerdict"
+            },
+            "capability": {
+              "$ref": "#/definitions/ControlAdmissionVerdict"
+            },
+            "credential": {
+              "$ref": "#/definitions/ControlAdmissionVerdict"
+            }
+          },
+          "required": [
+            "policy",
+            "capability",
+            "credential"
+          ],
+          "additionalProperties": false
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PreparationStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "joined": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "schema",
+        "outcome",
+        "exitCode",
+        "verdicts",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "PreparationCommandOutcome": {
+      "type": "string",
+      "enum": [
+        "submitted",
+        "requested",
+        "kept",
+        "answered",
+        "configuration-failure",
+        "awaiting-confirmation",
+        "unavailable",
+        "refused"
+      ],
+      "description": "Only outcomes produced by preparation, copied from the canonical command result; never a new verdict fold."
+    },
+    "ControlAdmissionVerdict": {
+      "type": "object",
+      "properties": {
+        "allowed": {
+          "type": "boolean"
+        },
+        "asked": {
+          "type": "boolean"
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        }
+      },
+      "required": [
+        "allowed",
+        "asked",
+        "reasonCode"
+      ],
+      "additionalProperties": false
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "PreparationStatus": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "schema": {
+              "type": "string",
+              "const": "sentinel-preparation-status/draft-1"
+            },
+            "found": {
+              "type": "boolean",
+              "const": false
+            }
+          },
+          "required": [
+            "schema",
+            "found"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema": {
+              "type": "string",
+              "const": "sentinel-preparation-status/draft-1"
+            },
+            "found": {
+              "type": "boolean",
+              "const": true
+            },
+            "preparationId": {
+              "$ref": "#/definitions/PreparationId"
+            },
+            "phase": {
+              "$ref": "#/definitions/PreparationPhase"
+            },
+            "acceptedAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "deadlineAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "runDeadlineAt": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "captured": {
+              "type": "boolean"
+            },
+            "runId": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Id"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "preparedRevision": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Ordinal"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The prepared revision is historical; run.inspect reports the run's actual current revision/state."
+            },
+            "checksStartedByPreparation": {
+              "type": "boolean",
+              "const": false
+            },
+            "availability": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/PreparationAvailability"
+              },
+              "maxItems": 32
+            },
+            "reasonCode": {
+              "$ref": "#/definitions/CatalogKey"
+            },
+            "resumeAvailable": {
+              "type": "boolean"
+            },
+            "freshRequestRequired": {
+              "type": "boolean"
+            },
+            "confirmation": {
+              "type": "object",
+              "properties": {
+                "cancel": {
+                  "$ref": "#/definitions/PreparationConfirmation"
+                },
+                "resume": {
+                  "$ref": "#/definitions/PreparationConfirmation"
+                }
+              },
+              "required": [
+                "cancel"
+              ],
+              "additionalProperties": false,
+              "description": "Absent from MCP. Only the real owner CLI can turn this data into confirmation."
+            }
+          },
+          "required": [
+            "schema",
+            "found",
+            "preparationId",
+            "phase",
+            "acceptedAt",
+            "deadlineAt",
+            "runDeadlineAt",
+            "captured",
+            "runId",
+            "preparedRevision",
+            "checksStartedByPreparation",
+            "availability"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "PreparationId": {
+      "type": "string",
+      "pattern": "^prep-[a-f0-9]{32}$"
+    },
+    "PreparationPhase": {
+      "type": "string",
+      "enum": [
+        "admitting",
+        "resuming",
+        "accepted",
+        "discovering",
+        "capturing",
+        "captured",
+        "bootstrapping",
+        "prepared",
+        "interrupted",
+        "failed",
+        "canceled"
+      ]
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "A UTC RFC 3339 timestamp with an explicit Z offset and a real calendar date (no leap second), years 0000–9999 proleptic Gregorian, up to nine fractional digits. The pattern bounds each field; the `date-time` format check refuses a day the month does not have. Comparisons keep all nine digits.",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$",
+      "format": "date-time"
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "Ordinal": {
+      "type": "integer",
+      "description": "A positive integer ordinal or revision.",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "PreparationAvailability": {
+      "type": "object",
+      "properties": {
+        "adapterId": {
+          "$ref": "#/definitions/Id"
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "reasonCode": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CatalogKey"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "adapterId",
+        "available",
+        "reasonCode"
+      ],
+      "additionalProperties": false
+    },
+    "PreparationConfirmation": {
+      "type": "object",
+      "properties": {
+        "intent": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "capture.source",
+                "run.cancel"
+              ]
+            },
+            "input": {
+              "$ref": "#/definitions/Digest"
+            },
+            "effects": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "local-artifacts",
+                  "tool-execution"
+                ]
+              },
+              "minItems": 1,
+              "maxItems": 2
+            },
+            "budget": {
+              "type": "object",
+              "properties": {
+                "maxTokens": {
+                  "type": "null"
+                },
+                "maxCost": {
+                  "type": "null"
+                },
+                "currency": {
+                  "type": "null"
+                }
+              },
+              "required": [
+                "maxTokens",
+                "maxCost",
+                "currency"
+              ],
+              "additionalProperties": false
+            },
+            "scope": {
+              "type": "object",
+              "properties": {
+                "profile": {
+                  "type": "string",
+                  "const": "static"
+                },
+                "provider": {
+                  "type": "null"
+                },
+                "targets": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/Digest"
+                  },
+                  "minItems": 1,
+                  "maxItems": 1
+                }
+              },
+              "required": [
+                "profile",
+                "provider",
+                "targets"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "action",
+            "input",
+            "effects",
+            "budget",
+            "scope"
+          ],
+          "additionalProperties": false
+        },
+        "stateDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "policyRevision": {
+          "$ref": "#/definitions/Digest"
+        }
+      },
+      "required": [
+        "intent",
+        "stateDigest",
+        "policyRevision"
+      ],
+      "additionalProperties": false,
+      "description": "Read-only data for the actual owner CLI only. A client cannot turn this into a receipt or human authority."
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-preparation-outcome.draft-1.schema.json",
+  "title": "sentinel-preparation-outcome/draft-1"
+}
