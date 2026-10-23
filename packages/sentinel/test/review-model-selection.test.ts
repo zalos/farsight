@@ -121,7 +121,7 @@ test('public hosted review defaults to paused, requires adopted enablement and n
 
 
 test('resolver uses the same 128 character id bound as the settings contract', () => {
-  const segmentId = 'a'.repeat(128);
+  const segmentId = 'segment:'.repeat(16); // 128 contract-valid characters, not a credential-shaped token.
   const config = defaults(); (config.segments as any[]).push({ stage: 'guided', segmentId, providerId: 'local-review', modelId: 'review' });
   assert.equal(resolveReviewModel(configured(config), 'guided', segmentId).segmentId, segmentId);
   const parsed = parseSettings(Buffer.from(JSON.stringify({ ...structuredClone(DEFAULT_SETTINGS), reviewModels: config })));
