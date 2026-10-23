@@ -331,9 +331,10 @@ export async function retainedSourceForAdmission(store: SentinelStore, ancestorI
   limits: RetainedProofLimits = RETAINED_PROOF_LIMITS): Promise<RetainedSourceProof> {
   const owner = boundOwner(store);
   store.assertHeld();
-  const epoch = store.epoch, storeId = store.storeId, signal = timing.signal;
-  const budget = new RetainedBudget(store, { signals: [signal], ...(timing.deadlineAt !== undefined ? { deadlineAt: timing.deadlineAt } : {}),
-    ...(timing.stillWithin ? { stillWithin: [timing.stillWithin] } : {}), owner, epoch, limits });
+  const epoch = store.epoch, storeId = store.storeId;
+  const { signal, deadlineAt, stillWithin } = timing;
+  const budget = new RetainedBudget(store, { signals: [signal], ...(deadlineAt !== undefined ? { deadlineAt } : {}),
+    ...(stillWithin ? { stillWithin: [stillWithin] } : {}), owner, epoch, limits });
   try {
     budget.boundary();
     const ancestor = exactAncestor(ancestorIn);
@@ -424,8 +425,9 @@ function copyView(state: ProofState): ReadonlyRetainedSource {
 export function readRetainedSourceProof(store: SentinelStore, proof: RetainedSourceProof, ancestorIn: RetainedSourceAncestor, timing: ProofTiming): ReadonlyRetainedSource {
   const state = (proof !== null && typeof proof === 'object') ? proofs.get(proof) : undefined;
   if (!state || store !== state.store) return fail('not a retained-source proof for this store');
-  const budget = new RetainedBudget(store, { signals: [state.signal, timing.signal], deadlineAt: Math.min(state.deadlineAt, callerDeadline(timing.deadlineAt)),
-    ...(timing.stillWithin ? { stillWithin: [timing.stillWithin] } : {}), owner: state.owner, epoch: state.epoch });
+  const { signal, deadlineAt, stillWithin } = timing;
+  const budget = new RetainedBudget(store, { signals: [state.signal, signal], deadlineAt: Math.min(state.deadlineAt, callerDeadline(deadlineAt)),
+    ...(stillWithin ? { stillWithin: [stillWithin] } : {}), owner: state.owner, epoch: state.epoch });
   const check = () => {
     budget.boundary();
     if (store.storeId !== state.storeId || boundOwner(store) !== state.owner) fail('the store owner or epoch changed');

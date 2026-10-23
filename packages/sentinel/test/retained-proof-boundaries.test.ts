@@ -151,3 +151,19 @@ test('the original mint signal survives mutation of the caller timing object dur
   original.abort();
   assert.throws(() => readRetainedSourceProof(s.store, proof, s.ancestor, timing()), canceled);
 });
+
+
+test('timing getters are captured once for each mint and accessor call', needsStore, async t => {
+  const s = await completed(t);
+  const calls = { signal: 0, deadlineAt: 0, stillWithin: 0 };
+  const signal = new AbortController().signal;
+  const grant = {
+    get signal() { calls.signal++; return signal; },
+    get deadlineAt() { calls.deadlineAt++; return Infinity; },
+    get stillWithin() { calls.stillWithin++; return () => {}; },
+  };
+  const proof = await retainedSourceForAdmission(s.store, s.ancestor, grant);
+  assert.deepEqual(calls, { signal: 1, deadlineAt: 1, stillWithin: 1 });
+  assert.ok(readRetainedSourceProof(s.store, proof, s.ancestor, grant));
+  assert.deepEqual(calls, { signal: 2, deadlineAt: 2, stillWithin: 2 });
+});
