@@ -417,7 +417,18 @@
           "$ref": "#/definitions/Ordinal"
         },
         "stage": {
-          "$ref": "#/definitions/PlanStage"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PlanStage"
+            },
+            {
+              "$ref": "#/definitions/ReviewPlanStage"
+            }
+          ]
+        },
+        "review": {
+          "$ref": "#/definitions/PlannedReview",
+          "description": "Exact retained model request inputs; present only on the two closed review stages."
         },
         "contract": {
           "type": "string",
@@ -510,6 +521,149 @@
         "check"
       ],
       "description": "What a work unit does: the bootstrap stages, or running checks."
+    },
+    "ReviewPlanStage": {
+      "type": "string",
+      "enum": [
+        "review-guided",
+        "review-general"
+      ]
+    },
+    "PlannedReview": {
+      "type": "object",
+      "properties": {
+        "spec": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "specDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "instructions": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "instructionDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "sourcePacket": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "segmentId": {
+          "$ref": "#/definitions/Id"
+        },
+        "selection": {
+          "$ref": "#/definitions/ReviewProviderSelection"
+        },
+        "terms": {
+          "type": "object",
+          "properties": {
+            "disclosure": {
+              "type": "string",
+              "enum": [
+                "local-only",
+                "hosted"
+              ]
+            },
+            "budget": {
+              "$ref": "#/definitions/Budget"
+            }
+          },
+          "required": [
+            "disclosure",
+            "budget"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "spec",
+        "specDigest",
+        "instructions",
+        "instructionDigest",
+        "sourcePacket",
+        "segmentId",
+        "selection",
+        "terms"
+      ],
+      "additionalProperties": false
+    },
+    "ReviewProviderSelection": {
+      "type": "object",
+      "properties": {
+        "providerId": {
+          "$ref": "#/definitions/Id"
+        },
+        "modelId": {
+          "$ref": "#/definitions/Id"
+        },
+        "bindingDigest": {
+          "$ref": "#/definitions/Digest"
+        }
+      },
+      "required": [
+        "providerId",
+        "modelId",
+        "bindingDigest"
+      ],
+      "additionalProperties": false,
+      "description": "One exact Sentinel request sent to the caller. Its identity is the request bytes, not a claim about vendor internals."
+    },
+    "Budget": {
+      "type": "object",
+      "properties": {
+        "maxTokens": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxCost": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DecimalAmount"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CurrencyCode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "maxTokens",
+        "maxCost",
+        "currency"
+      ],
+      "additionalProperties": false,
+      "description": "A spending bound. A paid action needs both a token and a cost bound."
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "DecimalAmount": {
+      "type": "string",
+      "description": "A non-negative decimal amount written as a string, so money is never a binary float.",
+      "pattern": "^(0|[1-9][0-9]{0,15})(\\.[0-9]{1,9})?$"
+    },
+    "CurrencyCode": {
+      "type": "string",
+      "description": "An ISO 4217 currency code.",
+      "pattern": "^[A-Z]{3}$"
     },
     "ScopeId": {
       "type": "string",
@@ -702,12 +856,6 @@
         "units"
       ],
       "additionalProperties": false
-    },
-    "Count": {
-      "type": "integer",
-      "description": "A non-negative integer.",
-      "minimum": 0,
-      "maximum": 9007199254740991
     }
   },
   "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-plan.draft-1.schema.json",

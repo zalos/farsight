@@ -43,6 +43,38 @@
         "selection": {
           "$ref": "#/definitions/ReviewProviderSelection"
         },
+        "wire": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "digest": {
+              "$ref": "#/definitions/Digest"
+            },
+            "encoding": {
+              "type": "string",
+              "const": "sentinel-claude-chat/v1"
+            },
+            "system": {
+              "type": "string",
+              "maxLength": 4194304
+            },
+            "stdin": {
+              "type": "string",
+              "maxLength": 4194304
+            },
+            "requestedModel": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "digest",
+            "encoding",
+            "requestedModel",
+            "stdin",
+            "system"
+          ]
+        },
         "messages": {
           "type": "array",
           "items": {

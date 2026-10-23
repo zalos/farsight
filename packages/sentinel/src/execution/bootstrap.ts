@@ -16,6 +16,8 @@
 // prepares its records; the coordinator holds them to the unit's grant before publishPrepared writes anything.
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import type {InstructionArtifact} from '../review/instructions.js';
+import type {AttemptUsage} from '../contracts/attempt.js';
 import type { ArtifactId, Id, WorkRef } from '../contracts/common.js';
 import type { PlanEnvelope, PlanWork } from '../contracts/plan.js';
 import type { RunEnvelope } from '../contracts/run.js';
@@ -80,6 +82,8 @@ const planSources = (plan: PlanEnvelope) => plan.units.filter(u => u.stage === '
  * them to the unit's grant (deadline, output bytes, memory) and the attempt's fence before publishPrepared writes any.
  */
 export interface PreparedOutputs {
+  artifacts?:readonly InstructionArtifact[];
+  usage?:AttemptUsage;
   records: Array<{ value: unknown; schema: string; privacy: ArtifactPrivacy; links: ArtifactId[] }>;
   outputs: ArtifactId[];
   /** Canonical bytes the records hold, as they would be stored. */
@@ -121,6 +125,8 @@ export async function publishPrepared(store: SentinelStore, work: WorkRef, attem
   const ids = prepared.records.map(r => store.objects.identifyCanonicalJson(r.value));
   const stageId = `stage.${attemptId}`.slice(0, 128);
   const staged: StagedArtifact[] = prepared.records.map((r, i) => ({ id: ids[i]!.id, schema: r.schema, privacy: r.privacy, links: r.links }));
+  const raw=[...new Map((prepared.artifacts??[]).map(a=>[a.id,a])).values()].filter(a=>!ids.some(i=>i.id===a.id));
+  staged.push(...raw.map(a=>({id:a.id,schema:a.schema,privacy:'source-derived' as const,links:[...a.links]})));
   store.ledger.registerStaging(stageId, staged, { work, attemptId });
   try {
     const receipts = [];
@@ -128,10 +134,11 @@ export async function publishPrepared(store: SentinelStore, work: WorkRef, attem
       await bootstrapIo.beforeWrite?.(prepared.records[i]!.value);
       receipts.push(await store.objects.putCanonicalJson(prepared.records[i]!.value, { expect: ids[i]! }));
     }
+    for(const a of raw){receipts.push(await store.objects.put(a.bytes,{expect:{id:a.id,rawSize:a.bytes.byteLength}}));beforeAccept?.()}
     store.assertHeld();
     // No await from here to the acceptance: what beforeAccept checked still holds when the ledger commits.
     beforeAccept?.();
-    return store.ledger.publish({ work, attemptId, stageId, receipts, outputs: prepared.outputs, endedAt: now() });
+    return store.ledger.publish({ work, attemptId, stageId, receipts, outputs: [...prepared.outputs,...raw.map(a=>a.id)], endedAt: now(),...(prepared.usage?{usage:prepared.usage}:{}) });
   } catch (error) {
     try { store.assertHeld(); store.ledger.abortStaging(stageId); } catch { /* recovery aborts a stage left open */ }
     throw error;

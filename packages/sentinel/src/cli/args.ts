@@ -37,7 +37,7 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   settings: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['action'], min: 1 },
   plan: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: [], min: 0 },
   paths: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--request': 'value' }, positional: ['ancestorRunId'], min: 1 },
-  run: { flags: { ...COMMON, ...STORE, '--detach': 'boolean', '--confirm': 'boolean' }, positional: ['planId'], min: 1 },
+  run: { flags: { ...COMMON, ...STORE, '--detach': 'boolean', '--confirm': 'boolean', '--confirm-models':'boolean' }, positional: ['planId'], min: 1 },
   status: { flags: { ...COMMON, ...STORE, '--after': 'value', '--limit': 'value' }, positional: ['runId'], min: 1 },
   wait: { flags: { ...COMMON, ...STORE, '--timeout': 'value' }, positional: ['runId'], min: 1 },
   pause: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
@@ -45,7 +45,7 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   retry: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
   resume: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
   rerun: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--stage': 'value' }, positional: ['runId'], min: 1 },
-  report: { flags: { ...COMMON, ...STORE, ...FULL_REPORT, '--full': 'boolean' }, positional: ['runId'], min: 1 },
+  report: { flags: { ...COMMON, ...STORE, ...FULL_REPORT, '--full': 'boolean', '--instructions':'boolean' }, positional: ['runId'], min: 1 },
   serve: { flags: { ...COMMON, ...STORE, '--idle-ms': 'value' }, positional: [], min: 0 },
   compare: { flags: { ...COMMON, ...STORE, ...FULL_REPORT }, positional: ['runId', 'baselineRunId'], min: 2 },
   rules: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['action', 'packDir'], min: 1 },
@@ -113,6 +113,8 @@ export function parseArgs(argv: readonly string[]): ParseResult {
   }
   if (positional.length > spec.positional.length) return fail('sentinel.args.unexpectedArgument', positional[spec.positional.length]!);
   if (positional.length < spec.min) return fail('sentinel.args.missingArgument', spec.positional[positional.length]!);
+  if(command==='run'&&flags['--confirm-models']&&flags['--detach'])return fail('sentinel.args.unexpectedArgument','--confirm-models requires foreground run');
+  if(command==='report'&&flags['--instructions']){if(!json||Object.keys(flags).some(f=>!['--json','--workspace','--instructions'].includes(f)))return fail('sentinel.args.unexpectedArgument','--instructions requires only --json');}
   if(command==='paths'&&flags['--request']===undefined)return fail('sentinel.args.missingValue','--request');
   const args: Record<string, string> = {};
   spec.positional.forEach((p, i) => { if (positional[i] !== undefined) args[p] = positional[i]!; });

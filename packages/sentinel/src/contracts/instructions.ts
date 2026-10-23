@@ -42,6 +42,13 @@ export interface ReviewInstructionsEnvelope {
 /** One exact Sentinel request sent to the caller. Its identity is the request bytes, not a claim about vendor internals. */
 export interface ReviewProviderSelection {providerId:Id;modelId:Id;bindingDigest:Digest}
 export interface ReviewInstructionBinding {manifest:ArtifactId;digest:Digest;assembled:ArtifactId;sourcePacket:ArtifactId;segmentId:Id;selection?:ReviewProviderSelection}
+export interface NativeReviewWire {encoding:'sentinel-claude-chat/v1';
+/** @maxLength 4194304 */
+system:string;
+/** @maxLength 4194304 */
+stdin:string;
+/** @maxLength 200 */
+requestedModel:string}
 export interface ReviewRequestEnvelope {
   schema:'sentinel-review-request/draft-1';
   sessionId:Id;runId:Id;attemptId:Id;snapshotId:Id;sourceId:Id;segmentId:Id;
@@ -49,6 +56,7 @@ export interface ReviewRequestEnvelope {
   /** Digest of the selected captured scope, including every content id. */
   scopeDigest:Digest;
   selection?:ReviewProviderSelection;
+  wire?:(NativeReviewWire & {digest:Digest});
   /**
    * @minItems 2
    * @maxItems 1024

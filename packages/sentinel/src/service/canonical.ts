@@ -11,6 +11,7 @@
 // A run's result is read back from the ledger: its recorded outcome and the coverage its units published. A run
 // that rests on the foundation-preview rule is required coverage incomplete whatever it records, and this build
 // never prints a satisfied result (findings are not judged against the policy until the full report exists).
+import {hasConfiguredReviews,reviewsFor,REVIEW_ADAPTERS} from './review-adapter.js';
 import { createHash } from 'node:crypto';
 import type { ActionEffect } from '../contracts/policy.js';
 import type { RunEnvelope } from '../contracts/run.js';
@@ -62,11 +63,14 @@ export interface CanonicalDisclosure {
   readonly unitIds: readonly string[];
   readonly ruleGaps: number;
   readonly requiredCoverageAchievable: boolean;
+  readonly reviews?:readonly {kind:string;segmentId:string;selection:import('../contracts/instructions.js').ReviewProviderSelection;terms:import('../contracts/plan.js').PlannedReview['terms'];instructionDigest:string;skills:'none-selected';vendorInstructions:'unobserved'}[];
   readonly label: 'foundation-preview' | 'deterministic';
 }
 
 /** The identity a write on a run is decided against: its current admitted revision. */
 export interface CurrentPlan {
+  readonly model?:{providerId:string;bindingDigest:string;budget:import('../contracts/policy.js').Budget};
+  readonly modelConflict?:true;
   readonly runId: string;
   readonly revision: number;
   readonly planDigest: string;
@@ -88,7 +92,7 @@ export function assertSupportedRules(plan: Pick<PlanRevision, 'pins'>): void {
 export function planEffects(plan: Pick<PlanRevision, 'units'>): readonly ActionEffect[] {
   const preview = publicRegistry().get(PREVIEW_DETECTOR_ID).digest;
   const tool = plan.units.some(unit => unit.stage === 'check' && (unit.adapterId !== PREVIEW_DETECTOR_ID || unit.implementationDigest !== preview));
-  return Object.freeze(tool ? ['local-artifacts', 'tool-execution'] as const : ['local-artifacts'] as const);
+  const reviews=plan.units.filter(u=>u.review);return Object.freeze([...new Set<ActionEffect>(['local-artifacts',...(tool?['tool-execution' as const]:[]),...(reviews.length?['paid-inference' as const]:[]),...(reviews.some(u=>u.review!.terms.disclosure==='hosted')?['source-disclosure' as const,'network' as const]:[])])]);
 }
 
 function disclose(plan: PlanRevision): CanonicalDisclosure {
@@ -97,6 +101,7 @@ function disclose(plan: PlanRevision): CanonicalDisclosure {
     effects: planEffects(plan), checks: Object.freeze({ ...plan.tallies.checks }), units: plan.units.length,
     unitIds: Object.freeze(plan.units.map(u => u.id).sort()),
     ruleGaps: plan.ruleGaps.length, requiredCoverageAchievable: plan.requiredCoverageAchievable,
+    ...(plan.units.some(u=>u.review)?{reviews:plan.units.filter(u=>u.review).map(u=>({kind:u.stage,segmentId:u.review!.segmentId,selection:u.review!.selection,terms:u.review!.terms,instructionDigest:u.review!.instructionDigest,skills:'none-selected' as const,vendorInstructions:'unobserved' as const}))}:{}),
     label: isPreview(plan) ? 'foundation-preview' as const : 'deterministic' as const,
   });
 }
@@ -110,7 +115,8 @@ export async function currentPlan(store: SentinelStore, runId: string): Promise<
   // A selected rerun's effects are those of the units it runs; held units start nothing.
   const runs = admitted.selection ? unitsToRun(admitted.selection) : null;
   const effects = planEffects(runs ? { units: admitted.plan.units.filter(u => runs.has(u.id)) } : admitted.plan);
-  return Object.freeze({ runId, revision, planDigest: admitted.plan.digest, policyRevision: admitted.plan.pins.policyDigest ?? '', kind: admitted.plan.kind, effects });
+  const reviews=admitted.plan.units.filter(u=>u.review),bindings=new Set(reviews.map(u=>u.review!.selection.bindingDigest)),first=reviews[0]?.review;
+  return Object.freeze({...(bindings.size>1?{modelConflict:true as const}:first?{model:{providerId:first.selection.providerId,bindingDigest:first.selection.bindingDigest,budget:first.terms.budget}}:{}),runId, revision, planDigest: admitted.plan.digest, policyRevision: admitted.plan.pins.policyDigest ?? '', kind: admitted.plan.kind, effects });
 }
 
 const backendOf = (wrapRunner: WrapRunner | undefined) => (wrapRunner ? { backendOptions: { wrapRunner } } : {});
@@ -133,6 +139,7 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   const registry = options.registry ?? publicRegistry(options.trustDir);
   const ids = [...new Set(packs.flatMap(p => p.manifest.rules.filter(r => options.policy.rules.includes(r.familyId)).map(r => r.implementation.adapterId)))].filter(id => externalDrivers().has(id));
   const available = options.profile ? new Set<string>() : await publicAvailability(options.trustDir, current.lock, packs, ids, options.scratchRoot, options.wrapRunner);
+  if(hasConfiguredReviews(options.policy))for(const a of REVIEW_ADAPTERS)available.add(a.id);
   const profile = options.profile ?? publicProfile(registry, available, packs);
   const snapshot = options.snapshotId !== undefined
     ? (await openSnapshot(store, options.snapshotId)).snapshot
@@ -148,12 +155,13 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   const latest = store.ledger.latestPlan(runId);
   const analysisFor = (boot: PlanRevision, evidence: BootstrapEvidence) => {
     const inventory = boot.units.find(u => u.stage === 'inventory')!;
-    return planAnalysis({
+    const deterministic=planAnalysis({
       runId, revision: 2, previous: boot, bootstrap: [{ id: inventory.id, revision: inventory.revision }], profile: profile.planner,
       snapshot: plannerSnapshotFrom(evidence.snapshot), analyses: evidence.analyses.map(a => plannerAnalysisFrom(a as never)),
       lock: plannerLockFrom(current.lock, packs, current.digest), policy: plannerPolicyFrom(options.policy),
       limits: options.policy.rules.includes(PREVIEW_RULE) ? ANALYSIS_LIMITS : { maxScopesPerWork: 32 },
     });
+    return hasConfiguredReviews(options.policy)?reviewsFor(deterministic,evidence,options.policy,registry,packs):{plan:deterministic,artifacts:[]};
   };
   if (latest?.kind === 'analysis') {
     const active = store.ledger.getRun(runId);
@@ -167,7 +175,7 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
           || !canonicalJsonBytes(first.profile).equals(canonicalJsonBytes(profile.record))
           || !canonicalJsonBytes(next.profile).equals(canonicalJsonBytes(profile.record))) throw new Error('not the immediate current-terms bootstrap successor');
         const evidence = await retainedBootstrapForReport(store, runId, next);
-        expected = analysisFor(first.plan, evidence);
+        expected = analysisFor(first.plan, evidence).plan;
         if (expected.digest !== next.plan.digest || evidence.snapshot.id !== snapshot.id) throw new Error('not the canonical successor from accepted evidence');
         assertSupportedRules(expected);
         if (!options.profile) checkPlanDatabases(expected, current.lock);
@@ -199,24 +207,24 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
 
   const inventory = boot.units.find(u => u.stage === 'inventory')!;
   const evidence = await loadBootstrap(store, runId, { id: inventory.id, revision: inventory.revision });
-  const analysis = analysisFor(boot, evidence);
+  const reviewed = analysisFor(boot, evidence),analysis=reviewed.plan;
   // Before admission: a shipped check adapter runs only the exact rules it implements.
   assertSupportedRules(analysis);
   if (!options.profile) checkPlanDatabases(analysis, current.lock);
-  await admitPlan(store, { plan: analysis, ruleLock: current.lock, policy: options.policy, profile: profile.record });
+  await admitPlan(store, { plan: analysis, ruleLock: current.lock, policy: options.policy, profile: profile.record,reviewArtifacts:reviewed.artifacts });
   store.ledger.advanceRunPlan(runId, analysis.revision);
   return { outcome: 'prepared', disclosure: disclose(analysis) };
 }
 
 /** Executes the run's current admitted revision. The coordinator records coverage and the outcome. */
-export async function executeRun(store: SentinelStore, runId: string, options: { scratchRoot: string; wrapRunner?: WrapRunner; registry?: AdapterRegistry; run?: RunEnvelope; trustDir?: string; drivers?: import('../execution/check-drivers.js').CheckDriverRegistry }): Promise<RunSummary> {
+export async function executeRun(store: SentinelStore, runId: string, options: { scratchRoot: string; wrapRunner?: WrapRunner; registry?: AdapterRegistry; run?: RunEnvelope; trustDir?: string; drivers?: import('../execution/check-drivers.js').CheckDriverRegistry;review?:import('../review/dispatch.js').ReviewRuntime }): Promise<RunSummary> {
   // Again before anything runs: an admitted plan from elsewhere is held to the same exact rules.
   const plan = await currentPlan(store, runId);
   if (plan) assertSupportedRules((await loadPlan(store, runId, plan.revision)).plan);
   const registry = options.registry ?? publicRegistry(options.trustDir);
   const assets = options.drivers ? { drivers: options.drivers } : await scannerExecution(store, runId, options.trustDir, options.scratchRoot, registry, options.wrapRunner);
   const run = options.run ?? await rerunEnvelopeOf(store, runId);
-  const coordinator = await Coordinator.open({ ...assets, store, runId, registry, scratchRoot: options.scratchRoot, ...backendOf(options.wrapRunner), ...(run ? { run } : {}) });
+  const coordinator = await Coordinator.open({ ...assets,...(options.review?{review:options.review}:{}), store, runId, registry, scratchRoot: options.scratchRoot, ...backendOf(options.wrapRunner), ...(run ? { run } : {}) });
   try { return await coordinator.run(); } catch (error) {
     try { recordRunFailure(store, runId, error); } catch { /* preserve the original error when the store cannot retain it */ }
     throw error;

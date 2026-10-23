@@ -74,3 +74,6 @@ export function builtinWorkerFiles(id: BuiltinWorkerId) {
 
 /** Rechecked at use: an installed .js sibling never substitutes for a missing or changed .mjs launch gate. */
 export function launchGateUrl(): string { return pathToFileURL(fixedDistFile(packageLayout(), 'execution/launch-gate', true)).href; }
+
+/** The two fixed in-process model operations share this exact package-owned implementation entry. */
+export function reviewOperationPath():string{return fixedDistFile(packageLayout(),'review/dispatch',false)}

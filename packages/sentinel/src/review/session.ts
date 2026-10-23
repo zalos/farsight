@@ -12,14 +12,14 @@ import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'n
 import { join } from 'node:path';
 import type { Digest, ModelIdentity, ObservationEnvelope, ReviewCheckpointEnvelope, ReviewOperation, ReviewRecordEnvelope, ScopedReason, ServedCitation } from '../contracts/index.js';
 import { MAX_ENVELOPE_BYTES } from '../contracts/index.js';
-import { digestOf } from '../store/ledger-json.js';
+import {canonicalDigest as digestOf} from '../policy/digest.js';
 import { canonicalDigest } from '../policy/digest.js';
 import { snapshot } from '../policy/immutable.js';
 import { parseEnvelope, validateEnvelope } from '../validate.js';
 import type { ChatMessage } from './providers/kinds.js';
 import { EvidenceBroker, type DisclosureFilter, type EvidenceItem, type EvidenceLimits, type EvidenceScope, type ToolRequest, type ToolResult } from './evidence.js';
 import { reviewFail, type ReplyRejectionCode, type ReviewFrontierCode } from './errors.js';
-import type {ReviewInstructionsEnvelope,ReviewRequestEnvelope,ReviewProviderSelection} from '../contracts/instructions.js';
+import type {ReviewInstructionsEnvelope,ReviewRequestEnvelope,ReviewProviderSelection,NativeReviewWire} from '../contracts/instructions.js';
 import {instructionManifest,renderedInstructions,instructionArtifacts,type PreparedInstructions,type InstructionArtifact} from './instructions.js';
 import {canonicalJsonBytes} from '../store/objects.js';
 import {sha256Digest} from '../policy/digest.js';
@@ -39,7 +39,8 @@ export interface CallerReply {
 export interface ModelCaller {
   readonly kind: 'mock' | 'provider';
   readonly selection?:Readonly<ReviewProviderSelection>;
-  call(req: { operationId: string; messages: readonly ChatMessage[]; maxOutputTokens: number; signal?: AbortSignal }): Promise<CallerReply>;
+  renderRequest?(messages:readonly ChatMessage[],maxOutputTokens:number):NativeReviewWire|undefined;
+  call(req: { operationId: string; messages: readonly ChatMessage[]; maxOutputTokens: number; requestedSelection?:Readonly<ReviewProviderSelection>; expectedWireDigest?:string; signal?: AbortSignal }): Promise<CallerReply>;
 }
 
 /** Thrown by a caller; `spend: 'possible'` means the provider may have charged for it. */
@@ -213,6 +214,7 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
   const selection=opts.caller.selection;
   if(manifest&&opts.caller.kind==='provider'&&(!spec.requestedSelection||!selection))reviewFail('sentinel.review.invalidInput','instruction-bound provider sessions seal their requested selection');
   if(spec.requestedSelection&&canonicalDigest(selection??null)!==canonicalDigest(spec.requestedSelection))reviewFail('sentinel.review.integrity','the caller selection changed');
+  if(manifest&&(!spec.segmentId||!ID.test(spec.segmentId)))reviewFail('sentinel.review.invalidInput','instruction-bound sessions require an explicit segment id');
   const digest = specDigest(spec);
   const broker = new EvidenceBroker(spec.scope, spec.limits, opts.read, opts.withhold);
   const tools = new Set(spec.tools);
@@ -268,15 +270,17 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
     const operationId = `${spec.sessionId}.op${step + 1}`;
     let request:ReviewRequestEnvelope|undefined;
     const messagesToSend=snapshot(cp.messages);
+    const rendered=opts.caller.renderRequest?.(messagesToSend,spec.budget.maxOutputTokens),wire=rendered?snapshot(rendered):undefined;
+    if(wire&&(wire.encoding!=='sentinel-claude-chat/v1'||typeof wire.system!=='string'||typeof wire.stdin!=='string'||typeof wire.requestedModel!=='string'||Object.keys(wire).sort().join(',')!=='encoding,requestedModel,stdin,system'||wire.system!==messagesToSend[0]?.content||Buffer.byteLength(JSON.stringify(wire))>MAX_ENVELOPE_BYTES))reviewFail('sentinel.review.integrity','native wire exceeds its fixed request contract');
     if(manifest){
       if(spec.requestedSelection&&canonicalDigest(opts.caller.selection??null)!==canonicalDigest(spec.requestedSelection))reviewFail('sentinel.review.integrity','the caller selection changed');
-      const body={schema:'sentinel-review-request/draft-1' as const,sessionId:spec.sessionId,runId:spec.runId,attemptId:spec.attemptId,snapshotId:spec.scope.snapshotId,sourceId:spec.scope.sourceId,segmentId:spec.segmentId??spec.sessionId,operationId,specDigest:digest,instructionDigest:manifest.digest,scopeDigest:canonicalDigest(spec.scope) as Digest,...(spec.requestedSelection?{selection:{...spec.requestedSelection}}:{}),messages:messagesToSend};
+      const body={schema:'sentinel-review-request/draft-1' as const,sessionId:spec.sessionId,runId:spec.runId,attemptId:spec.attemptId,snapshotId:spec.scope.snapshotId,sourceId:spec.scope.sourceId,segmentId:spec.segmentId??spec.sessionId,operationId,specDigest:digest,instructionDigest:manifest.digest,scopeDigest:canonicalDigest(spec.scope) as Digest,...(spec.requestedSelection?{selection:{...spec.requestedSelection}}:{}),messages:messagesToSend,...(wire?{wire:{...wire,digest:canonicalDigest(wire) as Digest}}:{})};
       request={...body,digest:digestOf(body) as Digest};await save({...cp,requests:[...cp.requests!,request]});if(cp.stopped)break;
     }
     const requestRef=request?{request:digestOf(request) as Digest}:{};
     let reply: CallerReply;
     try {
-      reply = await opts.caller.call({ operationId, messages: messagesToSend, maxOutputTokens: spec.budget.maxOutputTokens, ...(opts.signal ? { signal: opts.signal } : {}) });
+      reply = await opts.caller.call({ operationId, messages: messagesToSend, maxOutputTokens: spec.budget.maxOutputTokens,...(wire?{expectedWireDigest:canonicalDigest(wire)}:{}), ...(spec.requestedSelection?{requestedSelection:spec.requestedSelection}:{}), ...(opts.signal ? { signal: opts.signal } : {}) });
     } catch (error) {
       const e = (error ?? {}) as CallerFailure;
       // An operation the ledger already holds (a crash between its call and its checkpoint) is never re-sent: its

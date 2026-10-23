@@ -219,7 +219,7 @@ export async function executablePlan(store: SentinelStore, admitted: AdmittedPla
     }
     const listed = inputsOf(w);
     // A held unit never runs, so it is given no inputs; every unit that can run gets exactly the plan's.
-    if (unit.stage === 'check' && adapter && w.state !== 'disabled-by-policy' && w.state !== 'blocked') verifyInputSet(plan, w, listed);
+    if ((unit.stage === 'check'||unit.review) && adapter && w.state !== 'disabled-by-policy' && w.state !== 'blocked') verifyInputSet(plan, w, listed);
     const inputs = deepFreeze(listed.filter((i, n) => listed.findIndex(x => x.id === i.id) === n));
     const checks = plannedChecksOf(plan, w);
     const inputScopes = deepFreeze(capturedInputScopes(unit, checks, inputs));

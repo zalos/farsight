@@ -9,7 +9,7 @@ import type { AttemptUsage, Digest, ObservationEnvelope, ScopedReason, WorkEnvel
 import type { ModelBroker, ModelEnvelope } from './providers/broker.js';
 import type { BudgetLedger } from './providers/budget.js';
 import { fromNanos } from './providers/decimal.js';
-import {isProviderBinding,type ProviderBinding} from './providers/profile.js';
+import {type ProviderBinding} from './providers/profile.js';
 import { providerCaller } from './caller.js';
 import { LedgerCheckpointStore } from './checkpoints.js';
 import { reviewFail } from './errors.js';
@@ -66,25 +66,24 @@ export function createModelReviewOperation(deps: ModelOperationDeps) {
       const sealed=specDigest(ctx.spec);if(ctx.work.inputFingerprint!==sealed||ctx.work.influenceManifest!==canonicalDigest({spec:sealed,kind:ctx.spec.kind,sessionId:ctx.spec.sessionId}))reviewFail('sentinel.review.integrity','the review spec differs from its planned work binding');
       if (ctx.spec.attemptId !== ctx.attemptId) reviewFail('sentinel.review.integrity', 'the spec is for another attempt');
       const checkpoints = new LedgerCheckpointStore(deps.ledger, ctx.epoch, deps.now);
-      const originalCaller=providerCaller(deps.broker,deps.envelope,deps.binding);
-      const caller=ctx.spec.instructions?{...originalCaller,get selection(){const b=deps.binding();if(!isProviderBinding(b))return reviewFail('sentinel.review.integrity','the requested provider binding is not genuine');return Object.freeze({providerId:b.providerId,modelId:b.modelId,bindingDigest:b.digest as Digest})}}:originalCaller;
+      const caller=providerCaller(deps.broker,deps.envelope,deps.binding);
       const { record, observations,privateArtifacts } = await runSession(ctx.spec, { caller, checkpoints, read: ctx.read,
         ...(ctx.withhold ? { withhold: ctx.withhold } : {}), ...(ctx.signal ? { signal: ctx.signal } : {}) });
       return Object.freeze({ records: [{ value: record, schema: 'sentinel-review-record/draft-1' }, ...observations.map(o => ({ value: o, schema: 'sentinel-observation/draft-1' }))],
-        ...(privateArtifacts?{privateArtifacts}:{}),usage: usageOf(deps.ledger, deps.envelope.id, record), frontiers: record.frontiers, coverage: [] as const });
+        ...(privateArtifacts?{privateArtifacts}:{}),usage: usageOf(deps.ledger, deps.envelope.id, record, deps.binding().settingsBudget.currency), frontiers: record.frontiers, coverage: [] as const });
     },
   });
 }
 
 /** The attempt's usage, from the ledger: confirmed only when every operation settled. */
-export function usageOf(ledger: BudgetLedger, envelopeId: string, record: ReviewRecord): AttemptUsage {
+export function usageOf(ledger: BudgetLedger, envelopeId: string, record: ReviewRecord, currency?:string|null): AttemptUsage {
   let inputTokens = 0, outputTokens = 0, cost = 0n, unknown = false;
   for (const o of record.operations) {
     const r = ledger.reservationOf(envelopeId, o.operationId);
     if (!r || r.state !== 'settled') { if (r && r.state === 'released') continue; unknown = true; continue; }
     inputTokens += r.usedInputTokens ?? 0; outputTokens += r.usedOutputTokens ?? 0; cost += r.usedCostNanos ?? 0n;
   }
-  return unknown ? { certainty: 'unknown' } : { certainty: 'confirmed', inputTokens, outputTokens, monetaryCost: fromNanos(cost) };
+  return unknown ? { certainty: 'unknown' } : { certainty: 'confirmed', inputTokens, outputTokens, ...(currency?{monetaryCost: fromNanos(cost),currency}:{}) };
 }
 
 /**

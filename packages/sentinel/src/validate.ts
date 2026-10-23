@@ -14,7 +14,7 @@ import type {
   ReviewInstructionsEnvelope, ReviewRequestEnvelope,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
-import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf } from './planner/identity.js';
+import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf, reviewUnitIdOf } from './planner/identity.js';
 import { OWNER_ACTIONS } from './contracts/index.js';
 
 export interface EnvelopeTypes {
@@ -598,10 +598,13 @@ const plan: Check<PlanEnvelope> = (v, out) => {
   for (const i of duplicates(v.pins.adapters, a => a.adapterId)) out.add(err(`/pins/adapters/${i}`, 'duplicate adapter pin'));
   const covered = new Map<string, string>();
   v.units.forEach((w, i) => {
-    if (analysis !== (w.stage === 'check')) out.add(err(`/units/${i}/stage`, analysis ? 'an analysis revision schedules checks only' : 'a bootstrap revision schedules capture, parse and inventory'));
+    const reviewing=w.stage==='review-guided'||w.stage==='review-general';
+    if(reviewing&&(!w.review||!w.sourceId||w.adapterId!==`sentinel.review.${w.stage.slice(7)}`||w.checks.length||w.scopes.length!==1||w.scopes[0]!==w.sourceId||w.inputFingerprint!==w.review.specDigest))out.add(err(`/units/${i}/review`,'a review binds one exact source/segment/spec and no deterministic checks'));
+    if(!reviewing&&w.review!==undefined)out.add(err(`/units/${i}/review`,'only review work carries model inputs'));
+    if (analysis !== (w.stage === 'check'||reviewing)) out.add(err(`/units/${i}/stage`, analysis ? 'an analysis revision schedules checks only' : 'a bootstrap revision schedules capture, parse and inventory'));
     if (!analysis && !BOOTSTRAP_STAGES.has(w.stage)) out.add(err(`/units/${i}/stage`, 'unknown bootstrap stage'));
     if (w.stage === 'check' && w.adapterId === null) out.add(err(`/units/${i}/adapterId`, 'check work names its registered adapter'));
-    if (w.stage !== 'check') {
+    if (w.stage !== 'check'&&!reviewing) {
       const op = v.pins.operations[w.stage as 'capture' | 'parse' | 'inventory'];
       if ((op?.adapterId ?? null) !== w.adapterId || (op !== null && op !== undefined && op.digest !== w.implementationDigest)) {
         out.add(err(`/units/${i}/adapterId`, 'a bootstrap unit runs the operation the plan binds to its stage, or none'));
@@ -611,7 +614,7 @@ const plan: Check<PlanEnvelope> = (v, out) => {
     }
     if (w.inputSetDigest !== digestOf(w.inputs)) out.add(err(`/units/${i}/inputSetDigest`, 'the input set digest is the digest of exactly the inputs'));
     if (w.stage === 'check' && w.checks.length === 0) out.add(err(`/units/${i}/checks`, 'a check unit covers at least one check'));
-    if (w.stage !== 'check' && (w.checks.length || w.scopes.length || w.inputs.length)) out.add(err(`/units/${i}/checks`, 'a bootstrap unit covers no check'));
+    if (w.stage !== 'check' && !reviewing && (w.checks.length || w.scopes.length || w.inputs.length)) out.add(err(`/units/${i}/checks`, 'a bootstrap unit covers no check'));
     for (const id of w.checks) {
       if (covered.has(id)) out.add(err(`/units/${i}/checks`, `check ${id} is covered twice`));
       covered.set(id, w.id);
@@ -640,6 +643,7 @@ const plan: Check<PlanEnvelope> = (v, out) => {
         out.add(err(`/units/${i}/id`, 'a check unit id is the digest of its run, revision, adapter, source and checks'));
       }
       if (w.checks.some(id => ruleOf.has(id) && ruleOf.get(id) !== w.adapterId)) out.add(err(`/units/${i}/adapterId`, 'a unit runs the adapter its checks\' rules name'));
+    } else if(w.review){if(w.sourceId===null||w.id!==reviewUnitIdOf({runId:v.runId,revision:v.revision,stage:w.stage,sourceId:w.sourceId!,segmentId:w.review.segmentId,specDigest:w.review.specDigest}))out.add(err(`/units/${i}/id`,'review id binds its exact admitted segment and spec'));
     } else if (w.id !== bootstrapUnitIdOf({ runId: v.runId, revision: v.revision, stage: w.stage, sourceId: w.sourceId })) {
       out.add(err(`/units/${i}/id`, 'a bootstrap unit id is the digest of its run, revision, stage and source'));
     }
@@ -682,7 +686,7 @@ const plan: Check<PlanEnvelope> = (v, out) => {
   const scopeOf = new Map(v.checks.map(c => [c.id, c.scopeId]));
   v.units.forEach((w, i) => {
     const scopes = new Set(w.checks.map(id => scopeOf.get(id)));
-    if (w.scopes.length !== scopes.size || w.scopes.some(s => !scopes.has(s))) out.add(err(`/units/${i}/scopes`, 'a unit lists exactly the scopes of its checks'));
+    if (!w.review&&(w.scopes.length !== scopes.size || w.scopes.some(s => !scopes.has(s)))) out.add(err(`/units/${i}/scopes`, 'a unit lists exactly the scopes of its checks'));
   });
   requiredNotPlanned += v.ruleGaps.filter(g => g.required).length;
   for (const [state, n] of Object.entries(tally)) if (v.tallies.checks[state as keyof PlanEnvelope['tallies']['checks']] !== n) out.add(err(`/tallies/checks/${state}`, 'tallies recount the checks'));
@@ -824,7 +828,7 @@ const instructions:Check<ReviewInstructionsEnvelope>=(v,out)=>{
  if(v.assembled.bytes>524288)out.add(err('/assembled/bytes','assembled instructions exceed their bound'));
 };
 const reviewrequest:Check<ReviewRequestEnvelope>=(v,out)=>{
- const {digest,...body}=v;if(digest!==digestOf(body))out.add(err('/digest','request digest differs'));
+ const {digest,...body}=v;if(digest!==digestOf(body))out.add(err('/digest','request digest differs'));if(v.wire){const {digest:wireDigest,...wire}=v.wire;if(wireDigest!==digestOf(wire)||wire.system!==v.messages[0]?.content)out.add(err('/wire','native wire differs from its exact semantic instructions'))}
  if(!v.messages.length||v.messages[0]!.role!=='system')out.add(err('/messages','a request starts with the exact assembled instructions'));
 };
 const checkpoint: Check<ReviewCheckpointEnvelope> = (v, out) => {

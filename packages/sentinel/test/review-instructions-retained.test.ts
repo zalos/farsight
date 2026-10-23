@@ -7,7 +7,7 @@ import {readPublishedInstructions} from '../dist/review/instructions.js';
 import {bindProvider} from '../dist/review/providers/index.js';import {digestOf} from '../dist/store/ledger-json.js';
 import {scratch,needsStore} from './snapshot-helpers.ts';import {trustedPolicy,NOW,mockEndpoint,json,ollamaReply} from './provider-helpers.ts';
 const RESOURCE={deadlineMs:120000,memoryBytes:268435456,cpuQuota:1,maxPids:8,maxOutputBytes:4194304};
-test('actual captured source and private model operation publish exact instruction closure and replay after child exit source removal and owner reopen',needsStore,async t=>{
+test('genuine self-planned owned-child publication cannot impersonate an admitted canonical review operation before or after reopen',needsStore,async t=>{
  const dir=scratch(t,'sentinel-instructions-'),src=join(dir,'source');mkdirSync(src);const original='export const original = "original captured data";\n';writeFileSync(join(src,'original.ts'),original);
  const endpoint=await mockEndpoint(t,(req,res)=>{const messages=JSON.parse(req.body).messages,last=JSON.parse(messages.at(-1).content);json(res,200,ollamaReply({message:{role:'assistant',content:JSON.stringify(last.evidence?{action:'final',verdict:'no-finding',claims:[],inspected:['original.ts']}:{action:'read',path:'original.ts',startLine:1,endLine:1})}}))});
  let store=await openStore(join(dir,'store'));t.after(()=>{if(store.held)store.close()});
@@ -28,7 +28,9 @@ test('actual captured source and private model operation publish exact instructi
  for(const r of result.records){const bytes=Buffer.from((await import('../dist/store/objects.js')).canonicalJsonBytes(r.value)),id=store.objects.identify(bytes).id;artifacts.set(id,{id,bytes,schema:r.schema,links:[...artifacts.keys()]})}
  store.ledger.registerStaging('stage-instruction-results',[...artifacts.values()].map(a=>({id:a.id,schema:a.schema,privacy:'source-derived',links:a.links})),{work:unit!.work,attemptId:request.attemptId});const receipts=[];for(const a of artifacts.values())receipts.push(await store.objects.put(a.bytes,{expect:{id:a.id,rawSize:a.bytes.length}}));
  store.ledger.publish({work:unit!.work,attemptId:request.attemptId,stageId:'stage-instruction-results',receipts,outputs:[...artifacts.keys()],endedAt:new Date().toISOString()});
- const first=await readPublishedInstructions(store,unit!.work);assert.equal(first.authority,'accepted-publication-bytes');assert.equal(first.disclosure,'private-only');assert.equal(first.requests.length,2);assert.equal(first.record.instructions!.digest,instructionManifest(instructions).digest);assert.ok(first.requests[1].messages.some(m=>{try{return JSON.parse(m.content).evidence?.some((e:any)=>e.text.trim()===original.trim())}catch{return false}}));assert.equal(first.record.deterministicCoverage,false);
- rmSync(src,{recursive:true});store.close();store=await openStore(join(dir,'store'));const replay=await readPublishedInstructions(store,unit!.work);assert.equal(replay.instructions.digest,first.instructions.digest);assert.deepEqual(replay.requests,first.requests);assert.equal(endpoint.seen.length,2,'retained replay launches no model call');await assert.rejects(readPublishedInstructions({...store} as any,unit!.work));await assert.rejects(readPublishedInstructions(store,{id:'work-unrelated',revision:1}));
- t.diagnostic(JSON.stringify({actualOwnedChild:true,localFixtureProvider:true,realInferenceQualified:false,requests:2,acceptedPublication:true,sourceRemoved:true,ownerReopened:true,noReplayCalls:true}));
+ // This older private fixture genuinely published bytes, but self-planned owned-child work is not a modern admitted review operation.
+ await assert.rejects(readPublishedInstructions(store,unit!.work));
+ rmSync(src,{recursive:true});store.close();store=await openStore(join(dir,'store'));await assert.rejects(readPublishedInstructions(store,unit!.work));
+ assert.equal(endpoint.seen.length,2,'refusal launches no additional model call');await assert.rejects(readPublishedInstructions({...store} as any,unit!.work));
+ t.diagnostic(JSON.stringify({actualOwnedChild:true,localFixtureProvider:true,realInferenceQualified:false,acceptedBytesNotCoordinatorAuthority:true,refused:true}));
 });

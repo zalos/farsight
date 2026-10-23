@@ -79,7 +79,7 @@ test('the in-process operation publishes a record and observations, no coverage,
   assert.deepEqual(out.coverage, []);
   assert.deepEqual(out.records.map(x => x.schema), ['sentinel-review-record/draft-1', 'sentinel-observation/draft-1']);
   assert.ok(validateEnvelope('review', out.records[0]!.value).ok && validateEnvelope('observation', out.records[1]!.value).ok);
-  assert.deepEqual(out.usage, { certainty: 'confirmed', inputTokens: 80, outputTokens: 6, monetaryCost: '0' });
+  assert.deepEqual(out.usage, { certainty: 'confirmed', inputTokens: 80, outputTokens: 6, monetaryCost: '0', currency:'USD' });
   assert.equal(r.ledger.loadCheckpoint(unit!.spec.sessionId)!.epoch, 'epoch-a', 'checkpoints live in the model ledger under the epoch');
   await assert.rejects(op.run({ work: { ...unit!.work, stage: { ...unit!.work.stage, kind: 'coded' } }, spec: unit!.spec, attemptId: 'att-1', epoch: 'epoch-a', read }),
     (e: any) => e.code === 'sentinel.review.invalidInput');

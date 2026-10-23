@@ -94,7 +94,14 @@
           "$ref": "#/definitions/ViewHandle"
         },
         "stage": {
-          "$ref": "#/definitions/PlanStage"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PlanStage"
+            },
+            {
+              "$ref": "#/definitions/ReviewPlanStage"
+            }
+          ]
         },
         "revision": {
           "$ref": "#/definitions/Ordinal"
@@ -214,6 +221,13 @@
         "check"
       ],
       "description": "What a work unit does: the bootstrap stages, or running checks."
+    },
+    "ReviewPlanStage": {
+      "type": "string",
+      "enum": [
+        "review-guided",
+        "review-general"
+      ]
     },
     "Ordinal": {
       "type": "integer",
