@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@farsight/core": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.31.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "zod": "^3.24.0",
     "@farsight/parsers": "workspace:*",
     "@farsight/work": "workspace:*",
