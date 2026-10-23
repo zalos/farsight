@@ -27,7 +27,7 @@ export const SENTINEL_EXECUTION_STRINGS: Record<string, StringEntry> = {
   'sentinel.execution.stdoutBudget': same('the worker sent more protocol data than its limit', 'The protocol channel has a total byte limit. A worker that floods it is stopped.'),
   'sentinel.execution.deadlineExceeded': same('the worker did not finish before its deadline', 'Every attempt has a deadline. A worker still running at the deadline is stopped and the attempt ends without a result.'),
   'sentinel.execution.canceled': same('the attempt was canceled', 'Cancellation was asked for. The worker was told to stop and, if it did not stop in time, was stopped.'),
-  'sentinel.execution.resourceExceeded': same('the worker exceeded its memory limit', 'The container runtime stopped the worker because it used more memory than the attempt allows.'),
+  'sentinel.execution.resourceExceeded': same('a resource limit or capacity stopped the attempt', 'The attempt reached a configured memory or CPU limit, or its requested resources exceeded scheduling capacity. Details name the resource and observation. Container memory evidence comes from the runtime or verified counters for that exact container; a kernel observation records limit activity and an out-of-memory kill without proving a causally paired killer.'),
   'sentinel.execution.closureRefused': {
     professional: 'the built-in worker’s startup verification refused to run it',
     hud: 'Sentinel’s built-in check stopped at its startup check, before checking anything',

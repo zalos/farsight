@@ -1297,7 +1297,12 @@ local host. The exact 1,202,824-byte installed tarball (SHA-256
 source-removed readback, busy/natural-release, exact predecessor transfer and explicit abandonment. Deterministic
 interruption uses a separate matching built-private after-stage hold and real SIGKILL; this is not npm-only crash
 qualification. Native current/baseline/selected secret-privacy passed on the independently reviewed author candidate;
-fresh selected CI on the final integrated candidate remains required.
+fresh selected CI on the final integrated candidate remains required. The first #168 CI run found one stale
+MCP test expectation in service and full validation: it compared the closed twelve-value control vocabulary with
+all sixteen CLI outcomes after imports were added. SOL reproduced the failure, pinned the explicit control set and
+added valid-base refusal cases for the four import-only outcomes. The complete eight-test control file and adjacent
+CLI outcome test pass; the final valid-base assertion passes its named test. Independent Claude review approved the
+test correction; runtime/schema and prior installed-artifact evidence are unchanged. Original failures are retained.
 
 Main `919e26c6` and import runtime built at `f0ab28cd` (documentation/package-selection edits were uncommitted at
 build time) ingested the same 1,779 files frozen at `41897d55`: identical 10,228 nodes, 21,320 edges, source digest

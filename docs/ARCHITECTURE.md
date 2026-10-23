@@ -566,6 +566,19 @@ read. Expected scopes remain the admitted plan's scopes. The verified worker res
 Original rule packs and their digest manifest ship as data assets; they contain no engine, database or execution grant.
 
 
+**Positive container memory evidence.** On the qualified native Linux Docker Engine/cgroupv2 profile only,
+`execution/cgroup-memory.ts` may observe the exact-owned container's local kernel counters in addition to the raw
+daemon state. Its inspected PID and stable kernel start/cgroup association bind the full container leaf; root-owned,
+no-follow directory/file identities are pinned and checked before every bounded read. Before the unchanged start,
+one bounded setup establishes a fresh baseline while all original protocol, cancellation and deadline limits remain
+active. Extra worker data during setup is refused. A witness needs local `max`, `oom` and `oom_kill` increases plus
+the actual admitted `memory.max`. These are co-observed limit activity and an OOM kill, not proof of a causally paired
+killer. Only failed `workerExited`/137 with no signal and valid owner can receive that refinement; other failures
+and cleanup retain precedence. Daemon `OOMKilled:false` stays false. No parent/host counters, guessed cgroup path,
+artifact trace, privilege expansion or new public authority is involved. One watcher, fixed read/sample bounds and
+a final read before any Sentinel stop still may miss fast teardown; missing/raced evidence grants nothing. Desktop
+remains daemon-only. The shared resource error vocabulary also covers coordinator CPU/memory and scheduling capacity.
+
 **Coverage.** Each assigned check gets one `sentinel-coverage/draft-1` record per attempt that published:
 `complete`, `partial` (scope skipped, unresolved or not scanned) or `not-run`. The record is never finer than the
 trusted adapter's registered `coverage` granularity (default `aggregate`); a result cannot claim finer coverage.

@@ -551,6 +551,23 @@ explicit native opt-ins exercise already provisioned pinned assets and must meet
 `test/fixtures/` holds PR 01's feasibility
 inputs, which this package leaves untouched.
 
+### Container memory-failure observations
+
+A memory failure needs positive evidence. Exit137 alone, a missing kernel object, or a notification whose read
+raced teardown proves no memory cause. The raw container state remains recorded exactly as the daemon reported it.
+On qualified native Linux x64 with Docker Engine and readable cgroupv2, a bounded observer may additionally retain
+that exact owned container’s local `max`, `oom` and `oom_kill` counter increases, with its actual `memory.max` equal
+to the admitted limit. This establishes memory-limit activity and an observed out-of-memory kill; it does not prove
+that a particular local limit event caused that kill. Desktop continues to use daemon evidence only.
+
+The observer binds the inspected PID to its exact full container leaf and pins kernel object identities before the
+unchanged start message. Each native external start waits for one inspect, for up to 200 ms, within the original
+attempt deadline. It keeps the original timers and stream budgets active, reads no parent or host counters,
+and closes before any Sentinel stop. Its setup and samples are bounded, with no added settling window. Fast teardown
+or unavailable notifications can still prevent a witness. Absence of a witness is never proof that no OOM happened.
+The separate forced-daemon-false native control requires real positive kernel evidence; it does not replace the
+original daemon-settling or plain-SIGKILL controls, and local unit tests do not qualify the Linux runtime.
+
 ## Pattern adapter (draft)
 
 `src/adapters/pattern/` runs Semgrep 1.181.0 (`semgrep/semgrep@sha256:81474464…304b`, installed ahead, never pulled)

@@ -58,6 +58,7 @@ import { SENTINEL_SERVICE_STRINGS } from './strings-sentinel-service.js';
 import { SENTINEL_GLOSSARY_STRINGS } from './strings-sentinel-glossary.js';
 import { SENTINEL_STORAGE_ERROR_STRINGS } from './strings-sentinel-storage-errors.js';
 import { SENTINEL_PATTERN_STRINGS } from './strings-sentinel-pattern.js';
+import { SENTINEL_MEMORY_STRINGS } from './strings-sentinel-memory.js';
 import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
 import { SENTINEL_NEST_STRINGS } from './strings-sentinel-nest.js';
@@ -208,6 +209,7 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_PATTERN_STRINGS,
   // Sentinel worker execution: protocol, adapter registry, container isolation, supervisor (strings-sentinel-execution.ts)
   ...SENTINEL_EXECUTION_STRINGS,
+  ...SENTINEL_MEMORY_STRINGS,
   // Sentinel source capture: entry reasons and capture/restore refusals (strings-sentinel-capture.ts)
   ...SENTINEL_CAPTURE_STRINGS,
   // Sentinel parser evidence: refusals, entry classes and reconciled reads (strings-sentinel-parser.ts)

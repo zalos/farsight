@@ -12,6 +12,7 @@
 // - Ownership labels (store, attempt, epoch, invocation, a random owner nonce) are checked before any kill or
 //   removal, and removal is confirmed by the daemon reporting the exact container absent. Nothing is ever
 //   selected by name pattern or command line.
+import { watchOwnedCgroupMemory, type CgroupMemoryWatch } from './cgroup-memory.js';
 import { randomUUID } from 'node:crypto';
 import { lstatSync, mkdtempSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -305,6 +306,31 @@ export class ContainerBackend {
   startAttached(id: string): WorkerProcess {
     if (!CONTAINER_ID.test(id)) throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'start' });
     return this.#runner.start(id);
+  }
+
+  /** Private positive-only kernel support; Desktop and other namespaces keep daemon evidence only. */
+  get supportsLocalMemoryWitness(): boolean {
+    return process.platform === 'linux' && this.facts.host === 'linux-x64' && this.facts.backend === 'docker-engine'
+      && this.facts.server === 'linux-amd64' && this.facts.cgroupVersion === '2';
+  }
+
+  /** Exactly one owned inspect within200ms; no guessed PID/path or fallback to parent/kernel-wide counters. */
+  async prepareMemoryWitness(id: string, owner: OwnershipLabels, memoryBytes: number, signal: AbortSignal): Promise<CgroupMemoryWatch | undefined> {
+    if (!this.supportsLocalMemoryWitness || signal.aborted
+      || !['owner', 'store', 'attempt', 'epoch'].every(key => typeof owner[key as keyof OwnershipLabels] === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(owner[key as keyof OwnershipLabels]))
+      || !/^sha256:[0-9a-f]{64}$/.test(owner.invocation)) return;
+    const until = performance.now() + 200;
+    const timeout = new AbortController(), timer = setTimeout(() => timeout.abort(), 200);
+    const stopped = AbortSignal.any([signal, timeout.signal]);
+    try {
+      const c = await Promise.race([this.#owned(id, owner, stopped), new Promise<undefined>(resolve => { if (stopped.aborted) resolve(undefined); else stopped.addEventListener('abort', () => resolve(undefined), { once: true }); })]);
+      if (stopped.aborted || performance.now() >= until || !c) return;
+      const state = c.State as { Running?: boolean; Pid?: number } | undefined;
+      if (state?.Running !== true || !Number.isSafeInteger(state.Pid) || state.Pid! <= 0) return;
+      const observation = watchOwnedCgroupMemory(id, state.Pid!, memoryBytes);
+      if (stopped.aborted || performance.now() >= until) { observation.close(); return; }
+      return observation;
+    } catch { return undefined; } finally { clearTimeout(timer); timeout.abort(); }
   }
 
   async state(id: string, owner: Partial<OwnershipLabels>, signal?: AbortSignal): Promise<ContainerState | null> {
