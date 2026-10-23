@@ -41,8 +41,13 @@ in README and ADR48. Native Claude remains disabled.
 
 The original two-turn scan is retained as unfinished: list/read exhausted its budget before the source could be
 sent in a final request. New plans allow three turns under the same 120-second unit deadline and unchanged
-owner-adopted budgets. Independent Claude review cleared the correction. Final PR CI, merge, release workflow
-and published-asset acceptance remain distinct gates; this is not a claim that publication has finished.
+owner-adopted budgets. Independent Claude review cleared the correction. All final checks passed and #190
+merged as `7bb4ba23`. Owner-interface clarity and recovery [#196](https://github.com/zalos/farsight/pull/196)
+merged as `1ff7a25e` after independent SOL/Claude review and all selected CI passed. It makes preparation versus
+analysis visible and provides readable expired-pairing recovery without extending authority or replaying writes.
+The root [closeout recap and restart plan](../../../SENTINEL-STATUS-2026-10-23.md) records validation,
+cleanup, owner decisions and the remaining work. Release workflow, release PR, publication and published-asset
+acceptance remain open. Latest published Farsight is 0.3.0; this does not complete the full plan.
 
 ## Current native attribution disposition — 2026-10-23
 
