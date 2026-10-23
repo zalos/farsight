@@ -1284,6 +1284,34 @@ it holds no run, work or attempt state.
 - Usage above a reservation is charged in full, recorded as an overrun, and overdraws the envelope, which then
   refuses every further reservation until the owner approves a new budget. Nothing is clamped.
 
+**Closed native Claude profile (CLI-only release refinement).** The additive `claude-cli` kind is one
+pinned Claude Code 2.1.282 macOS arm64 executable, shipped fixed helper and versioned wire. The owner adopts
+its exact executable/helper/profile digests, the observed full Haiku model id, hosted terms and a token quota.
+The hosted HTTP feature pause does not disable this separate native profile. Other CLI/OS profiles remain
+unavailable. Discovery reads the first existing fixed `claude` basename in a bounded host PATH and requires
+exact bytes; it never executes discovery commands, tries a second mismatch candidate or starts local inference.
+
+The helper uses Apple's no-UI APIs and one exact native login service/current account query. **The whole
+native JSON, potentially including refresh material, is read only in this short-lived helper.** Only access
+metadata reaches the parent; only the access token reaches the fixed vendor child over an anonymous FD.
+No refresh, login, keychain write, home/config fallback or credential copy is allowed. Expiry must exceed the
+original unit deadline plus fixed skew. Core dumps are disabled. Vendor flags remove customizations/tools;
+a deny-default Seatbelt policy separately confines source/home reads, child execution, writes and network.
+An owned bounded gate permits only end-to-end TLS to the fixed vendor endpoint, never arbitrary destinations.
+A qualified runtime alone grants no read or launch: a private one-use authority is issued only after the genuine
+admission, consumed owner receipt and held reservation, and is checked again for the helper read.
+
+`subscription-quota` uses the existing durable ledger with null monetary amounts/currency: it is **not** a
+zero-cost or no-fee assertion. Each single native turn conservatively reserves its full context, including opaque
+vendor overhead. Confirmed reported tokens (including cache input) may settle quota; partial, canceled, deadline
+or unknown consumption keeps the reservation. Resumed admissions aggregate across the same provider/run and
+can only tighten the original cap/accounting basis. Old monetary rows retain their amounts and provenance;
+legacy unobserved provider rows cannot reserve or dispatch. Exact role-tagged native input/system bytes and
+encoding version are retained before the call and must match its digest. Only final visible assistant output is
+exposed, with requested/reported identity and confirmed usage; EOF without a final result is failure. Shipped
+helper source/binary/self-test provenance is distinct from live authentication qualification. No erasure claim
+or vendor-internal instruction/skill visibility is made.
+
 **Tests.** Ordinary tests use original local mock endpoints on 127.0.0.1, a throwaway self-signed certificate for
 the TLS check, and in-memory credential sources. No hosted provider is called, no model is downloaded and no real
 keychain entry is read.

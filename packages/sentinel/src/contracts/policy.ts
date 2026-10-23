@@ -70,11 +70,13 @@ export interface SentinelGrant {
 
 export interface ProviderSettings {
   id: Id;
-  kind: 'ollama' | 'openai-compatible';
+  kind: 'ollama' | 'openai-compatible' | 'claude-cli';
   endpoint: EndpointOrigin;
   credential: KeychainRef | null;
   /** `local-only` keeps source on this machine; `hosted` sends permitted context off it. */
   disclosure: 'local-only' | 'hosted';
+  /** Explicit owner adoption of the closed native profile; configuration alone is not runtime qualification. */
+  nativeProfile?: { id: Id; executableDigest: Digest; helperDigest: Digest; profileDigest: Digest };
   /** The most one admitted action may reserve. */
   budget: Budget;
   /**
@@ -162,7 +164,9 @@ export type ModelPricing =
       asOf: CalendarDate;
     }
   /** A local runtime: no provider fee. Compute is not claimed free; tokens are still reserved. */
-  | { kind: 'no-fee'; basis: 'local-runtime' };
+  | { kind: 'no-fee'; basis: 'local-runtime' }
+  /** Owner-bounded subscription tokens. Monetary consumption is unobserved, never zero. */
+  | { kind: 'subscription-quota'; basis: 'owner-subscription' };
 
 /** A hosted provider's terms as the owner recorded them: endpoint-specific facts, never a protocol promise. */
 export interface ProviderTerms {
@@ -175,7 +179,7 @@ export interface ProviderTerms {
 /** What a probe of one origin found for one model. The owner adopts it with the settings; it is never assumed. */
 export interface ModelCapability {
   schema: 'sentinel-model-capability/draft-1';
-  kind: 'ollama' | 'openai-compatible';
+  kind: 'ollama' | 'openai-compatible' | 'claude-cli';
   origin: EndpointOrigin;
   model: ModelName;
   listed: true;
@@ -282,7 +286,7 @@ export interface EffectivePolicyEnvelope {
   /** @maxItems 64 */
   grants: { actions: SentinelAction[]; principals: Principal[]; confirm: 'always' | 'agent' | 'never' | 'default'; scoped: boolean }[];
   /** @maxItems 16 */
-  providers: { id: Id; kind: 'ollama' | 'openai-compatible'; disclosure: 'local-only' | 'hosted'; credential: 'keychain' | 'none' }[];
+  providers: { id: Id; kind: 'ollama' | 'openai-compatible' | 'claude-cli'; disclosure: 'local-only' | 'hosted'; credential: 'keychain' | 'none' }[];
   /** @maxItems 4096 */
   refused: RefusedRequest[];
 }

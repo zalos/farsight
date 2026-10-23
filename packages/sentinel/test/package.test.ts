@@ -142,6 +142,11 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'frameworks/next/analyze.js': ['node:crypto'],
   'frameworks/next/config.js': ['dynamic:oxc-parser'],
   'frameworks/next/errors.js': ['@farsight/core/dist/strings-sentinel-next.js'],
+  // Fixed native CLI boundary: exact helper and executable, anonymous token FD, owned fixed TLS egress only.
+  'review/providers/cli-native-call.js': ['node:child_process', 'node:fs/promises'],
+  'review/providers/cli-native-helper.js': ['node:child_process', 'node:crypto', 'node:fs', 'node:fs/promises', 'node:path', 'node:url'],
+  'review/providers/cli-native-profile.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:path'],
+  'review/providers/cli-native-proxy.js': ['node:dns/promises', 'node:net'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
   // The Spring pack: tree-sitter's Java grammar, loaded on first analysis only; graph is pure JSON helpers.
   'frameworks/spring/pack.js': ['@farsight/graph', 'node:crypto'],

@@ -62,6 +62,11 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   release gate), `paths.ts` (canonical, local, owner-only folders), `owner.ts` (the lifetime owner lock and epoch),
   `ledger.ts` + `migrations.ts` + `store-types.ts` (the fenced WAL ledger), `objects.ts` (content-addressed objects),
   `objects-ledger.ts` (the ledger seam and verifier) and `gc.ts` (read-only reachability and the dry-run prune plan).
+  The fixed native `cli-native-{profile,helper,auth,call,proxy,wire}.ts` modules qualify exact executable/helper
+  bytes, enforce one-use admitted credential/launch authority, confine one native call and retain versioned wire.
+  `native/claude-keychain-helper.m` is compiled only at build time by `scripts/build-cli-native-helper.mjs`;
+  missing/wrong-platform artifacts refuse. Quota uses the same `budget.ts`, with null monetary fields and
+  cumulative same-provider/run caps. Synthetic native and genuine legacy migration tests read no real credentials.
   `test/store-integration.test.ts` drives the facade end to end across processes. The OSV advisory adapter (PR 12, ADR 29,
   `src/adapters/osv/`, composed by the explicit scanner CLI; `src/adapters/sealed-input.ts` is the shared sealed-copy reader): `adapter.ts` (OSV-Scanner 2.7.0 pins, offline arguments, support), `worker-source.ts`
   (the original shell shim), `job.ts` (dependency-file kinds, snapshot inputs, the line job), `normalize.ts` (components with

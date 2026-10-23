@@ -236,7 +236,8 @@
           "type": "string",
           "enum": [
             "ollama",
-            "openai-compatible"
+            "openai-compatible",
+            "claude-cli"
           ]
         },
         "endpoint": {
@@ -259,6 +260,31 @@
             "hosted"
           ],
           "description": "`local-only` keeps source on this machine; `hosted` sends permitted context off it."
+        },
+        "nativeProfile": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/Id"
+            },
+            "executableDigest": {
+              "$ref": "#/definitions/Digest"
+            },
+            "helperDigest": {
+              "$ref": "#/definitions/Digest"
+            },
+            "profileDigest": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "id",
+            "executableDigest",
+            "helperDigest",
+            "profileDigest"
+          ],
+          "additionalProperties": false,
+          "description": "Explicit owner adoption of the closed native profile; configuration alone is not runtime qualification."
         },
         "budget": {
           "$ref": "#/definitions/Budget",
@@ -293,6 +319,11 @@
       "type": "string",
       "description": "An OS-keychain reference. Settings hold references only, never secret values or environment names.",
       "pattern": "^keychain:farsight/[a-z0-9][a-z0-9-]{0,62}$"
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
     },
     "Budget": {
       "type": "object",
@@ -481,7 +512,8 @@
         "kind": {
           "enum": [
             "rates",
-            "no-fee"
+            "no-fee",
+            "subscription-quota"
           ]
         }
       },
@@ -560,6 +592,34 @@
             ],
             "additionalProperties": false
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "subscription-quota"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "subscription-quota"
+              },
+              "basis": {
+                "type": "string",
+                "const": "owner-subscription"
+              }
+            },
+            "required": [
+              "kind",
+              "basis"
+            ],
+            "additionalProperties": false
+          }
         }
       ],
       "description": "How a model's spend is priced. There is no unpriced form: an unpriced call cannot be bounded."
@@ -616,7 +676,8 @@
           "type": "string",
           "enum": [
             "ollama",
-            "openai-compatible"
+            "openai-compatible",
+            "claude-cli"
           ]
         },
         "origin": {
@@ -655,11 +716,6 @@
       ],
       "additionalProperties": false,
       "description": "What a probe of one origin found for one model. The owner adopts it with the settings; it is never assumed."
-    },
-    "Digest": {
-      "type": "string",
-      "description": "A SHA-256 content address, lower-case hex.",
-      "pattern": "^sha256:[0-9a-f]{64}$"
     },
     "Timestamp": {
       "type": "string",
