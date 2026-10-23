@@ -1230,7 +1230,9 @@ chat-completions API. Compatibility is per endpoint. `probeCapability` lists wha
 listing), and a binding needs a capability record for exactly its kind, origin and model.
 
 **Binding.** `bindProvider(policy, profile)` joins a provider from the adopted settings (kind, origin, keychain
-reference, disclosure, per-action budget) with a model profile. The profile names the model, hard limits, a rate
+reference, disclosure, per-action budget) with a model profile. *Superseded in the same draft (ADR 39 update):
+models are configured in the adopted settings, `providers[].models[]`, and `bindProvider(policy, providerId,
+modelId)` reads every term there; the caller names ids only.* The profile names the model, hard limits, a rate
 schedule or an explicit local no-fee basis, recorded hosted terms, and the capability record. A local-only provider
 must be a literal loopback address; a hosted one must use https and needs recorded retention and training terms.
 An unpriced profile is refused, and only a local runtime may declare no fee. The binding's canonical digest is the
@@ -1289,6 +1291,118 @@ keychain entry is read.
 Not decided here: the evidence broker, prompts and review lanes (PR 22); the coordinator stage that opens envelopes
 and fences epochs (PR 08 integration); a settings-contract home for profiles and capability records; live
 model acceptance; and a second model configuration.
+
+39. **Sentinel's model review is a fixed grammar over pinned evidence, recorded apart from coverage (2026-10-22).**
+
+`@farsight/sentinel/review` runs rule-guided review (one session per planned check, over its scope files and pinned
+rule text) and general review (one session per partition of the inventory). Both use one bounded loop and the PR 21
+broker (ADR 35) through `providerCaller`.
+
+**Scope is decided before the model, and independently of findings.** `partitionInventory` sorts one source's
+captured TS/JS/Java files and cuts them by file and byte bounds. Its only inputs are the snapshot entries and the
+bounds, so a file without a detector hit is reviewed like any other. Uncaptured, too-large and unlisted entries are
+gaps with reasons.
+
+**The model sees source only through the evidence broker.** The broker serves bounded line slices of files in the
+session's scope, read by content id and hash-checked, each with an evidence id, the exact UTF-8 byte span and a
+quote digest. It also serves the pinned rule text and, when given, recorded call reachability. The reachability is
+a structural view of PR 18's `sentinel-paths/draft-1` results, explicitly not data flow. Anything else is refused
+as data and recorded: out of scope, an unknown tool, over budget, or a span a `DisclosureFilter` withholds (the
+seam for opaque secret-location refs). Evidence goes to the model as JSON marked `untrusted`.
+
+**Replies are a closed grammar.** A reply is `list`, `read`, `rule`, `paths` (each only when the session offers it)
+or `final`, with no other key. So no text in the reviewed code, however it is worded, can add a tool, a target, a
+disclosure, an approval, a suppression or a promotion: a reply carrying any of them is a shape error, answered once
+with the rejection and bounded by `maxInvalidReplies`.
+- Every claim cites ids this session served, re-verified against the captured bytes.
+- A finding needs a cited claim.
+- `inspected` must name only files actually served.
+- Valid citations make a claim well formed, not right; correctness is evaluated against labels.
+
+**Bounds and checkpoints.** A session stops, with its own frontier, at its call limit, cumulative serialized input,
+deadline, cancellation, invalid replies, provider budget, a provider error, or uncertain usage. Each model call is
+one operation with a stable id. The checkpoint (`sentinel-review-checkpoint/draft-1`, behind a `CheckpointStore`
+seam with a private-file default) records it settled, with its reply and broker result, before the next call. A
+resumed session continues after its last settled operation and never re-sends one, and the PR 21 ledger refuses a
+repeat anyway. A checkpoint resumes only for the same scope, prompt, budget and tools (`specDigest`).
+
+**Records are not coverage.** The session record (`sentinel-review-record/draft-1`) lists what was served, by file
+and line range, and every in-scope file never read, as a `notInspected` frontier. It states `establishes:
+model-review-inspection` and `deterministicCoverage: false`; no formal check is completed by it. Claims of a finding
+become `sentinel-observation/draft-1` envelopes from a `model-review` producer, carrying:
+- the model identity at its actual strength and the prompt digest;
+- the planned rule, for guided review;
+- `sentinel.review.limitation.modelClaim`.
+
+They are proposals; nothing in review approves or promotes.
+
+**E5/E8.** `planEvaluation` enumerates models × cases × trials × {clean, canary}: 600 evaluations for two models,
+the 30-case corpus and five trials. `runEvaluation` runs each through the same session and validator, scoring
+verdicts against labels. It counts invalid and unfinished runs, canary-induced verdict changes and canary-token
+leaks per model and case, and computes Wilson intervals for precision and recall. `e5Gate` never says qualified. It
+lists what is missing:
+- two provider-backed models (mock runs report `mockOnly`);
+- 30 cases and five trials;
+- a label review by someone other than the author;
+- owner thresholds;
+- unfinished evaluations.
+
+Only when nothing is missing does it say whether the thresholds were met; owner acceptance is a separate decision.
+The corpus (`test/fixtures/model-review/e5-corpus.json`) is original synthetic text with author-draft labels.
+`estimatePlan` gives E8 upper bounds labeled `estimate`; observed usage lives in session records and the budget
+ledger.
+
+Not decided here: the live E5 run, labels review, thresholds and the second model's configuration (owner); the
+coordinator stage that plans, admits and fences review work (PR 08/09 integration); a registered JSON schema for the
+record and checkpoint drafts; report rendering (PR 19); and feeding PR 18 path envelopes and secret-location refs
+through the two seams. The open items are tracked in the [model integration checklist](proposals/farsight-sentinel/model-integration-checklist.md).
+
+**Update — registered contracts and trusted configuration (2026-10-22).** The additive public contracts are:
+- `sentinel-settings/draft-1` gains an optional `providers[].models[]` (`ModelSettings`). Each model carries its
+  limits, a `rates` or local `no-fee` pricing (there is no unpriced form), recorded `terms` (required for a hosted
+  provider), and the owner-adopted `sentinel-model-capability/draft-1` record (`null` until probed). The validator
+  enforces unique model ids, no-fee only for local-only providers, rates in the budget's currency, an output
+  allowance that leaves room in the context, and a capability for exactly this kind, origin and model.
+  `bindProvider(policy, providerId, modelId)` and `probeConfigured` read only these adopted values; the settings
+  example carries scrubbed models.
+- Three envelopes join the canonical registry, with generated bounded schemas, invariants, valid fixtures and
+  invalid cases:
+  - `sentinel-review-partitions/draft-1`: unique, ordered members; partition ids and the plan digest recomputed;
+    bounds respected.
+  - `sentinel-review-checkpoint/draft-1`: the fixed prompt first; sequential operation ids; usage on exactly the
+    settled operations; claims and `inspected` only over served evidence; an unsettled call implies a stop.
+  - `sentinel-review-record/draft-1`: the digest; a verdict exactly when completed; every unread file a frontier;
+    usage unknown exactly when a call is unsettled; `deterministicCoverage` always false.
+- Plans, checkpoints and records are validated where produced and where read (`parseEnvelope` caps a checkpoint
+  file at the 4 MiB envelope limit). A checkpoint that would outgrow the limit is not written; the session stops
+  at the last one that fitted. A checkpoint for another session, prompt or spec, or with a forged quote digest,
+  never resumes.
+
+Withheld secret-location citations (PR 11's `location: 'withheld'` union) enter through `withheldEntries`. It
+resolves each against the snapshot and fails closed when it cannot. `partitionInventory(…, { withheld })` and
+`withoutWithheld` then remove those files from review whole (their paths are not sent either) and record
+`<sourceId>#entry:<n>` gaps. The citation is consumed by its discriminator and never turned into a path; the
+structural view is replaced by the contract import when PR 11 integrates.
+
+
+**Update — the agentic operation (2026-10-22).** Model review is planned and run as its own stage.
+- `planReviewWork` emits `sentinel-work/draft-1` units with `stage.kind: 'agentic'` (`sentinel.stage.review.guided`
+  and `.general`). They depend on the deterministic work they read and carry no checks. `assertAgenticOnly`
+  refuses any coverage record that names such a unit.
+- `createModelReviewOperation` is the trusted in-process driver. It runs a unit's session through the broker under
+  the run's envelope and returns the review record and observations to publish, the attempt usage from the ledger
+  (`confirmed` only when every call settled) and no coverage.
+- The model ledger is the provider budget's SQLite file, which now also holds review checkpoints
+  (`LedgerCheckpointStore`), written in one transaction under the coordinator epoch.
+  `recoverModelWork(staleEpochs)` fences those epochs: their unsent reservations are released, their sent ones stay
+  charged as uncertain, and a process still running under a fenced epoch can no longer reserve, dispatch or
+  checkpoint.
+- A session belongs to its work unit, not its attempt, so the next attempt resumes the last checkpoint. An operation
+  is sent at most once in the ledger, under whichever envelope, so a crash between a call and its checkpoint leaves
+  the session stopped as uncertain usage, never silently re-sent.
+- Owner helpers (`probeIntent`/`probeModel`, `reconcileIntent`/`reconcileReservation`, `inspectEnvelopes`) are for
+  the CLI, which owns dispatch and admission. Probing is an owner action (`tool.acquire`, network effect).
+  Reconciling lowers charged spend, so it always needs a spent owner receipt, whatever the grants say.
 
 30. **Sentinel's Next pack decides middleware applicability statically and never claims an effect (2026-10-22).**
 

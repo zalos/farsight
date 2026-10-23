@@ -36,6 +36,7 @@ export const SENTINEL_PROVIDER_STRINGS: Record<string, StringEntry> = {
   'sentinel.provider.operationConflict': same('this operation already reserved a different amount: {detail}', 'An operation reserves once. Asking again with the same id and the same amount returns the first reservation; another amount is refused.'),
   'sentinel.provider.reservationState': same('the reservation cannot move that way: {detail}', 'A reservation is held, then sent, then settled with its usage. A sent reservation is never released; one whose usage is unknown stays held until the owner reconciles it.'),
   'sentinel.provider.ledgerInvalid': same('the budget ledger cannot be used: {detail}', 'The ledger keeps every reservation durably, so concurrent calls share one budget across processes and a restart cannot forget a call that may have been charged.'),
+  'sentinel.provider.epochFenced': same('this work belongs to a newer coordinator now: {detail}', 'After a restart, recovery fences the earlier coordinator\'s epoch: a process still running under it cannot reserve budget, send a call or save a review checkpoint, so two owners never spend or write for one session.'),
   // ---- reservation states ----
   'sentinel.reservation.held': same('reserved, not sent', 'The worst case of a call is set aside in the budget; nothing has been sent.'),
   'sentinel.reservation.dispatched': same('sent, usage not yet known', 'The request may have reached the provider. The reservation stays set aside until its usage is known.'),

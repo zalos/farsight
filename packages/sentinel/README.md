@@ -107,6 +107,15 @@ or project/workspace-root package declarations) leave applicability unknown: the
 not identify patched installed bytes. Ordinary peer dependency suffixes and unrelated package patches remain
 supported. This source-only check reads captured installation evidence; it does not attest a running installation.
 
+## Model review (draft, opt-in)
+
+`farsight-sentinel/review` runs rule-guided and general review over pinned snapshot evidence. General review
+partitions the captured inventory without regard to findings. A model reads code only through a scoped evidence
+broker and answers only in a fixed grammar; every claim cites exact captured bytes. Sessions are bounded and
+checkpointed after each settled call. What a session read is recorded separately from deterministic coverage, and
+its claims are observations for a person to decide on (ADR 39). The E5 harness runs over an original synthetic
+corpus. Its gate stays not-ready until the owner configures two models, reviews the labels and sets thresholds.
+
 ## The local store (draft)
 
 ```ts

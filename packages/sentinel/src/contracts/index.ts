@@ -13,6 +13,7 @@ export type * from './protocol.js';
 export type * from './rules.js';
 export type * from './policy.js';
 export type * from './controls.js';
+export type * from './review.js';
 export type * from './plan.js';
 export type * from './paths.js';
 export type * from './deepimport.js';
@@ -60,6 +61,9 @@ export const ENVELOPES = {
   deliverychunk: { schema: 'sentinel-delivery-chunk/draft-1', type: 'DeliveryChunk' },
   controlcapabilities: { schema: 'sentinel-control-capabilities/draft-1', type: 'ControlCapabilities' },
   controloutcome: { schema: 'sentinel-control-outcome/draft-1', type: 'ControlOutcome' },
+  partitions: { schema: 'sentinel-review-partitions/draft-1', type: 'ReviewPartitionsEnvelope' },
+  checkpoint: { schema: 'sentinel-review-checkpoint/draft-1', type: 'ReviewCheckpointEnvelope' },
+  review: { schema: 'sentinel-review-record/draft-1', type: 'ReviewRecordEnvelope' },
 } as const;
 
 export type EnvelopeKind = keyof typeof ENVELOPES;
@@ -120,6 +124,10 @@ export const CONTROL_PROPERTIES = [
   'authentication', 'authorization', 'csrf', 'input-validation', 'rate-limit', 'security-headers', 'cors',
 ] as const;
 export const CONTROL_VERDICTS = ['applies', 'does-not-apply', 'unknown'] as const;
+export const REVIEW_VERDICTS = ['finding', 'no-finding', 'inconclusive'] as const;
+export const REVIEW_KINDS = ['guided', 'general'] as const;
+export const REVIEW_OUTCOMES = ['completed', 'unfinished'] as const;
+export const MODEL_PRICING_KINDS = ['rates', 'no-fee'] as const;
 
 /** Largest serialized envelope or worker message accepted, in UTF-8 bytes (PR 01's proposed 4 MiB output ceiling). */
 export const MAX_ENVELOPE_BYTES = 4 * 1024 * 1024;

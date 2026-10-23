@@ -12,7 +12,7 @@ export const PROVIDER_ERROR_CODES = Object.freeze([
   'sentinel.provider.redirectRefused', 'sentinel.provider.httpStatus', 'sentinel.provider.malformedResponse',
   'sentinel.provider.identityMalformed', 'sentinel.provider.identityMismatch', 'sentinel.provider.timeout',
   'sentinel.provider.canceled', 'sentinel.provider.unreachable', 'sentinel.provider.credentialUnavailable',
-  'sentinel.provider.operationConflict', 'sentinel.provider.reservationState', 'sentinel.provider.ledgerInvalid',
+  'sentinel.provider.operationConflict', 'sentinel.provider.reservationState', 'sentinel.provider.ledgerInvalid', 'sentinel.provider.epochFenced',
 ] as const);
 export type ProviderErrorCode = typeof PROVIDER_ERROR_CODES[number];
 

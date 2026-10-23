@@ -551,7 +551,7 @@ try {
       const path = ${JSON.stringify(path)}, at = '2026-10-22T12:00:00.000000000Z';
       const ledger = await BudgetLedger.open(path);
       try {
-        ledger.createEnvelope({ id: 'fixture', runId: 'fixture-run', bindingDigest: 'sha256:' + '1'.repeat(64), admissionDigest: 'sha256:' + '2'.repeat(64), receiptDigest: null,
+        ledger.createEnvelope({ id: 'fixture', runId: 'fixture-run', providerId: 'fixture-provider', bindingDigest: 'sha256:' + '1'.repeat(64), admissionDigest: 'sha256:' + '2'.repeat(64), receiptDigest: null,
           maxTokens: 10, maxCostNanos: 0n, currency: 'USD', createdAt: at });
         const held = ledger.reserve({ envelopeId: 'fixture', operationId: 'first', tokens: 6, costNanos: 0n, epoch: 'fixture-epoch', at });
         assert.equal(ledger.reserve({ envelopeId: 'fixture', operationId: 'first', tokens: 6, costNanos: 0n, epoch: 'fixture-epoch', at }).id, held.id);

@@ -24,6 +24,7 @@ export const RESERVATION_STATE_KEYS: Readonly<Record<ReservationState, string>> 
 export interface EnvelopeInput {
   readonly id: string;
   readonly runId: string;
+  readonly providerId: string;
   readonly bindingDigest: string;
   readonly admissionDigest: string;
   readonly receiptDigest: string | null;
@@ -61,7 +62,7 @@ export interface Usage { readonly inputTokens: number; readonly outputTokens: nu
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS envelopes (
-  id TEXT PRIMARY KEY, run_id TEXT NOT NULL, binding_digest TEXT NOT NULL, admission_digest TEXT NOT NULL,
+  id TEXT PRIMARY KEY, run_id TEXT NOT NULL, provider_id TEXT NOT NULL, binding_digest TEXT NOT NULL, admission_digest TEXT NOT NULL,
   receipt_digest TEXT, max_tokens INTEGER NOT NULL CHECK (max_tokens >= 0), max_cost_nanos INTEGER NOT NULL CHECK (max_cost_nanos >= 0),
   currency TEXT NOT NULL, overdrawn INTEGER NOT NULL DEFAULT 0 CHECK (overdrawn IN (0, 1)), created_at TEXT NOT NULL) STRICT;
 CREATE TABLE IF NOT EXISTS reservations (
@@ -72,6 +73,10 @@ CREATE TABLE IF NOT EXISTS reservations (
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
   CHECK ((state = 'settled') = (used_cost_nanos IS NOT NULL)),
   UNIQUE (envelope_id, operation_id)) STRICT;
+CREATE TABLE IF NOT EXISTS fenced_epochs (epoch TEXT PRIMARY KEY, fenced_at TEXT NOT NULL) STRICT;
+CREATE TABLE IF NOT EXISTS review_checkpoints (
+  session_id TEXT PRIMARY KEY, epoch TEXT NOT NULL, sequence INTEGER NOT NULL CHECK (sequence >= 1),
+  body TEXT NOT NULL, updated_at TEXT NOT NULL) STRICT;
 CREATE TABLE IF NOT EXISTS reservation_events (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, reservation_id TEXT NOT NULL REFERENCES reservations(id),
   from_state TEXT, to_state TEXT NOT NULL, detail TEXT NOT NULL, at TEXT NOT NULL) STRICT;
@@ -124,20 +129,26 @@ export class BudgetLedger {
 
   #run(sql: string, ...args: (string | number | bigint | null)[]): void { this.#db.prepare(sql).run(...args); }
 
+  #fenced(epoch: string): boolean { return !!this.#get('SELECT 1 AS x FROM fenced_epochs WHERE epoch = ?', epoch); }
+
+  #assertLive(epoch: string): void {
+    if (this.#fenced(epoch)) fail('sentinel.provider.epochFenced', 'this coordinator epoch was fenced by recovery; a newer epoch owns its work');
+  }
+
   /** Records an approved envelope once. Re-creating the same id with other terms is refused. */
   createEnvelope(e: EnvelopeInput): void {
-    id(e.id, 'the envelope'); id(e.runId, 'the run'); tokens(e.maxTokens, 'maxTokens'); nanos(e.maxCostNanos, 'maxCost');
+    id(e.id, 'the envelope'); id(e.runId, 'the run'); id(e.providerId, 'the provider'); tokens(e.maxTokens, 'maxTokens'); nanos(e.maxCostNanos, 'maxCost');
     this.#tx(() => {
       const prior = this.#get('SELECT * FROM envelopes WHERE id = ?', e.id);
       if (prior) {
         if (prior.binding_digest !== e.bindingDigest || prior.admission_digest !== e.admissionDigest || BigInt(prior.max_tokens as bigint) !== BigInt(e.maxTokens)
-          || prior.max_cost_nanos !== e.maxCostNanos || prior.currency !== e.currency || prior.run_id !== e.runId) {
+          || prior.max_cost_nanos !== e.maxCostNanos || prior.currency !== e.currency || prior.run_id !== e.runId || prior.provider_id !== e.providerId) {
           fail('sentinel.provider.ledgerInvalid', 'an envelope with this id already has other terms');
         }
         return;
       }
-      this.#run('INSERT INTO envelopes (id, run_id, binding_digest, admission_digest, receipt_digest, max_tokens, max_cost_nanos, currency, created_at) VALUES (?,?,?,?,?,?,?,?,?)',
-        e.id, e.runId, e.bindingDigest, e.admissionDigest, e.receiptDigest, e.maxTokens, e.maxCostNanos, e.currency, e.createdAt);
+      this.#run('INSERT INTO envelopes (id, run_id, provider_id, binding_digest, admission_digest, receipt_digest, max_tokens, max_cost_nanos, currency, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        e.id, e.runId, e.providerId, e.bindingDigest, e.admissionDigest, e.receiptDigest, e.maxTokens, e.maxCostNanos, e.currency, e.createdAt);
     });
   }
 
@@ -180,11 +191,16 @@ export class BudgetLedger {
   reserve(r: { envelopeId: string; operationId: string; tokens: number; costNanos: bigint; epoch: string; at: string }): Reservation {
     id(r.envelopeId, 'the envelope'); id(r.operationId, 'the operation'); id(r.epoch, 'the epoch'); tokens(r.tokens, 'tokens'); nanos(r.costNanos, 'cost');
     return this.#tx(() => {
+      // An operation is sent at most once in this ledger, under whichever envelope: after a crash a new envelope never
+      // makes an uncertain operation sendable again.
+      const elsewhere = this.#get('SELECT state FROM reservations WHERE operation_id = ? AND envelope_id <> ?', r.operationId, r.envelopeId);
+      if (elsewhere) fail('sentinel.provider.reservationState', `operation ${r.operationId.slice(0, 64)} is already ${String(elsewhere.state)} under another envelope`);
       const prior = this.#get('SELECT id, tokens, cost_nanos FROM reservations WHERE envelope_id = ? AND operation_id = ?', r.envelopeId, r.operationId);
       if (prior) {
         if (Number(prior.tokens) !== r.tokens || prior.cost_nanos !== r.costNanos) fail('sentinel.provider.operationConflict', r.operationId);
         return this.#row(prior.id as string);
       }
+      this.#assertLive(r.epoch);
       const t = this.#totals(r.envelopeId);
       if (t.overdrawn) fail('sentinel.provider.envelopeOverdrawn', 'an earlier call reported more than it reserved');
       if (t.chargedTokens + r.tokens > t.maxTokens) fail('sentinel.provider.budgetExhausted', `${t.maxTokens - t.chargedTokens} tokens left, ${r.tokens} needed`);
@@ -211,7 +227,9 @@ export class BudgetLedger {
   }
 
   /** Written before the request leaves: from here a crash leaves the call uncertain, never forgotten. */
-  dispatch(rid: string, at: string): Reservation { return this.#tx(() => this.#move(rid, ['held'], 'dispatched', 'about to send', at)); }
+  dispatch(rid: string, at: string): Reservation {
+    return this.#tx(() => { this.#assertLive(this.#row(rid).epoch); return this.#move(rid, ['held'], 'dispatched', 'about to send', at); });
+  }
 
   /** Returns a reservation that was never sent: held, or dispatched when no connection was ever made. */
   releaseUnsent(rid: string, at: string, proof: 'not-dispatched' | 'no-connection'): Reservation {
@@ -250,6 +268,8 @@ export class BudgetLedger {
   recover(staleEpochs: readonly string[], at: string): { released: number; uncertain: number } {
     for (const e of staleEpochs) id(e, 'an epoch');
     return this.#tx(() => {
+      // Fenced first: from here a stale process can neither reserve, dispatch nor checkpoint under its epoch.
+      for (const e of staleEpochs) this.#run('INSERT OR IGNORE INTO fenced_epochs (epoch, fenced_at) VALUES (?, ?)', e, at);
       let released = 0;
       let uncertain = 0;
       for (const e of staleEpochs) {
@@ -259,6 +279,63 @@ export class BudgetLedger {
         }
       }
       return { released, uncertain };
+    });
+  }
+
+  /** Whether recovery fenced this epoch. */
+  isFenced(epoch: string): boolean { id(epoch, 'an epoch'); return this.#tx(() => this.#fenced(epoch)); }
+
+  /** The reservation an operation made under an envelope, if any. */
+  reservationOf(envelopeId: string, operationId: string): Reservation | null {
+    return this.#tx(() => {
+      const r = this.#get('SELECT id FROM reservations WHERE envelope_id = ? AND operation_id = ?', envelopeId, operationId);
+      return r ? this.#row(r.id as string) : null;
+    });
+  }
+
+  /** Envelopes, newest first, at most `limit` (1–200), optionally for one run. */
+  listEnvelopes(options: { runId?: string; limit: number }): { id: string; runId: string; providerId: string; bindingDigest: string; receiptDigest: string | null; currency: string; createdAt: string; totals: EnvelopeTotals }[] {
+    if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 200) fail('sentinel.provider.ledgerInvalid', 'list 1–200 envelopes');
+    if (options.runId !== undefined) id(options.runId, 'the run');
+    return this.#tx(() => {
+      const rows = options.runId === undefined
+        ? this.#all('SELECT * FROM envelopes ORDER BY created_at DESC, id LIMIT ?', options.limit)
+        : this.#all('SELECT * FROM envelopes WHERE run_id = ? ORDER BY created_at DESC, id LIMIT ?', options.runId, options.limit);
+      return rows.map(r => ({ id: r.id as string, runId: r.run_id as string, providerId: r.provider_id as string, bindingDigest: r.binding_digest as string, receiptDigest: (r.receipt_digest as string | null) ?? null,
+        currency: r.currency as string, createdAt: r.created_at as string, totals: this.#totals(r.id as string) }));
+    });
+  }
+
+  /** Held, dispatched and uncertain reservations of one envelope, at most `limit` (1–1000). */
+  openReservations(envelopeId: string, limit: number): Reservation[] {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) fail('sentinel.provider.ledgerInvalid', 'list 1–1000 reservations');
+    return this.#tx(() => this.#all("SELECT id FROM reservations WHERE envelope_id = ? AND state IN ('held','dispatched','uncertain') ORDER BY created_at, id LIMIT ?", envelopeId, limit)
+      .map(r => this.#row(r.id as string)));
+  }
+
+  /** The latest checkpoint text a session saved, with the epoch that wrote it. */
+  loadCheckpoint(sessionId: string): { body: string; epoch: string; sequence: number } | null {
+    return this.#tx(() => {
+      const r = this.#get('SELECT body, epoch, sequence FROM review_checkpoints WHERE session_id = ?', sessionId);
+      return r ? { body: r.body as string, epoch: r.epoch as string, sequence: Number(r.sequence) } : null;
+    });
+  }
+
+  /**
+   * Saves a session's checkpoint under one epoch, atomically. Refused for a fenced epoch, and when another epoch that
+   * is still live wrote the last one: a session has one writer at a time, and recovery hands it over.
+   */
+  saveCheckpoint(sessionId: string, epoch: string, body: string, at: string): number {
+    id(epoch, 'the epoch');
+    if (typeof body !== 'string' || Buffer.byteLength(body) > 4 * 1024 * 1024) fail('sentinel.provider.ledgerInvalid', 'a checkpoint is at most 4 MiB');
+    return this.#tx(() => {
+      this.#assertLive(epoch);
+      const prior = this.#get('SELECT epoch, sequence FROM review_checkpoints WHERE session_id = ?', sessionId);
+      if (prior && prior.epoch !== epoch && !this.#fenced(prior.epoch as string)) fail('sentinel.provider.epochFenced', 'another live epoch owns this session');
+      const sequence = prior ? Number(prior.sequence) + 1 : 1;
+      this.#run('INSERT INTO review_checkpoints (session_id, epoch, sequence, body, updated_at) VALUES (?,?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET epoch = excluded.epoch, sequence = excluded.sequence, body = excluded.body, updated_at = excluded.updated_at',
+        sessionId, epoch, sequence, body, at);
+      return sequence;
     });
   }
 

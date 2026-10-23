@@ -123,6 +123,11 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'frameworks/nest/errors.js': ['@farsight/core/dist/strings-sentinel-nest.js'],
   'frameworks/nest/syntax.js': ['dynamic:oxc-parser'],
 
+  // Model review (PR 22): partitions, the evidence broker, sessions and checkpoints; no network of its own.
+  'review/evaluation.js': ['node:crypto'],
+  'review/errors.js': ['@farsight/core/dist/strings-sentinel-review.js'],
+  'review/evidence.js': ['node:crypto'],
+  'review/session.js': ['node:fs', 'node:path'],
   // Model providers (PR 21): the only network client in the package, and the keychain read through core's reader.
   'review/providers/broker.js': ['node:crypto'],
   'review/providers/budget.js': ['node:crypto', 'node:path'],
