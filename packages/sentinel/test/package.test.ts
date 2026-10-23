@@ -90,13 +90,14 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/gitleaks/normalize.js': ['node:crypto'],
   'adapters/gitleaks/run.js': ['node:fs', 'node:path'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
-  'execution/assets.js': ['node:fs', 'node:path', 'node:url'],
+  'execution/assets.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   'execution/bootstrap.js': ['node:fs', 'node:path'],
   'execution/check-drivers.js': ['node:crypto', 'node:fs', 'node:path'],
   'execution/coordinator.js': ['node:crypto', 'node:fs', 'node:path'],
   'execution/coverage.js': ['node:crypto'],
   'execution/durability.js': ['node:fs'],
-  'execution/retained-analysis.js': ['node:crypto'],
+  // Accepted-source hashing moved from retained-analysis into the shared bounded verifier.
+  'execution/retained-source.js': ['node:crypto'],
   'execution/plan.js': ['node:crypto', 'node:path'],
   'execution/plans.js': ['node:crypto'],
   'execution/errors.js': ['@farsight/core/dist/strings-sentinel-execution.js'],
@@ -209,7 +210,6 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
   // The framework inspection worker (ADR 44): sealed inputs by digest, one output file; it runs only as its own entry.
   'frameworks/controls/closure.js': ['node:crypto', 'node:fs', 'node:module', 'node:path', 'node:url', 'require:oxc-parser'],
-  'frameworks/controls/driver.js': ['node:url'],
   'frameworks/controls/worker.js': ['node:crypto', 'node:fs', 'node:url'],
   'frameworks/express/pack.js': ['@farsight/graph', 'node:crypto'],
   'frameworks/express/syntax.js': ['dynamic:oxc-parser'],
