@@ -1670,3 +1670,14 @@ unsettled read request on their own socket; unknown/finished IDs do nothing, dup
 and disconnect aborts unsettled preparation while accepted work and prior immutable deliveries remain intact.
 Capabilities describe shipped library support separately from untested asset readiness. Mutating MCP tools, model
 execution, policy decisions, evidence reads and the graphical interface remain outside this slice.
+
+ADR48 implementation refinements: live unexpired read buffers count as activity for the existing detached idle
+policy, without renewing TTLs; a connection by itself does not. After service.stop waits for accepted run tasks,
+listener.close destroys only that listener’s accepted sockets, so an idle client cannot prevent store release.
+An explicit simultaneous inspection is retryable inspectBusy, whereas projectionLimit remains a permanent size
+refusal. MCP status deliberately accepts runId only and returns status/outcome; existing CLI event pagination is
+unchanged. The final installation sequence fence can refuse viewChanged without adding a third generation. View
+and delivery caches are global insertion-order quotas, so another same-account channel can cause early eviction.
+The SDK’s express/hono/cors/jose and other dependencies enlarge the optional installed supply-chain surface, despite
+lazy loading keeping the MCP entry out of ordinary imports. Its required zod peer is pinned exactly 3.25.76 beside
+SDK 1.31.0; lazy execution does not imply a smaller installation.

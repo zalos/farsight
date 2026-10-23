@@ -67,3 +67,12 @@ test('a cancellation with the same request ID on another real socket cannot canc
  const controller=new AbortController(),other=b.request('report.open',{runId:f.runId,format:'json'},{signal:controller.signal});controller.abort();await assert.rejects(other,code('sentinel.ipc.canceled'));
  const m:any=await first;assert.equal((await a.request('delivery.read',{deliveryId:m.deliveryId,offset:0}) as any).deliveryId,m.deliveryId);assert.equal(f.store.ledger.getRun(f.runId)?.state,'completed');
 });
+
+test('service shutdown aborts its unsettled read then closes only its own accepted socket',{timeout:60000},async t=>{
+ let armed=false,begin:()=>void=()=>{},settle:(v:any)=>void=()=>{};const began=new Promise<void>(r=>begin=r),settled=new Promise(r=>settle=r);
+ const f=await publishedReadonly(t,{now:()=>{if(armed)begin();return new Date();}}),ownerNonce=newOwnerNonce(),address=runtimeAddress({storePath:f.store.storePath,ownerNonce,sources:[f.ws.path]});
+ const listener=await listenOwnerSocket(address,{storeId:f.store.storeId,ownerNonce},(op,body,by,ctx)=>{const p=f.service.handle(op,body,by,ctx);void p.then(v=>settle({value:v}),e=>settle({code:e.code}));return p;});
+ const client=await connectOwnerSocket(address,{storeId:f.store.storeId,ownerNonce},'mcp');t.after(async()=>{client.close();await listener.close();});
+ armed=true;const task=client.request('report.open',{runId:f.runId,format:'html'});void task.catch(()=>{});await began;await f.service.stop();await listener.close();
+ await assert.rejects(task,(e:any)=>['sentinel.ipc.notListening','sentinel.execution.canceled'].includes(e.code));assert.equal((await settled as any).code,'sentinel.execution.canceled');assert.equal(f.store.ledger.getRun(f.runId)?.state,'completed');
+});

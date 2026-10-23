@@ -22,10 +22,12 @@ test('the package is optional, private and exports only files that exist', () =>
   assert.equal(manifest.private, true);
   assert.match(manifest.version, /-draft\./);
   // core supplies the shared catalog (and later counts/placement/grants); @types/node because the public store
-  // declarations name Node built-ins. Only the lazy MCP protocol SDK is added; no scanner, container client or model SDK dependency.
+  // declarations name Node built-ins. Only the lazy MCP protocol SDK and its pinned required peer are added; no scanner, container client or model SDK dependency.
 
   // oxc-parser (the version the public parser pins) because the Express pack reads source syntax itself (ADR 31).
-  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@modelcontextprotocol/sdk', '@types/node', '@vscode/tree-sitter-wasm', 'ajv', 'oxc-parser']);
+  assert.equal(manifest.dependencies?.zod, '3.25.76');
+  assert.equal(manifest.dependencies?.['@modelcontextprotocol/sdk'], '1.31.0');
+  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@modelcontextprotocol/sdk', '@types/node', '@vscode/tree-sitter-wasm', 'ajv', 'oxc-parser', 'zod']);
   assert.equal(manifest.bin['farsight-sentinel'], './dist/cli.js');
   for (const [key, target] of Object.entries(manifest.exports as Record<string, any>)) {
     if (key.includes('*')) continue;

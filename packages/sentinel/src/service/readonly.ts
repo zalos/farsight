@@ -19,11 +19,11 @@ export const READONLY_LIMITS = Object.freeze({ pageRows:128, pageBytes:256*1024,
   reportMs:READ_BUDGET_LIMITS.durationMs, reportReads:READ_BUDGET_LIMITS.reads, reportDecodedBytes:READ_BUDGET_LIMITS.decodedBytes, reportEncodedBytes:READ_BUDGET_LIMITS.encodedBytes,
   deliveryBytes:32*1024*1024, deliveryCacheBytes:64*1024*1024, deliveries:4, deliveryTtlMs:300000, chunkDefault:16*1024, chunkMax:64*1024, cursors:4096 });
 export type ReadonlyErrorCode = 'sentinel.service.requestInvalid' | 'sentinel.service.planUnknown' | 'sentinel.service.viewExpired' | 'sentinel.service.viewInvalid'
-  | 'sentinel.service.viewChanged' | 'sentinel.service.projectionLimit' | 'sentinel.service.deliveryExpired' | 'sentinel.service.deliveryInvalid'
+  | 'sentinel.service.viewChanged' | 'sentinel.service.inspectBusy' | 'sentinel.service.projectionLimit' | 'sentinel.service.deliveryExpired' | 'sentinel.service.deliveryInvalid'
   | 'sentinel.service.deliveryLimit' | 'sentinel.service.deliveryBusy';
 export class ReadonlyError extends Error {
   readonly retryable: boolean;
-  constructor(readonly code:ReadonlyErrorCode) { super(code); this.name='ReadonlyError'; this.retryable=code==='sentinel.service.viewChanged'||code==='sentinel.service.deliveryBusy'; }
+  constructor(readonly code:ReadonlyErrorCode) { super(code); this.name='ReadonlyError'; this.retryable=code==='sentinel.service.viewChanged'||code==='sentinel.service.deliveryBusy'||code==='sentinel.service.inspectBusy'; }
 }
 const invalid=():never=>{throw new ReadonlyError('sentinel.service.requestInvalid');};
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(v);
@@ -58,6 +58,8 @@ export class ReadonlyViews {
   #inspecting=false;
   constructor(readonly store:SentinelStore,readonly ws:Workspace,readonly now:()=>Date=()=>new Date()){}
   close(){this.#closed.abort();this.#views.clear();this.#deliveries.clear();}
+  /** Absolute TTLs only: connected readers and repeated reads never renew retention. */
+  get retaining():boolean{this.#purge();return this.#views.size>0||this.#deliveries.size>0;}
   #signal(signal?:AbortSignal){return signal?AbortSignal.any([signal,this.#closed.signal]):this.#closed.signal;}
   #held(signal?:AbortSignal){this.store.assertHeld();if(signal?.aborted)throw new ExecutionError('sentinel.execution.canceled');}
   #purge(){const now=performance.now();for(const[id,v]of this.#views)if(now>=v.until)this.#views.delete(id);for(const[id,d]of this.#deliveries)if(now>=d.until)this.#deliveries.delete(id);}
@@ -68,7 +70,7 @@ export class ReadonlyViews {
   }
   async inspect(body:unknown,channel:string,signal?:AbortSignal):Promise<RunInspection>{
     const f=readFields(body,['runId'],['planRevision']);if(!id(f.runId)||(f.planRevision!==undefined&&!number(f.planRevision,1,2147483647)))return invalid();
-    if(this.#inspecting)throw new ReadonlyError('sentinel.service.projectionLimit');
+    if(this.#inspecting)throw new ReadonlyError('sentinel.service.inspectBusy');
     this.#inspecting=true;const stop=this.#signal(signal);let prepared:View;
     try{
       prepared=(await withStoreReadBudget(this.store,{durationMs:READONLY_LIMITS.inspectMs,signal:stop},async()=>{

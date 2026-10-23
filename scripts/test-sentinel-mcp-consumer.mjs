@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
-import {mkdirSync,readFileSync,existsSync,rmSync,realpathSync,writeFileSync} from 'node:fs';
+import {mkdirSync,readFileSync,existsSync,rmSync,realpathSync,writeFileSync,renameSync} from 'node:fs';
 import {spawn} from 'node:child_process';
 import {join,resolve,dirname} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
@@ -21,6 +21,9 @@ try{
  writeFileSync(join(c.dir,'sentinel-public.mjs'),"export * from 'farsight-sentinel';\n");writeFileSync(join(c.dir,'sentinel-reports.mjs'),"export * from 'farsight-sentinel/reports';\n");
  const sentinel=await import(pathToFileURL(join(c.dir,'sentinel-public.mjs')).href),renderers=await import(pathToFileURL(join(c.dir,'sentinel-reports.mjs')).href);
  assert.equal(JSON.parse(readFileSync(resolve(dirname(require.resolve('@modelcontextprotocol/sdk/client/index.js')),'../../..','package.json'))).version,'1.31.0');
+ const sdkPath=resolve(dirname(require.resolve('@modelcontextprotocol/sdk/client/index.js')),'../../..'),sdkRequire=createRequire(join(sdkPath,'package.json'));
+ assert.equal(JSON.parse(readFileSync(sdkRequire.resolve('zod/package.json'))).version,'3.25.76','the actual SDK resolves the exact required peer');
+ renameSync(sdkPath,sdkPath+'.held');try{await c.exec(c.bin('farsight-sentinel'),['--help']);await c.exec(process.execPath,['--input-type=module','-e',"await import('farsight-sentinel');"]);}finally{renameSync(sdkPath+'.held',sdkPath);}
  const scratch=realpathSync.native(c.scratch),ws=join(scratch,'workspace');mkdirSync(join(ws,'src'),{recursive:true});
  for(let i=0;i<4;i++)writeFileSync(join(ws,'src',`private-lookup-${i}.ts`),'export const lookup = (id) => db.query("SELECT * FROM invoice WHERE id = " + id);\n');
  const env={...c.env,HOME:join(scratch,'home'),XDG_STATE_HOME:join(scratch,'owner'),NODE_PATH:'',NODE_OPTIONS:''};mkdirSync(env.HOME);
@@ -34,12 +37,15 @@ try{
  rmSync(join(ws,'src'),{recursive:true});
  const selected=await call('rerun',parent,'--stage',plan.body.facts.unitIds[0],'--confirm');assert.equal(selected.status,0,JSON.stringify(selected));const childId=selected.body.facts.runId;
  assert.equal((await call('run',childId)).body.facts.state,'completed');
- const serving=()=>{const child=spawn(bin,['serve','--workspace',ws,'--idle-ms','0'],{cwd:ws,env,stdio:['ignore','pipe','pipe']});services.add(child);return child;};
+ const serving=(idleMs=0)=>{const child=spawn(bin,['serve','--workspace',ws,'--idle-ms',String(idleMs)],{cwd:ws,env,stdio:['ignore','pipe','pipe']});services.add(child);return child;};
  async function connect(){const client=new Client({name:'sentinel-installed-readonly-consumer',version:'1'},{capabilities:{}});const transport=new StdioClientTransport({command:process.execPath,args:[bin,'mcp','--workspace',ws],cwd:ws,env,stderr:'pipe'});clients.add(client);let stderr='';transport.stderr?.on('data',b=>stderr+=b);await client.connect(transport);return{client,stderr:()=>stderr};}
  async function ready(){let last;for(let i=0;i<100;i++){try{return await connect();}catch(e){last=e;await wait(50);}}throw last;}
  let service=serving(),{client,stderr}=await ready();
  const tool=async(name,args={})=>{const r=await client.callTool({name,arguments:args});assert.ok(!r.isError,JSON.stringify(r));return r.structuredContent??JSON.parse(r.content[0].text);};
- assert.deepEqual((await client.listTools()).tools.map(t=>t.name).sort(),['sentinel_service_info','sentinel_run_describe','sentinel_run_status','sentinel_run_wait','sentinel_run_inspect','sentinel_view_page','sentinel_report_open','sentinel_delivery_read'].sort());
+ const toolList=(await client.listTools()).tools;assert.deepEqual(Object.keys(toolList.find(t=>t.name==='sentinel_run_status').inputSchema.properties),['runId']);
+ const noEvents=await client.callTool({name:'sentinel_run_status',arguments:{runId:childId,after:0,limit:1}});assert.equal(noEvents.isError,true);assert.equal(noEvents.structuredContent.error.code,'sentinel.service.requestInvalid');
+ const copies=await Promise.all([1,2].map(()=>client.callTool({name:'sentinel_run_inspect',arguments:{runId:childId}})));assert.equal(copies.filter(x=>!x.isError).length,1);const busy=copies.find(x=>x.isError);assert.equal(busy.structuredContent.error.code,'sentinel.service.inspectBusy');assert.equal(busy.structuredContent.error.retryable,true);
+ assert.deepEqual(toolList.map(t=>t.name).sort(),['sentinel_service_info','sentinel_run_describe','sentinel_run_status','sentinel_run_wait','sentinel_run_inspect','sentinel_view_page','sentinel_report_open','sentinel_delivery_read'].sort());
  const caps=await tool('sentinel_service_info');assert.equal(caps.controlsSupported,false);assert.ok(sentinel.validateEnvelope('servicecapabilities',caps).ok);
  const start=performance.now(),view=await tool('sentinel_run_inspect',{runId:childId}),inspectMs=performance.now()-start;
  assert.ok(sentinel.validateEnvelope('runinspection',view).ok);let cursor,seen=0;
@@ -109,8 +115,12 @@ try{
   for(const format of['json','md','html','sarif']){const text=await bytes(await tool('sentinel_report_open',{runId:cleanPlan.body.facts.planId,baselineRunId:selectedId,format}));assert.equal(text.includes(value),false,'baseline selected ancestry withholding');if(format==='json')assert.match(JSON.parse(text).inspections[0].sourceId,/^withheld-/);}
   native=true;
  }
+ // Real wall-clock control at the same 15s idle cutoff used by the detached launcher.
+ await client.close();clients.delete(client);await stop(service);services.delete(service);service=serving(15000);({client,stderr}=await ready());
+ const idleReport=await tool('sentinel_report_open',{runId:frameworkId,format:'json'}),idleBytes=await bytes(idleReport),idleView=await tool('sentinel_run_inspect',{runId:frameworkId});
+ await wait(16000);assert.equal(service.exitCode,null,'actual saved buffers retain owner beyond detached idle cutoff');assert.equal(await bytes(idleReport),idleBytes);assert.equal((await tool('sentinel_view_page',{viewId:idleView.viewId,collection:'works'})).viewId,idleView.viewId);
  assert.equal(stderr(),'');
- console.log(JSON.stringify({schema:'sentinel-mcp-consumer/draft-1',npmOnly:true,sdk:'1.31.0',sourceGone:true,selected:true,comparison:true,reconnect:true,restartExpired:true,controlsAbsent:true,frameworkSourceGone:true,nativeSecrets:native,sarifParity:'semantic',otherFormatParity:'exact',inspectMs,formats:measure}));
+ console.log(JSON.stringify({schema:'sentinel-mcp-consumer/draft-1',npmOnly:true,sdk:'1.31.0',zod:'3.25.76',statusOnly:true,inspectBusy:true,ordinaryImportWithoutSdk:true,retainedPastDetachedIdle:true,sourceGone:true,selected:true,comparison:true,reconnect:true,restartExpired:true,controlsAbsent:true,frameworkSourceGone:true,nativeSecrets:native,sarifParity:'semantic',otherFormatParity:'exact',inspectMs,formats:measure}));
 }finally{
  for(const client of clients)await client.close().catch(()=>{});for(const child of services)await stop(child);
  c.cleanup();

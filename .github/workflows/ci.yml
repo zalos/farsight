@@ -246,7 +246,7 @@ jobs:
           umask 022
           node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=300000 \
             --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=service.tap \
-            test/cli-prework.test.ts test/service-detached.test.ts test/service-reliability.test.ts test/service-policy.test.ts test/cli-preview-e2e.test.ts test/cli-rules.test.ts test/preview-slice.test.ts test/trusted-profile.test.ts test/receipts-publish.test.ts test/service-readonly.test.ts test/service-readonly-transport.test.ts test/service-report-delivery.test.ts test/store-read-budget.test.ts
+            test/cli-prework.test.ts test/service-detached.test.ts test/service-reliability.test.ts test/service-policy.test.ts test/cli-preview-e2e.test.ts test/cli-rules.test.ts test/preview-slice.test.ts test/trusted-profile.test.ts test/receipts-publish.test.ts test/service-readonly.test.ts test/service-readonly-transport.test.ts test/service-readonly-lifecycle.test.ts test/service-report-delivery.test.ts test/store-read-budget.test.ts
           grep -qx '# skipped 0' service.tap || { echo "::error::a service test was skipped"; exit 1; }
           grep -qx '# fail 0' service.tap && grep -qx '# cancelled 0' service.tap
 

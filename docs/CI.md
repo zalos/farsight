@@ -276,3 +276,9 @@ current/baseline/selected secret withholding uses the already provisioned pinned
 assets fail; ordinary validation explicitly skips those two native controls. SARIF consumer rerendering from
 canonical-key-sorted parsed JSON compares semantic values; exact delivered format hashes are always checked,
 and the genuine same-evaluation held-service tests compare all four legacy rendering bytes exactly.
+
+The read-only lifetime controls spawn a real detached owner with the production 15-second idle policy; private
+test-process clocks advance over view/delivery absolute expiry without changing a production limit or adding a
+public clock input. They prove retained buffers survive the idle cutoff, then expire and release the held store
+even with an open idle MCP socket. The installed SDK consumer asserts exact SDK/zod versions, status-only request
+shape and retryable inspection contention.
