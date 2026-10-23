@@ -22,7 +22,10 @@ farsight-sentinel capabilities
 ```
 
 `dist/build-stamp.json` in the installed package names its version, build time and commit. Uninstalling it removes
-the package only; a store it wrote stays where it is. Project initialization and scanning arrive with their PRs.
+the package only; a store it wrote stays where it is. Initialize from the application folder with `farsight-sentinel init`,
+adopt with `farsight-sentinel settings adopt --confirm`, promote `builtin:foundation-preview`, and use `plan`, `run`
+and `report`. The [npm-only walkthrough](https://github.com/zalos/farsight/blob/main/docs/GETTING-STARTED.md#farsight-sentinel-optional-installed-separately)
+shows the complete command sequence. A static preview ends with required coverage incomplete, not a clean verdict.
 
 ## Envelopes
 

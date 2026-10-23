@@ -6,6 +6,19 @@ evidence moved it. A row moves to **done** only when its PR has merged and the e
 An open PR, green CI, a stub or a process that exited zero is not that evidence. Numbers are local planning
 identifiers, not GitHub PR numbers.
 
+## First CLI and UX release scope — 2026-10-23
+
+The owner narrowed this push to a verified CLI scan using the cheapest qualified model, a usable owner UI, npm installation and a release. Hosted API work remains retained behind a default-off feature flag; it is not live-qualified in this release. Follow-up work stays open rather than being counted as complete:
+
+- [#173](https://github.com/zalos/farsight/issues/173): entry-point Markdown code walkthroughs.
+- [#174](https://github.com/zalos/farsight/issues/174): hosted API and broader CLI/provider qualification.
+- [#175](https://github.com/zalos/farsight/issues/175): replay bundles, pruning and differential scan gates.
+- [#176](https://github.com/zalos/farsight/issues/176): original Spring sample and managed runtime qualification.
+- [#177](https://github.com/zalos/farsight/issues/177): further UX polish, configuration editing and Fable review.
+- [#178](https://github.com/zalos/farsight/issues/178): broad model evaluation and fenced external review claims.
+
+Release validation must still demonstrate the public CLI path, exact retained instruction/model identity, the browser's separate confirmation and report flow, and clean npm-only consumers. A preview's incomplete required coverage is never a successful security verdict. Release readiness is recorded after those checks; this scope change does not complete the full plan.
+
 ## Checkpoint — 2026-10-23
 
 The bounded retained-source/fixed-worker seam merged as #164 (`2587763a`) after all sixteen final checks passed.
@@ -281,8 +294,8 @@ skipped with its reason, never as passed.
 
 | Gate | Status | Acceptance test |
 |---|---|---|
-| Final Fable review | pending | Fable reviews delivered CLI, MCP, GUI, reports and docs for cleanup/touch-up; SOL fixes findings and independent Claude review verifies each fix |
-| Java + Spring sample application | pending | An **original** Java/Spring Boot sample written for this gate (no external benchmark acquisition) builds and runs in a Linux container (never on the host; source-only scanning does not execute its build). Sentinel scans it and the report shows: a known-vulnerable case found, its safe sibling not flagged, and an unknown/unsupported case reported as unknown, not as protected or clean |
+| Final Fable review | deferred for first release, [#177](https://github.com/zalos/farsight/issues/177) | Fable reviews delivered CLI, MCP, GUI, reports and docs for cleanup/touch-up; SOL fixes findings and independent Claude review verifies each fix |
+| Java + Spring sample application | deferred for first release, [#176](https://github.com/zalos/farsight/issues/176) | An **original** Java/Spring Boot sample written for this gate (no external benchmark acquisition) builds and runs in a Linux container (never on the host; source-only scanning does not execute its build). Sentinel scans it and the report shows: a known-vulnerable case found, its safe sibling not flagged, and an unknown/unsupported case reported as unknown, not as protected or clean |
 | npm-only consumer install | pending | On a clean machine or prefix with only Node 24 and npm (no pnpm, no checkout): `npm install -g <GitHub Release tarball URL>`, then `--help`; the existing Farsight path (install → `farsight.config.json`/settings → ingest → serve) works as [GETTING-STARTED.md](../../GETTING-STARTED.md) documents; Sentinel's initialization flow, a scan and a report succeed; the report opens offline. Written as initialization instructions for npm-only users |
 | Release | pending | The release PR flow in [RELEASING.md](../../RELEASING.md): gates, smoke both independently versioned Farsight/Sentinel tarballs, squash-merge, publish both with their exact install lines, then install each and both from the published URLs in clean Node/npm-only prefixes without pnpm or a checkout; verify the release commit |
 
@@ -301,16 +314,3 @@ skipped with its reason, never as passed.
 
 Still pending, configuration only: the second model or hosted endpoint with a spend cap for PR 22's live
 evaluation (see *Resolutions and scope notes*).
-
-## First CLI and UX release scope — 2026-10-23
-
-The owner narrowed this push to a verified CLI scan using the cheapest qualified model, a usable owner UI, npm installation and a release. Hosted API work remains retained behind a default-off feature flag; it is not live-qualified in this release. Follow-up work stays open rather than being counted as complete:
-
-- [#173](https://github.com/zalos/farsight/issues/173): entry-point Markdown code walkthroughs.
-- [#174](https://github.com/zalos/farsight/issues/174): hosted API and broader CLI/provider qualification.
-- [#175](https://github.com/zalos/farsight/issues/175): replay bundles, pruning and differential scan gates.
-- [#176](https://github.com/zalos/farsight/issues/176): original Spring sample and managed runtime qualification.
-- [#177](https://github.com/zalos/farsight/issues/177): further UX polish, configuration editing and Fable review.
-- [#178](https://github.com/zalos/farsight/issues/178): broad model evaluation and fenced external review claims.
-
-Release validation must still demonstrate the public CLI path, exact retained instruction/model identity, the browser's separate confirmation and report flow, and clean npm-only consumers. A preview's incomplete required coverage is never a successful security verdict. Release readiness is recorded after those checks; this scope change does not complete the full plan.

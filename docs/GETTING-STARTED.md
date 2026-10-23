@@ -475,9 +475,24 @@ Per project, `npm install --save-dev <the same URL>` pins it like farsight-cli, 
 `npm uninstall -g farsight-sentinel` removes the package and nothing else: its stored evidence stays where it was
 written, and Farsight keeps working.
 
-The commands that initialize a project and run a scan (`init`, `plan`, `run`, `report`) are not in this build yet;
-`farsight-sentinel capabilities` lists them as unavailable. The initialization steps for npm-only users will be
-written here with the release that ships them.
+From the application folder, initialize and adopt the settings, then run the built-in static preview:
+
+```sh
+farsight-sentinel init
+farsight-sentinel settings adopt --confirm
+farsight-sentinel rules promote builtin:foundation-preview --confirm
+farsight-sentinel plan --json
+# Copy the runId or planId printed above into the commands below.
+farsight-sentinel run <run-id> --confirm
+farsight-sentinel report <run-id> --full --format md
+farsight-sentinel report <run-id> --full --format html --out sentinel-report.html
+```
+
+A preview completes with exit code 2 because required security coverage is incomplete; it is not a clean security
+verdict. The report remains readable from retained evidence after source removal. External scanner profiles need
+explicitly adopted scanner assets and Linux containers; there is no automatic host fallback. Models are optional,
+and hosted API review is paused by default. Use the package's [README](../packages/sentinel/README.md) for scan,
+model and owner-UI configuration. Project-local installs use `npx farsight-sentinel` for the same commands.
 
 ## Dogfood: Farsight on Farsight
 
