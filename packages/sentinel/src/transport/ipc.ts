@@ -219,7 +219,13 @@ export async function listenOwnerSocket(address: RuntimeAddress, identity: Servi
       unlinkSync(address.socket);
     }
   }
-  const server: Server = createServer(socket => serveConnection(socket, identity, handler));
+  const accepted = new Set<Socket>();
+  let closing = false;
+  const server: Server = createServer(socket => {
+    if (closing) { socket.destroy(); return; }
+    accepted.add(socket); socket.once('close', () => accepted.delete(socket));
+    serveConnection(socket, identity, handler);
+  });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(address.socket, () => { server.off('error', reject); resolve(); });
@@ -228,10 +234,16 @@ export async function listenOwnerSocket(address: RuntimeAddress, identity: Servi
   assertOwnSocket(lstatSync(address.socket));
   return Object.freeze({
     address,
-    close: () => new Promise<void>(resolve => server.close(() => {
-      try { if (socketStat(address.socket)?.isSocket()) unlinkSync(address.socket); } catch { /* already gone */ }
-      resolve();
-    })),
+    close: () => new Promise<void>(resolve => {
+      closing = true;
+      server.close(() => {
+        try { if (socketStat(address.socket)?.isSocket()) unlinkSync(address.socket); } catch { /* already gone */ }
+        resolve();
+      });
+      // These sockets were accepted by this listener only. A connected idle reader cannot retain the owner
+      // after its buffers expire; service.stop has already waited for accepted run tasks to settle.
+      for (const socket of accepted) socket.destroy();
+    }),
   });
 }
 

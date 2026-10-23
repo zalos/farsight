@@ -133,6 +133,8 @@ export class OwnerService {
 
   /** True while a run executes. */
   get busy(): boolean { return this.#active.size > 0; }
+  /** Bounded unexpired buffers keep a detached owner alive, without renewing their absolute TTLs. */
+  get retainingReads(): boolean { return this.#reads.retaining; }
   /** When the last run ended (or the service started), for the idle stop. */
   get idleSince(): number { return this.#idleSince; }
 
@@ -419,7 +421,7 @@ export async function connectService(ws: Workspace, kind: import('../transport/i
 }
 
 export interface ServeOptions {
-  /** Stop after this long with no run and no request; 0 never stops on its own. */
+  /** Stop after this long with no run, request or unexpired read buffer; 0 never stops on its own. */
   readonly idleMs: number;
   /** Stops the service: the CLI wires SIGINT and SIGTERM to it. */
   readonly signal?: AbortSignal;
@@ -458,7 +460,7 @@ export async function serveWorkspace(ws: Workspace, options: ServeOptions): Prom
         if (options.signal?.aborted) { resolve(); return; }
         const timer = setInterval(() => {
           const quiet = Date.now() - Math.max(lastRequest, service.idleSince);
-          if (options.idleMs > 0 && inflight === 0 && !service.busy && quiet >= options.idleMs) done();
+          if (options.idleMs > 0 && inflight === 0 && !service.busy && !service.retainingReads && quiet >= options.idleMs) done();
         }, 100);
         const done = () => { clearInterval(timer); options.signal?.removeEventListener('abort', done); resolve(); };
         options.signal?.addEventListener('abort', done, { once: true });

@@ -661,3 +661,15 @@ Read raw chunks in order and decode UTF-8 after joining them. Capabilities adver
 cache, byte, read-count and cooperative time limits. A busy store may return retryable `viewChanged`; the adapter
 never silently loops or returns a partial report. Cancel/disconnect interrupts unsettled read preparation between
 synchronous operations; it does not stop an accepted scan or provide a hard filesystem/RSS timeout.
+
+The MCP status tool accepts only `runId` and returns a lifecycle/outcome summary; it does not page events. The
+owner CLI retains its separate event pagination. Simultaneous inspection returns retryable `inspectBusy`, distinct
+from a plan that exceeds projection limits.
+
+Unexpired saved views or deliveries retain a detached service past its ordinary idle cutoff, only until their
+absolute TTLs. Reads never renew those TTLs, and a connection alone cannot keep the owner alive. Caches are global
+to the service: insertion-order count/byte eviction can remove another same-account client’s saved handle before
+its TTL. Stop/crash/restart loses buffers explicitly. A final sequence change at the no-await installation fence
+can still return retryable `viewChanged` after the bounded two-generation preparation, without a third attempt.
+The optional install includes the SDK’s transitive dependency set even though ordinary import/CLI execution does
+not load the MCP module; SDK 1.31.0 and its required zod 3.25.76 peer are exact normal dependencies.

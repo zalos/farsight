@@ -15,7 +15,7 @@ const integer=(minimum:number,maximum:number)=>({type:'integer',minimum,maximum}
 const tools=[
   ['sentinel_service_info','service.capabilities',{},[],'servicecapabilities'],
   ['sentinel_run_describe','run.describe',{runId:id},['runId'],null],
-  ['sentinel_run_status','run.status',{runId:id,after:integer(0,Number.MAX_SAFE_INTEGER),limit:integer(1,500)},['runId'],null],
+  ['sentinel_run_status','run.status',{runId:id},['runId'],null],
   ['sentinel_run_wait','run.wait',{runId:id,timeoutMs:integer(0,25000)},['runId'],null],
   ['sentinel_run_inspect','run.inspect',{runId:id,planRevision:integer(1,2147483647)},['runId'],'runinspection'],
   ['sentinel_view_page','view.page',{viewId:id,collection:{enum:['works','attempts','inputs','outputs']},workKey:id,attemptKey:id,cursor:id,limit:integer(1,128)},['viewId','collection'],'inspectionpage'],
@@ -54,12 +54,15 @@ export async function runMcp(ws:Workspace):Promise<number>{
     const tool=available.find(t=>t[0]===request.params.name);
     try{
       if(!tool)throw fail('sentinel.service.operationUnavailable');
-      const value=await(await connection()).request(tool[1],request.params.arguments??{},{signal:extra.signal,timeoutMs:30000});
+      const args=request.params.arguments??{};
+      // This tool deliberately returns status only; the legacy CLI retains its separate event pagination.
+      if(tool[1]==='run.status'&&Object.keys(args).some(k=>k!=='runId'))throw fail('sentinel.service.requestInvalid');
+      const value=await(await connection()).request(tool[1],args,{signal:extra.signal,timeoutMs:30000});
       let safe:unknown;
       if(tool[4]){const checked=validateEnvelope(tool[4],value);if(!checked.ok)throw fail('sentinel.service.operationUnavailable');safe=checked.value;}
       else safe=legacyProjection(tool[1],value);
       return {content:[{type:'text' as const,text:JSON.stringify(safe)}],...(safe&&typeof safe==='object'?{structuredContent:safe as Record<string,unknown>}: {})};
-    }catch(error){const code=knownCode((error as any)?.code),retryable=['sentinel.service.viewChanged','sentinel.report.viewChanged','sentinel.service.deliveryBusy'].includes(code);
+    }catch(error){const code=knownCode((error as any)?.code),retryable=['sentinel.service.viewChanged','sentinel.report.viewChanged','sentinel.service.deliveryBusy','sentinel.service.inspectBusy'].includes(code);
       const safe={error:{code,retryable}};return {isError:true,content:[{type:'text' as const,text:sentinelServiceWord(code)}],structuredContent:safe};}
   });
   const ended=new Promise<void>(resolve=>{server.onclose=()=>{client?.close();resolve();};});

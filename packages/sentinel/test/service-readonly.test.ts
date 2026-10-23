@@ -141,3 +141,9 @@ test('damaged actual accepted report bytes refuse without a partial install or e
 test('an explicit historical admitted revision labels its rows and retains current recorded run status',async t=>{
  const f=await publishedReadonly(t),v:any=await f.call('run.inspect',{runId:f.runId,planRevision:1});assert.equal(v.historical,true);assert.equal(v.planRevision,1);assert.equal(v.status,'completed');const page:any=await f.call('view.page',{viewId:v.viewId,collection:'works'});assert.ok(validateEnvelope('inspectionpage',page).ok);assert.ok(page.rows.length>0);
 });
+
+test('a simultaneous genuine inspection returns retryable inspectBusy without installing another view',async t=>{
+ const f=await publishedReadonly(t),first=f.call('run.inspect',{runId:f.runId});
+ await assert.rejects(f.call('run.inspect',{runId:f.runId}),(e:any)=>e.code==='sentinel.service.inspectBusy'&&e.retryable===true);
+ const v:any=await first;assert.ok(validateEnvelope('runinspection',v).ok);assert.equal((await f.call('view.page',{viewId:v.viewId,collection:'works'})as any).viewId,v.viewId);
+});
