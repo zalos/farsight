@@ -86,7 +86,7 @@ test('duplicate, unknown-key and malformed selections refuse rather than silentl
   for (const config of [a, b, null, { ...defaults(), extra: true }, { ...defaults(), stages: [{ stage: 'guided', modelId: 'review' }] }, { ...defaults(), stages: [{ ...defaults().stages[0], command: 'anything' }] }]) {
     assert.throws(() => resolveReviewModel(configured(config), 'guided', 'segment-a'), is('sentinel.provider.invalidProfile'));
   }
-  for (const id of ['../source', '*', '', 'a'.repeat(97)]) assert.throws(() => resolveReviewModel(configured(), 'guided', id), is('sentinel.provider.invalidProfile'));
+  for (const id of ['../source', '*', '', 'a'.repeat(129)]) assert.throws(() => resolveReviewModel(configured(), 'guided', id), is('sentinel.provider.invalidProfile'));
 });
 
 test('selection cardinality and identifier bounds are enforced before resolution', () => {
@@ -117,4 +117,29 @@ test('public hosted review defaults to paused, requires adopted enablement and n
   assert.equal(bindProvider(configured(config), 'hosted-review', 'review').providerId, 'hosted-review');
   const unadopted = effectivePolicy({ trust: 'not-adopted', settings: enabled.settings, settingsDigest: D('requested-enabled'), repoConfig: null, repoConfigDigest: null });
   assert.throws(() => resolveReviewModel(unadopted, 'guided', 'segment-a'), is('sentinel.provider.capabilityUntested'));
+});
+
+
+test('resolver uses the same 128 character id bound as the settings contract', () => {
+  const segmentId = 'a'.repeat(128);
+  const config = defaults(); (config.segments as any[]).push({ stage: 'guided', segmentId, providerId: 'local-review', modelId: 'review' });
+  assert.equal(resolveReviewModel(configured(config), 'guided', segmentId).segmentId, segmentId);
+  const parsed = parseSettings(Buffer.from(JSON.stringify({ ...structuredClone(DEFAULT_SETTINGS), reviewModels: config })));
+  assert.equal(parsed.reviewModels!.segments[0]!.segmentId, segmentId);
+  assert.throws(() => resolveReviewModel(configured(config), 'guided', segmentId + 'a'), is('sentinel.provider.invalidProfile'));
+});
+
+test('hosted segment overrides remain paused under a local default without widening the local pause', () => {
+  const config = defaults();
+  (config.segments as any[]).push({ stage: 'guided', segmentId: 'remote-segment', providerId: 'hosted-review', modelId: 'review' });
+  const policy = configured(config);
+  assert.throws(() => resolveReviewModel(policy, 'guided', 'remote-segment'), is('sentinel.provider.featureDisabled'));
+  assert.equal(resolveReviewModel(policy, 'guided', 'local-segment').selection.providerId, 'local-review');
+});
+
+test('segment-only selections resolve exactly their named segment with no stage fallback', () => {
+  const policy = configured({ stages: [], segments: [{ stage: 'guided', segmentId: 'only-segment', providerId: 'local-review', modelId: 'review' }] });
+  assert.equal(resolveReviewModel(policy, 'guided', 'only-segment').selectedBy, 'segment');
+  assert.throws(() => resolveReviewModel(policy, 'guided', 'other-segment'), is('sentinel.provider.capabilityMissing'));
+  assert.throws(() => resolveReviewModel(policy, 'general', 'only-segment'), is('sentinel.provider.capabilityMissing'));
 });

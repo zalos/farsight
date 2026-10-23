@@ -1,12 +1,19 @@
 // A stage/segment choice is audit data derived from the current owner-adopted policy. It never admits a call.
 // The existing bindProvider boundary supplies the actual binding; no structural selection can recreate authority.
-import type { Digest, ReviewModelStage, ReviewModelsSettings, ReviewStageModelSelection } from '../../contracts/index.js';
+import type { Digest, ReviewModelStage, ReviewModelsSettings, ReviewStageModelSelection, ProviderSettings } from '../../contracts/index.js';
 import { canonicalDigest } from '../../policy/digest.js';
 import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.js';
 import { bindProvider, type ProviderBinding, type ProviderSelection } from './profile.js';
 import { fail } from './errors.js';
 
-const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/;
+const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+// Closed dispatch classification: adding a provider kind requires an explicit hosted-pause decision.
+function isApiKind(kind: ProviderSettings['kind']): boolean {
+  switch (kind) {
+    case 'ollama': case 'openai-compatible': return true;
+    default: { const unhandled: never = kind; return fail('sentinel.provider.invalidProfile', 'unsupported provider kind'); }
+  }
+}
 const stageIs = (v: unknown): v is ReviewModelStage => v === 'guided' || v === 'general';
 
 export interface ResolvedReviewModel {
@@ -51,7 +58,7 @@ export function resolveReviewModel(policy: EffectivePolicy, stage: ReviewModelSt
   const selected: ReviewStageModelSelection | undefined = specific ?? config.stages.find(x => x.stage === stage);
   if (!selected) return fail('sentinel.provider.capabilityMissing', 'no configured model for this review segment');
   const provider = policy.settings.providers.find(x => x.id === selected.providerId);
-  if (provider?.disclosure === 'hosted' && (provider.kind === 'ollama' || provider.kind === 'openai-compatible')
+  if (provider?.disclosure === 'hosted' && isApiKind(provider.kind)
     && policy.settings.hostedApiReviewEnabled !== true) {
     fail('sentinel.provider.featureDisabled', 'the adopted hosted review feature is off');
   }
