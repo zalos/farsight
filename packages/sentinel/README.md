@@ -520,7 +520,8 @@ to the admitted limit. This establishes memory-limit activity and an observed ou
 that a particular local limit event caused that kill. Desktop continues to use daemon evidence only.
 
 The observer binds the inspected PID to its exact full container leaf and pins kernel object identities before the
-unchanged start message. It keeps the original timers and stream budgets active, reads no parent or host counters,
+unchanged start message. Each native external start waits for one inspect, for up to 200 ms, within the original
+attempt deadline. It keeps the original timers and stream budgets active, reads no parent or host counters,
 and closes before any Sentinel stop. Its setup and samples are bounded, with no added settling window. Fast teardown
 or unavailable notifications can still prevent a witness. Absence of a witness is never proof that no OOM happened.
 The separate forced-daemon-false native control requires real positive kernel evidence; it does not replace the

@@ -18,7 +18,7 @@ function kernel(t:any){
  const setProcess=(start='77',group=GROUP)=>{fs.writeFileSync(join(proc,'stat'),PID+' (docker-init) '+['S',...Array(18).fill('0'),start,...Array(30).fill('0')].join(' ')+'\n');fs.writeFileSync(join(proc,'cgroup'),'0::'+group+'\n')};setProcess();
  const write=(body:string)=>fs.writeFileSync(join(leaf,'memory.events.local'),body);
  write(record());fs.writeFileSync(join(leaf,'memory.max'),String(LIMIT)+'\n');
- const held=new Map<number,string>(),opened:number[]=[];let callback=()=>{},watchClosed=false,wrongUid=false,watchFailure=false,afterRead:(p:string)=>void=()=>{};
+ const held=new Map<number,string>(),opened:number[]=[];let callback=()=>{},watchError=(_error:Error)=>{},watchClosed=false,wrongUid=false,watchFailure=false,afterRead:(p:string)=>void=()=>{};
  const actual={...cgroupMemoryIo};
  const mapped=(p:any)=>{p=String(p);const fd=/^\/proc\/self\/fd\/(\d+)(.*)$/.exec(p);if(fd){const base=held.get(Number(fd[1]));assert.ok(base,'only an actually held descriptor is referenced');return base+fd[2]}
   if(p==='/sys/fs/cgroup'||p.startsWith('/sys/fs/cgroup/'))return cg+p.slice('/sys/fs/cgroup'.length);
@@ -33,9 +33,9 @@ function kernel(t:any){
   statfsSync:(p:any)=>({type:p==='/proc'?0x9fa0:p==='/sys/fs/cgroup'?0x63677270:assert.fail('unexpected statfs')}),
 
  });
- (cgroupMemoryIo as any).watch=(_path:string,cb:()=>void)=>{if(watchFailure)throw Error('unsupported watcher');callback=cb;const emitter=new EventEmitter() as any;emitter.close=()=>{watchClosed=true};return emitter};
+ (cgroupMemoryIo as any).watch=(_path:string,cb:()=>void)=>{if(watchFailure)throw Error('unsupported watcher');callback=cb;const emitter=new EventEmitter() as any;emitter.close=()=>{watchClosed=true};watchError=error=>{emitter.emit('error',error)};return emitter};
  t.after(()=>{Object.assign(cgroupMemoryIo,actual);assert.equal(held.size,0,'every opened kernel descriptor was closed')});
- return {root,cg,leaf,proc,held,opened,write,setProcess,notify:()=>callback(),watchClosed:()=>watchClosed,
+ return {root,cg,leaf,proc,held,opened,write,setProcess,notify:()=>callback(),watchError:(error:Error)=>watchError(error),watchClosed:()=>watchClosed,
   wrongUid:()=>{wrongUid=true},watchFailure:()=>{watchFailure=true},afterRead:(f:(p:string)=>void)=>{afterRead=f},
   start:()=>watchOwnedCgroupMemory(ID,PID,LIMIT)};
 }
@@ -46,6 +46,18 @@ test('exact local max+oom+kill delta retains immutable evidence after teardown, 
  fs.rmSync(k.leaf,{recursive:true});const e=w.finish()!;
  assert.equal(e.witness,'cgroup-v2-local');assert.equal(e.resource,'memory');assert.equal(e.identity.container,ID);assert.equal(e.identity.pid,PID);assert.equal(e.memoryMax,String(LIMIT));
  assert.deepEqual(e.baseline,{max:'0',oom:'0',oom_kill:'0'});assert.deepEqual(e.observed,{max:'20',oom:'1',oom_kill:'1'});assert.equal(Object.isFrozen(e.identity),true);
+});
+test('a queued watcher error after a positive preserves its immutable evidence and diagnostic state',async t=>{
+ const k=kernel(t),w=k.start();w.arm();k.write(record(20,1,1));k.notify();
+ const evidence=w.finish(),observation=w.observation();assert.ok(evidence);assert.equal(observation.state,'positive');
+ queueMicrotask(()=>k.watchError(Object.assign(Error('queued watcher teardown'),{code:'ENOENT'})));await Promise.resolve();
+ assert.equal(w.finish(),evidence);assert.deepEqual(w.observation(),observation);assert.equal(k.held.size,0);
+});
+test('pre-arm notifications count no samples and cannot turn a later final-read failure into a raced observation',t=>{
+ const k=kernel(t),w=k.start();for(let i=0;i<3;i++)k.notify();
+ assert.deepEqual(w.observation(),{state:'watching',samples:0});
+ w.arm();fs.unlinkSync(join(k.leaf,'memory.events.local'));
+ assert.equal(w.finish(),undefined);assert.deepEqual(w.observation(),{state:'unavailable',samples:0,reason:'kernel-object-gone'});assert.equal(k.held.size,0);
 });
 for(const [name,body] of [['unchanged/plainSIGKILL',record()],['kill alone/global ambiguity',record(0,0,1)],['max only',record(2,0,0)],['oom without kill',record(2,1,0)],['kill without max',record(0,1,1)]] as const)test(name+' supplies no affirmative witness',t=>{
  const k=kernel(t),w=k.start();w.arm();k.write(body);k.notify();assert.equal(w.finish(),undefined);

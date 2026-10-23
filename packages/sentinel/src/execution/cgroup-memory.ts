@@ -63,6 +63,7 @@ export function watchOwnedCgroupMemory(container:string,pid:number,memoryBytes:n
     events=maximum=directory=undefined;if(state==='watching')state='closed';
   }
   function unavailable(error:unknown){
+    if(closed)return;
     const code=(error as {code?:string}).code;
     state=armed&&notifications>0?'raced':'unavailable';reason=code==='ENOENT'||code==='ENODEV'?'kernel-object-gone':'identity-or-read-unavailable';close();
   }
@@ -122,7 +123,7 @@ export function watchOwnedCgroupMemory(container:string,pid:number,memoryBytes:n
     events=cgroupMemoryIo.openSync(`/proc/self/fd/${directory}/memory.events.local`,FLAGS);eventId=id(cgroupMemoryIo.fstatSync(events));
     maximum=cgroupMemoryIo.openSync(`/proc/self/fd/${directory}/memory.max`,FLAGS);maxId=id(cgroupMemoryIo.fstatSync(maximum));
     snapshot(true);state='watching';
-    watcher=cgroupMemoryIo.watch(`/proc/self/fd/${events}`,()=>{notifications++;sample()});
+    watcher=cgroupMemoryIo.watch(`/proc/self/fd/${events}`,()=>{if(closed||!armed)return;notifications++;sample()});
     watcher.on('error',unavailable);
   }catch(error){unavailable(error)}
   return result;
