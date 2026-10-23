@@ -1,0 +1,79 @@
+{
+  "schema": "sentinel-review-record/draft-1",
+  "sessionId": "rv-g-f6aa4c9fd9c187bcc8d6b39e",
+  "kind": "guided",
+  "runId": "run-1",
+  "attemptId": "attempt-1",
+  "snapshotId": "snap-1",
+  "sourceId": "web",
+  "specDigest": "sha256:1d63fbce9517abff371ab7748a49360a232182048db595593e88a41aeb5327c0",
+  "promptDigest": "sha256:b3c2f0f851e9e058e46dbd5176ce3b2e7def040923c9c171e7d0dabb471e1eaf",
+  "model": {
+    "requestedModel": "review-model:1",
+    "returnedModel": "review-model:1",
+    "immutableRevision": null,
+    "source": "host-reported"
+  },
+  "callerKind": "provider",
+  "outcome": "completed",
+  "verdict": "finding",
+  "inspected": [
+    {
+      "relativePath": "src/query.ts",
+      "content": "sha256:26dc9e73fe1fcbcd99333e5d13e63194ecdeb751c1b809fc0db1a486d738c8dd",
+      "ranges": [
+        [
+          1,
+          2
+        ]
+      ]
+    }
+  ],
+  "notInspected": [
+    "src/util.ts"
+  ],
+  "frontiers": [
+    {
+      "scopeId": "web:src/util.ts",
+      "reasonCode": "sentinel.review.frontier.notInspected"
+    }
+  ],
+  "operations": [
+    {
+      "operationId": "rv-g-f6aa4c9fd9c187bcc8d6b39e.op1",
+      "state": "settled",
+      "inputBytes": 1777,
+      "usage": {
+        "inputTokens": 120,
+        "outputTokens": 30
+      },
+      "outcome": "tool"
+    },
+    {
+      "operationId": "rv-g-f6aa4c9fd9c187bcc8d6b39e.op2",
+      "state": "settled",
+      "inputBytes": 2229,
+      "usage": {
+        "inputTokens": 120,
+        "outputTokens": 30
+      },
+      "outcome": "final"
+    }
+  ],
+  "totals": {
+    "steps": 2,
+    "toolCalls": 1,
+    "inputBytes": 4006,
+    "inputTokens": 240,
+    "outputTokens": 60,
+    "usage": "confirmed"
+  },
+  "refusals": 0,
+  "rejectedReplies": 0,
+  "observations": [
+    "obs-1761c3977bdc5bcdf2a1e3549e61a05c"
+  ],
+  "establishes": "model-review-inspection",
+  "deterministicCoverage": false,
+  "digest": "sha256:5df99dfc77c006a37bd67cac2e511145b960ea820db33d1e6346d0c328ccecdb"
+}

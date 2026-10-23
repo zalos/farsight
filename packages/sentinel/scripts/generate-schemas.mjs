@@ -21,6 +21,8 @@ const ENVELOPES = {
   repoconfig: ['sentinel-repoconfig/draft-1', 'RepoConfigEnvelope'],
   policy: ['sentinel-policy/draft-1', 'EffectivePolicyEnvelope'],
   adoption: ['sentinel-adoption/draft-1', 'AdoptionEnvelope'],
+  owneruireceipt: ['sentinel-owneruireceipt/draft-1', 'OwnerUiReceiptEnvelope'],
+  owneruicapabilities: ['sentinel-owneruicapabilities/draft-1', 'OwnerUiCapabilities'],
   receipt: ['sentinel-receipt/draft-1', 'ReceiptEnvelope'],
   admission: ['sentinel-admission/draft-1', 'AdmissionEnvelope'],
   controls: ['sentinel-controls/draft-1', 'ControlFactsEnvelope'],
@@ -35,12 +37,21 @@ const ENVELOPES = {
   deliverychunk: ['sentinel-delivery-chunk/draft-1', 'DeliveryChunk'],
   controlcapabilities: ['sentinel-control-capabilities/draft-1', 'ControlCapabilities'],
   controloutcome: ['sentinel-control-outcome/draft-1', 'ControlOutcome'],
+  preparationcapabilities: ['sentinel-preparation-capabilities/draft-1', 'PreparationCapabilities'],
+  configurationpreview: ['sentinel-configuration-preview/draft-1', 'ConfigurationPreview'],
+  preparationstatus: ['sentinel-preparation-status/draft-1', 'PreparationStatus'],
+  preparationoutcome: ['sentinel-preparation-outcome/draft-1', 'PreparationOutcome'],
 
   decisioninput:['sentinel-decision-input/draft-1','OwnerDecisionInput'],
   decisionview:['sentinel-decision-view/draft-1','DecisionViewEnvelope'],
   decisionpage:['sentinel-decision-page/draft-1','DecisionPageEnvelope'],
   importview: ['sentinel-import-view/draft-1','ImportViewEnvelope'],
   importpage: ['sentinel-import-page/draft-1','ImportPageEnvelope'],
+  partitions: ['sentinel-review-partitions/draft-1', 'ReviewPartitionsEnvelope'],
+  checkpoint: ['sentinel-review-checkpoint/draft-1', 'ReviewCheckpointEnvelope'],
+  instructions:['sentinel-review-instructions/draft-1','ReviewInstructionsEnvelope'],
+  reviewrequest:['sentinel-review-request/draft-1','ReviewRequestEnvelope'],
+  review: ['sentinel-review-record/draft-1', 'ReviewRecordEnvelope'],
 };
 
 const generator = createGenerator({

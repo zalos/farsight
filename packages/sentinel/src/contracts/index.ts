@@ -1,3 +1,4 @@
+export type {InstructionContent,SelectedSkill,ReviewInstructionsEnvelope,ReviewInstructionBinding,ReviewRequestEnvelope,ReviewProviderSelection} from './instructions.js';
 // The draft Sentinel contracts. Types here are the one source; schemas/*.schema.json and
 // src/schemas.generated.ts are generated from them by scripts/generate-schemas.mjs (--check detects drift).
 export type * from './common.js';
@@ -13,6 +14,8 @@ export type * from './protocol.js';
 export type * from './rules.js';
 export type * from './policy.js';
 export type * from './controls.js';
+export type * from './review.js';
+export type * from './review-providers.js';
 export type * from './plan.js';
 export type * from './paths.js';
 export type * from './deepimport.js';
@@ -20,6 +23,9 @@ export type * from './service.js';
 export type * from './import-view.js';
 export type * from './decision-view.js';
 export type * from './pathrequest.js';
+
+export type * from './preparation.js';
+export type * from './ownerui.js';
 
 /**
  * Every envelope: its kind, the one schema version this build reads and writes, and the generated type.
@@ -41,6 +47,8 @@ export const ENVELOPES = {
   repoconfig: { schema: 'sentinel-repoconfig/draft-1', type: 'RepoConfigEnvelope' },
   policy: { schema: 'sentinel-policy/draft-1', type: 'EffectivePolicyEnvelope' },
   adoption: { schema: 'sentinel-adoption/draft-1', type: 'AdoptionEnvelope' },
+  owneruireceipt: { schema: 'sentinel-owneruireceipt/draft-1', type: 'OwnerUiReceiptEnvelope' },
+  owneruicapabilities: { schema: 'sentinel-owneruicapabilities/draft-1', type: 'OwnerUiCapabilities' },
   receipt: { schema: 'sentinel-receipt/draft-1', type: 'ReceiptEnvelope' },
   admission: { schema: 'sentinel-admission/draft-1', type: 'AdmissionEnvelope' },
   controls: { schema: 'sentinel-controls/draft-1', type: 'ControlFactsEnvelope' },
@@ -60,6 +68,15 @@ export const ENVELOPES = {
   deliverychunk: { schema: 'sentinel-delivery-chunk/draft-1', type: 'DeliveryChunk' },
   controlcapabilities: { schema: 'sentinel-control-capabilities/draft-1', type: 'ControlCapabilities' },
   controloutcome: { schema: 'sentinel-control-outcome/draft-1', type: 'ControlOutcome' },
+  preparationcapabilities: { schema: 'sentinel-preparation-capabilities/draft-1', type: 'PreparationCapabilities' },
+  configurationpreview: { schema: 'sentinel-configuration-preview/draft-1', type: 'ConfigurationPreview' },
+  preparationstatus: { schema: 'sentinel-preparation-status/draft-1', type: 'PreparationStatus' },
+  preparationoutcome: { schema: 'sentinel-preparation-outcome/draft-1', type: 'PreparationOutcome' },
+  partitions: { schema: 'sentinel-review-partitions/draft-1', type: 'ReviewPartitionsEnvelope' },
+  checkpoint: { schema: 'sentinel-review-checkpoint/draft-1', type: 'ReviewCheckpointEnvelope' },
+  instructions: {schema:'sentinel-review-instructions/draft-1',type:'ReviewInstructionsEnvelope'},
+  reviewrequest: {schema:'sentinel-review-request/draft-1',type:'ReviewRequestEnvelope'},
+  review: { schema: 'sentinel-review-record/draft-1', type: 'ReviewRecordEnvelope' },
 } as const;
 
 export type EnvelopeKind = keyof typeof ENVELOPES;
@@ -84,7 +101,7 @@ export const COVERAGE_STATUSES = ['complete', 'partial', 'unsupported', 'not-run
 export const COVERAGE_GRANULARITIES = ['per-file-per-rule', 'per-file', 'aggregate'] as const;
 export const COVERAGE_BASES = ['executed', 'reused', 'imported', 'unavailable'] as const;
 export const DISPOSITION_DECISIONS = ['accepted-risk', 'false-positive', 'mitigated', 'deferred'] as const;
-export const DECISION_CHANNELS = ['owner-cli', 'mcp', 'http-bridge', 'model', 'local-service'] as const;
+export const DECISION_CHANNELS = ['owner-cli', 'mcp', 'http-bridge', 'model', 'local-service', 'owner-ui'] as const;
 export const ASSERTION_TRUSTS = ['asserted', 'imported-config', 'runtime-observed'] as const;
 export const COMPARISON_LABELS = [
   'new', 'persistent', 'changed-evidence', 'changed-detection', 'reopened', 'reopened-disposition-expired',
@@ -120,6 +137,10 @@ export const CONTROL_PROPERTIES = [
   'authentication', 'authorization', 'csrf', 'input-validation', 'rate-limit', 'security-headers', 'cors',
 ] as const;
 export const CONTROL_VERDICTS = ['applies', 'does-not-apply', 'unknown'] as const;
+export const REVIEW_VERDICTS = ['finding', 'no-finding', 'inconclusive'] as const;
+export const REVIEW_KINDS = ['guided', 'general'] as const;
+export const REVIEW_OUTCOMES = ['completed', 'unfinished'] as const;
+export const MODEL_PRICING_KINDS = ['rates', 'no-fee'] as const;
 
 /** Largest serialized envelope or worker message accepted, in UTF-8 bytes (PR 01's proposed 4 MiB output ceiling). */
 export const MAX_ENVELOPE_BYTES = 4 * 1024 * 1024;

@@ -12,6 +12,7 @@
 //
 // A failure before admission aborts every stage it registered: the bytes written become unreferenced and wait for
 // an explicit prune. Nothing here opens the ledger database or the owner lock; it uses the facade only.
+import { withAdmissionFence } from '../store/admission-fence.js';
 import { createHash } from 'node:crypto';
 import { lstatSync, realpathSync } from 'node:fs';
 import { isAbsolute, sep } from 'node:path';
@@ -174,7 +175,8 @@ function fingerprint(e: Enumerated): string {
   });
 }
 
-function enumerate(request: CaptureRequest, policy: CapturePolicy, store: CaptureStore, now: () => string, budget: GitReadBudget): Enumerated {
+function enumerate(request: CaptureRequest, policy: CapturePolicy, store: CaptureStore, now: () => string, budget: GitReadBudget, stillWithin: () => void): Enumerated {
+  stillWithin();
   const inv = new Inventory(policy);
   const sources: SnapshotSource[] = [];
   const repos: GitRepository[] = [];
@@ -182,6 +184,7 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
   const held = heldStoreRoot(store);
   try {
     for (const s of request.sources) {
+      stillWithin();
       const root = canonical(s.root, s.sourceId);
       const st = lstatSync(root);
       if (!st.isDirectory()) throw new SnapshotError('sentinel.capture.rootUnreadable', s.sourceId);
@@ -193,7 +196,7 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
         let found;
         try {
           commit = repo.resolveCommit(s.revision ?? 'HEAD');
-          found = enumerateCommit(inv, { sourceId: s.sourceId, repo, commit, lfsObjects: s.lfsObjects, submodules: s.submodules ?? [] });
+          found = enumerateCommit(inv, { sourceId: s.sourceId, repo, commit, lfsObjects: s.lfsObjects, submodules: s.submodules ?? [], stillWithin });
         } catch (e) { if (e instanceof CaptureChanged || e instanceof SnapshotError) throw e; return gitFailure(e); }
         sources.push({ sourceId: s.sourceId, repositoryId: s.repositoryId, commit, dirty: false, capturedAt: now() });
         for (const sub of found) {
@@ -210,7 +213,7 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
           }
           try {
             enumerateCommit(inv, { sourceId: sub.request.sourceId, repo: subRepo, commit: sub.commit, lfsObjects: sub.request.lfsObjects,
-              submodules: [] });
+              submodules: [], stillWithin });
           } catch (e) { if (e instanceof CaptureChanged || e instanceof SnapshotError) throw e; return gitFailure(e); }
           sources.push({ sourceId: sub.request.sourceId, repositoryId: sub.request.repositoryId, commit: sub.commit, dirty: false, capturedAt: now() });
         }
@@ -223,8 +226,8 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
         let commit: string | null = null;
         if (repo) { try { commit = repo.resolveCommit('HEAD'); } catch { commit = null; } }
         const start = inv.entries.length;
-        enumerateWorktree(inv, { sourceId: s.sourceId, root, store: storeHeld, lfsObjects: s.lfsObjects });
-        const dirty = commit === null || repo === undefined ? true : differsFromCommit(repo, commit, s.sourceId, inv.entries.slice(start), inv);
+        enumerateWorktree(inv, { sourceId: s.sourceId, root, store: storeHeld, lfsObjects: s.lfsObjects, stillWithin });
+        const dirty = commit === null || repo === undefined ? true : differsFromCommit(repo, commit, s.sourceId, inv.entries.slice(start), inv, stillWithin);
         sources.push({ sourceId: s.sourceId, repositoryId: s.repositoryId, commit, dirty, capturedAt: now() });
       }
     }
@@ -242,8 +245,8 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
  * nothing else was captured. Anything that cannot be compared (a tracked file excluded, too large or unreadable; a
  * link target not recorded) counts as a difference.
  */
-function differsFromCommit(repo: GitRepository, commit: string, sourceId: string, entries: readonly CaptureEntry[], inv: Inventory): boolean {
-  const tracked = trackedBlobs(repo, commit);
+function differsFromCommit(repo: GitRepository, commit: string, sourceId: string, entries: readonly CaptureEntry[], inv: Inventory, stillWithin: () => void): boolean {
+  const tracked = trackedBlobs(repo, commit, stillWithin);
   if (!tracked) return true;
   const gitlinks = [...tracked].filter(([, v]) => v.startsWith('160000:')).map(([p]) => p);
   const underGitlink = (p: string) => gitlinks.some(g => p === g || p.startsWith(`${g}/`));
@@ -255,6 +258,7 @@ function differsFromCommit(repo: GitRepository, commit: string, sourceId: string
   }
   const key = (path: string) => `${sourceId}\u0000${path}`;
   for (const [path, value] of tracked) {
+    stillWithin();
     const [mode, oid] = value.split(':') as [string, string];
     if (mode === '160000') continue;
     const mine = captured.get(path);
@@ -302,13 +306,18 @@ export function captureSnapshot(store: CaptureStore, request: CaptureRequest): P
  * every repository the capture opens (sources, submodules, both working-copy enumerations, every retry); each is
  * closed when its capture attempt ends, which releases what it reserved.
  */
-export async function captureWithBudget(store: CaptureStore, request: CaptureRequest, budget: GitReadBudget): Promise<CaptureResult> {
+export async function captureWithBudget(store: CaptureStore, request: CaptureRequest, budget: GitReadBudget,
+  stillWithin?: () => void, beforeAdmission?: () => void): Promise<CaptureResult> {
+  // Internal only: callers retain their original owner/deadline/signal. Never a CaptureRequest/JSON field.
+  const checkpoint = stillWithin ? () => { store.assertHeld(); stillWithin(); } : () => {};
+  checkpoint();
   const policy = checkRequest(request);
   const now = request.now ?? (() => new Date().toISOString());
   store.assertHeld();
   for (let attempt = 1; attempt <= policy.stabilityAttempts; attempt++) {
     try {
-      return await captureOnce(store, request, policy, now, attempt, budget);
+      checkpoint();
+      return await captureOnce(store, request, policy, now, attempt, budget, checkpoint, stillWithin !== undefined, beforeAdmission);
     } catch (e) {
       // A Git read refused after enumeration (a re-read reloading an index over the budget) is explicit too.
       if (e instanceof GitReadError) gitFailure(e);
@@ -320,11 +329,12 @@ export async function captureWithBudget(store: CaptureStore, request: CaptureReq
 }
 
 async function captureOnce(store: CaptureStore, request: CaptureRequest, policy: CapturePolicy, now: () => string, attempt: number,
-  budget: GitReadBudget): Promise<CaptureResult> {
-  const first = enumerate(request, policy, store, now, budget);
+  budget: GitReadBudget, stillWithin: () => void, admissionFence: boolean, beforeAdmission?: () => void): Promise<CaptureResult> {
+  const first = enumerate(request, policy, store, now, budget, stillWithin);
   let second: Enumerated | undefined;
   try {
-    return await captureEnumerated(store, request, policy, now, attempt, first, budget, e => { second = e; });
+    stillWithin();
+    return await captureEnumerated(store, request, policy, now, attempt, first, budget, e => { second = e; }, stillWithin, admissionFence, beforeAdmission);
   } finally {
     // The committed-tree read closures reopen pack files on demand; every handle is closed here, once nothing reads.
     for (const r of [...first.repos, ...(second?.repos ?? [])]) r.close();
@@ -332,7 +342,8 @@ async function captureOnce(store: CaptureStore, request: CaptureRequest, policy:
 }
 
 async function captureEnumerated(store: CaptureStore, request: CaptureRequest, policy: CapturePolicy, now: () => string,
-  attempt: number, first: Enumerated, budget: GitReadBudget, keep: (e: Enumerated) => void): Promise<CaptureResult> {
+  attempt: number, first: Enumerated, budget: GitReadBudget, keep: (e: Enumerated) => void, stillWithin: () => void, admissionFence: boolean, beforeAdmission?: () => void): Promise<CaptureResult> {
+  stillWithin();
   const envelope = buildEnvelope(request.mode, policy, first, now(), attempt);
   const valid = validateEnvelope('snapshot', envelope);
   if (!valid.ok) throw new SnapshotError('sentinel.capture.contractInvalid', valid.errors.slice(0, 3).map(x => `${x.path} ${x.message}`).join('; '));
@@ -360,33 +371,44 @@ async function captureEnumerated(store: CaptureStore, request: CaptureRequest, p
     // 3. Pin everything about to be written before the first byte is: source bytes, then the two roots, which link
     //    to content held by the other (unbound) stages.
     batches.forEach((ids, i) => {
+      stillWithin();
       store.ledger.registerStaging(stageId(i), ids.map(id => ({ id, schema: 'application/octet-stream', privacy: 'source' as const })));
       open.push(stageId(i));
     });
+    stillWithin();
     store.ledger.registerStaging(rootsStage, [
       { id: manifestId.id, schema: 'sentinel-snapshot/draft-1', privacy: 'source-derived', links: contentIds },
       { id: sidecarId.id, schema: MATERIALIZATION_SCHEMA, privacy: 'source', links: [manifestId.id] },
     ]);
     open.push(rootsStage);
     request.onStaged?.([...open]);
+    stillWithin();
     // 4. Write the source bytes, each verified against the inventory.
     for (const id of contentIds) {
+      stillWithin();
       const content = first.inv.contents.get(id)!;
       receipts.push(await store.objects.put(content.read(), { expect: { id, rawSize: content.bytes } }));
+      stillWithin();
     }
     // 5. A working copy must hold still across the whole capture.
     if (request.mode === 'working-copy') {
       store.assertHeld();
-      const second = enumerate(request, policy, store, now, budget);
+      const second = enumerate(request, policy, store, now, budget, stillWithin);
       keep(second);
+      stillWithin();
       if (fingerprint(first) !== fingerprint(second)) throw new CaptureChanged('the working copy changed during capture');
     }
     // 6. The roots, then one admission that verifies every object again and releases every stage.
+    stillWithin();
     const manifestReceipt = await store.objects.put(manifest, { expect: manifestId });
+    stillWithin();
     receipts.push(manifestReceipt, await store.objects.put(sidecar, { expect: sidecarId }));
+    stillWithin();
     store.assertHeld();
-    const record = store.ledger.admitSnapshot({ snapshotId: envelope.id, stageIds: [...open], manifest: manifestId.id,
+    beforeAdmission?.(); stillWithin();
+    const admit = () => store.ledger.admitSnapshot({ snapshotId: envelope.id, stageIds: [...open], manifest: manifestId.id,
       materialization: sidecarId.id, inventoryDigest: envelope.inventoryDigest, receipts });
+    const record = admissionFence ? withAdmissionFence(store, stillWithin, admit) : admit();
     open.length = 0;
     return Object.freeze({ snapshot: envelope, record, artifact: manifestReceipt, materialization, attempts: attempt });
   } catch (e) {

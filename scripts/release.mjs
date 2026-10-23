@@ -10,10 +10,14 @@
 //       # the release-PR shape the workflow uses: a new branch holding the version
 //       # commit and .github/release-notes/vX.Y.Z.md, no tag (publish.yml tags the squash-merged commit)
 //
-// Only the root package.json carries the release version: scripts/pack.mjs
+// The root package.json carries farsight-cli's release version: scripts/pack.mjs
 // gives it to the farsight-cli tarball and core's buildInfo() reads it in a
-// workspace build. The independently published graph/code-parser versions are
-// managed by library-version.mjs; application releases leave them alone.
+// workspace build. farsight-sentinel is versioned on its own: when the checkout has
+// packages/sentinel, every release names Sentinel's version explicitly with
+// --sentinel-version (it is never inferred from Farsight's), and both versions go
+// into the release manifest (.github/release-manifests/vX.Y.Z.json) the publish
+// workflow validates and uploads. The independently published graph/code-parser
+// versions are managed by library-version.mjs; application releases leave them alone.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -21,6 +25,9 @@ import { join, dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { changelog, prependSection, sinceLabel } from './changelog.mjs';
+import { buildManifest, manifestPath } from './release-manifest.mjs';
+
+const SENTINEL_MANIFEST = 'packages/sentinel/package.json';
 
 const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
 
@@ -90,12 +97,12 @@ export function preflight(cwd, { tag, allowBranch, newBranch }) {
   return { branch, problems };
 }
 
-function setRootVersion(cwd, version) {
-  const file = join(cwd, 'package.json');
+function setVersion(cwd, manifest, version) {
+  const file = join(cwd, manifest);
   const text = readFileSync(file, 'utf8');
   // replace in place, so the file's formatting and key order stay as they were
   const next = text.replace(/^(\s*"version"\s*:\s*")[^"]*(")/m, `$1${version}$2`);
-  if (next === text) throw new Error('package.json has no "version" to bump');
+  if (next === text) throw new Error(`${manifest} has no "version" to bump`);
   writeFileSync(file, next);
 }
 
@@ -112,58 +119,85 @@ export const notesPath = (tag) => `.github/release-notes/${tag}.md`;
 /** `release/v{version}` → `release/v1.2.3`; `{tag}` works too. */
 export const branchName = (template, version) => template.replaceAll('{version}', version).replaceAll('{tag}', `v${version}`);
 
+/**
+ * Sentinel's release version: explicit, a version, and after its own current one. Never Farsight's by default.
+ * Returns null when the checkout has no Sentinel package (then naming a version is refused).
+ */
+export function sentinelRelease(cwd, sentinelVersion) {
+  const file = join(cwd, SENTINEL_MANIFEST);
+  if (!existsSync(file)) {
+    if (sentinelVersion) throw new Error(`--sentinel-version ${sentinelVersion} was given, but ${SENTINEL_MANIFEST} does not exist`);
+    return null;
+  }
+  const current = JSON.parse(readFileSync(file, 'utf8')).version;
+  if (!sentinelVersion) throw new Error(`name farsight-sentinel's release version with --sentinel-version (it is ${current} now; it is never taken from farsight-cli's)`);
+  parseVersion(sentinelVersion);
+  if (compareVersions(sentinelVersion, current) <= 0) throw new Error(`farsight-sentinel ${sentinelVersion} is not after its current version ${current}`);
+  return { current, version: sentinelVersion };
+}
+
 export function release(cwd, opts) {
   const current = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')).version;
   const version = nextVersion(current, opts);
   if (compareVersions(version, current) <= 0) throw new Error(`${version} is not after the current version ${current}`);
+  const sentinel = sentinelRelease(cwd, opts.sentinelVersion);
   const tag = `v${version}`;
   const tagIt = opts.tag !== false;
   const newBranch = opts.branch ? branchName(opts.branch, version) : null;
   const { branch, problems } = preflight(cwd, { tag, allowBranch: opts.allowBranch, newBranch });
-  const log = changelog(cwd, { version, repoUrl: opts.repoUrl });
+  const log = changelog(cwd, { version, repoUrl: opts.repoUrl, sentinelVersion: sentinel?.version });
+  const manifest = buildManifest(tag, { farsight: version, ...(sentinel ? { sentinel: sentinel.version } : {}) });
+  const notes = log.notes;
   const committedNotes = opts.commitNotes ? notesPath(tag) : null;
   const notesFile = opts.notesOut ?? (committedNotes ? join(cwd, committedNotes) : join(mkdtempSync(join(tmpdir(), 'farsight-release-')), 'release-notes.md'));
   const releaseBranch = newBranch ?? branch;
-  const files = ['package.json', 'CHANGELOG.md', ...(committedNotes ? [committedNotes] : [])];
-  const plan = { current, version, tag, branch: releaseBranch, from: branch, tagged: tagIt, prerelease: version.includes('-'), since: log.since, commits: log.commits.length, notesFile };
+  const files = ['package.json', ...(sentinel ? [SENTINEL_MANIFEST] : []), 'CHANGELOG.md', manifestPath(tag), ...(committedNotes ? [committedNotes] : [])];
+  const plan = { current, version, sentinel: sentinel?.version ?? null, sentinelCurrent: sentinel?.current ?? null, manifest, tag, branch: releaseBranch, from: branch, tagged: tagIt, prerelease: version.includes('-'), since: log.since, commits: log.commits.length, notesFile };
 
   if (opts.dryRun) {
     console.log(`release (dry run): ${current} → ${version} on ${branch}, ${plural(log.commits.length)} since ${sinceLabel(log.since)}`);
+    if (sentinel) console.log(`farsight-sentinel: ${sentinel.current} → ${sentinel.version} (its own version)`);
     if (problems.length) console.log(`\nwould refuse:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
     const where = newBranch ? ` on a new branch ${newBranch}` : '';
     const tagging = tagIt ? ` and tag ${tag} (annotated, message = the notes below)` : ` and not tag it (${tag} is created after the release PR merges)`;
     console.log(`\nwould commit "chore(release): ${tag}" (${files.join(', ')})${where}${tagging}\n`);
     console.log(log.section);
     console.log('# Release notes\n');
-    console.log(log.notes);
+    console.log(notes);
     return { ...plan, problems };
   }
   if (problems.length) throw new Error(`refusing to release:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
 
   if (newBranch) git(cwd, ['switch', '-q', '-c', newBranch]);
-  setRootVersion(cwd, version);
+  setVersion(cwd, 'package.json', version);
+  if (sentinel) setVersion(cwd, SENTINEL_MANIFEST, sentinel.version);
+  mkdirSync(dirname(join(cwd, manifestPath(tag))), { recursive: true });
+  writeFileSync(join(cwd, manifestPath(tag)), JSON.stringify(manifest, null, 2) + '\n');
   const changelogFile = join(cwd, 'CHANGELOG.md');
   writeFileSync(changelogFile, prependSection(existsSync(changelogFile) ? readFileSync(changelogFile, 'utf8') : null, log.section, version));
   if (committedNotes) {
     mkdirSync(dirname(join(cwd, committedNotes)), { recursive: true });
-    writeFileSync(join(cwd, committedNotes), log.notes);
+    writeFileSync(join(cwd, committedNotes), notes);
   }
-  writeFileSync(notesFile, log.notes);
+  writeFileSync(notesFile, notes);
 
   git(cwd, ['add', '--', ...files]);
   git(cwd, ['commit', '-q', '-m', `chore(release): ${tag}`, ...trailerArgs(opts.trailers)]);
   // verbatim: the notes are Markdown, and git's default cleanup would strip every `### heading` as a comment
   if (tagIt) git(cwd, ['tag', '-a', tag, '--cleanup=verbatim', '-F', notesFile]);
   const commit = git(cwd, ['rev-parse', '--short', 'HEAD']);
-  setOutputs({ version, tag, prerelease: String(plan.prerelease), notes: notesFile, commit, branch: releaseBranch, tagged: String(tagIt) });
+  setOutputs({ version, ...(sentinel ? { sentinel_version: sentinel.version } : {}), manifest: manifestPath(tag), tag, prerelease: String(plan.prerelease), notes: notesFile, commit, branch: releaseBranch, tagged: String(tagIt) });
 
   console.log(`released ${tag} locally: commit ${commit}${newBranch ? ` on ${newBranch}` : ''}${tagIt ? '' : ', not tagged'}, ${plural(log.commits.length)} since ${sinceLabel(log.since)}`);
+  if (sentinel) console.log(`farsight-sentinel ${sentinel.version} (from ${sentinel.current})`);
   console.log(`release notes: ${notesFile}`);
   console.log('\nnext:');
   if (tagIt) {
     console.log('  node scripts/pack.mjs                 # the tarball, stamped with this commit');
+    if (sentinel) console.log('  node scripts/pack-sentinel.mjs        # farsight-sentinel, stamped with this commit');
     console.log(`  git push --follow-tags origin ${releaseBranch}`);
-    console.log(`  gh release create ${tag} build/farsight-cli-${version}.tgz --title "farsight-cli ${tag}" --notes-file ${notesFile}${plan.prerelease ? ' --prerelease' : ''} --verify-tag`);
+    const assets = [`build/farsight-cli-${version}.tgz`, ...(sentinel ? [`build/sentinel/farsight-sentinel-${sentinel.version}.tgz`] : [])].join(' ');
+    console.log(`  gh release create ${tag} ${assets} --title "farsight-cli ${tag}" --notes-file ${notesFile}${plan.prerelease ? ' --prerelease' : ''} --verify-tag`);
   } else {
     console.log(`  git push -u origin ${releaseBranch}`);
     console.log(`  gh pr create --base ${branch} --head ${releaseBranch} --title "chore(release): ${tag}" --body-file ${notesFile} --label release`);
@@ -184,6 +218,7 @@ function main(argv) {
     options: {
       bump: { type: 'string' },
       version: { type: 'string' },
+      'sentinel-version': { type: 'string' },
       prerelease: { type: 'string' },
       'dry-run': { type: 'boolean', default: false },
       'allow-branch': { type: 'boolean', default: false },
@@ -197,13 +232,13 @@ function main(argv) {
     },
   });
   if (values.help) {
-    console.log('usage: node scripts/release.mjs (--bump patch|minor|major | --version X.Y.Z) [--prerelease beta.1] [--dry-run] [--allow-branch] [--no-tag] [--branch release/v{version}] [--commit-notes] [--notes-out <file>] [--trailer "Key: value"]...');
+    console.log('usage: node scripts/release.mjs (--bump patch|minor|major | --version X.Y.Z) [--sentinel-version A.B.C] [--prerelease beta.1] [--dry-run] [--allow-branch] [--no-tag] [--branch release/v{version}] [--commit-notes] [--notes-out <file>] [--trailer "Key: value"]...');
     return;
   }
   if (values.bump && values.version) throw new Error('pass --bump or --version, not both');
   const cwd = git(process.cwd(), ['rev-parse', '--show-toplevel']);
   release(cwd, {
-    bump: values.bump, version: values.version || undefined, prerelease: values.prerelease || undefined,
+    bump: values.bump, version: values.version || undefined, sentinelVersion: values['sentinel-version'] || undefined, prerelease: values.prerelease || undefined,
     dryRun: values['dry-run'], allowBranch: values['allow-branch'], notesOut: values['notes-out'],
     repoUrl: values['repo-url'], trailers: values.trailer ?? [],
     tag: values.tag, branch: values.branch || undefined, commitNotes: values['commit-notes'],

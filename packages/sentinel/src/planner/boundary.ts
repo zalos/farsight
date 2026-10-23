@@ -40,7 +40,7 @@ export interface InfluenceManifest {
   readonly schema: 'sentinel-influence/draft-1';
   readonly plan: { readonly runId: Id; readonly revision: number; readonly digest: string };
   readonly unit: WorkRef;
-  readonly stage: PlanStage;
+  readonly stage: PlannedWork['stage'];
   readonly inputFingerprint: string;
   readonly implementationDigest: string;
   readonly adapterId: Id | null;
@@ -48,6 +48,7 @@ export interface InfluenceManifest {
   readonly checks: readonly Id[];
   readonly scopes: readonly string[];
   readonly inputs: PlannedWork['inputs'];
+  readonly review?:PlannedWork['review'];
   readonly pins: PlanRevision['pins'];
 }
 
@@ -125,7 +126,7 @@ function manifestIn(plan: PlanRevision, index: PlanIndex, ref: WorkRef): { reado
     schema: 'sentinel-influence/draft-1' as const, plan: { runId: plan.runId, revision: plan.revision, digest: plan.digest },
     unit: { id: u.id, revision: u.revision }, stage: u.stage, inputFingerprint: u.inputFingerprint,
     implementationDigest: u.implementationDigest, adapterId: u.adapterId, dependencies: u.dependencies.map(d => ({ ...d })),
-    checks: [...u.checks], scopes: [...u.scopes], inputs: u.inputs.map(i => ({ ...i })), pins: plan.pins,
+    checks: [...u.checks], scopes: [...u.scopes], inputs: u.inputs.map(i => ({ ...i })), pins: plan.pins,...(u.review?{review:u.review}:{}),
   }));
   const built = Object.freeze({ manifest, id: canonicalArtifactId(manifest) });
   // Only an owned (immutable) plan keeps what it built; a caller's plan is re-read on every call.
@@ -154,9 +155,9 @@ export function workEnvelopesFor(given: PlanRevision, conversion: WorkConversion
   const tools = new Set(plan.pins.tools.map(t => t.adapterId));
   return plan.units.map(u => {
     const { manifest, id: manifestId } = manifestIn(plan, index, u);
-    const resources = conversion.execution.resources[u.stage];
+    const resources = conversion.execution.resources[u.stage==='review-guided'||u.stage==='review-general'?'check':u.stage];
     if (!resources) throw invalid(`the profile grants no resources to the ${u.stage} stage`);
-    const kind: StageKind = u.adapterId !== null && tools.has(u.adapterId) ? 'external-tool' : 'coded';
+    const kind: StageKind = u.review?'agentic':u.adapterId !== null && tools.has(u.adapterId) ? 'external-tool' : 'coded';
     const common = {
       schema: 'sentinel-work/draft-1' as const, id: u.id, revision: u.revision, runId: plan.runId, planRevision: plan.revision,
       stage: { contract: u.contract, contractVersion: 'draft-1', kind, implementationDigest: u.implementationDigest },

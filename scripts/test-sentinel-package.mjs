@@ -65,6 +65,9 @@ try {
     assert.ok(existsSync(controlsDriver), 'the descriptor driver is a fixed internal dist entry');
     assert.ok(!Object.hasOwn(pkg.sentinel.assets, 'frameworks/controls/driver'), 'the fixed driver is pinned by the dist closure, not the started-asset inventory');
   }
+  if (existsSync(join(sourceDir, 'src/service/review-adapter.ts'))) {
+    assert.ok(existsSync(join(installed, 'dist/review/dispatch.mjs')), 'the model registry operation is a fixed installed entry');
+  }
   // Required whenever the source package can start built-in workers (it has the supervisor).
   const startsWorkers = existsSync(join(sourceDir, 'src', 'execution', 'supervisor.ts'));
   if (startsWorkers) assert.ok(existsSync(gate), 'the launch gate is shipped as dist/execution/launch-gate.mjs');
@@ -551,7 +554,7 @@ try {
       const path = ${JSON.stringify(path)}, at = '2026-10-22T12:00:00.000000000Z';
       const ledger = await BudgetLedger.open(path);
       try {
-        ledger.createEnvelope({ id: 'fixture', runId: 'fixture-run', bindingDigest: 'sha256:' + '1'.repeat(64), admissionDigest: 'sha256:' + '2'.repeat(64), receiptDigest: null,
+        ledger.createEnvelope({ id: 'fixture', runId: 'fixture-run', providerId: 'fixture-provider', bindingDigest: 'sha256:' + '1'.repeat(64), admissionDigest: 'sha256:' + '2'.repeat(64), receiptDigest: null,
           maxTokens: 10, maxCostNanos: 0n, currency: 'USD', createdAt: at });
         const held = ledger.reserve({ envelopeId: 'fixture', operationId: 'first', tokens: 6, costNanos: 0n, epoch: 'fixture-epoch', at });
         assert.equal(ledger.reserve({ envelopeId: 'fixture', operationId: 'first', tokens: 6, costNanos: 0n, epoch: 'fixture-epoch', at }).id, held.id);

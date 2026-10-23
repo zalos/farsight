@@ -225,8 +225,8 @@ test('the facade exposes domain operations only', needsStore, async t => {
   assert.equal(root.openStore, openStore, 'the root export is the same facade');
   assert.equal(root.CAPABILITIES.find(c => c.id === 'ledger')?.state, 'available-draft');
   assert.equal(root.CAPABILITIES.find(c => c.id === 'mcp')?.reasonCode, 'sentinel.capability.draftMcpReadonly');
-  assert.deepEqual(root.CAPABILITIES.filter(c => c.state === 'available-draft').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import', 'reports', 'report-imports', 'dispositions', 'mcp']);
-  assert.deepEqual(root.CAPABILITIES.filter(c => c.state === 'unavailable').map(c => c.id), ['framework-next', 'framework-nest', 'interprocedural-flow', 'model-review', 'farsight-host-bridge', 'gui', 'replay-bundles'],
+  assert.deepEqual(root.CAPABILITIES.filter(c => c.state === 'available-draft').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import', 'reports', 'report-imports', 'dispositions', 'mcp', 'farsight-host-bridge']);
+  assert.deepEqual(root.CAPABILITIES.filter(c => c.state === 'unavailable').map(c => c.id), ['framework-next', 'framework-nest', 'interprocedural-flow', 'model-review', 'gui', 'replay-bundles'],
     'unimplemented features remain explicitly unavailable');
 });
 

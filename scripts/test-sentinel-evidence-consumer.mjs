@@ -11,6 +11,7 @@ import {constants,openSync,closeSync,fstatSync,readSync,writeSync,existsSync,mkd
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {npmConsumer} from './npm-consumer.mjs';
+import {repackAtOriginalBuildTime} from './sentinel-evidence-provenance.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),version=JSON.parse(readFileSync(join(root,'packages/sentinel/package.json'))).version;
 const artifact=resolve(process.argv[2]??join(root,'build/sentinel',`farsight-sentinel-${version}.tgz`));
 assert.ok(existsSync(artifact),'pack Sentinel first');
@@ -38,6 +39,7 @@ try{
  execFileSync(process.execPath,[join(root,'node_modules/typescript/bin/tsc'),'-p',join(root,'packages/sentinel/tsconfig.json')],options);
  execFileSync(process.execPath,[join(root,'scripts/pack-sentinel.mjs')],options);
  const repacked=join(root,'build/sentinel','farsight-sentinel-'+version+'.tgz');
+ repackAtOriginalBuildTime({snapshot,packageDir:join(root,'build/sentinel/package'),version,options});
  assert.equal(artifactDigest(repacked),artifactSha256,'private build/input artifact mismatch');
  provenanceMatched=true;
  // Install the original snapshot, never the potentially overwritten default output.

@@ -1030,3 +1030,13 @@ operation. Read one candidate to obtain a currently validated, privacy-projected
 
 The page cursor is bound to the actual owner history head, workspace, store and run revision. Read a decision to
 obtain its current evidence/privacy projection; a metadata row does not establish retained evidence availability.
+
+### Sentinel configured preparation preview counts (ADR 48)
+
+`ConfigurationPreview.counts` contains configured rule-family counts before capture or readiness discovery.
+`selectedRules` counts each effective requested/mandatory family once, from
+`PreparationController.preview.effectivePolicy.rules`; `mandatoryRules` counts distinct adopted mandatory families,
+from `PreparationController.preview.adoptedSettings.mandatoryRules`. Both use the catalog scope
+`sentinel.preparation.scope.configuration` and their matching two-register unit keys
+`sentinel.preparation.count.selectedRules` / `.mandatoryRules`. They are core `Counted` shapes and do not count
+captured files, executable checks, supported adapters or findings. No exact source-scope claim is made before capture.

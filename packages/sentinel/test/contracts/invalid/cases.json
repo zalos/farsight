@@ -1907,5 +1907,394 @@
     ],
     "expect": "sentinel.contract.invalid",
     "path": "/attestation"
+  },
+  {
+    "name": "models: two models with one id",
+    "base": "settings-models",
+    "ops": [
+      {
+        "set": "/providers/0/models/1/id",
+        "value": "review"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/providers/0/models/1/id"
+  },
+  {
+    "name": "models: a hosted provider cannot declare no fee",
+    "base": "settings-models",
+    "ops": [
+      {
+        "set": "/providers/1/models/0/pricing",
+        "value": {
+          "kind": "no-fee",
+          "basis": "local-runtime"
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/providers/1/models/0/pricing"
+  },
+  {
+    "name": "models: a capability probed at another origin",
+    "base": "settings-models",
+    "ops": [
+      {
+        "set": "/providers/0/models/0/capability/origin",
+        "value": "http://127.0.0.1:1"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/providers/0/models/0/capability"
+  },
+  {
+    "name": "models: a hosted model without recorded terms",
+    "base": "settings-models",
+    "ops": [
+      {
+        "set": "/providers/1/models/0/terms",
+        "value": null
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/providers/1/models/0/terms"
+  },
+  {
+    "name": "models: rates in another currency than the budget",
+    "base": "settings-models",
+    "ops": [
+      {
+        "set": "/providers/1/models/0/pricing/currency",
+        "value": "EUR"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/providers/1/models/0/pricing/currency"
+  },
+  {
+    "name": "models: the output allowance fills the context",
+    "base": "settings-models",
+    "ops": [
+      {
+        "set": "/providers/0/models/0/limits/maxOutputTokens",
+        "value": 40000
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/providers/0/models/0/limits/maxOutputTokens"
+  },
+  {
+    "name": "models: an unpriced model has no form",
+    "base": "settings-models",
+    "ops": [
+      {
+        "set": "/providers/0/models/0/pricing",
+        "value": null
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "models: an unknown pricing kind",
+    "base": "settings-models",
+    "ops": [
+      {
+        "set": "/providers/0/models/0/pricing",
+        "value": {
+          "kind": "free"
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "models: a model cannot carry its own endpoint",
+    "base": "settings-models",
+    "ops": [
+      {
+        "set": "/providers/0/models/0/endpoint",
+        "value": "https://elsewhere.example"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "models: a limit over its ceiling",
+    "base": "settings-models",
+    "ops": [
+      {
+        "set": "/providers/0/models/0/limits/timeoutMs",
+        "value": 10000000
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "models: a model name with a space",
+    "base": "settings-models",
+    "ops": [
+      {
+        "set": "/providers/0/models/0/model",
+        "value": "review model"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "partitions: a tampered plan fails its digest",
+    "base": "partitions",
+    "ops": [
+      {
+        "set": "/partitions/0/members/0/bytes",
+        "value": 1
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "partitions: a partition id that is not its digest",
+    "base": "partitions",
+    "ops": [
+      {
+        "set": "/partitions/0/id",
+        "value": "part-000000000000000000000000"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/partitions/0/id"
+  },
+  {
+    "name": "partitions: a member path that climbs out",
+    "base": "partitions",
+    "ops": [
+      {
+        "set": "/partitions/0/members/0/relativePath",
+        "value": "../etc/hosts"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "partitions: a findings field cannot steer the plan",
+    "base": "partitions",
+    "ops": [
+      {
+        "set": "/findings",
+        "value": [
+          "x"
+        ]
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "partitions: bounds over the ceiling",
+    "base": "partitions",
+    "ops": [
+      {
+        "set": "/bounds/maxFiles",
+        "value": 5000
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "checkpoint: a session must start with its fixed prompt",
+    "base": "checkpoint",
+    "ops": [
+      {
+        "set": "/messages/0/role",
+        "value": "user"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/messages/0/role"
+  },
+  {
+    "name": "checkpoint: an operation out of sequence",
+    "base": "checkpoint",
+    "ops": [
+      {
+        "set": "/operations/0/operationId",
+        "value": "other.op1"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/operations/0/operationId"
+  },
+  {
+    "name": "checkpoint: concluded and stopped at once",
+    "base": "checkpoint",
+    "ops": [
+      {
+        "set": "/stopped",
+        "value": "sentinel.review.frontier.budget"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/stopped"
+  },
+  {
+    "name": "checkpoint: a claim citing evidence never served",
+    "base": "checkpoint",
+    "ops": [
+      {
+        "set": "/final/claims/0/citations/0",
+        "value": "ev-0000000000000000"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/final/claims/0/citations/0"
+  },
+  {
+    "name": "checkpoint: inspected names a file never served",
+    "base": "checkpoint",
+    "ops": [
+      {
+        "set": "/final/inspected/0",
+        "value": "src/util.ts"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/final/inspected/0"
+  },
+  {
+    "name": "checkpoint: a settled operation without usage",
+    "base": "checkpoint",
+    "ops": [
+      {
+        "delete": "/operations/0/usage"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/operations/0"
+  },
+  {
+    "name": "checkpoint: a replied approval is not part of the grammar",
+    "base": "checkpoint",
+    "ops": [
+      {
+        "set": "/final/approve",
+        "value": true
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "checkpoint: an evidence id of another form",
+    "base": "checkpoint",
+    "ops": [
+      {
+        "set": "/served/0/id",
+        "value": "source:query:3"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "checkpoint: an unknown message role",
+    "base": "checkpoint",
+    "ops": [
+      {
+        "set": "/messages/1/role",
+        "value": "tool"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "review: a tampered record fails its digest",
+    "base": "review",
+    "ops": [
+      {
+        "set": "/totals/inputTokens",
+        "value": 1
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/digest"
+  },
+  {
+    "name": "review: completed without a verdict",
+    "base": "review",
+    "ops": [
+      {
+        "set": "/verdict",
+        "value": null
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/verdict"
+  },
+  {
+    "name": "review: a record never claims deterministic coverage",
+    "base": "review",
+    "ops": [
+      {
+        "set": "/deterministicCoverage",
+        "value": true
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "review: a record establishes only model-review inspection",
+    "base": "review",
+    "ops": [
+      {
+        "set": "/establishes",
+        "value": "coverage"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "review: a file both inspected and not",
+    "base": "review",
+    "ops": [
+      {
+        "set": "/notInspected/0",
+        "value": "src/query.ts"
+      }
+    ],
+    "expect": "sentinel.contract.invariant"
+  },
+  {
+    "name": "review: usage confirmed though a call is unsettled",
+    "base": "review",
+    "ops": [
+      {
+        "set": "/operations/0/state",
+        "value": "unsettled"
+      },
+      {
+        "delete": "/operations/0/usage"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/totals/usage"
+  },
+  {
+    "name": "review: observations from a no-finding review",
+    "base": "review",
+    "ops": [
+      {
+        "set": "/verdict",
+        "value": "no-finding"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/observations"
+  },
+  {
+    "name": "review: a mock caller is named, never hidden",
+    "base": "review",
+    "ops": [
+      {
+        "set": "/callerKind",
+        "value": "oracle"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
   }
 ]

@@ -1,0 +1,34 @@
+# A build artifact only: this job never reads credentials or calls a model.
+name: sentinel-cli-native-helper
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - name: Check out the exact source revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_sha }}
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Build and self-test without querying credentials
+        run: |
+          test "$(uname -m)" = arm64
+          node packages/sentinel/scripts/build-cli-native-helper.mjs
+      - name: Retain the source-bound helper
+        uses: actions/upload-artifact@v7
+        with:
+          name: sentinel-cli-native-darwin-arm64
+          path: build/sentinel-cli-native/darwin-arm64/
+          if-no-files-found: error
+          retention-days: 7

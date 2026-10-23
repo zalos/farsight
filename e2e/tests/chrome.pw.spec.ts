@@ -92,7 +92,8 @@ test.describe('a read-only session', () => {
    */
   test('the chip says READ-ONLY, every write control is greyed with its reason, and the server refuses the write', async ({ page }) => {
     const v = await (await fetch(base + 'api/version')).json();
-    expect(v.session).toEqual({ readOnly: true, why: 'flag' });
+    expect(Object.keys(v.session).sort()).toEqual(['instance', 'readOnly', 'why']);
+    expect(v.session).toEqual({ readOnly: true, why: 'flag', instance: expect.stringMatching(/^host-[a-f0-9]{32}$/) });
     const put = await fetch(base + 'api/settings', { method: 'PUT', body: '{}' });
     expect(put.status).toBe(403);
     const writes: string[] = [];

@@ -1,21 +1,71 @@
 {
   "schema": "sentinel-settings/draft-1",
-  "mandatoryRules": ["sentinel.secrets.committed-credential", "sentinel.sql.dynamic-query"],
+  "mandatoryRules": [
+    "sentinel.secrets.committed-credential",
+    "sentinel.sql.dynamic-query"
+  ],
   "thresholds": {
     "failOnSeverity": "high",
     "requireCompleteCoverage": true,
-    "requiredCapabilities": ["source-bytes", "pattern-match"]
+    "requiredCapabilities": [
+      "source-bytes",
+      "pattern-match"
+    ]
   },
   "grants": [
-    { "actions": ["run.start", "capture.source"], "principals": ["human", "agent"] },
-    { "actions": ["disposition.propose"], "principals": ["human", "agent"], "confirm": "never" },
     {
-      "actions": ["paid.admit", "disclosure.send"],
-      "principals": ["human", "agent"],
-      "confirm": "always",
-      "scope": { "providers": ["local-review", "hosted-review"], "effects": ["paid-inference", "source-disclosure", "network"] }
+      "actions": [
+        "run.start",
+        "capture.source"
+      ],
+      "principals": [
+        "human",
+        "agent"
+      ]
     },
-    { "actions": ["disposition.approve", "rule.promote", "tool.acquire", "settings.adopt"], "principals": ["human"] }
+    {
+      "actions": [
+        "disposition.propose"
+      ],
+      "principals": [
+        "human",
+        "agent"
+      ],
+      "confirm": "never"
+    },
+    {
+      "actions": [
+        "paid.admit",
+        "disclosure.send"
+      ],
+      "principals": [
+        "human",
+        "agent"
+      ],
+      "confirm": "always",
+      "scope": {
+        "providers": [
+          "local-review",
+          "hosted-review"
+        ],
+        "effects": [
+          "paid-inference",
+          "source-disclosure",
+          "network"
+        ]
+      }
+    },
+    {
+      "actions": [
+        "disposition.approve",
+        "rule.promote",
+        "tool.acquire",
+        "settings.adopt"
+      ],
+      "principals": [
+        "human"
+      ]
+    }
   ],
   "agentActions": "confirm",
   "providers": [
@@ -25,7 +75,32 @@
       "endpoint": "http://127.0.0.1:11434",
       "credential": null,
       "disclosure": "local-only",
-      "budget": { "maxTokens": 200000, "maxCost": "0", "currency": "USD" }
+      "budget": {
+        "maxTokens": 200000,
+        "maxCost": "0",
+        "currency": "USD"
+      },
+      "models": [
+        {
+          "id": "review",
+          "model": "example-model:latest",
+          "limits": {
+            "maxRequestBytes": 262144,
+            "maxResponseBytes": 65536,
+            "timeoutMs": 120000,
+            "maxOutputTokens": 1024,
+            "contextTokens": 32768,
+            "maxMessages": 64,
+            "templateTokensPerMessage": 16
+          },
+          "pricing": {
+            "kind": "no-fee",
+            "basis": "local-runtime"
+          },
+          "terms": null,
+          "capability": null
+        }
+      ]
     },
     {
       "id": "hosted-review",
@@ -33,7 +108,41 @@
       "endpoint": "https://models.example.com",
       "credential": "keychain:farsight/sentinel-example",
       "disclosure": "hosted",
-      "budget": { "maxTokens": 100000, "maxCost": "5.00", "currency": "USD" }
+      "budget": {
+        "maxTokens": 100000,
+        "maxCost": "5.00",
+        "currency": "USD"
+      },
+      "models": [
+        {
+          "id": "review",
+          "model": "example-model",
+          "limits": {
+            "maxRequestBytes": 262144,
+            "maxResponseBytes": 65536,
+            "timeoutMs": 120000,
+            "maxOutputTokens": 1024,
+            "contextTokens": 32768,
+            "maxMessages": 64,
+            "templateTokensPerMessage": 16
+          },
+          "pricing": {
+            "kind": "rates",
+            "currency": "USD",
+            "inputPerMillion": "0",
+            "outputPerMillion": "0",
+            "source": "replace with the provider's published rate schedule",
+            "asOf": "2026-10-22"
+          },
+          "terms": {
+            "retention": "replace with the provider's retention terms",
+            "training": "unknown",
+            "source": "replace with the terms page you read",
+            "recordedAt": "2026-10-22"
+          },
+          "capability": null
+        }
+      ]
     }
   ]
 }

@@ -42,7 +42,7 @@ export const CAPABILITIES: readonly Capability[] = Object.freeze([
   { id: 'dispositions', state: 'available-draft', reasonCode: 'sentinel.capability.draftDecisions', plannedIn: 'PR 20' },
   { id: 'model-review', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 21–22' },
   { id: 'mcp', state: 'available-draft', reasonCode: 'sentinel.capability.draftMcpReadonly', plannedIn: 'PR 23a' },
-  { id: 'farsight-host-bridge', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 24' },
+  { id: 'farsight-host-bridge', state: 'available-draft', reasonCode: 'sentinel.capability.draftHostBridge', plannedIn: 'PR 24' },
   { id: 'gui', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 25' },
   { id: 'replay-bundles', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 26' },
 ].map(c => Object.freeze(c as Capability)));

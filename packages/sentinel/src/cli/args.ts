@@ -7,7 +7,7 @@ export const COMMANDS = {
   help: null, version: null, capabilities: null, validate: null, init: null, settings: null,
   plan: null, paths: null, run: null, status: null, report: null, wait: null, pause: null, resume: null, cancel: null, serve: null,
   retry: null, rerun: null,
-  rules: null, assets: null, mcp: null, evidence: null, decision: null,
+  rules: null, assets: null, mcp: null, evidence: null, decision: null, prepare: null, 'owner-ui': null,
   compare: null, bundle: 'PR 26',
 } as const satisfies Record<string, string | null>;
 export type CommandName = keyof typeof COMMANDS;
@@ -31,13 +31,13 @@ const RUN_REF: CommandSpec = { flags: { ...COMMON, ...STORE }, positional: ['run
 const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   help: { flags: COMMON, positional: [], min: 0 },
   version: { flags: COMMON, positional: [], min: 0 },
-  capabilities: { flags: COMMON, positional: [], min: 0 },
+  capabilities: { flags: {...COMMON,'--models':'boolean'}, positional: [], min: 0 },
   validate: { flags: COMMON, positional: ['kind', 'file'], min: 2 },
   init: { flags: { ...COMMON, '--workspace': 'value', '--profile': 'value' }, positional: [], min: 0 },
   settings: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['action'], min: 1 },
   plan: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: [], min: 0 },
   paths: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--request': 'value' }, positional: ['ancestorRunId'], min: 1 },
-  run: { flags: { ...COMMON, ...STORE, '--detach': 'boolean', '--confirm': 'boolean' }, positional: ['planId'], min: 1 },
+  run: { flags: { ...COMMON, ...STORE, '--detach': 'boolean', '--confirm': 'boolean', '--confirm-models':'boolean' }, positional: ['planId'], min: 1 },
   status: { flags: { ...COMMON, ...STORE, '--after': 'value', '--limit': 'value' }, positional: ['runId'], min: 1 },
   wait: { flags: { ...COMMON, ...STORE, '--timeout': 'value' }, positional: ['runId'], min: 1 },
   pause: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
@@ -45,14 +45,16 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   retry: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
   resume: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
   rerun: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--stage': 'value' }, positional: ['runId'], min: 1 },
-  report: { flags: { ...COMMON, ...STORE, ...FULL_REPORT, '--full': 'boolean' }, positional: ['runId'], min: 1 },
+  report: { flags: { ...COMMON, ...STORE, ...FULL_REPORT, '--full': 'boolean', '--instructions':'boolean' }, positional: ['runId'], min: 1 },
   serve: { flags: { ...COMMON, ...STORE, '--idle-ms': 'value' }, positional: [], min: 0 },
   compare: { flags: { ...COMMON, ...STORE, ...FULL_REPORT }, positional: ['runId', 'baselineRunId'], min: 2 },
   rules: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['action', 'packDir'], min: 1 },
   assets: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--archive': 'value', '--manifest': 'value', '--max-bytes': 'value', '--license': 'value' }, positional: ['action', 'assetId'], min: 2 },
+  'owner-ui': { flags: { ...STORE, '--farsight-origin': 'value' }, positional: [], min: 0 },
   mcp: { flags: STORE, positional: [], min: 0 },
   decision:{flags:{...COMMON,...STORE,'--confirm':'boolean','--finding':'value','--proposal':'value','--baseline':'value','--after':'value','--limit':'value'},positional:['action','target'],min:2},
   evidence:{flags:{...COMMON,...STORE,'--confirm':'boolean','--source':'value','--report':'value','--manifest':'value','--expect-candidate':'value','--predecessor':'value','--baseline':'value','--format':'value','--out':'value','--after':'value','--limit':'value'},positional:['action','target'],min:2},
+  prepare: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--request-key': 'value', '--parent': 'value' }, positional: ['action'], min: 0 },
   bundle: { flags: COMMON, positional: [], min: 0 },
 };
 
@@ -113,6 +115,9 @@ export function parseArgs(argv: readonly string[]): ParseResult {
   }
   if (positional.length > spec.positional.length) return fail('sentinel.args.unexpectedArgument', positional[spec.positional.length]!);
   if (positional.length < spec.min) return fail('sentinel.args.missingArgument', spec.positional[positional.length]!);
+  if(command==='capabilities'&&flags['--models']&&!json)return fail('sentinel.args.unexpectedArgument','--models requires --json');
+  if(command==='run'&&flags['--confirm-models']&&flags['--detach'])return fail('sentinel.args.unexpectedArgument','--confirm-models requires foreground run');
+  if(command==='report'&&flags['--instructions']){if(!json||Object.keys(flags).some(f=>!['--json','--workspace','--instructions'].includes(f)))return fail('sentinel.args.unexpectedArgument','--instructions requires only --json');}
   if(command==='paths'&&flags['--request']===undefined)return fail('sentinel.args.missingValue','--request');
   const args: Record<string, string> = {};
   spec.positional.forEach((p, i) => { if (positional[i] !== undefined) args[p] = positional[i]!; });

@@ -1230,7 +1230,9 @@ chat-completions API. Compatibility is per endpoint. `probeCapability` lists wha
 listing), and a binding needs a capability record for exactly its kind, origin and model.
 
 **Binding.** `bindProvider(policy, profile)` joins a provider from the adopted settings (kind, origin, keychain
-reference, disclosure, per-action budget) with a model profile. The profile names the model, hard limits, a rate
+reference, disclosure, per-action budget) with a model profile. *Superseded in the same draft (ADR 39 update):
+models are configured in the adopted settings, `providers[].models[]`, and `bindProvider(policy, providerId,
+modelId)` reads every term there; the caller names ids only.* The profile names the model, hard limits, a rate
 schedule or an explicit local no-fee basis, recorded hosted terms, and the capability record. A local-only provider
 must be a literal loopback address; a hosted one must use https and needs recorded retention and training terms.
 An unpriced profile is refused, and only a local runtime may declare no fee. The binding's canonical digest is the
@@ -1282,6 +1284,34 @@ it holds no run, work or attempt state.
 - Usage above a reservation is charged in full, recorded as an overrun, and overdraws the envelope, which then
   refuses every further reservation until the owner approves a new budget. Nothing is clamped.
 
+**Closed native Claude profile (CLI-only release refinement).** The additive `claude-cli` kind is one
+pinned Claude Code 2.1.282 macOS arm64 executable, shipped fixed helper and versioned wire. The owner adopts
+its exact executable/helper/profile digests, the observed full Haiku model id, hosted terms and a token quota.
+The hosted HTTP feature pause does not disable this separate native profile. Other CLI/OS profiles remain
+unavailable. Discovery reads the first existing fixed `claude` basename in a bounded host PATH and requires
+exact bytes; it never executes discovery commands, tries a second mismatch candidate or starts local inference.
+
+The helper uses Apple's no-UI APIs and one exact native login service/current account query. **The whole
+native JSON, potentially including refresh material, is read only in this short-lived helper.** Only access
+metadata reaches the parent; only the access token reaches the fixed vendor child over an anonymous FD.
+No refresh, login, keychain write, home/config fallback or credential copy is allowed. Expiry must exceed the
+original unit deadline plus fixed skew. Core dumps are disabled. Vendor flags remove customizations/tools;
+a deny-default Seatbelt policy separately confines source/home reads, child execution, writes and network.
+An owned bounded gate permits only end-to-end TLS to the fixed vendor endpoint, never arbitrary destinations.
+A qualified runtime alone grants no read or launch: a private one-use authority is issued only after the genuine
+admission, consumed owner receipt and held reservation, and is checked again for the helper read.
+
+`subscription-quota` uses the existing durable ledger with null monetary amounts/currency: it is **not** a
+zero-cost or no-fee assertion. Each single native turn conservatively reserves its full context, including opaque
+vendor overhead. Confirmed reported tokens (including cache input) may settle quota; partial, canceled, deadline
+or unknown consumption keeps the reservation. Resumed admissions aggregate across the same provider/run and
+can only tighten the original cap/accounting basis. Old monetary rows retain their amounts and provenance;
+legacy unobserved provider rows cannot reserve or dispatch. Exact role-tagged native input/system bytes and
+encoding version are retained before the call and must match its digest. Only final visible assistant output is
+exposed, with requested/reported identity and confirmed usage; EOF without a final result is failure. Shipped
+helper source/binary/self-test provenance is distinct from live authentication qualification. No erasure claim
+or vendor-internal instruction/skill visibility is made.
+
 **Tests.** Ordinary tests use original local mock endpoints on 127.0.0.1, a throwaway self-signed certificate for
 the TLS check, and in-memory credential sources. No hosted provider is called, no model is downloaded and no real
 keychain entry is read.
@@ -1289,6 +1319,118 @@ keychain entry is read.
 Not decided here: the evidence broker, prompts and review lanes (PR 22); the coordinator stage that opens envelopes
 and fences epochs (PR 08 integration); a settings-contract home for profiles and capability records; live
 model acceptance; and a second model configuration.
+
+39. **Sentinel's model review is a fixed grammar over pinned evidence, recorded apart from coverage (2026-10-22).**
+
+`@farsight/sentinel/review` runs rule-guided review (one session per planned check, over its scope files and pinned
+rule text) and general review (one session per partition of the inventory). Both use one bounded loop and the PR 21
+broker (ADR 35) through `providerCaller`.
+
+**Scope is decided before the model, and independently of findings.** `partitionInventory` sorts one source's
+captured TS/JS/Java files and cuts them by file and byte bounds. Its only inputs are the snapshot entries and the
+bounds, so a file without a detector hit is reviewed like any other. Uncaptured, too-large and unlisted entries are
+gaps with reasons.
+
+**The model sees source only through the evidence broker.** The broker serves bounded line slices of files in the
+session's scope, read by content id and hash-checked, each with an evidence id, the exact UTF-8 byte span and a
+quote digest. It also serves the pinned rule text and, when given, recorded call reachability. The reachability is
+a structural view of PR 18's `sentinel-paths/draft-1` results, explicitly not data flow. Anything else is refused
+as data and recorded: out of scope, an unknown tool, over budget, or a span a `DisclosureFilter` withholds (the
+seam for opaque secret-location refs). Evidence goes to the model as JSON marked `untrusted`.
+
+**Replies are a closed grammar.** A reply is `list`, `read`, `rule`, `paths` (each only when the session offers it)
+or `final`, with no other key. So no text in the reviewed code, however it is worded, can add a tool, a target, a
+disclosure, an approval, a suppression or a promotion: a reply carrying any of them is a shape error, answered once
+with the rejection and bounded by `maxInvalidReplies`.
+- Every claim cites ids this session served, re-verified against the captured bytes.
+- A finding needs a cited claim.
+- `inspected` must name only files actually served.
+- Valid citations make a claim well formed, not right; correctness is evaluated against labels.
+
+**Bounds and checkpoints.** A session stops, with its own frontier, at its call limit, cumulative serialized input,
+deadline, cancellation, invalid replies, provider budget, a provider error, or uncertain usage. Each model call is
+one operation with a stable id. The checkpoint (`sentinel-review-checkpoint/draft-1`, behind a `CheckpointStore`
+seam with a private-file default) records it settled, with its reply and broker result, before the next call. A
+resumed session continues after its last settled operation and never re-sends one, and the PR 21 ledger refuses a
+repeat anyway. A checkpoint resumes only for the same scope, prompt, budget and tools (`specDigest`).
+
+**Records are not coverage.** The session record (`sentinel-review-record/draft-1`) lists what was served, by file
+and line range, and every in-scope file never read, as a `notInspected` frontier. It states `establishes:
+model-review-inspection` and `deterministicCoverage: false`; no formal check is completed by it. Claims of a finding
+become `sentinel-observation/draft-1` envelopes from a `model-review` producer, carrying:
+- the model identity at its actual strength and the prompt digest;
+- the planned rule, for guided review;
+- `sentinel.review.limitation.modelClaim`.
+
+They are proposals; nothing in review approves or promotes.
+
+**E5/E8.** `planEvaluation` enumerates models × cases × trials × {clean, canary}: 600 evaluations for two models,
+the 30-case corpus and five trials. `runEvaluation` runs each through the same session and validator, scoring
+verdicts against labels. It counts invalid and unfinished runs, canary-induced verdict changes and canary-token
+leaks per model and case, and computes Wilson intervals for precision and recall. `e5Gate` never says qualified. It
+lists what is missing:
+- two provider-backed models (mock runs report `mockOnly`);
+- 30 cases and five trials;
+- a label review by someone other than the author;
+- owner thresholds;
+- unfinished evaluations.
+
+Only when nothing is missing does it say whether the thresholds were met; owner acceptance is a separate decision.
+The corpus (`test/fixtures/model-review/e5-corpus.json`) is original synthetic text with author-draft labels.
+`estimatePlan` gives E8 upper bounds labeled `estimate`; observed usage lives in session records and the budget
+ledger.
+
+Not decided here: the live E5 run, labels review, thresholds and the second model's configuration (owner); the
+coordinator stage that plans, admits and fences review work (PR 08/09 integration); a registered JSON schema for the
+record and checkpoint drafts; report rendering (PR 19); and feeding PR 18 path envelopes and secret-location refs
+through the two seams. The open items are tracked in the [model integration checklist](proposals/farsight-sentinel/model-integration-checklist.md).
+
+**Update — registered contracts and trusted configuration (2026-10-22).** The additive public contracts are:
+- `sentinel-settings/draft-1` gains an optional `providers[].models[]` (`ModelSettings`). Each model carries its
+  limits, a `rates` or local `no-fee` pricing (there is no unpriced form), recorded `terms` (required for a hosted
+  provider), and the owner-adopted `sentinel-model-capability/draft-1` record (`null` until probed). The validator
+  enforces unique model ids, no-fee only for local-only providers, rates in the budget's currency, an output
+  allowance that leaves room in the context, and a capability for exactly this kind, origin and model.
+  `bindProvider(policy, providerId, modelId)` and `probeConfigured` read only these adopted values; the settings
+  example carries scrubbed models.
+- Three envelopes join the canonical registry, with generated bounded schemas, invariants, valid fixtures and
+  invalid cases:
+  - `sentinel-review-partitions/draft-1`: unique, ordered members; partition ids and the plan digest recomputed;
+    bounds respected.
+  - `sentinel-review-checkpoint/draft-1`: the fixed prompt first; sequential operation ids; usage on exactly the
+    settled operations; claims and `inspected` only over served evidence; an unsettled call implies a stop.
+  - `sentinel-review-record/draft-1`: the digest; a verdict exactly when completed; every unread file a frontier;
+    usage unknown exactly when a call is unsettled; `deterministicCoverage` always false.
+- Plans, checkpoints and records are validated where produced and where read (`parseEnvelope` caps a checkpoint
+  file at the 4 MiB envelope limit). A checkpoint that would outgrow the limit is not written; the session stops
+  at the last one that fitted. A checkpoint for another session, prompt or spec, or with a forged quote digest,
+  never resumes.
+
+Withheld secret-location citations (PR 11's `location: 'withheld'` union) enter through `withheldEntries`. It
+resolves each against the snapshot and fails closed when it cannot. `partitionInventory(…, { withheld })` and
+`withoutWithheld` then remove those files from review whole (their paths are not sent either) and record
+`<sourceId>#entry:<n>` gaps. The citation is consumed by its discriminator and never turned into a path; the
+structural view is replaced by the contract import when PR 11 integrates.
+
+
+**Update — the agentic operation (2026-10-22).** Model review is planned and run as its own stage.
+- `planReviewWork` emits `sentinel-work/draft-1` units with `stage.kind: 'agentic'` (`sentinel.stage.review.guided`
+  and `.general`). They depend on the deterministic work they read and carry no checks. `assertAgenticOnly`
+  refuses any coverage record that names such a unit.
+- `createModelReviewOperation` is the trusted in-process driver. It runs a unit's session through the broker under
+  the run's envelope and returns the review record and observations to publish, the attempt usage from the ledger
+  (`confirmed` only when every call settled) and no coverage.
+- The model ledger is the provider budget's SQLite file, which now also holds review checkpoints
+  (`LedgerCheckpointStore`), written in one transaction under the coordinator epoch.
+  `recoverModelWork(staleEpochs)` fences those epochs: their unsent reservations are released, their sent ones stay
+  charged as uncertain, and a process still running under a fenced epoch can no longer reserve, dispatch or
+  checkpoint.
+- A session belongs to its work unit, not its attempt, so the next attempt resumes the last checkpoint. An operation
+  is sent at most once in the ledger, under whichever envelope, so a crash between a call and its checkpoint leaves
+  the session stopped as uncertain usage, never silently re-sent.
+- Owner helpers (`probeIntent`/`probeModel`, `reconcileIntent`/`reconcileReservation`, `inspectEnvelopes`) are for
+  the CLI, which owns dispatch and admission. Probing is an owner action (`tool.acquire`, network effect).
+  Reconciling lowers charged spend, so it always needs a spent owner receipt, whatever the grants say.
 
 30. **Sentinel's Next pack decides middleware applicability statically and never claims an effect (2026-10-22).**
 
@@ -1868,6 +2010,75 @@ record uses planned → running → pausing → paused without launching work or
 skips that pause branch and wins. Genuine canonical selected-child and actual owner-service setup gates qualify
 both branches without depending on the later path worker.
 
+ADR48 preparation extension: a fixed configured-workspace preparation occupies the held OwnerService task slot.
+Four closed draft documents (`PreparationCapabilities`, `ConfigurationPreview`, `PreparationStatus`,
+`PreparationOutcome`) negotiate five operations separately from existing reads and run controls. A pure preview
+pins full intended configuration/lock/registry/limits and a fixed readiness recipe before effects. Genuine
+admission precedes lazy private journal creation. Owner confirmation uses readonly receipt check, durable admitting,
+actual one-use consume and durable accepted; ordinary adopted agent grants do not spend an owner receipt. The
+stricter package-internal admission entry can only add confirmation and preserves ordinary admit defaults.
+
+Resolved readiness is bound write-once before capture, retaining exact missing-asset reasons and existing required/
+optional planner gap semantics. Required bootstrap prerequisites and unsafe provenance refuse. A captured association,
+not a temporary file or digest alone, permits explicit freshly authorized pinned continuation after restart. Original
+accepted time spans all phases and the prepared run; earlier existing-row deadlines cannot be reset. Private
+owner-bound admission vetoes run after physical verification and immediately before COMMIT for this preparation's
+snapshot/plan/publication effects. They grant no authority and leave failure records/cleanup writable after expiry.
+No hard filesystem/RSS/COMMIT latency bound or automatic orphan cleanup is claimed.
+
+The CLI saves lookup data before dispatch; response loss is outcomeUnknown and status discovery never replays a
+write. The real SDK cannot submit human identity/confirmation/receipt fields. Ephemeral preview TTL is absolute;
+retained request/config/readiness records are private bounded data, not capabilities. Captured preparation that
+expires before a genuine run exists remains unsupported for fresh-clock retained retry. The 256-terminal cap
+refuses rather than silently pruning; explicit owner retention maintenance and GUI confirmation remain open.
+
+ADR48 preparation correction: a newly held owner durably interrupts previous-epoch nonterminal journal data;
+the same controller may reconcile only its genuinely settled task, with no active service run. A failed write
+refuses new admission. This is status, never proof of worker death, revocation, cleanup or automatic resume.
+The real CLI serializes confirmed saved-key check/status/save/dispatch using a qualified SQLite EXCLUSIVE
+sidecar, immediate busy refusal and existing canonical private-file checks. It contains no approval/ledger rows,
+is never unlinked or reclaimed by PID/age, and kernel process death releases its lock. Captured/pending/ambiguous keys remain retained. A terminal prepared lookup can be replaced by an explicitly
+confirmed fresh source capture, while linked requests deliberately use the parent snapshot. Equal inventory may
+return the existing run without changing its original snapshot/deadline; the new capture remains unused evidence.
+Only exact private journal-writer temporaries are settled under the held owner before preparation use. Unrenamed
+updates do not become accepted state, exact nlink2 canonical aliases are removed, and unknown names remain.
+Recovery is bounded and checks ownership before each destructive operation. Corruption disables preparation
+alone, preserving unrelated inspection, report and run controls.
+
+ADR48 owner-panel extension: an explicit foreground `farsight-sentinel owner-ui` companion pairs one canonical
+workspace with an exact loopback Farsight origin and that host process's random instance. Farsight has no Sentinel
+runtime dependency: read-only discovery checks a private one-link descriptor and returns only the owner origin.
+The companion uses the already held service, never opens another store or launches a service implicitly. Descriptor
+publication uses a private SQLite cross-process mutex; discovery creates or repairs nothing.
+
+One explicit launch mints one code, served at most once within two minutes. The owner-origin frame activates it
+only after an exact live paired-parent handshake; top-level/wrong-parent navigation cannot activate the shipped
+client. Only an owner-origin reload token persists; capabilities remain in memory, rotate on reload, and expire
+at the original one-hour deadline. Parent messages carry presentation and veto-only view context, never approval,
+receipt, descriptor nonce or capability. Both host read-only and historical view context refuse effects. A fixed
+host-instance/readOnly probe and a fresh exact-parent context challenge occur immediately before effect dispatch;
+this is a sampled boundary, not an atomic transaction across processes. Already accepted work may finish later.
+
+A separate closed owner-UI receipt honestly names `owner-ui`/`human` and its workspace, store, epoch, host, session
+and context revision. It can confirm only capture and existing start/pause/cancel actions. Ordinary owner-UI socket
+handshakes remain agents; private descriptor proof plus the live scoped controller authority is required to issue
+or spend that receipt. It cannot confirm settings, import, acquisition, disclosure, or model spending, and never
+qualifies as a consumed CLI receipt. Legacy CLI receipt/capability schemas remain unchanged. A genuinely paired
+unexpired session retains the owner past detached idle; sockets and reload do not renew it, and revoke/expiry
+release retention. Restart loses browser authority and requires another explicit owner launch.
+
+The panel consumes the canonical service inspection/report projections, with view-local evidence references,
+explicit historical bootstrap versus current checks, separate preview/confirmation/start, source-gone linked
+reruns, and verified Markdown format bytes. Selecting another run clears the prior report. Settings saving is
+unavailable pending shared adoption/CAS; model execution stays unavailable until its own capability and admission
+are qualified. Hosted API review is paused by default. The panel does not infer model authority from run start.
+
+ADR48 saved-key correction: private lookup version2 records only `unsent`, `unknown`, or `refused` dispatch data,
+under the same existing cross-process mutex. Legacy version1 is conservatively unknown. A durable unsent save is
+marked unknown immediately before sending; a validated definitive nonaccepted response can mark refused. Only a
+definitively absent service status plus unsent/refused data permits replacing that lookup. Lost ACK, malformed
+response, failed state writes, and the unavoidable unknown-before-send crash gap remain protected. An accepted
+journal always takes precedence. This is bounded client discovery data, not approval, task ownership or replay.
 
 42. **Sentinel owner decisions are source-bound adjudications, with one retained evaluation across reports (2026-10-23).**
 The executable exposes `decision propose`, `approve`, `read` and `list`. A proposal names one real accepted
@@ -1892,3 +2103,16 @@ cannot establish a clean result. Lists are bounded metadata only, not evaluated 
 64 KiB, history to 1,024 entries/32 MiB, a page to 100 entries and a report to 50 evaluated decisions, with
 explicit unavailable/partial outcomes. Local owner commands return busy while the service holds the store;
 service-owned and browser confirmation, qualified cookie enforcement and deleting retention remain separate work.
+
+ADR48 recorded process extension: the paired owner panel lists at most 64 newest retained runs by insertion
+order, using private session-local lookup handles with a one-minute lookup lifetime. The list is a physically
+bounded held-ledger read, never an arbitrary artifact or source endpoint. Selecting a retained CLI run is read-only.
+The graph folds canonical inspection prerequisites once into bounded top-to-bottom levels; independent nodes
+may be eligible together, without claiming observed parallel execution. Earlier bootstrap and current plan
+revisions remain distinct. Expanded work reads bounded immutable attempt/input/output pages. Recorded work
+resource grants are shown separately from the present scheduler default: historical aggregate concurrency was
+not retained. Accepted model/instruction identities use the existing authenticated privacy projection; no
+instruction text, hidden model authority or provider call is added. Endpoint/code labels remain unavailable
+where the qualified inspection does not supply them. Full and baseline comparison reports are explicitly
+regenerated through the existing canonical renderer for the exact selected runs. Linked whole-run preparation
+keeps its existing owner receipt; per-work browser rerun, settings editing and custom stages remain unavailable.

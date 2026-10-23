@@ -1,5 +1,35 @@
 # Farsight — shared Codex / Claude memory
 
+## Sentinel CLI and owner UI release candidate — 2026-10-23
+
+Draft [#183](https://github.com/zalos/farsight/pull/183) integrates durable preparation, separate browser owner
+confirmation, retained reports, configured review operations and exact instruction identity, plus independent
+Farsight/Sentinel npm tarballs. Six actual clean npm-only consumers passed 87 checks with zero failures or pending
+gates at the integrated `517e81ea` checkpoint. That check includes initialization preservation, source-removed
+reports and the installed companion handshake; it does not establish live model execution or final graph behavior.
+
+Independent Claude source reviews cleared the owner refusal recovery, model disclosure gate, native credential
+boundary and integration seams. Preparation freezes shipped review operations before capture; model execution
+still requires separate foreground admission. Hosted APIs remain paused and disabled by default. The native
+Claude validation host refused credential authorization before any model process or provider request; there has
+been no successful live model call. Resolve that authorization and qualify the installed path, or explicitly gate
+the native feature before release. Do not turn a refused call into a successful CLI qualification.
+
+The owner chose a working process graph for this release and custom stage creation afterward
+([#181](https://github.com/zalos/farsight/issues/181)). Fine-grained browser reruns, configuration editing and richer
+privacy-qualified entry metadata remain [#182](https://github.com/zalos/farsight/issues/182). The graph passed genuine source and npm-installed browser flows, including retained parent/child selection,
+expandable stage inputs, separately confirmed execution and exact report delivery. A delayed-delivery regression
+reproduced an old comparison repaint after a baseline change; the corrected browser discards it and a fresh
+comparison still succeeds. Resource values have explicit units and exact-byte tips. Final integrated measurements,
+selected CI and publication remain pending. CI exposed outdated historical-refusal, MCP-tool-list and host-session
+assertions, plus a rebuilt-tarball provenance mismatch. Their precise corrections retain the authority checks and
+complete package hash; only the original artifact build timestamp is reused. A Mac-only browser evidence path was
+also made portable with cleanup on failure. Original failures are retained separately from corrected passes. The earlier native memory-attribution investigation remains historically unresolved. Merged #169 adds a
+qualified exact-container witness; missing evidence still yields a failed unidentified exit. The lead treats the
+remaining bounded-attribution limitation as nonblocking under current passing isolation/recovery gates, tracked in
+[#184](https://github.com/zalos/farsight/issues/184); this supersedes the older blanket hold, not its retained failures.
+The broader plan is still open; see the scoped release ledger and linked issues.
+
 ## Sentinel owner decisions integration — 2026-10-23
 
 The isolated owner-decisions candidate extends retained report imports and bounded path reports. An owner can

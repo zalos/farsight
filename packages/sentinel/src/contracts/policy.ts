@@ -4,6 +4,7 @@
 import type { BoundedText, CatalogKey, Count, DecimalAmount, Digest, Id, ScopeId, ShortText, Timestamp } from './common.js';
 import type { DecisionChannel } from './disposition.js';
 import type { RuleCapability, RuleFamilyId, Severity } from './rules.js';
+import type { ReviewModelsSettings } from './review-providers.js';
 
 /** Every action the Sentinel gate decides. */
 export type SentinelAction =
@@ -69,13 +70,134 @@ export interface SentinelGrant {
 
 export interface ProviderSettings {
   id: Id;
-  kind: 'ollama' | 'openai-compatible';
+  kind: 'ollama' | 'openai-compatible' | 'claude-cli';
   endpoint: EndpointOrigin;
   credential: KeychainRef | null;
   /** `local-only` keeps source on this machine; `hosted` sends permitted context off it. */
   disclosure: 'local-only' | 'hosted';
+  /** Explicit owner adoption of the closed native profile; configuration alone is not runtime qualification. */
+  nativeProfile?: { id: Id; executableDigest: Digest; helperDigest: Digest; profileDigest: Digest };
   /** The most one admitted action may reserve. */
   budget: Budget;
+  /**
+   * The models the owner configured for this provider (PR 21). A model is usable only from adopted settings; a caller
+   * or repository cannot supply one.
+   * @maxItems 16
+   */
+  models?: ModelSettings[];
+}
+
+/**
+ * A model name as the provider spells it.
+ * @pattern ^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$
+ */
+export type ModelName = string;
+
+/**
+ * A calendar date, `YYYY-MM-DD`.
+ * @pattern ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$
+ */
+export type CalendarDate = string;
+
+/**
+ * @asType integer
+ * @minimum 1
+ * @maximum 4194304
+ */
+export type ModelBytes = number;
+/**
+ * @asType integer
+ * @minimum 1
+ * @maximum 600000
+ */
+export type ModelTimeoutMs = number;
+/**
+ * @asType integer
+ * @minimum 1
+ * @maximum 131072
+ */
+export type ModelOutputTokens = number;
+/**
+ * @asType integer
+ * @minimum 1
+ * @maximum 2000000
+ */
+export type ModelContextTokens = number;
+/**
+ * @asType integer
+ * @minimum 1
+ * @maximum 256
+ */
+export type ModelMessages = number;
+/**
+ * @asType integer
+ * @minimum 0
+ * @maximum 1024
+ */
+export type ModelTemplateTokens = number;
+
+/** Hard limits on one model call. */
+export interface ModelLimits {
+  maxRequestBytes: ModelBytes;
+  maxResponseBytes: ModelBytes;
+  timeoutMs: ModelTimeoutMs;
+  maxOutputTokens: ModelOutputTokens;
+  /** Worst-case input plus output must fit, so a provider never cuts input silently. */
+  contextTokens: ModelContextTokens;
+  maxMessages: ModelMessages;
+  /** Tokens a chat template may add per message beyond the bytes sent; part of the worst-case bound. */
+  templateTokensPerMessage: ModelTemplateTokens;
+}
+
+/**
+ * How a model's spend is priced. There is no unpriced form: an unpriced call cannot be bounded.
+ * @discriminator kind
+ */
+export type ModelPricing =
+  | {
+      kind: 'rates';
+      currency: CurrencyCode;
+      inputPerMillion: DecimalAmount;
+      outputPerMillion: DecimalAmount;
+      /** Where the owner read the rate schedule. */
+      source: ShortText;
+      asOf: CalendarDate;
+    }
+  /** A local runtime: no provider fee. Compute is not claimed free; tokens are still reserved. */
+  | { kind: 'no-fee'; basis: 'local-runtime' }
+  /** Owner-bounded subscription tokens. Monetary consumption is unobserved, never zero. */
+  | { kind: 'subscription-quota'; basis: 'owner-subscription' };
+
+/** A hosted provider's terms as the owner recorded them: endpoint-specific facts, never a protocol promise. */
+export interface ProviderTerms {
+  retention: ShortText;
+  training: 'not-used' | 'used' | 'unknown';
+  source: ShortText;
+  recordedAt: CalendarDate;
+}
+
+/** What a probe of one origin found for one model. The owner adopts it with the settings; it is never assumed. */
+export interface ModelCapability {
+  schema: 'sentinel-model-capability/draft-1';
+  kind: 'ollama' | 'openai-compatible' | 'claude-cli';
+  origin: EndpointOrigin;
+  model: ModelName;
+  listed: true;
+  /** An immutable revision the provider listed (Ollama's weight digest), else null. */
+  revision: Digest | null;
+  probedAt: Timestamp;
+}
+
+/** One configured model of a provider. */
+export interface ModelSettings {
+  id: Id;
+  model: ModelName;
+  limits: ModelLimits;
+  pricing: ModelPricing;
+  /** Required when the provider's disclosure is `hosted`. */
+  terms: ProviderTerms | null;
+  /** null until the owner probes and adopts it: an untested model cannot be bound. */
+  capability: ModelCapability | null;
 }
 
 export interface PolicyThresholds {
@@ -102,6 +224,10 @@ export interface SettingsEnvelope {
   agentActions: 'confirm' | 'allow';
   /** @maxItems 16 */
   providers: ProviderSettings[];
+  /** Optional owner-adopted agentic model choices. Absent keeps legacy settings bytes unchanged. */
+  reviewModels?: ReviewModelsSettings;
+  /** Hosted API review is paused when absent or false; explicit adoption is required to enable public dispatch. */
+  hostedApiReviewEnabled?: boolean;
 }
 
 /** A repository's request to suppress a finding. Recorded and refused: approval is an owner disposition. */
@@ -160,7 +286,7 @@ export interface EffectivePolicyEnvelope {
   /** @maxItems 64 */
   grants: { actions: SentinelAction[]; principals: Principal[]; confirm: 'always' | 'agent' | 'never' | 'default'; scoped: boolean }[];
   /** @maxItems 16 */
-  providers: { id: Id; kind: 'ollama' | 'openai-compatible'; disclosure: 'local-only' | 'hosted'; credential: 'keychain' | 'none' }[];
+  providers: { id: Id; kind: 'ollama' | 'openai-compatible' | 'claude-cli'; disclosure: 'local-only' | 'hosted'; credential: 'keychain' | 'none' }[];
   /** @maxItems 4096 */
   refused: RefusedRequest[];
 }

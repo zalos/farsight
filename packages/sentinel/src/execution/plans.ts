@@ -7,6 +7,8 @@
 // analysis plan pins an admitted snapshot. Then the four records are staged, stored and admitted together; the plan
 // is a collection root and links the other three. loadPlan reads them back and repeats every check, so what the
 // coordinator executes is exactly what was admitted, whatever happened to the caller's objects.
+import {verifyReviewInputs} from '../review/plan.js';
+import type {InstructionArtifact} from '../review/instructions.js';
 import type { PathRequestEnvelope } from '../contracts/pathrequest.js';
 import { pathRequestOf, PATH_REQUEST_SCHEMA } from '../analysis/paths/request.js';
 import { verifyPathAdmission, pathUnitsFor, type PathRequestAdmission } from '../analysis/paths/admission.js';
@@ -19,6 +21,7 @@ import { isEffectivePolicy, type EffectivePolicy } from '../policy/settings.js';
 import { lockDigest } from '../rules/lock.js';
 import type { SentinelStore } from '../store/index.js';
 import { canonicalJsonBytes } from '../store/objects.js';
+import { withAdmissionFence } from '../store/admission-fence.js';
 import type { PlanRecord } from '../store/store-types.js';
 import { validateEnvelope } from '../validate.js';
 import { ExecutionError } from './errors.js';
@@ -45,6 +48,8 @@ export interface AdmitPlanRequest {
   selection?: RerunSelection | null;
   /** Required exactly when the plan pins a source-derived structural request. */
   pathRequest?: PathRequestAdmission;
+  /** Exact private inputs of closed review units; data revalidated against current policy/capture before staging. */
+  reviewArtifacts?:readonly InstructionArtifact[];
 }
 
 export interface AdmittedPlan {
@@ -75,8 +80,10 @@ function check(plan: PlanRevision, ruleLock: RuleLockEnvelope | null, policy: Ef
 }
 
 /** Admit an exact plan revision with what it pins. Returns the ledger's record. */
-export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest): Promise<PlanRecord> {
-  store.assertHeld();
+export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest, stillWithin?: () => void, beforeAdmission?: () => void): Promise<PlanRecord> {
+  // Internal preparation fence only, never a persisted/public request field. Legacy callers retain their behavior.
+  const checkpoint = () => { store.assertHeld(); stillWithin?.(); };
+  checkpoint();
   const plan = structuredClone(request.plan);
   const ruleLock = request.ruleLock ? structuredClone(request.ruleLock) : null;
   if (request.policy !== null && !isEffectivePolicy(request.policy)) refuse('the policy is accepted only as effectivePolicy returned it');
@@ -89,6 +96,7 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest)
   if (plan.pins.snapshotId !== null && !store.ledger.getSnapshot(plan.pins.snapshotId)) refuse('the plan pins a snapshot that was not admitted');
   if ((plan.pins.pathRequest!==undefined)!==(request.pathRequest!==undefined)) refuse('a pinned path request requires its genuine read proof');
   const path=request.pathRequest?await verifyPathAdmission(store,plan,profile,request.pathRequest):undefined;
+  const reviewArtifacts=request.reviewArtifacts??[];if(plan.units.some(u=>u.review)){if(!request.policy)return refuse('review requires current policy');await verifyReviewInputs(store,plan,request.policy,reviewArtifacts)}else if(reviewArtifacts.length)refuse('no review unit accepts extra inputs');
   const ids = {
     plan: store.objects.identifyCanonicalJson(plan), profile: store.objects.identifyCanonicalJson(profile),
     ruleLock: ruleLock ? store.objects.identifyCanonicalJson(ruleLock) : null, policy: policy ? store.objects.identifyCanonicalJson(policy) : null,
@@ -102,10 +110,12 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest)
       && existing.selection === (ids.selection?.id ?? null)) return existing;
     refuse(`revision ${plan.revision} of run ${plan.runId} was already admitted with other content`);
   }
-  const pinned = [ids.profile.id, ...(ids.ruleLock ? [ids.ruleLock.id] : []), ...(ids.policy ? [ids.policy.id] : []), ...(ids.selection ? [ids.selection.id] : []),...(path?[path.request.id]:[])];
+  const pinned = [...plan.units.flatMap(u=>u.review?[u.review.spec]:[]),ids.profile.id, ...(ids.ruleLock ? [ids.ruleLock.id] : []), ...(ids.policy ? [ids.policy.id] : []), ...(ids.selection ? [ids.selection.id] : []),...(path?[path.request.id]:[])];
   const stageId = `plan.${plan.runId}.${plan.revision}.${plan.digest.slice(7, 23)}`.slice(0, 128);
   path?.boundary();
+  checkpoint();
   store.ledger.registerStaging(stageId, [
+    ...reviewArtifacts.map(a=>({id:a.id,schema:a.schema,privacy:'source-derived' as const,links:[...a.links]})),
     { id: ids.plan.id, schema: 'sentinel-plan/draft-1', privacy: 'source-derived', links: pinned },
     { id: ids.profile.id, schema: profile.schema, privacy: 'metadata' },
     ...(ruleLock ? [{ id: ids.ruleLock!.id, schema: 'sentinel-rulelock/draft-1', privacy: 'metadata' as const }] : []),
@@ -114,19 +124,22 @@ export async function admitPlan(store: SentinelStore, request: AdmitPlanRequest)
     ...(path?[{id:path.request.id,schema:PATH_REQUEST_SCHEMA,privacy:'source-derived' as const,links:path.links}]:[]),
   ]);
   const put = async (value:unknown, expect: {id:ArtifactId;rawSize:number}) => {
-    path?.boundary();const receipt=await store.objects.putCanonicalJson(value,{expect});path?.boundary();return receipt;
+    checkpoint();path?.boundary();const receipt=await store.objects.putCanonicalJson(value,{expect});path?.boundary();checkpoint();return receipt;
   };
   try {
     const receipts = [await put(plan, ids.plan), await put(profile, ids.profile)];
+    for(const a of reviewArtifacts){store.assertHeld();receipts.push(await store.objects.put(a.bytes,{expect:{id:a.id,rawSize:a.bytes.byteLength}}));store.assertHeld()}
     if (ruleLock) receipts.push(await put(ruleLock, ids.ruleLock!));
     if (policy) receipts.push(await put(policy, ids.policy!));
     if (selection) receipts.push(await put(selection, ids.selection!));
     if(path) receipts.push(await put(path.request.value,{id:path.request.id,rawSize:canonicalJsonBytes(path.request.value).length}));
     path?.boundary();
-    store.assertHeld();
-    return store.ledger.admitPlan({ runId: plan.runId, revision: plan.revision, kind: plan.kind, digest: plan.digest, previous: plan.previous,
+    checkpoint();
+    beforeAdmission?.(); checkpoint();
+    const admit = () => store.ledger.admitPlan({ runId: plan.runId, revision: plan.revision, kind: plan.kind, digest: plan.digest, previous: plan.previous,
       plan: ids.plan.id, ruleLock: ids.ruleLock?.id ?? null, policy: ids.policy?.id ?? null, profile: ids.profile.id, selection: ids.selection?.id ?? null,
       snapshotId: plan.pins.snapshotId, stageIds: [stageId], receipts });
+    return stillWithin ? withAdmissionFence(store, checkpoint, admit) : admit();
   } catch (error) {
     try { store.assertHeld(); store.ledger.abortStaging(stageId); } catch { /* recovery aborts a stage left open */ }
     throw error;

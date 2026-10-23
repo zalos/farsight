@@ -24,6 +24,8 @@ export interface CommittedSource {
   readonly commit: string;
   readonly lfsObjects: string | undefined;
   readonly submodules: readonly SubmoduleRequest[];
+  /** Internal preparation checkpoint; absent for legacy callers. */
+  readonly stillWithin?: () => void;
 }
 
 /** A submodule found at a gitlink whose permitted local clone should be captured as its own source. */
@@ -42,6 +44,7 @@ export function enumerateCommit(inv: Inventory, src: CommittedSource): FoundSubm
 }
 
 function walkTree(inv: Inventory, src: CommittedSource, rel: string, treeOid: string, found: FoundSubmodule[]): void {
+  src.stillWithin?.();
   let entries;
   try { entries = src.repo.readTree(treeOid); } catch (e) {
     const reason = corruptOrMissing(e);
@@ -69,6 +72,7 @@ function walkTree(inv: Inventory, src: CommittedSource, rel: string, treeOid: st
   }
   inv.listed(src.sourceId, rel);
   for (const { e, check } of children) {
+    src.stillWithin?.();
     const path = joinPath(rel, check.name);
     inv.release();
     const isTree = e.mode === '40000' || e.mode === '040000';
@@ -158,13 +162,17 @@ function addBlob(inv: Inventory, src: CommittedSource, path: string, oid: string
 }
 
 /** Git blob ids of every regular file in a commit, or undefined when any object on the way is unavailable. */
-export function trackedBlobs(repo: GitRepository, commit: string): Map<string, string> | undefined {
+export function trackedBlobs(repo: GitRepository, commit: string, stillWithin?: () => void): Map<string, string> | undefined {
+  let checkpointFailure: { error: unknown } | undefined;
+  const checkpoint = () => { try { stillWithin?.(); } catch (error) { checkpointFailure = { error }; throw error; } };
   const out = new Map<string, string>();
   const walk = (rel: string, oid: string): boolean => {
+    checkpoint();
     let entries;
     try { entries = repo.readTree(oid); } catch { return false; }
     if (!entries) return false;
     for (const e of entries) {
+      checkpoint();
       const c = checkName(e.name, true);
       if (c.refused) return false;
       const path = joinPath(rel, c.name);
@@ -173,5 +181,8 @@ export function trackedBlobs(repo: GitRepository, commit: string): Map<string, s
     }
     return true;
   };
-  try { return walk('', repo.treeOf(commit)) ? out : undefined; } catch { return undefined; }
+  try { return walk('', repo.treeOf(commit)) ? out : undefined; } catch {
+    if (checkpointFailure) throw checkpointFailure.error;
+    return undefined;
+  }
 }

@@ -8,7 +8,7 @@ import { ownerDecisionCommand, decisionWire } from './findings/owner-cli.js';
 import { ownerEvidenceCommand, evidenceWire } from './evidence/owner-cli.js';
 import { REPORT_FORMATS, type ReportFormat } from './service/full-report.js';
 import {
-  adoptWorkspaceSettings, confirmForService, currentRules, followWorkspaceRun, promoteRulePack, planWorkspace, prepareWorkspacePaths, previewReport, runPlan, describeRun, runStatus, workspaceOf, checkWorkspaceLayout, PolicyError, fullReportIn,
+  privateReviewTrace, adoptWorkspaceSettings, confirmForService, currentRules, followWorkspaceRun, promoteRulePack, planWorkspace, prepareWorkspacePaths, previewReport, runPlan, describeRun, runStatus, workspaceOf, checkWorkspaceLayout, PolicyError, fullReportIn,
   type Workspace,
 } from './service/local.js';
 import { connectService, readServiceDescriptor, serveWorkspace } from './service/owner-service.js';
@@ -31,6 +31,7 @@ import { parseEnvelope } from './validate.js';
 // Every printed word comes from the shared catalog (strings-sentinel-cli.ts and strings-sentinel-service.ts).
 import { sentinelWord, SENTINEL_CLI_STRINGS } from '@farsight/core/dist/strings-sentinel-cli.js';
 import { SENTINEL_DECISION_STRINGS } from '@farsight/core/dist/strings-sentinel-decisions.js';
+import { SENTINEL_OWNER_UI_STRINGS } from '@farsight/core/dist/strings-sentinel-owner-ui.js';
 import { sentinelServiceWord } from '@farsight/core/dist/strings-sentinel-service.js';
 
 const word = (key: string, values: Record<string, string | number> = {}) =>
@@ -66,6 +67,8 @@ function help(): string {
     `  ${word('sentinel.cli.usageFullReport')}`,
     `  ${word('sentinel.cli.usageServe')}`,
     `  ${word('sentinel.service.mcpUsage')}`,
+    `  ${word('sentinel.preparation.usage')}`,
+    `  ${SENTINEL_OWNER_UI_STRINGS['sentinel.ownerUi.usage']!.professional}`,
     `  ${word('sentinel.cli.usageRules')}`,
     `  ${word('sentinel.cli.usageAssets')}`,
     `  ${word('sentinel.decision.usage')}`,
@@ -86,7 +89,11 @@ function finish(r: CommandResult): number {
   return r.exitCode;
 }
 
-function capabilities(p: ParsedCommand): number {
+async function capabilities(p: ParsedCommand): Promise<number> {
+  if(p.flags['--models']===true){
+    try{const {qualifyInstalledNativeClaude,CLAUDE_NATIVE_PROFILE}=await import('./review/providers/cli-native-profile.js');const runtime=await qualifyInstalledNativeClaude({deadlineAt:Date.now()+5000});return finish(result('capabilities','answered',{facts:{version:version(),modelProfiles:[{kind:'claude-cli',model:'claude-haiku-4-5-20251001',version:CLAUDE_NATIVE_PROFILE.version,platform:'darwin',architecture:'arm64',nativeProfile:{id:runtime.profileId,executableDigest:runtime.executableDigest,helperDigest:runtime.helperDigest,profileDigest:runtime.profileDigest},qualification:'local-bytes-only',authentication:'unobserved',inference:'unobserved'}]}}))}
+    catch(e){const code=(e as {code?:string})?.code;return finish(result('capabilities','unavailable',{reasonCode:code==='sentinel.provider.timeout'?'sentinel.provider.timeout':'sentinel.provider.capabilityUntested',facts:{modelProfiles:[],qualification:'unavailable',authentication:'unobserved',inference:'unobserved'}}))}
+  }
   if (p.json) return finish(result('capabilities', 'answered', { facts: { version: version(), capabilities: CAPABILITIES } }));
   const state = (c: (typeof CAPABILITIES)[number]) => word(c.state === 'unavailable' ? 'sentinel.cli.stateUnavailable' : 'sentinel.cli.stateDraft');
   const width = Math.max(...CAPABILITIES.map(c => state(c).length));
@@ -217,6 +224,7 @@ async function owner(p: ParsedCommand): Promise<number> {
   try {
     const ws = workspaceFor(p);
     const format = typeof p.flags['--format'] === 'string' ? p.flags['--format'] : 'md';
+    if(p.command==='report'&&p.flags['--instructions']===true){const live=await connectService(ws);if(live){live.close();return serviceOut(result('report','configuration-failure',{reasonCode:'sentinel.service.ownerServiceRunning'}))}return serviceOut(await privateReviewTrace(ws,p.args.runId!));}
     if (p.command === 'compare' || (p.command === 'report' && p.flags['--full'] === true)) return await fullReportCommand(p, ws, format, confirm, now);
     // The flags of the full report change nothing in the minimal report: refused rather than ignored.
     for (const flag of ['--disclosure', '--context', '--repo', '--out', '--confirm']) {
@@ -265,6 +273,7 @@ async function owner(p: ParsedCommand): Promise<number> {
         }
       };
       const planNow = await describeNow();
+      if(action==='run.start'&&planNow?.effects.includes('paid-inference'))return serviceOut(result(p.command,'configuration-failure',{reasonCode:'sentinel.review.foregroundRequired'}));
       const shown = confirmForService(ws, { command: p.command, action, plan: planNow, planId: runId, confirm: false, now });
       if (!confirm || ('result' in shown && shown.result.outcome !== 'awaiting-confirmation')) return serviceOut('result' in shown ? shown.result : result(p.command, 'refused'));
       const client = p.command === 'pause' ? await connectService(ws) : await ensureService(ws);
@@ -340,7 +349,7 @@ async function owner(p: ParsedCommand): Promise<number> {
       return serviceOut(r, r.disclosure ? [`plan ${r.disclosure.planId} · ${r.disclosure.planDigest} · effects: ${r.disclosure.effects.join(', ')} · ${word(r.disclosure.label === 'foundation-preview' ? 'sentinel.report.previewOnly' : 'sentinel.report.scannerSlice')}`] : []);
     }
     if (p.command === 'run') {
-      const r = await runPlan(ws, { planId: p.args.planId!, confirm, now });
+      const r = await runPlan(ws, { planId: p.args.planId!, confirm, confirmModels:p.flags['--confirm-models']===true, now });
       return serviceOut(r, r.facts.runId ? [`run ${String(r.facts.runId)} · ${String(r.facts.state)} · preview findings: ${String(r.facts.previewFindings)}`] : []);
     }
     if (p.command === 'status') {
@@ -502,7 +511,9 @@ async function dispatch(p: ParsedCommand): Promise<number> {
       }
     }
     case 'capabilities': return capabilities(p);
+    case 'owner-ui': {const origin=p.flags['--farsight-origin'];if(typeof origin!=='string')return finish(result('owner-ui','configuration-failure',{reasonCode:'sentinel.ownerUi.invalid'}));return(await import('./owner-ui/server.js')).runOwnerUi(workspaceFor(p),origin);}
     case 'mcp': return (await import('./service/mcp.js')).runMcp(workspaceFor(p));
+    case 'prepare': return serviceOut(await (await import('./service/preparation-client.js')).prepareCommand(workspaceFor(p),{action:p.args.action,confirm:p.flags['--confirm']===true,requestKey:typeof p.flags['--request-key']==='string'?p.flags['--request-key']:undefined,parentId:typeof p.flags['--parent']==='string'?p.flags['--parent']:undefined}));
     case 'validate': return validate(p);
     case 'init': return init(p);
     case 'settings': case 'plan': case 'paths': case 'run': case 'status': case 'report': case 'compare':

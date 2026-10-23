@@ -5,14 +5,16 @@ import { MAX_PATH_REQUEST_BYTES } from './contracts/pathrequest.js';
 import schemas from './schemas.generated.js';
 import { ENVELOPES, MAX_ENVELOPE_BYTES, type EnvelopeKind } from './contracts/index.js';
 import type {
-  AttemptEnvelope, CoverageEnvelope, DispositionEnvelope, ObservationEnvelope, PolicyResult, ProtocolMessage,
+  OwnerUiReceiptEnvelope, OwnerUiCapabilities, AttemptEnvelope, CoverageEnvelope, DispositionEnvelope, ObservationEnvelope, PolicyResult, ProtocolMessage,
   ReportCount, ReportEnvelope, RunEnvelope, SnapshotEnvelope, WorkEnvelope, FindingPlace, HelloMessage,
   WelcomeMessage, RefuseMessage, RulePackManifest, RuleLockEnvelope, SettingsEnvelope, RepoConfigEnvelope,
   EffectivePolicyEnvelope, AdoptionEnvelope, ReceiptEnvelope, AdmissionEnvelope, ControlFactsEnvelope, Rights, Budget,
-  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope, ServiceCapabilities, RunInspection, InspectionPage, ReportDelivery, DeliveryChunk, ControlCapabilities, ControlOutcome, ImportViewEnvelope, ImportPageEnvelope, OwnerDecisionInput, DecisionViewEnvelope, DecisionPageEnvelope, PathRequestEnvelope,
+  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope, ServiceCapabilities, RunInspection, InspectionPage, ReportDelivery, DeliveryChunk, ControlCapabilities, ControlOutcome, ImportViewEnvelope, ImportPageEnvelope, OwnerDecisionInput, DecisionViewEnvelope, DecisionPageEnvelope, PathRequestEnvelope, PreparationCapabilities, ConfigurationPreview, PreparationStatus, PreparationOutcome,
+  ReviewPartitionsEnvelope, ReviewCheckpointEnvelope, ReviewRecordEnvelope,
+  ReviewInstructionsEnvelope, ReviewRequestEnvelope,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
-import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf } from './planner/identity.js';
+import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf, reviewUnitIdOf } from './planner/identity.js';
 import { OWNER_ACTIONS } from './contracts/index.js';
 
 export interface EnvelopeTypes {
@@ -32,6 +34,8 @@ export interface EnvelopeTypes {
   policy: EffectivePolicyEnvelope;
   adoption: AdoptionEnvelope;
   receipt: ReceiptEnvelope;
+  owneruireceipt: OwnerUiReceiptEnvelope;
+  owneruicapabilities: OwnerUiCapabilities;
   admission: AdmissionEnvelope;
   controls: ControlFactsEnvelope;
   plan: PlanEnvelope;
@@ -45,12 +49,21 @@ export interface EnvelopeTypes {
   deliverychunk: DeliveryChunk;
   controlcapabilities: ControlCapabilities;
   controloutcome: ControlOutcome;
+  preparationcapabilities: PreparationCapabilities;
+  configurationpreview: ConfigurationPreview;
+  preparationstatus: PreparationStatus;
+  preparationoutcome: PreparationOutcome;
 
   decisioninput: OwnerDecisionInput;
   decisionview: DecisionViewEnvelope;
   decisionpage: DecisionPageEnvelope;
   importview: ImportViewEnvelope;
   importpage: ImportPageEnvelope;
+  partitions: ReviewPartitionsEnvelope;
+  checkpoint: ReviewCheckpointEnvelope;
+  review: ReviewRecordEnvelope;
+  instructions:ReviewInstructionsEnvelope;
+  reviewrequest:ReviewRequestEnvelope;
 }
 
 /** Stable error codes; message text is safe context, never raw input. */
@@ -482,6 +495,17 @@ const settings: Check<SettingsEnvelope> = (v, out) => {
   v.providers.forEach((p, i) => {
     if (p.endpoint.startsWith('http:') && !LOOPBACK.test(p.endpoint)) out.add(err(`/providers/${i}/endpoint`, 'plain http is accepted only on the loopback interface'));
     budgetErrors(out, `/providers/${i}/budget`, p.budget);
+    const models = p.models ?? [];
+    for (const j of duplicates(models, m => m.id)) out.add(err(`/providers/${i}/models/${j}/id`, 'duplicate model'));
+    models.forEach((m, j) => {
+      const at = `/providers/${i}/models/${j}`;
+      if (m.limits.maxOutputTokens >= m.limits.contextTokens) out.add(err(`${at}/limits/maxOutputTokens`, 'the output allowance must leave room for input in the context'));
+      if (m.pricing.kind === 'no-fee' && p.disclosure !== 'local-only') out.add(err(`${at}/pricing`, 'only a local-only provider may declare no fee'));
+      if (m.pricing.kind === 'rates' && m.pricing.currency !== p.budget.currency) out.add(err(`${at}/pricing/currency`, 'the rate currency must be the provider budget\u2019s'));
+      if (p.disclosure === 'hosted' && m.terms === null) out.add(err(`${at}/terms`, 'a hosted provider\u2019s model needs its recorded terms'));
+      const c = m.capability;
+      if (c && (c.kind !== p.kind || c.origin !== p.endpoint || c.model !== m.model)) out.add(err(`${at}/capability`, 'the capability record is for another kind, origin or model'));
+    });
   });
   v.grants.forEach((g, i) => {
     if ((g.principals ?? ['human']).includes('agent') && g.actions.some(a => OWNER.has(a))) {
@@ -515,7 +539,7 @@ function nanos(t: string): bigint {
   return seconds * 1_000_000_000n + BigInt((m[7] ?? '').padEnd(9, '0'));
 }
 
-const receipt: Check<ReceiptEnvelope> = (v, out) => {
+const receipt: Check<Pick<ReceiptEnvelope, 'issuedAt' | 'expiresAt'>> = (v, out) => {
   if (compareTimestamps(v.expiresAt, v.issuedAt) <= 0) out.add(err('/expiresAt', 'expires at or before issue'));
   else if (nanos(v.expiresAt) - nanos(v.issuedAt) > BigInt(MAX_RECEIPT_TTL_MS) * 1_000_000n) out.add(err('/expiresAt', 'a receipt lives at most one hour'));
 };
@@ -580,10 +604,13 @@ const plan: Check<PlanEnvelope> = (v, out) => {
   for (const i of duplicates(v.pins.adapters, a => a.adapterId)) out.add(err(`/pins/adapters/${i}`, 'duplicate adapter pin'));
   const covered = new Map<string, string>();
   v.units.forEach((w, i) => {
-    if (analysis !== (w.stage === 'check')) out.add(err(`/units/${i}/stage`, analysis ? 'an analysis revision schedules checks only' : 'a bootstrap revision schedules capture, parse and inventory'));
+    const reviewing=w.stage==='review-guided'||w.stage==='review-general';
+    if(reviewing&&(!w.review||!w.sourceId||w.adapterId!==`sentinel.review.${w.stage.slice(7)}`||w.checks.length||w.scopes.length!==1||w.scopes[0]!==w.sourceId||w.inputFingerprint!==w.review.specDigest))out.add(err(`/units/${i}/review`,'a review binds one exact source/segment/spec and no deterministic checks'));
+    if(!reviewing&&w.review!==undefined)out.add(err(`/units/${i}/review`,'only review work carries model inputs'));
+    if (analysis !== (w.stage === 'check'||reviewing)) out.add(err(`/units/${i}/stage`, analysis ? 'an analysis revision schedules checks only' : 'a bootstrap revision schedules capture, parse and inventory'));
     if (!analysis && !BOOTSTRAP_STAGES.has(w.stage)) out.add(err(`/units/${i}/stage`, 'unknown bootstrap stage'));
     if (w.stage === 'check' && w.adapterId === null) out.add(err(`/units/${i}/adapterId`, 'check work names its registered adapter'));
-    if (w.stage !== 'check') {
+    if (w.stage !== 'check'&&!reviewing) {
       const op = v.pins.operations[w.stage as 'capture' | 'parse' | 'inventory'];
       if ((op?.adapterId ?? null) !== w.adapterId || (op !== null && op !== undefined && op.digest !== w.implementationDigest)) {
         out.add(err(`/units/${i}/adapterId`, 'a bootstrap unit runs the operation the plan binds to its stage, or none'));
@@ -593,7 +620,7 @@ const plan: Check<PlanEnvelope> = (v, out) => {
     }
     if (w.inputSetDigest !== digestOf(w.inputs)) out.add(err(`/units/${i}/inputSetDigest`, 'the input set digest is the digest of exactly the inputs'));
     if (w.stage === 'check' && w.checks.length === 0) out.add(err(`/units/${i}/checks`, 'a check unit covers at least one check'));
-    if (w.stage !== 'check' && (w.checks.length || w.scopes.length || w.inputs.length)) out.add(err(`/units/${i}/checks`, 'a bootstrap unit covers no check'));
+    if (w.stage !== 'check' && !reviewing && (w.checks.length || w.scopes.length || w.inputs.length)) out.add(err(`/units/${i}/checks`, 'a bootstrap unit covers no check'));
     for (const id of w.checks) {
       if (covered.has(id)) out.add(err(`/units/${i}/checks`, `check ${id} is covered twice`));
       covered.set(id, w.id);
@@ -622,6 +649,7 @@ const plan: Check<PlanEnvelope> = (v, out) => {
         out.add(err(`/units/${i}/id`, 'a check unit id is the digest of its run, revision, adapter, source and checks'));
       }
       if (w.checks.some(id => ruleOf.has(id) && ruleOf.get(id) !== w.adapterId)) out.add(err(`/units/${i}/adapterId`, 'a unit runs the adapter its checks\' rules name'));
+    } else if(w.review){if(w.sourceId===null||w.id!==reviewUnitIdOf({runId:v.runId,revision:v.revision,stage:w.stage,sourceId:w.sourceId!,segmentId:w.review.segmentId,specDigest:w.review.specDigest}))out.add(err(`/units/${i}/id`,'review id binds its exact admitted segment and spec'));
     } else if (w.id !== bootstrapUnitIdOf({ runId: v.runId, revision: v.revision, stage: w.stage, sourceId: w.sourceId })) {
       out.add(err(`/units/${i}/id`, 'a bootstrap unit id is the digest of its run, revision, stage and source'));
     }
@@ -664,7 +692,7 @@ const plan: Check<PlanEnvelope> = (v, out) => {
   const scopeOf = new Map(v.checks.map(c => [c.id, c.scopeId]));
   v.units.forEach((w, i) => {
     const scopes = new Set(w.checks.map(id => scopeOf.get(id)));
-    if (w.scopes.length !== scopes.size || w.scopes.some(s => !scopes.has(s))) out.add(err(`/units/${i}/scopes`, 'a unit lists exactly the scopes of its checks'));
+    if (!w.review&&(w.scopes.length !== scopes.size || w.scopes.some(s => !scopes.has(s)))) out.add(err(`/units/${i}/scopes`, 'a unit lists exactly the scopes of its checks'));
   });
   requiredNotPlanned += v.ruleGaps.filter(g => g.required).length;
   for (const [state, n] of Object.entries(tally)) if (v.tallies.checks[state as keyof PlanEnvelope['tallies']['checks']] !== n) out.add(err(`/tallies/checks/${state}`, 'tallies recount the checks'));
@@ -766,20 +794,143 @@ const importpage:Check<ImportPageEnvelope>=(v,out)=>{
   if(v.count.n!==v.items.length)out.add(err('/count','page count counts returned metadata rows only'));
   for(const i of duplicates(v.items,x=>x.operationId))out.add(err(`/items/${i}`,'one row per operation'));
 };
+// Exact public timestamp arithmetic keeps fractions that Date.parse truncates.
+const timestampNanos = (value: string): bigint | null => {
+ if(!isCalendarTimestamp(value))return null;
+ const millis=Date.parse(value.slice(0,19)+'Z');if(!Number.isSafeInteger(millis))return null;
+ const whole = BigInt(millis)*1_000_000n;
+ const fraction = value.slice(19,-1).replace(/^\./,'');
+ return whole + BigInt(fraction.padEnd(9,'0'));
+};
+
+const partitions: Check<ReviewPartitionsEnvelope> = (v, out) => {
+  const seen = new Set<string>();
+  let previous = '';
+  v.partitions.forEach((p, i) => {
+    let bytes = 0;
+    p.members.forEach((m, j) => {
+      pathError(out, `/partitions/${i}/members/${j}/relativePath`, m.relativePath);
+      if (seen.has(m.relativePath)) out.add(err(`/partitions/${i}/members/${j}`, 'a file is in two partitions'));
+      if (m.relativePath <= previous) out.add(err(`/partitions/${i}/members/${j}`, 'members are in path order'));
+      seen.add(m.relativePath);
+      previous = m.relativePath;
+      bytes += m.bytes;
+    });
+    if (p.members.length > v.bounds.maxFiles || bytes > v.bounds.maxBytes) out.add(err(`/partitions/${i}`, 'the partition is over its bounds'));
+    if (bytes !== p.bytes) out.add(err(`/partitions/${i}/bytes`, 'the bytes do not sum its members'));
+    if (p.id !== `part-${digestOf({ sourceId: v.sourceId, members: p.members.map(m => [m.relativePath, m.content]) }).slice(7, 31)}`) {
+      out.add(err(`/partitions/${i}/id`, 'the id is not the digest of the partition\u2019s source and members'));
+    }
+  });
+  for (const i of duplicates(v.gaps, g => g.scopeId)) out.add(err(`/gaps/${i}`, 'duplicate gap'));
+  const { digest, ...rest } = v;
+  if (digest !== digestOf(rest)) out.add(err('/digest', 'the digest is not the canonical digest of the plan'));
+};
+
+const assessmentErrors = (out: Bounded, at: string, a: { verdict: string; claims: { citations: string[] }[]; inspected: string[] }, served: ReadonlySet<string>, read: ReadonlySet<string>) => {
+  if (a.verdict === 'finding' && a.claims.length === 0) out.add(err(`${at}/claims`, 'a finding needs a cited claim'));
+  a.claims.forEach((c, i) => c.citations.forEach((id, j) => { if (!served.has(id)) out.add(err(`${at}/claims/${i}/citations/${j}`, 'cites evidence the session never served')); }));
+  a.inspected.forEach((p, i) => { pathError(out, `${at}/inspected/${i}`, p); if (!read.has(p)) out.add(err(`${at}/inspected/${i}`, 'names a file the session never served')); });
+};
+
+const instructions:Check<ReviewInstructionsEnvelope>=(v,out)=>{
+ const {digest,...body}=v;if(digest!==digestOf(body))out.add(err('/digest','instruction manifest digest differs'));
+ for(const item of [v.prompt,v.assembled,...v.skills.flatMap(s=>[s,...s.resources])])if(item.content!==item.digest)out.add(err('/content','instruction bytes and digest differ'));
+ for(const i of duplicates(v.skills,s=>s.id))out.add(err(`/skills/${i}`,'duplicate selected skill'));
+ v.skills.forEach((s,i)=>{for(const j of duplicates(s.resources,r=>r.id))out.add(err(`/skills/${i}/resources/${j}`,'duplicate included resource'))});
+ if(v.prompt.bytes+v.skills.reduce((n,s)=>n+s.bytes+s.resources.reduce((m,r)=>m+r.bytes,0),0)>524288)out.add(err('/skills','instruction inputs exceed their aggregate bound'));
+ if(v.skills.reduce((n,s)=>n+s.resources.length,0)>32)out.add(err('/skills','included resource count exceeds its bound'));
+ if(v.assembled.bytes>524288)out.add(err('/assembled/bytes','assembled instructions exceed their bound'));
+};
+const reviewrequest:Check<ReviewRequestEnvelope>=(v,out)=>{
+ const {digest,...body}=v;if(digest!==digestOf(body))out.add(err('/digest','request digest differs'));if(v.wire){const {digest:wireDigest,...wire}=v.wire;if(wireDigest!==digestOf(wire)||wire.system!==v.messages[0]?.content)out.add(err('/wire','native wire differs from its exact semantic instructions'))}
+ if(!v.messages.length||v.messages[0]!.role!=='system')out.add(err('/messages','a request starts with the exact assembled instructions'));
+};
+const checkpoint: Check<ReviewCheckpointEnvelope> = (v, out) => {
+  if((v.instructions===undefined)!==(v.requests===undefined))out.add(err('/requests','instruction-bound checkpoints retain their request list'));
+  if(v.instructions){instructions(v.instructions,out);if(v.requests!.length<v.operations.length||v.requests!.length>v.operations.length+1)out.add(err('/requests','at most one prepared request has unknown outcome'));v.requests!.forEach((r,i)=>{reviewrequest(r,out);if(r.sessionId!==v.sessionId||r.specDigest!==v.specDigest||r.instructionDigest!==v.instructions!.digest||r.operationId!==`${v.sessionId}.op${i+1}`)out.add(err(`/requests/${i}`,'request binding differs'));if(v.operations[i]?.state==='settled'&&!v.operations[i]!.identity)out.add(err(`/operations/${i}/identity`,'a bound settled reply retains its reported identity'));if(v.operations[i]&&v.operations[i]!.request!==digestOf(r))out.add(err(`/operations/${i}/request`,'operation does not name its exact request'));});}
+  if (v.messages[0]!.role !== 'system') out.add(err('/messages/0/role', 'a session starts with its fixed prompt'));
+  for (const i of duplicates(v.served, x => x.id)) out.add(err(`/served/${i}/id`, 'duplicate evidence id'));
+  const snapshots = new Set(v.served.map(x => x.citation.snapshotId));
+  if (snapshots.size > 1) out.add(err('/served', 'served evidence cites more than one snapshot'));
+  v.served.forEach((x, i) => {
+    pathError(out, `/served/${i}/citation/relativePath`, x.citation.relativePath);
+    if (x.endLine < x.startLine) out.add(err(`/served/${i}/endLine`, 'the range ends before it starts'));
+    if (x.citation.span.endByte < x.citation.span.startByte) out.add(err(`/served/${i}/citation/span`, 'span ends before it starts'));
+    if (!x.citation.quoteDigest) out.add(err(`/served/${i}/citation/quoteDigest`, 'a served slice carries its quote digest'));
+  });
+  v.operations.forEach((o, i) => {
+    if (o.operationId !== `${v.sessionId}.op${i + 1}`) out.add(err(`/operations/${i}/operationId`, 'operations are numbered in order under the session'));
+    if ((o.state === 'settled') !== (o.usage !== undefined)) out.add(err(`/operations/${i}`, 'exactly the settled operations carry usage'));
+  });
+  if (v.final && v.stopped) out.add(err('/stopped', 'a session either concluded or stopped'));
+  if (v.final) {
+    const last = v.operations[v.operations.length - 1];
+    if (!last || last.outcome !== 'final') out.add(err('/final', 'the last operation is the final assessment'));
+    assessmentErrors(out, '/final', v.final, new Set(v.served.map(x => x.id)), new Set(v.served.map(x => x.citation.relativePath)));
+  }
+  if (v.operations.some(o => o.state === 'unsettled') && !v.stopped) out.add(err('/stopped', 'an unsettled call stops the session'));
+};
+
+const review: Check<ReviewRecordEnvelope> = (v, out) => {
+  if ((v.outcome === 'completed') !== (v.verdict !== null)) out.add(err('/verdict', 'exactly a completed review has a verdict'));
+  if (v.observations.length && v.verdict !== 'finding') out.add(err('/observations', 'only a finding yields observations'));
+  const inspected = new Set<string>();
+  v.inspected.forEach((x, i) => {
+    pathError(out, `/inspected/${i}/relativePath`, x.relativePath);
+    if (inspected.has(x.relativePath)) out.add(err(`/inspected/${i}`, 'duplicate inspected file'));
+    inspected.add(x.relativePath);
+    x.ranges.forEach(([a, b], j) => { if (b < a) out.add(err(`/inspected/${i}/ranges/${j}`, 'the range ends before it starts')); });
+  });
+  v.notInspected.forEach((p, i) => { pathError(out, `/notInspected/${i}`, p); if (inspected.has(p)) out.add(err(`/notInspected/${i}`, 'a file is both inspected and not')); });
+  for (const p of v.notInspected) {
+    if (!v.frontiers.some(f => f.scopeId === `${v.sourceId}:${p}` && f.reasonCode === 'sentinel.review.frontier.notInspected')) {
+      out.add(err('/frontiers', 'every file not inspected is a frontier'));
+      break;
+    }
+  }
+  const unsettled = v.operations.some(o => o.state === 'unsettled');
+  if ((v.totals.usage === 'unknown') !== unsettled) out.add(err('/totals/usage', 'usage is unknown exactly when a call is unsettled'));
+  if (v.totals.steps !== v.operations.length) out.add(err('/totals/steps', 'steps count the operations'));
+  if (v.model === null && v.operations.some(o => o.state === 'settled')) out.add(err('/model', 'a settled reply names its model'));
+  const { digest, ...rest } = v;
+  if (digest !== digestOf(rest)) out.add(err('/digest', 'the digest is not the canonical digest of the record'));
+};
+
 const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   snapshot, run, work, attempt, observation, coverage, disposition, report, protocol,
-  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan, paths, pathrequest, deepimport, importview, importpage, decisioninput, decisionview, decisionpage,
+  partitions, checkpoint, review,
+  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, owneruireceipt: receipt, owneruicapabilities: () => [], admission, controls, plan, paths, pathrequest, deepimport, importview, importpage, decisioninput, decisionview, decisionpage,
   servicecapabilities: () => [],
   runinspection: () => [],
   inspectionpage: () => [],
   reportdelivery: () => [],
   deliverychunk: () => [],
+  preparationcapabilities: () => [],
+  configurationpreview: (v, out) => {
+    const end=timestampNanos(v.expiresAt),start=timestampNanos(v.createdAt);
+    if (end===null||start===null||end <= start || end-start>30_000_000_000n) out.add(err('/expiresAt', 'preview expiry exceeds its original bound'));
+  },
+  preparationstatus: (v, out) => {
+    if (!v.found) return;
+    const end=timestampNanos(v.deadlineAt),start=timestampNanos(v.acceptedAt),runEnd=timestampNanos(v.runDeadlineAt);
+    if (end===null||start===null||runEnd===null||end<=start||end-start>600_000_000_000n||runEnd>end) out.add(err('/deadlineAt', 'preparation timing must preserve the original bound'));
+    if(v.phase==='prepared'&&(!v.runId||v.preparedRevision===null||v.preparedRevision<2))out.add(err('/preparedRevision','prepared requires an actual analysis revision'));
+    for(const [i,a]of v.availability.entries())if(a.available?(a.reasonCode!==null):(a.reasonCode===null))out.add(err(`/availability/${i}`,'readiness answer and reason differ'));
+  },
+  preparationoutcome: (v, out) => {
+    const exits = {submitted:0,requested:0,kept:0,answered:0,'configuration-failure':3,'awaiting-confirmation':4,unavailable:3,refused:3};
+    if(v.status){const nested=new Bounded();INVARIANTS.preparationstatus(v.status,nested);for(const error of nested.list)out.add({...error,path:'/status'+error.path});}
+    if(v.exitCode!==exits[v.outcome])out.add(err('/exitCode','exit code differs from the canonical command outcome'));
+    if(['submitted','requested','kept'].includes(v.outcome)&&(!v.status||!v.status.found))out.add(err('/status','an accepted preparation outcome requires its actual retained status'));
+  },
   controlcapabilities: () => [],
   controloutcome: (v, out) => {
     const exits = { ...POLICY_EXIT_CODES, submitted: 0, requested: 0, unavailable: 3, prepared: 0, kept: 0, answered: 0, refused: 3 };
     if (v.exitCode !== exits[v.outcome]) out.add(err('/exitCode', 'exit code does not match the canonical command outcome'));
   },
 
+  instructions, reviewrequest,
 };
 
 /**

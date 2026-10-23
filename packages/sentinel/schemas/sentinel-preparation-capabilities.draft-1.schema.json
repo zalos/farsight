@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/PreparationCapabilities",
+  "definitions": {
+    "PreparationCapabilities": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-preparation-capabilities/draft-1"
+        },
+        "apiRevision": {
+          "type": "number",
+          "const": 1
+        },
+        "storeId": {
+          "$ref": "#/definitions/Id"
+        },
+        "epoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 5,
+          "items": [
+            {
+              "type": "string",
+              "const": "configuration.preview"
+            },
+            {
+              "type": "string",
+              "const": "prepare.accept"
+            },
+            {
+              "type": "string",
+              "const": "prepare.status"
+            },
+            {
+              "type": "string",
+              "const": "prepare.resume"
+            },
+            {
+              "type": "string",
+              "const": "prepare.cancel"
+            }
+          ],
+          "maxItems": 5
+        },
+        "preparationMs": {
+          "type": "number",
+          "const": 600000
+        },
+        "previewMs": {
+          "type": "number",
+          "const": 30000
+        },
+        "terminalLimit": {
+          "type": "number",
+          "const": 256
+        },
+        "source": {
+          "type": "string",
+          "const": "configured-workspace"
+        },
+        "prerequisites": {
+          "type": "array",
+          "minItems": 3,
+          "items": [
+            {
+              "type": "string",
+              "const": "capture"
+            },
+            {
+              "type": "string",
+              "const": "parse"
+            },
+            {
+              "type": "string",
+              "const": "inventory"
+            }
+          ],
+          "maxItems": 3
+        },
+        "checksStartSeparately": {
+          "type": "boolean",
+          "const": true
+        },
+        "automaticResume": {
+          "type": "boolean",
+          "const": false
+        },
+        "limitationKey": {
+          "type": "string",
+          "const": "sentinel.preparation.limits"
+        }
+      },
+      "required": [
+        "schema",
+        "apiRevision",
+        "storeId",
+        "epoch",
+        "operations",
+        "preparationMs",
+        "previewMs",
+        "terminalLimit",
+        "source",
+        "prerequisites",
+        "checksStartSeparately",
+        "automaticResume",
+        "limitationKey"
+      ],
+      "additionalProperties": false
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-preparation-capabilities.draft-1.schema.json",
+  "title": "sentinel-preparation-capabilities/draft-1"
+}

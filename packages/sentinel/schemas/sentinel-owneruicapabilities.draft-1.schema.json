@@ -1,0 +1,108 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/OwnerUiCapabilities",
+  "definitions": {
+    "OwnerUiCapabilities": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-owneruicapabilities/draft-1"
+        },
+        "apiRevision": {
+          "type": "number",
+          "const": 1
+        },
+        "storeId": {
+          "$ref": "#/definitions/Id"
+        },
+        "epoch": {
+          "$ref": "#/definitions/Id"
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 10,
+          "items": [
+            {
+              "type": "string",
+              "const": "owner-ui.pair"
+            },
+            {
+              "type": "string",
+              "const": "owner-ui.revoke"
+            },
+            {
+              "type": "string",
+              "const": "owner-ui.context"
+            },
+            {
+              "type": "string",
+              "const": "owner-ui.preview"
+            },
+            {
+              "type": "string",
+              "const": "owner-ui.accept"
+            },
+            {
+              "type": "string",
+              "const": "owner-ui.status"
+            },
+            {
+              "type": "string",
+              "const": "owner-ui.resume"
+            },
+            {
+              "type": "string",
+              "const": "owner-ui.cancel"
+            },
+            {
+              "type": "string",
+              "const": "owner-ui.control-preview"
+            },
+            {
+              "type": "string",
+              "const": "owner-ui.control"
+            }
+          ],
+          "maxItems": 10
+        },
+        "receiptSchema": {
+          "type": "string",
+          "const": "sentinel-owneruireceipt/draft-1"
+        },
+        "settingsSave": {
+          "type": "boolean",
+          "const": false
+        },
+        "modelAdmission": {
+          "type": "boolean",
+          "const": false
+        },
+        "processInspection": {
+          "type": "boolean",
+          "const": true,
+          "description": "Bounded retained-run selection, process inspection and identity display; no extra effect authority."
+        }
+      },
+      "required": [
+        "schema",
+        "apiRevision",
+        "storeId",
+        "epoch",
+        "operations",
+        "receiptSchema",
+        "settingsSave",
+        "modelAdmission"
+      ],
+      "additionalProperties": false
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-owneruicapabilities.draft-1.schema.json",
+  "title": "sentinel-owneruicapabilities/draft-1"
+}

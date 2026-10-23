@@ -79,6 +79,10 @@
     "./frameworks/next": {
       "types": "./dist/frameworks/next/index.d.ts",
       "import": "./dist/frameworks/next/index.js"
+    },
+    "./review": {
+      "types": "./dist/review/index.d.ts",
+      "import": "./dist/review/index.js"
     }
   },
   "files": [

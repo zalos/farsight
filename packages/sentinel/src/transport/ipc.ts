@@ -170,10 +170,11 @@ export class FrameDecoder {
  * recorded under: every one is a non-owner agent, so no hello can select owner authority. The owner's CLI is a
  * `local-service` client like any other; owner authority travels only as a receipt its own process minted.
  */
-export type ClientKind = 'cli' | 'mcp' | 'http-bridge';
+export type ClientKind = 'cli' | 'mcp' | 'http-bridge' | 'owner-ui';
 const GRANTS: Readonly<Record<ClientKind, ServiceGrant>> = Object.freeze({
   'cli': Object.freeze({ principal: 'agent', channel: 'local-service' }),
   'mcp': Object.freeze({ principal: 'agent', channel: 'mcp' }),
+  'owner-ui': Object.freeze({ principal: 'agent', channel: 'owner-ui' }),
   'http-bridge': Object.freeze({ principal: 'agent', channel: 'http-bridge' }),
 });
 
@@ -308,7 +309,7 @@ function serveConnection(socket: Socket, identity: ServiceIdentity, handler: Ser
       if (id === undefined || typeof f.op !== 'string' || f.type !== 'request' || inflight.has(id) || inflight.size >= 128) { refuse('sentinel.ipc.frameMalformed'); return; }
       const granted = by;
       inflight.add(id);
-      const read = f.op === 'run.inspect' || f.op === 'report.open' ? new AbortController() : undefined;
+      const read = f.op === 'run.inspect' || f.op === 'report.open' || f.op === 'prepare.resume' || f.op === 'owner-ui.process' ? new AbortController() : undefined;
       if (read) reads.set(id, read);
       Promise.resolve()
         .then(() => handler(f.op as string, refuseActorClaims(f.body), granted, read ? { signal: read.signal } : undefined))
@@ -423,7 +424,7 @@ export async function connectOwnerSocket(address: RuntimeAddress, expect: Servic
       const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
       return new Promise((resolve, reject) => {
         const settle = (fn: () => void) => { clearTimeout(timer); options.signal?.removeEventListener('abort', onAbort); pending.delete(id); fn(); };
-        const cancelRead = () => { if ((op === 'run.inspect' || op === 'report.open') && !socket.destroyed) { try { socket.write(encodeFrame({ type: 'cancel', id })); } catch { /* connection failure already rejects */ } } };
+        const cancelRead = () => { if ((op === 'run.inspect' || op === 'report.open' || op === 'prepare.resume') && !socket.destroyed) { try { socket.write(encodeFrame({ type: 'cancel', id })); } catch { /* connection failure already rejects */ } } };
         const timer = setTimeout(() => { cancelRead(); settle(() => reject(new IpcError('sentinel.ipc.timeout'))); }, timeoutMs);
         const onAbort = () => { cancelRead(); settle(() => reject(new IpcError('sentinel.ipc.canceled'))); };
         options.signal?.addEventListener('abort', onAbort, { once: true });

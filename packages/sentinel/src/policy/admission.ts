@@ -15,6 +15,9 @@ import { validateEnvelope } from '../validate.js';
 import { policyFail, type PolicyReasonCode } from './errors.js';
 import { snapshot } from './immutable.js';
 import { intentDigest, type ReceiptBook, type ConsumedReceipt } from './receipts.js';
+import { assertOwnerUiProof, type OwnerUiProof } from '../owner-ui/authority.js';
+import type { OwnerUiReceiptBook } from '../owner-ui/receipts.js';
+import type { OwnerUiReceiptEnvelope } from '../contracts/ownerui.js';
 import { isEffectivePolicy, type EffectivePolicy } from './settings.js';
 
 /** The adapter's answer for verdict 2. */
@@ -75,8 +78,16 @@ function boundsMiss(intent: ActionIntent, policy: EffectivePolicy): [PolicyReaso
   if ((paid || discloses) && !provider) return ['sentinel.admission.providerNotTrusted', 'a paid or disclosing action names a trusted provider'];
   if (paid && provider) {
     const b = intent.budget;
-    if (b.maxTokens === null || b.maxCost === null || b.currency === null) return ['sentinel.admission.budgetRequired', 'a paid action states its token and cost bounds'];
     const cap = provider.budget;
+    // Only the explicitly adopted closed CLI subscription profile accounts in tokens with money unobserved.
+    // A monetary or unconfigured provider cannot use null money to bypass its bound.
+    if (provider.kind === 'claude-cli' && provider.nativeProfile && provider.models?.length
+      && provider.models.every(m => m.pricing.kind === 'subscription-quota' && m.pricing.basis === 'owner-subscription')
+      && cap.maxTokens !== null && cap.maxCost === null && cap.currency === null) {
+      if (b.maxTokens === null || b.maxCost !== null || b.currency !== null) return ['sentinel.admission.budgetRequired', 'a subscription action states its token quota with monetary consumption unobserved'];
+      return b.maxTokens > cap.maxTokens ? ['sentinel.admission.budgetExceeded', 'the intent exceeds the adopted token quota'] : null;
+    }
+    if (b.maxTokens === null || b.maxCost === null || b.currency === null) return ['sentinel.admission.budgetRequired', 'a paid action states its token and cost bounds'];
     if (cap.maxTokens === null || cap.maxCost === null || cap.currency === null) return ['sentinel.admission.budgetExceeded', 'the provider has no budget in the adopted settings'];
     if (b.currency !== cap.currency || b.maxTokens > cap.maxTokens || compareDecimal(b.maxCost, cap.maxCost) > 0) {
       return ['sentinel.admission.budgetExceeded', 'the intent reserves more than the provider’s budget allows'];
@@ -94,7 +105,20 @@ function grantMiss(g: SentinelGrant, intent: ActionIntent): string | null {
   return null;
 }
 
-export function admit(req: AdmissionRequest): AdmissionResult {
+export function admit(req: AdmissionRequest): AdmissionResult { return decideAdmission(req, false); }
+
+/** Package-internal stricter path for a service acting on an owner's real receipt. It only adds a requirement;
+ * ordinary admit and its public facade remain unchanged. No request JSON can set this internal choice. */
+export function admitRequiringReceipt(req: AdmissionRequest): AdmissionResult { return decideAdmission(req, true); }
+
+type DecisionRequest<R> = Omit<AdmissionRequest, 'receipt'> & { receipt?: { book: { consume(id: string, binding: { intent: ActionIntent; stateDigest: string; policyRevision: string }, now: Date): R }; id: string } };
+/** Only the closed private UI receipt/proof may choose this provenance; no public JSON flag exists. */
+export function admitOwnerUi(req: Omit<AdmissionRequest, 'receipt'> & { receipt?: { book: OwnerUiReceiptBook; id: string } }, proof: OwnerUiProof, required: boolean) {
+  assertOwnerUiProof(proof, req.intent.action);
+  if(req.requestedBy.channel !== 'owner-ui' || req.requestedBy.principal !== 'human') policyFail('sentinel.receipt.ownerOnly', 'not a genuine browser owner confirmation');
+  return decideAdmission<ConsumedReceipt<OwnerUiReceiptEnvelope>>(req, required);
+}
+function decideAdmission<R extends { readonly digest: string } = ConsumedReceipt>(req: DecisionRequest<R>, requireReceipt: boolean): { readonly record: AdmissionEnvelope; readonly receipt: R | null } {
   const { policy } = req;
   if (!isEffectivePolicy(policy)) policyFail('sentinel.policy.settingsInvalid', 'admission decides only under effectivePolicy’s own result');
   // The exact request decided on: a private frozen copy, so the caller cannot change it between verdicts.
@@ -103,7 +127,7 @@ export function admit(req: AdmissionRequest): AdmissionResult {
   const stateDigest = req.stateDigest;
   const digest = intentDigest(intent);
   let policyVerdict: AdmissionVerdict;
-  let requiresConfirmation = false;
+  let requiresConfirmation = requireReceipt;
   const owner = OWNER.has(intent.action);
   if (owner && (requestedBy.principal !== 'human' || requestedBy.channel !== 'owner-cli')) {
     policyVerdict = verdict(false, 'sentinel.admission.ownerOnly', 'only the owner, through the local CLI, may take this action');
@@ -117,7 +141,7 @@ export function admit(req: AdmissionRequest): AdmissionResult {
         miss: g => grantMiss(g, intent),
       });
       policyVerdict = verdict(d.verdict.allowed, d.verdict.allowed ? 'sentinel.admission.granted' : 'sentinel.admission.noGrant', d.verdict.reason);
-      requiresConfirmation = d.requiresConfirmation || owner;
+      requiresConfirmation = requireReceipt || d.requiresConfirmation || owner;
     }
   }
 
@@ -135,7 +159,7 @@ export function admit(req: AdmissionRequest): AdmissionResult {
   }
 
   const allowed = policyVerdict.allowed && capability.allowed && credential.allowed;
-  let spent: ConsumedReceipt | null = null;
+  let spent: R | null = null;
   let outcome: AdmissionEnvelope['outcome'] = allowed ? 'admitted' : 'denied';
   if (allowed && requiresConfirmation) {
     if (req.receipt) {

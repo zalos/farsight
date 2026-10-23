@@ -1,3 +1,4 @@
+import {reviewRuntime} from './review-adapter.js';
 import { preparePathTask, acceptPathTask, type PathTaskCandidate } from './path-task.js';
 import { readPathRequestFile } from './path-request-file.js';
 import { selectedSecretPrivacy } from '../reports/selected-privacy.js';
@@ -142,6 +143,7 @@ export function runWriteBinding(ws: Workspace, action: 'run.start' | 'run.pause'
   { intent: ActionIntent; stateDigest: string } {
   const workspace = workspaceIdentity(ws.path).digest;
   const intent = intentOf(action, plan.planDigest, action === 'run.start' ? [...plan.effects] : ['local-artifacts'], [`sentinel.workspace:${workspace}`, `sentinel.store:${instance.storeId}`, `sentinel.run:${instance.runId}`]);
+  if(action==='run.start'&&plan.model){intent.scope.provider=plan.model.providerId;intent.budget={...plan.model.budget}}
   return { intent, stateDigest: sha(canonicalJsonBytes({ kind: 'sentinel-run-write/1', plan: plan.planDigest, workspace, store: instance.storeId, run: instance.runId })) };
 }
 
@@ -270,7 +272,7 @@ export async function describeRun(ws: Workspace, runId: string): Promise<Current
  * (and only under the policy it was admitted with), then executed by the coordinator. A run that already completed
  * returns its result again without executing anything. The result is read back from the ledger (canonicalResult).
  */
-export async function runPlan(ws: Workspace, options: { planId: string; confirm: boolean; now: Date }): Promise<CommandResult> {
+export async function runPlan(ws: Workspace, options: { planId: string; confirm: boolean; confirmModels?:boolean; now: Date }): Promise<CommandResult> {
   const adopted = adoptedPolicy(ws);
   if ('refusal' in adopted) return adopted.refusal;
   const { policy } = adopted;
@@ -278,6 +280,9 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
     const plan = await currentPlan(store, options.planId);
     if (!plan || plan.kind !== 'analysis') return result('run', 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts: { planId: options.planId } });
     if (policy.revision !== plan.policyRevision) return result('run', 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts: { planId: plan.runId } });
+    if(plan.modelConflict)return result('run','configuration-failure',{reasonCode:'sentinel.provider.bindingChanged',facts:{limitation:'one-model-binding-per-run'}});
+    const admittedReview=await loadPlan(store,plan.runId,plan.revision),reviews=admittedReview.plan.units.filter(u=>u.review).map(u=>({kind:u.stage,segmentId:u.review!.segmentId,selection:u.review!.selection,terms:u.review!.terms,instructions:u.review!.instructionDigest,skills:'none-selected',vendorInstructions:'unobserved'}));
+    if(reviews.length&&(!options.confirmModels||!options.confirm))return result('run','awaiting-confirmation',{reasonCode:'sentinel.service.needsOwnerConfirm',facts:{runId:plan.runId,modelReviews:reviews,requiredFlag:'--confirm-models'}});
     const binding = runWriteBinding(ws, 'run.start', plan, { storeId: store.storeId, runId: plan.runId });
     const decided = decide(ws, policy, binding.intent, binding.stateDigest, options.confirm, options.now);
     if (!decided.admitted) return decided.result;
@@ -287,7 +292,8 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
       // refused before anything starts; canonicalResult says why.
       if (await notExecutableHere(store, plan.runId, publicRegistry(ws.trustDir))) return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts, registry:publicRegistry(ws.trustDir), trustDir:ws.trustDir });
       return withScratch(store, async lease => {
-        await executeRun(store, plan.runId, { scratchRoot: lease.path, wrapRunner: lease.wrapRunner, trustDir: ws.trustDir });
+        const admitted=await loadPlan(store,plan.runId,plan.revision),review=admitted.plan.units.some(u=>u.review)?await reviewRuntime(store,ws,options.confirmModels===true):undefined;
+        try{await executeRun(store, plan.runId, { scratchRoot: lease.path, wrapRunner: lease.wrapRunner, trustDir: ws.trustDir,...(review?{review}:{}) });}finally{review?.close()}
         return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts, registry:publicRegistry(ws.trustDir), trustDir:ws.trustDir });
       });
     }
@@ -649,4 +655,23 @@ async function followPathTaskIn(store:SentinelStore,ws:Workspace,admitted:Awaite
  const stillWithin=()=>{const current=adoptedPolicy(ws);if('refusal'in current||current.policy.revision!==policy.revision)throw new ExecutionError('sentinel.execution.planInvalid',{reason:'the owner policy changed during structural rerun preparation'})};
  const candidate=await preparePathTask(store,request.value,{trustDir:trustFolder(ws),policy,now:options.now},{signal,deadlineAt,stillWithin});
  return decidePathTaskIn(store,ws,candidate,policy,{command:options.mode,confirm:options.confirm,now:options.now,parentSelection:selected});
+}
+
+
+/** Closed owner-only private trace, read from genuine accepted review work. No artifact/path lookup input. */
+export async function privateReviewTrace(ws:Workspace,runId:string):Promise<CommandResult>{
+ checkWorkspaceLayout(ws);
+ return withStore(ws,async store=>{
+  const run=store.ledger.getRun(runId);if(!run)return result('report','configuration-failure',{reasonCode:'sentinel.execution.planInvalid'});
+  const plan=await loadPlan(store,runId,run.planRevision),deadlineAt=Date.now()+20000,signal=AbortSignal.timeout(20000);
+  const {reviewSecretsKnown}=await import('../review/dispatch.js');
+  if(await reviewSecretsKnown(store,runId,plan))return result('report','answered',{facts:{runId,disclosure:'private-only',privacy:'withheld',traces:[]}});
+  const {readPublishedInstructions}=await import('../review/instructions.js'),traces=[];let bytes=0;
+  const units=plan.plan.units.filter(u=>u.review);if(units.length>32)throw new ExecutionError('sentinel.execution.planInvalid',{});
+  for(const unit of units){const trace=await readPublishedInstructions(store,unit,{signal,deadlineAt});const value={work:{id:unit.id,revision:unit.revision},record:trace.record,instructions:trace.instructions,requests:trace.requests,observations:trace.observations,contents:trace.contents.map(c=>({id:c.id,text:new TextDecoder('utf8',{fatal:true}).decode(c.bytes)}))};bytes+=Buffer.byteLength(JSON.stringify(value));if(bytes>8*1024*1024)throw new ExecutionError('sentinel.execution.outputTooLarge',{});traces.push(value)}
+  store.assertHeld();if(signal.aborted||Date.now()>=deadlineAt)throw new ExecutionError('sentinel.execution.deadlineExceeded',{});
+  if(await reviewSecretsKnown(store,runId,plan))return result('report','answered',{facts:{runId,disclosure:'private-only',privacy:'withheld',traces:[]}});
+  const response=result('report','answered',{facts:{runId,disclosure:'private-only',privacy:'private-owner-view',vendorInstructions:'unobserved',traces}});
+  if(Buffer.byteLength(JSON.stringify(response))>8*1024*1024)throw new ExecutionError('sentinel.execution.outputTooLarge',{});return response;
+ });
 }

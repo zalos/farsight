@@ -28,13 +28,15 @@ const MANIFEST = {
 
 function workspace({ build = true } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'farsight-pack-sentinel-'));
-  for (const file of ['pack-sentinel.mjs', 'pack-preflight.mjs', 'npm-consumer.mjs', 'test-sentinel-package.mjs']) {
+  for (const file of ['pack-sentinel.mjs', 'sentinel-native-helper.mjs', 'pack-preflight.mjs', 'npm-consumer.mjs', 'test-sentinel-package.mjs']) {
     write(root, `scripts/${file}`, readFileSync(resolve('scripts', file), 'utf8'));
   }
   symlinkSync(resolve('node_modules'), join(root, 'node_modules'), 'dir');
   write(root, 'package.json', JSON.stringify({ version: '0.0.0-test', type: 'module', engines: { node: '>=24' } }));
   write(root, 'packages/core/package.json', JSON.stringify({ name: '@farsight/core', main: 'dist/index.js' }));
   write(root, 'packages/core/dist/index.js', '');
+  // core's gitIdentity, stood in: the packer stamps the Sentinel build with it, by the rule farsight-cli's packer uses.
+  write(root, 'packages/core/dist/version.js', "export function gitIdentity() { return { commit: 'abc1234', codeCommit: 'abc1234', dirty: false }; }\n");
   write(root, 'packages/sentinel/package.json', json(MANIFEST));
   write(root, 'packages/sentinel/tsconfig.json', json({ compilerOptions: {
     target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, declaration: true,
@@ -261,6 +263,34 @@ test('the tarball carries typed exports, declarations, its own metadata and the 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test("Sentinel's version is its own: no fallback to the app's, an expected version is enforced, and the build is stamped", () => {
+  const root = workspace();
+  try {
+    // deliberately different from the root (app) version 0.0.0-test
+    const packed = node(root, 'pack-sentinel.mjs', '--expect-version', '0.0.0-draft.1');
+    assert.equal(packed.status, 0, packed.stderr);
+    const stamp = JSON.parse(readFileSync(join(root, 'build/sentinel/package/dist/build-stamp.json'), 'utf8'));
+    assert.equal(stamp.name, 'farsight-sentinel');
+    assert.equal(stamp.version, '0.0.0-draft.1');
+    assert.equal(stamp.commit, 'abc1234');
+    assert.equal(stamp.dirty, false);
+    assert.ok(!Number.isNaN(Date.parse(stamp.built)));
+    assert.match(packed.stdout, /commit abc1234/);
+    writeFileSync(join(root, 'build/sentinel/keep.txt'), 'prior');
+    const wrong = node(root, 'pack-sentinel.mjs', '--expect-version', '0.0.0-test');
+    assert.equal(wrong.status, 1);
+    assert.match(wrong.stderr, /is 0\.0\.0-draft\.1, not the expected 0\.0\.0-test/);
+    const manifest = JSON.parse(readFileSync(join(root, 'packages/sentinel/package.json'), 'utf8'));
+    delete manifest.version;
+    writeFileSync(join(root, 'packages/sentinel/package.json'), json(manifest));
+    const none = node(root, 'pack-sentinel.mjs');
+    assert.equal(none.status, 1);
+    assert.match(none.stderr, /no version of its own; farsight-sentinel is never versioned from farsight-cli/);
+    assert.ok(!readdirSync(join(root, 'build/sentinel')).some((f) => f.includes('0.0.0-test')), 'nothing was packed under the app version');
+    assert.equal(readFileSync(join(root, 'build/sentinel/keep.txt'), 'utf8'), 'prior', 'refusals leave prior artifacts');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('a clean npm consumer imports, type-checks and validates through the installed package', () => {
   const root = workspace();
   try {
@@ -453,5 +483,24 @@ for (const stem of ['frameworks/controls','analysis/paths']) test(`a shipped ${s
     assert.ok(run.stderr.includes(`${stem}/driver.ts is missing`),run.stderr);
     assert.equal(readFileSync(join(root, 'build/sentinel/previous-package'), 'utf8'), 'keep this exact prior package');
     assert.deepEqual(readdirSync(join(root, 'build/sentinel')).sort(), before);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('a configured review registry ships its fixed operation entry and refuses a missing one', () => {
+  const root = workspace();
+  try {
+    write(root, 'packages/sentinel/src/service/review-adapter.ts', 'export const reviews = true;\n');
+    write(root, 'build/sentinel/previous-package', 'keep this exact prior package');
+    const before = readdirSync(join(root, 'build/sentinel')).sort();
+    const refused = node(root, 'pack-sentinel.mjs');
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /review\/dispatch.ts is missing/);
+    assert.equal(readFileSync(join(root, 'build/sentinel/previous-package'), 'utf8'), 'keep this exact prior package');
+    assert.deepEqual(readdirSync(join(root, 'build/sentinel')).sort(), before);
+    write(root, 'packages/sentinel/src/review/dispatch.ts', 'export const operation = true;\n');
+    const packed = node(root, 'pack-sentinel.mjs');
+    assert.equal(packed.status, 0, packed.stderr);
+    assert.ok(existsSync(join(root, 'build/sentinel/package/dist/review/dispatch.mjs')));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

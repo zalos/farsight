@@ -14,6 +14,7 @@
 // A check adapter also states the finest coverage granularity its engine can establish (`coverage`, default
 // `aggregate`). The coordinator never records coverage finer than this, whatever a result claims.
 // No production external adapter is registered yet; PR 10 onwards adds them with their measured pins.
+import {reviewOperationPath} from './assets.js';
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
@@ -97,11 +98,13 @@ export interface BuiltInAdapterDefinition {
 
 export type BootstrapOperation = 'capture' | 'parse' | 'inventory';
 
+export type CoordinatorOperation=BootstrapOperation|'review-guided'|'review-general';
+
 export interface OperationAdapterDefinition {
   id: Id;
   version: string;
   kind: 'operation';
-  operation: BootstrapOperation;
+  operation: CoordinatorOperation;
 }
 
 export type AdapterDefinition = ExternalAdapterDefinition | BuiltInAdapterDefinition | OperationAdapterDefinition;
@@ -117,6 +120,7 @@ export type TrustedAdapter =
  */
 const OPERATION_MODULES: Readonly<Record<BootstrapOperation, string>> = Object.freeze({
   capture: CAPTURE_IMPLEMENTATION_URL, parse: PARSE_IMPLEMENTATION_URL, inventory: INVENTORY_IMPLEMENTATION_URL,
+
 });
 const GRANULARITIES: readonly CoverageGranularity[] = ['per-file-per-rule', 'per-file', 'aggregate'];
 const coverageOf = (v: unknown): CoverageGranularity => {
@@ -189,8 +193,9 @@ function trusted(def: AdapterDefinition): TrustedAdapter {
   if (!ID.test(def.id ?? '')) invalid('id');
   if (typeof def.version !== 'string' || !def.version || def.version.length > 64) invalid('version');
   if (def.kind === 'operation') {
-    if (!Object.hasOwn(OPERATION_MODULES, def.operation ?? '')) invalid('operation');
-    const moduleDigest = moduleDigestOf(fileURLToPath(OPERATION_MODULES[def.operation]));
+    const reviewing=def.operation==='review-guided'||def.operation==='review-general';
+    if (!reviewing&&!Object.hasOwn(OPERATION_MODULES, def.operation ?? '')) invalid('operation');
+    const moduleDigest = moduleDigestOf(reviewing?reviewOperationPath():fileURLToPath(OPERATION_MODULES[def.operation as BootstrapOperation]));
     const body = { id: def.id, version: def.version, kind: def.kind, operation: def.operation, moduleDigest };
     return Object.freeze({ ...body, limits: ACCEPTED_CEILINGS, coverage: 'aggregate' as const, digest: sha256(canonicalJsonBytes(body)) });
   }

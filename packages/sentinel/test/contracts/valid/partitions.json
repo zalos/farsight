@@ -1,0 +1,34 @@
+{
+  "schema": "sentinel-review-partitions/draft-1",
+  "snapshotId": "snap-1",
+  "sourceId": "web",
+  "bounds": {
+    "maxFiles": 10,
+    "maxBytes": 65536
+  },
+  "partitions": [
+    {
+      "id": "part-9ac937c7ebec760d334d7f24",
+      "members": [
+        {
+          "relativePath": "src/query.ts",
+          "content": "sha256:26dc9e73fe1fcbcd99333e5d13e63194ecdeb751c1b809fc0db1a486d738c8dd",
+          "bytes": 87
+        },
+        {
+          "relativePath": "src/util.ts",
+          "content": "sha256:31f7971c549f5c953772492bd4aca5212a4f4237282de15bb30d0ad6981b15f6",
+          "bytes": 28
+        }
+      ],
+      "bytes": 115
+    }
+  ],
+  "gaps": [
+    {
+      "scopeId": "web:vendor",
+      "reasonCode": "sentinel.review.frontier.unknownScope"
+    }
+  ],
+  "digest": "sha256:a88be3b84272d8f7e2115916362adb07f06f1e6f597947b0b7eeff14507c334a"
+}

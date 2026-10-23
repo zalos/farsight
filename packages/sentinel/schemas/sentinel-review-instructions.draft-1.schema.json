@@ -1,0 +1,173 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/ReviewInstructionsEnvelope",
+  "definitions": {
+    "ReviewInstructionsEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-review-instructions/draft-1"
+        },
+        "assembly": {
+          "type": "string",
+          "const": "sentinel.review.instructions/1"
+        },
+        "prompt": {
+          "$ref": "#/definitions/InstructionContent"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SelectedSkill"
+          },
+          "description": "Selection order is semantically significant.",
+          "maxItems": 16
+        },
+        "assembled": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "$ref": "#/definitions/ArtifactId"
+            },
+            "digest": {
+              "$ref": "#/definitions/Digest"
+            },
+            "bytes": {
+              "$ref": "#/definitions/AssembledInstructionBytes"
+            }
+          },
+          "required": [
+            "content",
+            "digest",
+            "bytes"
+          ],
+          "additionalProperties": false
+        },
+        "vendorInstructions": {
+          "type": "string",
+          "const": "unobserved"
+        },
+        "vendorSkillDiscovery": {
+          "type": "string",
+          "const": "not-performed"
+        },
+        "digest": {
+          "$ref": "#/definitions/Digest"
+        }
+      },
+      "required": [
+        "schema",
+        "assembly",
+        "prompt",
+        "skills",
+        "assembled",
+        "vendorInstructions",
+        "vendorSkillDiscovery",
+        "digest"
+      ],
+      "additionalProperties": false,
+      "description": "Exact ordered owner-selected instruction inputs and the bytes Sentinel assembled. Data, not execution authority."
+    },
+    "InstructionContent": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "content": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "digest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65536
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "content",
+        "digest",
+        "bytes"
+      ],
+      "additionalProperties": false
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "ArtifactId": {
+      "$ref": "#/definitions/Digest",
+      "description": "An immutable object-store identity: the digest of canonical uncompressed bytes."
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "SelectedSkill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "content": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "digest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65536
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InstructionContent"
+          },
+          "maxItems": 32
+        },
+        "rendered": {
+          "type": "boolean",
+          "const": true,
+          "description": "Every selected skill is rendered in this version. No vendor discovery occurs."
+        }
+      },
+      "required": [
+        "bytes",
+        "content",
+        "digest",
+        "id",
+        "rendered",
+        "resources",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "AssembledInstructionBytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 524288
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-review-instructions.draft-1.schema.json",
+  "title": "sentinel-review-instructions/draft-1"
+}

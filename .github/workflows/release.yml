@@ -5,6 +5,10 @@
 # `chore(release): vX.Y.Z`. Squash-merging that PR (the only merge kind main
 # allows; the PR title becomes the commit) runs publish.yml, which tags that
 # commit, packs and creates the GitHub Release.
+# A release carries two independently versioned tarballs: farsight-cli (vX.Y.Z,
+# the tag) and farsight-sentinel, whose version is the explicit sentinel_version
+# input — never derived from farsight-cli's. Both are packed and accepted in clean
+# npm-only consumers (scripts/npm-acceptance.mjs) before the PR opens.
 # Run it from the Actions tab or `gh workflow run release.yml -f bump=minor`.
 # docs/RELEASING.md explains each input, the RELEASE_TOKEN secret and the rehearsal.
 name: release
@@ -19,6 +23,10 @@ on:
         default: patch
       version:
         description: Explicit version X.Y.Z (optional; overrides bump)
+        type: string
+        required: false
+      sentinel_version:
+        description: farsight-sentinel's own release version A.B.C (required; never taken from farsight-cli's)
         type: string
         required: false
       prerelease:
@@ -42,13 +50,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  native-helper:
+    uses: ./.github/workflows/sentinel-cli-native-helper.yml
+    with:
+      source_sha: ${{ github.sha }}
   release-pr:
+    needs: native-helper
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       # inputs reach the scripts through env, never pasted into shell text
       BUMP: ${{ inputs.bump }}
       VERSION: ${{ inputs.version }}
+      SENTINEL_VERSION: ${{ inputs.sentinel_version }}
       PRERELEASE: ${{ inputs.prerelease }}
       DRY_RUN: ${{ inputs.dry_run }}
       # a PR opened with GITHUB_TOKEN does not start pull_request workflows (GitHub's
@@ -104,6 +118,8 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           args=()
           if [ -n "$VERSION" ]; then args+=(--version "$VERSION"); else args+=(--bump "$BUMP"); fi
+          # release.mjs refuses a release of a checkout with Sentinel unless its version is named here
+          if [ -n "$SENTINEL_VERSION" ]; then args+=(--sentinel-version "$SENTINEL_VERSION"); fi
           if [ -n "$PRERELEASE" ]; then args+=(--prerelease "$PRERELEASE"); fi
           # a dry run may be dispatched from any branch; a real release only from main
           if [ "$DRY_RUN" = "true" ]; then args+=(--allow-branch); fi
@@ -122,9 +138,22 @@ jobs:
             echo "::error::$TAG is already released"; exit 1
           fi
 
-      # after the version commit, so the bundle's stamp names it; publish.yml packs again after the merge
-      - name: Pack
-        run: node scripts/pack.mjs
+      # after the version commit, so each bundle's stamp names it; publish.yml packs again after the merge
+      - name: Fetch the helper built for this workflow revision
+        uses: actions/download-artifact@v8
+        with:
+          name: sentinel-cli-native-darwin-arm64
+          path: build/sentinel-cli-native/darwin-arm64
+
+      - name: Pack both tarballs, each at its own version
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          node scripts/pack.mjs
+          node scripts/release-manifest.mjs validate --tag "$TAG" | while IFS=$'\t' read -r name version _ _; do
+            if [ "$name" = farsight-sentinel ]; then node scripts/pack-sentinel.mjs --expect-version "$version" --require-native-helper; fi
+          done
+          ls -l build/*.tgz build/sentinel/*.tgz 2>/dev/null || true
 
       - name: Smoke-test the tarball
         env:
@@ -142,6 +171,24 @@ jobs:
           "$prefix/bin/farsight" ingest "$GITHUB_WORKSPACE/examples/invoice-app" --repo invoice-app --out "$RUNNER_TEMP/smoke/g.json"
           test -s "$RUNNER_TEMP/smoke/g.json"
 
+      # Six clean npm-only consumers (each package alone and both, global and project-local), installing from
+      # URLs. A real release needs every gate passed: a pending gate stops it before any branch or PR exists. Only a
+      # dry run, which pushes nothing and opens no PR, may report pending gates (--allow-pending).
+      - name: Accept both tarballs in clean npm-only consumers
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          args=()
+          while IFS=$'\t' read -r name version file _; do
+            case "$name" in
+              farsight-cli) args+=(--farsight "build/$file" --expect-farsight "$version") ;;
+              farsight-sentinel) args+=(--sentinel "build/sentinel/$file" --expect-sentinel "$version") ;;
+            esac
+          done < <(node scripts/release-manifest.mjs validate --tag "$TAG")
+          commit="$(node -e "import('./packages/core/dist/version.js').then((m) => console.log(m.gitIdentity('.').commit))")"
+          if [ "$DRY_RUN" = "true" ]; then args+=(--allow-pending); fi
+          node scripts/npm-acceptance.mjs "${args[@]}" --expect-commit "$commit" --report "$RUNNER_TEMP/acceptance.json"
+
       - name: Write the PR body
         env:
           TAG: ${{ steps.release.outputs.tag }}
@@ -155,7 +202,7 @@ jobs:
             echo
             echo "**Release PR.** Squash-merge it keeping this title (\`gh pr merge --squash\`); \`publish.yml\` then tags \`$TAG\` on the squash commit, packs, smoke-tests and creates the GitHub Release."
             echo
-            echo "**Gates already run** on this exact commit by the [release workflow]($RUN_URL): install, build, typecheck, test, lint:strings, pack and the tarball smoke test."
+            echo "**Gates already run** on this exact commit by the [release workflow]($RUN_URL): install, build, typecheck, test, lint:strings, pack of both tarballs, the tarball smoke test and the clean npm-only acceptance (each package alone and both, global and project-local)."
             if [ "$HAS_RELEASE_TOKEN" != "true" ]; then
               echo
               echo "**CI has not started on this PR**: it was opened with \`GITHUB_TOKEN\`, which does not trigger \`pull_request\` workflows, and \`main\` requires the \`validate\` and \`e2e\` checks. To start them, close and reopen this PR, or push an empty commit to \`$BRANCH\` (\`git commit --allow-empty -m 'ci: run checks'\`). A \`RELEASE_TOKEN\` secret removes this step (docs/RELEASING.md)."
@@ -174,6 +221,12 @@ jobs:
             else
               echo "## farsight-cli $TAG — release PR $BRANCH → $BASE"
             fi
+            echo
+            echo '| package | version | tarball |'
+            echo '|---|---|---|'
+            node scripts/release-manifest.mjs validate --tag "$TAG" | while IFS=$'\t' read -r name version file _; do echo "| $name | $version | $file |"; done
+            echo
+            node -e "const r=require(process.argv[1]);const s=r.summary;console.log('Acceptance: '+s.passed+' passed, '+s.failed+' failed, '+s.pending+' pending'+(s.pending?' (blocked by '+s.blockedBy.join(', ')+')':'')+'.')" "$RUNNER_TEMP/acceptance.json" || true
             echo
             cat "$RUNNER_TEMP/release-notes.md"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -1,5 +1,6 @@
 // Public dispatch composes the reviewed production drivers without changing them. Registered code is distinct from
 // an available capability: only exact owner-promoted tools and held databases enable a planner fact.
+import {REVIEW_ADAPTERS} from '../review/dispatch.js';
 import {createAdapterRegistry,type AdapterRegistry,type AdapterDefinition} from '../execution/registry.js';
 import {createCheckDriverRegistry} from '../execution/check-drivers.js';
 import {createCapabilityTable,type CapabilityFact} from '../planner/index.js';
@@ -18,7 +19,7 @@ const registries=new Map<string,AdapterRegistry>();
 export function publicRegistry(trustDir?:string):AdapterRegistry{
  const key=trustDir??'';const framework=trustDir?frameworkAdapter(trustDir):null;const paths=trustDir?pathAdapter(trustDir):null;
  let registry=registries.get(key);
- if(!registry){const base=foundationRegistry();registry=createAdapterRegistry([...base.ids.map(id=>base.get(id) as AdapterDefinition),...[...externalDrivers().values()].map(e=>e.definition),...(framework?[framework.definition]:[]),...(paths?[paths.definition]:[])]);registries.set(key,registry);}return registry;
+ if(!registry){const base=foundationRegistry();registry=createAdapterRegistry([...base.ids.map(id=>base.get(id) as AdapterDefinition),...REVIEW_ADAPTERS,...[...externalDrivers().values()].map(e=>e.definition),...(framework?[framework.definition]:[]),...(paths?[paths.definition]:[])]);registries.set(key,registry);}return registry;
 }
 /** The same availability terms are used for fresh planning and selected reruns. */
 export async function publicAvailability(trustDir:string,lock:RuleLockEnvelope,packs:readonly ValidatedPack[],ids:readonly string[],scratch:string,wrapRunner?:(runner:import('../execution/isolation.js').DockerRunner)=>import('../execution/isolation.js').DockerRunner):Promise<Set<string>>{
@@ -36,7 +37,7 @@ export function publicProfile(registry:AdapterRegistry,available:ReadonlySet<str
  const planner={id:'static-scanners',registry,capabilities:createCapabilityTable(registry,facts),permits:[...new Set(facts.map(f=>f.capability))],operations:foundationProfile(registry).planner.operations};
  // An unavailable optional built-in is not a prerequisite of legacy preview/scanner plans. The executing
  // registry may contain extra registered code, while the admitted profile pins this adapter only when enabled.
- const recordedRegistry=createAdapterRegistry(registry.ids.filter(id=>![FRAMEWORK_CONTROLS_ADAPTER_ID,PATHS_ADAPTER_ID].includes(id)||available.has(id)).map(id=>registry.get(id) as AdapterDefinition));
+ const recordedRegistry=createAdapterRegistry(registry.ids.filter(id=>![FRAMEWORK_CONTROLS_ADAPTER_ID,PATHS_ADAPTER_ID,...REVIEW_ADAPTERS.map(a=>a.id)].includes(id)||available.has(id)).map(id=>registry.get(id) as AdapterDefinition));
  const record=executionProfileRecord({...planner,registry:recordedRegistry},structuredClone(RESOURCES),structuredClone(PARSE));return{planner,registry,record,digest:profileDigest(record)};
 }
 export function publicDrivers(registry:AdapterRegistry,records:readonly DatabaseRecord[]=[],secretsSnapshot?:import('../adapters/gitleaks/job.js').SecretsSnapshot,trustDir?:string){

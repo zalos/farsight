@@ -1,6 +1,11 @@
 # Publishes a release once its release PR (opened by release.yml) is merged into
-# main: tags vX.Y.Z on the release commit, packs, smoke-tests, creates the GitHub
-# Release with the tarball (and publishes to npm once an NPM_TOKEN secret exists).
+# main: tags vX.Y.Z on the release commit, packs both independently versioned
+# tarballs (farsight-cli at the tag's version, farsight-sentinel at the version the
+# committed release manifest names), accepts them in clean npm-only consumers,
+# creates the GitHub Release with both tarballs and release-manifest.json (and
+# publishes farsight-cli to npm once an NPM_TOKEN secret exists; farsight-sentinel
+# stays private and is not published to a registry), then verifies the published
+# URLs with verify-release.yml, which can also be run again on its own.
 # Every other push to main stops after the `detect` job, in seconds.
 # docs/RELEASING.md describes the whole flow.
 name: publish
@@ -69,8 +74,15 @@ jobs:
           { echo "release=true"; echo "version=$v"; echo "tag=$tag"; echo "sha=$sha"; echo "prerelease=$pre"; } >> "$GITHUB_OUTPUT"
           echo "release $tag: the release commit is $sha"
 
-  publish:
+  native-helper:
     needs: detect
+    if: ${{ needs.detect.outputs.release == 'true' }}
+    uses: ./.github/workflows/sentinel-cli-native-helper.yml
+    with:
+      source_sha: ${{ needs.detect.outputs.sha }}
+
+  publish:
+    needs: [detect, native-helper]
     if: ${{ needs.detect.outputs.release == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -120,8 +132,21 @@ jobs:
           if [ ! -s "$notes" ]; then echo "::error::$notes is missing from the release commit"; exit 1; fi
           cp "$notes" "$RUNNER_TEMP/release-notes.md"
 
-      - name: Pack
-        run: node scripts/pack.mjs
+      # The committed manifest must agree with both packages' own manifests; each tarball is packed at its own version.
+      - name: Fetch the helper built for this workflow revision
+        uses: actions/download-artifact@v8
+        with:
+          name: sentinel-cli-native-darwin-arm64
+          path: build/sentinel-cli-native/darwin-arm64
+
+      - name: Pack both tarballs from the release manifest
+        run: |
+          node scripts/release-manifest.mjs validate --tag "$TAG" > "$RUNNER_TEMP/packages.tsv"
+          cat "$RUNNER_TEMP/packages.tsv"
+          node scripts/pack.mjs
+          while IFS=$'\t' read -r name version _ _; do
+            if [ "$name" = farsight-sentinel ]; then node scripts/pack-sentinel.mjs --expect-version "$version" --require-native-helper; fi
+          done < "$RUNNER_TEMP/packages.tsv"
 
       - name: Smoke-test the tarball
         run: |
@@ -137,6 +162,26 @@ jobs:
           "$prefix/bin/farsight" ingest "$GITHUB_WORKSPACE/examples/invoice-app" --repo invoice-app --out "$RUNNER_TEMP/smoke/g.json"
           test -s "$RUNNER_TEMP/smoke/g.json"
 
+      # Mandatory, before any tag, Release, upload or npm publish: the merged commit's own tarballs must pass every
+      # acceptance gate. A pending gate fails it like a failed one; nothing here can waive that.
+      - name: Accept both tarballs in clean npm-only consumers
+        run: |
+          args=()
+          while IFS=$'\t' read -r name version file _; do
+            case "$name" in
+              farsight-cli) args+=(--farsight "build/$file" --expect-farsight "$version") ;;
+              farsight-sentinel) args+=(--sentinel "build/sentinel/$file" --expect-sentinel "$version") ;;
+            esac
+          done < "$RUNNER_TEMP/packages.tsv"
+          commit="$(node -e "import('./packages/core/dist/version.js').then((m) => console.log(m.gitIdentity('.').commit))")"
+          node scripts/npm-acceptance.mjs "${args[@]}" --expect-commit "$commit" --report "$RUNNER_TEMP/acceptance.json"
+          echo "COMMIT=$commit" >> "$GITHUB_ENV"
+
+      - name: Write the release manifest with each tarball's URL, size and digest
+        env:
+          URL: ${{ github.server_url }}/${{ github.repository }}
+        run: node scripts/release-manifest.mjs assets --tag "$TAG" --repo-url "$URL" --commit "$COMMIT" --out "$RUNNER_TEMP/release-manifest.json"
+
       - name: Tag the release commit
         run: |
           git config user.name 'github-actions[bot]'
@@ -151,7 +196,14 @@ jobs:
         run: |
           flags=()
           if [ "$PRE" = "true" ]; then flags+=(--prerelease); fi
-          gh release create "$TAG" "build/farsight-cli-$V.tgz" --verify-tag \
+          assets=("$RUNNER_TEMP/release-manifest.json")
+          while IFS=$'\t' read -r name _ file _; do
+            case "$name" in
+              farsight-cli) assets+=("build/$file") ;;
+              farsight-sentinel) assets+=("build/sentinel/$file") ;;
+            esac
+          done < "$RUNNER_TEMP/packages.tsv"
+          gh release create "$TAG" "${assets[@]}" --verify-tag \
             --title "farsight-cli $TAG" --notes-file "$RUNNER_TEMP/release-notes.md" "${flags[@]}"
 
       # optional: secrets cannot be tested in `if:`, so the step reads its own env
@@ -178,7 +230,23 @@ jobs:
             echo "Release: $URL/releases/tag/$TAG"
             echo
             echo '```sh'
-            echo "npm install -g $URL/releases/download/$TAG/farsight-cli-$V.tgz"
-            echo 'farsight --version'
+            # each line from that package's own entry in the uploaded manifest, never re-derived
+            if [ -s "$RUNNER_TEMP/release-manifest.json" ]; then
+              node scripts/release-manifest.mjs lines --manifest "$RUNNER_TEMP/release-manifest.json" | while IFS=$'\t' read -r name version _ url; do
+                echo "npm install -g $url   # $name $version"
+              done
+            fi
             echo '```'
+            if [ -s "$RUNNER_TEMP/acceptance.json" ]; then
+              node -e "const s=require(process.argv[1]).summary;console.log('Acceptance: '+s.passed+' passed, '+s.failed+' failed, '+s.pending+' pending'+(s.pending?' (blocked by '+s.blockedBy.join(', ')+')':'')+'.')" "$RUNNER_TEMP/acceptance.json"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Installs the published GitHub Release URLs in clean npm-only consumers. verify-release.yml can be run again for
+  # any tag at any time; it does not need this workflow (a re-run of publish skips a tag that exists).
+  verify:
+    needs: [detect, publish]
+    if: ${{ needs.detect.outputs.release == 'true' }}
+    uses: ./.github/workflows/verify-release.yml
+    with:
+      tag: ${{ needs.detect.outputs.tag }}

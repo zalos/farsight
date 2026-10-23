@@ -62,6 +62,11 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   release gate), `paths.ts` (canonical, local, owner-only folders), `owner.ts` (the lifetime owner lock and epoch),
   `ledger.ts` + `migrations.ts` + `store-types.ts` (the fenced WAL ledger), `objects.ts` (content-addressed objects),
   `objects-ledger.ts` (the ledger seam and verifier) and `gc.ts` (read-only reachability and the dry-run prune plan).
+  The fixed native `cli-native-{profile,helper,auth,call,proxy,wire}.ts` modules qualify exact executable/helper
+  bytes, enforce one-use admitted credential/launch authority, confine one native call and retain versioned wire.
+  `native/claude-keychain-helper.m` is compiled only at build time by `scripts/build-cli-native-helper.mjs`;
+  missing/wrong-platform artifacts refuse. Quota uses the same `budget.ts`, with null monetary fields and
+  cumulative same-provider/run caps. Synthetic native and genuine legacy migration tests read no real credentials.
   `test/store-integration.test.ts` drives the facade end to end across processes. The OSV advisory adapter (PR 12, ADR 29,
   `src/adapters/osv/`, composed by the explicit scanner CLI; `src/adapters/sealed-input.ts` is the shared sealed-copy reader): `adapter.ts` (OSV-Scanner 2.7.0 pins, offline arguments, support), `worker-source.ts`
   (the original shell shim), `job.ts` (dependency-file kinds, snapshot inputs, the line job), `normalize.ts` (components with
@@ -166,6 +171,14 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `support.ts` (`NEST_PACK`, the support manifest) and `errors.ts` (reason codes, `strings-sentinel-nest.ts`);
   `test/frameworks-nest.test.ts` runs capture → parse → analyze over `test/fixtures/nest/` and the E2 corpus.
 
+
+  `src/review/` is bounded model review (PR 22, ADR 39), exported as `./review`: `evidence.ts` (deterministic
+  `partitionInventory` and the scoped `EvidenceBroker`), `validator.ts` (the closed reply grammar and citation checks),
+  `session.ts` (the bounded, checkpointed loop and the review record), `guided.ts` and `general.ts` (the two lanes),
+  `caller.ts` (sessions over the PR 21 broker), `prompts.ts` (the pinned prompt artifacts), `evaluation.ts` (the E5
+  harness and gate, E8 estimates) and `errors.ts`; its envelopes are `contracts/review.ts` (partitions, checkpoint,
+  record) and its model configuration `contracts/policy.ts` `ModelSettings`; its words are `strings-sentinel-review.ts`; `test/review.test.ts`
+  and `test/fixtures/model-review/` (the original 30-case clean/canary corpus).
   `src/review/providers/` is the opt-in model broker (PR 21, ADR 35), exported as `./review/providers`: `profile.ts`
   (model profiles and the owner-bound provider binding), `kinds.ts` (Ollama and OpenAI-compatible wire formats and
   `probeCapability`), `transport.ts` (one bounded node:http/https exchange, no redirects, verified TLS),
@@ -356,3 +369,27 @@ runs genuine Gitleaks current/baseline/selected/canceled cases in the explicit z
 `scripts/test-sentinel-decisions-consumer.mjs` installs the tarball with npm alone and exercises public decisions,
 source removal, owner-service contention and all-format reports, adding current/baseline/selected privacy under
 native opt-in. Its recorded command outcome does not qualify service-owned writes or installed crash windows.
+
+Sentinel's durable preparation extension adds `contracts/preparation.ts`, `service/preparation-{clock,inputs,
+discovery,journal,controller,projection,client,key-lock}.ts` and private `store/admission-fence.ts`. The held service owns the
+journal/controller; the client only connects to that owner and uses real CLI receipt confirmation. Input/profile
+proofs remain opaque in process, captured continuation reuses canonical bootstrap/planning, and a private scoped
+veto checks actual ledger acceptance boundaries without changing public store callbacks. The SDK adds separately
+negotiated preparation tools. `test/preparation-*.test.ts` and `scripts/test-sentinel-preparation-consumer.mjs`
+exercise genuine admission, no hidden preview writes, original deadlines, actual owner crash and installed source-gone
+continuation before separate check execution. Native provenance/image readiness runs in the existing pinned scanner
+gate, apart from the zero-skip pure service gate. These modules add no arbitrary runtime package exports.
+
+The optional Sentinel owner panel (ADR48) uses core `sentinel-companion.ts` for read-only private descriptor
+validation, server `/api/sentinel/companion` and `/api/version.session.instance` for exact host discovery, and
+viewer `surfaces/sentinel.js` for the paired iframe and veto-only live/history context. Sentinel `owner-ui/`
+contains the foreground HTTP companion, pure session/host validation, qualified descriptor mutex, private
+service authority/receipts/operations, and static catalog-backed panel. `contracts/ownerui.ts` registers its
+separate closed receipt/capability documents. `test/owner-ui-*` covers real owner/socket/browser boundaries;
+`scripts/test-sentinel-owner-ui-consumer.mjs` uses only npm-installed public executables at runtime.
+
+The owner panel's `owner-ui/process.ts` privately resolves bounded retained-run handles and authenticated
+plan/model identity metadata; `process-layout.ts` folds canonical work dependencies into bounded graph levels.
+`InspectionWork.resources` optionally carries the actual recorded work grant. No raw source or generic artifact
+read endpoint is introduced. `owner-ui-process.test.ts` checks genuine source-gone owner projections and DAG
+bounds; the source and installed browser journeys exercise graph expansion and manual report selection.

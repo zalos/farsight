@@ -13,6 +13,7 @@
 // and inventory units run as the coordinator's own operations (bootstrap.ts); an analysis revision's check units
 // run as workers, and what each covered is recorded as canonical coverage records (coverage.ts) that PR 06's
 // evaluateRequiredCoverage alone turns into the run's outcome.
+import {prepareAdmittedReview,runAdmittedReview,type ReviewRuntime} from '../review/dispatch.js';
 import { BUILTIN_WORKERS, closureRefusalOf } from './builtin-workers.js';
 import { deepFreeze } from '../policy/immutable.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -86,6 +87,7 @@ export interface CoordinatorOptions {
   /** The promoted packs the plan's lock pins, with their files' bytes, for drivers (each verified when used). */
   packs?: ReadonlyArray<{ pack: ValidatedPack; files: ReadonlyMap<string, Uint8Array> }>;
   /** Package-internal test seam for the container runtime (see ContainerBackend.connect). */
+  review?:ReviewRuntime;
   backendOptions?: { wrapRunner?: (runner: DockerRunner) => DockerRunner };
 }
 
@@ -130,6 +132,7 @@ const CPU_SLACK_MS = 100;
 
 export class Coordinator {
   readonly #store: SentinelStore;
+  readonly #review:ReviewRuntime|undefined;
   readonly #plan: ValidatedPlan;
   readonly #service: ExecutionService;
   readonly #intents: IntentFiles;
@@ -168,7 +171,7 @@ export class Coordinator {
   readonly #scopes: ScopeIndex;
 
   private constructor(o: CoordinatorOptions, plan: ValidatedPlan, service: ExecutionService, intents: IntentFiles, workers: WorkerFiles, recovery: RecoveryReport) {
-    this.#store = o.store; this.#plan = plan; this.#service = service; this.#intents = intents; this.#workers = workers;
+    this.#store = o.store;this.#review=o.review; this.#plan = plan; this.#service = service; this.#intents = intents; this.#workers = workers;
     this.#scratchRoot = o.scratchRoot;
     this.#databases = o.databases ? o.databases.map(d => ({ ...d })) : [];
     this.#drivers = o.drivers;
@@ -723,20 +726,21 @@ export class Coordinator {
     const adapter = executable.adapter!;
     if (adapter.kind !== 'operation') throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'not an operation' });
     const profile = this.#plan.admitted.profile;
+    const review=executable.unit.review?await prepareAdmittedReview(this.#store,this.#plan,ref,this.#review):undefined;
     const record = {
       format: 'sentinel-operation-invocation/draft-1', store: this.#store.storeId, attemptId: id, work: ref, coordinatorEpoch: this.#store.epoch,
       adapter: { id: adapter.id, version: adapter.version, digest: adapter.digest }, operation: adapter.operation,
       plan: { runId: this.#plan.run.id, revision: this.#plan.admitted.plan.revision, digest: this.#plan.admitted.plan.digest },
       influenceManifest: work.influenceManifest, snapshotId: this.#plan.run.snapshotId, sourceId: executable.unit.sourceId,
-      ...(adapter.operation === 'parse' ? { parse: profile.parse } : {}),
+      ...(adapter.operation === 'parse' ? { parse: profile.parse } : {}),...(review?{review:review.review}:{}),
     };
     const invocation = this.#store.objects.identifyCanonicalJson(record).id as ArtifactId;
-    const records = await this.#stageRecords(`invocation.${id}`, [{ value: record, schema: 'sentinel-operation-invocation/draft-1' }]);
+    const records = await this.#stageRecords(`invocation.${id}`, [{ value: record, schema: 'sentinel-operation-invocation/draft-1',privacy:'source-derived' },...(review?[{value:review.admission,schema:'sentinel-admission/draft-1',privacy:'source-derived' as const}]:[])]);
     try {
       this.#store.ledger.startAttempt({
         schema: 'sentinel-attempt/draft-1', id, work: ref, ordinal, coordinatorEpoch: this.#store.epoch, operationId: id,
         worker: { kind: 'coordinator-operation', adapterId: adapter.id, adapterDigest: adapter.digest },
-        startedAt: now(), usage: { certainty: 'not-applicable' }, state: 'running', invocation,
+        startedAt: now(), usage: { certainty: review?'unknown':'not-applicable' }, state: 'running', invocation,
       }, { records });
     } catch (error) { this.#abortStage(records.stageId); throw error; }
     this.#hooks?.at?.('after-attempt-start', { work: ref, attemptId: id });
@@ -747,6 +751,7 @@ export class Coordinator {
     // is a separate contract: the store's object cap and the parser's own pinned limits, enforced where they apply.
     const grant = work.resources;
     const deadlineMs = Math.max(1, Math.min(grant.deadlineMs, Math.floor(this.#runDeadline - Date.now())));
+    const deadlineAt=Date.now()+deadlineMs;
     const own = AbortSignal.timeout(deadlineMs);
     const memory = new AbortController();
     const signal = AbortSignal.any([this.#cancel.signal, this.#deadline.signal, own, memory.signal]);
@@ -759,7 +764,7 @@ export class Coordinator {
     let prepared: Awaited<ReturnType<typeof runOperation>> | undefined;
     let failure: unknown;
     try {
-      prepared = await runOperation(adapter.operation, { store: this.#store, run: this.#plan.run, plan: this.#plan.admitted.plan, unit: executable.unit, profile,
+      prepared = review?await runAdmittedReview(this.#store,this.#plan,ref,id,review,signal,deadlineAt):await runOperation(adapter.operation as import('./registry.js').BootstrapOperation, { store: this.#store, run: this.#plan.run, plan: this.#plan.admitted.plan, unit: executable.unit, profile,
         attemptId: id, scratchRoot: this.#scratchRoot, signal });
     } catch (error) { failure = error; } finally { clearInterval(sampler); sample(); }
     const wallMs = performance.now() - t0;

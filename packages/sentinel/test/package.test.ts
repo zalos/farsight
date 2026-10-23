@@ -58,6 +58,22 @@ test('no Farsight package depends on or imports Sentinel', () => {
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // Exact-owned native memory witness: bounded fixed proc/cgroup reads and one filesystem notification watcher.
   'execution/cgroup-memory.js': ['node:fs'],
+
+  'service/preparation-key-lock.js': ['node:path'],
+  'service/preparation-client.js': ['node:crypto', 'node:path'],
+  'service/preparation-projection.js': ['@farsight/core/dist/strings.js'],
+  'service/preparation-controller.js': ['node:crypto', 'node:path', 'node:timers/promises'],
+  'service/preparation-journal.js': ['node:crypto', 'node:fs', 'node:path'],
+  'service/preparation-clock.js': ['node:perf_hooks'],
+  // Explicit loopback browser companion; only host.ts and server.ts open their fixed HTTP boundaries.
+  'owner-ui/authority.js': ['@farsight/core/dist/sentinel-companion.js', 'node:async_hooks', 'node:crypto'],
+  'owner-ui/descriptor.js': ['@farsight/core/dist/sentinel-companion.js', 'node:fs', 'node:path'],
+  'owner-ui/host.js': ['@farsight/core/dist/sentinel-companion.js', 'node:http'],
+  'owner-ui/process.js': ['node:crypto'],
+  'owner-ui/operations.js': ['node:crypto', 'node:path'],
+  'owner-ui/receipts.js': ['node:crypto'],
+  'owner-ui/server.js': ['@farsight/core/dist/sentinel-companion.js', '@farsight/core/dist/strings.js', 'node:crypto', 'node:http'],
+  'owner-ui/session.js': ['node:crypto'],
   'service/controls.js': ['@farsight/core/dist/strings.js'],
   'service/readonly.js': ['@farsight/core/dist/strings.js', 'node:crypto', 'node:perf_hooks'],
   'service/mcp.js': ['@farsight/core/dist/strings-sentinel-service.js', '@farsight/core/dist/strings.js', '@modelcontextprotocol/sdk/server/index.js', '@modelcontextprotocol/sdk/server/stdio.js', '@modelcontextprotocol/sdk/types.js'],
@@ -123,6 +139,14 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'frameworks/nest/errors.js': ['@farsight/core/dist/strings-sentinel-nest.js'],
   'frameworks/nest/syntax.js': ['dynamic:oxc-parser'],
 
+  // Model review (PR 22): partitions, the evidence broker, sessions and checkpoints; no network of its own.
+  'review/evaluation.js': ['node:crypto'],
+  'review/errors.js': ['@farsight/core/dist/strings-sentinel-review.js'],
+  'review/evidence.js': ['node:crypto'],
+  'review/instructions.js': ['node:crypto'],
+  'review/plan.js':['node:crypto'],
+  'service/review-adapter.js':['node:path'],
+  'review/session.js': ['node:fs', 'node:path'],
   // Model providers (PR 21): the only network client in the package, and the keychain read through core's reader.
   'review/providers/broker.js': ['node:crypto'],
   'review/providers/budget.js': ['node:crypto', 'node:path'],
@@ -134,6 +158,11 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'frameworks/next/analyze.js': ['node:crypto'],
   'frameworks/next/config.js': ['dynamic:oxc-parser'],
   'frameworks/next/errors.js': ['@farsight/core/dist/strings-sentinel-next.js'],
+  // Fixed native CLI boundary: exact helper and executable, anonymous token FD, owned fixed TLS egress only.
+  'review/providers/cli-native-call.js': ['node:child_process', 'node:fs/promises'],
+  'review/providers/cli-native-helper.js': ['node:child_process', 'node:crypto', 'node:fs', 'node:fs/promises', 'node:path', 'node:url'],
+  'review/providers/cli-native-profile.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:path'],
+  'review/providers/cli-native-proxy.js': ['node:dns/promises', 'node:net'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
   // The Spring pack: tree-sitter's Java grammar, loaded on first analysis only; graph is pure JSON helpers.
   'frameworks/spring/pack.js': ['@farsight/graph', 'node:crypto'],
@@ -147,7 +176,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'policy/user-state.js': ['node:crypto', 'node:fs', 'node:path'],
   // Rule packs are read as data: listed and opened, never imported, evaluated or spawned.
   'rules/pack.js': ['node:fs', 'node:path'],
-  'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-decisions.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:fs', 'node:path'],
+  'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-decisions.js', '@farsight/core/dist/strings-sentinel-owner-ui.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:fs', 'node:path'],
   // The full report: reads the store's accepted evidence, an owner-supplied graph file, and writes one new file.
   // The per-store report key: random bytes kept once in the owner's trust folder.
   'service/report-key.js': ['node:crypto', 'node:path'],
@@ -191,6 +220,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'evidence/audit.js': ['node:fs', 'node:path'],
   'store/ledger-json.js': ['node:crypto'],
   // Scope-local counters and a monotonic clock; neither performs I/O or starts work on import.
+    'store/admission-fence.js': ['node:async_hooks'],
   'store/read-budget.js': ['node:async_hooks', 'node:perf_hooks', 'node:timers/promises'],
   'store/ledger.js': ['node:fs', 'node:path'],
   'store/migrations.js': ['node:crypto', 'node:fs', 'node:path'],
@@ -352,7 +382,8 @@ test('public scanner command support is conditional on explicit adopted pinned a
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import', 'reports', 'report-imports', 'dispositions', 'mcp']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import', 'reports', 'report-imports', 'dispositions', 'mcp', 'farsight-host-bridge']);
+  assert.equal(listed.find(c=>c.id==='farsight-host-bridge')?.reasonCode,'sentinel.capability.draftHostBridge');
   assert.equal(listed.find(c => c.id === 'framework-express')?.reasonCode, 'sentinel.capability.draftExpress');
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
   assert.deepEqual([listed.find(c=>c.id==='dispositions')?.state,listed.find(c=>c.id==='dispositions')?.reasonCode],['available-draft','sentinel.capability.draftDecisions']);

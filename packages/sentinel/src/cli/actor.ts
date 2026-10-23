@@ -2,8 +2,9 @@
 // line, running in this process, is the only owner channel. Every client of the local service, the owner's CLI
 // included, is a non-owner (`agent`) on a service channel: nothing it sends (a hello, a client kind, a body) can
 // select owner authority. A request body that names an actor, a principal or a channel is refused. Owner authority
-// reaches the service only as an owner receipt, minted in the owner CLI's own process after its confirm step and
-// verified by the service against the receipt book; a connection can carry a receipt's id but never mint one.
+// reaches ordinary service operations as a genuine CLI receipt after its confirm step. The separate closed
+// owner-UI controller can issue its own honest receipt only under private descriptor/session/context proof;
+// it never changes a socket grant or mints CLI authority. A connection body cannot select either issuer.
 // Code running as the same OS account is outside this boundary.
 import type { DecisionChannel, Principal } from '../contracts/index.js';
 

@@ -42,7 +42,7 @@ async function fixture(t:any,mode:'deny'|'confirm'|'allow'='deny'){
  const service=new OwnerService(store,ws),ownerNonce=newOwnerNonce(),address=runtimeAddress({storePath:store.storePath,ownerNonce,sources:[path]});
  const requests:string[]=[],clients:Client[]=[];let legacy=false,foreign=false,afterControl:((op:string,value:any)=>Promise<unknown>)|undefined;
  const socket=await listenOwnerSocket(address,{storeId:store.storeId,ownerNonce},async(op,body,by,ctx)=>{
-  if(legacy&&op==='service.control-capabilities')throw new ServiceError('sentinel.service.unknownOperation');
+  if(legacy&&['service.control-capabilities','service.preparation-capabilities'].includes(op))throw new ServiceError('sentinel.service.unknownOperation');
   requests.push(op);const value=await service.handle(op,body,by,ctx);if(foreign&&op==='service.control-capabilities')return {...value as any,storeId:'store-foreign'};if(actions.includes(op)){const changed=await afterControl?.(op,value);if(changed!==undefined)return changed;}return value;
  });
  // Same production private descriptor layout, naming this actually held store and genuine listening socket.
@@ -78,7 +78,7 @@ test('control schema vocabulary pins supported outcomes and rejects altered exit
 
 test('SDK negotiates additive controls while original read capabilities and denied default permissions remain intact',{timeout:60000},async t=>{
  const f=await fixture(t),c=await f.connect(),listed=(await c.listTools()).tools;
- assert.equal(listed.length,11);for(const name of ['start','pause','cancel']){const tool=listed.find(x=>x.name==='sentinel_run_'+name)!;assert.equal(tool.annotations?.readOnlyHint,false);assert.equal(tool.annotations?.idempotentHint,false);}
+ assert.equal(listed.length,16);for(const name of ['start','pause','cancel']){const tool=listed.find(x=>x.name==='sentinel_run_'+name)!;assert.equal(tool.annotations?.readOnlyHint,false);assert.equal(tool.annotations?.idempotentHint,false);}
  assert.equal((await f.call(c,'sentinel_service_info',{})).controlsSupported,false);
  const cap:any=await f.service.handle('service.control-capabilities',{}, {principal:'agent',channel:'mcp'});assert.ok(validateEnvelope('controlcapabilities',cap).ok);
  const before=f.store.ledger.currentSequence();
@@ -129,7 +129,7 @@ test('lost accepted start response reconnects to status without automatic mutati
 
 test('older control negotiation leaves all eight reads; reconnect downgrade refuses before dispatch',{timeout:60000},async t=>{
  const f=await fixture(t,'allow');f.setLegacy(true);let c=await f.connect();assert.equal((await c.listTools()).tools.length,8);assert.equal((await f.call(c,'sentinel_run_start',{planId:f.runId})).error.code,'sentinel.service.operationUnavailable');
- await c.close();f.setLegacy(false);c=await f.connect();assert.equal((await c.listTools()).tools.length,11);
+ await c.close();f.setLegacy(false);c=await f.connect();assert.equal((await c.listTools()).tools.length,16);
  f.setLegacy(true);const v=await f.call(c,'sentinel_run_start',{planId:f.runId});assert.equal(v.error.code,'sentinel.service.operationUnavailable');assert.equal(f.requests.filter(op=>op==='run.start').length,0);
  f.setLegacy(false);f.setForeign(true);assert.equal((await f.call(c,'sentinel_run_start',{planId:f.runId})).error.code,'sentinel.service.operationUnavailable');assert.equal(f.requests.filter(op=>op==='run.start').length,0,'foreign negotiation cannot dispatch to the held run');
 });

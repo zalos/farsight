@@ -1,0 +1,20 @@
+{
+  "schema": "sentinel-review-instructions/draft-1",
+  "assembly": "sentinel.review.instructions/1",
+  "prompt": {
+    "id": "sentinel.review.guided",
+    "revision": 1,
+    "content": "sha256:32a6e744bcd9269d4fe8437ec3ed8c4e2dcabc8b248167f3ea3ec677fc070fcb",
+    "digest": "sha256:32a6e744bcd9269d4fe8437ec3ed8c4e2dcabc8b248167f3ea3ec677fc070fcb",
+    "bytes": 1448
+  },
+  "skills": [],
+  "assembled": {
+    "content": "sha256:32a6e744bcd9269d4fe8437ec3ed8c4e2dcabc8b248167f3ea3ec677fc070fcb",
+    "digest": "sha256:32a6e744bcd9269d4fe8437ec3ed8c4e2dcabc8b248167f3ea3ec677fc070fcb",
+    "bytes": 1448
+  },
+  "vendorInstructions": "unobserved",
+  "vendorSkillDiscovery": "not-performed",
+  "digest": "sha256:df7be3f5bc259c48e74edcef6f6c89429c184542cfb9d9b965f83a350a2b2a2e"
+}

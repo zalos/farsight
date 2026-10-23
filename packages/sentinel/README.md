@@ -10,6 +10,23 @@ Farsight's application packages neither depend on nor import this optional packa
 Plan: [`docs/proposals/farsight-sentinel/implementation-plan.md`](../../docs/proposals/farsight-sentinel/implementation-plan.md),
 PR 02 in [`implementation-prs.md`](../../docs/proposals/farsight-sentinel/implementation-prs.md).
 
+## Install
+
+With Node 24 or newer and npm only, from the GitHub Release that carries it. Its version is its own (the release
+notes name it); it is never farsight-cli's, and neither package needs the other:
+
+```sh
+npm install -g https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsight-sentinel-A.B.C.tgz
+farsight-sentinel --version
+farsight-sentinel capabilities
+```
+
+`dist/build-stamp.json` in the installed package names its version, build time and commit. Uninstalling it removes
+the package only; a store it wrote stays where it is. Initialize from the application folder with `farsight-sentinel init`,
+adopt with `farsight-sentinel settings adopt --confirm`, promote `builtin:foundation-preview`, and use `plan`, `run`
+and `report`. The [npm-only walkthrough](https://github.com/zalos/farsight/blob/main/docs/GETTING-STARTED.md#farsight-sentinel-optional-installed-separately)
+shows the complete command sequence. A static preview ends with required coverage incomplete, not a clean verdict.
+
 ## Envelopes
 
 | Kind | Version | What it records |
@@ -106,6 +123,15 @@ Recorded pnpm patches for Next, React or React DOM (patch maps, importer hashes,
 or project/workspace-root package declarations) leave applicability unknown: the original tarball integrity does
 not identify patched installed bytes. Ordinary peer dependency suffixes and unrelated package patches remain
 supported. This source-only check reads captured installation evidence; it does not attest a running installation.
+
+## Model review (draft, opt-in)
+
+`farsight-sentinel/review` runs rule-guided and general review over pinned snapshot evidence. General review
+partitions the captured inventory without regard to findings. A model reads code only through a scoped evidence
+broker and answers only in a fixed grammar; every claim cites exact captured bytes. Sessions are bounded and
+checkpointed after each settled call. What a session read is recorded separately from deterministic coverage, and
+its claims are observations for a person to decide on (ADR 39). The E5 harness runs over an original synthetic
+corpus. Its gate stays not-ready until the owner configures two models, reviews the labels and sets thresholds.
 
 ## The local store (draft)
 
@@ -827,3 +853,187 @@ qualified enforcement evidence. Changing evidence or expiry reopens the issue; h
 Clean private reports may include rationale, while shareable reports omit it. A relevant accepted secret match
 withholds source-derived owner detail in both profiles. These local commands return busy while a service owns
 the store; they never stop or impersonate it. Service-owned/browser decision confirmation remains unavailable.
+
+### Durable local preparation (draft)
+
+Preparation separates source capture and parser/inventory bootstrap from executing checks. Start the owner service
+with the existing `serve` command after adopting workspace settings and promoting the requested shipped rule pack.
+The service holds the store throughout; these commands connect to it and never start a competing local owner:
+
+```sh
+farsight-sentinel prepare preview --workspace . --json
+farsight-sentinel prepare --workspace . --confirm --json
+farsight-sentinel prepare status --workspace . --json
+# Once status says prepared, use its actual runId for a separate permission-checked start:
+farsight-sentinel run <runId> --workspace . --detach --confirm --json
+```
+
+The pure preview reports configured rule counts, fixed stages and effects. It does not capture source or claim
+that scanner assets are ready. `prepare --confirm` confirms that exact configured workspace, rule lock, policy,
+registry and limits through the real owner CLI's existing receipt book. The CLI obtains a fresh preview for that
+confirmation call; an earlier displayed preview is informative. Direct service acceptance instead requires its
+still-current preview ID and refuses changed configuration. A private discovery key is saved before
+acceptance is sent; after a lost response, use `prepare status` rather than automatically sending a new preparation.
+The owner CLI serializes confirmed key replacement with a private qualified SQLite mutex. Contention refuses immediately; process death releases the lock without deleting its file. Pending, captured, expired captured, missing or ambiguous saved requests are never overwritten. A terminal prepared lookup may be replaced by a newly confirmed unlinked request, which captures current source again. Edited input names a new run; unchanged inventory returns the existing run with its original snapshot and deadline, retaining the new capture as unused evidence. Explicit linked requests instead reuse the selected completed/canceled parent snapshot. An explicit `--request-key` is supported for a caller that persists its own opaque key before requesting work.
+Keys must be random and persisted by the caller; they identify retained requests and grant no permission. A new preview replaces the earlier preview for the same fixed service channel, so concurrent clients can invalidate each other’s preview without admitting work. Status returns catalog reasons and safe identities,
+not paths, source text, profile objects, raw hashes or receipt bindings. The prepared revision is historical;
+`run.inspect` through the service reports the run's actual current revision and work.
+
+After admission, readiness resolves once before capture. A missing scanner image, tool or database stays an
+explicit retained gap, including whether the requested adapter was unavailable; it is not silently disabled or
+presented as supported. Required capture, parse and inventory prerequisites and unsafe promotion provenance still
+refuse. Readiness never downloads assets, and a changed configuration invalidates the request. The initial full
+registry remains bound while the frozen planner profile excludes unavailable adapters using existing gap semantics.
+Status readiness is the retained preparation answer, not a current machine inventory.
+
+`acceptedAt`, `deadlineAt` and `runDeadlineAt` show the original absolute ceiling. The same 600-second preparation
+budget covers discovery, capture, bootstrap, inspection delay and the later check run. Starting a prepared run does
+not restart the clock; an existing bootstrap run's earlier deadline can tighten it. An unchanged inventory with an already recorded analysis is disclosed as already prepared with its original deadline, even after that deadline; disclosure does not renew or start the run. Cooperative checkpoints check immediately
+before admission commits, not that disk COMMIT or one physical read will finish before a hard wall deadline.
+
+Startup under a newly held epoch durably marks an earlier nonterminal preparation interrupted. A task whose genuine preparation has settled can be marked interrupted before an explicit new operation; an active preparation or run is never retired this way. Only exact owned journal-writer temporaries are settled at owner startup: an unrenamed update never replaces its old canonical record, and an exact temporary hardlink alias is removed without touching unknown names. This recovery visits at most 1,024 entries per journal folder (four times the 256 terminal-record cap) and fences the held owner before each deletion. A corrupt journal or failed interruption write disables preparation alone; existing run controls, inspection and report delivery remain available. Inspect and repair the preparation data, then restart the owner service to recheck it. This changes journal status only and never proves a worker stopped, authorizes cleanup or resumes work. No startup or reconnect automatically resumes preparation. `prepare resume --confirm` explicitly admits continuation
+of an associated captured snapshot after an owner restart, under fresh current permission and the original clock.
+It does not recapture source. The current CLI/MCP request timeout bounds pre-acceptance resume proof to 30 seconds; timeout or disconnection aborts that unsettled proof without accepting or spending its receipt. This transport limit may prevent continuation of larger retained inputs even with preparation time remaining. An interruption before durable captured association requires a fresh authorized
+request; uncertain files are retained. `prepare cancel --confirm` controls the exact preparation, separately from
+`cancel <runId>` for an analysis run. In this draft, canceling an inactive interrupted preparation does not revoke a retained captured checkpoint; it can still offer explicit resume. A terminal abandonment/cleanup contract remains separate work. A genuine completed/canceled parent can be selected with `prepare --parent
+<runId> --confirm` to prepare a pinned linked child with fresh authority. If preparation expires after capture but
+before any real run record exists, this slice refuses safely: retrying that retained preparation under a new clock
+requires a later reviewed contract and is not supplied by inventing a parent or recapturing silently.
+
+The separate preparation capability document negotiates `configuration.preview` and `prepare.accept/status/resume/
+cancel` without changing the original read/control handshake. Five corresponding SDK tools use ordinary adopted
+agent permissions; MCP cannot pass a receipt, actor or confirmation field. Only the real owner CLI can issue an
+owner receipt. Browser configuration, trusted GUI confirmation, stage selection and selected rerun configuration
+remain separate work. The private journal retains at most 256 terminal requests and refuses further creation with
+`sentinel.preparation.retentionRequired`; it never prunes history or sweeps uncertain leftovers automatically.
+Explicit owner retention maintenance remains a release gate for this bounded draft.
+
+A fresh independent confirmed request may replace the CLI lookup for a terminal prepared, failed or canceled request, or an interrupted request explicitly reported nonresumable. The old journal/run stays discoverable under its original key. A live, resumable, missing or ambiguous lookup still refuses replacement. This does not reset an expired captured preparation or silently recapture it.
+
+### Local owner panel
+
+After initialization, settings adoption, and rule promotion, run the existing Sentinel service and Farsight from
+the same canonical workspace. Explicitly launch the companion against that exact Farsight origin:
+
+```sh
+farsight-sentinel serve --workspace /path/to/workspace
+farsight serve /path/to/graph.json --port 4477
+farsight-sentinel owner-ui --workspace /path/to/workspace --farsight-origin http://127.0.0.1:4477
+```
+
+The companion stays in the foreground. Open **Sentinel** in Farsight (or reconnect/reload an already open viewer).
+Preview the adopted configuration, confirm preparation in the owner frame, inspect retained capture/parse and
+check inputs/outputs, then confirm start separately. Completed runs can prepare a linked child using the original
+captured snapshot; original outputs remain retained. The shareable Markdown report comes from the canonical
+report projection and its delivered-byte digest is checked before display. No terminal confirmation is required
+for these implemented actions after launching the companion.
+
+One launch serves one pairing code within two minutes; the session expires absolutely after one hour, including
+reloads. Restart/expiry requires a new explicit launch. Live paired sessions retain the detached owner until that
+original expiry; an idle socket alone does not. Browser authority is separate from CLI authority and does not
+confirm model calls, imports, disclosures, acquisition or settings. Read-only hosts and historical navigation veto
+effects. Host/context checks immediately before dispatch are sampled, not an atomic cross-process guarantee.
+
+Settings Save and unqualified model stages are visibly unavailable. Hosted API review remains paused/default
+false; there is no hidden fallback. Configured model and exact prompt/skill identities require their actual
+qualified service projection. A busy dead saved preparation with `--parent` must be replaced through a fresh
+unlinked request; captured resumable state and unknown lookup state remain protected. Preparation corruption
+requires inspecting/repairing private state and restarting the owner; other run/report inspection stays available.
+
+A definitive refused owner-panel preparation does not pin the next request forever. Saved lookup data distinguishes
+known-unsent, definitively-refused and unknown dispatch. A fresh request can replace only known-unsent/refused data
+when the genuine service also confirms no retained preparation exists. Lost responses, legacy unknown records,
+accepted or resumable work stay protected; reconnect never automatically replays them.
+
+## Foreground review and private instruction records
+
+Configured review stages use the same admitted plan, coordinator attempts and model budget ledger as ordinary
+runs. They establish model claims or unfinished inspection, never deterministic coverage or mitigation. Hosted
+HTTP APIs are off by default; that flag does not make native Claude local inference. Native Claude sends source
+to a hosted model and still requires source-disclosure, network and paid-inference admission, plus the complete
+current-source secret scan described below. No local model server is required for this native CLI path. The currently
+supported native profile is Claude Code 2.1.282 on macOS arm64 and the requested Haiku model below. Other
+versions/platforms refuse. Account authentication and actual inference need separate qualification; successfully
+hashing a local binary does not establish either, and a login refusal never means the user is logged out.
+
+Preparation includes review stages from genuinely adopted model selections even when its recipe does not
+request a review adapter; the frozen profile records code availability, while dispatch still requires the exact
+model binding, receipt and admission.
+
+First obtain data for the owner configuration, without reading a credential or starting a process:
+
+```sh
+farsight-sentinel capabilities --models --json > native-profile.json
+farsight-sentinel init --workspace ./workspace --profile secrets
+```
+
+A missing/wrong native binary or packaged helper returns a typed unavailable result. Discovery considers only
+the first installed `claude` on bounded absolute `PATH` entries; it never hunts for another version or downloads
+one. Keep `native-profile.json` outside the source checkout. Copy its `facts.modelProfiles[0].nativeProfile` into
+the provider below in `workspace/.farsight/sentinel/settings.json`, retaining the existing settings fields:
+
+```json
+{
+  "hostedApiReviewEnabled": false,
+  "providers": [{
+    "id": "native-claude", "kind": "claude-cli", "endpoint": "https://api.anthropic.com",
+    "credential": null, "disclosure": "hosted",
+    "nativeProfile": { "id": "COPY_DISCOVERED_ID", "executableDigest": "COPY_DISCOVERED_DIGEST", "helperDigest": "COPY_DISCOVERED_DIGEST", "profileDigest": "COPY_DISCOVERED_DIGEST" },
+    "budget": { "maxTokens": 400000, "maxCost": null, "currency": null },
+    "models": [{
+      "id": "haiku", "model": "claude-haiku-4-5-20251001",
+      "limits": { "maxRequestBytes": 65536, "maxResponseBytes": 16384, "timeoutMs": 60000, "maxOutputTokens": 512, "contextTokens": 200000, "maxMessages": 32, "templateTokensPerMessage": 8 },
+      "pricing": { "kind": "subscription-quota", "basis": "owner-subscription" },
+      "terms": { "retention": "RECORD_THE_TERMS_YOU_REVIEWED", "training": "unknown", "source": "RECORD_THE_SOURCE_YOU_REVIEWED", "recordedAt": "RECORD_YYYY-MM-DD" },
+      "capability": { "schema": "sentinel-model-capability/draft-1", "kind": "claude-cli", "origin": "https://api.anthropic.com", "model": "claude-haiku-4-5-20251001", "listed": true, "revision": null, "probedAt": "RECORD_YYYY-MM-DDTHH:MM:SS.000000000Z" }
+    }]
+  }],
+  "reviewModels": { "stages": [{ "stage": "general", "providerId": "native-claude", "modelId": "haiku" }], "segments": [] }
+}
+```
+
+This is a configuration fragment, not a claim that a subscription permits access or that vendor terms were
+verified. Replace every placeholder with the discovered pins or owner-reviewed facts before adopting. Record
+uncertainty honestly. Subscription quota records confirmed tokens when available; monetary consumption remains
+unobserved, never USD zero. Each native call conservatively reserves the full fixed context before dispatch.
+The one provider/run budget is cumulative across stages and reopened epochs. Review the chosen token cap.
+
+Explicitly extend the owner's existing `run.start` grant to allow `paid-inference`, `source-disclosure` and
+`network` effects, and add a human `paid.admit` grant scoped to provider `native-claude`, with confirmation required.
+Do not widen agent grants. Then use the public owner commands:
+
+```sh
+farsight-sentinel settings adopt --workspace ./workspace --confirm
+farsight-sentinel rules promote builtin:secrets --workspace ./workspace --confirm
+farsight-sentinel assets adopt-tool secrets-gitleaks --workspace ./workspace --confirm
+farsight-sentinel plan --workspace ./workspace --json
+farsight-sentinel run PLAN_ID --workspace ./workspace --confirm --confirm-models --json
+farsight-sentinel report RUN_ID --workspace ./workspace --instructions --json
+```
+
+Inspect the exact model selection, disclosure and budget in the plan before confirming. `--confirm-models` needs
+foreground `--confirm`; it cannot be combined with detach and does not replace the separate model admission
+receipt. Another live owner yields busy until it naturally releases; the command never takes its lock. Model
+execution and settings editing from the graphical service remain unavailable in this slice.
+
+The private result contains accepted model statements and captured citations, exact Sentinel prompt/selected
+skill/resource bytes, semantic messages, native wire, requested selection and reported identity. It works after
+source removal. A prepared or failed request is distinguished by its operation outcome and is not evidence that
+a vendor received it. Vendor hidden instructions, internal reasoning and vendor skills are unobserved. Public
+stages use the bundled prompt with **no additional skills selected**; there is no vendor discovery. The explicit
+prepared-instruction library can retain selected skills without granting execution authority.
+
+Hosted review, including native Claude even with `hostedApiReviewEnabled: false`, requires one genuinely accepted
+current-source Gitleaks repository publication covering every captured entry, with complete coverage and no skipped
+scope, before any model receipt, login read or call. Per-file or partial publications cannot be combined to satisfy
+this gate, and an ancestor scan cannot replace the current scan. Missing, held, unsupported or partial secret scans
+refuse; no matches alone is insufficient. The Gitleaks image must already be installed at its adopted pin; planning
+acquires nothing.
+
+Known current or retained-ancestor secrets withhold optional model work and private trace delivery. Missing
+privacy or publication proof refuses rather than exposing raw data. The default report excludes private traces;
+the private result is not safe to share. One exact provider/model binding per run is supported: configured
+stage/segment overrides selecting different bindings are refused. Use a new linked rerun for changed adopted
+model terms; old results remain immutable. The slice caps a plan at 32 review units, input artifacts at 16 MiB,
+private trace content/output at 8 MiB with a shared 20-second read deadline, and checkpoints at their existing
+4 MiB limit. These bounds can leave inspection unfinished; they never establish absence or complete coverage.

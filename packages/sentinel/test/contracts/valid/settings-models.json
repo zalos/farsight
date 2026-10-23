@@ -1,0 +1,139 @@
+{
+  "schema": "sentinel-settings/draft-1",
+  "mandatoryRules": [],
+  "thresholds": {
+    "failOnSeverity": "high",
+    "requireCompleteCoverage": true,
+    "requiredCapabilities": []
+  },
+  "grants": [
+    {
+      "actions": [
+        "paid.admit"
+      ],
+      "principals": [
+        "human"
+      ],
+      "confirm": "always",
+      "scope": {
+        "providers": [
+          "local-review",
+          "hosted-review"
+        ]
+      }
+    }
+  ],
+  "agentActions": "confirm",
+  "providers": [
+    {
+      "id": "local-review",
+      "kind": "ollama",
+      "endpoint": "http://127.0.0.1:11434",
+      "credential": null,
+      "disclosure": "local-only",
+      "budget": {
+        "maxTokens": 200000,
+        "maxCost": "0",
+        "currency": "USD"
+      },
+      "models": [
+        {
+          "id": "review",
+          "model": "review-model:1",
+          "limits": {
+            "maxRequestBytes": 262144,
+            "maxResponseBytes": 65536,
+            "timeoutMs": 60000,
+            "maxOutputTokens": 512,
+            "contextTokens": 32768,
+            "maxMessages": 32,
+            "templateTokensPerMessage": 16
+          },
+          "pricing": {
+            "kind": "no-fee",
+            "basis": "local-runtime"
+          },
+          "terms": null,
+          "capability": {
+            "schema": "sentinel-model-capability/draft-1",
+            "kind": "ollama",
+            "origin": "http://127.0.0.1:11434",
+            "model": "review-model:1",
+            "listed": true,
+            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "probedAt": "2026-10-22T11:00:00.000000000Z"
+          }
+        },
+        {
+          "id": "untested",
+          "model": "other-model:2",
+          "limits": {
+            "maxRequestBytes": 262144,
+            "maxResponseBytes": 65536,
+            "timeoutMs": 60000,
+            "maxOutputTokens": 512,
+            "contextTokens": 32768,
+            "maxMessages": 32,
+            "templateTokensPerMessage": 16
+          },
+          "pricing": {
+            "kind": "no-fee",
+            "basis": "local-runtime"
+          },
+          "terms": null,
+          "capability": null
+        }
+      ]
+    },
+    {
+      "id": "hosted-review",
+      "kind": "openai-compatible",
+      "endpoint": "https://models.example.com",
+      "credential": "keychain:farsight/sentinel-review",
+      "disclosure": "hosted",
+      "budget": {
+        "maxTokens": 100000,
+        "maxCost": "5.00",
+        "currency": "USD"
+      },
+      "models": [
+        {
+          "id": "review",
+          "model": "review-model",
+          "limits": {
+            "maxRequestBytes": 262144,
+            "maxResponseBytes": 65536,
+            "timeoutMs": 60000,
+            "maxOutputTokens": 512,
+            "contextTokens": 32768,
+            "maxMessages": 32,
+            "templateTokensPerMessage": 16
+          },
+          "pricing": {
+            "kind": "rates",
+            "currency": "USD",
+            "inputPerMillion": "2.50",
+            "outputPerMillion": "10",
+            "source": "synthetic rate schedule",
+            "asOf": "2026-10-22"
+          },
+          "terms": {
+            "retention": "synthetic: 30 days",
+            "training": "not-used",
+            "source": "synthetic terms page",
+            "recordedAt": "2026-10-22"
+          },
+          "capability": {
+            "schema": "sentinel-model-capability/draft-1",
+            "kind": "openai-compatible",
+            "origin": "https://models.example.com",
+            "model": "review-model",
+            "listed": true,
+            "revision": null,
+            "probedAt": "2026-10-22T11:00:00.000000000Z"
+          }
+        }
+      ]
+    }
+  ]
+}
