@@ -59,6 +59,7 @@ import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
 import { SENTINEL_PROVIDER_STRINGS } from './strings-sentinel-providers.js';
 import { SENTINEL_REVIEW_STRINGS } from './strings-sentinel-review.js';
+import {SENTINEL_INSTRUCTION_STRINGS} from './strings-sentinel-instructions.js';
 import { SENTINEL_SECRETS_STRINGS } from './strings-sentinel-secrets.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
@@ -193,6 +194,7 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_POLICY_STRINGS,
   ...SENTINEL_PROVIDER_STRINGS,
   ...SENTINEL_REVIEW_STRINGS,
+  ...SENTINEL_INSTRUCTION_STRINGS,
   // Sentinel current-tree secret scanning: limitation keys, skipped scope and coded failures (strings-sentinel-secrets.ts)
   ...SENTINEL_SECRETS_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)

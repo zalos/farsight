@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/ReviewRequestEnvelope",
+  "definitions": {
+    "ReviewRequestEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-review-request/draft-1"
+        },
+        "sessionId": {
+          "$ref": "#/definitions/Id"
+        },
+        "runId": {
+          "$ref": "#/definitions/Id"
+        },
+        "attemptId": {
+          "$ref": "#/definitions/Id"
+        },
+        "snapshotId": {
+          "$ref": "#/definitions/Id"
+        },
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "segmentId": {
+          "$ref": "#/definitions/Id"
+        },
+        "operationId": {
+          "$ref": "#/definitions/Id"
+        },
+        "specDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "instructionDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "scopeDigest": {
+          "$ref": "#/definitions/Digest",
+          "description": "Digest of the selected captured scope, including every content id."
+        },
+        "selection": {
+          "$ref": "#/definitions/ReviewProviderSelection"
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InstructionMessage"
+          },
+          "minItems": 2,
+          "maxItems": 1024
+        },
+        "digest": {
+          "$ref": "#/definitions/Digest"
+        }
+      },
+      "required": [
+        "schema",
+        "sessionId",
+        "runId",
+        "attemptId",
+        "snapshotId",
+        "sourceId",
+        "segmentId",
+        "operationId",
+        "specDigest",
+        "instructionDigest",
+        "scopeDigest",
+        "messages",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ReviewProviderSelection": {
+      "type": "object",
+      "properties": {
+        "providerId": {
+          "$ref": "#/definitions/Id"
+        },
+        "modelId": {
+          "$ref": "#/definitions/Id"
+        },
+        "bindingDigest": {
+          "$ref": "#/definitions/Digest"
+        }
+      },
+      "required": [
+        "providerId",
+        "modelId",
+        "bindingDigest"
+      ],
+      "additionalProperties": false,
+      "description": "One exact Sentinel request sent to the caller. Its identity is the request bytes, not a claim about vendor internals."
+    },
+    "InstructionMessage": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "system",
+            "user",
+            "assistant"
+          ]
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 4194304
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-review-request.draft-1.schema.json",
+  "title": "sentinel-review-request/draft-1"
+}

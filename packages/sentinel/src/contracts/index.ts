@@ -1,3 +1,4 @@
+export type {InstructionContent,SelectedSkill,ReviewInstructionsEnvelope,ReviewInstructionBinding,ReviewRequestEnvelope,ReviewProviderSelection} from './instructions.js';
 // The draft Sentinel contracts. Types here are the one source; schemas/*.schema.json and
 // src/schemas.generated.ts are generated from them by scripts/generate-schemas.mjs (--check detects drift).
 export type * from './common.js';
@@ -42,6 +43,8 @@ export const ENVELOPES = {
   plan: { schema: 'sentinel-plan/draft-1', type: 'PlanEnvelope' },
   partitions: { schema: 'sentinel-review-partitions/draft-1', type: 'ReviewPartitionsEnvelope' },
   checkpoint: { schema: 'sentinel-review-checkpoint/draft-1', type: 'ReviewCheckpointEnvelope' },
+  instructions: {schema:'sentinel-review-instructions/draft-1',type:'ReviewInstructionsEnvelope'},
+  reviewrequest: {schema:'sentinel-review-request/draft-1',type:'ReviewRequestEnvelope'},
   review: { schema: 'sentinel-review-record/draft-1', type: 'ReviewRecordEnvelope' },
 } as const;
 

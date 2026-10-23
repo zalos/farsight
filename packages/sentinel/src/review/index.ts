@@ -26,3 +26,6 @@ export { planReviewWork, isReviewWork, assertAgenticOnly, REVIEW_STAGE_CONTRACTS
 export type { ReviewWorkRequest, ReviewWorkUnit } from './stage.js';
 export { createModelReviewOperation, usageOf, recoverModelWork } from './operation.js';
 export type { ModelOperationContext, ModelOperationOutcome, ModelOperationDeps } from './operation.js';
+
+export {prepareInstructions,instructionManifest,instructionIdentity,renderedInstructions,instructionArtifacts,INSTRUCTION_LIMITS} from './instructions.js';
+export type {PreparedInstructions,SkillSelection,InstructionArtifact,InstructionIdentity} from './instructions.js';

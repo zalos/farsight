@@ -1,5 +1,5 @@
 // The review prompt artifacts (PR 22): fixed, versioned text whose digests every observation and checkpoint pins.
-// The prompts are the only instructions a model receives. Evidence arrives afterwards as JSON data marked untrusted;
+// These are Sentinel-visible base instructions; vendor hidden instructions remain unobserved. Evidence arrives as JSON data marked untrusted;
 // nothing inside it can add a tool, a target, a disclosure or an approval, because the session only acts on replies
 // the validator accepts against the fixed grammar below, whatever any text asks for.
 import { canonicalDigest } from '../policy/digest.js';

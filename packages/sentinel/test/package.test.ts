@@ -67,6 +67,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'review/evaluation.js': ['node:crypto'],
   'review/errors.js': ['@farsight/core/dist/strings-sentinel-review.js'],
   'review/evidence.js': ['node:crypto'],
+  'review/instructions.js': ['node:crypto'],
   'review/session.js': ['node:fs', 'node:path'],
   // Model providers (PR 21): the only network client in the package, and the keychain read through core's reader.
   'review/providers/broker.js': ['node:crypto'],

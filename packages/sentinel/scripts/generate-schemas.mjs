@@ -27,6 +27,8 @@ const ENVELOPES = {
   plan: ['sentinel-plan/draft-1', 'PlanEnvelope'],
   partitions: ['sentinel-review-partitions/draft-1', 'ReviewPartitionsEnvelope'],
   checkpoint: ['sentinel-review-checkpoint/draft-1', 'ReviewCheckpointEnvelope'],
+  instructions:['sentinel-review-instructions/draft-1','ReviewInstructionsEnvelope'],
+  reviewrequest:['sentinel-review-request/draft-1','ReviewRequestEnvelope'],
   review: ['sentinel-review-record/draft-1', 'ReviewRecordEnvelope'],
 };
 

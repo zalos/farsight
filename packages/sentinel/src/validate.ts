@@ -8,7 +8,7 @@ import type {
   ReportCount, ReportEnvelope, RunEnvelope, SnapshotEnvelope, WorkEnvelope, FindingPlace, HelloMessage,
   WelcomeMessage, RefuseMessage, RulePackManifest, RuleLockEnvelope, SettingsEnvelope, RepoConfigEnvelope,
   EffectivePolicyEnvelope, AdoptionEnvelope, ReceiptEnvelope, AdmissionEnvelope, ControlFactsEnvelope, Rights, Budget,
-  PlanEnvelope, ReviewPartitionsEnvelope, ReviewCheckpointEnvelope, ReviewRecordEnvelope,
+  ReviewInstructionsEnvelope,ReviewRequestEnvelope, PlanEnvelope, ReviewPartitionsEnvelope, ReviewCheckpointEnvelope, ReviewRecordEnvelope,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
 import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf } from './planner/identity.js';
@@ -37,6 +37,8 @@ export interface EnvelopeTypes {
   partitions: ReviewPartitionsEnvelope;
   checkpoint: ReviewCheckpointEnvelope;
   review: ReviewRecordEnvelope;
+  instructions:ReviewInstructionsEnvelope;
+  reviewrequest:ReviewRequestEnvelope;
 }
 
 /** Stable error codes; message text is safe context, never raw input. */
@@ -690,7 +692,22 @@ const assessmentErrors = (out: Bounded, at: string, a: { verdict: string; claims
   a.inspected.forEach((p, i) => { pathError(out, `${at}/inspected/${i}`, p); if (!read.has(p)) out.add(err(`${at}/inspected/${i}`, 'names a file the session never served')); });
 };
 
+const instructions:Check<ReviewInstructionsEnvelope>=(v,out)=>{
+ const {digest,...body}=v;if(digest!==digestOf(body))out.add(err('/digest','instruction manifest digest differs'));
+ for(const item of [v.prompt,v.assembled,...v.skills.flatMap(s=>[s,...s.resources])])if(item.content!==item.digest)out.add(err('/content','instruction bytes and digest differ'));
+ for(const i of duplicates(v.skills,s=>s.id))out.add(err(`/skills/${i}`,'duplicate selected skill'));
+ v.skills.forEach((s,i)=>{for(const j of duplicates(s.resources,r=>r.id))out.add(err(`/skills/${i}/resources/${j}`,'duplicate included resource'))});
+ if(v.prompt.bytes+v.skills.reduce((n,s)=>n+s.bytes+s.resources.reduce((m,r)=>m+r.bytes,0),0)>524288)out.add(err('/skills','instruction inputs exceed their aggregate bound'));
+ if(v.skills.reduce((n,s)=>n+s.resources.length,0)>32)out.add(err('/skills','included resource count exceeds its bound'));
+ if(v.assembled.bytes>524288)out.add(err('/assembled/bytes','assembled instructions exceed their bound'));
+};
+const reviewrequest:Check<ReviewRequestEnvelope>=(v,out)=>{
+ const {digest,...body}=v;if(digest!==digestOf(body))out.add(err('/digest','request digest differs'));
+ if(!v.messages.length||v.messages[0]!.role!=='system')out.add(err('/messages','a request starts with the exact assembled instructions'));
+};
 const checkpoint: Check<ReviewCheckpointEnvelope> = (v, out) => {
+  if((v.instructions===undefined)!==(v.requests===undefined))out.add(err('/requests','instruction-bound checkpoints retain their request list'));
+  if(v.instructions){instructions(v.instructions,out);if(v.requests!.length<v.operations.length||v.requests!.length>v.operations.length+1)out.add(err('/requests','at most one prepared request has unknown outcome'));v.requests!.forEach((r,i)=>{reviewrequest(r,out);if(r.sessionId!==v.sessionId||r.specDigest!==v.specDigest||r.instructionDigest!==v.instructions!.digest||r.operationId!==`${v.sessionId}.op${i+1}`)out.add(err(`/requests/${i}`,'request binding differs'));if(v.operations[i]?.state==='settled'&&!v.operations[i]!.identity)out.add(err(`/operations/${i}/identity`,'a bound settled reply retains its reported identity'));if(v.operations[i]&&v.operations[i]!.request!==digestOf(r))out.add(err(`/operations/${i}/request`,'operation does not name its exact request'));});}
   if (v.messages[0]!.role !== 'system') out.add(err('/messages/0/role', 'a session starts with its fixed prompt'));
   for (const i of duplicates(v.served, x => x.id)) out.add(err(`/served/${i}/id`, 'duplicate evidence id'));
   const snapshots = new Set(v.served.map(x => x.citation.snapshotId));
@@ -742,7 +759,7 @@ const review: Check<ReviewRecordEnvelope> = (v, out) => {
 const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   snapshot, run, work, attempt, observation, coverage, disposition, report, protocol,
   rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan,
-  partitions, checkpoint, review,
+  partitions, checkpoint, review, instructions, reviewrequest,
 };
 
 /**
