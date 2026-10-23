@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {mkdirSync,renameSync,writeFileSync,readFileSync} from 'node:fs';
+import {mkdirSync,renameSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {Coordinator} from '../dist/execution/coordinator.js';
 import {openStore} from '../dist/store/index.js';
@@ -14,9 +14,10 @@ import {retainedFixture} from './retained-analysis-helpers.ts';
 export const timing=()=>({signal:new AbortController().signal});
 export const report={version:'2.1.0',runs:[{tool:{driver:{name:'original-import-fixture',version:'1'}},results:[{ruleId:'external-rule',message:{text:'original imported claim'}}]}]};
 export const manifest={schema:'sentinel-import-manifest/draft-1',format:'sarif-2.1.0',producer:{name:null,version:null},tested:{origins:['https://example.test'],methods:['GET'],properties:['cookie-secure'],directions:['outbound']}};
-export async function acceptFixture(t:any) {
-  const s=await retainedFixture(t,{otherSource:true});
-  const done=await(await Coordinator.open({store:s.store,runId:s.run.id,registry:s.registry,scratchRoot:s.work})).run();assert.equal(done.state,'completed',JSON.stringify(done.failures));
+export async function acceptFixture(t:any,options:{extraFiles?:Record<string,string>;canceled?:boolean}={}) {
+  const s=await retainedFixture(t,{otherSource:true,...options});
+  if(options.canceled){s.store.ledger.setRunState(s.run.id,'canceling');s.store.ledger.setRunState(s.run.id,'canceled');}
+  else {const done=await(await Coordinator.open({store:s.store,runId:s.run.id,registry:s.registry,scratchRoot:s.work})).run();assert.equal(done.state,'completed',JSON.stringify(done.failures));}
   const run=s.store.ledger.getRun(s.run.id)!;
   const ancestor={runId:s.run.id,revision:run.planRevision,planDigest:s.store.ledger.getPlan(s.run.id,run.planRevision)!.digest,snapshotId:s.snapshot.id,sourceId:'app'};
   const path=join(s.dir,'owner-workspace');mkdirSync(join(path,'.farsight','sentinel'),{recursive:true,mode:0o700});

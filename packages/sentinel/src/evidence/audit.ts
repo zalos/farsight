@@ -1,23 +1,34 @@
 // Bounded independent receipt/admission replay. Retained JSON is never rehydrated into a consumed capability.
-import { lstatSync } from 'node:fs';
+import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ActionIntent, AdmissionEnvelope, ReceiptEnvelope } from '../contracts/index.js';
 import { compareTimestamps, isCalendarTimestamp, validateEnvelope } from '../validate.js';
 import { admit, type AdmissionRequest } from '../policy/admission.js';
 import { intentDigest, type ReceiptBinding } from '../policy/receipts.js';
-import { readPrivateFile } from '../policy/user-state.js';
 import { canonicalJson, digestOf } from '../store/ledger-json.js';
 import { LedgerError } from '../store/store-types.js';
 import { currentImportPolicy, ownerContextOf, type ImportOwnerContext } from './owner-context.js';
 
 export const AUDIT_BYTES = 16384;
 function readAuditFile(path:string,maxBytes:number):Buffer|undefined {
-  // Reject a stable FIFO/socket/directory before the legacy private-file reader opens it. The existing helper
-  // still handles only its recognized temporary aliases after an interrupted atomic receipt write. This detects
-  // replacements at observations, not same-account filesystem confinement.
-  let st;try {st=lstatSync(path);}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw error;}
-  if(!st.isFile()||st.isSymbolicLink()) auditUnavailable();
-  return readPrivateFile(path,maxBytes,'sentinel.receipt.storeUnsafe');
+  // Read-only, nonblocking regular-file observations. We do not repair temporary aliases or reconstruct a spend.
+  // A pending interrupted ReceiptBook write must first be resolved by that genuine owner path. This is not a
+  // same-account filesystem confinement guarantee: identities are checked at the observed boundaries.
+  let fd:number;
+  try {fd=openSync(path,FS.O_RDONLY|(FS.O_NOFOLLOW??0)|(FS.O_NONBLOCK??0));}
+  catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return undefined;return auditUnavailable();}
+  try {
+    const before=fstatSync(fd,{bigint:true});
+    if(!before.isFile()||before.nlink!==1n||(before.mode&0o077n)!==0n||(process.getuid&&before.uid!==BigInt(process.getuid()))
+      ||before.size>BigInt(maxBytes)) auditUnavailable();
+    const data=Buffer.alloc(Number(before.size));let off=0;
+    while(off<data.length){const n=readSync(fd,data,off,data.length-off,off);if(!n)auditUnavailable();off+=n;}
+    if(readSync(fd,Buffer.alloc(1),0,1,data.length)!==0)auditUnavailable();
+    const after=fstatSync(fd,{bigint:true}),named=lstatSync(path,{bigint:true});
+    if(after.dev!==before.dev||after.ino!==before.ino||after.size!==before.size||after.mtimeNs!==before.mtimeNs||after.ctimeNs!==before.ctimeNs
+      ||after.nlink!==1n||named.isSymbolicLink()||!named.isFile()||named.dev!==before.dev||named.ino!==before.ino)auditUnavailable();
+    return data;
+  }catch{return auditUnavailable();}finally{closeSync(fd);}
 }
 export function auditUnavailable(): never { throw new LedgerError('sentinel.store.corruptRecord', 'the retained import authority or payload is unavailable'); }
 export function boundedAudit(value: unknown): void { if (Buffer.byteLength(canonicalJson(value)) > AUDIT_BYTES) auditUnavailable(); }
@@ -35,7 +46,7 @@ export function forecastAdmission(context: ImportOwnerContext, binding: ReceiptB
   let value: unknown; try { value = JSON.parse(bytes.toString('utf8')); } catch { return auditUnavailable(); }
   const result = validateEnvelope('receipt', value); if (!result.ok) auditUnavailable();
   const receipt = result.value;
-  if (receipt.id !== receiptId || receipt.actor.principal !== 'human' || receipt.action !== binding.intent.action || receipt.intentDigest !== intentDigest(binding.intent)
+  if (receipt.id !== receiptId || receipt.actor.principal !== 'human' || receipt.actor.channel !== 'owner-cli' || receipt.action !== binding.intent.action || receipt.intentDigest !== intentDigest(binding.intent)
     || receipt.stateDigest !== binding.stateDigest || receipt.policyRevision !== binding.policyRevision) auditUnavailable();
   const preview = admit(admissionRequest(context, binding, now));
   if (preview.record.outcome !== 'awaiting-confirmation') auditUnavailable();

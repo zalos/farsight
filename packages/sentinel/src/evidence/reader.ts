@@ -13,9 +13,10 @@ import { evidenceLedgerFor, type EvidenceAcceptance } from '../store/evidence-bi
 import { canonicalJson, digestOf } from '../store/ledger-json.js';
 import { compareTimestamps, isCalendarTimestamp } from '../validate.js';
 import { deepFreeze } from '../policy/immutable.js';
-import { auditUnavailable, verifyRetainedAudit } from './audit.js';
+import { auditUnavailable, boundedAudit, verifyRetainedAudit } from './audit.js';
 import { admissionOf, rootOf, EVIDENCE_LIMITS, checkEvidenceBounds } from './import-operation.js';
 import { importOwnerContext, ownerContextOf, type ImportOwnerContext } from './owner-context.js';
+import { evidencePoint } from './test-hooks.js';
 
 declare const brand:unique symbol;
 export interface AcceptedImportedReport {readonly [brand]:true}
@@ -53,6 +54,7 @@ export async function validateAcceptedImport(context:ImportOwnerContext,candidat
     if(data.length!==declared) auditUnavailable();size+=data.length;bytes.set(id,data);
   }
   const root=json(bytes.get(p.root)!),audit=json(bytes.get(p.roles.admission)!),candidate=json(bytes.get(p.roles.candidate)!);
+  boundedAudit(audit);
   if(!same(root,rootOf(i))||!bytes.get(p.root)!.equals(Buffer.from(canonicalJson(root)))||!same(audit,admissionOf(i))
     ||!bytes.get(p.roles.admission)!.equals(Buffer.from(canonicalJson(audit)))||!bytes.get(p.roles.candidate)!.equals(Buffer.from(canonicalJson(candidate)))) auditUnavailable();
   verifyRetainedAudit(context,{receipt:i.receipt,receiptDigest:i.receiptDigest,admission:p.admission,intent:i.intent,stateDigest:i.stateDigest,policyRevision:i.policyRevision});
@@ -87,7 +89,9 @@ export async function validateAcceptedImport(context:ImportOwnerContext,candidat
   }
   const unchanged=ops.acceptance(candidateDigest);
   if(!unchanged||!same(unchanged,record)) auditUnavailable();
+  evidencePoint('after-payload-reads');
   ownerContextOf(context);
+  readRetainedSourceProof(store,proof,i.ancestor,{signal:c.signal,deadlineAt:c.deadlineAt});
   const token=Object.freeze({}) as AcceptedImportedReport;accepted.set(token,{context,record,proof,document:normalized.document});return token;
 }
 /** Existing report privacy readers authenticate all scanner/selected-ancestor records. No imported tag counts. */
@@ -108,12 +112,15 @@ export async function reportImportView(value:AcceptedImportedReport,options:{bas
   const runIds=new Set([i.ancestor.runId,...(run.envelope.baselineId?[run.envelope.baselineId]:[]),...(options.baselineRunId?[options.baselineRunId]:[])]);
   if(runIds.size>3) auditUnavailable();let reason:'accepted-secret-match'|'privacy-unassessed-canceled-run'|null=null;
   for(const id of runIds) {const state=await privacy(s.context,id);if(state==='secret') reason='accepted-secret-match';else if(state==='unassessed'&&reason===null) reason='privacy-unassessed-canceled-run';}
-  ownerContextOf(s.context);
-  return deepFreeze({schema:'sentinel-import-view/1',kind:'imported-report',authority:'owner-associated-imported-claims',candidateDigest:s.record.candidateDigest,root:s.record.root,
+  const result=deepFreeze({schema:'sentinel-import-view/1',kind:'imported-report',authority:'owner-associated-imported-claims',candidateDigest:s.record.candidateDigest,root:s.record.root,
     withheld:reason!==null,limitation:reason,counts:{claims:s.document.claims.length,exchanges:s.document.exchanges.length,cookies:s.document.cookies.length},
     // No heuristic substitutes source strings. Any match (current/baseline/selected ancestor) removes the entire
     // caller-controlled payload in both disclosure profiles. Counts and structural digests remain useful.
     document:reason===null?structuredClone(s.document):null});
+  evidencePoint('after-privacy');
+  ownerContextOf(s.context);
+  readRetainedSourceProof(c.store,s.proof,i.ancestor,{signal:c.signal,deadlineAt:c.deadlineAt});
+  return result;
 }
 export async function readAcceptedReportImport(store:SentinelStore,ws:Workspace,candidateDigest:string,options:{timing:ProofTiming;baselineRunId?:string}) {
   const context=importOwnerContext(store,ws,options.timing),value=await validateAcceptedImport(context,candidateDigest);

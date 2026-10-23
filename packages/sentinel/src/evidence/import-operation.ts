@@ -1,5 +1,5 @@
-// Private report-import preparation and spending boundary. This checkpoint only pins pending bytes: it cannot
-// publish an acceptance, execute a producer or confer findings/coverage/mitigation authority.
+// Private report-import preparation and fixed publication permits. Legacy pending-only permits cannot accept
+// roots. Neither permit kind executes a producer or confers findings, coverage or mitigation authority.
 import { randomUUID } from 'node:crypto';
 import type { ActionIntent, AdmissionEnvelope, ReceiptEnvelope } from '../contracts/index.js';
 import { normalizeImport } from '../imports/normalize.js';
@@ -186,7 +186,8 @@ export function draftReportPublication(value: PreparedImport, receipt: ReceiptEn
     roles: { raw: candidate.raw, manifest: candidate.manifest, normalized: candidate.normalized, candidate: p.candidateDigest, admission: '' },
     admission, root: '' };
   const provisional = { ...base, publication: pub, artifacts: [] } as EvidenceIdentity;
-  const audit = admissionOf(provisional), auditBytes = Buffer.from(canonicalJson(audit));
+  const audit = admissionOf(provisional); boundedAudit(audit);
+  const auditBytes = Buffer.from(canonicalJson(audit));
   pub.roles.admission = digestOf(audit);
   const root = rootOf(provisional), rootBytes = Buffer.from(canonicalJson(root)); pub.root = digestOf(root);
   const bytes = new Map(p.bytes); bytes.set(pub.roles.admission, auditBytes); bytes.set(pub.root, rootBytes);

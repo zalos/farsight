@@ -274,6 +274,7 @@ export class Ledger {
   }
   #insertEvidence(i: EvidenceIdentity, predecessor: string | null): number {
     this.#evidenceFence(i);
+    if (this.#get("SELECT 1 AS x FROM events WHERE kind = 'evidence-abandoned' AND json_extract(payload,'$.receipt.id') = ?",i.receiptId)) throw new LedgerError('sentinel.store.conflict','receipt already applied');
     if (Number(this.#get("SELECT count(*) AS n FROM evidence_operations WHERE state = 'open'")?.n) - (predecessor === null ? 0 : 1) >= EVIDENCE_LIMITS.openOperations
       || Number(this.#get('SELECT count(*) AS n FROM evidence_operations WHERE binding_digest = ?', i.bindingDigest)?.n) >= EVIDENCE_LIMITS.historyPerBinding) throw invalid('evidence operation limit');
     const sequence = this.#event('evidence-opened', i.ancestor.runId, null, { operationId: i.id, predecessor });
