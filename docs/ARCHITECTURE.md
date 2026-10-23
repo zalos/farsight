@@ -2127,10 +2127,15 @@ substitution is introduced. This release prioritizes separately qualified Copilo
 ADR48 Copilot boundary: the existing model broker and cumulative same-provider/run quota ledger also accept
 a closed `copilot-cli` profile for Copilot 1.0.103 on macOS arm64 with explicit `gpt-6-luna`. Before launch,
 Sentinel verifies the external executable and every member of its fixed runtime closure, copies only that
-code into owned temporary storage, and runs with isolated HOME/config/cwd, fixed no-tools arguments and
+code into owned temporary storage, and runs with private config/cwd, fixed no-tools arguments and
 TLS-verified exact-host proxy access. The vendor runtime is not redistributed. Native authentication remains
-inside pinned Copilot through the shared macOS securityd broker; this is vendor-process trust, not
-credential-service-specific OS confinement. No credential/config copying or ambient source access is granted.
+inside pinned Copilot. Profile v5 retains real HOME identity for native User-keychain lookup, with no general HOME
+file-content access (the real HOME path itself and existing directory metadata checks are visible to the vendor). Additional filesystem reads cover only the user's
+encrypted `Library/Keychains` files and `/private/var/protected/trustd`, with no filesystem writes there, plus fixed SecurityServer/securityd/trustd IPC. General preferences remain denied. This is
+vendor-process trust, not credential-service-specific or read-only API confinement. OS trust-service fetches may
+bypass the child's exact-host application proxy. Only bounded selected-account host/login metadata is projected
+into private state; no token, unrelated settings or ambient source access is copied. Unknown CONNECT targets are
+refused before DNS/forwarding on that socket; valid allowed connections remain subject to shared caps/deadlines.
 
 Genuine current complete Gitleaks coverage precedes hosted disclosure and model admission. Exact prompt,
 semantic messages, wire, selected model and explicit empty additional-skills selection are retained before

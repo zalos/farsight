@@ -1013,16 +1013,19 @@ uncertain, with no retry/refund invented; reported usage beyond a reservation ov
 Supported native authentication stays inside the pinned Copilot process, using its already configured OS keychain.
 Sentinel omits `--no-auto-login`: that vendor flag disables stored-OAuth detection as well as GitHub CLI reuse;
 it does not merely prevent interactive login. GitHub CLI fallback receives no new permission: the child has only
-its fixed executable grant, isolated HOME and `/usr/bin:/bin` PATH, so it cannot execute a separate `gh` binary.
+its fixed executable grant and `/usr/bin:/bin` PATH, so it cannot execute a separate `gh` binary.
 After admission, Sentinel reads only bounded native machine state at the selected Copilot home, validates the
 selected GitHub host/login uniquely against its account list, and reconstructs only that selector privately. It
 copies no token, subscription snapshot, other accounts or unrelated settings, grants no `gh` fallback, and uses private
-HOME/config/cwd with no tools, MCP, hooks, plugins, custom instructions, updates or session reuse. The macOS policy
-allows the shared securityd broker: this trusts the pinned vendor's native authentication and **does not** enforce
-credential-service-specific confinement. Sentinel's exact prompt, ordered semantic messages and piped Copilot wire
+config/cwd with no tools, MCP, hooks, plugins, custom instructions, updates or session reuse. The v5 macOS profile
+retains real HOME identity for native User-keychain lookup, exposing that path to the pinned vendor but granting
+no general HOME file-content access; existing directory metadata checks remain permitted. It adds filesystem reads only of the user's encrypted `Library/Keychains` files and the
+fixed `/private/var/protected/trustd` store, with no filesystem write grant there, and fixed SecurityServer/securityd/trustd IPC. General preference access is denied. This trusts the pinned
+vendor's native authentication and **does not** enforce credential-service-specific or read-only API confinement.
+The OS trust service may fetch trust/revocation data outside Sentinel's application proxy; only the Copilot child
+connections are constrained by the exact-host proxy. Other HOME files and a separate `gh` executable remain denied. Sentinel's exact prompt, ordered semantic messages and piped Copilot wire
 are retained before dispatch; only final visible text and reported identity/usage are accepted. Vendor hidden
-instructions/reasoning are unobserved, and public stages record **no additional skills selected**. Private accepted
-A fixed native no-authentication-information message is classified only by exact in-memory bytes; this does
+instructions/reasoning are unobserved, and public stages record **no additional skills selected**. A fixed native no-authentication-information message is classified only by exact in-memory bytes; this does
 not establish the owner is logged out, and unknown messages remain unknown. Failure diagnostics retain only fixed phase/reason, exit/signal classes and bounded byte/frame/proxy counters
 in the existing reservation event; native text, event names, hosts and authentication details are discarded. These
 diagnostics do not prove no spend. Records can be read after source removal; known-secret/privacy failures withhold them. They are not safe to share.

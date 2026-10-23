@@ -9,10 +9,10 @@ import {COPILOT_CODE_MANIFEST} from './cli-copilot-manifest.js';
 import {canonicalDigest} from '../../policy/digest.js';
 import {fail,ProviderError} from './errors.js';
 import type {NativeTiming} from './cli-native-profile.js';
-export const COPILOT_NATIVE_PROFILE=Object.freeze({id:'copilot-1.0.103-darwin-arm64-seatbelt-v4',version:'1.0.103',model:'gpt-6-luna',
+export const COPILOT_NATIVE_PROFILE=Object.freeze({id:'copilot-1.0.103-darwin-arm64-seatbelt-v5',version:'1.0.103',model:'gpt-6-luna',
  executableDigest:'sha256:1c81150e4bd7805c8470f4718bc8cb3c3a20c2379086f36309f7ae823e32ace6',executableBytes:181807712,
  runtimeDigest:'sha256:3d0df03e4145ef5a61c6e208cc4c80c6e56159a87b078b49ff2c91607397cc41',runtimeBytes:212717731,runtimeFiles:265,
- accountSelection:'owner-selected-host-login/1',toolRestriction:'exclude-builtin-mcp-custom/1',autoLogin:'vendor-stored-oauth-detection',auth:'vendor-native-keychain',wire:'sentinel-copilot-chat/v1',softAiCredits:30,contextReservation:272000});
+ accountSelection:'owner-selected-host-login/1',toolRestriction:'exclude-builtin-mcp-custom/1',autoLogin:'vendor-stored-oauth-detection',auth:'vendor-native-keychain',authFileReads:'$HOME/Library/Keychains;/private/var/protected/trustd',authMachServices:'com.apple.SecurityServer;com.apple.trustd;com.apple.trustd.agent',preferences:'denied',proxyRejection:'per-socket-unknown-connect/1',wire:'sentinel-copilot-chat/v1',softAiCredits:30,contextReservation:272000});
 export interface NativeCopilotRuntime {readonly profileId:string;readonly executableDigest:string;readonly runtimeDigest:string;readonly profileDigest:string}
 interface FileIdentity {dev:number;ino:number;size:number;mtimeMs:number}
 interface Member {path:string;bytes:number;digest:string}
@@ -52,17 +52,21 @@ export async function qualifyInstalledNativeCopilot(t:NativeTiming):Promise<Nati
 export async function nativeCopilotSetup(runtime:NativeCopilotRuntime,proxyPort:number,t:NativeTiming){
  const held=runtimes.get(runtime);if(!held||!Number.isSafeInteger(proxyPort)||proxyPort<1||proxyPort>65535)return fail('sentinel.provider.notTrusted','Copilot setup requires genuine qualification');copilotBoundary(t);
  const before=await readExecutable(held.executable,t);if(before.digest!==runtime.executableDigest||!same(before.identity,held.identity))fail('sentinel.provider.capabilityUntested','Copilot executable changed');
+ const ownerHome=homedir();await checkedRoot(ownerHome);
  const ownedRoot=await realpath(await mkdtemp('/private/tmp/sentinel-copilot-'));
  try{for(const d of ['runtime','home','state','tmp'])await mkdir(join(ownedRoot,d),{mode:0o700});await runtimeMembers(held.runtimeDir,t,join(ownedRoot,'runtime'));
   const policy=['(version 1)(deny default)','(allow process-fork)',`(allow process-exec (literal ${q(held.executable)}))`,'(allow process-info* (target same-sandbox))(allow signal (target same-sandbox))(allow sysctl-read)',
    `(allow file-read* (literal "/") (subpath "/System") (subpath "/usr/lib") (subpath "/Library/Apple") (literal ${q(held.executable)}) (subpath ${q(ownedRoot)}) (literal "/dev/null") (literal "/dev/urandom") (literal "/dev/random"))`,
    `(deny file-read* (subpath ${q(join(ownedRoot,'runtime/builtin-skills'))}) (subpath ${q(join(ownedRoot,'runtime/builtin'))}) (subpath ${q(join(ownedRoot,'runtime/plugins'))}))`,
    '(allow file-read-metadata (vnode-type DIRECTORY))',`(allow file-write* (subpath ${q(join(ownedRoot,'home'))}) (subpath ${q(join(ownedRoot,'state'))}) (subpath ${q(join(ownedRoot,'tmp'))}) (literal "/dev/null"))`,
-   '(allow mach-priv-task-port (target same-sandbox))(allow user-preference-read)',
-   // Native supported auth trusts this pinned vendor's use of securityd. This does NOT confine queries to one service.
+   '(allow mach-priv-task-port (target same-sandbox))',
+   // Native User-keychain lookup requires real HOME identity, not general HOME access.
+   `(allow file-read* (subpath ${q(join(ownerHome,'Library/Keychains'))}) (subpath "/private/var/protected/trustd"))`,
+   // Shared OS APIs trust pinned vendor use; trustd may fetch trust data outside our application proxy.
+   '(allow mach-lookup (global-name "com.apple.SecurityServer") (global-name "com.apple.trustd") (global-name "com.apple.trustd.agent"))',
    '(allow mach-lookup (global-name "com.apple.securityd") (global-name "com.apple.securityd.xpc") (global-name "com.apple.logd") (global-name "com.apple.system.logger") (global-name "com.apple.system.opendirectoryd.libinfo") (global-name "com.apple.system.opendirectoryd.membership"))',
    '(allow file-ioctl (literal "/dev/null") (literal "/dev/zero") (literal "/dev/random") (literal "/dev/urandom"))',`(allow network-outbound (remote ip "localhost:${proxyPort}"))`].join('\n');
-  const env=Object.freeze({PATH:'/usr/bin:/bin',HOME:join(ownedRoot,'home'),COPILOT_HOME:join(ownedRoot,'state'),COPILOT_CLI_DIST_DIR:join(ownedRoot,'runtime'),TMPDIR:join(ownedRoot,'tmp'),XDG_CACHE_HOME:join(ownedRoot,'state'),CI:'1',TERM:'dumb',NO_COLOR:'1',COPILOT_AUTO_UPDATE:'false',USE_TGREP:'false',HTTPS_PROXY:`http://127.0.0.1:${proxyPort}`,HTTP_PROXY:`http://127.0.0.1:${proxyPort}`,NO_PROXY:''});
+  const env=Object.freeze({PATH:'/usr/bin:/bin',HOME:ownerHome,COPILOT_HOME:join(ownedRoot,'state'),COPILOT_CLI_DIST_DIR:join(ownedRoot,'runtime'),TMPDIR:join(ownedRoot,'tmp'),XDG_CACHE_HOME:join(ownedRoot,'state'),CI:'1',TERM:'dumb',NO_COLOR:'1',COPILOT_AUTO_UPDATE:'false',USE_TGREP:'false',HTTPS_PROXY:`http://127.0.0.1:${proxyPort}`,HTTP_PROXY:`http://127.0.0.1:${proxyPort}`,NO_PROXY:''});
   const setup=Object.freeze({executable:held.executable,policy,env,ownedRoot});setups.set(setup,ownedRoot);return setup;
  }catch(e){await rm(ownedRoot,{recursive:true,force:true});throw e}
 }
