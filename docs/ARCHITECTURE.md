@@ -1651,8 +1651,8 @@ Receipt spending and SQLite commit are separate durable effects. An interruption
 spent receipt and no operation row; the result does not promise the spend can be undone. A lost acknowledgement
 revalidates the one existing acceptance before another spend. Resuming an older pending candidate requires fresh
 confirmation and a new current-epoch operation; its complete stage is pinned before the old stage is released.
-The original receipt and admission remain in the immutable old operation for independent audit, even if obsolete
-unaccepted payload blobs are later pruned. Unknown pending operations are retained. Explicit `evidence.abandon`
+The original receipt and admission remain in the immutable old operation for independent audit. This slice
+deletes no payload blobs; that audit would remain if a future explicit collector prunes obsolete unaccepted bytes. Unknown pending operations are retained. Explicit `evidence.abandon`
 requires its own current owner receipt for one exact older pending identity and stage set; it releases only that
 stage association, records the complete audit, and deletes no physical object.
 
