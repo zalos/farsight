@@ -355,6 +355,21 @@ jobs:
           grep -q '^# cancelled 0$' sentinel-report-browser.tap
           grep -q '^# skipped 0$' sentinel-report-browser.tap
 
+      - name: Sentinel retained structural HTML delivery and print (no skips)
+        env:
+          SENTINEL_REPORT_BROWSER: '1'
+        run: |
+          set -euo pipefail
+          node --disable-warning=ExperimentalWarning --experimental-strip-types --test \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=tap --test-reporter-destination=sentinel-paths-browser.tap \
+            packages/sentinel/test/path-report-browser.test.ts
+          grep -qx '# tests 1' sentinel-paths-browser.tap
+          grep -qx '# pass 1' sentinel-paths-browser.tap
+          grep -qx '# fail 0' sentinel-paths-browser.tap
+          grep -qx '# cancelled 0' sentinel-paths-browser.tap
+          grep -qx '# skipped 0' sentinel-paths-browser.tap
+
       - run: pnpm e2e
 
       # the perf suite on the small synthetic workspace (≈50 projects · ≈20k nodes): every surface must draw with no
@@ -390,6 +405,7 @@ jobs:
           path: |
             e2e/test-results/
             e2e/.playwright-report/
+            sentinel-paths-browser.tap
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14

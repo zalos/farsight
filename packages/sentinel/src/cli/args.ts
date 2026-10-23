@@ -5,7 +5,7 @@
 /** The commands this executable knows, and the planning change that delivers each one that is not built yet. */
 export const COMMANDS = {
   help: null, version: null, capabilities: null, validate: null, init: null, settings: null,
-  plan: null, run: null, status: null, report: null, wait: null, pause: null, resume: null, cancel: null, serve: null,
+  plan: null, paths: null, run: null, status: null, report: null, wait: null, pause: null, resume: null, cancel: null, serve: null,
   retry: null, rerun: null,
   rules: null, assets: null, mcp: null, evidence: null, decision: null,
   compare: null, bundle: 'PR 26',
@@ -36,6 +36,7 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   init: { flags: { ...COMMON, '--workspace': 'value', '--profile': 'value' }, positional: [], min: 0 },
   settings: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['action'], min: 1 },
   plan: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: [], min: 0 },
+  paths: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--request': 'value' }, positional: ['ancestorRunId'], min: 1 },
   run: { flags: { ...COMMON, ...STORE, '--detach': 'boolean', '--confirm': 'boolean' }, positional: ['planId'], min: 1 },
   status: { flags: { ...COMMON, ...STORE, '--after': 'value', '--limit': 'value' }, positional: ['runId'], min: 1 },
   wait: { flags: { ...COMMON, ...STORE, '--timeout': 'value' }, positional: ['runId'], min: 1 },
@@ -112,6 +113,7 @@ export function parseArgs(argv: readonly string[]): ParseResult {
   }
   if (positional.length > spec.positional.length) return fail('sentinel.args.unexpectedArgument', positional[spec.positional.length]!);
   if (positional.length < spec.min) return fail('sentinel.args.missingArgument', spec.positional[positional.length]!);
+  if(command==='paths'&&flags['--request']===undefined)return fail('sentinel.args.missingValue','--request');
   const args: Record<string, string> = {};
   spec.positional.forEach((p, i) => { if (positional[i] !== undefined) args[p] = positional[i]!; });
   if(command==='decision'){

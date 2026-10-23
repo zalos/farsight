@@ -1,3 +1,4 @@
+import { cgroupMemoryFailure, type CgroupMemoryEvidence, type CgroupMemoryWatch, type MemoryObservation } from './cgroup-memory.js';
 import { BUILTIN_WORKERS } from './builtin-workers.js';
 // The supervisor runs one attempt of one work revision under the current store owner, and returns a checked
 // outcome. It never publishes: PR 08's scheduler records the outcome in the ledger.
@@ -108,6 +109,8 @@ export interface WorkerOutcome {
   worker?: AttemptWorker;
   result?: ResultMessage;
   outputs: VerifiedOutput[];
+  /** Bounded private observer status; unavailable/raced is never affirmative memory evidence. */
+  memoryObservation?: Readonly<MemoryObservation>;
   /** Captured from stderr, bounded, never parsed as protocol. */
   diagnostics: { bytes: number; truncated: boolean; text: string };
   protocol: { frames: number; bytes: number };
@@ -232,6 +235,12 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   const nonce = ownerNonce();
   const labels = { owner: nonce, store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch, invocation: invocationDigest };
   let containerId: string | undefined;
+  let memoryWatch: CgroupMemoryWatch | undefined, memoryEvidence: Readonly<CgroupMemoryEvidence> | undefined;
+  const memorySetup = new AbortController();
+  const finishMemory = () => {
+    memorySetup.abort();
+    if (memoryWatch) { memoryEvidence = memoryWatch.finish(); outcome.memoryObservation = memoryWatch.observation(); }
+  };
   let proc: WorkerProcess;
   let identity: WorkerIdentity | undefined;
   const guard: { ownerClosed: boolean; createPending: boolean; id?: string; proc?: WorkerProcess } = { ownerClosed: false, createPending: false };
@@ -240,6 +249,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     name: `worker ${request.attemptId}${backend ? ` (container owner ${nonce})` : ''}`,
     close: () => {
       guard.ownerClosed = true;
+      memorySetup.abort(); memoryWatch?.close();
       guard.proc?.kill();
       if (!backend) return;
       const direct = guard.id ? backend.removeSync(guard.id, labels) : 'already-absent';
@@ -337,11 +347,20 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   guard.proc = proc;
 
   try {
+    const memoryGate = containerId && backend?.supportsLocalMemoryWitness ? {
+      prepare: async () => {
+        const candidate = await backend.prepareMemoryWitness(containerId!, labels, limits.memoryBytes, memorySetup.signal);
+        if (memorySetup.signal.aborted || guard.ownerClosed) { candidate?.close(); return; }
+        memoryWatch = candidate;
+      },
+      start: () => { owner.assertHeld(); if (guard.ownerClosed || request.signal?.aborted) throw new Error('owner-or-signal-lost'); memoryWatch?.arm(); },
+    } : undefined;
     await drive(proc, session, limits, outputDir, outcome, request.signal, async () => {
       if (containerId) outcome.stopConfirmed = await request.backend!.kill(containerId, labels).catch(() => false);
       proc.kill();
-    });
+    }, memoryGate, finishMemory);
   } finally {
+    finishMemory();
     proc.kill();
     const exit = await proc.exited;
     outcome.exit = { exitCode: exit.exitCode, exitSignal: exit.exitSignal };
@@ -351,7 +370,12 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       const backend = request.backend!;
       const state = await backend.state(containerId, labels, request.signal).catch(() => null);
       if (state) outcome.container!.state = { exitCode: state.exitCode, oomKilled: state.oomKilled };
-      if (state?.oomKilled && outcome.state === 'failed') setFailure(outcome, 'sentinel.execution.resourceExceeded', {}, true);
+      if (state?.oomKilled && outcome.state === 'failed') setFailure(outcome, 'sentinel.execution.resourceExceeded', { resource: 'memory', witness: 'runtime', detailKey: 'sentinel.execution.memoryWitness.runtime' }, true);
+      // A kernel witness never rewrites daemon state, promotes success, or takes precedence over another failure.
+      let held = false; try { owner.assertHeld(); held = !guard.ownerClosed; } catch { /* owner failure wins */ }
+      const kernelFailure = cgroupMemoryFailure(memoryEvidence, { ownerHeld: held, aborted: request.signal?.aborted === true,
+        state: outcome.state, code: outcome.code, containerExit: state?.exitCode, clientExit: exit.exitCode, clientSignal: exit.exitSignal });
+      if (kernelFailure) setFailure(outcome, 'sentinel.execution.resourceExceeded', { ...kernelFailure }, true);
       outcome.cleanup = await backend.remove(containerId, labels).catch(() => 'cleanup-failed' as const);
       if (outcome.cleanup !== 'cleanup-failed') request.intents?.settle(intentDetail({ labels }));
     }
@@ -393,15 +417,17 @@ function setFailure(outcome: WorkerOutcome, code: ExecutionErrorCode, detail: Re
 
 /** Run the protocol until the worker ends one way or another. Never throws for worker behaviour. */
 function drive(proc: WorkerProcess, session: WorkerSession, limits: TrustedAdapter['limits'], outputDir: string,
-  outcome: WorkerOutcome, signal: AbortSignal | undefined, stop: () => Promise<void>): Promise<void> {
+  outcome: WorkerOutcome, signal: AbortSignal | undefined, stop: () => Promise<void>,
+  startGate?: { prepare(): Promise<void>; start(): void }, finishObservation: () => void = () => {}): Promise<void> {
   return new Promise<void>(resolve => {
     const decoder = new FrameDecoder({ maxFrameBytes: limits.maxFrameBytes, maxTotalBytes: limits.stdoutBytes });
     const stderr = new BoundedCapture(limits.stderrBytes);
     const timers: NodeJS.Timeout[] = [];
-    let settled = false;
+    let settled = false, preparingStart = false;
     const finish = (code?: ExecutionErrorCode, detail: Record<string, unknown> = {}) => {
       if (settled) return;
       settled = true;
+      finishObservation(); // Final own-counter read precedes every stop/kill, never a post-kill inference.
       for (const t of timers) clearTimeout(t);
       clearInterval(poll);
       signal?.removeEventListener('abort', onAbort);
@@ -429,13 +455,28 @@ function drive(proc: WorkerProcess, session: WorkerSession, limits: TrustedAdapt
       if (settled) return;
       stdoutEmitted += b.byteLength;
       if (overCombined()) return finish('sentinel.execution.stdoutBudget', { combined: combinedLimit });
+      if (preparingStart) return finish('sentinel.execution.protocolViolation', { rule: 'worker-data-before-start' });
       let messages: ProtocolMessage[];
       try { messages = decoder.push(b); } catch (e) { return finish((e as ExecutionError).code, (e as ExecutionError).detail); }
       for (const m of messages) {
         if (settled) return;
+        if (preparingStart) return finish('sentinel.execution.protocolViolation', { rule: 'worker-data-before-start' });
         let step;
         try { step = session.receive(m); } catch (e) { return finish((e as ExecutionError).code, (e as ExecutionError).detail); }
-        for (const out of step.send) send(out);
+        if (startGate && step.send.some(out => out.type === 'start')) {
+          // Keep draining stdout with the same byte/frame ceilings while the bounded native setup is pending.
+          // A genuine worker waits for start; any extra bytes or coalesced messages before it are refused.
+          preparingStart = true;
+          if (b.at(-1) !== 0x0a) return finish('sentinel.execution.protocolViolation', { rule: 'worker-data-before-start' });
+          void startGate.prepare().catch(() => {}).then(() => {
+            if (settled) return;
+            if (signal?.aborted) return finish('sentinel.execution.canceled');
+            try { startGate.start(); } catch { return finish('sentinel.execution.protocolViolation', { rule: 'owner-lost-before-start' }); }
+            if (settled || signal?.aborted) return finish('sentinel.execution.canceled');
+            preparingStart = false;
+            for (const out of step.send) send(out); // Byte-identical welcome/start, with no late dispatch.
+          });
+        } else for (const out of step.send) send(out);
         if (step.canceled) return finish('sentinel.execution.canceled');
         if (step.result) {
           // Provisional: confirmed only at stdout end of stream with clean framing and a clean exit.
@@ -467,6 +508,7 @@ function drive(proc: WorkerProcess, session: WorkerSession, limits: TrustedAdapt
       if (outputBytesOver(outputDir, limits.outputBytes)) finish('sentinel.execution.outputTooLarge', { bytes: limits.outputBytes });
     }, 200);
     const onAbort = () => {
+      if (preparingStart) return finish('sentinel.execution.canceled');
       const cancel = session.cancel();
       if (!cancel) return finish('sentinel.execution.canceled');
       send(cancel);
@@ -581,3 +623,6 @@ export function releaseWorkDir(workDir: string): void {
   try { if (lstatSync(input).isDirectory()) chmodSync(input, 0o700); } catch { /* absent */ }
   rmSync(workDir, { recursive: true, force: true });
 }
+
+// Package-internal protocol engine for focused real-child lifecycle controls; never a package facade or owner factory.
+export { drive as driveOwnedProtocol };

@@ -622,7 +622,7 @@ export class Coordinator {
   async #prepareIn(dir: string, driver: CheckDriver, executable: ReturnType<ValidatedPlan['unitOf']>, signal: AbortSignal, stillWithin: () => void) {
     const context: DriverContext = Object.freeze({
       signal, analysis: driver.reads?.analysis ? await retainedAnalysisFor(this.#store, this.#plan, executable.unit, this.#plan.admitted.profile, signal, stillWithin) : null,
-      plan: this.#plan.admitted.plan, unit: executable.unit, checks: executable.checks, profile: this.#plan.admitted.profile,
+      plan: this.#plan.admitted.plan, ...(this.#plan.admitted.pathRequest?{pathRequest:this.#plan.admitted.pathRequest}:{}), unit: executable.unit, checks: executable.checks, profile: this.#plan.admitted.profile,
       inputs: executable.inputs, inputScopes: executable.inputScopes, rules: this.#rulesOf(executable.checks),
       tools: this.#plan.admitted.plan.pins.tools.filter(t => t.adapterId === executable.unit.adapterId).map(t => ({ ...t })),
       databases: this.#plan.admitted.plan.pins.databases.map(pin => {

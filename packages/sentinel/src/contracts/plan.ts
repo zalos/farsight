@@ -72,6 +72,8 @@ export interface PlanPinnedRule {
 }
 
 export interface PlanPins {
+  /** Optional canonical structural-path request; source-derived data, never authority. Absent on old and bootstrap plans. */
+  pathRequest?: ArtifactId;
   /** Null on a bootstrap revision: there is no snapshot yet. */
   snapshotId: Id | null;
   inventoryDigest: Digest | null;

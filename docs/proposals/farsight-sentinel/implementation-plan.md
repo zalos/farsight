@@ -1,5 +1,7 @@
 # Farsight Sentinel implementation plan
 
+> Owner update (2026-10-23): prioritize CLI adapters and the owner UX. Hosted API work and live validation are paused; preserve the existing implementation behind an adopted `hostedApiReviewEnabled` flag, default false for the new stage workflow. Enforce it in dispatch and show unavailability in the UI. Keep the hosted-only acceptance gate recorded for resumption; CLI-only validation and retained prompt/skill provenance continue.
+
 **Status:** PR 00 merged as [#118](https://github.com/zalos/farsight/pull/118) at `0c8c747`, 2026-10-19.
 Execution preparation reviewed against main `46018cb` on 2026-10-21; implementation has not started.
 The owner confirmed container-only external scanners with no host fallback. Exact capabilities remain subject
@@ -31,18 +33,22 @@ not silent amendments or claims that Sentinel already exists.
 
 ### Confirmed by the owner for this plan
 
-- **Local first, preserve a future hosted option.** Keep provider/scanner adapters replaceable; avoid making
-  a restricted engine or rule distribution essential to the product. Hosting is a future architecture and
-  licensing review, not a promise that the local SQLite service is already multi-tenant.
+- **Local Sentinel service, replaceable providers.** Keep provider/scanner adapters replaceable; avoid making
+  a restricted engine or rule distribution essential to the product. Local service operation does not require
+  local model inference. Hosting the service remains a future architecture/licensing review; the SQLite service
+  is not already multi-tenant.
 - **Source-only first release.** Do not execute Maven, Gradle, npm scripts or target-supplied plugins.
   Existing generated source can be captured as source. Producing missing generated code, build-derived
   bytecode and analyzers that invoke project tooling require the later isolated-build track.
 - **Container-only external scanners, confirmed 2026-10-21.** External scanners require Linux containers;
   there is no automatic host-execution fallback. Parsing/planning with trusted built-in adapters needs no
   container. Runtime selection, acquisition and measured support remain separate PR 01/07 gates.
-- **Ollama and a configurable hosted endpoint.** Ship an Ollama adapter and a capability-tested
-  OpenAI-compatible HTTP adapter. Compatibility is verified per endpoint; it does not imply support for
-  every vendor feature. Both are optional, and hosted disclosure requires trusted local configuration.
+- **Company-approved API, CLI or optional local model providers, extended 2026-10-23.** Support configured
+  enterprise hosted APIs and approved Claude/Copilot CLI runners alongside optional Ollama. Start HTTP support
+  with capability-tested OpenAI-compatible endpoints; other protocols require explicit qualified adapters.
+  Company policy can forbid local inference and model downloads entirely. No local model is required by setup,
+  review or the model evaluation gate. Provider/model choices and reruns must respect that policy; no automatic
+  provider, endpoint or local/hosted/CLI fallback. Each CLI/version and endpoint needs its own capability gate.
 - **Standalone delivery and Farsight integration.** A recipient can understand a delivered report without
   Farsight, Sentinel, the original checkout or a running service. Farsight presents that same report with
   application navigation and authorized follow-up actions. Placement enriches the report when known; missing
@@ -61,7 +67,7 @@ not silent amendments or claims that Sentinel already exists.
 | Admission limits | One heavy scanner plus one model operation per coordinator; memory and token reservations additionally constrain admission | PR 07/21, measured in E8 |
 | Retention | No automatic deletion in v1; explicit inspect/pin/prune, disk quotas, refusal before exhaustion | PR 03/26 |
 | Rule distribution | Original Sentinel rules; separate provenance/license record for every external pack | PR 06/26 |
-| Model policy | Guided and general review separately selectable; no automatic hosted fallback from Ollama | PR 21/22 |
+| Model policy | Guided/general review separately selectable; trusted company allowlist for API/CLI/local providers, including local-inference denial; no automatic fallback | PR 21/22/25b |
 | Exit policy | Required coverage first; findings second. Mandatory rules/thresholds come from trusted settings | PR 06/09 |
 
 The exact framework releases, production rule list, E3/E5 quality thresholds and resource defaults remain
@@ -136,7 +142,7 @@ flowchart TB
   RUNNER --> SCAN[Isolated deterministic scanners]
   RUNNER --> REVIEW[Guided and general review]
   REVIEW --> BROKER[Scoped evidence and provider broker]
-  BROKER --> MODEL[Approved Ollama or hosted endpoint]
+  BROKER --> MODEL[Approved hosted API, CLI runner or optional local model]
   SCAN --> VALIDATE[Output and coverage validation]
   REVIEW --> VALIDATE
   VALIDATE --> COORD
@@ -487,10 +493,55 @@ Implement two work kinds: rule-guided review over a planned scope, and general r
 partitions of the inventory. General review includes scopes without scanner hits; its scope coverage is
 separate from formal rule checks. Model output cannot claim deterministic capabilities.
 
-The provider broker alone resolves credentials and contacts an approved endpoint. Source classes, endpoint
-origin, intended disclosure, retention/training terms with source/date, model identity policy and budgets are
+The provider broker alone resolves credential authority and contacts an approved endpoint or invokes a qualified
+CLI adapter. Source classes, endpoint origin, intended disclosure, retention/training terms with source/date,
+model identity policy and budgets are
 owner-controlled. Tool/endpoint changes invalidate trust receipts. A repository-provided URL cannot select a
 provider. Capture exact request/response artifacts privately, with credentials excluded.
+
+Company policy comes from an owner-adopted artifact under the existing trust directory or an explicitly adopted
+machine-managed policy source, never repository configuration. Bind adoption to its exact identity/digest and an
+owner receipt; only that trusted administrative path may replace it. Machine-managed restrictions remain a ceiling
+that workspace owners cannot relax through profile changes. Without such a policy, adopted default settings enable
+no model providers. Trusted policy controls provider kinds, endpoints, CLI executables/versions and models; a local
+workspace/profile choice can narrow it, never expand it. This uses the existing local-account trust boundary, not
+a claim of tamper resistance against that account. A policy forbidding local inference prevents
+local probing, startup, download and fallback, including evaluation/setup helpers. Demonstrate useful hosted-only
+and CLI-only review with no Ollama process or model installed. No built-in enterprise policy requires acquiring
+a second local model; E5 uses two approved configured models through any qualified transport.
+
+A managed CLI runner is a bounded model-provider adapter, not a shell tool exposed to the model. Configure a
+trusted executable/version and structured arguments, without shell interpolation or repository-provided command
+strings. Bind organization/endpoint and credential authority to the selected profile; credentials and authentication
+output stay out of prompts, logs and retained artifacts. Use an isolated captured-input workspace and allowlisted
+environment/configuration. Disable or enforceably confine ambient tools, plugins, hooks, arbitrary file access,
+commands and network destinations. PR 21 must select and qualify Linux-container confinement using PR 07, or
+a measured OS sandbox per supported platform; ordinary host execution is not implicitly permitted. Until the exact
+CLI/version/platform and confinement mechanism pass, that profile is unavailable. Do not assume noninteractive
+mode or vendor settings alone enforce those boundaries. Specify each profile's isolated authentication channel
+and credential authority, preserving the existing keychain-only secret contract; never mount the real home/config
+tree or copy authentication material into captured inputs, logs or replay artifacts. If supported vendor login
+cannot work within that boundary, show unavailable instead of broadening access. Qualify actual Claude/Copilot versions before advertising
+support; neither CLI is installed, logged in or contacted automatically.
+
+Own each invocation and its children, enforce input/output/time/concurrency limits, retain bounded structured
+output and diagnostics, and reconcile interruption before replacement. Cancellation cannot imply remote work or
+billing stopped. Authentication prompts, unsupported output, missing tools, unknown model identity and uncertain
+usage are explicit outcomes. Apply existing reservations/disclosure/receipt gates; a subscription or missing token
+report does not imply zero cost. An enforceable monetary budget requires a trusted cost bound or the profile is
+unavailable. The provider cannot change scan scope, approve decisions, bypass required deterministic stages or
+execute arbitrary project commands. External scanners remain Linux-container-only with no host fallback.
+
+PR 21 owns managed CLI adapters and company provider policy. PR 23b separately fences an externally coordinated
+Claude/Copilot agent through the same scoped claim/evidence/result contract, retaining its actual identity strength;
+self-reported execution is not equivalent to a managed invocation. Record source-disclosure, retention/training
+terms and their provenance for CLI vendor profiles as well as HTTP endpoints. Both routes can review nominated stages or
+PR 19a entry packets. CLI, MCP and GUI selection pins provider/model and exact input scope; reruns preserve prior
+results and preview changed disclosure/budget. An agent may request an existing authorized deterministic stage
+as a proposal through Sentinel's admission path under its actual transport principal. Effectful or paid work
+still needs the applicable owner confirmation receipt; a model channel cannot supply that receipt or replace
+accepted scanner output with a model opinion.
+
 
 The model sees structured untrusted evidence and typed tools for bounded source slices, graph neighborhoods,
 layer facts and rule definitions. It never gets a shell, arbitrary URL fetch, environment variables, rule
@@ -502,6 +553,22 @@ Track cumulative serialized input, output allowance, tool calls, deadline and pr
 retains its reservation pending explicit reconciliation. Unpriced endpoints cannot satisfy an enforceable
 monetary budget; require a trusted rate schedule or keep that profile unavailable. Local Ollama can record
 zero provider fee without claiming zero compute cost. Budget exhaustion preserves the unfinished frontier.
+
+Provider qualification includes two separate installed-package workflows: an approved hosted API with no local
+models, and each supported CLI profile with no local models. Use original synthetic captured source, exercise
+provider/model selection per stage and entry-point review plus a linked rerun, and retain actual identities,
+outputs and usage certainty. Mocks support regression checks but do not substitute for these real transport
+gates. Missing approved configuration/credentials leaves qualification open, never triggers local fallback.
+
+Every model-enabled stage/scan segment retains a versioned instruction manifest: exact Sentinel-rendered
+prompt/message bytes and template identity, ordered selected skills with version/content digest and the actual
+captured text/resources included, source packet identity, configured provider/model and CLI version/profile,
+reported identity, outputs and usage certainty. Distinguish selected, loaded and rendered skills. Preserve these
+private artifacts after source removal, apply run-wide secret withholding to their projections, and exclude
+credentials and private reasoning. Disable ambient instructions where qualified; label vendor-hidden instructions
+as unobserved rather than inventing their contents. A prompt, skill or model change binds a new linked rerun
+and retains prior results. Deterministic stages show these choices as not applicable. The GUI displays the same
+manifest and evidence as the CLI and permits authorized inspection and rerun through the existing owner flow.
 
 No silent retries of ambiguous paid calls. A retry policy states its maximum attempts and additional reservation.
 Model aliases and host-reported identity are recorded at their actual strength, not inferred from response text.
@@ -530,7 +597,8 @@ execution view with dependencies, progress, attempts, retained inputs/outputs an
 checks cannot be silently disabled; unavailable capabilities and resulting gaps are visible before admission.
 A selected-stage rerun previews its dependency consequences and creates a linked run with prior results
 preserved; this does not promise the later PR 27 incremental-selection optimization. PR 25b adds an explicit
-provider/model picker for the review stages, showing configured availability, disclosure and budget effects,
+provider/transport/model picker for review stages and selected entry points, showing company policy, configured
+availability, disclosure and budget effects,
 and records the requested and actual model identity with each result. This UI consumes the existing service
 contracts and pinned evidence; no alternative scheduler or result calculation lives in the viewer.
 
@@ -657,6 +725,48 @@ explicitly cannot replay absent source. Restore validates names, hashes, sizes, 
 before accepting objects; it never executes bundled tools. Restored trust grants are inactive until the owner
 adopts them. Signing/encryption is a separate enhancement; owner-only storage and integrity hashes are the v1
 baseline and do not create protection against the local OS account itself.
+
+### Retained entry-point code walkthroughs
+
+PR 19a adds a private review artifact after PR 18's retained paths and PR 19's captured-context/disclosure
+foundation. It produces one clean Markdown file per selected entry point plus a retained index, backed by a
+versioned structured packet. It does not depend on model review or the Farsight server. The ordinary assessment
+report and its default shareable disclosure profile remain separate.
+
+Bind entry/source/node identities, exact captured body and call-site spans, source/graph/context digests,
+producer/render versions, accepted ancestry, selection and bounds. Reuse the pure `core/query.ts` execution
+walk and small shared tree/splice folds; the current web endpoint's live-disk enrichment, 160-line cap and
+snippet fallback cannot supply historical complete bodies. Render complete selected symbols once, linking
+shared calls/cycles and preserving branches, setup/deferred work and unresolved exits. Captured supporting
+imports/declarations may be selected explicitly. This is a readable structural walk, not concatenated executable
+code, a runtime trace, data-flow proof or an additional security verdict.
+
+Frontend-only and backend-only entries are valid. A connected frontend/backend walk requires verified capture
+binding for both sources and the connecting relationship. A matching URL or name alone is insufficient. Missing
+code, unsupported dispatch and external implementations remain named boundaries. Entry selection and scope are
+visible; every admitted entry has a document or an explicit refused/withheld result. Bound traversal and output,
+and narrow/refuse instead of silently truncating a body described as complete.
+
+Markdown leads with the entry, scope and limitations, then contents, a structural overview, linked complete code
+sections and provenance/omissions. Use deterministic collision-safe filenames/anchors and safe code fences for
+arbitrary source; no live filesystem links, remote loads or source comments treated as instructions. The same
+packet and renderer version produce the same bytes. Existing disclosure and secret checks apply across current,
+baseline and selected ancestry, including paths/labels/filenames. Preserve existing run-wide withholding:
+accepted secret evidence in any of those scopes withholds all source/context text and every name covered by
+the existing name rule. Whole-body omission is presentation, not a per-body privacy exception; narrower disclosure
+requires separate qualification. This does not change findings or coverage. Reading/exporting does not authorize
+execution or disclosure to a model provider.
+
+Retain the packet, Markdown and verified closure through the existing owned artifact lifecycle; reruns retain
+previous versions. PR 22 can review this exact input with validated citations and visible reviewed/skipped scope,
+while general review still covers its nominated inventory and scanners consume their genuine captured inputs.
+PR 19a owns explicit bounded MCP artifact reads through PR 23a using existing authorization and exact retained
+identity; ordinary MCP reads do not include full source. PR 25 exposes the same retained artifact in existing
+stage/evidence views with pinned web/Markdown parity.
+PR 26 proves installed npm-only generation/export, source-gone replay and clean-recipient offline reading.
+Include frontend/backend variants, long bodies, duplicate identities, branch/cycle/unknown cases, changed live
+source, Markdown injection, privacy/ancestry and bounds in acceptance. The full gate lives in PR 19a's backlog;
+adding it to the plan is not an implementation or qualification claim.
 
 ## 12. Verification and release gates
 

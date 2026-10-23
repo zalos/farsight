@@ -566,6 +566,19 @@ read. Expected scopes remain the admitted plan's scopes. The verified worker res
 Original rule packs and their digest manifest ship as data assets; they contain no engine, database or execution grant.
 
 
+**Positive container memory evidence.** On the qualified native Linux Docker Engine/cgroupv2 profile only,
+`execution/cgroup-memory.ts` may observe the exact-owned container's local kernel counters in addition to the raw
+daemon state. Its inspected PID and stable kernel start/cgroup association bind the full container leaf; root-owned,
+no-follow directory/file identities are pinned and checked before every bounded read. Before the unchanged start,
+one bounded setup establishes a fresh baseline while all original protocol, cancellation and deadline limits remain
+active. Extra worker data during setup is refused. A witness needs local `max`, `oom` and `oom_kill` increases plus
+the actual admitted `memory.max`. These are co-observed limit activity and an OOM kill, not proof of a causally paired
+killer. Only failed `workerExited`/137 with no signal and valid owner can receive that refinement; other failures
+and cleanup retain precedence. Daemon `OOMKilled:false` stays false. No parent/host counters, guessed cgroup path,
+artifact trace, privilege expansion or new public authority is involved. One watcher, fixed read/sample bounds and
+a final read before any Sentinel stop still may miss fast teardown; missing/raced evidence grants nothing. Desktop
+remains daemon-only. The shared resource error vocabulary also covers coordinator CPU/memory and scheduling capacity.
+
 **Coverage.** Each assigned check gets one `sentinel-coverage/draft-1` record per attempt that published:
 `complete`, `partial` (scope skipped, unresolved or not scanned) or `not-run`. The record is never finer than the
 trusted adapter's registered `coverage` granularity (default `aggregate`); a result cannot claim finer coverage.
@@ -1570,8 +1583,8 @@ validated plan, current revision and original source/owner checks; a read-only p
 `retained-bootstrap.ts` and `retained-analysis.ts` share verification mechanics while retaining those different
 entry authorities. Execution's body-read behavior is unchanged.
 
-The closed internal descriptor table currently names `framework-controls` and `bounded-paths`; the latter cannot
-register until its real worker and driver ship. No caller selects a worker path or export. Framework definitions
+The closed internal descriptor table names `framework-controls` and `bounded-paths`; each resolves its shipped
+fixed worker and driver through the same installed closure contract. No caller selects a worker path or export. Framework definitions
 import the actual pure support modules, and report reads/imports/help do not resolve assets, load the worker or
 load the native parser. Already accepted reports remain readable with worker assets absent; a new execution still
 requires the installed assets and exact registration identity.
@@ -1592,6 +1605,80 @@ supervisor outcome remains unchanged. Cancellation, deadlines, cleanup, ownershi
 failures keep their existing precedence. Exit 71 from another worker, a container or after protocol activity keeps
 its ordinary failure meaning. Catalog wording says startup verification refused, since that observation alone
 does not establish that files changed or that no process started.
+
+45. **Canonical structural path requests are pinned source-derived data; owner-confirmed deep imports remain a separate acceptance boundary (2026-10-22).**
+
+A structural path request has the closed `sentinel-path-request/draft-1` contract: the exact recorded ancestor run,
+revision and plan digest; captured snapshot and source; sorted unique exact node pairs; sorted allowed call/http/render
+edge kinds; and explicit depth, fan-out and visit bounds matching the bounded-path library. At most 10,000 pairs and
+one MiB of serialized request are accepted; the byte/count bounds apply before parsing or expensive processing.
+Queries are data, never executable code, a grant or proof of flow. The request's canonical artifact identity is the
+optional `PlanPins.pathRequest`; absent pins preserve every old plan's canonical bytes and bootstrap revisions reject
+this pin. A path unit's influence and input fingerprint include the request identity. Other sources stay unavailable
+rather than reading another source's query, and no request supplies the missing interprocedural-flow capability.
+Changed queries, bounds, adopted terms or terminal generation give a different linked task identity.
+
+Admission must prove the actual current ancestor revision, allowed ended state and exact source/capture through the
+same retained bootstrap/source authority used by canonical execution. The request is staged as source-derived with
+the plan, linked to the exact admitted ancestor and accepted operation/parser closure; callers cannot supply those
+links or turn copied artifact JSON into authority. Execution rechecks the pin and uses sealed retained bytes, never
+today's workspace or an unpinned prepare-only parameter. The internal admission seam requires the genuine
+owner-bound read proof, validates the request's exact path unit fingerprints and included source bodies, and derives
+all retention links itself before staging. Proof construction and closure revalidation are separate bounded read
+passes; both retain the original absolute deadline and signal. Repeated pre-write assertions check that proof without
+copying its large source view or minting execution authority. Execution holds every unrelated unit. Authenticated
+request ancestor edges and genuine selected-rerun edges retain their recorded revisions; a parent id alone grants
+nothing. Mixed request pins and legacy rerun selections refuse explicitly. An explicit rerun of actual active path
+units prepares a new request pinned to that ended path task's executed revision, with the same exact queries and
+bounds; it never invents legacy parent-unit mappings. Retry selects only unpublished active units, never held
+checks; a successful task has nothing to retry. A non-ended task joins/resumes without a new generation.
+
+The owner command is `paths <ancestorRunId> --request <file>`: adopted policy preflight precedes the one bounded,
+non-following regular-file read. It proves the ended ancestor before task writes, discloses exact queries, bounds,
+held required checks and prerequisites, then consumes the existing exact preparation receipt when required.
+Acceptance atomically retains the request and proven closure before creating the linked planned run. It does not
+launch: `run <childRunId>` requires separate current `run.start` admission. A prepared path task
+starts its absolute run deadline at admission; a later start after expiry holds every unit with `runDeadline` and
+publishes nothing. This timing statement applies to path tasks, not every legacy plan/run path. Identical pending/running/paused
+preparation joins; completed/canceled tasks permit a new explicit generation. Admission-before-run recovery
+reconciles only the exact retained candidate, and accepted publication survives coordinator death without being
+accepted twice. A pending pause follows legal running/pausing/paused transitions without launch, preserving its
+original creation/deadline; cancellation wins over a pending pause.
+
+Minimal and full JSON, Markdown, offline HTML and SARIF share the authenticated accepted structural section.
+Readback checks actual publication, succeeded owned attempt, exact invocation/job/assignment, immutable request,
+retained source closure, raw worker result and normalized records. It does not run a second search or independently
+reverify a no-path claim. Every rendering first applies accepted current, explicit baseline, authenticated request
+and selected-ancestor secret privacy, including canceled ancestors and executed revisions with merely admitted
+successors. Query/node/edge/site/span details are withheld together; ancestor findings and coverage never become
+child findings. Counts describe the pinned query's outcomes separately from security gaps. A missing recorded
+secret match is not proof of secret absence. Each retained structural section has a cooperative 120-second
+proof/readback bound, so a large or slow valid closure can be refused without launching or refreshing its producer.
+
+The shipped `bounded-paths` worker has one explicit sealed job naming its request and the four original retained
+roles. A source unit admits at most 1,018 entries before the six fixed roles/job/request, within the existing 1,024
+start-input cap. No worker enumerates JSON to discover a job. `DriverContext.pathRequest` is data supplied only
+from the coordinator's genuine admitted plan. The driver binds the exact work, attempt, assignment, source, profile,
+sealed input set and derived job before normalization; output graph, path steps, sites, cycles and producer identity
+are checked against the original parser evidence. Only the exact promoted shipped rule selected by owner policy
+can plan this task. Registration does not alter adopted settings, requested families or default stages.
+
+Sentinel's rule evidence vocabulary adds `call-path`: a retained bounded structural query result, including an
+explicit no-path or frontier outcome. This is not a new Farsight evidence class, security finding, data-flow fact or
+clearance. Structural task completion gives no required security coverage, and unrelated required checks remain
+gaps. The worker enforces one budget over all queries: 64 MiB decoded/cache bytes, 1,024 distinct reads, one million
+visits, four million traversal/index steps and four MiB output. Limits can only tighten. These are cooperative
+accounting limits, not hard heap or RSS claims. The coordinator preserves its original unit prepare-to-accept
+cancellation/deadline; a separately bounded normalization pass records its own graph-validation counters without
+re-running the queries or re-reading bodies. Worker usage, normalization usage, proof and admission revalidation
+are separately stated; none claims a single combined quota.
+
+Deep imports retain ADR 36's separate owner `evidence.import` receipt boundary and tool-scope-only observations.
+A consumed in-process receipt cannot be reconstructed from serialized JSON; durable import acceptance and its crash
+behavior require their own reviewed transaction and retained closure. No scanner attempt or executed coverage is
+fabricated for an import, and no deep engine, build, network permission, model call or target execution is inferred
+from an analyzer's mode. This decision reserves the owner boundary; durable import implementation follows the first
+canonical structural-path slice rather than being implied by the library contract.
 
 46. **Sentinel captures everything but the exact store it holds, and keeps run scratch in a lease inside that store (2026-10-22).**
 A working-copy capture leaves out one folder only: the store this process holds, at its exact canonical path and
@@ -1624,6 +1711,77 @@ multi-source `captureSnapshot` API knows no trust or runtime state and checks on
 captures several sources checks them all (`assertTrustOutside`). Farsight's code parser lists no hidden folder, so a
 route under `.farsight` is captured and read by a framework pack but has no graph surface: it is a cited
 `routeNotInGraph` frontier, never a fact. Number 45 is reserved for the path protocol.
+
+47. **Sentinel records owner-associated report imports in its existing ledger, separately from worker execution (2026-10-23).**
+The internal report-import path accepts bounded SARIF and ZAP data as caller-stated claims. A retained source
+proof binds the exact executed run revision, snapshot, source and accepted inventory/parse closure. The trusted
+owner Workspace supplies the current adopted policy and receipt directory; nothing in an imported report supplies
+that authority. The current implementation supports the existing default Workspace layout. The owner executable exposes
+`evidence import`, `read`, `list` and `abandon`. Deep-engine execution, a qualified observation producer and
+mitigation decisions remain separate work.
+
+Migration 6 adds evidence operations and append-only acceptances to the same SQLite ledger, and associates each
+pending stage with its operation. Private permits bind the genuine held owner, epoch, exact candidate, prior
+acceptance head and consumed `evidence.import` receipt. Generic worker publication, generic staging and report pins
+cannot accept these stages. Candidate identity covers the retained source closure, workspace/store binding, exact
+raw and manifest bytes, normalized data and adapter version. It excludes receipt choice and acknowledgement time;
+the completed acceptance root separately binds the actual operation and authority audit, without a hash cycle.
+
+Shared policy preflight precedes caller-file reads. Normalization, byte/layout limits and the full authority-audit
+size are checked before spending. Once the shared admission consumes the exact receipt, the operation registers
+its six-role stage before writing objects. Acceptance verifies the complete object and link closure and atomically
+records the artifacts, acceptance, event and terminal operation while releasing its stage. Accepted roots become
+ordinary referenced roots for reachability. Every imported payload keeps at least source-derived privacy; captured
+source keeps its stronger floor.
+
+Receipt spending and SQLite commit are separate durable effects. An interruption before publication may leave a
+spent receipt and no operation row; the result does not promise the spend can be undone. A lost acknowledgement
+revalidates the one existing acceptance before another spend. Resuming an older pending candidate requires fresh
+confirmation and a new current-epoch operation; its complete stage is pinned before the old stage is released.
+The original receipt and admission remain in the immutable old operation for independent audit. This slice
+deletes no payload blobs; that audit would remain if a future explicit collector prunes obsolete unaccepted bytes. Unknown pending operations are retained. Explicit `evidence.abandon`
+requires its own current owner receipt for one exact older pending identity and stage set; it releases only that
+stage association, records the complete audit, and deletes no physical object.
+
+Retained reads independently verify the acceptance, terminal event, exact closure and normalized bytes, supported
+adapter, and local issued-and-spent authority at the original decision time. Expiry today does not erase valid past
+acceptance. Reopening reconstructs read authority only; serialized receipts or imported bundles cannot reconstruct
+a launch or acceptance permit. Final proof checks preserve the original owner, epoch, source context, deadline and
+cancellation signal after asynchronous reads. Known secret findings in current, baseline or selected ancestry
+withhold all imported text; canceled runs remain unassessed. Imports do not contribute scanner execution, coverage,
+deployment, cryptographic or mitigation credit.
+
+Fixed limits are 64 open operations per store, 256 historical operations per binding, one stage per operation,
+six payload roles, 2,048 source-closure artifacts, 4,096 links, 40 MiB payload bytes and 512 KiB operation identity.
+Existing 16 MiB per-object limits and the 16 KiB complete authority-audit limit also apply. These are cooperative
+bounded operations, not process-memory or operating-system confinement guarantees. Recovery pages old generic
+stages in SQL by stable identity, leaving operation-associated evidence stages to their explicit domain recovery.
+
+The initial public command acquires the genuine local owner before touching caller report files. If a detached
+service holds the workspace, it returns a typed busy result; it neither steals ownership nor stops the service.
+Unexpired MCP read buffers may retain that owner for five minutes. This local-only command is an interim delivery
+boundary: the continuous GUI needs separately reviewed receipt transport against the service that already owns
+the store. A generic RPC cannot identify itself as the human owner.
+
+Preview returns an exact candidate digest; optional expected-candidate matching refuses stale bytes before receipt
+issuance or spending. Confirmation repeats the bounded proofs under the original absolute 120-second operation
+deadline. With a prior accepted head, one command can perform up to five complete source proofs; an earlier
+three-proof warm-cache measurement is not a worst-case C1 capacity promise. A verified acceptance and its
+metadata remain true if subsequent rendering or file delivery fails. The small acknowledgement and the complete
+serialized document have separate 16 KiB and 32 MiB limits, including command wrappers. Output is validated and
+bounded before one no-overwrite file creation or stdout delivery; overflow refuses rather than truncates.
+The new-file export is not crash-atomic: I/O or process failure may leave a new partial file.
+
+The public data-only `sentinel-import-view/draft-1` and `sentinel-import-page/draft-1` schemas support projected
+JSON and readable indented-code Markdown, preserving the payload's original characters. One fixed owner-local
+disclosure is explicit; a clean imported document is not guaranteed safe to share. There is no shareable flag.
+They expose imported claims and honest withholding, never original report bytes or receipts. A default 50 / maximum 100-row metadata page uses a bounded SQL query and a binding-specific cursor;
+its availability is explicitly not evaluated, rather than implying that every payload was revalidated. Ordering
+is by stable generated operation identity, not chronology. Import/list require a completed run; reading an already
+accepted canceled-run import remains wholly withheld. The read
+command independently revalidates one acceptance and its current privacy. Claim, exchange and cookie counts
+name one accepted import; operation counts name only the returned page. Neither contributes scanner findings,
+coverage or mitigation totals.
 
 48. **Sentinel exposes bounded retained reads through its existing owner service and the MCP SDK (2026-10-22).**
 The first PR 23a slice is read-only: `service.capabilities`, `run.inspect`, `view.page`, `report.open` and

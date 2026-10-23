@@ -41,7 +41,7 @@ test('absolute deadline validates malformed input; Infinity keeps the internal b
   }
   const budget = new RetainedBudget(s.store, { signals: [], deadlineAt: Infinity });
   assert.ok(Number.isFinite(budget.deadlineAt));
-  assert.equal(budget.deadlineAt - budget.started, RETAINED_PROOF_LIMITS.deadlineMs);
+  assert.equal(budget.deadlineAt, budget.started + RETAINED_PROOF_LIMITS.deadlineMs);
   const proof = await retainedSourceForAdmission(s.store, s.ancestor, { ...timing(), deadlineAt: Infinity });
   assert.ok(readRetainedSourceProof(s.store, proof, s.ancestor, { ...timing(), deadlineAt: Infinity }));
   assert.throws(() => readRetainedSourceProof(s.store, proof, s.ancestor, { ...timing(), deadlineAt: NaN }), unavailable);

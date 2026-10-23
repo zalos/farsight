@@ -29,7 +29,8 @@ export type RuleMeaning = 'candidate' | 'finding';
 export type Severity = 'info' | 'low' | 'medium' | 'high' | 'critical';
 
 /** Evidence a result of the rule must carry. */
-export type RuleEvidence = 'source-span' | 'matched-pattern' | 'control-fact' | 'dependency-version' | 'advisory-id';
+/** call-path means a retained bounded query result, including no-path/frontier; never security or data-flow evidence. */
+export type RuleEvidence = 'source-span' | 'matched-pattern' | 'control-fact' | 'dependency-version' | 'advisory-id' | 'call-path';
 
 /** Frameworks with planned control-fact packs (PRs 14–17). */
 export type FrameworkId = 'next' | 'express' | 'nest' | 'spring';

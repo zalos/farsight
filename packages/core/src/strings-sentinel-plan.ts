@@ -6,6 +6,7 @@ import type { StringEntry } from './strings.js';
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
 
 export const SENTINEL_PLAN_STRINGS: Record<string, StringEntry> = {
+  'sentinel.plan.pathRequestUnavailable': same('no structural query is pinned for this captured source', 'A bounded call-path task runs only the exact queries and bounds in a retained request for this source. A request for another source, or no request, leaves this task unavailable; no path or security coverage is inferred.'),
   'sentinel.plan.capabilityUnavailable': same('no registered adapter establishes a capability the rule needs', 'A rule names what must be established before it can be checked. No adapter in the trusted registry is recorded as establishing one of them, so the check is kept as unsupported rather than run with something weaker.'),
   'sentinel.plan.capabilityNotPermitted': same('this profile does not permit relying on a capability the rule needs', 'The capability is established by a registered adapter, but the profile does not permit checks to rely on it, so the check is kept as unsupported.'),
   'sentinel.plan.adapterNotRegistered': same('the rule\'s adapter is not in the trusted adapter registry', 'Only adapters Sentinel\'s own code registered, by digest, may run a rule. This one is not registered, so the check is kept as unsupported.'),

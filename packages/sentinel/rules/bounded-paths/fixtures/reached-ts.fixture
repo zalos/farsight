@@ -1,0 +1,2 @@
+export function entry(){return sink()}
+export function sink(){return 1}

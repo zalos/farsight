@@ -179,6 +179,13 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   the graph records every call a visited function could make) and `deep/import.ts` (`importDeepAnalysis` for
   attested, bound `sentinel-deep-import/draft-1` documents; `DEEP_ANALYSIS_SUPPORT` states that no engine exists).
   Words in core's `strings-sentinel-analysis.ts`; tests in `test/analysis-paths.test.ts`.
+  ADR 45 adds the closed request (`paths/request.ts`, `contracts/pathrequest.ts`), bounded aggregate budget and
+  explicit sealed-job protocol (`paths/budget.ts`, `protocol.ts`), fixed builtin `worker.ts`/`driver.ts`, and pure
+  shared output checks (`output.ts`). `service/path-request-file.ts` reads one bounded owner file after policy
+  preflight; `path-task.ts` prepares/admits exact linked retained tasks; `path-report.ts` authenticates their accepted
+  publications. `reports/structural-paths.ts` formats the shared privacy-projected section. Owner lifecycle,
+  process-kill recovery, native secret ancestry and byte/protocol tests live in `test/path-*.test.ts`; the actual
+  npm-only workflow is `scripts/test-sentinel-paths-consumer.mjs`. No new public authority factory or loader ships.
   `src/frameworks/express/` is the Express 4.21.2 pack (PR 15, ADR 31), exported as `./frameworks/express`:
   `syntax.ts` (Oxc over captured bytes, exact UTF-8 spans), `modules.ts` (bindings, imports, exports, relative
   resolution), `model.ts` (applications, routers, layers in order, open objects), `effects.ts` (refusal, pass-through,
@@ -288,6 +295,8 @@ Sentinel public scanner dispatch extends the CLI/service boundary: `service/scan
 reviewed external drivers and the exact preview driver (`service/preview-driver.ts`), `service/scanner-assets.ts`
 handles explicit bounded owner acquisition/adoption and receipt-bound private asset records, and
 `reports/scanner.ts` projects only accepted current-plan observations through the shared coverage evaluator.
+`execution/cgroup-memory.ts` is the private positive-only native Linux local OOM counter observer: exact-owned PID/cgroup binding, pinned kernel file identities, bounded notifications and no parent/host fallback. `execution/isolation.ts` gates its one pre-start setup by the qualified backend; `execution/supervisor.ts` preserves raw daemon state and lifecycle precedence. `test/cgroup-memory.test.ts` uses real descriptors behind an explicit kernel-I/O fixture, `test/execution-memory-start.test.ts` exercises genuine child protocol timing, and the separate native forced-daemon-false control needs actual kernel evidence before qualification.
+
 `execution/retained-source.ts` shares bounded accepted-source mechanics and an owner-bound read-only proof, without granting execution authority. `execution/retained-analysis.ts` separately checks the genuine validated execution plan before minting driver access to original auxiliary bytes. `execution/retained-bootstrap.ts` proves report bootstrap lineage against admitted parent plans and accepted coordinator invocations using those shared mechanics. `reports/accepted-secrets.ts` shares the existing secret-record binding validator; `reports/selected-privacy.ts` inherits only matched-name privacy through that lineage. `service/full-report.ts` builds the full `sentinel-report/draft-1` document of a completed scanner run (and a comparison
 with a baseline run) from accepted publications bound to their run, unit and attempt, pins an owner-confirmed
 application graph against the captured bytes, and writes a rendering once (`report --full`, `compare`, ADR 38).
@@ -305,3 +314,34 @@ Sentinel's service slice (ADR 48) lives in `src/contracts/service.ts` (five read
 unsettled read preparation without changing the handshake. `scripts/test-sentinel-mcp-consumer.mjs` installs only
 the tarball with npm and exercises the real SDK, retained framework reports and, under explicit native opt-in,
 genuine local-container secret privacy. `scripts/test-sentinel-mcp-controls-consumer.mjs` exercises real adopted grants, owner CLI confirmation, same-run pause/resume/cancel and lost-response reconnect without replay. Controls reuse the existing service admission; the package starts no MCP process or SDK import at ordinary library import.
+
+Sentinel owner report imports (ADR 47) are executable internals. `imports/` bounds and normalizes SARIF/ZAP,
+HTTP exchanges and cookie statements; `evidence/owner-cli.ts` supplies preview, confirmation, read/list and explicit
+abandon through genuine local ownership. `owner-context.ts` binds the executed source proof; `import-operation.ts`,
+`accept.ts`, `audit.ts`, `reader.ts` and `abandon.ts` enforce the receipt, immutable candidate, acceptance and recovery
+boundaries. `store/evidence-binding.ts` holds private permits; migration 6 and the existing ledger own stages,
+operations, acceptances and referenced roots. `contracts/import-view.ts` describes projected views/pages, with
+words in the existing Sentinel CLI/service catalogs and count scopes in core. `scripts/test-sentinel-evidence-consumer.mjs`
+qualifies the actual npm-only owner commands and separately identifies its matching built-private crash fixture.
+Imported claims never become scanner execution, coverage or qualified mitigation evidence.
+
+Sentinel structural task requests (ADR 45) add `contracts/pathrequest.ts` and
+`analysis/paths/request.ts`: bounded, immutable canonical query data and deterministic request/generation identity.
+`planner/planner.ts` optionally pins that artifact and fingerprints source-scoped path work; missing requests and
+unavailable deep-flow capability stay explicit gaps. These helpers grant no execution or receipt authority.
+`analysis/paths/protocol.ts` is the pure sealed-object job/output reader: exact request/ancestor/source bindings,
+read-byte hashes and parser result/index links, returning call reachability and frontiers without check credit. It
+launches and publishes nothing. `analysis/paths/admission.ts` binds the exact admitted path units to a genuine
+owner-bound retained-source proof, revalidates its closure through counted reads and derives source-derived request
+retention links before the existing atomic plan admission. Unrelated execution units remain held; request ancestry
+uses exact accepted edges, and mixed legacy selections refuse. `analysis/paths/budget.ts` accounts aggregate
+worker reads, decoded/cache bytes and query work; `worker.ts` is the fixed supervised sealed-job child; `driver.ts`
+binds normalization to the genuine coordinator context and original parser graph; `definitions.ts` is pure shared
+identity data. `rules/bounded-paths/` defines the exact promoted structural family with `call-path` rule evidence,
+and `service/path-adapter.ts` gates availability without adopting policy. Tests in `path-worker-inputs.test.ts` and
+`path-driver.test.ts` exercise the genuine child and completed/canceled ancestor acceptance. `service/path-task.ts`
+owns canonical generation/admission; `path-request-file.ts` bounds the caller file and `path-report.ts` authenticates
+retained results. The owner CLI prepares the task and separately starts it, with retry/selected rerun and all-format
+report delivery through the existing service. `scripts/test-sentinel-paths-consumer.mjs` exercises the actual installed
+workflow, strict worker assets and source-removed reports; native privacy and offline browser tests remain separate
+explicit zero-skip checks. No structural outcome counts as data flow, a security finding or independent absence proof.

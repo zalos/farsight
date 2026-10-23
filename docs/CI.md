@@ -314,3 +314,27 @@ request after reaping is not an actual signal. Exit 137, fixture wording, parent
 matches never prove OOM. If child counters and daemon state disagree, record that discrepancy without changing the
 production conservative result or native assertion. A passing run does not explain a historical failure. Do not
 blindly rerun a failed gate or claim release clearance; retain the unresolved cause for an explicit owner decision.
+
+## Owner report-import verification
+
+The normal installed Sentinel package gate also runs `scripts/test-sentinel-evidence-consumer.mjs`. It snapshots
+the input tarball, freshly compiles the private Sentinel modules, repacks and requires an identical artifact digest
+before installing the original snapshot with npm. Provenance mismatch retains the private input for diagnosis.
+Actual installed commands cover preview, stale confirmation, acceptance, source-removed read/list, Markdown,
+busy-owner refusal and natural release, interrupted predecessor transfer and explicit abandonment.
+
+The deterministic interruption is a separately identified matching built-private after-stage hold followed by a
+real SIGKILL; it is not an installed CLI crash qualification. The public transfer/abandon actions still use the
+unmodified installed package. The native scanner job additionally selects `evidence-privacy.test.ts` with zero
+skips and requires the installed consumer's genuine current/baseline/selected secret-privacy result. Existing MCP,
+framework, scanner, observer and full recovery gates remain selected.
+
+## Retained structural-path verification
+
+Ordinary installed package checks include `scripts/test-sentinel-paths-consumer.mjs`: actual owner preparation,
+separate run confirmation, retained source-removed reports, selected rerun, required security gaps and strict
+installed worker assets. The native scanner job also runs this consumer and selects `path-report-secrets.test.ts`
+for real current/baseline/request-ancestor privacy with zero skips. The browser-provisioned e2e job explicitly runs
+the one `path-report-browser.test.ts` case, requiring one pass and zero failures/skips, and retains its TAP report.
+It reads and prints clean/withheld HTML offline with JavaScript disabled after the source/store are removed.
+Neither structural completion nor its test count supplies security coverage or independently re-proves no path.

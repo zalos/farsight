@@ -246,6 +246,33 @@ versions/shapes; public GUI work, policy assessment and general analysis reuse r
 review, one Opus PR review and remote CI/merge are still required. Shared readonly source-proof and worker-descriptor
 refactoring belongs to a separate subsequent path integration, with no changes on this framework branch.
 
+## Structural-path data checkpoint (historical scope) — 2026-10-22
+
+Selected reruns merged as [#159](https://github.com/zalos/farsight/pull/159), `64d86ae9`, with the file tree exactly
+the reviewed `147eb71c` candidate (runtime `bfb60d65`). All sixteen required and selected CI checks passed.
+Independent SOL replay of the final recovery delta passed eleven actual controls with zero skips, including the
+unchanged original crash-window public-CLI probe, paused/source-removed owner reopening, future-revision guards and
+inherited privacy. Opus's one final source-only review approved the earlier `62de9d6c`; the subsequent corrections
+were implemented by SOL and independently reviewed by SOL. No whole PR 09/19/27 or final release gate is implied.
+
+The next isolated branch, `codex/sentinel-path-requests`, starts ADR 45's bounded source-derived request schema,
+optional plan pin, source-filtered planner fingerprint and request/generation identity. Its byte/count/schema bounds
+run before expensive processing, reject duplicate/unsorted node pairs or broader edge kinds and preserve old no-pin
+canonical plan output. A query never grants execution or supplies the missing deep-flow capability. Fifty focused
+contract, planner and package controls pass with zero skips; the affected closure build and typecheck, generated
+schemas and catalog check pass. A following pure job/output checkpoint binds the canonical request, exact ancestor,
+snapshot/source and parser artifact/result/index references to the bytes sealed for an attempt. It reads no workspace
+paths, launches or publishes nothing, and returns only the existing call-reachability evidence and frontiers. Five
+new original capture/parse controls plus the request/package controls pass 21 tests with zero skips, including source
+removal, valid-digest foreign references, missing/substituted bytes and unknown-node frontiers; build/typecheck pass.
+These data checks do not authenticate the producer chain or replace request admission. This is a private integration
+checkpoint, not a completed path-command feature.
+
+The reviewed shared read-only proof and fixed worker seam now exist. The next lane integrates them with request
+admission/retention, then the actual owner command, supervised worker and privacy-safe report. SOL implements and
+Claude independently reviews; the lead owns publishing. The data checkpoint above grants no execution authority.
+Durable deep-import acceptance remains a separate design and implementation gate.
+
 ## Selected-rerun crash-window recovery — 2026-10-22
 
 Runtime checkpoint `bfb60d65` corrects independent review's genuine legacy admit-before-advance crash window on
@@ -1249,6 +1276,44 @@ whitespace and the exact PR-title lint. The selector chooses no runtime suites f
 it selects all runtime suites for the future feasibility script. The original review files match the baseline
 byte-for-byte. Claude's source review and SOL re-review support preparation; PR 02's concrete preflight fix
 is an explicit acceptance requirement, not a claim that optional Sentinel packaging already works.
+
+## Sentinel owner report imports — 2026-10-23
+
+Existing-run MCP controls merged as #167 (`919e26c6`) after independent review and all eighteen selected checks,
+including installed scanners and full twenty-repetition recovery. The historical unidentified native exits remain
+an unresolved release gate; passing observations do not establish their cause.
+
+Branch `codex/sentinel-import-integration` integrates approved owner import runtime `10c1e902` and final test-only
+follow-up `87d21397` with current MCP contracts. Independent final integration review approved `41897d55`.
+Owner `evidence import/read/list/abandon` uses real local ownership, executed retained source, exact candidate
+confirmation and atomic accepted-root publication. ADR 47 describes fixed owner-local disclosure, whole-document
+privacy, limits and the honest spent-receipt interruption window. A running service returns busy; live-service
+imports and browser confirmation remain required follow-up work.
+
+Complete build, Sentinel typecheck, generated schemas, 4,504 catalog entries and seven workflow controls passed.
+Affected tests: 200 passed, zero failures and one intentional inverse unqualified-host test skipped on the qualified
+local host. The exact 1,202,824-byte installed tarball (SHA-256
+`15fb1d570ec62c992a6560525a2b895072885d800e85c8f3d1de8ad3f6e24d6b`) passed the npm-only import journey,
+source-removed readback, busy/natural-release, exact predecessor transfer and explicit abandonment. Deterministic
+interruption uses a separate matching built-private after-stage hold and real SIGKILL; this is not npm-only crash
+qualification. Native current/baseline/selected secret-privacy passed on the independently reviewed author candidate;
+fresh selected CI on the final integrated candidate remains required. The first #168 CI run found one stale
+MCP test expectation in service and full validation: it compared the closed twelve-value control vocabulary with
+all sixteen CLI outcomes after imports were added. SOL reproduced the failure, pinned the explicit control set and
+added valid-base refusal cases for the four import-only outcomes. The complete eight-test control file and adjacent
+CLI outcome test pass; the final valid-base assertion passes its named test. Independent Claude review approved the
+test correction; runtime/schema and prior installed-artifact evidence are unchanged. Original failures are retained.
+
+Main `919e26c6` and import runtime built at `f0ab28cd` (documentation/package-selection edits were uncommitted at
+build time) ingested the same 1,779 files frozen at `41897d55`: identical 10,228 nodes, 21,320 edges, source digest
+`892e0d69248a` and 39,657,472-byte databases. Graph bytes were 28,877,495 → 28,877,500, solely build/run metadata.
+Three fresh front-door/Map/code-map screenshots were inspected: zero page errors or failed requests, with five
+existing missing-fixture-image 404s and their console messages. The isolated server was stopped and its port cleared.
+The primary checkout, global installation and dogfood graph were untouched.
+
+SOL continues durable preparation, genuine finding-bound owner decisions and the bounded original cookie proof.
+Saved configuration, real browser confirmation, full stage I/O, model selection/evaluation, Fable review, original
+Java/Spring container acceptance, npm initialization and release remain explicit plan gates.
 
 ## Parser and CLI gap delivery — 2026-10-21
 

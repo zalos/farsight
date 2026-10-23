@@ -88,12 +88,14 @@ export async function retainedLineage(store: SentinelStore, runId: string, admit
       return { inventory, bootstrapRunId: id, bootstrapPlan: first, inventoryAttempt: attempt, revisions, visited };
     }
     const selection = current.selection;
-    if (!selection || run.envelope.parentId !== selection.parent.runId || selection.parent.snapshotId !== snapshotId
-      || !selection.reused.some(r => sameRef(r, inventory))) return refuse('the selected run has no exact retained parent binding');
-    const parent = store.ledger.getRun(selection.parent.runId);
-    if (!parent || (parent.state !== 'completed' && parent.state !== 'canceled') || parent.planRevision !== selection.parent.revision || parent.envelope.snapshotId !== snapshotId) return refuse('the selected parent is not its pinned revision and snapshot');
-    const parentPlan = await io.loadPlan(parent.id, selection.parent.revision);
-    if (parentPlan.plan.kind !== 'analysis' || parentPlan.plan.digest !== selection.parent.planDigest) return refuse('the selected parent plan is not its pinned digest');
+    const request = current.pathRequest;
+    const edge = selection?.parent ?? (request && current.plan.pins.pathRequest ? { ...request.ancestor, snapshotId: request.snapshotId } : undefined);
+    if (!edge || run.envelope.parentId !== edge.runId || edge.snapshotId !== snapshotId
+      || (selection && !selection.reused.some(r => sameRef(r, inventory)))) return refuse('the retained run has no exact admitted selection or request ancestor');
+    const parent = store.ledger.getRun(edge.runId);
+    if (!parent || (parent.state !== 'completed' && parent.state !== 'canceled') || parent.planRevision !== edge.revision || parent.envelope.snapshotId !== snapshotId) return refuse('the selected parent is not its pinned revision and snapshot');
+    const parentPlan = await io.loadPlan(parent.id, edge.revision);
+    if (parentPlan.plan.kind !== 'analysis' || parentPlan.plan.digest !== edge.planDigest) return refuse('the selected parent plan is not its pinned digest');
     id = parent.id; current = parentPlan;
   }
   return refuse('the retained bootstrap lineage exceeds its bound');
