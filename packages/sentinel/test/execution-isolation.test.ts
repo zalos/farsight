@@ -458,3 +458,41 @@ test('a work resource policy lowers the container limits, and the kernel enforce
   t.diagnostic(`policy enforcement oom=${memory.container?.state?.oomKilled} cpu=${ratio}/0.5 forked=${canary(pids.diagnostics.text).started}/16`);
   for (const o of [memory, cpu, pids]) assert.equal(o.cleanup, 'removed-owned-container');
 });
+
+// A separate permanent NATIVE Linux positive control. Original memory/raw-daemon assertions above are unchanged.
+// The test-only runner masks daemon evidence; the product must obtain its own exact local kernel witness.
+test('native local memory witness survives forced-false daemon flags without inventing daemon evidence', {
+  skip: process.platform !== 'linux' || process.arch !== 'x64'
+    ? 'requires native Linux x64 docker-engine cgroupv2; Desktop keeps daemon-only evidence' : skip,
+}, async t => {
+  const attemptId = `kernel-oom-${++n}`;
+  let id: string | undefined;
+  const expectedLabels: Record<string, string> = {};
+  const raw: Array<{ status: string; oomKilled: boolean }> = [];
+  const service = await createExecutionService(store, {
+    scratchRoot: s.work, containers: true, registry: registryFor('memory', { memoryBytes: 64 * 1024 * 1024 }),
+    wrapRunner: real => ({ ...real, run: async (args, signal) => {
+      if (args[0] === 'create') for (let i = 0; i < args.length; i++) if (args[i] === '--label') { const [key, ...value] = args[++i]!.split('='); expectedLabels[key!] = value.join('='); }
+      const answer = await real.run(args, signal);
+      if (args[0] === 'create' && answer.exitCode === 0 && /^[0-9a-f]{64}$/.test(answer.stdout.toString().trim())) id = answer.stdout.toString().trim();
+      if (args[0] !== 'inspect' || !args.includes('--format') || answer.exitCode !== 0 || args.at(-1) !== id) return answer;
+      const c = JSON.parse(answer.stdout.toString()), labels = c.Config?.Labels;
+      if (c.Id !== id || Object.keys(expectedLabels).length !== 5 || !Object.entries(expectedLabels).every(([key, value]) => labels?.[key] === value)
+        || labels?.[LABELS.store] !== store.storeId || labels?.[LABELS.attempt] !== attemptId || labels?.[LABELS.epoch] !== store.epoch) return answer;
+      if (raw.length < 16) raw.push({ status: String(c.State?.Status), oomKilled: c.State?.OOMKilled === true });
+      return { ...answer, stdout: Buffer.from(JSON.stringify({ ...c, State: { ...c.State, OOMKilled: false } })) };
+    } }),
+  });
+  assert.equal(service.backend?.supportsLocalMemoryWitness, true);
+  const memory = await service.run({ adapterId: 'canary-memory', attemptId, work, inputs: captured });
+  t.diagnostic(`native forced-daemon-false memory witness ${JSON.stringify({ code: memory.code, detail: memory.detail, observation: memory.memoryObservation, raw })}`);
+  assert.equal(memory.code, 'sentinel.execution.resourceExceeded');
+  assert.equal(memory.container?.state?.oomKilled, false, 'raw masked daemon state remains false');
+  assert.equal(memory.detail?.resource, 'memory'); assert.equal(memory.detail?.witness, 'cgroup-v2-local');
+  const baseline = memory.detail?.baseline as any, observed = memory.detail?.observed as any;
+  for (const key of ['max', 'oom', 'oom_kill']) assert.ok(BigInt(observed[key]) > BigInt(baseline[key]), key);
+  assert.equal((memory.detail?.identity as any).container, memory.container?.id);
+  assert.equal(memory.detail?.memoryMax, String(64 * 1024 * 1024));
+  assert.equal(memory.memoryObservation?.state, 'positive');
+  assert.equal(memory.cleanup, 'removed-owned-container'); assert.deepEqual(memory.outputs, []); assert.equal(memory.result, undefined);
+});
