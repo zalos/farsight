@@ -1,0 +1,66 @@
+<!-- {"title":"Sentinel · Entry points","level":"Entry points","layout":["by surface","by risk","table"],"layoutOn":0,"crumb":"<b>invoice-app</b> <span class=sep>›</span> scan <b>#42</b> <span class=sep>›</span> entry points <span class=sep>·</span> 18 found by the parser · 18 walked · 3 boundaries","verdicts":"<span class='chip warn'>12 findings · this scan</span><span class='chip k-agent'>3 observations</span><span class='chip'>coverage · 8 of 9 required</span>"} -->
+<style>
+.grp{margin-bottom:14px}
+.grp h2{margin:0 0 6px;font:12px var(--hud);letter-spacing:.12em;text-transform:uppercase;color:var(--dim);display:flex;gap:10px;align-items:center}
+.grp h2 .n{color:var(--muted);font-family:var(--body);text-transform:none;letter-spacing:0;font-size:12px}
+table.t td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap}
+.verb{display:inline-block;width:52px;font:600 11px var(--mono);color:var(--cyan)}
+.verb.scr{color:var(--ok)} .verb.job{color:var(--fn)}
+.gate{font:11px var(--mono);color:var(--auth)}
+.none{color:var(--dim)}
+.risk{display:inline-flex;gap:3px}
+.risk i{width:6px;height:11px;border-radius:1px;background:var(--line)}
+.risk.h i:nth-child(-n+3){background:var(--err)} .risk.m i:nth-child(-n+2){background:var(--warn)} .risk.l i:nth-child(1){background:var(--ok)}
+.hops{font:11px var(--mono);color:var(--muted)}
+.hops b{color:var(--ink);font-weight:500}
+.hops .bnd{color:var(--warn)}
+</style>
+<div class="stage">
+ <h1 class="page">Where a request can enter the application</h1>
+ <p class="sub">Every entry point the parser found, walked end to end by stage 4. Click one to read the whole path from the request to the records it touches. Numbers are over this scan.</p>
+ <div class="grp"><h2>HTTP routes · express 4.19 <span class="n">8 routes · 3 guarded by a scope check · 5 open</span></h2>
+ <table class="t"><thead><tr><th>entry</th><th>guards on the way</th><th>reaches</th><th>findings</th><th>reviewed</th><th>risk</th></tr></thead><tbody>
+  <tr><td><span class="verb">GET</span>/invoices</td><td class="none">none</td><td class="hops">routes → invoiceService.list → <b>invoices</b></td><td class="none">—</td><td class="dim">no claim</td><td><span class="risk l"><i></i><i></i><i></i><i></i></span></td></tr>
+  <tr><td><span class="verb">POST</span>/invoices</td><td class="gate">validate(createInvoice)</td><td class="hops">routes → invoiceService.create → ocr → <b>invoices</b> · <b>lines</b></td><td><span class="chip warn">2</span></td><td><span class="chip k-agent">1 obs</span></td><td><span class="risk m"><i></i><i></i><i></i><i></i></span></td></tr>
+  <tr class="sel"><td><span class="verb">POST</span>/invoices/:id/approve</td><td class="gate">requireScope(billing:admin)</td><td class="hops">routes → approvals.approveInvoice → withTx → <b>approvals</b> · <b>invoices</b> · <span class="bnd">erp (external)</span></td><td><span class="chip err">1 high</span></td><td><span class="chip k-agent">1 obs</span></td><td><span class="risk h"><i></i><i></i><i></i><i></i></span></td></tr>
+  <tr><td><span class="verb">POST</span>/invoices/:id/finalize</td><td class="gate">requireScope(billing:admin)</td><td class="hops">routes → invoiceService.finalize → taxEngine → <b>invoices</b></td><td><span class="chip warn">3</span></td><td class="dim">no claim</td><td><span class="risk m"><i></i><i></i><i></i><i></i></span></td></tr>
+  <tr><td><span class="verb">POST</span>/invoices/:id/mark-paid</td><td class="gate">requireScope(billing:admin)</td><td class="hops">routes → payments.markPaid → <b>invoices</b> · <b>payments</b></td><td><span class="chip warn">1</span></td><td><span class="chip k-agent">1 obs</span></td><td><span class="risk m"><i></i><i></i><i></i><i></i></span></td></tr>
+  <tr><td><span class="verb">POST</span>/invoices/:id/payment-intent</td><td class="none">none</td><td class="hops">routes → payments.createIntent → <span class="bnd">payments provider (external)</span></td><td><span class="chip warn">2</span></td><td class="dim">no claim</td><td><span class="risk m"><i></i><i></i><i></i><i></i></span></td></tr>
+  <tr><td><span class="verb">PATCH</span>/invoices/:id</td><td class="gate">validate(patchInvoice)</td><td class="hops">routes → invoiceService.update → <b>invoices</b></td><td class="none">—</td><td class="dim">no claim</td><td><span class="risk l"><i></i><i></i><i></i><i></i></span></td></tr>
+  <tr><td><span class="verb">GET</span>/invoices/:id</td><td class="none">none</td><td class="hops">routes → invoiceService.get → <b>invoices</b></td><td class="none">—</td><td class="dim">no claim</td><td><span class="risk l"><i></i><i></i><i></i><i></i></span></td></tr>
+ </tbody></table></div>
+ <div class="grp"><h2>Screens · react router <span class="n">4 screens · each calls one or more routes above</span></h2>
+ <table class="t"><tbody>
+  <tr><td><span class="verb scr">SCREEN</span>Invoice list</td><td class="none">sign-in</td><td class="hops">InvoiceListPage → GET /invoices</td><td class="none">—</td><td class="dim">no claim</td><td><span class="risk l"><i></i><i></i><i></i><i></i></span></td></tr>
+  <tr><td><span class="verb scr">SCREEN</span>New invoice</td><td class="none">sign-in</td><td class="hops">CreateInvoiceForm → POST /invoices</td><td><span class="chip warn">1</span></td><td class="dim">no claim</td><td><span class="risk m"><i></i><i></i><i></i><i></i></span></td></tr>
+  <tr><td><span class="verb scr">SCREEN</span>Payments</td><td class="none">sign-in</td><td class="hops">PaymentsPage → POST …/payment-intent · POST …/mark-paid</td><td><span class="chip warn">1</span></td><td class="dim">no claim</td><td><span class="risk m"><i></i><i></i><i></i><i></i></span></td></tr>
+ </tbody></table></div>
+ <div class="grp"><h2>Jobs and CI <span class="n">2 jobs · 1 workflow</span></h2>
+ <table class="t"><tbody>
+  <tr><td><span class="verb job">JOB</span>notify.sendReminders</td><td class="none">flag SEND_PAYMENT_REMINDERS = false</td><td class="hops">events → notify → <span class="bnd">mail (external)</span> · <span class="chip">switched off</span></td><td class="none">—</td><td><span class="chip warn">deadline</span></td><td><span class="risk l"><i></i><i></i><i></i><i></i></span></td></tr>
+  <tr><td><span class="verb job">CI</span>.github/workflows/ci.yml</td><td class="none">—</td><td class="hops">3 jobs · 2 third-party actions pinned by tag, not digest</td><td><span class="chip warn">1</span></td><td class="dim">not reviewed</td><td><span class="risk m"><i></i><i></i><i></i><i></i></span></td></tr>
+ </tbody></table></div>
+ <div class="foot"><span>risk = findings on the path, weighted by the guard it sits behind · <a class="door">how it is counted</a></span><span style="margin-left:auto">3 boundaries the walk could not follow: erp (external) · payments provider (external) · mail (external)</span></div>
+</div>
+<aside class="dock">
+ <div class="tabs"><span class="on">Entry</span><span>Findings</span><span>Tests</span></div>
+ <div class="pane">
+  <h2><span class="mono">POST /invoices/:id/approve</span></h2>
+  <div class="row"><span class="chip err">1 high</span><span class="chip k-agent">1 observation</span><span class="chip">guarded · 1 gate</span></div>
+  <dl class="kv">
+   <dt>journeys</dt><dd>Approve an invoice <span class="dim">· step 3 of 5 in Invoice to cash</span></dd>
+   <dt>screen</dt><dd>Invoice detail · approve action</dd>
+   <dt>persona</dt><dd>Approver</dd>
+   <dt>who may</dt><dd>billing:admin scope <span class="dim">· read from requireScope</span></dd>
+   <dt>reaches</dt><dd>approvals · invoices · erp (external, not followed)</dd>
+   <dt>tests</dt><dd>3 cases reach this route · passed · <span class="dim">over this route</span></dd>
+   <dt>walked by</dt><dd>stage 4 · 142 lines · 7 hops · 1 boundary</dd>
+  </dl>
+  <h3>on this path</h3>
+  <div class="card"><div class="bd" style="display:flex;flex-direction:column;gap:6px">
+   <div class="row"><span class="chip err">high</span><span>SQL built by concatenation</span><span class="dim mono" style="font-size:11px">db.ts:48 · semgrep</span></div>
+   <div class="row"><span class="chip k-agent">obs</span><span>withTx opens no transaction</span><span class="dim mono" style="font-size:11px">approvals.ts:30 · copilot</span></div>
+  </div></div>
+  <div class="row" style="margin-top:auto"><span class="btn primary">open the path</span><span class="btn">see it on the map</span></div>
+ </div>
+</aside>
