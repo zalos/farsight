@@ -40,3 +40,8 @@ test('full-report native acceptance builds its context-ingestion dependency and 
 test('framework inspection privacy and genuine installed delivery remain mandatory in native acceptance',()=>{
  assert.ok(workflow.includes('test/framework-report-secrets.test.ts'));assert.ok(workflow.includes('node scripts/test-sentinel-framework-consumer.mjs'));assert.ok(workflow.includes('framework-delivery/clean.html'));assert.ok(workflow.includes('framework-delivery/secret.html'));
 });
+
+
+test('accepted imports have a zero-skip genuine privacy gate and npm-only public owner consumer',()=>{
+ assert.ok(workflow.includes('test/evidence-privacy.test.ts'));assert.ok(workflow.includes('node scripts/test-sentinel-evidence-consumer.mjs | tee evidence-consumer.log'));assert.ok(workflow.includes(`grep -q '"nativePrivacy":true' evidence-consumer.log`));
+});

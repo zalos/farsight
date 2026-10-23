@@ -1,4 +1,4 @@
-// Private trusted-local report-import pipeline. Public CLI/producer/deep/mitigation entrypoints remain absent.
+// Private trusted-local acceptance pipeline. Only the local owner CLI wraps it; producer/deep/mitigation entrypoints remain absent.
 import type { ActionIntent } from '../contracts/index.js';
 import { retainedSourceForAdmission, type ProofTiming, type RetainedSourceAncestor } from '../execution/retained-source.js';
 import { readImportFile } from '../imports/bounded-file.js';
@@ -24,7 +24,7 @@ function ancestorOf(value:RetainedSourceAncestor):RetainedSourceAncestor {
 }
 /** ws is the trusted existing Workspace selected by local/OwnerService, never any input report/root JSON. */
 export async function acceptReportImportFiles(store:SentinelStore,ws:Workspace,ancestorIn:RetainedSourceAncestor,
-  files:{reportPath:string;manifestPath:string},options:{timing:ProofTiming;receiptId?:string;predecessorId?:string;baselineRunId?:string}) {
+  files:{reportPath:string;manifestPath:string},options:{timing:ProofTiming;receiptId?:string;predecessorId?:string;baselineRunId?:string;expectCandidate?:string}) {
   const context=importOwnerContext(store,ws,options.timing),c=ownerContextOf(context),ancestor=ancestorOf(ancestorIn),policy=currentImportPolicy(context);
   const run=store.ledger.getRun(ancestor.runId);if(!run) auditUnavailable();
   const preflight:ActionIntent={action:'evidence.import',input:digestOf({domain:'report-import-preflight',storeId:store.storeId,workspaceDigest:c.workspaceDigest,ancestor}),
@@ -40,6 +40,7 @@ export async function acceptReportImportFiles(store:SentinelStore,ws:Workspace,a
     report=readImportFile(files.reportPath,budget.limits.rawBytes,budget);ownerContextOf(context);
   } catch(error) {if(error instanceof ImportRefusal) return {status:'refused' as const,code:error.code,pointer:error.pointer};throw error;}
   const prepared=prepareOwnedReportImport(context,proof,ancestor,report,manifest),binding=reportImportBinding(prepared),ops=evidenceLedgerFor(store);
+  if(options.expectCandidate!==undefined&&options.expectCandidate!==binding.intent.input) return {status:'confirmationStale' as const,candidateDigest:binding.intent.input};
   const existing=ops.acceptance(binding.intent.input);
   if(existing) {
     const accepted=await validateAcceptedImport(context,binding.intent.input),view=await reportImportView(accepted,{...(options.baselineRunId?{baselineRunId:options.baselineRunId}:{})});
@@ -77,7 +78,7 @@ export async function acceptReportImportFiles(store:SentinelStore,ws:Workspace,a
     // is uncertain, do not claim non-publication. A subsequent retained read may prove a committed acceptance.
     try {
       ownerContextOf(context);
-      if(ops.acceptance(binding.intent.input)) return {status:'publicationUnknown' as const,candidateDigest:binding.intent.input,receiptDigest:admitted.receipt.digest};
+      if(ops.acceptance(binding.intent.input)) return {status:'publicationUnknown' as const,acceptanceRecorded:true as const,candidateDigest:binding.intent.input,receiptDigest:admitted.receipt.digest};
       return {status:'spentNotPublished' as const,candidateDigest:binding.intent.input,receiptDigest:admitted.receipt.digest,...(operationId?{operationId}:{})};
     } catch {return {status:'publicationUnknown' as const,candidateDigest:binding.intent.input,receiptDigest:admitted.receipt.digest};}
   }

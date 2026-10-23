@@ -4,6 +4,7 @@
 // Acquisition is a separate explicit owner action; no plan or scan downloads or uses a host scanner.
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { ownerEvidenceCommand, evidenceWire } from './evidence/owner-cli.js';
 import { REPORT_FORMATS, type ReportFormat } from './service/full-report.js';
 import {
   adoptWorkspaceSettings, confirmForService, currentRules, followWorkspaceRun, promoteRulePack, planWorkspace, previewReport, runPlan, describeRun, runStatus, workspaceOf, checkWorkspaceLayout, PolicyError, fullReportIn,
@@ -63,6 +64,7 @@ function help(): string {
     `  ${word('sentinel.cli.usageServe')}`,
     `  ${word('sentinel.cli.usageRules')}`,
     `  ${word('sentinel.cli.usageAssets')}`,
+    `  ${word('sentinel.evidence.usage')}`,
     `  ${word('sentinel.cli.usageFollow')}`,
     '',
     word('sentinel.cli.planned', { commands: planned.join(', ') }),
@@ -450,7 +452,7 @@ export async function main(argv: string[]): Promise<number> {
   const parsed = parseArgs(argv);
   jsonOut = parsed.ok ? parsed.parsed.json : parsed.json;
   if (!parsed.ok) {
-    errOut(word(parsed.code, { detail: parsed.detail }));
+    errOut(argv.find(a=>a!=='--json')==='evidence'?word('sentinel.evidence.inputRefused'):word(parsed.code, { detail: parsed.detail }));
     return finish(result('unknown', 'refused', { reasonCode: parsed.code }));
   }
   const p = parsed.parsed;
@@ -472,6 +474,15 @@ async function dispatch(p: ParsedCommand): Promise<number> {
       const facts = { version: version(), contracts: ENVELOPES.run.schema.split('/')[1]! };
       if (p.json) return finish(result('version', 'answered', { facts }));
       out(word('sentinel.cli.version', { version: facts.version, draft: facts.contracts })); return 0;
+    }
+    case 'evidence': {
+      try{
+        const wire=evidenceWire(await ownerEvidenceCommand(workspaceFor(p),p),p.json);
+        (p.json||wire.result.exitCode===0?out:errOut)(wire.text);return wire.result.exitCode;
+      }catch{
+        const wire=evidenceWire({result:result('evidence','refused',{reasonCode:'sentinel.evidence.storageRefused'})},p.json);
+        (p.json?out:errOut)(wire.text);return wire.result.exitCode;
+      }
     }
     case 'capabilities': return capabilities(p);
     case 'validate': return validate(p);

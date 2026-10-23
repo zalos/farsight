@@ -59,5 +59,21 @@ test('genuine current/baseline/selected accepted secret evidence withholds the w
   for(const id of [parent,child,clean]){const view=await readAcceptedReportImport(store,ws,candidates.get(id)!,{timing:timing()});assert.equal(view.withheld,id!==clean);if(id!==clean){absent(JSON.stringify(view),'reopened source-gone import',GENERIC_VALUE);absent(JSON.stringify(view),'reopened source-gone filename');}}
   const containers=new Set<string>();for(const runId of [parent,child,clean]){for(const unit of (await loadPlan(store,runId)).plan.units){const pub=store.ledger.getPublication(unit);if(!pub)continue;const worker=store.ledger.getAttempt(pub.attemptId)?.envelope.worker;if(worker?.kind==='owned-container'){assert.equal(worker.ownershipLabels.store,store.storeId);containers.add(worker.containerId);}}}
   assert.ok(containers.size>=5);for(const id of containers){const listed=spawnSync('docker',['container','ls','--all','--no-trunc','--filter','id='+id,'--format','{{.ID}}'],{encoding:'utf8',timeout:10000});assert.equal(listed.status,0,'exact own-container cleanup check reached the daemon');assert.equal(listed.stdout.trim(),'','the exact recorded own container was cleaned');}
+  // Exercise the new actual owner executable after releasing the genuine API owner. No RPC can mint this authority.
+  const anchors=new Map([parent,child,clean].map(id=>[id,store.ledger.getRun(id)!.envelope.requestedScope.sourceIds[0]!]));
+  store.close();
+  const cli=(...args:string[])=>{const r=spawnSync(process.execPath,[new URL('../dist/cli.js',import.meta.url).pathname,'evidence',...args,'--workspace',ws.path,'--json'],{encoding:'utf8',timeout:120000,env:{...process.env,XDG_STATE_HOME:join(dir,'state')}});assert.equal(r.error,undefined);return{status:r.status,body:JSON.parse(r.stdout),stderr:r.stderr}};
+  for(const id of [parent,child,clean]){
+    const imported=cli('import',id,'--source',anchors.get(id)!,'--report',files.reportPath,'--manifest',files.manifestPath,'--confirm');
+    assert.equal(imported.status,0);assert.equal(imported.body.facts.reused,true);
+    for(const profile of ['private','shareable'])for(const format of ['json','md']){
+      const read=cli('read',candidates.get(id)!,'--disclosure',profile,'--format',format);
+      assert.equal(read.status,0);assert.equal(read.body.facts.document.withheld,id!==clean);
+      if(id!==clean){absent(JSON.stringify(read.body),'public current/selected projection',GENERIC_VALUE);absent(JSON.stringify(read.body),'public current/selected filename');}
+    }
+  }
+  const publicBaseline=cli('read',candidates.get(clean)!,'--baseline',child);assert.equal(publicBaseline.status,0);assert.equal(publicBaseline.body.facts.document.document,null);absent(JSON.stringify(publicBaseline.body),'public baseline-only',GENERIC_VALUE);
+  const exportPath=join(dir,VALUE+'.md'),exported=cli('read',candidates.get(parent)!,'--format','md','--out',exportPath);
+  assert.equal(exported.status,0);absent(JSON.stringify(exported.body),'public export acknowledgement');absent(readFileSync(exportPath,'utf8'),'public exported Markdown',GENERIC_VALUE);
   t.diagnostic(JSON.stringify({storeId:store.storeId,ownContainers:[...containers],cleaned:true,actualPinnedEngines:2,currentSecret:true,selectedInheritedSecret:true,baselineOnlySecret:true,cleanUseful:true,sourceRemoved:true,reopened:true}));
 });

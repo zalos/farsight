@@ -27,6 +27,8 @@ const ENVELOPES = {
   plan: ['sentinel-plan/draft-1', 'PlanEnvelope'],
   paths: ['sentinel-paths/draft-1', 'PathEvidenceEnvelope'],
   deepimport: ['sentinel-deep-import/draft-1', 'DeepImportEnvelope'],
+  importview: ['sentinel-import-view/draft-1','ImportViewEnvelope'],
+  importpage: ['sentinel-import-page/draft-1','ImportPageEnvelope'],
 };
 
 const generator = createGenerator({

@@ -16,7 +16,12 @@ export interface AbandonTarget {
   readonly identity: EvidenceIdentity; readonly state: string; readonly epoch: string; readonly stageDigest: string;
   readonly stages: readonly { stageId: string; epoch: string; artifacts: readonly { id: string; schema: string; privacy: string; links: readonly string[] }[] }[];
 }
+export interface EvidencePageRow {
+  readonly operationId:string; readonly candidateDigest:string; readonly state:'open'|'accepted'|'superseded'|'aborted';
+  readonly root:string|null; readonly previous:string|null;
+}
 export interface EvidenceOperations {
+  page(binding:string,after:string|null,limit:number):readonly EvidencePageRow[];
   head(bindingDigest: string): string | null;
   begin(permit: EvidencePermit): { operationId: string; sequence: number };
   stage(permit: EvidencePermit): { stageId: string; sequence: number };
@@ -48,6 +53,7 @@ export function evidenceLedgerFor(store: object): EvidenceOperations {
   };
   check();
   return Object.freeze({
+    page: (binding:string,after:string|null,limit:number) => { check(); return bound!.operations.page(binding,after,limit); },
     head: (binding: string) => { check(); return bound!.operations.head(binding); },
     begin: (permit: EvidencePermit) => { check(); return bound!.operations.begin(permit); },
     stage: (permit: EvidencePermit) => { check(); return bound!.operations.stage(permit); },

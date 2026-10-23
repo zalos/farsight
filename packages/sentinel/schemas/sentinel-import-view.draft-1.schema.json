@@ -1,0 +1,453 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/ImportViewEnvelope",
+  "definitions": {
+    "ImportViewEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-import-view/draft-1"
+        },
+        "kind": {
+          "type": "string",
+          "const": "imported-report"
+        },
+        "authority": {
+          "type": "string",
+          "const": "owner-associated-imported-claims"
+        },
+        "candidateDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "root": {
+          "$ref": "#/definitions/Digest"
+        },
+        "withheld": {
+          "type": "boolean"
+        },
+        "limitation": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "accepted-secret-match",
+            "privacy-unassessed-canceled-run",
+            null
+          ]
+        },
+        "limitationKey": {
+          "type": "string",
+          "const": "sentinel.evidence.importedClaims"
+        },
+        "counts": {
+          "type": "object",
+          "properties": {
+            "claims": {
+              "$ref": "#/definitions/ReportCount"
+            },
+            "exchanges": {
+              "$ref": "#/definitions/ReportCount"
+            },
+            "cookies": {
+              "$ref": "#/definitions/ReportCount"
+            }
+          },
+          "required": [
+            "claims",
+            "exchanges",
+            "cookies"
+          ],
+          "additionalProperties": false
+        },
+        "document": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/NormalizedImport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema",
+        "kind",
+        "authority",
+        "candidateDigest",
+        "root",
+        "withheld",
+        "limitation",
+        "limitationKey",
+        "counts",
+        "document"
+      ],
+      "additionalProperties": false
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ReportCount": {
+      "type": "object",
+      "properties": {
+        "n": {
+          "$ref": "#/definitions/Count"
+        },
+        "of": {
+          "$ref": "#/definitions/Count"
+        },
+        "unit": {
+          "$ref": "#/definitions/SharedCatalogKey"
+        },
+        "bizUnit": {
+          "$ref": "#/definitions/SharedCatalogKey"
+        },
+        "scope": {
+          "$ref": "#/definitions/SharedCatalogKey"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "breakdown": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReportCountPart"
+          },
+          "maxItems": 64
+        },
+        "recheck": {
+          "type": "object",
+          "properties": {
+            "cli": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "mcp": {
+              "type": "string",
+              "maxLength": 1024
+            }
+          },
+          "required": [
+            "cli"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "n",
+        "unit",
+        "scope",
+        "source"
+      ],
+      "additionalProperties": false,
+      "description": "A scoped number with exactly core's `Counted` shape: what it counts (`unit`, and `bizUnit` when the business register prints it), over which scope, from which fold, its partition and the command that re-checks it. Unit, scope and part keys are shared-catalog keys; the tests run core's own `countedProblems` over them."
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "SharedCatalogKey": {
+      "type": "string",
+      "description": "A key in the shared two-register catalog (`count.unit.journeys`, `sentinel.count.findings`).",
+      "pattern": "^[a-z][A-Za-z0-9]*(\\.[A-Za-z0-9]+)+$",
+      "maxLength": 128
+    },
+    "ReportCountPart": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/definitions/SharedCatalogKey",
+          "description": "A catalog key printed with `{n}`."
+        },
+        "n": {
+          "$ref": "#/definitions/Count"
+        },
+        "label": {
+          "$ref": "#/definitions/BoundedText",
+          "description": "A name out of the pinned context, when the part is one thing rather than a kind."
+        }
+      },
+      "required": [
+        "key",
+        "n"
+      ],
+      "additionalProperties": false,
+      "description": "One part of a count's partition: core's `CountPart`. Parts sum to the count they explain."
+    },
+    "BoundedText": {
+      "type": "string",
+      "description": "Untrusted text supplied by a producer (a scanner message, a rationale). Always escaped when rendered.",
+      "maxLength": 4000
+    },
+    "NormalizedImport": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-import-normalized/draft-1"
+        },
+        "adapter": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "format": {
+          "$ref": "#/definitions/ImportFormat"
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "rawDigest": {
+              "type": "string"
+            },
+            "rawBytes": {
+              "type": "number"
+            },
+            "byteOrderMark": {
+              "type": "boolean"
+            },
+            "manifestDigest": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "rawDigest",
+            "rawBytes",
+            "byteOrderMark",
+            "manifestDigest"
+          ],
+          "additionalProperties": false
+        },
+        "callerStated": {
+          "type": "object",
+          "properties": {
+            "producer": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "version": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "name",
+                "version"
+              ],
+              "additionalProperties": false,
+              "description": "What the caller expects the report to say about its producer; null compares nothing."
+            },
+            "tested": {
+              "type": "object",
+              "properties": {
+                "origins": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "methods": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "properties": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/CookieProperty"
+                  }
+                },
+                "directions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "inbound",
+                      "outbound"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "origins",
+                "methods",
+                "properties",
+                "directions"
+              ],
+              "additionalProperties": false
+            },
+            "context": {
+              "type": "object",
+              "properties": {
+                "runId": {
+                  "type": "string"
+                },
+                "snapshotId": {
+                  "type": "string"
+                },
+                "sourceId": {
+                  "type": "string"
+                },
+                "environmentDigest": {
+                  "type": "string"
+                },
+                "deploymentDigest": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "description": "Identifiers the caller associates with the report. Recorded as stated; nothing here checks them."
+            }
+          },
+          "required": [
+            "producer",
+            "tested",
+            "context"
+          ],
+          "additionalProperties": false,
+          "description": "The manifest as the caller stated it. Nothing in it is verified."
+        },
+        "tool": {
+          "$ref": "#/definitions/Json"
+        },
+        "claims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Json"
+          }
+        },
+        "exchanges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Json"
+          }
+        },
+        "cookies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Json"
+          }
+        },
+        "unknowns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pointer": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "pointer",
+              "code"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "ignored": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Json"
+          }
+        },
+        "limitationKeys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "adapter",
+        "format",
+        "input",
+        "callerStated",
+        "tool",
+        "claims",
+        "exchanges",
+        "cookies",
+        "unknowns",
+        "ignored",
+        "limitationKeys"
+      ],
+      "additionalProperties": false
+    },
+    "ImportFormat": {
+      "type": "string",
+      "enum": [
+        "sarif-2.1.0",
+        "zap-traditional-json",
+        "zap-traditional-json-plus"
+      ]
+    },
+    "CookieProperty": {
+      "type": "string",
+      "enum": [
+        "cookie-secure",
+        "cookie-http-only",
+        "cookie-same-site"
+      ]
+    },
+    "Json": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Json"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/Json"
+          }
+        }
+      ]
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-import-view.draft-1.schema.json",
+  "title": "sentinel-import-view/draft-1"
+}

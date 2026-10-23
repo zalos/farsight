@@ -218,6 +218,18 @@ export class Ledger {
   bindEvidenceDomain(): void {
     if (this.#evidence || this.#closed) throw new LedgerError('sentinel.store.conflict', 'evidence domain is already bound or closed');
     const domain: EvidenceOperations = Object.freeze({
+      page: (binding:string,after:string|null,limit:number) => {
+        checkDigest(binding,'evidence binding');if(after!==null)checkId(after,'cursor');
+        if(!Number.isSafeInteger(limit)||limit<1||limit>101)throw invalid('evidence page limit');
+        return this.#read(()=>this.#all(`SELECT o.id,o.candidate_digest,o.state,a.root_id,a.previous_candidate FROM evidence_operations o
+          LEFT JOIN evidence_acceptances a ON a.operation_id=o.id WHERE o.binding_digest=? AND (? IS NULL OR o.id>?) ORDER BY o.id LIMIT ?`,binding,after,after,limit).map(r=>{
+          const state=String(r.state);if(!['open','accepted','superseded','aborted'].includes(state))throw invalid('evidence page state');
+          checkId(String(r.id),'operation');checkDigest(String(r.candidate_digest),'candidate');
+          if(r.root_id!==null)checkDigest(String(r.root_id),'root');if(r.previous_candidate!==null)checkDigest(String(r.previous_candidate),'previous');
+          return {operationId:String(r.id),candidateDigest:String(r.candidate_digest),state:state as 'open'|'accepted'|'superseded'|'aborted',
+            root:r.root_id===null?null:String(r.root_id),previous:r.previous_candidate===null?null:String(r.previous_candidate)};
+        }));
+      },
       head: (binding: string) => { checkDigest(binding, 'evidence binding'); return this.#read(() => this.#evidenceHead(binding)); },
       begin: (permit: EvidencePermit) => this.#beginEvidence(permit),
       stage: (permit: EvidencePermit) => this.#stageEvidence(permit),

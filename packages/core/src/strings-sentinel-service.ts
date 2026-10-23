@@ -6,6 +6,10 @@ import type { StringEntry } from './strings.js';
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
 
 export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
+  'sentinel.outcome.read': same('retained data read', 'The owner read a projected document or a bounded metadata page. This is not a scan result.'),
+  'sentinel.outcome.accepted': same('import accepted', 'An owner-associated imported report was retained and verified. No scan or coverage verdict follows.'),
+  'sentinel.outcome.abandoned': same('pending pins released', 'Exactly one older import operation was abandoned; retained object bytes were not deleted.'),
+  'sentinel.outcome.deliveryFailed': same('delivery failed', 'The command did not deliver its requested output. Its acknowledgement separately states whether an acceptance is already retained.'),
   'sentinel.capability.localCoordinator': same('canonical local scheduling and isolated worker execution are built; runtime prerequisites are verified before use', 'The coordinator accepts only the admitted plan and exact trusted drivers, and the external worker backend requires a qualified local runtime and existing pinned image. This feature listing does not claim any check ran.'),
 
   'sentinel.report.scannerRun': same('Run: {run}', 'The exact durable run whose accepted publications this report reads.'),
