@@ -1636,7 +1636,9 @@ retained source closure, raw worker result and normalized records. It does not r
 reverify a no-path claim. Every rendering first applies accepted current, explicit baseline, authenticated request
 and selected-ancestor secret privacy, including canceled ancestors and executed revisions with merely admitted
 successors. Query/node/edge/site/span details are withheld together; ancestor findings and coverage never become
-child findings. Counts describe the pinned query's outcomes separately from security gaps.
+child findings. Counts describe the pinned query's outcomes separately from security gaps. A missing recorded
+secret match is not proof of secret absence. Each retained structural section has a cooperative 120-second
+proof/readback bound, so a large or slow valid closure can be refused without launching or refreshing its producer.
 
 The shipped `bounded-paths` worker has one explicit sealed job naming its request and the four original retained
 roles. A source unit admits at most 1,018 entries before the six fixed roles/job/request, within the existing 1,024

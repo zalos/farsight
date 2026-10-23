@@ -398,7 +398,10 @@ graph, or stopped at a frontier. Readback validates source/path identities but d
 or prove absence. Required security checks remain gaps and neither fixture positives (reached) nor negatives
 (frontier) produce findings or observations. Accepted secret knowledge from current, baseline and authenticated
 request/selected ancestry, including canceled ancestors, withholds endpoint, node, edge, path and site details in
-every rendering. A clean report preserves useful captured call sites.
+every rendering. No recorded secret match means only that the accepted evidence supplied no match; it never proves
+that the source contains no secrets. A clean projection preserves useful captured call sites. Retained structural
+readback has a cooperative 120-second proof/readback bound for each accepted section and can refuse a large or
+slow valid closure; reading a report does not launch a worker.
 
 One fixed worker budget covers all queries: 64 MiB decoded/cache bytes, 1,024 distinct reads, one million visits,
 four million indexing/traversal steps and four MiB output, within the remaining original unit deadline. A source may
