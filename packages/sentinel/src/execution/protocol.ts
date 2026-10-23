@@ -159,6 +159,7 @@ export interface SessionBinding {
   adapterDigest: Digest;
   inputFingerprint: Digest;
   inputs: ArtifactId[];
+  job?: ArtifactId;
   deadlineAt: Timestamp;
   /** The plan's assignment for this attempt, carried by the start. */
   assignment?: { checks: Id[]; scopes: ScopeId[]; inputScopes?: Array<{ input: ArtifactId; scopes: ScopeId[] }> };
@@ -260,6 +261,7 @@ export class WorkerSession {
     const start: StartMessage = {
       protocol: PROTOCOL, type: 'start', ...this.#nextBinding(),
       inputFingerprint: this.binding.inputFingerprint, inputs: [...this.binding.inputs], deadlineAt: this.binding.deadlineAt,
+      ...(this.binding.job !== undefined ? { job: this.binding.job } : {}),
       ...(this.binding.assignment ? { checks: [...this.binding.assignment.checks], scopes: [...this.binding.assignment.scopes],
         ...(this.binding.assignment.inputScopes ? { inputScopes: this.binding.assignment.inputScopes.map(x => ({ input: x.input, scopes: [...x.scopes] })) } : {}) } : {}),
     };

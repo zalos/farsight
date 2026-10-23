@@ -20,6 +20,7 @@ test('mandatory framework rules without promotion remain gaps and never launch a
 
 test('a strict framework selection reuses genuine retained parser evidence after source removal',needsStore,async t=>{
  const f=await frameworkFixture(t,ORDER,{preview:true});const unit=f.admitted.plan.units.find(u=>u.adapterId==='framework-controls')!;
+ for(const u of f.admitted.plan.units){const pub=f.store.ledger.getPublication(u);assert.ok(pub);const attempt=f.store.ledger.getAttempt(pub.attemptId);const inv=JSON.parse((await f.store.readArtifact(attempt.envelope.invocation)).toString());assert.equal(Object.hasOwn(inv,'job'),u.adapterId==='framework-controls','preview invocation retains the absent-job form');}
  assert.ok(f.admitted.plan.units.length>1);rmSync(join(f.path,'src'),{recursive:true,force:true});
  const child:any=await rerunRun(f.store,f.runId,[unit.id],f.terms);assert.ok(child.disclosure,JSON.stringify(child));assert.equal(child.preview.all,false);
  const done=await executeRun(f.store,child.disclosure.runId,{scratchRoot:f.work,trustDir:f.ws.trustDir});assert.equal(done.state,'completed',JSON.stringify(done.failures));assert.equal(done.published,1);

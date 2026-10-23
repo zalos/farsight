@@ -8,6 +8,12 @@ identifiers, not GitHub PR numbers.
 
 ## Checkpoint — 2026-10-22
 
+Current integration sequence after merged #163: finish the independently reviewed bounded retained-source/fixed-worker
+seam, then the real owner path workflow and durable decisions/imports. Read-only service/MCP work proceeds toward
+the optional bridge and complete deterministic scan GUI. A private source review or storage checkpoint is not a
+public command. The separate configured-model track, Fable cleanup, Java/Spring container qualification, npm-only
+installation and release remain required; no second-model acquisition or spend is inferred from this schedule.
+
 - PR 03 merged as [#135](https://github.com/zalos/farsight/pull/135), `97ff419`, after independent SOL
   review, clean npm consumers, measured macOS/Linux storage recovery, and all nine final CI checks.
   PR 04 capture and PR 07 isolation subsequently merged as [#140](https://github.com/zalos/farsight/pull/140)
@@ -67,7 +73,7 @@ identifiers, not GitHub PR numbers.
   installed Linux scanner and offline report workflow. The first post-merge native run failed OOM attribution;
   one unchanged failed-job retry passed 104 checks with zero skips. Exit 137 alone is not an OOM witness, and
   the retry does not erase the failure or establish flake-free behavior. The scanner job passed.
-  The reviewed capture-boundary candidate (ADR 46, not yet merged) removes the owner-policy
+  Capture-boundary correction [#163](https://github.com/zalos/farsight/pull/163) (`d79a9b3a`, ADR 46) removes the owner-policy
   omission of `.farsight` described there: a capture leaves out only
   the exact held store; run scratch is a lease inside it, released only on scoped stopped-consumer proof; trust state
   and the service runtime folder are refused inside the workspace. On the default layout the Express inspection then
@@ -81,7 +87,8 @@ identifiers, not GitHub PR numbers.
   the combined capture/planner/selected-rerun build and 53 controls passed with zero skips. PR #162 retained an
   initial native OOM-attribution failure, six passing unchanged-production diagnostic observations and one
   passing unchanged failed-job rerun (104 controls, zero skips); historical cause remains unknown. A recurrence
-  stops further retries. Exact-head capture CI and merge remain; the capture behavior is not yet merged-main behavior.
+  stops further retries. All sixteen exact-head capture checks passed on their first run, including native isolation,
+  full twenty-repetition recovery and installed five-scanner acceptance; #163 is merged-main behavior.
 
   Historical framework candidate evidence: the candidate combined the retained source seam and closure with
   `64d86ae9`; its
@@ -89,9 +96,9 @@ identifiers, not GitHub PR numbers.
   two-source readback after removal, installed npm-only report delivery, actual mid-inspection service SIGKILL/resume
   and once-only publication pass. Existing exports, five scanner assets and four framework library consumers remain
   present. Actual clean and secret-withheld reports render/print offline without external requests or browser errors.
-  That slice is now merged in #160; it does not complete PRs 14–17. On merged main, the owner-policy omission
-  of `.farsight` can leave Express/Spring source completeness unknown. The separate capture candidate must not
-  manufacture protection: accept an indexed open route as established `does-not-apply`, a guarded route as cited
+  That slice is now merged in #160; it does not complete PRs 14–17. At that checkpoint, the owner-policy omission
+  of `.farsight` could leave Express/Spring source completeness unknown. Merged #163 removes that omission without
+  manufacturing protection: accept an indexed open route as established `does-not-apply`, a guarded route as cited
   `unknown/refusalUnproven`, and neither with an artificial `sourceIncomplete` caused by blanket omission. Hidden
   source can be captured while its route remains a valid `routeNotInGraph` parser frontier. Genuine exclusions
   remain unknown. Inspection is `assessment: none`; GUI configuration, progress/detail, visual placement, broader

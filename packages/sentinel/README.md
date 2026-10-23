@@ -592,6 +592,22 @@ before every rendering; raw source-derived artifacts remain private evidence.
 The trusted child has enforced wall-clock, cancellation and output bounds. It is not network-isolated and has no
 hard memory, CPU or process limit; it runs only Sentinel's shipped code. The worker closure pins the complete shipped
 build and installed dependency bytes/lookups. Reinstalling, moving or changing those bytes requires a new plan.
+A startup verification refusal ends the inspection with no accepted result and is not retried automatically.
+The recorded reason preserves the original exit and adapter identity; it does not establish that files changed.
+A failure to inspect a pinned path’s filesystem status also refuses without an automatic retry; other file-read
+errors keep the ordinary worker-exit behavior.
+Cancellation, deadline and cleanup failures keep their own reasons. Restore the intended installation, re-register
+it and make a new plan before trying again.
+
+Installed execution requires the package's own valid manifest, fixed worker and launch-gate byte pins, and fixed
+internal driver. It never substitutes workspace files for missing installed assets. Importing Sentinel, help and
+reading reports do not register or load workers. Previously accepted reports can still be read when worker files
+are absent; starting new work refuses. The read-only retained-source proof is bounded to its original store owner,
+revision, deadline and signal and grants no execution authority. Execution independently verifies its admitted plan.
+
+The coordinator explicitly selects one sealed job. Captured JSON that resembles a job cannot replace it or prevent
+the inspection. New accepted records require the invocation, execution binding and output to name that exact job;
+older records without this optional job field retain their original report-read behavior.
 Public GUI configuration and policy assessment remain separate work.
 
 Canonical working-copy capture excludes only the exact held store, rather than every folder named `.farsight`.
