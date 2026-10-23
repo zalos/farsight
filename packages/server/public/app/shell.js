@@ -18,6 +18,7 @@ import { mountChanges, changesRefresh } from './surfaces/changes.js';
 import { mountStewardship } from './surfaces/stewardship.js';
 import { mountApis, apisRefresh } from './surfaces/apis.js';
 import { mountTests, testsRefresh } from './surfaces/tests.js';
+import {mountSentinel,unmountSentinel,sentinelUpdate} from './surfaces/sentinel.js';
 import { mountWork, workRefresh } from './surfaces/work.js';
 import { mountMap, mapRefresh, mapUpdate, unmountMap, mapOpen, mapTravel } from './surfaces/map.js';
 import { renderConfigFiles } from './surfaces/settings-config.js';
@@ -34,7 +35,7 @@ import { readOnlyWhy, applyReadOnly } from './lib/read-only.js';
 
 // ── router ──────────────────────────────────────────────────────
 // the Map is the one place a journey is read (lanes round 2026-10-10, proposal 1): no longer an experiment behind a flag
-const NAV = ['portfolio', 'journeys', 'map', 'codemap', 'apis', 'tests', 'changes', 'work'];
+const NAV = ['portfolio', 'journeys', 'map', 'codemap', 'apis', 'tests', 'changes', 'work', 'sentinel'];
 /** The tabs the bar draws. @group Shell */
 export function navTabs() { return NAV; }
 /**
@@ -64,6 +65,7 @@ const SURFACES = {
   tests: { mount: mountTests, refresh: testsRefresh },
   changes: { mount: mountChanges, refresh: changesRefresh },
   work: { mount: mountWork, refresh: workRefresh },
+  sentinel: {mount:mountSentinel,unmount:unmountSentinel,update:sentinelUpdate,refresh:sentinelUpdate},
   // `update(route)`: the route moved inside the surface (another journey, a screen
   // opened, the back button) — the board keeps its place instead of re-mounting
   map: { mount: mountMap, unmount: unmountMap, refresh: mapRefresh, update: mapUpdate },

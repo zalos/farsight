@@ -1508,3 +1508,9 @@ with the step's name, *done by <who>* and where, *done outside the code* and *no
 would be (never a status chip, never a verdict); `partyLaneHeadHtml()` — the party's name, its count and *a party · no
 code reaches it*; `offPlatformListHtml()` — the rows the Map property's Overview lists under *done outside the code*.
 The WALK prints a stop of kind `offPlatform` after the screen's hand-offs (core `tour.ts`).
+
+The optional **Sentinel** surface is `surfaces/sentinel.js`: it discovers only a validated companion origin,
+embeds its static owner-origin frame, and supplies exact frame/document/host/revision context plus theme/register.
+It never receives a browser capability, reload token, descriptor nonce or receipt, and cannot confirm an action.
+Hash/history changes invalidate pending confirmations; host read-only and unavailable initial context also veto.
+The companion, not the Farsight application host, talks to the already running Sentinel owner service.

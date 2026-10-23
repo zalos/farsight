@@ -366,3 +366,11 @@ negotiated preparation tools. `test/preparation-*.test.ts` and `scripts/test-sen
 exercise genuine admission, no hidden preview writes, original deadlines, actual owner crash and installed source-gone
 continuation before separate check execution. Native provenance/image readiness runs in the existing pinned scanner
 gate, apart from the zero-skip pure service gate. These modules add no arbitrary runtime package exports.
+
+The optional Sentinel owner panel (ADR48) uses core `sentinel-companion.ts` for read-only private descriptor
+validation, server `/api/sentinel/companion` and `/api/version.session.instance` for exact host discovery, and
+viewer `surfaces/sentinel.js` for the paired iframe and veto-only live/history context. Sentinel `owner-ui/`
+contains the foreground HTTP companion, pure session/host validation, qualified descriptor mutex, private
+service authority/receipts/operations, and static catalog-backed panel. `contracts/ownerui.ts` registers its
+separate closed receipt/capability documents. `test/owner-ui-*` covers real owner/socket/browser boundaries;
+`scripts/test-sentinel-owner-ui-consumer.mjs` uses only npm-installed public executables at runtime.

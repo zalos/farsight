@@ -65,6 +65,14 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'service/preparation-controller.js': ['node:crypto', 'node:path', 'node:timers/promises'],
   'service/preparation-journal.js': ['node:crypto', 'node:fs', 'node:path'],
   'service/preparation-clock.js': ['node:perf_hooks'],
+  // Explicit loopback browser companion; only host.ts and server.ts open their fixed HTTP boundaries.
+  'owner-ui/authority.js': ['@farsight/core/dist/sentinel-companion.js', 'node:async_hooks', 'node:crypto'],
+  'owner-ui/descriptor.js': ['@farsight/core/dist/sentinel-companion.js', 'node:fs', 'node:path'],
+  'owner-ui/host.js': ['@farsight/core/dist/sentinel-companion.js', 'node:http'],
+  'owner-ui/operations.js': ['node:crypto', 'node:path'],
+  'owner-ui/receipts.js': ['node:crypto'],
+  'owner-ui/server.js': ['@farsight/core/dist/sentinel-companion.js', '@farsight/core/dist/strings.js', 'node:crypto', 'node:http'],
+  'owner-ui/session.js': ['node:crypto'],
   'service/controls.js': ['@farsight/core/dist/strings.js'],
   'service/readonly.js': ['@farsight/core/dist/strings.js', 'node:crypto', 'node:perf_hooks'],
   'service/mcp.js': ['@farsight/core/dist/strings-sentinel-service.js', '@farsight/core/dist/strings.js', '@modelcontextprotocol/sdk/server/index.js', '@modelcontextprotocol/sdk/server/stdio.js', '@modelcontextprotocol/sdk/types.js'],
@@ -154,7 +162,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'policy/user-state.js': ['node:crypto', 'node:fs', 'node:path'],
   // Rule packs are read as data: listed and opened, never imported, evaluated or spawned.
   'rules/pack.js': ['node:fs', 'node:path'],
-  'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-decisions.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:fs', 'node:path'],
+  'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-decisions.js', '@farsight/core/dist/strings-sentinel-owner-ui.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:fs', 'node:path'],
   // The full report: reads the store's accepted evidence, an owner-supplied graph file, and writes one new file.
   // The per-store report key: random bytes kept once in the owner's trust folder.
   'service/report-key.js': ['node:crypto', 'node:path'],

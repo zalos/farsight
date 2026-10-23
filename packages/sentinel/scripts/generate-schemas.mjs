@@ -21,6 +21,8 @@ const ENVELOPES = {
   repoconfig: ['sentinel-repoconfig/draft-1', 'RepoConfigEnvelope'],
   policy: ['sentinel-policy/draft-1', 'EffectivePolicyEnvelope'],
   adoption: ['sentinel-adoption/draft-1', 'AdoptionEnvelope'],
+  owneruireceipt: ['sentinel-owneruireceipt/draft-1', 'OwnerUiReceiptEnvelope'],
+  owneruicapabilities: ['sentinel-owneruicapabilities/draft-1', 'OwnerUiCapabilities'],
   receipt: ['sentinel-receipt/draft-1', 'ReceiptEnvelope'],
   admission: ['sentinel-admission/draft-1', 'AdmissionEnvelope'],
   controls: ['sentinel-controls/draft-1', 'ControlFactsEnvelope'],

@@ -15,6 +15,9 @@ import { validateEnvelope } from '../validate.js';
 import { policyFail, type PolicyReasonCode } from './errors.js';
 import { snapshot } from './immutable.js';
 import { intentDigest, type ReceiptBook, type ConsumedReceipt } from './receipts.js';
+import { assertOwnerUiProof, type OwnerUiProof } from '../owner-ui/authority.js';
+import type { OwnerUiReceiptBook } from '../owner-ui/receipts.js';
+import type { OwnerUiReceiptEnvelope } from '../contracts/ownerui.js';
 import { isEffectivePolicy, type EffectivePolicy } from './settings.js';
 
 /** The adapter's answer for verdict 2. */
@@ -100,7 +103,14 @@ export function admit(req: AdmissionRequest): AdmissionResult { return decideAdm
  * ordinary admit and its public facade remain unchanged. No request JSON can set this internal choice. */
 export function admitRequiringReceipt(req: AdmissionRequest): AdmissionResult { return decideAdmission(req, true); }
 
-function decideAdmission(req: AdmissionRequest, requireReceipt: boolean): AdmissionResult {
+type DecisionRequest<R> = Omit<AdmissionRequest, 'receipt'> & { receipt?: { book: { consume(id: string, binding: { intent: ActionIntent; stateDigest: string; policyRevision: string }, now: Date): R }; id: string } };
+/** Only the closed private UI receipt/proof may choose this provenance; no public JSON flag exists. */
+export function admitOwnerUi(req: Omit<AdmissionRequest, 'receipt'> & { receipt?: { book: OwnerUiReceiptBook; id: string } }, proof: OwnerUiProof, required: boolean) {
+  assertOwnerUiProof(proof, req.intent.action);
+  if(req.requestedBy.channel !== 'owner-ui' || req.requestedBy.principal !== 'human') policyFail('sentinel.receipt.ownerOnly', 'not a genuine browser owner confirmation');
+  return decideAdmission<ConsumedReceipt<OwnerUiReceiptEnvelope>>(req, required);
+}
+function decideAdmission<R extends { readonly digest: string } = ConsumedReceipt>(req: DecisionRequest<R>, requireReceipt: boolean): { readonly record: AdmissionEnvelope; readonly receipt: R | null } {
   const { policy } = req;
   if (!isEffectivePolicy(policy)) policyFail('sentinel.policy.settingsInvalid', 'admission decides only under effectivePolicy’s own result');
   // The exact request decided on: a private frozen copy, so the caller cannot change it between verdicts.
@@ -141,7 +151,7 @@ function decideAdmission(req: AdmissionRequest, requireReceipt: boolean): Admiss
   }
 
   const allowed = policyVerdict.allowed && capability.allowed && credential.allowed;
-  let spent: ConsumedReceipt | null = null;
+  let spent: R | null = null;
   let outcome: AdmissionEnvelope['outcome'] = allowed ? 'admitted' : 'denied';
   if (allowed && requiresConfirmation) {
     if (req.receipt) {
