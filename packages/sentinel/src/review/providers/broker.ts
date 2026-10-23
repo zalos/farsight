@@ -21,7 +21,7 @@ import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.j
 import type { BudgetLedger, Reservation } from './budget.js';
 import { resolveCredential, type CredentialSource, type Secret } from './credentials.js';
 import { costOf, toNanos, fromNanos } from './decimal.js';
-import { ProviderError, fail } from './errors.js';
+import { ProviderError, NativeCredentialError, type NativeAuthDiagnostic, fail } from './errors.js';
 import { chatBody, chatPath, parseReply, type ChatMessage, type FinishReason, type ReplyIdentity } from './kinds.js';
 import { isProviderBinding, type ProviderBinding } from './profile.js';
 import { exchange } from './transport.js';
@@ -93,10 +93,12 @@ export interface ModelReply {
 /** Thrown after a call settled or stayed uncertain; carries the reservation as recorded. */
 export class ModelCallError extends ProviderError {
   readonly reservation: Reservation | null;
+  readonly nativeAuth?: Readonly<NativeAuthDiagnostic>;
   constructor(cause: ProviderError, reservation: Reservation | null) {
     super(cause.code, '', cause.spend);
     this.message = cause.message;
     this.reservation = reservation;
+    if (cause instanceof NativeCredentialError) this.nativeAuth = cause.nativeAuth;
   }
 }
 

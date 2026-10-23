@@ -2,7 +2,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, writeFile, copyFile, rm, chmod } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile, copyFile, rm, chmod, rename } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, join } from 'node:path';
 const exec = promisify(execFile);
@@ -35,8 +35,11 @@ try {
   await writeFile(join(scratch, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   for (const directory of [output, local]) {
     await mkdir(directory, { recursive: true });
-    await copyFile(binary, join(directory, 'claude-keychain-helper')); await chmod(join(directory, 'claude-keychain-helper'), 0o555);
-    await copyFile(join(scratch, 'manifest.json'), join(directory, 'manifest.json'));
+    const next = join(directory, `.helper-${process.pid}`);
+    await copyFile(binary, next); await chmod(next, 0o555);
+    await rename(next, join(directory, 'claude-keychain-helper'));
+    const metadata = join(directory, `.manifest-${process.pid}`);
+    await copyFile(join(scratch, 'manifest.json'), metadata); await rename(metadata, join(directory, 'manifest.json'));
   }
   console.log(JSON.stringify(manifest));
 } finally { await rm(scratch, { recursive: true, force: true }); }
