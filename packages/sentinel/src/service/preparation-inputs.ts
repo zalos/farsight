@@ -37,6 +37,7 @@ export interface PreparationAvailability { readonly adapterId: string; readonly 
 interface PreparedRunState {
   inputs: PreparationInputs; clock: PreparationClock; parent: PreparationParent | null; snapshot: SnapshotEnvelope;
   recordedEnvelope: RunEnvelope | null;
+  recordedAnalysis: { revision: number; digest: string; runDeadlineAt: string } | null;
 }
 const runsFor = new WeakMap<object, PreparedRunState>();
 const refuse = (): never => { throw new PreparationError('sentinel.preparation.changed'); };
@@ -162,6 +163,7 @@ export async function resolvePreparationRun(store: SentinelStore, value: Prepara
   const runId = workspaceRunIdentity(store, { inventory: snapshot.inventoryDigest, lock: terms.current.digest,
     policy: terms.policy.revision, profile: terms.profile.digest, parent: parent?.runId ?? null });
   const existing = store.ledger.getRun(runId);
+  let recordedAnalysis: PreparedRunState['recordedAnalysis'] = null;
   if (existing) {
     const admitted = await loadPlan(store, runId, existing.planRevision);
     clock.stillWithin();
@@ -173,12 +175,28 @@ export async function resolvePreparationRun(store: SentinelStore, value: Prepara
     if (pinned.snapshot.inventoryDigest !== snapshot.inventoryDigest) return refuse();
     snapshot = pinned.snapshot;
     const deadline = Date.parse(existing.envelope.createdAt) + existing.envelope.budgets.deadlineMs;
-    if (deadline < Date.parse(clock.runDeadlineAt)) tightenPreparationClock(store, clock, new Date(deadline).toISOString());
+    // Disclosing the exact recorded analysis starts no work and must not tighten a fresh request to an
+    // already expired execution clock. Bootstrap continuation still preserves that earlier bound.
+    if (admitted.plan.kind === 'analysis') recordedAnalysis = { revision: admitted.plan.revision, digest: admitted.plan.digest, runDeadlineAt: new Date(deadline).toISOString() };
+    else if (deadline < Date.parse(clock.runDeadlineAt)) tightenPreparationClock(store, clock, new Date(deadline).toISOString());
   }
   assertPreparationInputs(store, value, () => clock.stillWithin());
   const out = Object.freeze({ runId, snapshotId: snapshot.id });
-  runsFor.set(out, { inputs: value, clock, parent, snapshot: immutable(snapshot), recordedEnvelope: existing?.envelope ?? null });
+  runsFor.set(out, { inputs: value, clock, parent, snapshot: immutable(snapshot), recordedEnvelope: existing?.envelope ?? null, recordedAnalysis });
   return out;
+}
+
+/** Read-only exact recorded analysis disclosure. This never admits/promotes a plan or renews its clock. */
+export function existingPreparationAnalysis(store: SentinelStore, identity: PreparationRunIdentity) {
+  preparationRunContext(store, identity);
+  const proof = runsFor.get(identity)!, analysis = proof.recordedAnalysis;
+  if (!analysis) return null;
+  const actual = store.ledger.getRun(identity.runId), plan = store.ledger.getPlan(identity.runId, analysis.revision);
+  if (!actual || actual.planRevision !== analysis.revision || actual.envelope.snapshotId !== identity.snapshotId
+    || actual.envelope.createdAt !== proof.recordedEnvelope!.createdAt
+    || actual.envelope.budgets.deadlineMs !== proof.recordedEnvelope!.budgets.deadlineMs || plan?.digest !== analysis.digest) return refuse();
+  proof.clock.stillWithin();
+  return Object.freeze({ ...analysis });
 }
 
 /** Record an already admitted bootstrap as planned with the ORIGINAL clock, before Coordinator.open.

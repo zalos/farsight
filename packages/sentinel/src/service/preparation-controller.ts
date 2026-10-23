@@ -22,7 +22,7 @@ import {OWNER,SCAN_PROFILE,printed,type Workspace} from './local.js';
 import {openScratchLease,releaseScratchLease,type ScratchLease} from './scratch-lease.js';
 import {planPreparedWorkspaceCanonical} from './canonical.js';
 import {resolvePreparationInputs,assertPreparationInputs,preparationInputBytes,preparationResolvedBytes,
- preparationTerms,resolvePreparationRun,restorePreparationInputs,type PreparationInputs,type PreparationParent} from './preparation-inputs.js';
+ preparationTerms,resolvePreparationRun,existingPreparationAnalysis,restorePreparationInputs,type PreparationInputs,type PreparationParent} from './preparation-inputs.js';
 import {FRAMEWORK_CONTROLS_ADAPTER_ID} from './framework-adapter.js';
 import {discoverPreparationProfile} from './preparation-discovery.js';
 import {PreparationJournal,terminalPreparation,PREPARATION_TERMINAL_LIMIT,type PreparationRecord} from './preparation-journal.js';
@@ -253,6 +253,14 @@ export class PreparationController {
     this.#update(active,{phase:'captured',snapshotId,checkpoint:'captured'});
    }
    const identity=await resolvePreparationRun(this.#store,resolved,snapshotId,active.clock,parent);active.clock.stillWithin();
+   const existing=existingPreparationAnalysis(this.#store,identity);
+   if(existing){
+    // Preserve journal moves while disclosing already admitted state; no coordinator or plan write runs.
+    this.#update(active,{phase:'bootstrapping',checkpoint:'bootstrapping',runId:identity.runId,runDeadlineAt:existing.runDeadlineAt});
+    existingPreparationAnalysis(this.#store,identity);
+    this.#update(active,{phase:'prepared',runId:identity.runId,planRevision:existing.revision,planDigest:existing.digest,runDeadlineAt:existing.runDeadlineAt,errorCode:'sentinel.preparation.alreadyPrepared'});
+    return;
+   }
    // Same inventory may name an existing run. Its original snapshot/deadline stay authoritative; this
    // preparation retains its newly admitted capture as unused evidence and never relabels either snapshot.
    const reused=identity.snapshotId!==active.record.snapshotId;

@@ -63,7 +63,9 @@ export async function prepareCommand(ws:Workspace,options:{action?:string;confir
     if(!old.status?.found)throw new PreparationError('sentinel.preparation.unavailable');
     if(previous===key){if(options.parentId!==undefined)throw new PreparationError('sentinel.preparation.changed');return project({...old,outcome:'kept'},{requestKeySaved:true});}
     const status=old.status;
-    if(status.phase!=='prepared'&&(status.captured||!['interrupted','failed','canceled'].includes(status.phase)))
+    const replaceable=status.phase==='prepared'||options.parentId===undefined
+     &&(['failed','canceled'].includes(status.phase)||status.phase==='interrupted'&&status.resumeAvailable===false);
+    if(!replaceable)
      return project({...old,outcome:'refused',reasonCode:'sentinel.preparation.busy'},{requestKeySaved:true});
    }
   }
