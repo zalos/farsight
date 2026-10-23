@@ -34,7 +34,8 @@ were inspected: zero page errors or failed requests and five known missing-fixtu
 checkout build, dogfood graph replacement or global installation occurred.
 
 The startup tamper tests now use separate copied packages; 32 controls passed under normal test-file concurrency,
-with every shared compiled file unchanged. Final delta review and exact-head CI remain before merge. Next is the actual retained
+with every shared compiled file unchanged. Independent final delta review approved the isolated harness and
+integration; its startup filesystem-status wording correction is applied. Exact-head CI remains before merge. Next is the actual retained
 `paths → run → report` workflow. Durable report-import storage and read-only service/MCP are separate reviewed
 checkpoints, not completed public features. The Astra plan audit keeps the critical sequence focused on owner
 paths/decisions, service/MCP, optional bridge and full scan GUI. Configured model work, the final Fable review,
