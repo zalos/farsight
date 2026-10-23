@@ -186,6 +186,28 @@ function memoryEvidence(t: any, outcome: any) {
   t.diagnostic(`unconfirmed memory canary ${JSON.stringify({ code: outcome.code, container: id, state: outcome.container?.state, events, eventQueryStatus: result.status })}`);
 }
 
+function assertMemoryProof(t: any, memory: any, label = 'ordinary') {
+  if (memory.container?.state?.oomKilled === true) {
+    assert.equal(memory.detail?.witness, 'runtime');
+  } else {
+    // The separately qualified native control proves this production witness without daemon flags.
+    assert.equal(memory.container?.state?.oomKilled, false, 'preserve the raw daemon observation');
+    assert.equal(memory.detail?.resource, 'memory');
+    assert.equal(memory.detail?.witness, 'cgroup-v2-local');
+    assert.match(memory.container?.id ?? '', /^[0-9a-f]{64}$/);
+    assert.equal((memory.detail?.identity as any)?.container, memory.container?.id);
+    assert.equal(memory.detail?.memoryMax, String(64 * 1024 * 1024));
+    const baseline = memory.detail?.baseline as any, observed = memory.detail?.observed as any;
+    for (const key of ['max', 'oom', 'oom_kill']) {
+      assert.match(baseline?.[key] ?? '', /^[0-9]+$/);
+      assert.match(observed?.[key] ?? '', /^[0-9]+$/);
+      assert.ok(BigInt(observed[key]) > BigInt(baseline[key]), key);
+    }
+    assert.equal(memory.memoryObservation?.state, 'positive');
+  }
+  t.diagnostic(`${label} memory witness ${JSON.stringify({ witness: memory.detail?.witness, missingDaemonWitness: memory.container?.state?.oomKilled === false })}`);
+}
+
 test('the backend is a qualified local runtime; its facts are printed for the run log', { skip }, t => {
   const f = backend.facts;
   t.diagnostic(`sentinel-isolation-qualification host=${f.host} backend=${f.backend} server=${f.server} engine=${f.serverVersion} os=${JSON.stringify(f.operatingSystem)} cgroup=${f.cgroupVersion} status=${f.qualification.status}`);
@@ -238,25 +260,7 @@ test('resource canaries: memory, processes and temporary storage are bounded', {
     { adapterId: 'canary-memory', attemptId: `attempt-c${++n}`, work, inputs: captured });
   memoryEvidence(t, memory);
   assert.equal(memory.code, 'sentinel.execution.resourceExceeded', JSON.stringify({ code: memory.code, c: memory.container?.state }));
-  if (memory.container?.state?.oomKilled === true) {
-    assert.equal(memory.detail?.witness, 'runtime');
-  } else {
-    // The separately qualified native control proves this production witness without daemon flags.
-    assert.equal(memory.container?.state?.oomKilled, false, 'preserve the raw daemon observation');
-    assert.equal(memory.detail?.resource, 'memory');
-    assert.equal(memory.detail?.witness, 'cgroup-v2-local');
-    assert.match(memory.container?.id ?? '', /^[0-9a-f]{64}$/);
-    assert.equal((memory.detail?.identity as any)?.container, memory.container?.id);
-    assert.equal(memory.detail?.memoryMax, String(64 * 1024 * 1024));
-    const baseline = memory.detail?.baseline as any, observed = memory.detail?.observed as any;
-    for (const key of ['max', 'oom', 'oom_kill']) {
-      assert.match(baseline?.[key] ?? '', /^[0-9]+$/);
-      assert.match(observed?.[key] ?? '', /^[0-9]+$/);
-      assert.ok(BigInt(observed[key]) > BigInt(baseline[key]), key);
-    }
-    assert.equal(memory.memoryObservation?.state, 'positive');
-  }
-  t.diagnostic(`ordinary memory witness ${JSON.stringify({ witness: memory.detail?.witness, missingDaemonWitness: memory.container?.state?.oomKilled === false })}`);
+  assertMemoryProof(t, memory);
   const pids = await run('pids', { pids: 16 });
   const forked = canary(pids.diagnostics.text);
   assert.notEqual(pids.state, 'succeeded');
@@ -267,7 +271,7 @@ test('resource canaries: memory, processes and temporary storage are bounded', {
   for (const o of [memory, pids, tmp]) assert.equal(o.cleanup, 'removed-owned-container');
 });
 
-test('a real OOM whose first inspect flags are delayed settles before owned cleanup; plain SIGKILL stays unidentified', { skip }, async t => {
+test('a real OOM with delayed inspect flags requires daemon settling or exact local kernel proof', { skip }, async t => {
   let delayed!: ReturnType<typeof delayedOomInspects>;
   const context = traceContext(t, 'delayed-memory');
   t.after(() => t.diagnostic(`delayed-OOM raw inspect trace ${JSON.stringify({ terminalReads: delayed?.terminalReads(), observations: delayed?.observations })}`));
@@ -279,15 +283,30 @@ test('a real OOM whose first inspect flags are delayed settles before owned clea
     .then(context.result, error => { context.failed(error); throw error; }).finally(context.flush);
   memoryEvidence(t, memory);
   assert.equal(memory.code, 'sentinel.execution.resourceExceeded', JSON.stringify(memory.container?.state));
-  assert.equal(memory.container?.state?.oomKilled, true);
   assert.equal(delayed.observations.filter(o => o.masked).length, 2, 'exactly the first two terminal observations were hidden');
-  assert.ok(delayed.observations.some(o => !o.masked && o.rawOomKilled), 'the final classification required a real affirmative daemon observation after the delayed flags');
+  assert.ok(delayed.terminalReads() > 2, 'the real daemon was reread after the two masked terminal observations');
+  if (delayed.observations.some(o => o.rawOomKilled)) {
+    assert.equal(memory.container?.state?.oomKilled, true);
+    assert.ok(delayed.observations.some(o => !o.masked && o.rawOomKilled), 'the final classification required a real affirmative daemon observation after the delayed flags');
+    assert.equal(memory.detail?.witness, 'runtime');
+    t.diagnostic('delayed memory settling ' + JSON.stringify({ settlingExercised: true, missingDaemonWitness: false }));
+  } else {
+    assert.ok(delayed.observations.every(o => o.rawOomKilled === false));
+    assert.equal(memory.container?.state?.oomKilled, false);
+    t.diagnostic('delayed memory settling ' + JSON.stringify({ settlingExercised: false, missingDaemonWitness: true }));
+  }
+  assertMemoryProof(t, memory, 'delayed');
   assert.equal(memory.cleanup, 'removed-owned-container');
+});
+
+test('plain SIGKILL stays unidentified by both daemon and local kernel memory witnesses', { skip }, async t => {
   const killed = await observedAttempt(t, 'plain-sigkill', registryFor('self-sigkill'),
     { adapterId: 'canary-self-sigkill', attemptId: `attempt-c${++n}`, work, inputs: captured });
   assert.equal(killed.container?.state?.exitCode, 137);
   assert.equal(killed.container?.state?.oomKilled, false);
   assert.equal(killed.code, 'sentinel.execution.workerExited');
+  assert.equal(killed.detail?.witness, undefined);
+  assert.notEqual(killed.memoryObservation?.state, 'positive');
   assert.equal(killed.cleanup, 'removed-owned-container');
 });
 
