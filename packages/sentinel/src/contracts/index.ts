@@ -18,6 +18,7 @@ export type * from './paths.js';
 export type * from './deepimport.js';
 export type * from './service.js';
 export type * from './import-view.js';
+export type * from './pathrequest.js';
 
 /**
  * Every envelope: its kind, the one schema version this build reads and writes, and the generated type.
@@ -46,6 +47,7 @@ export const ENVELOPES = {
   paths: { schema: 'sentinel-paths/draft-1', type: 'PathEvidenceEnvelope' },
   importview: {schema:'sentinel-import-view/draft-1',type:'ImportViewEnvelope'},
   importpage: {schema:'sentinel-import-page/draft-1',type:'ImportPageEnvelope'},
+  pathrequest: { schema: 'sentinel-path-request/draft-1', type: 'PathRequestEnvelope' },
   deepimport: { schema: 'sentinel-deep-import/draft-1', type: 'DeepImportEnvelope' },
   servicecapabilities: { schema: 'sentinel-service-capabilities/draft-1', type: 'ServiceCapabilities' },
   runinspection: { schema: 'sentinel-run-inspection/draft-1', type: 'RunInspection' },
@@ -97,7 +99,7 @@ export const RULE_CAPABILITIES = [
 export const RULE_MEANINGS = ['candidate', 'finding'] as const;
 /** Ordered from least to most severe; a lower failing threshold is stricter. */
 export const SEVERITIES = ['info', 'low', 'medium', 'high', 'critical'] as const;
-export const RULE_EVIDENCE = ['source-span', 'matched-pattern', 'control-fact', 'dependency-version', 'advisory-id'] as const;
+export const RULE_EVIDENCE = ['source-span', 'matched-pattern', 'control-fact', 'dependency-version', 'advisory-id', 'call-path'] as const;
 export const FRAMEWORK_IDS = ['next', 'express', 'nest', 'spring'] as const;
 export const RULE_ORIGINS = ['sentinel-original', 'third-party'] as const;
 export const SENTINEL_ACTIONS = [

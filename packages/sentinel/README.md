@@ -371,6 +371,45 @@ is imported only with the owner's spent receipt for exactly that document and sn
 document's own attestation is never trusted alone) and a binding to the exact captured bytes; imported flows never
 count as checks Sentinel ran. ADR 36.
 
+### Owner workflow over retained source
+
+Promote `builtin:bounded-paths` explicitly and select `sentinel.paths.call-reachability` in the adopted owner policy.
+Registration never changes default stages or clears unrelated required checks. Prepare an exact local
+`sentinel-path-request/draft-1` document with the ancestor's executed run/revision/digest, captured snapshot/source,
+sorted unique exact node pairs and explicit bounds. No URL, wildcard, executable module or approval field is accepted.
+
+```sh
+farsight-sentinel paths <ancestorRunId> --request canonical-request.json --json
+farsight-sentinel paths <ancestorRunId> --request canonical-request.json --confirm --json
+farsight-sentinel run <childRunId> --confirm --json
+farsight-sentinel report <childRunId> --full --format html
+```
+
+The first command discloses the linked plan and, when confirmation is required, waits with exit 4. Preparation
+retains the canonical request and authenticated ended ancestor closure; it launches nothing. The separate run
+requires its own execution admission. A completed or canceled ancestor with accepted parse evidence can be used
+after source removal. Pending/running/paused identical tasks join; an explicit request after a terminal task creates
+a new generation. `rerun <child> --stage <activePathUnit>` pins a new request to that actual ended task, preserving its
+exact queries and bounds. Retry never widens to held checks and returns nothing to retry after successful publication.
+
+Minimal and full JSON, Markdown, offline HTML, SARIF and comparison read the accepted retained result without a
+worker or checkout. They report what the exact pinned bounded query said: reached, search ended within the parser
+graph, or stopped at a frontier. Readback validates source/path identities but does not independently repeat a search
+or prove absence. Required security checks remain gaps and neither fixture positives (reached) nor negatives
+(frontier) produce findings or observations. Accepted secret knowledge from current, baseline and authenticated
+request/selected ancestry, including canceled ancestors, withholds endpoint, node, edge, path and site details in
+every rendering. No recorded secret match means only that the accepted evidence supplied no match; it never proves
+that the source contains no secrets. A clean projection preserves useful captured call sites. Retained structural
+readback has a cooperative 120-second proof/readback bound for each accepted section and can refuse a large or
+slow valid closure; reading a report does not launch a worker.
+
+One fixed worker budget covers all queries: 64 MiB decoded/cache bytes, 1,024 distinct reads, one million visits,
+four million indexing/traversal steps and four MiB output, within the remaining original unit deadline. A source may
+have at most 1,018 entries plus the six fixed job/request/retained roles. Exhaustion accepts no partial result as
+complete. Proof, admission revalidation and normalization have separately recorded bounds; these cooperative limits
+are not hard heap or RSS promises. New execution requires the exact installed manifest, fixed `.mjs` worker/gate/
+driver and pinned whole distribution/dependency closure; a neighboring `.js` is never a fallback. ADR 45.
+
 ## Spring Security servlet pack (draft, PR 17)
 
 `src/frameworks/spring/` turns one source's parser evidence into `sentinel-controls/draft-1` control facts for its
@@ -625,8 +664,10 @@ remain visible, and none of these control facts establishes protection.
 
 ## Remaining product and release gates
 
-Canonical structural-path requests and durable deep imports are not owner CLI workflows yet; no qualified deep-flow
-engine ships. Decisions/import authority, provider/model command integration, deterministic MCP, the optional host
+Canonical structural-path requests have the owner preparation, separately admitted fixed worker execution and
+accepted retained report workflow above. They report call reachability/frontiers, without security coverage or
+findings, and require the exact owner-promoted shipped pack selected by current policy. Durable deep imports remain
+a separate unimplemented owner workflow; no qualified deep-flow engine ships. Decisions/import authority, provider/model command integration, deterministic MCP, the optional host
 bridge, GUI configuration and stage detail, model selection, replay/retention and later differential/build/runtime
 tracks remain open. Framework inspection and scanner observations do not clear those gates. Final acceptance still
 requires the complete installed CLI/MCP/GUI/report journey, original Java/Spring build/run/scan cases in Linux

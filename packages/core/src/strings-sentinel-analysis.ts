@@ -6,6 +6,19 @@ const same = (text: string, define: string): StringEntry => ({ hud: text, profes
 
 export const SENTINEL_ANALYSIS_STRINGS: Record<string, StringEntry> = {
   // ---- bounded call paths ----
+  'sentinel.paths.report.heading': same('Structural call reachability', 'Results reported by the exact pinned bounded query over retained parser evidence. They establish neither data flow nor security clearance.'),
+  'sentinel.paths.report.pinnedQuery': same('These outcomes were reported by the pinned bounded query over the retained parser graph.', 'Readback authenticates the accepted producer, request, source closure and reported graph/path identities. It does not rerun the search or independently reverify a no-path outcome.'),
+  'sentinel.paths.report.queryLine': same('{from} → {to}: {outcome}', 'One exact requested start/end pair and the outcome reported by its accepted bounded structural search.'),
+  'sentinel.paths.report.stepLine': same('{from} → {to} ({kind}); sites: {sites}', 'One reported step that matches the original retained parser edge and its captured occurrence sites. A recorded call does not prove a value travels along it.'),
+  'sentinel.paths.report.reached': same('a recorded call path was found', 'The pinned bounded query reported a path between these exact endpoints in the captured parser graph.'),
+  'sentinel.paths.report.notReachedComplete': same('the search ended within the parser graph', 'The pinned bounded query reported that its graph search ended without reaching the endpoint. Readback does not independently rerun that search; unrecorded runtime calls and data flow are not established.'),
+  'sentinel.paths.report.notReachedBounded': same('the search stopped at a frontier', 'The pinned bounded query met a stated limit or unknown call, so a continuing path is not ruled out.'),
+  'sentinel.paths.count.queries': same('{n} structural call queries', 'Exact requested endpoint pairs with accepted bounded query outcomes, counted separately from findings, observations and required security coverage.'),
+  'sentinel.paths.count.reached': same('{n} with a recorded path', 'Requested pairs whose pinned bounded query reported a reached path.'),
+  'sentinel.paths.count.notReachedComplete': same('{n} whose search ended in the graph', 'Requested pairs whose pinned query reported that the parser-graph search ended without a path; not independently reverified absence or a security result.'),
+  'sentinel.paths.count.notReachedBounded': same('{n} stopped at a frontier', 'Requested pairs whose pinned bounded query met a limit or unknown rather than establishing absence.'),
+  'sentinel.paths.budgetExceeded': same('the structural search stopped at its work limit', 'The shared input, retained-byte, traversal, output or time allowance was exhausted. No partial search is accepted as a completed result.'),
+  'sentinel.paths.rule.callReachability': same('bounded structural call reachability', 'A retained bounded call-path query result includes a reached, no-path or frontier outcome in the captured parser graph. It never establishes data flow, security enforcement or clearance.'),
   'sentinel.paths.unresolvedCall': same('the search met a call it cannot follow', 'The parser could not tell what a call reaches, or it reaches something outside the analysed graph. The search stops there, so it cannot say whether a path continues through it.'),
   'sentinel.paths.fanoutLimit': same('a function calls more places than the search follows', 'A function has more outgoing calls than the search bound allows; the calls past the bound were not followed, so a path through them is not ruled out.'),
   'sentinel.paths.depthLimit': same('the search reached its depth bound', 'Paths longer than the depth bound were not explored, so a longer path is not ruled out.'),

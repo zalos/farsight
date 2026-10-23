@@ -246,6 +246,33 @@ versions/shapes; public GUI work, policy assessment and general analysis reuse r
 review, one Opus PR review and remote CI/merge are still required. Shared readonly source-proof and worker-descriptor
 refactoring belongs to a separate subsequent path integration, with no changes on this framework branch.
 
+## Structural-path data checkpoint (historical scope) — 2026-10-22
+
+Selected reruns merged as [#159](https://github.com/zalos/farsight/pull/159), `64d86ae9`, with the file tree exactly
+the reviewed `147eb71c` candidate (runtime `bfb60d65`). All sixteen required and selected CI checks passed.
+Independent SOL replay of the final recovery delta passed eleven actual controls with zero skips, including the
+unchanged original crash-window public-CLI probe, paused/source-removed owner reopening, future-revision guards and
+inherited privacy. Opus's one final source-only review approved the earlier `62de9d6c`; the subsequent corrections
+were implemented by SOL and independently reviewed by SOL. No whole PR 09/19/27 or final release gate is implied.
+
+The next isolated branch, `codex/sentinel-path-requests`, starts ADR 45's bounded source-derived request schema,
+optional plan pin, source-filtered planner fingerprint and request/generation identity. Its byte/count/schema bounds
+run before expensive processing, reject duplicate/unsorted node pairs or broader edge kinds and preserve old no-pin
+canonical plan output. A query never grants execution or supplies the missing deep-flow capability. Fifty focused
+contract, planner and package controls pass with zero skips; the affected closure build and typecheck, generated
+schemas and catalog check pass. A following pure job/output checkpoint binds the canonical request, exact ancestor,
+snapshot/source and parser artifact/result/index references to the bytes sealed for an attempt. It reads no workspace
+paths, launches or publishes nothing, and returns only the existing call-reachability evidence and frontiers. Five
+new original capture/parse controls plus the request/package controls pass 21 tests with zero skips, including source
+removal, valid-digest foreign references, missing/substituted bytes and unknown-node frontiers; build/typecheck pass.
+These data checks do not authenticate the producer chain or replace request admission. This is a private integration
+checkpoint, not a completed path-command feature.
+
+The reviewed shared read-only proof and fixed worker seam now exist. The next lane integrates them with request
+admission/retention, then the actual owner command, supervised worker and privacy-safe report. SOL implements and
+Claude independently reviews; the lead owns publishing. The data checkpoint above grants no execution authority.
+Durable deep-import acceptance remains a separate design and implementation gate.
+
 ## Selected-rerun crash-window recovery — 2026-10-22
 
 Runtime checkpoint `bfb60d65` corrects independent review's genuine legacy admit-before-advance crash window on

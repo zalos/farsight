@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { ownerEvidenceCommand, evidenceWire } from './evidence/owner-cli.js';
 import { REPORT_FORMATS, type ReportFormat } from './service/full-report.js';
 import {
-  adoptWorkspaceSettings, confirmForService, currentRules, followWorkspaceRun, promoteRulePack, planWorkspace, previewReport, runPlan, describeRun, runStatus, workspaceOf, checkWorkspaceLayout, PolicyError, fullReportIn,
+  adoptWorkspaceSettings, confirmForService, currentRules, followWorkspaceRun, promoteRulePack, planWorkspace, prepareWorkspacePaths, previewReport, runPlan, describeRun, runStatus, workspaceOf, checkWorkspaceLayout, PolicyError, fullReportIn,
   type Workspace,
 } from './service/local.js';
 import { connectService, readServiceDescriptor, serveWorkspace } from './service/owner-service.js';
@@ -54,6 +54,7 @@ function help(): string {
     `  ${word('sentinel.cli.usageInit')}`,
     `  ${word('sentinel.cli.usageSettings')}`,
     `  ${word('sentinel.cli.usagePlan')}`,
+    `  ${word('sentinel.cli.usagePaths')}`,
     `  ${word('sentinel.cli.usageRun')}`,
     `  ${word('sentinel.cli.usageDetach')}`,
     `  ${word('sentinel.cli.usageStatus')}`,
@@ -277,7 +278,7 @@ async function owner(p: ParsedCommand): Promise<number> {
     }
     // While the service runs it alone holds the store: reads go through it, and nothing new is planned or run here.
     const live = await connectService(ws);
-    if (live && (p.command === 'plan' || p.command === 'run' || p.command === 'retry' || p.command === 'rerun')) {
+    if (live && (p.command === 'plan' || p.command === 'paths' || p.command === 'run' || p.command === 'retry' || p.command === 'rerun')) {
       live.close();
       return serviceOut(result(p.command, 'configuration-failure', { reasonCode: 'sentinel.service.ownerServiceRunning' }));
     }
@@ -326,6 +327,10 @@ async function owner(p: ParsedCommand): Promise<number> {
       const stages = typeof p.flags['--stage'] === 'string' ? p.flags['--stage'].split(',').map(x => x.trim()).filter(Boolean) : [];
       const r = await followWorkspaceRun(ws, { mode: p.command, runId: p.args.runId!, stages, confirm, now });
       return serviceOut(r, r.facts.runId && r.facts.parentId ? [`run ${String(r.facts.runId)} · follows ${String(r.facts.parentId)} · ${String(r.facts.planDigest)}`] : []);
+    }
+    if (p.command === 'paths') {
+      const r=await prepareWorkspacePaths(ws,{ancestorRunId:p.args.ancestorRunId!,requestFile:p.flags['--request'] as string,confirm,now});
+      return serviceOut(r,r.facts.runId?[word('sentinel.cli.pathsPrepared',{run:String(r.facts.runId),request:String(r.facts.request)})]:[]);
     }
     if (p.command === 'plan') {
       const r = await planWorkspace(ws, { confirm, now });
@@ -490,7 +495,7 @@ async function dispatch(p: ParsedCommand): Promise<number> {
     case 'mcp': return (await import('./service/mcp.js')).runMcp(workspaceFor(p));
     case 'validate': return validate(p);
     case 'init': return init(p);
-    case 'settings': case 'plan': case 'run': case 'status': case 'report': case 'compare':
+    case 'settings': case 'plan': case 'paths': case 'run': case 'status': case 'report': case 'compare':
     case 'serve': case 'wait': case 'pause': case 'resume': case 'cancel': case 'rules': case 'assets': case 'retry': case 'rerun': return owner(p);
     default: {
       const change = plannedIn(p.command)!;

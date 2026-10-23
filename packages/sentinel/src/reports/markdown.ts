@@ -2,6 +2,7 @@
 // registers, every finding with its place, comparison and evidence, every gap, and the definitions. Untrusted text is
 // escaped; excerpts are fenced with a fence longer than any backtick run inside them, so source cannot end the block.
 import type { ReportEnvelope, ReportEvidence, FindingPlace } from '../contracts/index.js';
+import { structuralText } from './structural-paths.js';
 import { inspectionText } from './inspection.js';
 import { COUNT_ORDER, countText, wordOf, defineOf, labelKey } from './words.js';
 
@@ -68,6 +69,7 @@ export function renderMarkdown(doc: ReportEnvelope): string {
     lines.push(`## ${md(wordOf(doc,'sentinel.controls.reportHeading','business'))}`, '');
     for(const i of inspectionText(doc))lines.push(`### ${md(i.source)}`, '', ...i.lines.map(l=>`- ${md(l)}`), '');
   }
+  if(doc.structuralPaths?.length){lines.push(`## ${md(wordOf(doc,'sentinel.paths.report.heading','business'))}`,'');for(const p of structuralText(doc))lines.push(`### ${md(p.source)}`,'',...p.lines.map(l=>`- ${md(l)}`),'')}
   lines.push('## Gaps in the checks', '');
   if (!doc.gaps.length) lines.push(doc.completeness === 'complete' ? 'Every planned check covered its scope.' : 'Every planned check recorded its scope, but some captured files were seen by no check or some folders were never listed: read the counts.', '');
   for (const g of doc.gaps) lines.push(`- <a id="${anchor('gap', g.checkId)}"></a>${md(g.checkId)}: ${md(g.status)}; ${md(g.explanation.business)}`);

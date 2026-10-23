@@ -59,6 +59,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'service/controls.js': ['@farsight/core/dist/strings.js'],
   'service/readonly.js': ['@farsight/core/dist/strings.js', 'node:crypto', 'node:perf_hooks'],
   'service/mcp.js': ['@farsight/core/dist/strings-sentinel-service.js', '@farsight/core/dist/strings.js', '@modelcontextprotocol/sdk/server/index.js', '@modelcontextprotocol/sdk/server/stdio.js', '@modelcontextprotocol/sdk/types.js'],
+  'service/path-request-file.js': ['node:fs'],
+  'service/path-adapter.js': ['node:path'],
   'service/scanner-assets.js': ['node:crypto', 'node:fs', 'node:path'],
   'reports/accepted-secrets.js': ['@farsight/graph', 'node:crypto'],
   'reports/selected-privacy.js': ['@farsight/graph'],
@@ -216,6 +218,10 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'reports/place.js': ['@farsight/core/dist/affected.js', '@farsight/core/dist/impact.js', '@farsight/core/dist/journeys.js', '@farsight/core/dist/query.js'],
   // Bounded call paths and attested deep import (ADR 36): pure over parser evidence and captured bytes; no engine, no process.
   'analysis/paths/paths.js': ['@farsight/graph', 'node:crypto'],
+  'analysis/paths/protocol.js': ['node:crypto'],
+  // The fixed structural child reads only sealed files; its driver writes the private prepared request.
+  'analysis/paths/worker.js': ['node:crypto', 'node:fs', 'node:url'],
+  'analysis/paths/driver.js': ['node:fs', 'node:path'],
   'analysis/deep/import.js': ['@farsight/graph', 'node:crypto'],
   // Imported report readers (PR 20 Stage A): one bounded no-follow file read, hashing and canonical JSON; no network,
   // no process, no decompression, no store or receipt.

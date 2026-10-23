@@ -60,7 +60,7 @@ test('policy enum sets are pinned to an explicit list and to the generated schem
     ['capabilities', RULE_CAPABILITIES, ['source-bytes', 'pattern-match', 'source-span', 'call-occurrence', 'resolved-receiver-type', 'framework-order', 'interprocedural-flow', 'runtime-observation', 'dependency-manifest', 'advisory-database'], schemaEnum('rulepack', 'RuleCapability')],
     ['meanings', RULE_MEANINGS, ['candidate', 'finding'], schemaEnum('rulepack', 'RuleMeaning')],
     ['severities', SEVERITIES, ['info', 'low', 'medium', 'high', 'critical'], schemaEnum('rulepack', 'Severity')],
-    ['evidence', RULE_EVIDENCE, ['source-span', 'matched-pattern', 'control-fact', 'dependency-version', 'advisory-id'], schemaEnum('rulepack', 'RuleEvidence')],
+    ['evidence', RULE_EVIDENCE, ['source-span', 'matched-pattern', 'control-fact', 'dependency-version', 'advisory-id', 'call-path'], schemaEnum('rulepack', 'RuleEvidence')],
     ['frameworks', FRAMEWORK_IDS, ['next', 'express', 'nest', 'spring'], schemaEnum('controls', 'FrameworkId')],
     ['origins', RULE_ORIGINS, ['sentinel-original', 'third-party'], schemaEnum('rulepack', 'RuleOrigin')],
     ['actions', SENTINEL_ACTIONS, ['run.start', 'capture.source', 'disposition.propose', 'disposition.approve', 'rule.promote', 'tool.acquire', 'paid.admit', 'disclosure.send', 'settings.adopt', 'run.pause', 'run.cancel', 'context.pin', 'evidence.import', 'evidence.abandon'], schemaEnum('settings', 'SentinelAction')],

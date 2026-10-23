@@ -442,15 +442,15 @@ test("a publishable workspace library's declarations are vendored; a string lite
 
 
 
-test('a shipped framework worker requires its fixed driver before the previous package is touched', () => {
+for (const stem of ['frameworks/controls','analysis/paths']) test(`a shipped ${stem} worker requires its fixed driver before the previous package is touched`, () => {
   const root = workspace();
   try {
-    write(root, 'packages/sentinel/src/frameworks/controls/worker.ts', 'export const worker = true;\n');
+    write(root, `packages/sentinel/src/${stem}/worker.ts`, 'export const worker = true;\n');
     write(root, 'build/sentinel/previous-package', 'keep this exact prior package');
     const before = readdirSync(join(root, 'build/sentinel')).sort();
     const run = node(root, 'pack-sentinel.mjs');
     assert.equal(run.status, 1);
-    assert.match(run.stderr, /frameworks\/controls\/driver\.ts is missing/);
+    assert.ok(run.stderr.includes(`${stem}/driver.ts is missing`),run.stderr);
     assert.equal(readFileSync(join(root, 'build/sentinel/previous-package'), 'utf8'), 'keep this exact prior package');
     assert.deepEqual(readdirSync(join(root, 'build/sentinel')).sort(), before);
   } finally { rmSync(root, { recursive: true, force: true }); }
