@@ -11,3 +11,13 @@ export type {
   AssessmentSide, CheckAssessment, Comparison, ComparisonRequest, CompatibilityMapping, CurrentLabel, CurrentOutcome, CurrentSurfaces,
   DetectionConditions, HistoricalLabel, HistoricalOutcome,
 } from './compare.js';
+
+// Scoped decisions: only proposals/read models are public. Approval stays in the package's owner CLI boundary.
+export { DecisionJournal } from './dispositions.js';
+export type { DecisionProposal, ApprovedDecision, DecisionApprovalOutcome } from './dispositions.js';
+export { DecisionError } from './decision-data.js';
+export type { DecisionBasis, DecisionPathBasis, DecisionProposalInput } from './decision-data.js';
+export { ASSERTION_PROPERTIES } from './assertions.js';
+export type { DeploymentAssertion, AssertionProperty, AssertionDirection } from './assertions.js';
+export { evaluateDecisions } from './decision-evaluation.js';
+export type { DecisionEvaluation, EvaluatedDecisionPath, DecisionPathReason } from './decision-evaluation.js';

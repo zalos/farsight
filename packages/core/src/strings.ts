@@ -59,6 +59,7 @@ import { SENTINEL_GLOSSARY_STRINGS } from './strings-sentinel-glossary.js';
 import { SENTINEL_STORAGE_ERROR_STRINGS } from './strings-sentinel-storage-errors.js';
 import { SENTINEL_PATTERN_STRINGS } from './strings-sentinel-pattern.js';
 import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
+import { SENTINEL_DECISION_STRINGS } from './strings-sentinel-decisions.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
 import { SENTINEL_NEST_STRINGS } from './strings-sentinel-nest.js';
 
@@ -231,6 +232,7 @@ export const STRINGS: Record<string, StringEntry> = {
 
   // Sentinel findings, comparisons and report words (strings-sentinel-findings.ts)
   ...SENTINEL_FINDINGS_STRINGS,
+  ...SENTINEL_DECISION_STRINGS,
   // Sentinel current-tree secret scanning: limitation keys, skipped scope and coded failures (strings-sentinel-secrets.ts)
   ...SENTINEL_SECRETS_STRINGS,
 

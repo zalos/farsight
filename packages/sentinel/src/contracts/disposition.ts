@@ -1,4 +1,4 @@
-import type { BoundedText, Digest, Id, ShortText, Timestamp } from './common.js';
+import type { BoundedText, Digest, Id, NodeId, ShortText, Timestamp } from './common.js';
 
 /** An accepted risk remains a risk; a mitigation is only as strong as the evidence it names. */
 export type DispositionDecision = 'accepted-risk' | 'false-positive' | 'mitigated' | 'deferred';
@@ -29,7 +29,7 @@ interface DispositionBase {
   /** Never wider than the finding's own scope; partial path coverage leaves the other paths open. */
   scope: {
     /** @maxItems 1024 */
-    surfaceIds: Id[];
+    surfaceIds: NodeId[];
     environmentDigest: Digest;
   };
   decision: DispositionDecision;

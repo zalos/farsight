@@ -208,6 +208,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'snapshot/policy.js': ['node:crypto', 'node:path'],
   // Findings and reports (ADR 38): pure folds over observations, captured bytes and a pinned context; core's own
   // journey, impact and persona folds and its catalog; no process, no network, no file access.
+  'findings/dispositions.js': ['node:crypto', 'node:fs', 'node:path'],
   'findings/correlate.js': ['@farsight/graph', 'node:crypto'],
   'findings/normalize.js': ['node:crypto'],
   'reports/context.js': ['@farsight/graph', 'node:crypto'],
