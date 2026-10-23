@@ -49,6 +49,14 @@
           "type": "boolean",
           "description": "Hosted API review is paused when absent or false; explicit adoption is required to enable public dispatch."
         },
+        "hostedReviewSecretScan": {
+          "type": "string",
+          "enum": [
+            "required",
+            "when-selected"
+          ],
+          "description": "Hosted disclosure requires complete secret scanning by default; when-selected still requires it whenever the secret rule is selected."
+        },
         "nativeClaudeReviewEnabled": {
           "type": "boolean",
           "description": "Native Claude execution is deferred when absent or false; enabling does not establish runtime qualification."

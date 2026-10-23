@@ -1,5 +1,6 @@
 {
   "schema": "sentinel-policy/draft-1",
+  "hostedReviewSecretScan": "when-selected",
   "settingsTrust": "adopted",
   "settingsDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "repoConfigDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",

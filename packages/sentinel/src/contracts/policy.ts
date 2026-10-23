@@ -230,6 +230,8 @@ export interface SettingsEnvelope {
   reviewModels?: ReviewModelsSettings;
   /** Hosted API review is paused when absent or false; explicit adoption is required to enable public dispatch. */
   hostedApiReviewEnabled?: boolean;
+  /** Hosted disclosure requires complete secret scanning by default; when-selected still requires it whenever the secret rule is selected. */
+  hostedReviewSecretScan?: 'required' | 'when-selected';
   /** Native Claude execution is deferred when absent or false; enabling does not establish runtime qualification. */
   nativeClaudeReviewEnabled?: boolean;
 }
@@ -282,6 +284,8 @@ export interface EffectivePolicyEnvelope {
   schema: 'sentinel-policy/draft-1';
   settingsTrust: SettingsTrust;
   settingsDigest: Digest | null;
+  /** Absent means required; the explicit adopted choice never claims secret coverage. */
+  hostedReviewSecretScan?: 'required' | 'when-selected';
   repoConfigDigest: Digest | null;
   /** @maxItems 2048 */
   rules: { familyId: RuleFamilyId; source: 'mandatory' | 'requested' | 'both' }[];

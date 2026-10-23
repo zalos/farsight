@@ -22,6 +22,14 @@
             }
           ]
         },
+        "hostedReviewSecretScan": {
+          "type": "string",
+          "enum": [
+            "required",
+            "when-selected"
+          ],
+          "description": "Absent means required; the explicit adopted choice never claims secret coverage."
+        },
         "repoConfigDigest": {
           "anyOf": [
             {

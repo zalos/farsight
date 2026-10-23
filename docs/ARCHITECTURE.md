@@ -2138,3 +2138,15 @@ dispatch. The fixed profile permits two Sentinel turns per review unit, original
 response bytes; vendor AI credits are soft, hidden model work is unobserved, and uncertain usage stays charged
 possible on the same ledger. Code-only qualification and auth-free startup do not qualify account access or
 real inference. Other models and platforms require separate qualification; no fallback is introduced.
+
+
+**Update — explicit optional external stages (2026-10-23).** The adopted settings may set
+`hostedReviewSecretScan: 'required' | 'when-selected'`. Omission preserves the required secret-scan gate.
+`when-selected` permits general agentic review over the genuine captured inventory without any external check;
+if the secret family is selected by effective policy or pinned/planned as Gitleaks, the existing exact current-source
+complete-coverage gate still applies. Missing definitions/assets, partial or failed scans cannot silently disable
+that gate. Current, baseline and proven selected-ancestor secret withholding is unchanged and runs first.
+This choice is visible in the redacted effective policy, included in its revision and therefore in plan/receipt
+bindings. It changes neither model capability nor source-disclosure/network/paid admission. General review's
+accepted records remain `deterministicCoverage: false`; reports retain zero planned checks and the files seen by no
+check. Guided review still depends on planned checks. Selected external scanners still use pinned containers only.

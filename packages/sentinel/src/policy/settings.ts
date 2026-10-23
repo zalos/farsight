@@ -146,6 +146,7 @@ export function effectivePolicy(given: PolicyInputs): EffectivePolicy {
   const view: EffectivePolicyEnvelope = {
     schema: 'sentinel-policy/draft-1',
     settingsTrust: trust,
+    ...(trusted.hostedReviewSecretScan === undefined ? {} : { hostedReviewSecretScan: trusted.hostedReviewSecretScan }),
     settingsDigest: trust === 'adopted' ? inputs.settingsDigest : null,
     repoConfigDigest: inputs.repoConfigDigest,
     rules: rules.map(familyId => ({

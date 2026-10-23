@@ -17,7 +17,10 @@ export async function prepareAdmittedReview(store:SentinelStore,plan:ValidatedPl
  if(new Set(plan.admitted.plan.units.filter(u=>u.review).map(u=>u.review!.selection.bindingDigest)).size>1)return bad();store.assertHeld();const unit=plan.unitOf(ref).unit;if(!unit.review||plan.admitted.plan.pins.snapshotId!==plan.run.snapshotId)return bad();
  if(await reviewSecretsKnown(store,plan.run.id,plan.admitted))throw new ReviewWithheld();
  const spec=await readReviewSpec(store,unit),policy=runtime.currentPolicy(),resolved=resolveReviewModel(policy,spec.kind,spec.segmentId!);
- if(resolved.binding.disclosure==='hosted')await requireHostedSecretCoverage(store,plan.run.id,plan.admitted,unit.sourceId!);
+ // The owner may select model review without an external scanner. A requested secret rule remains a gate even
+ // when missing assets prevented a scanner unit from being planned; failed/partial scans never become optional.
+ const secretScanSelected=policy.rules.includes('sentinel.secrets.current-tree')||plan.admitted.plan.pins.rules.some(p=>p.adapterId==='secrets-gitleaks')||plan.admitted.plan.units.some(u=>u.adapterId==='secrets-gitleaks');
+ if(resolved.binding.disclosure==='hosted'&&(policy.settings.hostedReviewSecretScan!=='when-selected'||secretScanSelected))await requireHostedSecretCoverage(store,plan.run.id,plan.admitted,unit.sourceId!);
  if(policy.revision!==plan.admitted.plan.pins.policyDigest||resolved.selection.bindingDigest!==unit.review.selection.bindingDigest)return bad();
  const prior=runtime.ledger.loadCheckpoint(spec.sessionId);if(prior&&prior.epoch!==store.epoch)runtime.ledger.recover([prior.epoch],new Date().toISOString());
  const request={binding:resolved.binding,policy,runId:plan.run.id,budget:unit.review.terms.budget,requestedBy:runtime.requestedBy,stateDigest:canonicalDigest({store:store.storeId,run:plan.run.id,plan:plan.admitted.plan.digest,binding:resolved.selection.bindingDigest})};let cache=envelopeCache.get(runtime);if(!cache)envelopeCache.set(runtime,cache=new Map());const key=request.stateDigest;let envelope=cache.get(key);if(!envelope){const receipt=runtime.receiptFor?.(request)??runtime.receipt;envelope=await runtime.broker.openEnvelope({...request,...(receipt?{receipt}:{})});cache.set(key,envelope)}

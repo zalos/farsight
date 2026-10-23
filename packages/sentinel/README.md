@@ -1123,3 +1123,49 @@ stage/segment overrides selecting different bindings are refused. Use a new link
 model terms; old results remain immutable. The slice caps a plan at 32 review units, input artifacts at 16 MiB,
 private trace content/output at 8 MiB with a shared 20-second read deadline, and checkpoints at their existing
 4 MiB limit. These bounds can leave inspection unfinished; they never establish absence or complete coverage.
+
+
+### Agentic-only review without external scanners
+
+Capture, parsing, retained inputs and general model review do not need Docker or a local model. In the existing
+owner settings, keep the configured Copilot provider and its exact model pins, and explicitly select:
+
+```json
+{
+  "mandatoryRules": [],
+  "hostedReviewSecretScan": "when-selected",
+  "reviewModels": {
+    "stages": [{ "stage": "general", "providerId": "native-copilot", "modelId": "luna" }],
+    "segments": []
+  }
+}
+```
+
+This is a fragment to merge into the existing settings, not a replacement for provider terms, limits, grants or
+capability pins. The repository's `requestedRules` must also be empty for a purely agentic run; repository requests
+cannot disable owner-mandatory rules. Adopt the changed settings before preparing a new plan:
+
+```sh
+farsight-sentinel settings adopt --workspace ./workspace --confirm
+farsight-sentinel rules promote builtin:foundation-preview --workspace ./workspace --confirm
+farsight-sentinel plan --workspace ./workspace --json
+farsight-sentinel run PLAN_ID --workspace ./workspace --confirm --confirm-models --json
+farsight-sentinel report RUN_ID --workspace ./workspace --full --format markdown
+```
+
+The promoted pack supplies the existing bootstrap recipe; no rule in it runs unless selected by the effective
+policy. Inspect that plan before confirming. General review partitions captured source independently of checks;
+guided review is generated only for planned deterministic checks. Source disclosure, network and paid-inference
+grants and exact model confirmation remain required. Hosted HTTP API and native Claude release switches are
+unchanged; this does not enable another provider or a fallback.
+
+If `hostedReviewSecretScan` is absent or `required`, hosted review still requires the complete accepted current-source
+secret scan described above. With `when-selected`, selecting the secret rule still requires that same complete
+scan: missing assets, failed or partial scans and known secret matches do not qualify. Any external scanner selected
+by the effective rules uses its pinned Linux container and existing asset checks; there is no host fallback.
+Known secret matches in current, baseline or proven selected ancestry still withhold review.
+
+An agentic-only report does not mean clean or secret-free. It reports zero planned deterministic checks and no
+executed deterministic coverage, retains the count of files seen by no check, and records model claims and unfinished
+review scope separately. Inspect exact selected provider/model, prompt and ordered skill identities with the private
+owner command `report RUN_ID --instructions --json`; model claims never establish check coverage.
