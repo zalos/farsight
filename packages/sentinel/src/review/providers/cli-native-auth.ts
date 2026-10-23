@@ -2,7 +2,7 @@
 // admission, consumed disclosure receipt and durable call reservation. This module is not a public provider API.
 // It never refreshes, logs in, writes credentials or reads any Claude settings/credential file.
 import type { Writable } from 'node:stream';
-import { fail, ProviderError } from './errors.js';
+import { fail, ProviderError, NativeCredentialError } from './errors.js';
 
 const MAX_ITEM_BYTES = 64 * 1024;
 const MAX_TOKEN_BYTES = 8192;
@@ -34,12 +34,13 @@ export function parseNativeClaudeToken(item: Uint8Array, deadlineAt: number, sig
   } catch { fail('sentinel.provider.credentialUnavailable', 'native keychain item is not supported JSON'); }
   if (!oauth || typeof oauth !== 'object' || Array.isArray(oauth)
     || typeof oauth.accessToken !== 'string' || oauth.accessToken.length === 0 || Buffer.byteLength(oauth.accessToken) > MAX_TOKEN_BYTES
-    || /[^\x21-\x7e]/.test(oauth.accessToken) || !Number.isSafeInteger(oauth.expiresAt) || oauth.expiresAt <= deadlineAt + 5000
+    || /[^\x21-\x7e]/.test(oauth.accessToken) || !Number.isSafeInteger(oauth.expiresAt)
     || !Array.isArray(oauth.scopes) || oauth.scopes.length > SCOPES.size || !oauth.scopes.includes('user:inference')
     || new Set(oauth.scopes).size !== oauth.scopes.length
     || oauth.scopes.some((s: unknown) => typeof s !== 'string' || !SCOPES.has(s))) {
-    return fail('sentinel.provider.credentialUnavailable', 'native OAuth is missing, expired or outside the qualified scope');
+    throw new NativeCredentialError({ schema: 'sentinel-native-auth-refusal/1', phase: 'validate', reason: 'unsupported', osStatus: null });
   }
+  if (oauth.expiresAt <= deadlineAt + 5000) throw new NativeCredentialError({ schema: 'sentinel-native-auth-refusal/1', phase: 'validate', reason: 'expired', osStatus: null });
   const handle = Object.freeze(new Token(oauth.expiresAt));
   tokens.set(handle, { bytes: Buffer.from(oauth.accessToken, 'utf8'), expiresAt: oauth.expiresAt });
   return handle;
