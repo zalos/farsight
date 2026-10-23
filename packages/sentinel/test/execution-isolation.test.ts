@@ -238,7 +238,25 @@ test('resource canaries: memory, processes and temporary storage are bounded', {
     { adapterId: 'canary-memory', attemptId: `attempt-c${++n}`, work, inputs: captured });
   memoryEvidence(t, memory);
   assert.equal(memory.code, 'sentinel.execution.resourceExceeded', JSON.stringify({ code: memory.code, c: memory.container?.state }));
-  assert.equal(memory.container?.state?.oomKilled, true);
+  if (memory.container?.state?.oomKilled === true) {
+    assert.equal(memory.detail?.witness, 'runtime');
+  } else {
+    // The separately qualified native control proves this production witness without daemon flags.
+    assert.equal(memory.container?.state?.oomKilled, false, 'preserve the raw daemon observation');
+    assert.equal(memory.detail?.resource, 'memory');
+    assert.equal(memory.detail?.witness, 'cgroup-v2-local');
+    assert.match(memory.container?.id ?? '', /^[0-9a-f]{64}$/);
+    assert.equal((memory.detail?.identity as any)?.container, memory.container?.id);
+    assert.equal(memory.detail?.memoryMax, String(64 * 1024 * 1024));
+    const baseline = memory.detail?.baseline as any, observed = memory.detail?.observed as any;
+    for (const key of ['max', 'oom', 'oom_kill']) {
+      assert.match(baseline?.[key] ?? '', /^[0-9]+$/);
+      assert.match(observed?.[key] ?? '', /^[0-9]+$/);
+      assert.ok(BigInt(observed[key]) > BigInt(baseline[key]), key);
+    }
+    assert.equal(memory.memoryObservation?.state, 'positive');
+  }
+  t.diagnostic(`ordinary memory witness ${JSON.stringify({ witness: memory.detail?.witness, missingDaemonWitness: memory.container?.state?.oomKilled === false })}`);
   const pids = await run('pids', { pids: 16 });
   const forked = canary(pids.diagnostics.text);
   assert.notEqual(pids.state, 'succeeded');
