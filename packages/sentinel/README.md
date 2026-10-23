@@ -594,6 +594,7 @@ hard memory, CPU or process limit; it runs only Sentinel's shipped code. The wor
 build and installed dependency bytes/lookups. Reinstalling, moving or changing those bytes requires a new plan.
 A startup verification refusal ends the inspection with no accepted result and is not retried automatically.
 The recorded reason preserves the original exit and adapter identity; it does not establish that files changed.
+A startup read failure also refuses without an automatic retry; restore readable installed files before making a new plan.
 Cancellation, deadline and cleanup failures keep their own reasons. Restore the intended installation, re-register
 it and make a new plan before trying again.
 

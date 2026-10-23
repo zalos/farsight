@@ -6,11 +6,46 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Sentinel retained source and fixed worker integration — 2026-10-22
+
+The isolated shared-proof candidate extends ADR 44 over merged main `d79a9b3a`. Independent Claude reviews
+approved the bounded read-only source proof, strict own-package resolver and immutable asset pins, explicit sealed
+job identity and legacy report compatibility, and terminal startup verification classification. SOL implements;
+Claude reviews; the lead owns integration and final acceptance. This candidate has not yet merged.
+
+The read proof is bound to the original held owner, executed revision, source closure, deadline and signal.
+Aggregate byte/read/depth/time bounds are cooperative and can only tighten; the proof grants no execution authority.
+Closed built-in descriptors name shipped files only. Existing reports remain readable without worker assets,
+while new execution requires the exact installed manifest, launch gate and worker pins. New framework invocations
+bind one explicit sealed job through preparation, execution, normalization and readback; an absent job preserves
+legacy accepted records. An exact silent built-in startup refusal is final without refreshing its registered identity.
+
+Integration validation: the build passed, along with types, schema drift, catalog and twelve packer controls.
+The first affected run passed 229 controls but one test module failed to import a scratch helper removed by #163.
+Adapting that test to the current genuine lease helper preserved its assertions and passed all 27 cases: 256 unique
+affected controls now pass with zero skips. The original failed run remains recorded. The installed npm-only
+consumer passed source-removed replay, genuine service kill/recovery with the old lease retained, strict assets,
+missing-worker legacy reports, pure imports and actual installed worker/gate/manifest startup refusal.
+
+Main `d79a9b3a` and integrated runtime `517b1d57` ingested the same 1,700 frozen files: identical 9,787 nodes,
+20,257 edges, source digest `66af17cd4991` and 37,629,952-byte databases. Graph bytes changed
+27,466,592 → 27,466,598 only through build/run metadata. All three fresh front-door, Map and code-map screenshots
+were inspected: zero page errors or failed requests and five known missing-fixture-image responses. No primary
+checkout build, dogfood graph replacement or global installation occurred.
+
+The startup tamper tests now use separate copied packages; 32 controls passed under normal test-file concurrency,
+with every shared compiled file unchanged. Final delta review and exact-head CI remain before merge. Next is the actual retained
+`paths → run → report` workflow. Durable report-import storage and read-only service/MCP are separate reviewed
+checkpoints, not completed public features. The Astra plan audit keeps the critical sequence focused on owner
+paths/decisions, service/MCP, optional bridge and full scan GUI. Configured model work, the final Fable review,
+original Java/Spring container qualification, npm installation documentation and the release remain required.
+
 ## Sentinel capture boundary and owned scratch — 2026-10-22
 
-PR #160 (bounded framework inspection) merged as `0b1f74a7`. The capture candidate on
-`codex/sentinel-capture-acceptance` implements ADR 46 and now includes merged deadline correction #161 and planner correction #162
-(`4cbe1d4d`); its final CI and merge remain open. SOL owns implementation and corrections, Claude performs independent review, and the lead owns integration
+PR #160 (bounded framework inspection) merged as `0b1f74a7`. Capture correction #163 merged as
+`d79a9b3a` after all sixteen exact-head checks passed on their first run, including the native isolation gate,
+full twenty-repetition recovery matrix and installed five-scanner workflow. It implements ADR 46 and includes
+merged deadline correction #161 (`4cbe1d4d`) and planner correction #162 (`aef9e705`). SOL owns implementation and corrections, Claude performs independent review, and the lead owns integration
 and the definition of done.
 
 - Working-copy capture excludes only the held store at its exact canonical path and acquired identity. Store
@@ -55,9 +90,8 @@ unit/run deadline notification and makes durable-write boundary tests determinis
 cancellation timing assumption is being reviewed with the fixed-worker seam. Passing an isolated retry does not
 close the original failed run.
 
-Remaining for this capture candidate: exact-head selected CI and merge, and qualification limits such as an actual
-Linux bind-mount alias. The complete fixed-worker seam, path/decision owner commands and full GUI remain later
-work. Nothing was installed globally, and the primary checkout and its live server were untouched.
+Capture qualification limits include an actual Linux bind-mount alias. The complete fixed-worker seam,
+path/decision owner commands and full GUI remain later work. Nothing was installed globally, and the primary checkout and its live server were untouched.
 
 ## Framework canonical wiring checkpoint — 2026-10-22
 
