@@ -26,7 +26,7 @@ test('the package is optional, private and exports only files that exist', () =>
 
   // oxc-parser (the version the public parser pins) because the Express pack reads source syntax itself (ADR 31).
   assert.equal(manifest.dependencies?.zod, '3.25.76');
-  assert.equal(manifest.dependencies?.['@modelcontextprotocol/sdk'], '1.31.0');
+  assert.equal(manifest.dependencies?.['@modelcontextprotocol/sdk'], '1.32.0');
   assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@modelcontextprotocol/sdk', '@types/node', '@vscode/tree-sitter-wasm', 'ajv', 'oxc-parser', 'zod']);
   assert.equal(manifest.bin['farsight-sentinel'], './dist/cli.js');
   for (const [key, target] of Object.entries(manifest.exports as Record<string, any>)) {

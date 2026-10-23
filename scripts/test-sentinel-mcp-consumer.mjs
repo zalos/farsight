@@ -20,7 +20,7 @@ try{
  const {StdioClientTransport}=await import(pathToFileURL(require.resolve('@modelcontextprotocol/sdk/client/stdio.js')).href);
  writeFileSync(join(c.dir,'sentinel-public.mjs'),"export * from 'farsight-sentinel';\n");writeFileSync(join(c.dir,'sentinel-reports.mjs'),"export * from 'farsight-sentinel/reports';\n");
  const sentinel=await import(pathToFileURL(join(c.dir,'sentinel-public.mjs')).href),renderers=await import(pathToFileURL(join(c.dir,'sentinel-reports.mjs')).href);
- assert.equal(JSON.parse(readFileSync(resolve(dirname(require.resolve('@modelcontextprotocol/sdk/client/index.js')),'../../..','package.json'))).version,'1.31.0');
+ assert.equal(JSON.parse(readFileSync(resolve(dirname(require.resolve('@modelcontextprotocol/sdk/client/index.js')),'../../..','package.json'))).version,'1.32.0');
  const sdkPath=resolve(dirname(require.resolve('@modelcontextprotocol/sdk/client/index.js')),'../../..'),sdkRequire=createRequire(join(sdkPath,'package.json'));
  assert.equal(JSON.parse(readFileSync(sdkRequire.resolve('zod/package.json'))).version,'3.25.76','the actual SDK resolves the exact required peer');
  renameSync(sdkPath,sdkPath+'.held');try{await c.exec(c.bin('farsight-sentinel'),['--help']);await c.exec(process.execPath,['--input-type=module','-e',"await import('farsight-sentinel');"]);}finally{renameSync(sdkPath+'.held',sdkPath);}
@@ -120,7 +120,7 @@ try{
  const idleReport=await tool('sentinel_report_open',{runId:frameworkId,format:'json'}),idleBytes=await bytes(idleReport),idleView=await tool('sentinel_run_inspect',{runId:frameworkId});
  await wait(16000);assert.equal(service.exitCode,null,'actual saved buffers retain owner beyond detached idle cutoff');assert.equal(await bytes(idleReport),idleBytes);assert.equal((await tool('sentinel_view_page',{viewId:idleView.viewId,collection:'works'})).viewId,idleView.viewId);
  assert.equal(stderr(),'');
- console.log(JSON.stringify({schema:'sentinel-mcp-consumer/draft-1',npmOnly:true,sdk:'1.31.0',zod:'3.25.76',statusOnly:true,inspectBusy:true,ordinaryImportWithoutSdk:true,retainedPastDetachedIdle:true,sourceGone:true,selected:true,comparison:true,reconnect:true,restartExpired:true,controlsNegotiated:true,defaultControlsDenied:true,frameworkSourceGone:true,nativeSecrets:native,sarifParity:'semantic',otherFormatParity:'exact',inspectMs,formats:measure}));
+ console.log(JSON.stringify({schema:'sentinel-mcp-consumer/draft-1',npmOnly:true,sdk:'1.32.0',zod:'3.25.76',statusOnly:true,inspectBusy:true,ordinaryImportWithoutSdk:true,retainedPastDetachedIdle:true,sourceGone:true,selected:true,comparison:true,reconnect:true,restartExpired:true,controlsNegotiated:true,defaultControlsDenied:true,frameworkSourceGone:true,nativeSecrets:native,sarifParity:'semantic',otherFormatParity:'exact',inspectMs,formats:measure}));
 }finally{
  for(const client of clients)await client.close().catch(()=>{});for(const child of services)await stop(child);
  c.cleanup();
