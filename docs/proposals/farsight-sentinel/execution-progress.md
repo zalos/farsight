@@ -19,7 +19,8 @@ probe was unavailable because its option was invalid. Preserve the failed run an
 passing diagnostic nor an upstream hypothesis clears the release gate. Standalone observation PR #165 preserves
 the original assertions and adds corrected real-runner preflight/provenance and bounded artifacts. Its first native
 job passed 106 original tests and ten diagnostic controls with no skips, including exact-container kernel OOM
-records in all three memory cases; remaining PR checks are pending. The separate configured-model track, Fable cleanup, Java/Spring container qualification, npm-only
+records in all three memory cases. All thirteen selected checks passed, including full recovery and installed
+scanners; #165 merged as `6ae1a194`. The separate configured-model track, Fable cleanup, Java/Spring container qualification, npm-only
 installation and release remain required; no second-model acquisition or spend is inferred from this schedule.
 
 - PR 03 merged as [#135](https://github.com/zalos/farsight/pull/135), `97ff419`, after independent SOL

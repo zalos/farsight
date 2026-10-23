@@ -30,12 +30,12 @@ build/run metadata. Fresh front-door, Map and code-map screenshots were inspecte
 requests, with five known missing-fixture-image responses. The exact temporary server was stopped. The primary
 checkout, dogfood graph and global installations remain unchanged. Final selected CI remains before merge.
 
-The separate observation PR [#165](https://github.com/zalos/farsight/pull/165), head `62f50c2c`, is independently
-approved. Its first required native job passed 106 original tests and ten diagnostic controls, with zero failures,
+The separate observation PR [#165](https://github.com/zalos/farsight/pull/165), head `62f50c2c`, merged as
+`6ae1a194` after independent approval and all thirteen selected checks passed. Its first required native job passed 106 original tests and ten diagnostic controls, with zero failures,
 skips or cancellations. The CI merge reference has the exact PR tree. Both real journal preflight queries passed;
 all three memory cases have exact-container kernel OOM records and own-cgroup counter increases, while plain
-SIGKILL remains an unidentified exit. All four traces have zero dropped records. Other checks remain pending at
-this checkpoint. This qualifies this observer run, not the three historical failures. No failed job was retried;
+SIGKILL remains an unidentified exit. All four traces have zero dropped records. The full twenty-repetition recovery matrix and installed scanner
+workflow also passed. This qualifies this observer run, not the three historical failures. No failed job was retried;
 release remains held and the temporary diagnostic workflow will not merge.
 
 ## Sentinel read-only service integration and native investigation — 2026-10-23
