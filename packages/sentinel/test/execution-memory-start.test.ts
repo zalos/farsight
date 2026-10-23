@@ -7,6 +7,8 @@ import {driveOwnedProtocol} from '../dist/execution/supervisor.js';
 import {WorkerSession,encodeFrame} from '../dist/execution/protocol.js';
 import {spawnWorker} from '../dist/execution/processes.js';
 import {DEFAULT_ADAPTER_LIMITS} from '../dist/execution/registry.js';
+import {kernel,pacedClock,record} from './cgroup-memory-fixture.ts';
+import {cgroupMemoryFailure} from '../dist/execution/cgroup-memory.js';
 import {boundOwner} from '../dist/store/owner-binding.js';
 import {storeIn,removeScratch,scratch,work,WORKER} from './execution-helpers.ts';
 
@@ -55,4 +57,29 @@ for(const mode of ['cancel','deadline','owner','early','coalesced','stderr','eof
  if(mode==='early'||mode==='coalesced')assert.equal(r.outcome.detail.rule,'worker-data-before-start');
  if(mode==='eof'){assert.equal(r.outcome.code,'sentinel.execution.workerExited');assert.equal(r.outcome.detail.exitCode,0)}
  if(mode==='stderr')assert.equal(r.outcome.code,'sentinel.execution.stderrBudget');
+});
+
+// Real owned child + actual compiled observer, with only kernel I/O and paced observation scheduling simulated.
+// Original protocol cancellation/deadline timers run normally; a queued late triple may never revive the outcome.
+
+for(const mode of ['cancel','deadline'] as const)test(mode+' with a paced OOM timer pending cannot accept a late triple after finish',async t=>{
+ const k=kernel(t),clock=pacedClock(t),watch=k.start();t.after(()=>watch.close());
+ const s=scratch('memory-burst-lifecycle');t.after(()=>removeScratch(s.root));const store=await storeIn(s.root);t.after(()=>store.close());
+ const owner=boundOwner(store),controller=new AbortController();let started!:()=>void;
+ const entered=new Promise<void>(resolve=>{started=resolve});
+ const binding={attemptId:'attempt-burst-'+mode,work,coordinatorEpoch:store.epoch,adapterId:'test-burst',adapterDigest:'sha256:'+'a'.repeat(64),inputFingerprint:'sha256:'+'b'.repeat(64),inputs:[],deadlineAt:new Date(Date.now()+10000).toISOString()};
+ const session=new WorkerSession(binding),limits={...DEFAULT_ADAPTER_LIMITS,timeoutMs:mode==='deadline'?500:5000,helloTimeoutMs:1000,cancelGraceMs:0};
+ const proc=spawnWorker(process.execPath,['--input-type=module','-e',readFileSync(WORKER,'utf8'),'hang'],{env:{SENTINEL_INPUT:s.work,SENTINEL_OUTPUT:s.work,SENTINEL_ADAPTER_ID:binding.adapterId,SENTINEL_ADAPTER_DIGEST:binding.adapterDigest}});
+ t.after(()=>proc.kill());let evidence:any,readsAtStop=-1,stops=0;
+ const outcome:any={state:'failed',outputs:[],diagnostics:{bytes:0,truncated:false,text:''},protocol:{frames:0,bytes:0}};
+ const drive=driveOwnedProtocol(proc,session,limits,s.work,outcome,controller.signal,async()=>{stops++;readsAtStop=k.eventReads();proc.kill()},
+  {prepare:async()=>{},start:()=>{owner.assertHeld();watch.arm();k.write(record(1));k.notify();started()}},()=>{evidence=watch.finish()});
+ await Promise.race([entered,drive]);assert.equal(clock.pending(),1,'genuine start created the paced observation');clock.dequeue();
+ k.write(record(2,1,1)); // The original final read may capture a genuine positive; lifecycle precedence must still win.
+ if(mode==='cancel')controller.abort();await drive;const exit=await proc.exited;
+ const reads=k.eventReads();assert.equal(reads,readsAtStop,'final observer read precedes the kill');k.write(record(2,1,1));clock.runDequeued();
+ assert.equal(k.eventReads(),reads);assert.equal(clock.pending(),0);assert.equal(stops,1);assert.ok(evidence,'a valid final kernel observation does not replace cancel/deadline');
+ assert.equal(outcome.code,mode==='cancel'?'sentinel.execution.canceled':'sentinel.execution.deadlineExceeded');
+ assert.equal(cgroupMemoryFailure(evidence,{ownerHeld:true,aborted:controller.signal.aborted,state:outcome.state,code:outcome.code,containerExit:137,clientExit:exit.exitCode,clientSignal:exit.exitSignal}),undefined);
+ assert.deepEqual(outcome.outputs,[]);assert.equal(outcome.result,undefined);
 });

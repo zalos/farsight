@@ -3,8 +3,9 @@
 import {closeSync,constants,fstatSync,lstatSync,openSync,readSync,statfsSync,watch,type Stats} from 'node:fs';
 
 /** Package-private fault seam; not exported by a package facade. Production always uses these real kernel APIs. */
-export const cgroupMemoryIo={closeSync,fstatSync,lstatSync,openSync,readSync,statfsSync,watch};
-export const CGROUP_MEMORY_BOUNDS=Object.freeze({bytes:4096,pathBytes:2048,depth:16,samples:128});
+export const cgroupMemoryIo={closeSync,fstatSync,lstatSync,openSync,readSync,statfsSync,watch,
+  now:()=>performance.now(),setTimeout:(callback:()=>void,ms:number)=>setTimeout(callback,ms),clearTimeout:(timer:ReturnType<typeof setTimeout>)=>clearTimeout(timer)};
+export const CGROUP_MEMORY_BOUNDS=Object.freeze({bytes:4096,pathBytes:2048,depth:16,attempts:128,burstReads:32,burstMs:50});
 const CGROUP2=0x63677270,PROCFS=0x9fa0;
 const FLAGS=constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK;
 type Identity={device:string;inode:string};
@@ -14,7 +15,16 @@ export interface CgroupMemoryEvidence {
   identity:Identity&{container:string;pid:number;processStart:string;cgroup:string};
   memoryMax:string;baseline:{max:string;oom:string;oom_kill:string};observed:{max:string;oom:string;oom_kill:string};
 }
-export interface MemoryObservation {state:'watching'|'positive'|'unavailable'|'raced'|'exhausted'|'closed';samples:number;reason?:string}
+type Phase='notification'|'burst'|'final';
+type Check='process'|'named-before'|'held'|'limit'|'read'|'counters'|'named-after'|'gone';
+type BurstEnd='positive'|'count'|'time'|'error'|'finish'|'close';
+export interface MemoryObservation {
+  state:'watching'|'positive'|'unavailable'|'raced'|'exhausted'|'closed';samples:number;attempts:number;reason?:string;
+  /** Fixed diagnostic data only; never read by cgroupMemoryFailure or used as affirmative evidence. */
+  firstSample?:Readonly<{maxDelta:string;oomDelta:string;oomKillDelta:string}>;
+  burst:Readonly<{triggered:boolean;reads:number;endedBy?:BurstEnd}>;
+  failure?:Readonly<{phase:Phase;check:Check}>;
+}
 export interface CgroupMemoryWatch {
   /** Fresh baseline immediately before start. Failure grants no witness, and does not prevent normal execution. */
   arm():void;
@@ -54,17 +64,24 @@ function localCounts(s:string):Counts {
 /** Internal data observer, called only after isolation.ts has verified the full container identity and labels. */
 export function watchOwnedCgroupMemory(container:string,pid:number,memoryBytes:number):CgroupMemoryWatch {
   let directory:number|undefined,events:number|undefined,maximum:number|undefined,watcher:ReturnType<typeof watch>|undefined;
-  let armed=false,closed=false,samples=0,notifications=0,baseline:Counts|undefined,last:Counts|undefined,evidence:Readonly<CgroupMemoryEvidence>|undefined;
+  let armed=false,closed=false,finishing=false,samples=0,attempts=0,notifications=0,baseline:Counts|undefined,last:Counts|undefined,evidence:Readonly<CgroupMemoryEvidence>|undefined;
   let state:MemoryObservation['state']='unavailable',reason:string|undefined;
+  let firstSample:MemoryObservation['firstSample'],failure:MemoryObservation['failure'],check:Check='process';
+  let burstUsed=false,burstReads=0,burstUntil=0,burstEnded:BurstEnd|undefined,timer:ReturnType<typeof setTimeout>|undefined;
+  function endBurst(why:BurstEnd){
+    if(timer!==undefined){cgroupMemoryIo.clearTimeout(timer);timer=undefined}
+    if(burstUsed&&burstEnded===undefined)burstEnded=why;
+  }
   let association:{start:string;cgroup:string},path:string,chain:Array<{path:string;identity:Identity}>,directoryId:Identity,eventId:Identity,maxId:Identity;
   function close(){
-    if(closed)return;closed=true;try{watcher?.close()}catch{/* no new evidence from a watcher close failure */}watcher=undefined;
+    if(closed)return;closed=true;endBurst('close');try{watcher?.close()}catch{/* no new evidence from a watcher close failure */}watcher=undefined;
     for(const fd of [events,maximum,directory])if(fd!==undefined)try{cgroupMemoryIo.closeSync(fd)}catch{/* no new evidence from a failed close */}
     events=maximum=directory=undefined;if(state==='watching')state='closed';
   }
-  function unavailable(error:unknown){
+  function unavailable(error:unknown,phase?:Phase){
     if(closed)return;
     const code=(error as {code?:string}).code;
+    if(phase)failure=Object.freeze({phase,check});endBurst('error');
     state=armed&&notifications>0?'raced':'unavailable';reason=code==='ENOENT'||code==='ENODEV'?'kernel-object-gone':'identity-or-read-unavailable';close();
   }
   function verifyProcess(requireLive:boolean){
@@ -72,40 +89,71 @@ export function watchOwnedCgroupMemory(container:string,pid:number,memoryBytes:n
     if(!current){if(requireLive)throw Error('process-gone-before-start');return}
     if(current.start!==association.start||current.cgroup!==association.cgroup)throw Error('pid-reused-or-moved');
   }
-  function snapshot(requireLive:boolean):Counts {
-    verifyProcess(requireLive);
+  function snapshot(requireLive:boolean):Counts|undefined {
+    // Every full attempt is charged, including setup, arm, failure and the final read. No extra final allowance.
+    if(attempts>=CGROUP_MEMORY_BOUNDS.attempts){state='exhausted';reason='sample-bound';endBurst('count');close();return}
+    attempts++;check='process';verifyProcess(requireLive);
+    check='named-before';
     for(const link of chain){const s=cgroupMemoryIo.lstatSync(link.path);owned(s);if(!s.isDirectory()||!same(id(s),link.identity))throw Error('cgroup-path-changed')}
-    if(!same(id(cgroupMemoryIo.fstatSync(directory!)),directoryId))throw Error('held-cgroup-changed');
+    check='held';if(!same(id(cgroupMemoryIo.fstatSync(directory!)),directoryId))throw Error('held-cgroup-changed');
     for(const [fd,name,expected] of [[events!,'memory.events.local',eventId],[maximum!,'memory.max',maxId]] as const){
-      const held=cgroupMemoryIo.fstatSync(fd),named=cgroupMemoryIo.lstatSync(path+'/'+name);owned(held);owned(named);
-      if(!held.isFile()||!named.isFile()||!same(id(held),expected)||!same(id(named),expected))throw Error('cgroup-file-changed');
+      check='held';const held=cgroupMemoryIo.fstatSync(fd);owned(held);
+      if(!held.isFile()||!same(id(held),expected))throw Error('cgroup-file-changed');
+      check='named-before';const named=cgroupMemoryIo.lstatSync(path+'/'+name);owned(named);
+      if(!named.isFile()||!same(id(named),expected))throw Error('cgroup-file-changed');
     }
-    if(bounded(maximum!).trim()!==String(memoryBytes))throw Error('memory-limit-changed');
-    const value=localCounts(bounded(events!));verifyProcess(requireLive);
-    // Recheck named kernel objects after the read, including leaf replacement during a process exit window.
+    check='limit';if(bounded(maximum!).trim()!==String(memoryBytes))throw Error('memory-limit-changed');
+    check='read';const raw=bounded(events!);check='counters';const value=localCounts(raw);
+    check='process';verifyProcess(requireLive);
+    // These post-read named checks remain mandatory: even a good counter read can be discarded by teardown.
+    check='named-after';
     for(const link of chain){const s=cgroupMemoryIo.lstatSync(link.path);owned(s);if(!s.isDirectory()||!same(id(s),link.identity))throw Error('cgroup-path-changed')}
     for(const [name,expected] of [['memory.events.local',eventId],['memory.max',maxId]] as const){const s=cgroupMemoryIo.lstatSync(path+'/'+name);owned(s);if(!same(id(s),expected))throw Error('cgroup-file-changed')}
     return value;
   }
-  function sample(final=false){
-    if(closed||!armed)return;
-    if(!final&&samples>=CGROUP_MEMORY_BOUNDS.samples){state='exhausted';reason='sample-bound';close();return}
+  function queueBurst(){
+    if(closed||finishing||!armed||!burstUsed||burstEnded!==undefined||timer!==undefined)return;
+    if(burstReads>=CGROUP_MEMORY_BOUNDS.burstReads){endBurst('count');return}
+    if(cgroupMemoryIo.now()>=burstUntil){endBurst('time');return}
+    timer=cgroupMemoryIo.setTimeout(()=>{
+      timer=undefined;
+      if(closed||finishing||!armed||burstEnded!==undefined)return;
+      if(cgroupMemoryIo.now()>=burstUntil){endBurst('time');return}
+      sample('burst');queueBurst();
+    },1);
+  }
+  function sample(phase:Phase){
+    if(closed||!armed||(finishing&&phase!=='final'))return;
+    if(phase==='burst'){
+      if(burstReads>=CGROUP_MEMORY_BOUNDS.burstReads||attempts>=CGROUP_MEMORY_BOUNDS.attempts){endBurst('count');return}
+      if(cgroupMemoryIo.now()>=burstUntil){endBurst('time');return}
+      burstReads++;
+    }
     try{
-      const value=snapshot(false);if(!final)samples++;
+      const value=snapshot(false);if(!value)return;if(phase==='notification')samples++;
+      check='counters';
       if(last&&(['max','oom','oom_kill'] as const).some(k=>value[k]<last![k]))throw Error('counter-decreased');last=value;
-      // oom_kill alone also counts global OOM kills. The triple gate establishes own-limit activity AND an
-      // observed OOM kill; it does not claim that they were a causally paired local killer and victim.
+      // A paced read may itself cross its cooperative time edge. It cannot supply late burst evidence.
+      if(phase==='burst'&&cgroupMemoryIo.now()>=burstUntil){endBurst('time');return}
+      if(!firstSample)firstSample=Object.freeze({maxDelta:decimal(value.max-baseline!.max),oomDelta:decimal(value.oom-baseline!.oom),oomKillDelta:decimal(value.oom_kill-baseline!.oom_kill)});
+      // oom_kill alone also counts global OOM kills. The triple establishes own-limit activity AND an observed
+      // OOM kill, not a causally paired local killer and victim. Diagnostics never supply this evidence.
       if(baseline&&value.max>baseline.max&&value.oom>baseline.oom&&value.oom_kill>baseline.oom_kill){
         evidence=Object.freeze({resource:'memory',witness:'cgroup-v2-local',detailKey:'sentinel.execution.memoryWitness.local',
           identity:Object.freeze({...directoryId,container,pid,processStart:association.start,cgroup:path.slice('/sys/fs/cgroup'.length)}),
-          memoryMax:String(memoryBytes),baseline:counts(baseline),observed:counts(value)});state='positive';close();
+          memoryMax:String(memoryBytes),baseline:counts(baseline),observed:counts(value)});state='positive';endBurst('positive');close();return;
       }
-    }catch(error){unavailable(error)}
+      if(phase==='notification'&&!burstUsed&&baseline&&value.max>baseline.max){
+        burstUsed=true;burstUntil=cgroupMemoryIo.now()+CGROUP_MEMORY_BOUNDS.burstMs;queueBurst();
+      }
+      if(attempts>=CGROUP_MEMORY_BOUNDS.attempts){state='exhausted';reason='sample-bound';endBurst('count');close()}
+    }catch(error){unavailable(error,phase)}
   }
   const result:CgroupMemoryWatch={
-    arm(){if(closed||armed)return;try{baseline=last=snapshot(true);armed=true}catch(error){unavailable(error)}},
-    finish(){sample(true);close();return evidence},close,
-    observation:()=>Object.freeze({state,samples,...(reason?{reason}:{})}),
+    arm(){if(closed||armed)return;try{const value=snapshot(true);if(value){baseline=last=value;armed=true}}catch(error){unavailable(error)}},
+    finish(){if(!closed){finishing=true;endBurst('finish');sample('final');close()}return evidence},close,
+    observation:()=>Object.freeze({state,samples,attempts,...(reason?{reason}:{}),...(firstSample?{firstSample}:{}),
+      burst:Object.freeze({triggered:burstUsed,reads:burstReads,...(burstEnded?{endedBy:burstEnded}:{})}),...(failure?{failure}:{})}),
   };
   try{
     if(!/^[0-9a-f]{64}$/.test(container)||!Number.isSafeInteger(pid)||pid<=0||!Number.isSafeInteger(memoryBytes)||memoryBytes<=0)throw Error('identity-input');
@@ -122,9 +170,9 @@ export function watchOwnedCgroupMemory(container:string,pid:number,memoryBytes:n
     if(!same(directoryId,chain.at(-1)!.identity))throw Error('directory-open-changed');
     events=cgroupMemoryIo.openSync(`/proc/self/fd/${directory}/memory.events.local`,FLAGS);eventId=id(cgroupMemoryIo.fstatSync(events));
     maximum=cgroupMemoryIo.openSync(`/proc/self/fd/${directory}/memory.max`,FLAGS);maxId=id(cgroupMemoryIo.fstatSync(maximum));
-    snapshot(true);state='watching';
-    watcher=cgroupMemoryIo.watch(`/proc/self/fd/${events}`,()=>{if(closed||!armed)return;notifications++;sample()});
-    watcher.on('error',unavailable);
+    snapshot(true);if(closed)return result;state='watching';
+    watcher=cgroupMemoryIo.watch(`/proc/self/fd/${events}`,()=>{if(closed||finishing||!armed)return;notifications++;sample('notification')});
+    watcher.on('error',error=>{check='gone';unavailable(error,armed?'notification':undefined)});
   }catch(error){unavailable(error)}
   return result;
 }

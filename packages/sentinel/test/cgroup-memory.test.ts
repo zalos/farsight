@@ -4,41 +4,11 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import {join} from 'node:path';
-import {EventEmitter} from 'node:events';
 import {watchOwnedCgroupMemory,cgroupMemoryIo,CGROUP_MEMORY_BOUNDS,cgroupMemoryFailure} from '../dist/execution/cgroup-memory.js';
 import {ContainerBackend,LABELS} from '../dist/execution/isolation.js';
 import {currentHost} from '../dist/store/runtime.js';
-import {scratch} from './snapshot-helpers.ts';
 
-const ID='a'.repeat(64),PID=4242,LIMIT=67108864,GROUP='/system.slice/docker-'+ID+'.scope';
-const record=(max=0,oom=0,kill=0)=>`low 0\nhigh 0\nmax ${max}\noom ${oom}\noom_kill ${kill}\noom_group_kill 0\n`;
-function kernel(t:any){
- const root=scratch(t,'sentinel-memory-kernel-'),cg=join(root,'cgroup'),leaf=cg+GROUP,proc=join(root,'process');
- fs.mkdirSync(leaf,{recursive:true});fs.mkdirSync(proc);
- const setProcess=(start='77',group=GROUP)=>{fs.writeFileSync(join(proc,'stat'),PID+' (docker-init) '+['S',...Array(18).fill('0'),start,...Array(30).fill('0')].join(' ')+'\n');fs.writeFileSync(join(proc,'cgroup'),'0::'+group+'\n')};setProcess();
- const write=(body:string)=>fs.writeFileSync(join(leaf,'memory.events.local'),body);
- write(record());fs.writeFileSync(join(leaf,'memory.max'),String(LIMIT)+'\n');
- const held=new Map<number,string>(),opened:number[]=[];let callback=()=>{},watchError=(_error:Error)=>{},watchClosed=false,wrongUid=false,watchFailure=false,afterRead:(p:string)=>void=()=>{};
- const actual={...cgroupMemoryIo};
- const mapped=(p:any)=>{p=String(p);const fd=/^\/proc\/self\/fd\/(\d+)(.*)$/.exec(p);if(fd){const base=held.get(Number(fd[1]));assert.ok(base,'only an actually held descriptor is referenced');return base+fd[2]}
-  if(p==='/sys/fs/cgroup'||p.startsWith('/sys/fs/cgroup/'))return cg+p.slice('/sys/fs/cgroup'.length);
-  if(p.startsWith(`/proc/${PID}/`))return proc+p.slice(`/proc/${PID}`.length);
-  throw Error('unexpected fixture kernel path '+p)};
- const stat=(s:any,p:string)=>Object.assign(Object.create(Object.getPrototypeOf(s)),s,{uid:wrongUid&&p===leaf?1001:0});
- Object.assign(cgroupMemoryIo,{
-  openSync:(p:any,f:number)=>{const path=mapped(p),fd=fs.openSync(path,f);held.set(fd,path);opened.push(fd);return fd},
-  closeSync:(fd:number)=>{assert.ok(held.has(fd));held.delete(fd);fs.closeSync(fd)},
-  readSync:(fd:number,b:Buffer,off:number,len:number,pos:number)=>{const n=fs.readSync(fd,b,off,len,pos);afterRead(held.get(fd)!);return n},
-  fstatSync:(fd:number)=>stat(fs.fstatSync(fd),held.get(fd)!),lstatSync:(p:any)=>{const path=mapped(p);return stat(fs.lstatSync(path),path)},
-  statfsSync:(p:any)=>({type:p==='/proc'?0x9fa0:p==='/sys/fs/cgroup'?0x63677270:assert.fail('unexpected statfs')}),
-
- });
- (cgroupMemoryIo as any).watch=(_path:string,cb:()=>void)=>{if(watchFailure)throw Error('unsupported watcher');callback=cb;const emitter=new EventEmitter() as any;emitter.close=()=>{watchClosed=true};watchError=error=>{emitter.emit('error',error)};return emitter};
- t.after(()=>{Object.assign(cgroupMemoryIo,actual);assert.equal(held.size,0,'every opened kernel descriptor was closed')});
- return {root,cg,leaf,proc,held,opened,write,setProcess,notify:()=>callback(),watchError:(error:Error)=>watchError(error),watchClosed:()=>watchClosed,
-  wrongUid:()=>{wrongUid=true},watchFailure:()=>{watchFailure=true},afterRead:(f:(p:string)=>void)=>{afterRead=f},
-  start:()=>watchOwnedCgroupMemory(ID,PID,LIMIT)};
-}
+import {ID,PID,LIMIT,GROUP,record,kernel} from './cgroup-memory-fixture.ts';
 
 test('exact local max+oom+kill delta retains immutable evidence after teardown, with every handle closed',t=>{
  const k=kernel(t),w=k.start();assert.equal(w.observation().state,'watching');w.arm();k.write(record(20,1,1));k.notify();
@@ -55,9 +25,9 @@ test('a queued watcher error after a positive preserves its immutable evidence a
 });
 test('pre-arm notifications count no samples and cannot turn a later final-read failure into a raced observation',t=>{
  const k=kernel(t),w=k.start();for(let i=0;i<3;i++)k.notify();
- assert.deepEqual(w.observation(),{state:'watching',samples:0});
+ assert.deepEqual(w.observation(),{state:'watching',samples:0,attempts:1,burst:{triggered:false,reads:0}});
  w.arm();fs.unlinkSync(join(k.leaf,'memory.events.local'));
- assert.equal(w.finish(),undefined);assert.deepEqual(w.observation(),{state:'unavailable',samples:0,reason:'kernel-object-gone'});assert.equal(k.held.size,0);
+ assert.equal(w.finish(),undefined);assert.deepEqual(w.observation(),{state:'unavailable',samples:0,attempts:3,reason:'kernel-object-gone',burst:{triggered:false,reads:0},failure:{phase:'final',check:'named-before'}});assert.equal(k.held.size,0);
 });
 for(const [name,body] of [['unchanged/plainSIGKILL',record()],['kill alone/global ambiguity',record(0,0,1)],['max only',record(2,0,0)],['oom without kill',record(2,1,0)],['kill without max',record(0,1,1)]] as const)test(name+' supplies no affirmative witness',t=>{
  const k=kernel(t),w=k.start();w.arm();k.write(body);k.notify();assert.equal(w.finish(),undefined);
@@ -95,9 +65,9 @@ test('exact leaf identity refuses a substring and never opens parent counters',t
 test('watcher failure closes without fallback',t=>{
  const k=kernel(t);k.watchFailure();const failed=k.start();assert.equal(failed.finish(),undefined);assert.equal(k.held.size,0);
 });
-test('notification sampling has a fixed cap and no polling',t=>{
- const k=kernel(t),w=k.start();w.arm();for(let i=0;i<CGROUP_MEMORY_BOUNDS.samples+2;i++)k.notify();
- assert.equal(w.observation().state,'exhausted');assert.equal(w.observation().samples,CGROUP_MEMORY_BOUNDS.samples);assert.equal(w.finish(),undefined);assert.equal(k.held.size,0);
+test('notification sampling shares the total128 setup arm and final attempt cap',t=>{
+ const k=kernel(t),w=k.start();w.arm();for(let i=0;i<CGROUP_MEMORY_BOUNDS.attempts+2;i++)k.notify();
+ assert.equal(w.observation().state,'exhausted');assert.equal(w.observation().samples,CGROUP_MEMORY_BOUNDS.attempts-2);assert.equal(w.observation().attempts,CGROUP_MEMORY_BOUNDS.attempts);assert.equal(w.finish(),undefined);assert.equal(k.held.size,0);
 });
 test('close before arm prevents late samples or a new baseline',t=>{
  const k=kernel(t),w=k.start();w.close();k.write(record(20,1,1));w.arm();k.notify();assert.equal(w.finish(),undefined);assert.equal(k.held.size,0);
