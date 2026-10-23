@@ -950,7 +950,7 @@ accepted or resumable work stay protected; reconnect never automatically replays
 The fixed Copilot profile uses GitHub Copilot CLI 1.0.103 on macOS arm64 and explicit model `gpt-6-luna`.
 The executable and complete matching external runtime must already be installed; Sentinel verifies their pins,
 copies only the recorded code closure into private temporary storage and refuses changed or missing code.
-Profile revision3 fixes all three runtime tool-source exclusions, disables automatic login, and projects only
+Profile revision4 fixes all three runtime tool-source exclusions, preserves vendor stored-OAuth detection, and projects only
 the current native selected-account host/login into private state;
 old profile adoption must be refreshed from capabilities. It never downloads or redistributes Copilot. Local code discovery does not establish account access, model
 availability, authentication or inference. There is no silent model, provider or version fallback. Other Copilot models are not yet qualified or enabled;
@@ -1011,6 +1011,9 @@ reported aggregate tokens with monetary consumption unobserved. Missing/contradi
 uncertain, with no retry/refund invented; reported usage beyond a reservation overdraws and stops further work.
 
 Supported native authentication stays inside the pinned Copilot process, using its already configured OS keychain.
+Sentinel omits `--no-auto-login`: that vendor flag disables stored-OAuth detection as well as GitHub CLI reuse;
+it does not merely prevent interactive login. GitHub CLI fallback receives no new permission: the child has only
+its fixed executable grant, isolated HOME and `/usr/bin:/bin` PATH, so it cannot execute a separate `gh` binary.
 After admission, Sentinel reads only bounded native machine state at the selected Copilot home, validates the
 selected GitHub host/login uniquely against its account list, and reconstructs only that selector privately. It
 copies no token, subscription snapshot, other accounts or unrelated settings, grants no `gh` fallback, and uses private
