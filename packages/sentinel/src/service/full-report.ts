@@ -1,3 +1,4 @@
+import { withOwnerDecisions } from '../findings/owner-report.js';
 // The full report of a completed scanner run (PR 19 over the PR 09 command path, ADR 38). Everything comes from the
 // run's own ledger: the exact admitted analysis plan, the accepted publication of each of its work units, the
 // bootstrap's retained snapshot and parser index. A scanner's finding becomes an observation only when its accepted
@@ -391,7 +392,8 @@ const TRUSTED = new RegExp('^(?:' + [
   // Exact scalar paths only: a later field added to either (a disposition's rationale, say) is screened until it is
   // listed here on purpose. Definitions are the catalog's own words (document.ts); a decision's fields are generated.
   String.raw`definitions\.\*\.(?:key|define|text\.business|text\.code)`,
-  String.raw`decisions\.\*\.(?:dispositionId|findingId|validity|expiresAt)`,
+  String.raw`decisionEvaluation\.(?:status|reasonCode)`,
+  String.raw`decisions\.\*\.(?:dispositionId|findingId|validity|expiresAt|evaluator|state|reasonCode|basisDigest|journalHead)`,
   String.raw`counts\.[A-Za-z]+\.` + COUNT,
   String.raw`findings\.\*\.(?:id|observationIds\.\*|ruleFamilyId|severity|comparison|comparisonReason|match\.kind|match\.baselineFindingIds\.\*|fingerprint\.(?:version|exact|probable))`,
   String.raw`findings\.\*\.evidence\.\*\.(?:id|state|reasonCode|content|location\.(?:startByte|endByte|startLine|endLine))`,
@@ -783,9 +785,10 @@ async function reportDocument(req: FullReportRequest): Promise<ReportDocument> {
   readBudgetCheckpoint(store);
   // Accepted secret matches in either run or its proven same-capture selected ancestry make every source/context
   // string unproved (the scanner reports whole lines), so all of it is withheld. Clean ancestry keeps normal detail.
+  const projected=req.trustDir?await withOwnerDecisions(build.document,store,{path:req.workspace,storePath:store.storePath,trustDir:req.trustDir},build.findings,now,req.baselineRunId):build.document;
   const secretRun = (baselineSecret ?? false) || await knownSecretMatches(store, current);
   readBudgetCheckpoint(store);
-  const doc = secretRun ? withholdSecretRun(build.document, ruleWords(req.trustDir, current.ruleLock)) : build.document;
+  const doc = secretRun ? withholdSecretRun(projected, ruleWords(req.trustDir, current.ruleLock)) : projected;
   readBudgetCheckpoint(store);
   const valid = validateEnvelope('report', doc);
   readBudgetCheckpoint(store);

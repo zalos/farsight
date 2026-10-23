@@ -1020,3 +1020,13 @@ identities while removing caller-controlled text; these counts never imply a suc
 The private list query uses stable generated operation identity, explicit binding predicate and limit, at most
 100 rows. Metadata says `not-evaluated`; it does not perform a full payload/privacy proof for every historic
 operation. Read one candidate to obtain a currently validated, privacy-projected import.
+
+
+### Sentinel owner decision metadata pages
+
+| number | unit | scope | what it counts | recheck |
+|---|---|---|---|---|
+| owner decision operations in this page | `sentinel.decision.operations` | `sentinel.decision.pageScope` — only this returned metadata page | Returned `items.length`, at most 100, for proposals bound to the requested run and recorded revision. Proposed/approved is recorded history; availability stays `not-evaluated`. This is neither all history nor a count of evaluated or mitigated findings. | `farsight-sentinel decision list <runId> --json` with the same cursor/limit |
+
+The page cursor is bound to the actual owner history head, workspace, store and run revision. Read a decision to
+obtain its current evidence/privacy projection; a metadata row does not establish retained evidence availability.

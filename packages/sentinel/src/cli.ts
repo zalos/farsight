@@ -4,6 +4,7 @@
 // Acquisition is a separate explicit owner action; no plan or scan downloads or uses a host scanner.
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { ownerDecisionCommand, decisionWire } from './findings/owner-cli.js';
 import { ownerEvidenceCommand, evidenceWire } from './evidence/owner-cli.js';
 import { REPORT_FORMATS, type ReportFormat } from './service/full-report.js';
 import {
@@ -29,10 +30,11 @@ import { ENVELOPES, ENVELOPE_KINDS, MAX_ENVELOPE_BYTES, type EnvelopeKind } from
 import { parseEnvelope } from './validate.js';
 // Every printed word comes from the shared catalog (strings-sentinel-cli.ts and strings-sentinel-service.ts).
 import { sentinelWord, SENTINEL_CLI_STRINGS } from '@farsight/core/dist/strings-sentinel-cli.js';
+import { SENTINEL_DECISION_STRINGS } from '@farsight/core/dist/strings-sentinel-decisions.js';
 import { sentinelServiceWord } from '@farsight/core/dist/strings-sentinel-service.js';
 
 const word = (key: string, values: Record<string, string | number> = {}) =>
-  (Object.hasOwn(SENTINEL_CLI_STRINGS, key) ? sentinelWord(key, values) : sentinelServiceWord(key, values));
+  (Object.hasOwn(SENTINEL_DECISION_STRINGS,key)?SENTINEL_DECISION_STRINGS[key]!.hud.replace(/\{([a-zA-Z]+)\}/g,(_,k:string)=>String(values[k]??'')):Object.hasOwn(SENTINEL_CLI_STRINGS, key) ? sentinelWord(key, values) : sentinelServiceWord(key, values));
 
 function version(): string {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
@@ -66,6 +68,7 @@ function help(): string {
     `  ${word('sentinel.service.mcpUsage')}`,
     `  ${word('sentinel.cli.usageRules')}`,
     `  ${word('sentinel.cli.usageAssets')}`,
+    `  ${word('sentinel.decision.usage')}`,
     `  ${word('sentinel.evidence.usage')}`,
     `  ${word('sentinel.cli.usageFollow')}`,
     '',
@@ -458,9 +461,9 @@ export async function main(argv: string[]): Promise<number> {
   const parsed = parseArgs(argv);
   jsonOut = parsed.ok ? parsed.parsed.json : parsed.json;
   if (!parsed.ok) {
-    const evidence=argv.find(a=>a!=='--json')==='evidence',code=evidence?'sentinel.evidence.inputRefused':parsed.code;
+    const name=argv.find(a=>a!=='--json'),evidence=name==='evidence'||name==='decision',code=evidence?(name==='decision'?'sentinel.decision.inputRefused':'sentinel.evidence.inputRefused'):parsed.code;
     errOut(evidence?word(code):word(code, { detail: parsed.detail }));
-    return finish(result(evidence?'evidence':'unknown', 'refused', { reasonCode: code }));
+    return finish(result(evidence?name!:'unknown', 'refused', { reasonCode: code }));
   }
   const p = parsed.parsed;
   try {
@@ -481,6 +484,13 @@ async function dispatch(p: ParsedCommand): Promise<number> {
       const facts = { version: version(), contracts: ENVELOPES.run.schema.split('/')[1]! };
       if (p.json) return finish(result('version', 'answered', { facts }));
       out(word('sentinel.cli.version', { version: facts.version, draft: facts.contracts })); return 0;
+    }
+    case 'decision': {
+      try{const wire=decisionWire(await ownerDecisionCommand(workspaceFor(p),p),p.json);
+      (p.json||wire.result.exitCode===0?out:errOut)(wire.text);return wire.result.exitCode;}catch{
+        const wire=decisionWire({result:result('decision','refused',{reasonCode:'sentinel.decision.unavailable'})},p.json);
+        (p.json?out:errOut)(wire.text);return wire.result.exitCode;
+      }
     }
     case 'evidence': {
       try{

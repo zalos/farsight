@@ -47,7 +47,7 @@ export function toSarif(doc: ReportEnvelope, options: { maxResults?: number } = 
           },
         };
       }),
-      properties: { reportId: doc.id, disclosure: doc.disclosure.profile, completeness: doc.completeness, coverageGaps: doc.gaps.length, ...(doc.inspections ? { inspections: doc.inspections, controlAnswers: doc.counts.controlAnswers } : {}), ...(doc.structuralPaths?{structuralPaths:doc.structuralPaths,pathQueries:doc.counts.pathQueries}:{}), limits: SARIF_LIMITS },
+      properties: { ...(doc.decisionEvaluation?{ownerDecisionEvaluation:doc.decisionEvaluation}:{}),...(doc.decisions.length?{ownerDecisions:doc.decisions}:{}),reportId: doc.id, disclosure: doc.disclosure.profile, completeness: doc.completeness, coverageGaps: doc.gaps.length, ...(doc.inspections ? { inspections: doc.inspections, controlAnswers: doc.counts.controlAnswers } : {}), ...(doc.structuralPaths?{structuralPaths:doc.structuralPaths,pathQueries:doc.counts.pathQueries}:{}), limits: SARIF_LIMITS },
     }],
   };
 }

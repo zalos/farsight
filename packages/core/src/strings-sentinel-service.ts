@@ -38,6 +38,8 @@ export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
   'sentinel.service.tool.sentinel_report_open': same('Prepare an exact shareable report delivery for a completed run, optionally with a baseline.', 'A read-only tool over the configured held owner service. No receipt, caller identity, arbitrary path or artifact read is accepted.'),
   'sentinel.service.tool.sentinel_delivery_read': same('Read a bounded raw-byte chunk of an exact report delivery as base64.', 'A read-only tool over the configured held owner service. No receipt, caller identity, arbitrary path or artifact read is accepted.'),
 
+  'sentinel.outcome.proposed': same('decision proposed', 'A source-bound decision is saved without owner approval.'),
+  'sentinel.outcome.applied': same('owner decision recorded', 'The source-bound adjudication was approved. It establishes no deployed mitigation.'),
   'sentinel.outcome.read': same('retained data read', 'The owner read a projected document or a bounded metadata page. This is not a scan result.'),
   'sentinel.outcome.accepted': same('import accepted', 'An owner-associated imported report was retained and verified. No scan or coverage verdict follows.'),
   'sentinel.outcome.abandoned': same('pending pins released', 'Exactly one older import operation was abandoned; retained object bytes were not deleted.'),

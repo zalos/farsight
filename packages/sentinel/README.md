@@ -811,3 +811,19 @@ Commands share an absolute 120-second cooperative proof budget. Rendered output 
 the command wrapper; it refuses rather than truncates. File output creates one private new file without overwrite.
 It is not crash-atomic and a failed write can leave a partial new file. Delivery failure does not undo an accepted
 import. No report-controlled executable, raw receipt, or original report bytes are exposed by these commands.
+
+
+### Review a finding with an owner decision
+
+Use `farsight-sentinel decision propose <runId> --finding <findingId> --proposal <file> --json` to retain an
+adjudication of an accepted source finding. The input uses `sentinel-decision-input/draft-1` with `decision`,
+`rationale`, `evidence`, `expiresAt` and `supersedes`. `decision approve <decisionId>` previews the confirmation;
+repeat with `--confirm` to apply the exact current proposal. Current adopted grants must allow each action.
+`decision read <decisionId> --json` evaluates it against retained evidence; `decision list <runId> --json`
+returns bounded metadata and an optional next cursor. Full reports include the same evaluation in every format.
+
+Accepted risk and false-positive decisions do not prove a fix. A mitigation assertion stays open without
+qualified enforcement evidence. Changing evidence or expiry reopens the issue; historical records are preserved.
+Clean private reports may include rationale, while shareable reports omit it. A relevant accepted secret match
+withholds source-derived owner detail in both profiles. These local commands return busy while a service owns
+the store; they never stop or impersonate it. Service-owned/browser decision confirmation remains unavailable.

@@ -9,7 +9,7 @@ import type {
   ReportCount, ReportEnvelope, RunEnvelope, SnapshotEnvelope, WorkEnvelope, FindingPlace, HelloMessage,
   WelcomeMessage, RefuseMessage, RulePackManifest, RuleLockEnvelope, SettingsEnvelope, RepoConfigEnvelope,
   EffectivePolicyEnvelope, AdoptionEnvelope, ReceiptEnvelope, AdmissionEnvelope, ControlFactsEnvelope, Rights, Budget,
-  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope, ServiceCapabilities, RunInspection, InspectionPage, ReportDelivery, DeliveryChunk, ControlCapabilities, ControlOutcome, ImportViewEnvelope, ImportPageEnvelope, PathRequestEnvelope,
+  PlanEnvelope, PathEvidenceEnvelope, DeepImportEnvelope, ServiceCapabilities, RunInspection, InspectionPage, ReportDelivery, DeliveryChunk, ControlCapabilities, ControlOutcome, ImportViewEnvelope, ImportPageEnvelope, OwnerDecisionInput, DecisionViewEnvelope, DecisionPageEnvelope, PathRequestEnvelope,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
 import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf } from './planner/identity.js';
@@ -46,6 +46,9 @@ export interface EnvelopeTypes {
   controlcapabilities: ControlCapabilities;
   controloutcome: ControlOutcome;
 
+  decisioninput: OwnerDecisionInput;
+  decisionview: DecisionViewEnvelope;
+  decisionpage: DecisionPageEnvelope;
   importview: ImportViewEnvelope;
   importpage: ImportPageEnvelope;
 }
@@ -391,10 +394,16 @@ const report: Check<ReportEnvelope> = (v, out) => {
     for (const j of duplicates(f.evidence, e => e.id)) out.add(err(`/findings/${i}/evidence/${j}`, 'duplicate evidence'));
   });
   v.gaps.forEach((g, i) => placeErrors(out, `/gaps/${i}/place`, g.place));
+  if(v.decisionEvaluation){
+    const section=v.decisionEvaluation,allowed=section.status==='complete'?['sentinel.decision.section.complete']:section.status==='unavailable'?['sentinel.decision.section.unavailable']:['sentinel.decision.section.partial','sentinel.decision.section.limit'];
+    if(!allowed.includes(section.reasonCode))out.add(err('/decisionEvaluation/reasonCode','decision availability and reason disagree'));
+    if(section.status==='unavailable'&&v.decisions.some(d=>d.evaluator==='sentinel-decision-evaluation/2'))out.add(err('/decisions','unavailable source decisions cannot carry decision credit'));
+  }
   v.decisions.forEach((d, i) => {
     if (!findings.has(d.findingId)) out.add(err(`/decisions/${i}/findingId`, 'decision about a finding the report does not contain'));
     // Validity is as of the report's pinned clock. Invalidation is the service's own finding and stays as recorded.
     const expired = d.expiresAt !== null && compareTimestamps(d.expiresAt, v.evaluatedAt) <= 0;
+    if (d.evaluator === 'sentinel-decision-evaluation/2' && d.state !== 'open' && d.validity !== 'valid') out.add(err(`/decisions/${i}/state`, 'only a valid source decision changes state'));
     if (d.validity === 'valid' && expired) out.add(err(`/decisions/${i}/validity`, 'the decision had expired at the report time'));
     if (d.validity === 'expired' && !expired) out.add(err(`/decisions/${i}/validity`, 'the decision had not expired at the report time'));
   });
@@ -741,6 +750,14 @@ const deepimport: Check<DeepImportEnvelope> = (v, out) => {
   });
 };
 
+const decisioninput:Check<OwnerDecisionInput>=(v,out)=>{if(new Set(v.evidence).size!==v.evidence.length)out.add(err('/evidence','evidence is unique'));};
+const decisionview:Check<DecisionViewEnvelope>=(v,out)=>{
+  if(v.decision.scope.findingId!==v.decision.findingId)out.add(err('/decision/scope','scope names another finding'));
+  if(v.withheld&&(v.decision.rationale!==null||v.decision.basisDigest!==null))out.add(err('/decision/rationale','withheld source metadata must be absent'));
+  if(v.decision.state!=='open'&&(v.decision.approval!=='approved'||v.decision.validity!=='valid'||v.decision.state!==v.decision.decision))out.add(err('/decision/state','only a valid matching owner adjudication changes source state'));
+  if(v.decision.approval==='proposed'&&v.decision.state!=='open')out.add(err('/decision/state','proposal grants no adjudication'));
+};
+const decisionpage:Check<DecisionPageEnvelope>=(v,out)=>{countErrors(out,'/count',v.count,v.items.length);if(v.count.n!==v.items.length||new Set(v.items.map(i=>i.id)).size!==v.items.length)out.add(err('/items','page count or identity mismatch'));};
 const importview:Check<ImportViewEnvelope>=(v,out)=>{
   if(v.withheld!==(v.document===null)||v.withheld!==(v.limitation!==null))out.add(err('/withheld','withholding removes the complete imported document'));
   if(v.document)for(const k of ['claims','exchanges','cookies'] as const)if(v.counts[k].n!==v.document[k].length)out.add(err('/counts','counts describe the retained normalized document'));
@@ -751,7 +768,7 @@ const importpage:Check<ImportPageEnvelope>=(v,out)=>{
 };
 const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   snapshot, run, work, attempt, observation, coverage, disposition, report, protocol,
-  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan, paths, pathrequest, deepimport, importview, importpage,
+  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan, paths, pathrequest, deepimport, importview, importpage, decisioninput, decisionview, decisionpage,
   servicecapabilities: () => [],
   runinspection: () => [],
   inspectionpage: () => [],

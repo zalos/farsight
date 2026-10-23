@@ -1,0 +1,174 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/DecisionPageEnvelope",
+  "definitions": {
+    "DecisionPageEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-decision-page/draft-1"
+        },
+        "authority": {
+          "type": "string",
+          "const": "metadata-only-not-evaluated"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/Id"
+              },
+              "findingId": {
+                "$ref": "#/definitions/Id"
+              },
+              "approval": {
+                "type": "string",
+                "enum": [
+                  "proposed",
+                  "approved"
+                ]
+              },
+              "availability": {
+                "type": "string",
+                "const": "not-evaluated"
+              }
+            },
+            "required": [
+              "id",
+              "findingId",
+              "approval",
+              "availability"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 100
+        },
+        "next": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 512
+        },
+        "count": {
+          "$ref": "#/definitions/ReportCount"
+        }
+      },
+      "required": [
+        "schema",
+        "authority",
+        "items",
+        "next",
+        "count"
+      ],
+      "additionalProperties": false
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "ReportCount": {
+      "type": "object",
+      "properties": {
+        "n": {
+          "$ref": "#/definitions/Count"
+        },
+        "of": {
+          "$ref": "#/definitions/Count"
+        },
+        "unit": {
+          "$ref": "#/definitions/SharedCatalogKey"
+        },
+        "bizUnit": {
+          "$ref": "#/definitions/SharedCatalogKey"
+        },
+        "scope": {
+          "$ref": "#/definitions/SharedCatalogKey"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "breakdown": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReportCountPart"
+          },
+          "maxItems": 64
+        },
+        "recheck": {
+          "type": "object",
+          "properties": {
+            "cli": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "mcp": {
+              "type": "string",
+              "maxLength": 1024
+            }
+          },
+          "required": [
+            "cli"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "n",
+        "unit",
+        "scope",
+        "source"
+      ],
+      "additionalProperties": false,
+      "description": "A scoped number with exactly core's `Counted` shape: what it counts (`unit`, and `bizUnit` when the business register prints it), over which scope, from which fold, its partition and the command that re-checks it. Unit, scope and part keys are shared-catalog keys; the tests run core's own `countedProblems` over them."
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "SharedCatalogKey": {
+      "type": "string",
+      "description": "A key in the shared two-register catalog (`count.unit.journeys`, `sentinel.count.findings`).",
+      "pattern": "^[a-z][A-Za-z0-9]*(\\.[A-Za-z0-9]+)+$",
+      "maxLength": 128
+    },
+    "ReportCountPart": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/definitions/SharedCatalogKey",
+          "description": "A catalog key printed with `{n}`."
+        },
+        "n": {
+          "$ref": "#/definitions/Count"
+        },
+        "label": {
+          "$ref": "#/definitions/BoundedText",
+          "description": "A name out of the pinned context, when the part is one thing rather than a kind."
+        }
+      },
+      "required": [
+        "key",
+        "n"
+      ],
+      "additionalProperties": false,
+      "description": "One part of a count's partition: core's `CountPart`. Parts sum to the count they explain."
+    },
+    "BoundedText": {
+      "type": "string",
+      "description": "Untrusted text supplied by a producer (a scanner message, a rationale). Always escaped when rendered.",
+      "maxLength": 4000
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-decision-page.draft-1.schema.json",
+  "title": "sentinel-decision-page/draft-1"
+}

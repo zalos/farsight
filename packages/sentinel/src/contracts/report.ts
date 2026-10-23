@@ -188,6 +188,13 @@ export interface ReportGap {
 export interface ReportDecision {
   dispositionId: Id;
   findingId: Id;
+  /** Source-only owner adjudication; earlier unbound records are never upgraded to this evaluator. */
+  evaluator?: 'sentinel-decision-evaluation/2';
+  state?: 'open'|'accepted-risk'|'false-positive';
+  reasonCode?: CatalogKey;
+  basisDigest?: Digest|null;
+  journalHead?: Digest;
+  rationale?: BoundedText|null;
   /** Validity as of the report's evaluation time; opening an old report never recalculates it. */
   validity: 'valid' | 'expired' | 'invalidated';
   expiresAt: Timestamp | null;
@@ -276,6 +283,8 @@ export interface ReportEnvelope {
   gaps: ReportGap[];
   /** @maxItems 25000 */
   decisions: ReportDecision[];
+  /** Availability of optional source-only owner adjudication, never scanner coverage. */
+  decisionEvaluation?: { status:'complete'|'partial'|'unavailable'; reasonCode:'sentinel.decision.section.complete'|'sentinel.decision.section.partial'|'sentinel.decision.section.unavailable'|'sentinel.decision.section.limit' };
   /** @maxItems 25000 */
   historical?: ReportHistoricalFinding[];
   /** @maxItems 2048 */

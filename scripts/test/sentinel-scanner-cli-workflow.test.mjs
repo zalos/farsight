@@ -55,7 +55,7 @@ test('accepted imports have a zero-skip genuine privacy gate and npm-only public
  const manifest=JSON.parse(readFileSync(new URL('package.json',root),'utf8'));
  assert.ok(manifest.scripts['test:sentinel:package'].includes('node scripts/test-sentinel-evidence-consumer.mjs'));
  assert.equal(selected(['scripts/test-sentinel-evidence-consumer.mjs']),true);
- assert.ok(workflow.includes('test/evidence-privacy.test.ts'));assert.ok(workflow.includes('node scripts/test-sentinel-evidence-consumer.mjs | tee evidence-consumer.log'));assert.ok(workflow.includes(`grep -q '"nativePrivacy":true' evidence-consumer.log`));
+ assert.ok(workflow.includes('test/owner-decision-privacy.test.ts'));assert.ok(workflow.includes('test/evidence-privacy.test.ts'));assert.ok(workflow.includes('node scripts/test-sentinel-evidence-consumer.mjs | tee evidence-consumer.log'));assert.ok(workflow.includes(`grep -q '"nativePrivacy":true' evidence-consumer.log`));
 });
 
 test('structural paths retain installed workflow, native privacy and explicit offline browser gates',()=>{
@@ -67,4 +67,13 @@ test('structural paths retain installed workflow, native privacy and explicit of
  assert.ok(workflow.includes('node scripts/test-sentinel-paths-consumer.mjs | tee paths-consumer.log'));
  assert.ok(ci.includes('packages/sentinel/test/path-report-browser.test.ts'));
  for(const line of ['tests 1','pass 1','fail 0','cancelled 0','skipped 0'])assert.ok(ci.includes("grep -qx '# "+line+"' sentinel-paths-browser.tap"));
+});
+
+test('owner decisions retain installed command and native privacy acceptance',()=>{
+ const manifest=JSON.parse(readFileSync(new URL('package.json',root),'utf8'));
+ assert.ok(manifest.scripts['test:sentinel:package'].includes('node scripts/test-sentinel-decisions-consumer.mjs'));
+ assert.equal(selected(['scripts/test-sentinel-decisions-consumer.mjs']),true);
+ assert.ok(workflow.includes('test/owner-decision-privacy.test.ts'));
+ assert.ok(workflow.includes('node scripts/test-sentinel-decisions-consumer.mjs | tee decisions-consumer.log'));
+ assert.ok(workflow.includes(`grep -q '"nativePrivacy":true' decisions-consumer.log`));
 });

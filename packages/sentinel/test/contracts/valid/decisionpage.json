@@ -1,0 +1,12 @@
+{
+  "schema": "sentinel-decision-page/draft-1",
+  "authority": "metadata-only-not-evaluated",
+  "items": [],
+  "next": null,
+  "count": {
+    "n": 0,
+    "unit": "sentinel.decision.operations",
+    "scope": "sentinel.decision.pageScope",
+    "source": "bounded owner-decision metadata page"
+  }
+}

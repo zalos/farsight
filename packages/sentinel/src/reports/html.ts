@@ -102,6 +102,7 @@ ${f.evidence.map(e => evidenceHtml(doc, e)).join('\n')}
 <h2 id="findings">Findings</h2>
 ${doc.findings.length ? `<ul>${toc}</ul>${findings}` : '<p>No findings. Read the counts and gaps: no finding is not proof that nothing was missed.</p>'}
 ${historical}
+${(doc.decisionEvaluation||doc.decisions.some(d=>d.evaluator==='sentinel-decision-evaluation/2'))?'<h2 id="decisions">'+esc(wordOf(doc,'sentinel.decision.reportHeading','business'))+'</h2><p>'+esc(wordOf(doc,'sentinel.decision.sourceOnly','business'))+'</p>'+(doc.decisionEvaluation?'<p>'+esc(wordOf(doc,doc.decisionEvaluation.reasonCode,'business'))+'</p>':'')+'<ul>'+doc.decisions.filter(d=>d.evaluator).map(d=>'<li>'+esc(d.dispositionId)+': '+esc(wordOf(doc,d.reasonCode!,'business'))+' ('+esc(d.validity)+')'+(d.rationale!==null&&d.rationale!==undefined?' — '+esc(d.rationale):'')+'</li>').join('')+'</ul>':''}
 ${doc.structuralPaths?.length?`<h2 id="structural-paths">${esc(wordOf(doc,'sentinel.paths.report.heading','business'))}</h2>${structuralText(doc).map(p=>`<section class="card"><h3>${esc(p.source)}</h3><ul>${p.lines.map(l=>`<li>${esc(l)}</li>`).join('')}</ul></section>`).join('')}`:''}
 ${doc.inspections?.length ? `<h2 id="inspections">${esc(wordOf(doc,'sentinel.controls.reportHeading','business'))}</h2>${inspectionText(doc).map(i=>`<section class="card"><h3>${esc(i.source)}</h3><ul>${i.lines.map(l=>`<li>${esc(l)}</li>`).join('')}</ul></section>`).join('')}` : ''}
 <h2 id="gaps">Gaps in the checks</h2>

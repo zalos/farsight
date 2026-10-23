@@ -64,7 +64,7 @@
             "surfaceIds": {
               "type": "array",
               "items": {
-                "$ref": "#/definitions/Id"
+                "$ref": "#/definitions/NodeId"
               },
               "maxItems": 1024
             },
@@ -166,6 +166,13 @@
       "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
       "maxLength": 128
+    },
+    "NodeId": {
+      "type": "string",
+      "description": "A canonical application-graph identity (`repo::path/to/File.tsx::Component`), a screen or a journey ID from pinned context. Unlike a ledger `Id` it may contain `/` and `::`; it is bounded and free of control characters.",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+$"
     },
     "Digest": {
       "type": "string",
@@ -288,7 +295,7 @@
             "surfaceIds": {
               "type": "array",
               "items": {
-                "$ref": "#/definitions/Id"
+                "$ref": "#/definitions/NodeId"
               },
               "maxItems": 1024
             },
