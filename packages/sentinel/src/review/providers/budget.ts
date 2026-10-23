@@ -106,8 +106,17 @@ const oldEnvelope = ddl(oldEnvelopeSql);
 const migratedEnvelope = ddl(oldEnvelopeSql.replace(/\) STRICT;$/, ', provider_id TEXT) STRICT;'));
 type SchemaDb = InstanceType<typeof import('node:sqlite')['DatabaseSync']>;
 function knownSchema(db: SchemaDb): 'empty' | 'legacy' | 'current' {
-  const objects = db.prepare("SELECT name, type, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name LIMIT 65").all() as { name: string; type: string; tbl_name: string; sql: string | null }[];
-  if (objects.length === 0) return 'empty';
+  const all = db.prepare('SELECT name, type, tbl_name, sql FROM sqlite_master ORDER BY name LIMIT 65').all() as { name: string; type: string; tbl_name: string; sql: string | null }[];
+  if (all.length > 64) return fail('sentinel.provider.ledgerInvalid', 'unknown budget ledger schema');
+  const indexes = new Map([['sqlite_autoindex_envelopes_1', 'envelopes'], ['sqlite_autoindex_reservations_1', 'reservations'],
+    ['sqlite_autoindex_reservations_2', 'reservations'], ['sqlite_autoindex_fenced_epochs_1', 'fenced_epochs'], ['sqlite_autoindex_review_checkpoints_1', 'review_checkpoints']]);
+  const objects = all.filter(o => {
+    if (o.name === 'sqlite_sequence' && o.type === 'table' && o.tbl_name === 'sqlite_sequence' && o.sql !== null
+      && ddl(o.sql) === ddl('CREATE TABLE sqlite_sequence(name,seq)')) return false;
+    if (indexes.get(o.name) === o.tbl_name && o.type === 'index' && o.sql === null) return false;
+    return true;
+  });
+  if (objects.length === 0 && all.length === 0) return 'empty';
   if (objects.length > 5 || objects.some(o => o.type !== 'table' || !expectedTables.has(o.name) || !o.sql)) {
     return fail('sentinel.provider.ledgerInvalid', 'unknown budget ledger schema');
   }
@@ -148,15 +157,18 @@ export class BudgetLedger {
     try {
       // The first check is read-only: malformed existing files are not changed even to switch journal mode.
       knownSchema(db);
-      db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;');
+      db.exec('PRAGMA synchronous=FULL;');
       db.exec('BEGIN IMMEDIATE');
       const shape = knownSchema(db); // serialized again with writers before schema or row mutations
       if (shape === 'legacy') db.exec('ALTER TABLE envelopes ADD COLUMN provider_id TEXT');
       db.exec(SCHEMA); knownSchema(db);
       db.exec('COMMIT');
-    } catch {
+      // Change journal mode only after the serialized final schema check accepted the database.
+      db.exec('PRAGMA journal_mode=WAL;');
+    } catch (error) {
       if (db.isTransaction) db.exec('ROLLBACK'); db.close();
-      return fail('sentinel.provider.ledgerInvalid', 'budget ledger schema is unknown or could not be migrated');
+      return fail('sentinel.provider.ledgerInvalid', (error as { errcode?: number }).errcode === 5 || (error as { errcode?: number }).errcode === 6
+        ? 'budget ledger is busy' : 'budget ledger schema is unknown or could not be migrated');
     }
     return new BudgetLedger(db);
   }
@@ -245,6 +257,8 @@ export class BudgetLedger {
   reserve(r: { envelopeId: string; operationId: string; tokens: number; costNanos: bigint; epoch: string; at: string }): Reservation {
     id(r.envelopeId, 'the envelope'); id(r.operationId, 'the operation'); id(r.epoch, 'the epoch'); tokens(r.tokens, 'tokens'); nanos(r.costNanos, 'cost');
     return this.#tx(() => {
+      const provenance = this.#get('SELECT provider_id FROM envelopes WHERE id = ?', r.envelopeId);
+      if (!provenance || provenance.provider_id === null) fail('sentinel.provider.notTrusted', 'legacy provider provenance cannot admit new work');
       // An operation is sent at most once in this ledger, under whichever envelope: after a crash a new envelope never
       // makes an uncertain operation sendable again.
       const elsewhere = this.#get('SELECT state FROM reservations WHERE operation_id = ? AND envelope_id <> ?', r.operationId, r.envelopeId);
@@ -282,7 +296,11 @@ export class BudgetLedger {
 
   /** Written before the request leaves: from here a crash leaves the call uncertain, never forgotten. */
   dispatch(rid: string, at: string): Reservation {
-    return this.#tx(() => { this.#assertLive(this.#row(rid).epoch); return this.#move(rid, ['held'], 'dispatched', 'about to send', at); });
+    return this.#tx(() => {
+      const row = this.#row(rid);
+      const provenance = this.#get('SELECT provider_id FROM envelopes WHERE id = ?', row.envelopeId);
+      if (!provenance || provenance.provider_id === null) fail('sentinel.provider.notTrusted', 'legacy provider provenance cannot dispatch work');
+      this.#assertLive(row.epoch); return this.#move(rid, ['held'], 'dispatched', 'about to send', at); });
   }
 
   /** Returns a reservation that was never sent: held, or dispatched when no connection was ever made. */

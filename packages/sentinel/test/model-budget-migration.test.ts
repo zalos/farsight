@@ -15,7 +15,10 @@ const fixture = new URL('./fixtures/model-budget/legacy-6c.db', import.meta.url)
 async function file(t: any) { const root = await mkdtemp(join(tmpdir(), 'sentinel-budget-migrate-')); t.after(() => rm(root, { recursive: true, force: true })); const path = join(root, 'ledger.db'); await copyFile(fixture, path); return path; }
 function rows(path: string) {
   const db = new DatabaseSync(path, { readOnly: true });
-  try { return ['reservations', 'reservation_events'].map(table => db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()); }
+  try { return [
+    db.prepare('SELECT id, run_id, binding_digest, admission_digest, receipt_digest, max_tokens, max_cost_nanos, currency, overdrawn, created_at FROM envelopes ORDER BY rowid').all(),
+    ...['reservations', 'reservation_events'].map(table => db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()),
+  ]; }
   finally { db.close(); }
 }
 const fresh = (id = 'new-env') => ({ id, runId: 'new-run', providerId: 'exact-provider', bindingDigest: D('binding'), admissionDigest: D(id), receiptDigest: null, maxTokens: 2000, maxCostNanos: 20_000_000_000n, currency: 'USD', createdAt: at });
@@ -78,4 +81,40 @@ test('whitespace inside a quoted CHECK literal is an unknown schema, not removab
   catch (error: any) { assert.equal(error.code, 'sentinel.provider.ledgerInvalid'); }
   assert.equal(accepted, false, 'a different SQL literal must be refused');
   assert.deepEqual(await readFile(path), before, 'refusal must not mutate the unknown database');
+});
+
+
+test('SQLite-prefix lookalike tables and triggers are not hidden from exact schema validation', async t => {
+  for (const ddl of ['CREATE TABLE sqlitex_patch (value TEXT)', 'CREATE TRIGGER sqliteAtrigger AFTER INSERT ON reservations BEGIN SELECT 1; END']) {
+    const path = await file(t), db = new DatabaseSync(path); db.exec(ddl); db.close();
+    const before = await readFile(path); let accepted = false;
+    try { const ledger = await BudgetLedger.open(path); ledger.close(); accepted = true; }
+    catch (error: any) { assert.equal(error.code, 'sentinel.provider.ledgerInvalid'); }
+    assert.equal(accepted, false, 'user objects must not disappear behind a LIKE wildcard');
+    assert.deepEqual(await readFile(path), before);
+  }
+});
+
+test('unobserved legacy provider provenance cannot reserve or dispatch any new work', async t => {
+  const path = await file(t), ledger = await BudgetLedger.open(path); t.after(() => ledger.close());
+  const before = rows(path), held = ledger.openReservations('legacy-env', 10).find(r => r.state === 'held')!;
+  assert.throws(() => ledger.reserve({ envelopeId: 'legacy-env', operationId: 'fresh-legacy-op', tokens: 1, costNanos: 1n, epoch: 'still-live', at }), code('sentinel.provider.notTrusted'));
+  assert.throws(() => ledger.dispatch(held.id, at), code('sentinel.provider.notTrusted'));
+  assert.deepEqual(rows(path), before); assert.equal(ledger.totals('legacy-env').chargedTokens, 600);
+});
+
+
+test('malformed reservations, partial checkpoint schema and invalid foreign keys refuse without mutation', async t => {
+  for (const change of ['reservation-ddl', 'partial-checkpoint', 'foreign-key']) {
+    const path = await file(t), db = new DatabaseSync(path);
+    if (change === 'reservation-ddl') {
+      db.exec('PRAGMA foreign_keys=OFF');
+      const sql = (db.prepare("SELECT sql FROM sqlite_master WHERE name = 'reservations'").get() as { sql: string }).sql;
+      db.exec('DROP TABLE reservations'); db.exec(sql.replace('tokens >= 0', 'tokens >= 1'));
+    } else if (change === 'partial-checkpoint') db.exec('CREATE TABLE fenced_epochs (epoch TEXT PRIMARY KEY, fenced_at TEXT NOT NULL) STRICT');
+    else db.exec("PRAGMA foreign_keys=OFF; INSERT INTO reservations (id,envelope_id,operation_id,state,tokens,cost_nanos,epoch,created_at,updated_at) VALUES ('orphan','missing','orphan-op','held',1,1,'legacy-epoch','2026-10-22T12:00:00Z','2026-10-22T12:00:00Z')");
+    db.close(); const before = await readFile(path);
+    await assert.rejects(BudgetLedger.open(path), code('sentinel.provider.ledgerInvalid'));
+    assert.deepEqual(await readFile(path), before, change);
+  }
 });
