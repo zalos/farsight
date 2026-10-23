@@ -673,7 +673,7 @@ to the service: insertion-order count/byte eviction can remove another same-acco
 its TTL. Stop/crash/restart loses buffers explicitly. A final sequence change at the no-await installation fence
 can still return retryable `viewChanged` after the bounded two-generation preparation, without a third attempt.
 The optional install includes the SDK’s transitive dependency set even though ordinary import/CLI execution does
-not load the MCP module; SDK 1.31.0 and its required zod 3.25.76 peer are exact normal dependencies.
+not load the MCP module; SDK 1.32.0 and its required zod 3.25.76 peer are exact normal dependencies.
 
 ### Run control authority and confirmation
 

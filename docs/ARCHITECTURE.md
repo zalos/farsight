@@ -1628,7 +1628,7 @@ route under `.farsight` is captured and read by a framework pack but has no grap
 48. **Sentinel exposes bounded retained reads through its existing owner service and the MCP SDK (2026-10-22).**
 The first PR 23a slice is read-only: `service.capabilities`, `run.inspect`, `view.page`, `report.open` and
 `delivery.read` are additive operations on the existing versioned socket. The MCP command lazily imports exactly
-SDK 1.31.0 as Sentinel's own dependency, connects to that existing service, and exposes these reads plus sanitized
+SDK 1.32.0 as Sentinel's own dependency, connects to that existing service, and exposes these reads plus sanitized
 existing describe/status/wait. It never opens a competing store or starts the service. An older service's
 `unknownOperation` means unavailable. Starting, pausing, canceling, preparing and rerunning remain owner CLI
 operations with their existing confirmation and admission; a transport connection is not a human confirmation.
@@ -1680,7 +1680,7 @@ unchanged. The final installation sequence fence can refuse viewChanged without 
 and delivery caches are global insertion-order quotas, so another same-account channel can cause early eviction.
 The SDK’s express/hono/cors/jose and other dependencies enlarge the optional installed supply-chain surface, despite
 lazy loading keeping the MCP entry out of ordinary imports. Its required zod peer is pinned exactly 3.25.76 beside
-SDK 1.31.0; lazy execution does not imply a smaller installation.
+SDK 1.32.0; lazy execution does not imply a smaller installation.
 
 
 ADR48 control extension: `service.control-capabilities` is a separate additive closed document, preserving the
