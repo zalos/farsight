@@ -1,4 +1,6 @@
-// Internal retained-read limits, never a store/owner factory or a public capability. SQLite row reads are not metered.
+// Internal retained-read limits, never a store/owner factory or a public capability. SQLite row reads and trust-
+// folder files (rule words/pack/lock/report-key reads) are outside this object-body meter. Detached tasks created
+// inside a scope inherit it and intentionally cannot read after it closes; delivery/cache work belongs outside.
 // Every facade object read reserves its recorded encoded/decoded size before allocation; repeated/failed
 // representations count again. A scope's first limit/cancel/deadline/owner failure survives callers' error mapping.
 import { AsyncLocalStorage } from 'node:async_hooks';

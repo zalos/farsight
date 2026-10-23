@@ -48,10 +48,12 @@ export type ReportFormat = (typeof REPORT_FORMATS)[number];
 export const MAX_CONTEXT_BYTES = 64 * 1024 * 1024;
 
 export class FullReportError extends Error {
-  constructor(readonly code: 'sentinel.report.runNotReportable' | 'sentinel.report.evidenceUnbound' | 'sentinel.report.contextInvalid' | 'sentinel.report.outExists',
+  readonly retryable: boolean;
+  constructor(readonly code: 'sentinel.report.runNotReportable' | 'sentinel.report.evidenceUnbound' | 'sentinel.report.contextInvalid' | 'sentinel.report.outExists' | 'sentinel.report.viewChanged' | 'sentinel.report.deliveryLimit',
     readonly facts: Readonly<Record<string, unknown>> = {}) {
     super(code);
     this.name = 'FullReportError';
+    this.retryable = code === 'sentinel.report.viewChanged';
   }
 }
 
@@ -813,30 +815,47 @@ export async function fullReportFormat(req: FullReportRequest, format: ReportFor
   if (!REPORT_FORMATS.includes(format)) throw new FullReportError('sentinel.report.evidenceUnbound', { reason: 'unsupported report format' });
   const store = req.store;
   const bounded = await withStoreReadBudget(store, options, async () => {
-    const sequence = store.ledger.currentSequence();
-    const built = await reportDocument(req);
-    readBudgetCheckpoint(store);
-    const json = canonicalJson(built.document); readBudgetCheckpoint(store);
-    const documentDigest = sha(json); readBudgetCheckpoint(store);
-    let text: string;
-    if (format === 'json') text = `${json}\n`;
-    else if (format === 'md') text = renderMarkdown(built.document);
-    else if (format === 'html') text = renderHtml(built.document);
-    else text = `${JSON.stringify(toSarif(built.document), null, 2)}\n`;
-    readBudgetCheckpoint(store);
-    const formatBytes = Buffer.byteLength(text, 'utf8');
-    if (formatBytes > 32 * 1024 * 1024) throw new FullReportError('sentinel.report.evidenceUnbound', { reason: 'the report rendering exceeds the delivery byte limit' });
-    const formatDigest = sha(text); readBudgetCheckpoint(store);
-    store.assertHeld();
-    for (const identity of [built.currentIdentity, ...(built.baselineIdentity ? [built.baselineIdentity] : [])]) {
-      const current = store.ledger.getRun(identity.runId);
-      if (!current || current.state !== 'completed' || current.planRevision !== identity.planRevision || current.envelope.snapshotId !== identity.snapshotId) {
-        throw new FullReportError('sentinel.report.evidenceUnbound', { reason: 'the report run changed during generation' });
+    // Pin the requested executed identities once: an unrelated retry must not adopt a changed current/baseline run.
+    const expected = [req.runId, ...(req.baselineRunId ? [req.baselineRunId] : [])].map(runId => {
+      const row = store.ledger.getRun(runId);
+      if (!row || row.state !== 'completed') throw new FullReportError('sentinel.report.runNotReportable', { runId, state: row?.state ?? null });
+      return { runId, planRevision: row.planRevision, snapshotId: row.envelope.snapshotId };
+    });
+    // Both generations spend the same counters, signal and original deadline. Only global sequence drift retries.
+    for (let generation = 0; generation < 2; generation++) {
+      const sequence = store.ledger.currentSequence();
+      const built = await reportDocument(req);
+      readBudgetCheckpoint(store);
+      const json = canonicalJson(built.document); readBudgetCheckpoint(store);
+      const documentDigest = sha(json); readBudgetCheckpoint(store);
+      let text: string;
+      if (format === 'json') text = `${json}\n`;
+      else if (format === 'md') text = renderMarkdown(built.document);
+      else if (format === 'html') text = renderHtml(built.document);
+      else text = `${JSON.stringify(toSarif(built.document), null, 2)}\n`;
+      readBudgetCheckpoint(store);
+      const formatBytes = Buffer.byteLength(text, 'utf8');
+      if (formatBytes > 32 * 1024 * 1024) throw new FullReportError('sentinel.report.deliveryLimit', { reason: 'the report rendering exceeds the delivery byte limit' });
+      const formatDigest = sha(text); readBudgetCheckpoint(store);
+      store.assertHeld();
+      const actual = [built.currentIdentity, ...(built.baselineIdentity ? [built.baselineIdentity] : [])];
+      for (const identity of expected) {
+        const assessed = actual.find(a => a.runId === identity.runId);
+        const current = store.ledger.getRun(identity.runId);
+        if (!assessed || assessed.planRevision !== identity.planRevision || assessed.snapshotId !== identity.snapshotId
+          || !current || current.state !== 'completed' || current.planRevision !== identity.planRevision || current.envelope.snapshotId !== identity.snapshotId) {
+          throw new FullReportError('sentinel.report.evidenceUnbound', { reason: 'the report run changed during generation' });
+        }
       }
+      readBudgetCheckpoint(store);
+      if (store.ledger.currentSequence() !== sequence) {
+        if (generation === 0) continue;
+        throw new FullReportError('sentinel.report.viewChanged', { generations: 2 });
+      }
+      readBudgetCheckpoint(store);
+      return { ...built, format, text, documentDigest, formatDigest, formatBytes, generationSequence: sequence };
     }
-    if (store.ledger.currentSequence() !== sequence) throw new FullReportError('sentinel.report.evidenceUnbound', { reason: 'the ledger changed during report generation' });
-    readBudgetCheckpoint(store);
-    return { ...built, format, text, documentDigest, formatDigest, formatBytes, generationSequence: sequence };
+    throw new FullReportError('sentinel.report.viewChanged', { generations: 2 });
   });
   // A2 may install immutable delivery bytes only after this function returns, with its own no-await final fence.
   return Object.freeze({ ...bounded.value, readUsage: bounded.usage });

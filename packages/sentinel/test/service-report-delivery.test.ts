@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, writeFileSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { openStore } from '../dist/store/index.js';
@@ -11,6 +12,8 @@ import { fullReport, fullReportFormat, renderingOf, assessRun } from '../dist/se
 import { initWorkspace } from '../dist/cli/init.js';
 import { workspaceOf, adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, scratchUnder, removeScratch } from '../dist/service/local.js';
 import { planWorkspaceCanonical, executeRun, rerunRun } from '../dist/service/canonical.js';
+import { Coordinator } from '../dist/execution/coordinator.js';
+import { publicRegistry, scannerExecution } from '../dist/service/scanner-profile.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
 import { scratch, removeScratch as removeRoot } from './execution-helpers.ts';
 const code = (c: string) => (e: any) => e?.code === c;
@@ -86,21 +89,102 @@ test('legacy evidence catches cannot convert byte/count exhaustion or cancellati
   await assert.rejects(task, code('sentinel.execution.canceled'));
 });
 
-test('the final identity/sequence fence refuses a genuine concurrent ledger change before returning bytes', async t => {
+test('a genuine unrelated Coordinator publication retries once and returns a coherent report', async t => {
   const f = await published(t);
-  const now = new Date();
-  const normal = now.toISOString.bind(now);
-  let changed = false;
+  const child = await rerunRun(f.store, f.request.runId, [], { workspace: f.ws.path, trustDir: f.ws.trustDir, policy: f.policy, scratchRoot: f.work, now: new Date() });
+  assert.ok(!('reasonCode' in child));
+  const stable = await fullReportFormat(f.request, 'json');
+  const registry = publicRegistry(f.ws.trustDir);
+  const assets = await scannerExecution(f.store, child.disclosure.runId, f.ws.trustDir, f.work, registry);
+  let task: ReturnType<typeof fullReportFormat> | undefined, publication: any;
+  let generations = 0;
+  const now = new Date(f.request.now), normal = now.toISOString.bind(now);
+  now.toISOString = () => { generations++; return normal(); };
+  const coordinator = await Coordinator.open({ ...assets, store: f.store, runId: child.disclosure.runId, registry, scratchRoot: f.work, hooks: {
+    at(boundary, context) {
+      if (boundary === 'after-objects' && !task) {
+        publication = context;
+        task = fullReportFormat({ ...f.request, now }, 'json');
+        void task.catch(() => undefined);
+      }
+    },
+  } });
+  assert.equal((await coordinator.run()).state, 'completed');
+  assert.ok(task && publication);
+  assert.ok(f.store.ledger.getPublication(publication.work), 'the unrelated worker really published');
+  const report = await task;
+  assert.equal(generations, 2);
+  assert.deepEqual(report.document, (await fullReport(f.request)).document);
+  assert.equal(report.readUsage.reads, 2 * stable.readUsage.reads, 'both generations share physical-read accounting');
+  assert.equal(report.generationSequence, f.store.ledger.currentSequence());
+});
+
+function drift(f: Awaited<ReturnType<typeof published>>, action?: () => void) {
+  const now = new Date(f.request.now), normal = now.toISOString.bind(now);
+  let count = 0;
   now.toISOString = () => {
-    if (!changed) {
-      changed = true;
-      f.store.ledger.registerStaging('report-concurrent-change', [{ id: `sha256:${'0'.repeat(64)}`, schema: 'application/octet-stream', privacy: 'source' }]);
-    }
+    count++;
+    f.store.ledger.registerStaging(`report-change-${count}`, [{ id: `sha256:${'0'.repeat(64)}`, schema: 'application/octet-stream', privacy: 'source' }]);
+    action?.();
     return normal();
   };
-  await assert.rejects(fullReportFormat({ ...f.request, now }, 'html'), e => code('sentinel.report.evidenceUnbound')(e) && (e as any).facts.reason === 'the ledger changed during report generation');
-  assert.equal(changed, true);
-  f.store.ledger.abortStaging('report-concurrent-change');
+  return { now, count: () => count };
+}
+
+test('continuous unrelated changes refuse with a retryable viewChanged after exactly two generations', async t => {
+  const f = await published(t), change = drift(f);
+  await assert.rejects(fullReportFormat({ ...f.request, now: change.now }, 'html'), (e: any) =>
+    e.code === 'sentinel.report.viewChanged' && e.retryable === true && e.facts.generations === 2);
+  assert.equal(change.count(), 2);
+});
+
+for (const changed of ['current', 'baseline'] as const) test(`a changed ${changed} executed revision refuses without adopting it on retry`, async t => {
+  const f = await published(t);
+  let request = f.request;
+  if (changed === 'baseline') {
+    const child = await rerunRun(f.store, f.request.runId, [], { workspace: f.ws.path, trustDir: f.ws.trustDir, policy: f.policy, scratchRoot: f.work, now: new Date() });
+    assert.ok(!('reasonCode' in child));
+    assert.equal((await executeRun(f.store, child.disclosure.runId, { scratchRoot: f.work, trustDir: f.ws.trustDir })).state, 'completed');
+    request = { ...f.request, runId: child.disclosure.runId, baselineRunId: f.request.runId } as typeof request;
+  }
+  const now = new Date(f.request.now), normal = now.toISOString.bind(now);
+  let generations = 0;
+  now.toISOString = () => {
+    generations++;
+    f.store.ledger.registerStaging('report-own-change', [{ id: `sha256:${'0'.repeat(64)}`, schema: 'application/octet-stream', privacy: 'source' }]);
+    // Fault injection after authentic accepted publication: remove only this fixture's row guards to exercise
+    // the report's independent fence. Production rejects this mutation; accepted evidence remains untouched.
+    const db = new DatabaseSync(join(f.store.storePath, 'ledger.sqlite'));
+    try {
+      db.exec('DROP TRIGGER runs_plan_advance; DROP TRIGGER runs_terminal;');
+      db.prepare('UPDATE runs SET plan_revision = 999 WHERE id = ?').run(f.request.runId);
+    } finally { db.close(); }
+    return normal();
+  };
+  await assert.rejects(fullReportFormat({ ...request, now }, 'json'), (e: any) =>
+    e.code === 'sentinel.report.evidenceUnbound' && e.retryable === false && e.facts.reason === 'the report run changed during generation');
+  assert.equal(generations, 1);
+});
+
+test('a retry cannot reset the physical-read budget', async t => {
+  const f = await published(t), stable = await fullReportFormat(f.request, 'json'), change = drift(f);
+  await assert.rejects(fullReportFormat({ ...f.request, now: change.now }, 'json', { reads: stable.readUsage.reads }), code('sentinel.object.tooLarge'));
+  assert.equal(change.count(), 1, 'the second generation cannot reach rendering with an exhausted original budget');
+});
+
+test('cancellation wins over sequence drift without a retry', async t => {
+  const f = await published(t), controller = new AbortController(), change = drift(f, () => controller.abort());
+  await assert.rejects(fullReportFormat({ ...f.request, now: change.now }, 'json', { signal: controller.signal }), code('sentinel.execution.canceled'));
+  assert.equal(change.count(), 1);
+});
+
+test('the original cooperative deadline wins over sequence drift without a retry', async t => {
+  const f = await published(t), change = drift(f, () => {
+    const until = performance.now() + 600;
+    while (performance.now() < until) { /* a synchronous report step cannot extend the original deadline */ }
+  });
+  await assert.rejects(fullReportFormat({ ...f.request, now: change.now }, 'json', { durationMs: 500 }), code('sentinel.execution.deadlineExceeded'));
+  assert.equal(change.count(), 1);
 });
 
 test('a closed owner still refuses through the real report reader with its original typed error', async t => {
