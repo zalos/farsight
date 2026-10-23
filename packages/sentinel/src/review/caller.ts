@@ -23,7 +23,7 @@ export function providerCaller(broker: ModelBroker, envelope: ModelEnvelope, bin
       if(!isProviderBinding(current))fail('sentinel.provider.notTrusted','a call requires the current genuine binding');
       if(req.requestedSelection&&canonicalDigest(req.requestedSelection)!==canonicalDigest({providerId:current.providerId,modelId:current.modelId,bindingDigest:current.digest}))fail('sentinel.provider.bindingChanged','the requested selection changed before dispatch');
       // Compare and dispatch this exact immutable binding; no second getter can substitute another model.
-      const r = await broker.generate(envelope, current, { operationId: req.operationId, messages: req.messages, maxOutputTokens: req.maxOutputTokens,...(options?{deadlineAt:options.deadlineAt}:{}),...(req.expectedWireDigest?{expectedWireDigest:req.expectedWireDigest}:{}),
+      const r = await broker.generate(envelope, current, { operationId: req.operationId, messages: req.messages, maxOutputTokens: req.maxOutputTokens,...(options?{deadlineAt:current.kind==='copilot-cli'?Math.min(options.deadlineAt,Date.now()+current.limits.timeoutMs):options.deadlineAt}:{}),...(req.expectedWireDigest?{expectedWireDigest:req.expectedWireDigest}:{}),
         ...(req.signal ? { signal: req.signal } : {}) });
       const identity: ModelIdentity = { requestedModel: r.identity.requestedModel, returnedModel: r.identity.returnedModel,
         immutableRevision: r.identity.probedRevision, source: r.identity.source };

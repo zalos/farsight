@@ -81,7 +81,7 @@ function boundsMiss(intent: ActionIntent, policy: EffectivePolicy): [PolicyReaso
     const cap = provider.budget;
     // Only the explicitly adopted closed CLI subscription profile accounts in tokens with money unobserved.
     // A monetary or unconfigured provider cannot use null money to bypass its bound.
-    if (provider.kind === 'claude-cli' && provider.nativeProfile && provider.models?.length
+    if (((provider.kind === 'claude-cli' && provider.nativeProfile) || (provider.kind === 'copilot-cli' && provider.copilotProfile)) && provider.models?.length
       && provider.models.every(m => m.pricing.kind === 'subscription-quota' && m.pricing.basis === 'owner-subscription')
       && cap.maxTokens !== null && cap.maxCost === null && cap.currency === null) {
       if (b.maxTokens === null || b.maxCost !== null || b.currency !== null) return ['sentinel.admission.budgetRequired', 'a subscription action states its token quota with monetary consumption unobserved'];

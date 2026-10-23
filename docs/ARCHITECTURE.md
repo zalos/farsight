@@ -2123,3 +2123,18 @@ refuse before run confirmation/receipt effects, credentials or process launch. T
 library remains available for subsequent qualification. Explicit true does not grant policy, prove native
 readiness or bypass other gates. Hosted API pause retains its separate flag and refusal; no automatic provider
 substitution is introduced. This release prioritizes separately qualified Copilot CLI.
+
+ADR48 Copilot boundary: the existing model broker and cumulative same-provider/run quota ledger also accept
+a closed `copilot-cli` profile for Copilot 1.0.103 on macOS arm64 with explicit `gpt-6-luna`. Before launch,
+Sentinel verifies the external executable and every member of its fixed runtime closure, copies only that
+code into owned temporary storage, and runs with isolated HOME/config/cwd, fixed no-tools arguments and
+TLS-verified exact-host proxy access. The vendor runtime is not redistributed. Native authentication remains
+inside pinned Copilot through the shared macOS securityd broker; this is vendor-process trust, not
+credential-service-specific OS confinement. No credential/config copying or ambient source access is granted.
+
+Genuine current complete Gitleaks coverage precedes hosted disclosure and model admission. Exact prompt,
+semantic messages, wire, selected model and explicit empty additional-skills selection are retained before
+dispatch. The fixed profile permits two Sentinel turns per review unit, original client deadlines and bounded
+response bytes; vendor AI credits are soft, hidden model work is unobserved, and uncertain usage stays charged
+possible on the same ledger. Code-only qualification and auth-free startup do not qualify account access or
+real inference. Other models and platforms require separate qualification; no fallback is introduced.

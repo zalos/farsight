@@ -2,7 +2,8 @@
 import { canonicalJsonBytes } from '../../store/objects.js';
 import type { ChatMessage, ParsedReply } from './kinds.js';
 import { fail } from './errors.js';
-export interface NativeReviewWire { readonly encoding: 'sentinel-claude-chat/v1'; readonly system: string; readonly stdin: string; readonly requestedModel: string }
+export type {NativeReviewWire} from '../../contracts/instructions.js';
+import type {NativeReviewWire} from '../../contracts/instructions.js';
 export function renderNativeClaudeWire(model: string, messages: readonly ChatMessage[], maxOutputTokens: number): NativeReviewWire {
   if (messages.length < 2 || messages[0]?.role !== 'system' || messages.slice(1).some(m => m.role === 'system')) return fail('sentinel.provider.invalidProfile', 'native wire has exactly one leading system message');
   return Object.freeze({ encoding: 'sentinel-claude-chat/v1', system: messages[0].content,

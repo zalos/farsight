@@ -120,7 +120,8 @@
                 "enum": [
                   "ollama",
                   "openai-compatible",
-                  "claude-cli"
+                  "claude-cli",
+                  "copilot-cli"
                 ]
               },
               "disclosure": {

@@ -945,6 +945,78 @@ known-unsent, definitively-refused and unknown dispatch. A fresh request can rep
 when the genuine service also confirms no retained preparation exists. Lost responses, legacy unknown records,
 accepted or resumable work stay protected; reconnect never automatically replays them.
 
+## Copilot CLI foreground review
+
+The fixed Copilot profile uses GitHub Copilot CLI 1.0.103 on macOS arm64 and explicit model `gpt-6-luna`.
+The executable and complete matching external runtime must already be installed; Sentinel verifies their pins,
+copies only the recorded code closure into private temporary storage and refuses changed or missing code.
+It never downloads or redistributes Copilot. Local code discovery does not establish account access, model
+availability, authentication or inference. There is no silent model, provider or version fallback. Other Copilot models are not yet qualified or enabled;
+arbitrary model names refuse, and stage selections can choose only available profiles.
+
+```sh
+farsight-sentinel capabilities --models --json > model-profiles.json
+farsight-sentinel init --workspace ./workspace --profile secrets
+```
+
+Keep that output outside the captured source. Copy the `copilot-cli` entry's exact `copilotProfile` into the
+provider below, retain the other initialized settings, and replace owner-reviewed terms/date placeholders:
+
+```json
+{
+  "hostedApiReviewEnabled": false,
+  "nativeClaudeReviewEnabled": false,
+  "providers": [{
+    "id": "native-copilot", "kind": "copilot-cli", "endpoint": "https://api.githubcopilot.com",
+    "credential": null, "disclosure": "hosted",
+    "copilotProfile": { "id": "COPY_DISCOVERED_ID", "executableDigest": "COPY_DISCOVERED_DIGEST", "runtimeDigest": "COPY_DISCOVERED_DIGEST", "profileDigest": "COPY_DISCOVERED_DIGEST" },
+    "budget": { "maxTokens": 544000, "maxCost": null, "currency": null },
+    "models": [{
+      "id": "luna", "model": "gpt-6-luna",
+      "limits": { "maxRequestBytes": 65536, "maxResponseBytes": 16384, "timeoutMs": 60000, "maxOutputTokens": 512, "contextTokens": 272000, "maxMessages": 32, "templateTokensPerMessage": 8 },
+      "pricing": { "kind": "subscription-quota", "basis": "owner-subscription" },
+      "terms": { "retention": "RECORD_REVIEWED_TERMS", "training": "unknown", "source": "RECORD_REVIEWED_SOURCE", "recordedAt": "RECORD_YYYY-MM-DD" },
+      "capability": { "schema": "sentinel-model-capability/draft-1", "kind": "copilot-cli", "origin": "https://api.githubcopilot.com", "model": "gpt-6-luna", "listed": true, "revision": null, "probedAt": "RECORD_YYYY-MM-DDTHH:MM:SS.000000000Z" }
+    }]
+  }],
+  "reviewModels": { "stages": [{ "stage": "general", "providerId": "native-copilot", "modelId": "luna" }], "segments": [] }
+}
+```
+
+Copilot is hosted source disclosure even while the HTTP API and native Claude switches are off. Extend only
+the owner's `run.start` grant with `paid-inference`, `source-disclosure` and `network`, and add a confirmed human
+`paid.admit` grant scoped to `native-copilot`. A complete genuine current-source Gitleaks publication covering
+every captured entry is required before model admission or native authentication; partial scans cannot be joined.
+
+```sh
+farsight-sentinel settings adopt --workspace ./workspace --confirm
+farsight-sentinel rules promote builtin:secrets --workspace ./workspace --confirm
+farsight-sentinel assets adopt-tool secrets-gitleaks --workspace ./workspace --confirm
+farsight-sentinel plan --workspace ./workspace --json
+farsight-sentinel run PLAN_ID --workspace ./workspace --confirm --confirm-models --json
+farsight-sentinel report RUN_ID --workspace ./workspace --instructions --json
+```
+
+The Gitleaks image must already be installed at its adopted pin. Review the exact selection/disclosure/budget
+before confirming. One exact model binding per run is supported. This Copilot profile seals at most two Sentinel
+model turns per review unit, with at most 60 seconds per invocation and 120 seconds for the whole unit. If more
+reads/turns are needed, inspection stays unfinished; no source extent is silently declared complete.
+
+Copilot's `max-ai-credits 30` is a **soft** vendor limit. It is not a hard spend, token or hidden-model-call ceiling.
+The output-token setting is a request, not a provider-enforced cap; original deadlines and combined response bytes
+are hard client bounds. The existing ledger reserves the full configured context before each invocation and records
+reported aggregate tokens with monetary consumption unobserved. Missing/contradictory usage or possible spend stays
+uncertain, with no retry/refund invented; reported usage beyond a reservation overdraws and stops further work.
+
+Supported native authentication stays inside the pinned Copilot process, using its already configured OS keychain.
+Sentinel copies no token, credential file or real user configuration, grants no `gh` fallback, and uses private
+HOME/config/cwd with no tools, MCP, hooks, plugins, custom instructions, updates or session reuse. The macOS policy
+allows the shared securityd broker: this trusts the pinned vendor's native authentication and **does not** enforce
+credential-service-specific confinement. Sentinel's exact prompt, ordered semantic messages and piped Copilot wire
+are retained before dispatch; only final visible text and reported identity/usage are accepted. Vendor hidden
+instructions/reasoning are unobserved, and public stages record **no additional skills selected**. Private accepted
+records can be read after source removal; known-secret/privacy failures withhold them. They are not safe to share.
+
 ## Foreground review and private instruction records
 
 Configured review stages use the same admitted plan, coordinator attempts and model budget ledger as ordinary

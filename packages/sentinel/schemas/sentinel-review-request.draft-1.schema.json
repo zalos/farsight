@@ -52,7 +52,10 @@
             },
             "encoding": {
               "type": "string",
-              "const": "sentinel-claude-chat/v1"
+              "enum": [
+                "sentinel-claude-chat/v1",
+                "sentinel-copilot-chat/v1"
+              ]
             },
             "system": {
               "type": "string",

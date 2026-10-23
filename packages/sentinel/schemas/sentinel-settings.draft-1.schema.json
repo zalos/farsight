@@ -241,7 +241,8 @@
           "enum": [
             "ollama",
             "openai-compatible",
-            "claude-cli"
+            "claude-cli",
+            "copilot-cli"
           ]
         },
         "endpoint": {
@@ -289,6 +290,31 @@
           ],
           "additionalProperties": false,
           "description": "Explicit owner adoption of the closed native profile; configuration alone is not runtime qualification."
+        },
+        "copilotProfile": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/Id"
+            },
+            "executableDigest": {
+              "$ref": "#/definitions/Digest"
+            },
+            "runtimeDigest": {
+              "$ref": "#/definitions/Digest"
+            },
+            "profileDigest": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "id",
+            "executableDigest",
+            "runtimeDigest",
+            "profileDigest"
+          ],
+          "additionalProperties": false,
+          "description": "Exact external Copilot code closure, not an authentication or inference attestation."
         },
         "budget": {
           "$ref": "#/definitions/Budget",
@@ -681,7 +707,8 @@
           "enum": [
             "ollama",
             "openai-compatible",
-            "claude-cli"
+            "claude-cli",
+            "copilot-cli"
           ]
         },
         "origin": {

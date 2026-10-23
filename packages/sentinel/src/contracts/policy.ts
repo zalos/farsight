@@ -70,13 +70,15 @@ export interface SentinelGrant {
 
 export interface ProviderSettings {
   id: Id;
-  kind: 'ollama' | 'openai-compatible' | 'claude-cli';
+  kind: 'ollama' | 'openai-compatible' | 'claude-cli' | 'copilot-cli';
   endpoint: EndpointOrigin;
   credential: KeychainRef | null;
   /** `local-only` keeps source on this machine; `hosted` sends permitted context off it. */
   disclosure: 'local-only' | 'hosted';
   /** Explicit owner adoption of the closed native profile; configuration alone is not runtime qualification. */
   nativeProfile?: { id: Id; executableDigest: Digest; helperDigest: Digest; profileDigest: Digest };
+  /** Exact external Copilot code closure, not an authentication or inference attestation. */
+  copilotProfile?: { id: Id; executableDigest: Digest; runtimeDigest: Digest; profileDigest: Digest };
   /** The most one admitted action may reserve. */
   budget: Budget;
   /**
@@ -179,7 +181,7 @@ export interface ProviderTerms {
 /** What a probe of one origin found for one model. The owner adopts it with the settings; it is never assumed. */
 export interface ModelCapability {
   schema: 'sentinel-model-capability/draft-1';
-  kind: 'ollama' | 'openai-compatible' | 'claude-cli';
+  kind: 'ollama' | 'openai-compatible' | 'claude-cli' | 'copilot-cli';
   origin: EndpointOrigin;
   model: ModelName;
   listed: true;
@@ -288,7 +290,7 @@ export interface EffectivePolicyEnvelope {
   /** @maxItems 64 */
   grants: { actions: SentinelAction[]; principals: Principal[]; confirm: 'always' | 'agent' | 'never' | 'default'; scoped: boolean }[];
   /** @maxItems 16 */
-  providers: { id: Id; kind: 'ollama' | 'openai-compatible' | 'claude-cli'; disclosure: 'local-only' | 'hosted'; credential: 'keychain' | 'none' }[];
+  providers: { id: Id; kind: 'ollama' | 'openai-compatible' | 'claude-cli' | 'copilot-cli'; disclosure: 'local-only' | 'hosted'; credential: 'keychain' | 'none' }[];
   /** @maxItems 4096 */
   refused: RefusedRequest[];
 }

@@ -11,7 +11,7 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 function isApiKind(kind: ProviderSettings['kind']): boolean {
   switch (kind) {
     case 'ollama': case 'openai-compatible': return true;
-    case 'claude-cli': return false;
+    case 'claude-cli': case 'copilot-cli': return false;
     default: { const unhandled: never = kind; return fail('sentinel.provider.invalidProfile', 'unsupported provider kind'); }
   }
 }

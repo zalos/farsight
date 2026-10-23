@@ -75,8 +75,8 @@ test('a structural call or runtime value cannot acquire native launch or keychai
 
 test('published settings schema keeps provider kinds and accounting bases as explicit closed literal sets', () => {
   const schema=JSON.parse(readFileSync(new URL('../schemas/sentinel-settings.draft-1.schema.json',import.meta.url),'utf8'));
-  assert.deepEqual(schema.definitions.ProviderSettings.properties.kind.enum,['ollama','openai-compatible','claude-cli']);
-  assert.deepEqual(schema.definitions.ModelCapability.properties.kind.enum,['ollama','openai-compatible','claude-cli']);
+  assert.deepEqual(schema.definitions.ProviderSettings.properties.kind.enum,['ollama','openai-compatible','claude-cli','copilot-cli']);
+  assert.deepEqual(schema.definitions.ModelCapability.properties.kind.enum,['ollama','openai-compatible','claude-cli','copilot-cli']);
   assert.deepEqual(schema.definitions.ModelPricing.properties.kind.enum,['rates','no-fee','subscription-quota']);
 });
 
