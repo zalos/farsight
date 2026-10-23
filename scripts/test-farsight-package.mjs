@@ -37,6 +37,7 @@ try {
   const packed = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'));
   assert.equal(packed.engines?.node, workspaceEngines, 'the tarball claims the workspace runtime floor');
   assert.equal(packed.dependencies?.['@modelcontextprotocol/sdk'], '^1.32.0', 'the installed CLI excludes SDK versions below the security floor');
+  assert.equal(packed.dependencies?.zod, '^3.25.0', 'the installed CLI meets the SDK required peer floor');
   const bundle = readFileSync(join(installed, 'dist', 'farsight.mjs'), 'utf8');
   assert.doesNotMatch(bundle, /["'](?:@farsight\/sentinel|farsight-sentinel)["'/]/, 'the CLI bundle names no Sentinel module');
   const modules = readdirSync(join(consumer.dir, 'node_modules'));

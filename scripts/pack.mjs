@@ -102,7 +102,7 @@ try {
           'oxc-parser': '^0.138.0',
           '@vscode/tree-sitter-wasm': '^0.3.1',
           '@modelcontextprotocol/sdk': '^1.32.0',
-          zod: '^3.24.0',
+          zod: '^3.25.0',
         },
         // the workspace's own runtime floor (node:sqlite history needs Node 24), not a looser claim
         engines: { node: workspacePkg.engines?.node ?? '>=24' },
