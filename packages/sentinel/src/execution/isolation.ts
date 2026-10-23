@@ -177,7 +177,8 @@ export class ContainerBackend {
       runner = clientRunner(docker, { PATH: SAFE_PATH, DOCKER_HOST: endpoint, DOCKER_CONFIG: config });
       clientConfigs.set(runner, Object.freeze({ path: config, identity: `${made.dev}:${made.ino}` }));
     }
-    // Package-internal fault injection around the real client (lost replies, delayed commits); never in production.
+    // Package-internal instrumentation: scratch leases associate the real client before any other wrapper.
+    // Test fault injection may wrap that associated runner for lost replies or delayed commits.
     if (options.wrapRunner) runner = options.wrapRunner(runner);
     const version = await runner.run(['version', '--format', '{{json .Server}}'], options.signal);
     if (!succeeded(version)) unavailable('docker server unreachable');

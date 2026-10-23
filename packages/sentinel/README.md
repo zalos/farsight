@@ -596,7 +596,9 @@ Public GUI configuration and policy assessment remain separate work.
 
 Canonical working-copy capture excludes only the exact held store, rather than every folder named `.farsight`.
 Workspace settings are ordinary privately retained capture inputs; capturing them never adopts them as trusted
-policy. An arbitrary hidden folder gets no exemption from capture. Trust state and the service runtime folder
+policy. Capture does not use `.gitignore` as an exclusion list: bounded local caches and other ignored files in
+`.farsight` can also become private evidence. An arbitrary hidden folder gets no exemption from capture.
+Trust state and the service runtime folder
 must remain outside the workspace. Original retained snapshots keep the boundaries recorded when they were made;
 new capture behavior does not reinterpret an earlier omission as empty source.
 

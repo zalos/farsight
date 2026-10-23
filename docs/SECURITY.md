@@ -32,15 +32,17 @@ a store at a time through an OS file lock on `owner.sqlite`, which is never dele
 else; `owner.json` only describes the holder. Records from an earlier owner's epoch are refused. Evidence objects
 are immutable and content-addressed; a publication is accepted only after their bytes are re-read and hashed, and
 the ledger keeps schema, privacy class and links per reference, so shared bytes cannot lower a reference's class.
-Nothing is deleted automatically; the prune plan is a dry run, and never lists the provenance (manifest, invocation, outputs, diagnostics) of a retained work or attempt record. The store holds no credential and no settings, and
-durability is claimed against process death, not power loss (ADR 19).
+Nothing is deleted automatically; the prune plan is a dry run, and never lists the provenance (manifest, invocation, outputs, diagnostics) of a retained work or attempt record. The store does not supply credentials or trusted settings;
+privately retained source can contain secrets, workspace settings and local caches. Capturing those bytes never
+adopts them as authority. Durability is claimed against process death, not power loss (ADR 19).
 
 A capture (ADR 46) leaves out only the store this process holds, at its exact canonical folder with the identity
 it was opened with; the store reached under another name, replaced, renamed or released refuses the capture, and no
 folder is left out by its name. A run's scratch is a lease inside that store. Release removes only a container
 client configuration folder the execution layer made for that lease, after every client it started exited; any
 other folder or file keeps the lease. Removal is bounded and checks the hold and the folders before every step;
-anything uncertain is kept. Path-based removal under an active
+anything uncertain is kept. Old retained leases survive service restart; the current service reports only leases
+retained during its own lifetime, and no old-epoch sweep is implemented. Path-based removal under an active
 same-account race is detection, not confinement. Owner trust state and the service's runtime folder are checked
 against the captured workspace before anything is made, and a selected location inside it is refused.
 
