@@ -12,7 +12,10 @@ const full = { validate: true, e2e: true, echo: true, sentinel: true, isolation:
 
 test('ordinary docs skip runtime checks; packaged docs still check their tarball', () => {
   assert.deepEqual(selectChecks(['README.md', 'docs/research/analysis-core-options-2026-10-17.md',
-    'docs/ARCHITECTURE.md', '.github/PULL_REQUEST_TEMPLATE.md', '.claude/skills/example/SKILL.md']), none);
+    'docs/ARCHITECTURE.md', '.github/PULL_REQUEST_TEMPLATE.md', '.claude/agents/review-example.md']), none);
+  // the two skills trees are checked against each other, so an edit to either runs the script tests
+  assert.deepEqual(selectChecks(['.claude/skills/example/SKILL.md']), { ...none, validate: true });
+  assert.deepEqual(selectChecks(['.agents/skills/example/references/x.md']), { ...none, validate: true });
   assert.deepEqual(selectChecks(['docs/ECHO.md', 'packages/echo/README.md']), { ...none, echo: true });
 });
 

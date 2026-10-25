@@ -71,7 +71,8 @@ union of the matching checks. Secrets and PR commit conventions always run, incl
 
 | changed paths | runtime checks |
 |---|---|
-| Root Markdown, Markdown under `docs/`, `.github/`, `.claude/`, `.agents/`, or `LICENSE` | none, except the packaged Echo docs below |
+| Root Markdown, Markdown under `docs/`, `.github/`, `.claude/` or `.agents/` (outside `skills/`), or `LICENSE` | none, except the packaged Echo docs below |
+| `.claude/skills/` or `.agents/skills/` (the two trees must be identical) | `validate` — `scripts/check-skills-mirror.mjs` through `pnpm test:scripts` |
 | `docs/ECHO.md`, `packages/echo/README.md`, Echo packaging scripts or example connection/settings | `echo-package` |
 | `packages/sentinel/README.md`, `scripts/pack-sentinel.mjs`, `scripts/test-sentinel-package.mjs` | `sentinel-package` |
 | `scripts/npm-acceptance.mjs` | `validate` (script tests) + `sentinel-package` (packed tarball acceptance) |
