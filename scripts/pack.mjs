@@ -34,7 +34,9 @@ const versionModule = join(root, 'packages', 'core', 'dist', 'version.js');
 // outside it (Sentinel, Echo) may be absent or unbuilt. Checked before build/ is touched.
 const missing = missingBuildOutputs(root, '@farsight/cli', [versionModule]);
 if (missing.length) {
-  console.error('pack: compiled packages are missing. Run `pnpm build && node scripts/pack.mjs` from the repository root.');
+  console.error(
+    'pack: compiled packages are missing. Run `pnpm build && node scripts/pack.mjs` from the repository root.',
+  );
   for (const path of missing) console.error('  missing: ' + (isAbsolute(path) ? relative(root, path) : path));
   process.exit(1);
 }
@@ -44,7 +46,8 @@ const git = gitIdentity(root);
 const commit = git.commit;
 // the build identity every consumer can read back: `farsight --version`, MCP graph_overview, /api/version, the HUD sync chip
 const buildIdentity = {
-  version: workspaceVersion, built: new Date().toISOString(),
+  version: workspaceVersion,
+  built: new Date().toISOString(),
   ...(commit ? { commit } : {}),
   ...(git.codeCommit ? { codeCommit: git.codeCommit } : {}),
   ...(git.codeCommit && typeof git.dirty === 'boolean' ? { dirty: git.dirty } : {}),
@@ -91,7 +94,8 @@ try {
       {
         name: 'farsight-cli',
         version: workspaceVersion,
-        description: 'Parse codebases into a semantic graph; explore it in a game-inspired HUD or feed it to LLM agents via MCP.',
+        description:
+          'Parse codebases into a semantic graph; explore it in a game-inspired HUD or feed it to LLM agents via MCP.',
         license: 'MIT',
         // npm's provenance check requires the package to name the repository it was built from
         ...(workspacePkg.repository ? { repository: workspacePkg.repository } : {}),
@@ -118,8 +122,12 @@ try {
   }
 } catch (error) {
   rmSync(stage, { recursive: true, force: true });
-  const detail = error?.errors?.length ? error.errors.map((e) => `${e.location?.file ?? ''} ${e.text}`.trim()).join('\n  ') : error?.message;
-  console.error(`pack: the bundle or the tarball failed; prior artifacts in build/ are unchanged. Run \`pnpm build\` and retry.\n  ${detail}`);
+  const detail = error?.errors?.length
+    ? error.errors.map((e) => `${e.location?.file ?? ''} ${e.text}`.trim()).join('\n  ')
+    : error?.message;
+  console.error(
+    `pack: the bundle or the tarball failed; prior artifacts in build/ are unchanged. Run \`pnpm build\` and retry.\n  ${detail}`,
+  );
   process.exit(1);
 }
 if (check) {
@@ -133,5 +141,13 @@ for (const name of readdirSync(buildDir)) if (/^farsight-cli-.+\.tgz$/.test(name
 renameSync(out, join(buildDir, 'farsight-cli'));
 renameSync(join(stage, tarball), join(buildDir, tarball));
 rmSync(stage, { recursive: true, force: true });
-console.log('\npackaged: build/farsight-cli-' + workspaceVersion + '.tgz  (built ' + buildIdentity.built + (commit ? ', commit ' + commit : '') + (buildIdentity.dirty ? ', with uncommitted changes' : '') + ')');
+console.log(
+  '\npackaged: build/farsight-cli-' +
+    workspaceVersion +
+    '.tgz  (built ' +
+    buildIdentity.built +
+    (commit ? ', commit ' + commit : '') +
+    (buildIdentity.dirty ? ', with uncommitted changes' : '') +
+    ')',
+);
 console.log('install:  npm install -g ./build/farsight-cli-' + workspaceVersion + '.tgz');

@@ -5,14 +5,28 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseArgs, preview, runHasFailures } from '../sentinel-feasibility-frameworks.mjs';
-import { BASE_IMAGES, OWNER_LABEL, RUN_UID, loadCorpus, materializeCase, parseProbeOutput, evaluateCaseOutcome, CORPUS } from '../sentinel-feasibility/frameworks/runtime.mjs';
+import {
+  BASE_IMAGES,
+  OWNER_LABEL,
+  RUN_UID,
+  loadCorpus,
+  materializeCase,
+  parseProbeOutput,
+  evaluateCaseOutcome,
+  CORPUS,
+} from '../sentinel-feasibility/frameworks/runtime.mjs';
 import * as expressFramework from '../sentinel-feasibility/frameworks/express.mjs';
 import * as nestFramework from '../sentinel-feasibility/frameworks/nest.mjs';
 import * as nextFramework from '../sentinel-feasibility/frameworks/next.mjs';
 import * as springFramework from '../sentinel-feasibility/frameworks/spring.mjs';
 
 const script = resolve('scripts/sentinel-feasibility-frameworks.mjs');
-const FRAMEWORKS = { 'express-order': expressFramework, 'nest-validation': nestFramework, 'next-matcher': nextFramework, 'spring-chains': springFramework };
+const FRAMEWORKS = {
+  'express-order': expressFramework,
+  'nest-validation': nestFramework,
+  'next-matcher': nextFramework,
+  'spring-chains': springFramework,
+};
 
 test('preview launches no external program and never runs docker', () => {
   const output = execFileSync(process.execPath, [script], { encoding: 'utf8', env: { PATH: '/does-not-exist' } });
@@ -74,43 +88,57 @@ test('the corpus index loads, and every case file hash matches its fixture bytes
   assert.equal(index.schemaVersion, 'sentinel-framework-feasibility-corpus-v1');
   assert.match(indexSha256, /^[a-f0-9]{64}$/);
   assert.equal(index.cases.length, 4);
-  for (const caseId of Object.keys(FRAMEWORKS)) assert.ok(index.cases.some(c => c.id === caseId), `corpus is missing case ${caseId}`);
+  for (const caseId of Object.keys(FRAMEWORKS))
+    assert.ok(
+      index.cases.some((c) => c.id === caseId),
+      `corpus is missing case ${caseId}`,
+    );
 });
 
 test('materializeCase refuses a tampered fixture before writing anything usable', async () => {
   const { index } = await loadCorpus(CORPUS);
-  const caseEntry = index.cases.find(c => c.id === 'express-order');
+  const caseEntry = index.cases.find((c) => c.id === 'express-order');
   const tampered = { ...caseEntry, files: [{ ...caseEntry.files[0], sha256: '0'.repeat(64) }] };
   const dir = await mkdtemp(join(tmpdir(), 'sentinel-fw-materialize-'));
-  try { await assert.rejects(materializeCase(tampered, dir, CORPUS), /hash mismatch/); }
-  finally { await rm(dir, { recursive: true, force: true }); }
+  try {
+    await assert.rejects(materializeCase(tampered, dir, CORPUS), /hash mismatch/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('materializeCase copies every declared file to its declared relative path', async () => {
   const { index } = await loadCorpus(CORPUS);
-  const caseEntry = index.cases.find(c => c.id === 'next-matcher');
+  const caseEntry = index.cases.find((c) => c.id === 'next-matcher');
   const dir = await mkdtemp(join(tmpdir(), 'sentinel-fw-materialize-'));
   try {
     const materialized = await materializeCase(caseEntry, dir, CORPUS);
     assert.equal(materialized.length, caseEntry.files.length);
     for (const file of caseEntry.files) assert.ok((await readFile(join(dir, file.path))).length > 0);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('parseProbeOutput requires exactly one well-formed marker line with a status field', () => {
   const noMarker = parseProbeOutput({ stdout: 'listening on 3000\n' });
-  assert.equal(noMarker.ok, false); assert.equal(noMarker.reason, 'no-result-marker');
+  assert.equal(noMarker.ok, false);
+  assert.equal(noMarker.reason, 'no-result-marker');
 
   const badJson = parseProbeOutput({ stdout: 'SENTINEL_FIXTURE_PROBE_RESULT={not json}\n' });
-  assert.equal(badJson.ok, false); assert.equal(badJson.reason, 'invalid-result-json');
+  assert.equal(badJson.ok, false);
+  assert.equal(badJson.reason, 'invalid-result-json');
 
   const missingStatus = parseProbeOutput({ stdout: 'SENTINEL_FIXTURE_PROBE_RESULT={"observations":{}}\n' });
   assert.equal(missingStatus.ok, false);
 
   const healthTimeout = parseProbeOutput({ stdout: 'SENTINEL_FIXTURE_PROBE_RESULT={"status":"health-timeout"}\n' });
-  assert.equal(healthTimeout.ok, true); assert.equal(healthTimeout.payload.status, 'health-timeout');
+  assert.equal(healthTimeout.ok, true);
+  assert.equal(healthTimeout.payload.status, 'health-timeout');
 
-  const good = parseProbeOutput({ stdout: 'booting\nSENTINEL_FIXTURE_PROBE_RESULT={"status":"ok","observations":{"a":{"withoutToken":401}}}\n' });
+  const good = parseProbeOutput({
+    stdout: 'booting\nSENTINEL_FIXTURE_PROBE_RESULT={"status":"ok","observations":{"a":{"withoutToken":401}}}\n',
+  });
   assert.equal(good.ok, true);
   assert.equal(good.payload.status, 'ok');
   assert.deepEqual(good.payload.observations, { a: { withoutToken: 401 } });
@@ -153,49 +181,53 @@ test('evaluateCaseOutcome fails on any missing observation, and never passes an 
 
 test('express assess agrees when runtime matches the static expectation, and flags a real mismatch', async () => {
   const { index } = await loadCorpus(CORPUS);
-  const caseEntry = index.cases.find(c => c.id === 'express-order');
+  const caseEntry = index.cases.find((c) => c.id === 'express-order');
   const matching = {
     'auth-before-route': { withoutToken: 401, withToken: 200 },
     'auth-after-route': { withoutToken: 200, withToken: 200 },
     'unknown-custom-middleware': { anyRequest: 403 },
   };
   const agreeing = expressFramework.assess(caseEntry, matching);
-  assert.ok(agreeing.every(a => a.matchesExpected === true));
+  assert.ok(agreeing.every((a) => a.matchesExpected === true));
   assert.equal(evaluateCaseOutcome(agreeing).state, 'measured');
 
   const brokenLateGate = { ...matching, 'auth-after-route': { withoutToken: 401, withToken: 200 } };
   const mismatched = expressFramework.assess(caseEntry, brokenLateGate);
-  assert.equal(mismatched.find(a => a.scenario === 'auth-after-route').matchesExpected, false);
+  assert.equal(mismatched.find((a) => a.scenario === 'auth-after-route').matchesExpected, false);
   assert.equal(evaluateCaseOutcome(mismatched).state, 'measured-with-mismatch');
 
   const missing = expressFramework.assess(caseEntry, null);
-  assert.ok(missing.every(a => a.observed === null && a.matchesExpected === null));
+  assert.ok(missing.every((a) => a.observed === null && a.matchesExpected === null));
   assert.equal(evaluateCaseOutcome(missing).state, 'failed');
 });
 
 test('nest assess distinguishes the piped route from the unpiped route', async () => {
   const { index } = await loadCorpus(CORPUS);
-  const caseEntry = index.cases.find(c => c.id === 'nest-validation');
+  const caseEntry = index.cases.find((c) => c.id === 'nest-validation');
   const observed = { 'validator-with-pipe': { invalidBody: 400 }, 'validator-without-pipe': { invalidBody: 201 } };
   const result = nestFramework.assess(caseEntry, observed);
-  assert.equal(result.find(a => a.scenario === 'validator-with-pipe').matchesExpected, true);
-  assert.equal(result.find(a => a.scenario === 'validator-without-pipe').matchesExpected, true);
+  assert.equal(result.find((a) => a.scenario === 'validator-with-pipe').matchesExpected, true);
+  assert.equal(result.find((a) => a.scenario === 'validator-without-pipe').matchesExpected, true);
   assert.equal(evaluateCaseOutcome(result).state, 'measured');
 });
 
 test('next assess treats matcher inclusion as necessary but not sufficient', async () => {
   const { index } = await loadCorpus(CORPUS);
-  const caseEntry = index.cases.find(c => c.id === 'next-matcher');
-  const observed = { 'matched-and-blocked': { status: 403 }, 'matched-but-exempted': { status: 200 }, 'excluded-by-matcher': { status: 200 } };
+  const caseEntry = index.cases.find((c) => c.id === 'next-matcher');
+  const observed = {
+    'matched-and-blocked': { status: 403 },
+    'matched-but-exempted': { status: 200 },
+    'excluded-by-matcher': { status: 200 },
+  };
   const result = nextFramework.assess(caseEntry, observed);
-  assert.ok(result.every(a => a.matchesExpected === true));
+  assert.ok(result.every((a) => a.matchesExpected === true));
   assert.equal(evaluateCaseOutcome(result).state, 'measured');
 });
 
 test('spring assess checks the unmatched-chain scenario against its own frozen expectation, not an exploratory null', async () => {
   const { index } = await loadCorpus(CORPUS);
-  const caseEntry = index.cases.find(c => c.id === 'spring-chains');
-  const unmatchedScenario = caseEntry.scenarios.find(s => s.id === 'unmatched-no-chain-applies');
+  const caseEntry = index.cases.find((c) => c.id === 'spring-chains');
+  const unmatchedScenario = caseEntry.scenarios.find((s) => s.id === 'unmatched-no-chain-applies');
   assert.equal(unmatchedScenario.staticLabel, 'unknown-enforcement');
   assert.equal(unmatchedScenario.expectedRuntime.withoutCredentials, 200);
 
@@ -205,9 +237,9 @@ test('spring assess checks the unmatched-chain scenario against its own frozen e
     'unmatched-no-chain-applies': { withoutCredentials: 200 },
   };
   const result = springFramework.assess(caseEntry, observed);
-  assert.equal(result.find(a => a.scenario === 'overlapping-open-chain').matchesExpected, true);
-  assert.equal(result.find(a => a.scenario === 'later-authenticated-chain').matchesExpected, true);
-  const unmatched = result.find(a => a.scenario === 'unmatched-no-chain-applies');
+  assert.equal(result.find((a) => a.scenario === 'overlapping-open-chain').matchesExpected, true);
+  assert.equal(result.find((a) => a.scenario === 'later-authenticated-chain').matchesExpected, true);
+  const unmatched = result.find((a) => a.scenario === 'unmatched-no-chain-applies');
   assert.equal(unmatched.matchesExpected, true);
   assert.equal(unmatched.observed.withoutCredentials, 200);
   assert.equal(evaluateCaseOutcome(result).state, 'measured');
@@ -216,7 +248,7 @@ test('spring assess checks the unmatched-chain scenario against its own frozen e
   // the scenario as exploratory after the fact.
   const unexpectedlyBlocked = { ...observed, 'unmatched-no-chain-applies': { withoutCredentials: 401 } };
   const mismatched = springFramework.assess(caseEntry, unexpectedlyBlocked);
-  assert.equal(mismatched.find(a => a.scenario === 'unmatched-no-chain-applies').matchesExpected, false);
+  assert.equal(mismatched.find((a) => a.scenario === 'unmatched-no-chain-applies').matchesExpected, false);
   assert.equal(evaluateCaseOutcome(mismatched).state, 'measured-with-mismatch');
 
   const droppedObservation = { ...observed, 'unmatched-no-chain-applies': undefined };
@@ -228,9 +260,16 @@ test('every framework module emits a Dockerfile that drops to the unprivileged r
   for (const [id, framework] of Object.entries(FRAMEWORKS)) {
     const text = framework.dockerfile();
     assert.match(text, /^FROM /, `${id} Dockerfile must start with FROM`);
-    assert.ok(text.includes(BASE_IMAGES.node) || text.includes(BASE_IMAGES.maven), `${id} Dockerfile must use a pinned base image`);
+    assert.ok(
+      text.includes(BASE_IMAGES.node) || text.includes(BASE_IMAGES.maven),
+      `${id} Dockerfile must use a pinned base image`,
+    );
     assert.match(text, /ENTRYPOINT \["\/app\/probe\.sh"\]/, `${id} Dockerfile must run the generated probe script`);
-    assert.match(text, /chown -R 65534:65534 \/app/, `${id} Dockerfile must hand ownership to the unprivileged run UID before it starts`);
+    assert.match(
+      text,
+      /chown -R 65534:65534 \/app/,
+      `${id} Dockerfile must hand ownership to the unprivileged run UID before it starts`,
+    );
     assert.ok(!/curl[^\n]*\|\s*sh/.test(text), `${id} Dockerfile must not pipe a remote script into a shell`);
   }
 });

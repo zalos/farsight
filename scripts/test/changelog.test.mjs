@@ -13,7 +13,10 @@ const URL = 'https://github.com/example/repo';
 
 function repo() {
   const dir = mkdtempSync(join(tmpdir(), 'farsight-changelog-'));
-  const g = (...args) => execFileSync('git', args, { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+  const g = (...args) =>
+    execFileSync('git', args, { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] })
+      .toString()
+      .trim();
   g('init', '-q', '-b', 'main');
   g('config', 'user.name', 'Test');
   g('config', 'user.email', 'test@example.invalid');
@@ -32,11 +35,18 @@ function repo() {
 
 test('parses type, scope, bang and the BREAKING CHANGE footer', () => {
   assert.deepEqual(
-    (({ group, scope, subject, breaking }) => ({ group, scope, subject, breaking }))(parseCommit({ sha: 'a', short: 'a', subject: 'feat(cli): add release' })),
+    (({ group, scope, subject, breaking }) => ({ group, scope, subject, breaking }))(
+      parseCommit({ sha: 'a', short: 'a', subject: 'feat(cli): add release' }),
+    ),
     { group: 'feat', scope: 'cli', subject: 'add release', breaking: false },
   );
   assert.equal(parseCommit({ sha: 'a', short: 'a', subject: 'fix!: drop flag' }).group, 'breaking');
-  const footer = parseCommit({ sha: 'a', short: 'a', subject: 'refactor(core): rename', body: 'Why.\n\nBREAKING CHANGE: graph.json v2 only' });
+  const footer = parseCommit({
+    sha: 'a',
+    short: 'a',
+    subject: 'refactor(core): rename',
+    body: 'Why.\n\nBREAKING CHANGE: graph.json v2 only',
+  });
   assert.equal(footer.group, 'breaking');
   assert.equal(footer.breakingNote, 'graph.json v2 only');
   assert.equal(parseCommit({ sha: 'a', short: 'a', subject: 'ci: cache pnpm' }).group, 'chore');
@@ -71,12 +81,20 @@ test('groups a whole history, skips merges, links each commit', () => {
     const order = ['### Breaking', '### Features', '### Docs', '### Other'].map((h) => s.indexOf(h));
     assert.ok(order.every((i) => i > 0) && order.every((i, k) => k === 0 || i > order[k - 1]), s);
     assert.doesNotMatch(s, /### Fixes/, 'a breaking fix is listed once, under Breaking');
-    assert.match(s, /- \*\*core:\*\* stop guessing \(\[[0-9a-f]{7,}\]\(https:\/\/github\.com\/example\/repo\/commit\/[0-9a-f]{40}\)\)/);
+    assert.match(
+      s,
+      /- \*\*core:\*\* stop guessing \(\[[0-9a-f]{7,}\]\(https:\/\/github\.com\/example\/repo\/commit\/[0-9a-f]{40}\)\)/,
+    );
     assert.match(s, /- \*\*parsers:\*\* cover it — nothing really/);
     assert.doesNotMatch(s, /Merge branch/);
-    assert.match(out.notes, /### Install\n\n```sh\nnpm install -g https:\/\/github\.com\/example\/repo\/releases\/download\/v0\.1\.0\/farsight-cli-0\.1\.0\.tgz\nfarsight --version/);
+    assert.match(
+      out.notes,
+      /### Install\n\n```sh\nnpm install -g https:\/\/github\.com\/example\/repo\/releases\/download\/v0\.1\.0\/farsight-cli-0\.1\.0\.tgz\nfarsight --version/,
+    );
     assert.match(out.notes, /docs\/GETTING-STARTED\.md/);
-  } finally { r.done(); }
+  } finally {
+    r.done();
+  }
 });
 
 test('starts at the last tag, and drops release commits', () => {
@@ -90,8 +108,14 @@ test('starts at the last tag, and drops release commits', () => {
     assert.equal(resolveSince(r.dir), 'v0.1.0');
     const subjects = readCommits(r.dir, 'v0.1.0').map((c) => c.subject);
     assert.deepEqual(subjects, ['two', 'bump']);
-    assert.deepEqual(changelog(r.dir, { since: r.g('rev-list', '--max-parents=0', 'HEAD') }).commits.map((c) => c.subject), ['two', 'bump'], 'an explicit --since wins, and the release commit is still dropped');
-  } finally { r.done(); }
+    assert.deepEqual(
+      changelog(r.dir, { since: r.g('rev-list', '--max-parents=0', 'HEAD') }).commits.map((c) => c.subject),
+      ['two', 'bump'],
+      'an explicit --since wins, and the release commit is still dropped',
+    );
+  } finally {
+    r.done();
+  }
 });
 
 test('without a tag, starts after the commit that seeded the newest released section', () => {
@@ -104,15 +128,21 @@ test('without a tag, starts after the commit that seeded the newest released sec
     const seed = r.g('rev-parse', 'HEAD');
     r.commit('feat: after the seed');
     assert.equal(resolveSince(r.dir), seed);
-    assert.deepEqual(changelog(r.dir, {}).commits.map((c) => c.subject), ['after the seed']);
-  } finally { r.done(); }
+    assert.deepEqual(
+      changelog(r.dir, {}).commits.map((c) => c.subject),
+      ['after the seed'],
+    );
+  } finally {
+    r.done();
+  }
 });
 
 test('--write keeps an [Unreleased] head above the new section; --notes writes the body; a repeat is refused', () => {
   const r = repo();
   try {
     r.commit('feat(cli): first');
-    const run = (...args) => execFileSync(process.execPath, [SCRIPT, ...args], { cwd: r.dir, stdio: ['ignore', 'pipe', 'pipe'] }).toString();
+    const run = (...args) =>
+      execFileSync(process.execPath, [SCRIPT, ...args], { cwd: r.dir, stdio: ['ignore', 'pipe', 'pipe'] }).toString();
     run('--version', '0.1.0', '--write', '--repo-url', URL, '--date', '2026-01-01');
     r.g('add', 'CHANGELOG.md');
     r.g('commit', '-q', '-m', 'chore(release): v0.1.0');
@@ -123,7 +153,10 @@ test('--write keeps an [Unreleased] head above the new section; --notes writes t
     const text = readFileSync(join(r.dir, 'CHANGELOG.md'), 'utf8');
     assert.ok(text.startsWith('# Changelog'));
     const at = (s) => text.indexOf(s);
-    assert.ok(at(UNRELEASED_HEAD) > 0 && at(UNRELEASED_HEAD) < at('## [0.1.1]') && at('## [0.1.1]') < at('## [0.1.0]'), text);
+    assert.ok(
+      at(UNRELEASED_HEAD) > 0 && at(UNRELEASED_HEAD) < at('## [0.1.1]') && at('## [0.1.1]') < at('## [0.1.0]'),
+      text,
+    );
     assert.equal(text.split(UNRELEASED_HEAD).length, 2, 'one Unreleased head');
     assert.match(text.slice(at('## [0.1.1]'), at('## [0.1.0]')), /second/);
     assert.doesNotMatch(text.slice(at('## [0.1.1]'), at('## [0.1.0]')), /first/);
@@ -132,5 +165,7 @@ test('--write keeps an [Unreleased] head above the new section; --notes writes t
     const dry = run('--dry-run', '--version', '0.1.2', '--repo-url', URL);
     assert.match(dry, /## \[0\.1\.2\]/);
     assert.match(dry, /### Install/);
-  } finally { r.done(); }
+  } finally {
+    r.done();
+  }
 });

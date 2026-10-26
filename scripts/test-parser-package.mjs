@@ -10,10 +10,19 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const version = JSON.parse(readFileSync(join(root, 'packages/graph/package.json'), 'utf8')).version;
 const scratch = mkdtempSync(join(tmpdir(), 'farsight-parser-consumer-'));
-const run = (cmd, args) => execFileSync(cmd, args, { cwd: scratch, stdio: 'pipe', encoding: 'utf8', timeout: 180_000, env: { ...process.env, npm_config_cache: join(scratch, 'npm-cache') } });
+const run = (cmd, args) =>
+  execFileSync(cmd, args, {
+    cwd: scratch,
+    stdio: 'pipe',
+    encoding: 'utf8',
+    timeout: 180_000,
+    env: { ...process.env, npm_config_cache: join(scratch, 'npm-cache') },
+  });
 try {
   writeFileSync(join(scratch, 'package.json'), '{"private":true,"type":"module"}\n');
-  const artifacts = ['graph', 'code-parser'].map(name => join(root, 'build/parser', `farsight-${name}-${version}.tgz`));
+  const artifacts = ['graph', 'code-parser'].map((name) =>
+    join(root, 'build/parser', `farsight-${name}-${version}.tgz`),
+  );
   run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', ...artifacts]);
   assert.deepEqual(readdirSync(join(scratch, 'node_modules/@farsight')).sort(), ['code-parser', 'graph']);
   for (const name of ['graph', 'code-parser']) {
@@ -23,14 +32,24 @@ try {
     assert.equal(pkg.version, version);
     assert.equal(pkg.license, 'MIT');
     assert.ok(!JSON.stringify(pkg.dependencies).includes('workspace:'));
-    assert.ok(!Object.keys(pkg.dependencies ?? {}).some(n => /^@farsight\/(core|parsers|server|cli|mcp|work)$/.test(n)));
+    assert.ok(
+      !Object.keys(pkg.dependencies ?? {}).some((n) => /^@farsight\/(core|parsers|server|cli|mcp|work)$/.test(n)),
+    );
     assert.ok(readFileSync(join(installed, 'LICENSE'), 'utf8').includes('MIT License'));
     assert.ok(readFileSync(join(installed, 'README.md'), 'utf8').length);
   }
   mkdirSync(join(scratch, 'fixture'));
-  writeFileSync(join(scratch, 'fixture/main.ts'), 'export function save() {} export function submit() { save(); save(); }');
-  writeFileSync(join(scratch, 'fixture/Invoice.java'), 'class Invoice { void save() {} void submit() { save(); save(); } }');
-  writeFileSync(join(scratch, 'consume.mjs'), `
+  writeFileSync(
+    join(scratch, 'fixture/main.ts'),
+    'export function save() {} export function submit() { save(); save(); }',
+  );
+  writeFileSync(
+    join(scratch, 'fixture/Invoice.java'),
+    'class Invoice { void save() {} void submit() { save(); save(); } }',
+  );
+  writeFileSync(
+    join(scratch, 'consume.mjs'),
+    `
     import assert from 'node:assert/strict';
     import { writeFileSync } from 'node:fs';
     import { createParser } from '@farsight/code-parser';
@@ -45,9 +64,12 @@ try {
     assert.equal(validateGraph(graphDocument(result.graph)).valid, true);
     writeFileSync('saved-graph.json', serializeGraph(result.graph));
     writeFileSync('analysis.json', JSON.stringify(result));
-  `);
+  `,
+  );
   run(process.execPath, ['consume.mjs']);
-  writeFileSync(join(scratch, 'query.mjs'), `
+  writeFileSync(
+    join(scratch, 'query.mjs'),
+    `
     import assert from 'node:assert/strict';
     import { readFileSync } from 'node:fs';
     import { deserializeGraph, indexGraph, reachable } from '@farsight/graph';
@@ -55,10 +77,13 @@ try {
     const entry = graph.nodes.find(n => n.name === 'submit');
     assert.equal(reachable(indexGraph(graph), [entry.id], { kinds: ['calls'] }).length, 2);
     assert.equal(graph.edges.filter(e => e.kind === 'calls').flatMap(e => e.occurrences).length, 4);
-  `);
+  `,
+  );
   run(process.execPath, ['query.mjs']);
   // Resolve types from the installed tarball, using only the compiler binary from this checkout.
-  writeFileSync(join(scratch, 'consumer.mts'), `
+  writeFileSync(
+    join(scratch, 'consumer.mts'),
+    `
     import { createParser, type AnalysisArtifact } from '@farsight/code-parser';
     import { tsJsAdapter } from '@farsight/code-parser/adapters/tsjs';
     import { javaAdapter } from '@farsight/code-parser/adapters/java';
@@ -71,7 +96,23 @@ try {
     const occurrences: EdgeOccurrence[] | undefined = graph.edges[0]?.occurrences;
     const node: GraphNode | undefined = graph.nodes[0];
     graphDocument(graph); void occurrences; void node; void support; void semantics;
-  `);
-  run(process.execPath, [join(root, 'node_modules/typescript/bin/tsc'), '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'consumer.mts']);
-  console.log(`Parser tarballs verified outside workspace on ${process.platform}/${process.arch}: native Oxc, Java WASM, public types, serialization and independent traversal.`);
-} finally { rmSync(scratch, { recursive: true, force: true }); }
+  `,
+  );
+  run(process.execPath, [
+    join(root, 'node_modules/typescript/bin/tsc'),
+    '--noEmit',
+    '--strict',
+    '--target',
+    'ES2022',
+    '--module',
+    'NodeNext',
+    '--moduleResolution',
+    'NodeNext',
+    'consumer.mts',
+  ]);
+  console.log(
+    `Parser tarballs verified outside workspace on ${process.platform}/${process.arch}: native Oxc, Java WASM, public types, serialization and independent traversal.`,
+  );
+} finally {
+  rmSync(scratch, { recursive: true, force: true });
+}

@@ -49,8 +49,15 @@ const CHANGELOG_PREAMBLE = [
 const UNRELEASED_BODY = 'Changes on `main` since the last release: `node scripts/changelog.mjs --dry-run` lists them.';
 
 const plural = (n) => `${n} commit${n === 1 ? '' : 's'}`;
-const git = (cwd, args) => execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 }).toString();
-const tryGit = (cwd, args) => { try { return git(cwd, args).trim(); } catch { return ''; } };
+const git = (cwd, args) =>
+  execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 }).toString();
+const tryGit = (cwd, args) => {
+  try {
+    return git(cwd, args).trim();
+  } catch {
+    return '';
+  }
+};
 
 /** Parse one commit; `type` is the group key it lands under. */
 export function parseCommit({ sha, short, subject, body = '', parents = [] }) {
@@ -61,12 +68,18 @@ export function parseCommit({ sha, short, subject, body = '', parents = [] }) {
   let type = 'other';
   if (m) {
     const t = m.groups.type.toLowerCase();
-    type = t === 'feat' || t === 'fix' || t === 'perf' || t === 'docs' || t === 'test' ? t
-      : t === 'tests' ? 'test'
-      : CHORE_TYPES.has(t) ? 'chore' : 'other';
+    type =
+      t === 'feat' || t === 'fix' || t === 'perf' || t === 'docs' || t === 'test'
+        ? t
+        : t === 'tests'
+          ? 'test'
+          : CHORE_TYPES.has(t)
+            ? 'chore'
+            : 'other';
   }
   return {
-    sha, short,
+    sha,
+    short,
     group: breaking ? 'breaking' : type,
     type,
     scope: m?.groups.scope ?? null,
@@ -84,10 +97,15 @@ export function readCommits(cwd, since) {
   const raw = tryGit(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'])
     ? git(cwd, ['log', '--reverse', '--format=%H%x1f%h%x1f%P%x1f%s%x1f%b%x1e', ...range])
     : '';
-  return raw.split('\x1e').map((r) => r.replace(/^\n/, '')).filter(Boolean).map((r) => {
-    const [sha, short, parents, subject, body] = r.split('\x1f');
-    return parseCommit({ sha, short, subject, body, parents: parents.split(' ').filter(Boolean) });
-  }).filter((c) => !c.merge && !(c.type === 'chore' && c.scope === 'release' && RELEASE_SUBJECT.test(c.subject)));
+  return raw
+    .split('\x1e')
+    .map((r) => r.replace(/^\n/, ''))
+    .filter(Boolean)
+    .map((r) => {
+      const [sha, short, parents, subject, body] = r.split('\x1f');
+      return parseCommit({ sha, short, subject, body, parents: parents.split(' ').filter(Boolean) });
+    })
+    .filter((c) => !c.merge && !(c.type === 'chore' && c.scope === 'release' && RELEASE_SUBJECT.test(c.subject)));
 }
 
 /** Where the next release starts: --since, the newest reachable v* tag, the commit that seeded the newest released section, or null. */
@@ -100,26 +118,33 @@ export function resolveSince(cwd, explicit) {
   const released = /^## \[(\d+\.\d+\.\d+[^\]]*)\]/m.exec(readFileSync(file, 'utf8'));
   if (!released) return null;
   // the oldest commit whose diff added that heading: everything before it is in the seeded section
-  const adds = tryGit(cwd, ['log', '--format=%H', '-S', `## [${released[1]}]`, '--', 'CHANGELOG.md']).split('\n').filter(Boolean);
+  const adds = tryGit(cwd, ['log', '--format=%H', '-S', `## [${released[1]}]`, '--', 'CHANGELOG.md'])
+    .split('\n')
+    .filter(Boolean);
   return adds.at(-1) ?? null;
 }
 
 /** https://github.com/owner/repo, from --repo-url, the Actions env, the origin remote, or package.json. */
 export function resolveRepoUrl(cwd, explicit) {
-  const norm = (u) => u?.trim()
-    .replace(/^git\+/, '')
-    .replace(/^git@([^:]+):/, 'https://$1/')
-    .replace(/^ssh:\/\/git@/, 'https://')
-    .replace(/\.git$/, '')
-    .replace(/\/$/, '') || null;
+  const norm = (u) =>
+    u
+      ?.trim()
+      .replace(/^git\+/, '')
+      .replace(/^git@([^:]+):/, 'https://$1/')
+      .replace(/^ssh:\/\/git@/, 'https://')
+      .replace(/\.git$/, '')
+      .replace(/\/$/, '') || null;
   if (explicit) return norm(explicit);
-  if (process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY) return `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`;
+  if (process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY)
+    return `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`;
   const origin = tryGit(cwd, ['remote', 'get-url', 'origin']);
   if (origin) return norm(origin);
   try {
     const repo = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')).repository;
     return norm(typeof repo === 'string' ? repo : repo?.url);
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function line(c, repoUrl) {
@@ -159,12 +184,14 @@ export function sentinelTarballUrl(repoUrl, tag, sentinelVersion) {
 export function renderNotes({ version, commits, repoUrl, sentinelVersion }) {
   const guide = repoUrl ? `${repoUrl}/blob/v${version}/docs/GETTING-STARTED.md` : 'docs/GETTING-STARTED.md';
   // farsight-sentinel is optional and versioned on its own; its line is derived from its own version, never Farsight's
-  const sentinel = sentinelVersion ? [
-    '',
-    `# optional, installed separately: farsight-sentinel ${sentinelVersion}`,
-    `npm install -g ${sentinelTarballUrl(repoUrl, `v${version}`, sentinelVersion)}`,
-    'farsight-sentinel --version',
-  ] : [];
+  const sentinel = sentinelVersion
+    ? [
+        '',
+        `# optional, installed separately: farsight-sentinel ${sentinelVersion}`,
+        `npm install -g ${sentinelTarballUrl(repoUrl, `v${version}`, sentinelVersion)}`,
+        'farsight-sentinel --version',
+      ]
+    : [];
   return [
     renderGroups(commits, repoUrl).trimEnd(),
     '',
@@ -189,7 +216,8 @@ export function prependSection(existing, section, version) {
   }
   const head = text.indexOf(UNRELEASED_HEAD);
   const firstRelease = text.search(/^## \[(?!Unreleased\])/m);
-  const before = head >= 0 ? text.slice(0, head) : (firstRelease >= 0 ? text.slice(0, firstRelease) : `${text.trimEnd()}\n\n`);
+  const before =
+    head >= 0 ? text.slice(0, head) : firstRelease >= 0 ? text.slice(0, firstRelease) : `${text.trimEnd()}\n\n`;
   const after = firstRelease >= 0 ? text.slice(firstRelease) : '';
   return `${before}${UNRELEASED_HEAD}\n\n${UNRELEASED_BODY}\n\n${section.trimEnd()}\n${after ? `\n${after}` : ''}`;
 }
@@ -199,7 +227,9 @@ export function sinceLabel(since) {
   return !since ? 'the first commit' : /^[0-9a-f]{40}$/.test(since) ? since.slice(0, 7) : since;
 }
 
-export function today() { return new Date().toISOString().slice(0, 10); }
+export function today() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 /** Everything the CLI prints or writes, for one release. */
 export function changelog(cwd, { version, since, repoUrl, date, sentinelVersion } = {}) {
@@ -208,7 +238,10 @@ export function changelog(cwd, { version, since, repoUrl, date, sentinelVersion 
   const url = resolveRepoUrl(cwd, repoUrl);
   const commits = readCommits(cwd, from);
   return {
-    version: v, since: from, repoUrl: url, commits,
+    version: v,
+    since: from,
+    repoUrl: url,
+    commits,
     section: renderSection({ version: v, date: date ?? today(), commits, repoUrl: url }),
     notes: renderNotes({ version: v, commits, repoUrl: url, sentinelVersion }),
   };
@@ -229,11 +262,18 @@ function main(argv) {
     },
   });
   if (values.help) {
-    console.log('usage: node scripts/changelog.mjs [--version X.Y.Z] [--since <tag|sha>] [--write] [--notes <file>] [--dry-run] [--repo-url <url>] [--date YYYY-MM-DD]');
+    console.log(
+      'usage: node scripts/changelog.mjs [--version X.Y.Z] [--since <tag|sha>] [--write] [--notes <file>] [--dry-run] [--repo-url <url>] [--date YYYY-MM-DD]',
+    );
     return;
   }
   const cwd = tryGit(process.cwd(), ['rev-parse', '--show-toplevel']) || process.cwd();
-  const r = changelog(cwd, { version: values.version, since: values.since, repoUrl: values['repo-url'], date: values.date });
+  const r = changelog(cwd, {
+    version: values.version,
+    since: values.since,
+    repoUrl: values['repo-url'],
+    date: values.date,
+  });
   const dry = values['dry-run'] || (!values.write && !values.notes);
   if (dry) {
     console.log(`# CHANGELOG.md section (${plural(r.commits.length)} since ${sinceLabel(r.since)})\n`);
@@ -254,5 +294,10 @@ function main(argv) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try { main(process.argv.slice(2)); } catch (e) { console.error(`changelog: ${e.message}`); process.exit(1); }
+  try {
+    main(process.argv.slice(2));
+  } catch (e) {
+    console.error(`changelog: ${e.message}`);
+    process.exit(1);
+  }
 }

@@ -55,7 +55,8 @@ export function parseArgs(argv) {
     else if (a === '--out') opts.out = v();
     else if (a === '--seed') opts.seed = Number(v());
     else if (a === '--settings') opts.settings = v();
-    else if (['--sources', '--projects', '--nodes', '--flows', '--manifests'].includes(a)) opts[a.slice(2)] = Number(v());
+    else if (['--sources', '--projects', '--nodes', '--flows', '--manifests'].includes(a))
+      opts[a.slice(2)] = Number(v());
     else if (a === '--help' || a === '-h') opts.help = true;
     else throw new Error(`unknown flag ${a}`);
   }
@@ -76,18 +77,145 @@ function rng(seed) {
   };
 }
 
-const DOMAINS = ['billing', 'payments', 'ledger', 'orders', 'catalog', 'inventory', 'shipping', 'customers', 'vendors', 'contracts',
-  'reports', 'audit', 'identity', 'notices', 'tax', 'refunds', 'scheduling', 'documents', 'claims', 'quotes', 'budgets', 'assets', 'search', 'support'];
-const NOUNS = ['Invoice', 'Customer', 'Payment', 'Ledger', 'Shipment', 'Order', 'Item', 'Stock', 'Vendor', 'Contract', 'Report', 'Entry',
-  'Session', 'Account', 'Rate', 'Refund', 'Slot', 'Notice', 'Approval', 'Document', 'Claim', 'Quote', 'Budget', 'Asset', 'Address', 'Note'];
-const VERBS = ['list', 'get', 'create', 'update', 'remove', 'approve', 'submit', 'validate', 'format', 'compute', 'load', 'save', 'sync',
-  'parse', 'build', 'resolve', 'check', 'export', 'import', 'merge', 'split', 'archive', 'restore', 'notify'];
-const QUALS = ['', 'ById', 'ForUser', 'Draft', 'Batch', 'Summary', 'Totals', 'Lines', 'Status', 'History', 'Preview', 'Options'];
-const THIRD = ['react', 'react-dom', 'zod', 'date-fns', 'lodash', 'rxjs', '@tanstack/react-query', 'axios', 'clsx', 'immer',
-  'pg', 'drizzle-orm', 'express', 'uuid', 'decimal.js', 'i18next', 'zustand', 'yup', 'nanoid', 'luxon', '@azure/storage-blob',
-  'dayjs', 'msw', 'ramda', 'qs', 'chart.js', 'd3', 'marked', 'dompurify', 'superjson'];
-const PERSONAS = [['finance', 'Finance'], ['ops', 'Operations'], ['customer', 'Customer'], ['admin', 'Administrator']];
-const GROUPS = [['start', 'Getting started'], ['daily', 'Daily work'], ['month-end', 'Month end'], ['review', 'Review and approve'], ['setup', 'Setup']];
+const DOMAINS = [
+  'billing',
+  'payments',
+  'ledger',
+  'orders',
+  'catalog',
+  'inventory',
+  'shipping',
+  'customers',
+  'vendors',
+  'contracts',
+  'reports',
+  'audit',
+  'identity',
+  'notices',
+  'tax',
+  'refunds',
+  'scheduling',
+  'documents',
+  'claims',
+  'quotes',
+  'budgets',
+  'assets',
+  'search',
+  'support',
+];
+const NOUNS = [
+  'Invoice',
+  'Customer',
+  'Payment',
+  'Ledger',
+  'Shipment',
+  'Order',
+  'Item',
+  'Stock',
+  'Vendor',
+  'Contract',
+  'Report',
+  'Entry',
+  'Session',
+  'Account',
+  'Rate',
+  'Refund',
+  'Slot',
+  'Notice',
+  'Approval',
+  'Document',
+  'Claim',
+  'Quote',
+  'Budget',
+  'Asset',
+  'Address',
+  'Note',
+];
+const VERBS = [
+  'list',
+  'get',
+  'create',
+  'update',
+  'remove',
+  'approve',
+  'submit',
+  'validate',
+  'format',
+  'compute',
+  'load',
+  'save',
+  'sync',
+  'parse',
+  'build',
+  'resolve',
+  'check',
+  'export',
+  'import',
+  'merge',
+  'split',
+  'archive',
+  'restore',
+  'notify',
+];
+const QUALS = [
+  '',
+  'ById',
+  'ForUser',
+  'Draft',
+  'Batch',
+  'Summary',
+  'Totals',
+  'Lines',
+  'Status',
+  'History',
+  'Preview',
+  'Options',
+];
+const THIRD = [
+  'react',
+  'react-dom',
+  'zod',
+  'date-fns',
+  'lodash',
+  'rxjs',
+  '@tanstack/react-query',
+  'axios',
+  'clsx',
+  'immer',
+  'pg',
+  'drizzle-orm',
+  'express',
+  'uuid',
+  'decimal.js',
+  'i18next',
+  'zustand',
+  'yup',
+  'nanoid',
+  'luxon',
+  '@azure/storage-blob',
+  'dayjs',
+  'msw',
+  'ramda',
+  'qs',
+  'chart.js',
+  'd3',
+  'marked',
+  'dompurify',
+  'superjson',
+];
+const PERSONAS = [
+  ['finance', 'Finance'],
+  ['ops', 'Operations'],
+  ['customer', 'Customer'],
+  ['admin', 'Administrator'],
+];
+const GROUPS = [
+  ['start', 'Getting started'],
+  ['daily', 'Daily work'],
+  ['month-end', 'Month end'],
+  ['review', 'Review and approve'],
+  ['setup', 'Setup'],
+];
 const METHODS = ['GET', 'GET', 'GET', 'POST', 'PATCH', 'DELETE', 'PUT'];
 const AT = '2026-10-01T09:00:00.000Z';
 
@@ -116,7 +244,12 @@ export function synthesize(o) {
     db: { status: 'resolved', technique: 'db-builder', confidence: 'HIGH', note: 'a builder chain names the table' },
     fetch: { status: 'resolved', technique: 'fetch→route', confidence: 'HIGH' },
     pkg: { status: 'resolved', technique: 'static-import', confidence: 'HIGH', note: 'the import names the package' },
-    test: { status: 'resolved', technique: 'import-resolution', confidence: 'HIGH', note: 'the test imports and calls it' },
+    test: {
+      status: 'resolved',
+      technique: 'import-resolution',
+      confidence: 'HIGH',
+      note: 'the test imports and calls it',
+    },
     route: { status: 'resolved', technique: 'route-literal', confidence: 'MEDIUM', note: 'a URL literal in the test' },
     sdk: { status: 'heuristic', technique: 'sdk-import', confidence: 'MEDIUM' },
     work: { status: 'heuristic', technique: 'work-key', confidence: 'MEDIUM' },
@@ -137,12 +270,34 @@ export function synthesize(o) {
     const webApps = 4;
     for (let k = 0; k < webApps; k++) {
       const d = domains[k % domains.length];
-      P.push({ name: `${repo}-web-${d}`, root: `apps/web-${d}`, type: 'application', layer: 'app', domain: d, tags: [`scope:${d}`, 'type:app', 'platform:web'] });
+      P.push({
+        name: `${repo}-web-${d}`,
+        root: `apps/web-${d}`,
+        type: 'application',
+        layer: 'app',
+        domain: d,
+        tags: [`scope:${d}`, 'type:app', 'platform:web'],
+      });
     }
-    P.push({ name: `${repo}-api`, root: 'apps/api', type: 'application', layer: 'api', domain: domains[0], tags: [`scope:${domains[0]}`, 'type:app', 'platform:node'] });
+    P.push({
+      name: `${repo}-api`,
+      root: 'apps/api',
+      type: 'application',
+      layer: 'api',
+      domain: domains[0],
+      tags: [`scope:${domains[0]}`, 'type:app', 'platform:node'],
+    });
     for (let k = 0; k < webApps / 2; k++) {
       const app = P[k * 2];
-      P.push({ name: `${app.name}-e2e`, root: `apps/web-${app.domain}-e2e`, type: 'e2e', layer: 'e2e', domain: app.domain, tags: [`scope:${app.domain}`, 'type:e2e'], implicitDependencies: [app.name] });
+      P.push({
+        name: `${app.name}-e2e`,
+        root: `apps/web-${app.domain}-e2e`,
+        type: 'e2e',
+        layer: 'e2e',
+        domain: app.domain,
+        tags: [`scope:${app.domain}`, 'type:e2e'],
+        implicitDependencies: [app.name],
+      });
     }
     const layers = ['feature', 'ui', 'data-access', 'util'];
     for (let k = 0; P.length < perSource; k++) {
@@ -150,22 +305,54 @@ export function synthesize(o) {
       const d = domains[Math.floor(k / layers.length) % domains.length];
       const n = Math.floor(k / (layers.length * domains.length));
       const name = `${repo}-${d}-${layer}${n ? '-' + n : ''}`;
-      P.push({ name, root: `libs/${d}/${layer}${n ? '-' + n : ''}`, type: 'library', layer, domain: d, tags: [`scope:${d}`, `type:${layer}`] });
+      P.push({
+        name,
+        root: `libs/${d}/${layer}${n ? '-' + n : ''}`,
+        type: 'library',
+        layer,
+        domain: d,
+        tags: [`scope:${d}`, `type:${layer}`],
+      });
     }
     const byLayer = (l) => P.filter((p) => p.layer === l);
-    const libsOf = (layer, domain) => byLayer(layer).filter((p) => p.domain === domain || p.domain === domains[domains.length - 1]);
+    const libsOf = (layer, domain) =>
+      byLayer(layer).filter((p) => p.domain === domain || p.domain === domains[domains.length - 1]);
     // the project graph: who may import whom, layered the way NX module boundaries usually are
     for (const p of P) {
       p.deps = [];
-      const add = (q) => { if (q && q !== p && !p.deps.includes(q)) p.deps.push(q); };
-      if (p.layer === 'app') { for (const q of libsOf('feature', p.domain).slice(0, 4)) add(q); add(pick(byLayer('ui'))); add(pick(byLayer('util'))); }
-      if (p.layer === 'api') { for (const q of byLayer('data-access').slice(0, 6)) add(q); add(pick(byLayer('util'))); }
-      if (p.layer === 'feature') { add(pick(libsOf('ui', p.domain))); add(pick(libsOf('data-access', p.domain))); add(pick(byLayer('util'))); if (r() < 0.4) add(pick(byLayer('feature'))); }
-      if (p.layer === 'ui') { add(pick(byLayer('util'))); }
-      if (p.layer === 'data-access') { add(pick(byLayer('util'))); }
-      if (p.layer === 'util' && r() < 0.3) { const u = byLayer('util'); const i = u.indexOf(p); if (i > 0) add(u[i - 1]); }
-      if (p.layer === 'e2e') { add(P.find((q) => q.name === p.implicitDependencies[0])); }
-      p.deps = p.deps.filter((q) => q.layer !== 'e2e' && q.layer !== 'app' || p.layer === 'e2e');
+      const add = (q) => {
+        if (q && q !== p && !p.deps.includes(q)) p.deps.push(q);
+      };
+      if (p.layer === 'app') {
+        for (const q of libsOf('feature', p.domain).slice(0, 4)) add(q);
+        add(pick(byLayer('ui')));
+        add(pick(byLayer('util')));
+      }
+      if (p.layer === 'api') {
+        for (const q of byLayer('data-access').slice(0, 6)) add(q);
+        add(pick(byLayer('util')));
+      }
+      if (p.layer === 'feature') {
+        add(pick(libsOf('ui', p.domain)));
+        add(pick(libsOf('data-access', p.domain)));
+        add(pick(byLayer('util')));
+        if (r() < 0.4) add(pick(byLayer('feature')));
+      }
+      if (p.layer === 'ui') {
+        add(pick(byLayer('util')));
+      }
+      if (p.layer === 'data-access') {
+        add(pick(byLayer('util')));
+      }
+      if (p.layer === 'util' && r() < 0.3) {
+        const u = byLayer('util');
+        const i = u.indexOf(p);
+        if (i > 0) add(u[i - 1]);
+      }
+      if (p.layer === 'e2e') {
+        add(P.find((q) => q.name === p.implicitDependencies[0]));
+      }
+      p.deps = p.deps.filter((q) => (q.layer !== 'e2e' && q.layer !== 'app') || p.layer === 'e2e');
     }
     const projRef = (p) => ({ name: p.name, root: p.root, type: p.type, tags: p.tags });
     const imports = new Map(); // "from|to" → { imports, files:Set, top: Map }
@@ -173,18 +360,36 @@ export function synthesize(o) {
       const k = from.name + '|' + to.name;
       let row = imports.get(k);
       if (!row) imports.set(k, (row = { from: from.name, to: to.name, imports: 0, files: new Set(), top: new Map() }));
-      row.imports++; row.files.add(path); row.top.set(path, (row.top.get(path) || 0) + 1);
+      row.imports++;
+      row.files.add(path);
+      row.top.set(path, (row.top.get(path) || 0) + 1);
     };
 
     // ── packages: third-party per source, one workspace package per library ──
     const third = THIRD.map((name) => ({ id: `${repo}::package::${name}`, name }));
     for (const t of third) {
-      nodes.push({ id: t.id, kind: 'package', name: t.name, tags: [], package: { scope: 'third-party', version: `^${int(1, 9)}.${int(0, 20)}.${int(0, 9)}`, declaredIn: ['package.json'] } });
+      nodes.push({
+        id: t.id,
+        kind: 'package',
+        name: t.name,
+        tags: [],
+        package: {
+          scope: 'third-party',
+          version: `^${int(1, 9)}.${int(0, 20)}.${int(0, 9)}`,
+          declaredIn: ['package.json'],
+        },
+      });
     }
     for (const p of P) {
       if (p.type !== 'library') continue;
       p.pkgId = `${repo}::package::@${repo}/${p.root.slice(5)}`;
-      nodes.push({ id: p.pkgId, kind: 'package', name: `@${repo}/${p.root.slice(5)}`, tags: [], package: { scope: 'workspace', project: p.name, root: p.root + '/src' } });
+      nodes.push({
+        id: p.pkgId,
+        kind: 'package',
+        name: `@${repo}/${p.root.slice(5)}`,
+        tags: [],
+        package: { scope: 'workspace', project: p.name, root: p.root + '/src' },
+      });
     }
 
     // ── tables and externals ──
@@ -194,21 +399,53 @@ export function synthesize(o) {
         const noun = NOUNS[(tables.length * 7 + s) % NOUNS.length].toLowerCase();
         const t = { id: `${repo}::table::${noun}_${tables.length}`, name: `${noun}_${tables.length}`, p };
         tables.push(t);
-        nodes.push({ id: t.id, kind: 'table', name: t.name, tags: [p.domain, 'data'], store: { name: 'Postgres', kind: 'sql', engine: 'postgres', via: 'sdk', ref: 'pg' }, project: projRef(p) });
+        nodes.push({
+          id: t.id,
+          kind: 'table',
+          name: t.name,
+          tags: [p.domain, 'data'],
+          store: { name: 'Postgres', kind: 'sql', engine: 'postgres', via: 'sdk', ref: 'pg' },
+          project: projRef(p),
+        });
       }
     }
     const externals = [
-      { id: `${repo}::external::Business Central`, name: 'Business Central', external: { kind: 'erp', source: 'config', store: true }, store: { name: 'Business Central', kind: 'erp', via: 'config' }, tags: ['external', 'erp'] },
-      { id: `${repo}::external::Blob Storage`, name: 'Blob Storage', external: { kind: 'files', source: 'sdk', ref: '@azure/storage-blob', store: true }, store: { name: 'Azure Blob Storage', kind: 'files', via: 'sdk' }, tags: ['external', 'files'] },
-      { id: `${repo}::external::Mail`, name: 'Mail', external: { kind: 'email', source: 'host', ref: 'MAIL_HOST' }, tags: ['external', 'email'] },
+      {
+        id: `${repo}::external::Business Central`,
+        name: 'Business Central',
+        external: { kind: 'erp', source: 'config', store: true },
+        store: { name: 'Business Central', kind: 'erp', via: 'config' },
+        tags: ['external', 'erp'],
+      },
+      {
+        id: `${repo}::external::Blob Storage`,
+        name: 'Blob Storage',
+        external: { kind: 'files', source: 'sdk', ref: '@azure/storage-blob', store: true },
+        store: { name: 'Azure Blob Storage', kind: 'files', via: 'sdk' },
+        tags: ['external', 'files'],
+      },
+      {
+        id: `${repo}::external::Mail`,
+        name: 'Mail',
+        external: { kind: 'email', source: 'host', ref: 'MAIL_HOST' },
+        tags: ['external', 'email'],
+      },
     ];
     for (const x of externals) nodes.push({ kind: 'external', ...x });
 
     // ── code: modules, functions, components, classes, rules, tests per project ──
     let fileCount = 0;
-    let testCases = 0; let testRuns = 0; let testFiles = 0; const covers = { declared: 0, static: 0, observed: 0 };
+    let testCases = 0;
+    let testRuns = 0;
+    let testFiles = 0;
+    const covers = { declared: 0, static: 0, observed: 0 };
     for (const p of P) {
-      p.fns = []; p.comps = []; p.clients = []; p.handlers = []; p.dataFns = []; p.modules = [];
+      p.fns = [];
+      p.comps = [];
+      p.clients = [];
+      p.handlers = [];
+      p.dataFns = [];
+      p.modules = [];
       const budget = p.layer === 'e2e' ? Math.round(codeBudget * 0.4) : codeBudget;
       const hasUi = p.layer === 'ui' || p.layer === 'feature' || p.layer === 'app';
       const testShare = p.layer === 'e2e' ? 0.9 : 0.3;
@@ -222,45 +459,95 @@ export function synthesize(o) {
         const noun = NOUNS[(f * 3 + s + p.name.length) % NOUNS.length];
         const path = `${srcBase}/${kebab(noun)}-${f}.${hasUi && f % 3 === 0 ? 'tsx' : 'ts'}`;
         const modId = `${repo}::module::${path}`;
-        nodes.push({ id: modId, kind: 'module', name: path, loc: { repo, path, line: 1 }, tags: [], project: projRef(p) });
+        nodes.push({
+          id: modId,
+          kind: 'module',
+          name: path,
+          loc: { repo, path, line: 1 },
+          tags: [],
+          project: projRef(p),
+        });
         p.modules.push({ id: modId, path });
         fileCount++;
         // imports: the libraries this project depends on, and a few third-party packages
         for (const q of p.deps) {
-          if (q.pkgId && r() < 0.55) { edge('imports', modId, q.pkgId, { specifier: q.pkgId.split('::package::')[1], line: int(1, 6), form: 'import', names: `${pick(VERBS)}${pick(NOUNS)}` }, RES.pkg); countImport(p, q, path); }
+          if (q.pkgId && r() < 0.55) {
+            edge(
+              'imports',
+              modId,
+              q.pkgId,
+              {
+                specifier: q.pkgId.split('::package::')[1],
+                line: int(1, 6),
+                form: 'import',
+                names: `${pick(VERBS)}${pick(NOUNS)}`,
+              },
+              RES.pkg,
+            );
+            countImport(p, q, path);
+          }
         }
-        for (let k = 0; k < 2; k++) { const t = pick(third); edge('imports', modId, t.id, { specifier: t.name, line: int(1, 8), form: 'import' }, RES.pkg); }
+        for (let k = 0; k < 2; k++) {
+          const t = pick(third);
+          edge('imports', modId, t.id, { specifier: t.name, line: int(1, 8), form: 'import' }, RES.pkg);
+        }
         const fileFns = [];
         for (let k = 0; k < perFile && made < nCode; k++, made++) {
           const isComp = hasUi && path.endsWith('.tsx') && k < 4;
           const verb = VERBS[(k * 5 + f) % VERBS.length];
           const qual = QUALS[(k + f * 7) % QUALS.length];
-          const fname = isComp ? `${noun}${['Panel', 'Card', 'Table', 'Form', 'Dialog', 'Row'][k % 6]}${f}` : `${verb}${noun}${qual}${k}`;
-          const kind = isComp ? 'component' : (k === perFile - 1 && f % 9 === 0 ? 'class' : 'function');
+          const fname = isComp
+            ? `${noun}${['Panel', 'Card', 'Table', 'Form', 'Dialog', 'Row'][k % 6]}${f}`
+            : `${verb}${noun}${qual}${k}`;
+          const kind = isComp ? 'component' : k === perFile - 1 && f % 9 === 0 ? 'class' : 'function';
           const id = `${repo}::${path}::${fname}`;
           const line = 3 + k * 14;
           const node = {
-            id, kind, name: fname, lang: 'ts', loc: { repo, path, line, endLine: line + 11 },
+            id,
+            kind,
+            name: fname,
+            lang: 'ts',
+            loc: { repo, path, line, endLine: line + 11 },
             snippet: isComp
               ? `function ${fname}({ ${noun.toLowerCase()}, onChange }: ${fname}Props) {\n  const [state, setState] = useState(initial${noun});\n  const rows = useMemo(() => select${noun}Rows(state), [state]);\n  return (\n    <Section title="${noun} ${['details', 'summary', 'lines'][k % 3]}">\n      {rows.map((row) => <${noun}Line key={row.id} row={row} onChange={onChange} />)}\n    </Section>\n  );\n}`
               : `export ${kind === 'class' ? 'class' : 'async function'} ${fname}(input: ${noun}Input, ctx: RequestContext): Promise<${noun}Result> {\n  const parsed = ${noun.toLowerCase()}Schema.parse(input);\n  const existing = await ctx.repo.find${noun}(parsed.id);\n  if (!existing) throw new NotFoundError('${noun.toLowerCase()} ' + parsed.id);\n  const next = { ...existing, ...parsed, updatedAt: ctx.clock.now() };\n  await ctx.repo.save${noun}(next);\n  return to${noun}Result(next);\n}`,
-            signature: isComp ? `(${noun.toLowerCase()}: ${noun}, onChange: (next: ${noun}) => void)` : `(input: ${noun}Input, ctx: RequestContext) => Promise<${noun}Result>`,
+            signature: isComp
+              ? `(${noun.toLowerCase()}: ${noun}, onChange: (next: ${noun}) => void)`
+              : `(input: ${noun}Input, ctx: RequestContext) => Promise<${noun}Result>`,
             tags: [p.domain, ...(isComp ? ['ux'] : [])],
             project: projRef(p),
           };
-          if ((k + f) % 4 === 0) node.docs = `${cap(verb)}s the ${noun.toLowerCase()} for the ${p.domain} team and records who changed it, so the next screen shows the current state.`;
-          if ((k + f) % 6 === 0) node.facets = { business: { label: `${cap(verb)} ${noun.toLowerCase()}${qual ? ' ' + kebab(qual).replace(/-/g, ' ') : ''}`, description: `The ${p.domain} ${noun.toLowerCase()} as the team reads it.` } };
+          if ((k + f) % 4 === 0)
+            node.docs = `${cap(verb)}s the ${noun.toLowerCase()} for the ${p.domain} team and records who changed it, so the next screen shows the current state.`;
+          if ((k + f) % 6 === 0)
+            node.facets = {
+              business: {
+                label: `${cap(verb)} ${noun.toLowerCase()}${qual ? ' ' + kebab(qual).replace(/-/g, ' ') : ''}`,
+                description: `The ${p.domain} ${noun.toLowerCase()} as the team reads it.`,
+              },
+            };
           nodes.push(node);
           fileFns.push(node);
-          if (isComp) p.comps.push(node); else p.fns.push(node);
+          if (isComp) p.comps.push(node);
+          else p.fns.push(node);
           if (!isComp && p.layer === 'feature' && k === 1) p.clients.push(node);
           if (!isComp && p.layer === 'data-access') p.dataFns.push(node);
           if (!isComp && p.layer === 'api') p.handlers.push(node);
         }
         // calls inside the file, then a use of an imported package now and then
         for (let k = 1; k < fileFns.length; k++) {
-          if (fileFns[k].kind !== 'component') edge('calls', fileFns[k - 1].id, fileFns[k].id, { line: fileFns[k - 1].loc.line + 4 }, RES.same);
-          if (r() < 0.25) { const t = pick(third); edge('imports', fileFns[k].id, t.id, { specifier: t.name, line: fileFns[k].loc.line + 2, use: true }, RES.pkg); }
+          if (fileFns[k].kind !== 'component')
+            edge('calls', fileFns[k - 1].id, fileFns[k].id, { line: fileFns[k - 1].loc.line + 4 }, RES.same);
+          if (r() < 0.25) {
+            const t = pick(third);
+            edge(
+              'imports',
+              fileFns[k].id,
+              t.id,
+              { specifier: t.name, line: fileFns[k].loc.line + 2, use: true },
+              RES.pkg,
+            );
+          }
         }
         if (made >= nCode) break;
       }
@@ -269,7 +556,16 @@ export function synthesize(o) {
         for (let k = 0; k < 3 && p.fns.length; k++) {
           const target = pick(p.fns);
           const id = `${repo}::${target.loc.path}::${target.name}Schema`;
-          nodes.push({ id, kind: 'rule', name: `${target.name}Schema`, lang: 'ts', loc: { repo, path: target.loc.path, line: 1, endLine: 1 }, tags: ['validation'], signature: 'z.object({ id: z.string(), amount: z.number() })', project: projRef(p) });
+          nodes.push({
+            id,
+            kind: 'rule',
+            name: `${target.name}Schema`,
+            lang: 'ts',
+            loc: { repo, path: target.loc.path, line: 1, endLine: 1 },
+            tags: ['validation'],
+            signature: 'z.object({ id: z.string(), amount: z.number() })',
+            project: projRef(p),
+          });
           edge('validates', id, target.id, undefined, RES.same);
         }
       }
@@ -278,44 +574,104 @@ export function synthesize(o) {
       for (let k = 0; k < nTests; k++) {
         const fi = Math.floor(k / testPerFile);
         const e2e = p.layer === 'e2e';
-        const path = e2e ? `${p.root}/src/${kebab(NOUNS[fi % NOUNS.length])}-${fi}.spec.ts` : `${p.root}/src/lib/${kebab(NOUNS[fi % NOUNS.length])}-${fi}.spec.ts`;
+        const path = e2e
+          ? `${p.root}/src/${kebab(NOUNS[fi % NOUNS.length])}-${fi}.spec.ts`
+          : `${p.root}/src/lib/${kebab(NOUNS[fi % NOUNS.length])}-${fi}.spec.ts`;
         if (k % testPerFile === 0) testFiles++;
         const title = `${pick(VERBS)}s the ${pick(NOUNS).toLowerCase()} ${['when it is a draft', 'for a new customer', 'and keeps the totals', 'and refuses an empty one', 'in the right order'][k % 5]} #${k}`;
         const id = `${repo}::test::${path}::${title}`;
         const status = r() < 0.92 ? 'passed' : r() < 0.6 ? 'failed' : 'flaky';
-        const run = k % 5 !== 4 ? { id: hex(s * 977 + 13), at: AT, sourceDigest: hex(s * 31 + 7), freshness: 'unchanged', stale: false, report: e2e ? 'e2e/results.json' : 'coverage/results.json', status, durationMs: int(2, e2e ? 4000 : 120), join: 'exact' } : undefined;
+        const run =
+          k % 5 !== 4
+            ? {
+                id: hex(s * 977 + 13),
+                at: AT,
+                sourceDigest: hex(s * 31 + 7),
+                freshness: 'unchanged',
+                stale: false,
+                report: e2e ? 'e2e/results.json' : 'coverage/results.json',
+                status,
+                durationMs: int(2, e2e ? 4000 : 120),
+                join: 'exact',
+              }
+            : undefined;
         nodes.push({
-          id, kind: 'test', name: title, lang: 'ts', loc: { repo, path, line: 3 + (k % testPerFile) * 9, endLine: 10 + (k % testPerFile) * 9 }, group: path,
+          id,
+          kind: 'test',
+          name: title,
+          lang: 'ts',
+          loc: { repo, path, line: 3 + (k % testPerFile) * 9, endLine: 10 + (k % testPerFile) * 9 },
+          group: path,
           tags: ['test', e2e ? 'test:e2e' : 'test:unit', e2e ? 'runner:playwright' : 'runner:vitest'],
-          test: { level: e2e ? 'e2e' : 'unit', runner: e2e ? 'playwright' : 'vitest', suite: [cap(p.domain)], file: path, ...(run ? { run, runs: [run] } : {}) },
+          test: {
+            level: e2e ? 'e2e' : 'unit',
+            runner: e2e ? 'playwright' : 'vitest',
+            suite: [cap(p.domain)],
+            file: path,
+            ...(run ? { run, runs: [run] } : {}),
+          },
           project: projRef(p),
         });
-        testCases++; if (run) testRuns++;
+        testCases++;
+        if (run) testRuns++;
         if (!e2e && p.fns.length) {
           const a = p.fns[(k * 7) % p.fns.length];
-          edge('covers', id, a.id, { evidence: 'static', signal: 'import+call', line: 5 }, RES.test); covers.static++;
-          if (k % 3 === 0) { const b = p.fns[(k * 11 + 3) % p.fns.length]; edge('covers', id, b.id, { evidence: 'observed', match: 'name+line', hits: int(1, 40) }, { status: 'resolved', technique: 'coverage-report', confidence: 'HIGH' }); covers.observed++; }
+          edge('covers', id, a.id, { evidence: 'static', signal: 'import+call', line: 5 }, RES.test);
+          covers.static++;
+          if (k % 3 === 0) {
+            const b = p.fns[(k * 11 + 3) % p.fns.length];
+            edge(
+              'covers',
+              id,
+              b.id,
+              { evidence: 'observed', match: 'name+line', hits: int(1, 40) },
+              { status: 'resolved', technique: 'coverage-report', confidence: 'HIGH' },
+            );
+            covers.observed++;
+          }
         }
-        p.e2eTests = p.e2eTests || []; if (e2e) p.e2eTests.push(id);
+        p.e2eTests = p.e2eTests || [];
+        if (e2e) p.e2eTests.push(id);
       }
     }
 
     // ── cross-project calls and renders, along the project graph ──
     for (const p of P) {
       for (const q of p.deps) {
-        const n = Math.min(40, Math.round(p.fns.length * 0.4 / Math.max(1, p.deps.length)));
-        for (let k = 0; k < n && p.fns.length && q.fns.length; k++) edge('calls', p.fns[(k * 13) % p.fns.length].id, q.fns[(k * 17) % q.fns.length].id, { line: int(4, 60) }, RES.imp);
+        const n = Math.min(40, Math.round((p.fns.length * 0.4) / Math.max(1, p.deps.length)));
+        for (let k = 0; k < n && p.fns.length && q.fns.length; k++)
+          edge(
+            'calls',
+            p.fns[(k * 13) % p.fns.length].id,
+            q.fns[(k * 17) % q.fns.length].id,
+            { line: int(4, 60) },
+            RES.imp,
+          );
         const c = Math.min(20, p.comps.length);
-        for (let k = 0; k < c && q.comps.length; k++) edge('renders', p.comps[k].id, q.comps[(k * 5) % q.comps.length].id, { line: int(4, 30) }, RES.jsx);
+        for (let k = 0; k < c && q.comps.length; k++)
+          edge('renders', p.comps[k].id, q.comps[(k * 5) % q.comps.length].id, { line: int(4, 30) }, RES.jsx);
       }
-      for (let k = 1; k < p.comps.length; k++) if (r() < 0.6) edge('renders', p.comps[k - 1].id, p.comps[k].id, { line: int(4, 30) }, RES.jsx);
-      for (let k = 0; k < p.comps.length; k++) if (p.fns.length && r() < 0.7) edge('calls', p.comps[k].id, p.fns[(k * 3) % p.fns.length].id, { line: int(4, 30) }, RES.same);
+      for (let k = 1; k < p.comps.length; k++)
+        if (r() < 0.6) edge('renders', p.comps[k - 1].id, p.comps[k].id, { line: int(4, 30) }, RES.jsx);
+      for (let k = 0; k < p.comps.length; k++)
+        if (p.fns.length && r() < 0.7)
+          edge('calls', p.comps[k].id, p.fns[(k * 3) % p.fns.length].id, { line: int(4, 30) }, RES.same);
     }
 
     // ── the API application: routes, the api node, handlers, client calls, data access ──
     const api = P.find((p) => p.layer === 'api');
     const apiId = `${repo}::api::openapi.yaml`;
-    nodes.push({ id: apiId, kind: 'api', name: `${cap(domains[0])} API`, tags: ['api'], docs: `Every operation the ${repo} services answer.`, signature: 'openapi 3.1.0 · version 1.0.0', loc: { repo, path: 'openapi.yaml', line: 1 }, facets: { business: { label: `${cap(domains[0])} API` } }, project: projRef(api) });
+    nodes.push({
+      id: apiId,
+      kind: 'api',
+      name: `${cap(domains[0])} API`,
+      tags: ['api'],
+      docs: `Every operation the ${repo} services answer.`,
+      signature: 'openapi 3.1.0 · version 1.0.0',
+      loc: { repo, path: 'openapi.yaml', line: 1 },
+      facets: { business: { label: `${cap(domains[0])} API` } },
+      project: projRef(api),
+    });
     const routes = [];
     const nRoutes = Math.max(10, Math.round(perSource * 0.8));
     for (let k = 0; k < nRoutes; k++) {
@@ -327,32 +683,78 @@ export function synthesize(o) {
       const opId = `${VERBS[k % VERBS.length]}${cap(noun)}${k}`;
       routes.push({ id, method, path, opId });
       nodes.push({
-        id, kind: 'route', name: `${method} ${path}`, lang: 'ts', loc: { repo, path: 'apps/api/src/routes.ts', line: 10 + k * 4 }, tags: [domains[k % domains.length], `api:${noun}`],
-        contract: { status: 'both', apiId, spec: { path: 'openapi.yaml', line: 20 + k * 12, operationId: opId }, summary: `${cap(VERBS[k % VERBS.length])} a ${noun}.`, tags: [cap(noun)], responses: [{ status: '200', description: 'OK' }], security: ['bearer'] },
+        id,
+        kind: 'route',
+        name: `${method} ${path}`,
+        lang: 'ts',
+        loc: { repo, path: 'apps/api/src/routes.ts', line: 10 + k * 4 },
+        tags: [domains[k % domains.length], `api:${noun}`],
+        contract: {
+          status: 'both',
+          apiId,
+          spec: { path: 'openapi.yaml', line: 20 + k * 12, operationId: opId },
+          summary: `${cap(VERBS[k % VERBS.length])} a ${noun}.`,
+          tags: [cap(noun)],
+          responses: [{ status: '200', description: 'OK' }],
+          security: ['bearer'],
+        },
         project: projRef(api),
       });
       edge('contains', apiId, id, undefined, RES.scan);
-      if (api.handlers.length) edge('calls', id, api.handlers[k % api.handlers.length].id, { line: 11 + k * 4 }, RES.imp);
+      if (api.handlers.length)
+        edge('calls', id, api.handlers[k % api.handlers.length].id, { line: 11 + k * 4 }, RES.imp);
     }
     // guards on routes
     for (let k = 0; k < 4; k++) {
       const id = `${repo}::guard::requireScope(${domains[k]}:write)`;
-      nodes.push({ id, kind: 'guard', name: `requireScope(${domains[k]}:write)`, tags: ['auth'], loc: { repo, path: 'apps/api/src/auth.ts', line: 4 + k * 6 }, project: projRef(api) });
-      for (let j = k; j < routes.length; j += 4) edge('guards', id, routes[j].id, undefined, { status: 'heuristic', technique: 'detected', confidence: 'MEDIUM' });
+      nodes.push({
+        id,
+        kind: 'guard',
+        name: `requireScope(${domains[k]}:write)`,
+        tags: ['auth'],
+        loc: { repo, path: 'apps/api/src/auth.ts', line: 4 + k * 6 },
+        project: projRef(api),
+      });
+      for (let j = k; j < routes.length; j += 4)
+        edge('guards', id, routes[j].id, undefined, {
+          status: 'heuristic',
+          technique: 'detected',
+          confidence: 'MEDIUM',
+        });
     }
     // handlers reach data access, data access reaches tables and externals
     const dataFns = byLayer('data-access').flatMap((p) => p.dataFns);
-    for (let k = 0; k < api.handlers.length && dataFns.length; k++) edge('calls', api.handlers[k].id, dataFns[(k * 7) % dataFns.length].id, { line: int(4, 40) }, RES.imp);
+    for (let k = 0; k < api.handlers.length && dataFns.length; k++)
+      edge('calls', api.handlers[k].id, dataFns[(k * 7) % dataFns.length].id, { line: int(4, 40) }, RES.imp);
     for (let k = 0; k < dataFns.length && tables.length; k++) {
       const t = tables[k % tables.length];
-      edge(k % 3 === 0 ? 'writes' : 'reads', dataFns[k].id, t.id, { op: k % 3 === 0 ? 'insert' : 'findMany', line: dataFns[k].loc.line + 3 }, RES.db);
-      if (k % 25 === 0) edge('http', dataFns[k].id, externals[k % 2].id, { method: k % 2 ? 'POST' : 'GET', line: dataFns[k].loc.line + 5 }, RES.sdk);
+      edge(
+        k % 3 === 0 ? 'writes' : 'reads',
+        dataFns[k].id,
+        t.id,
+        { op: k % 3 === 0 ? 'insert' : 'findMany', line: dataFns[k].loc.line + 3 },
+        RES.db,
+      );
+      if (k % 25 === 0)
+        edge(
+          'http',
+          dataFns[k].id,
+          externals[k % 2].id,
+          { method: k % 2 ? 'POST' : 'GET', line: dataFns[k].loc.line + 5 },
+          RES.sdk,
+        );
     }
     // client functions in feature libraries call routes
     const clients = byLayer('feature').flatMap((p) => p.fns.slice(0, 6));
     for (let k = 0; k < clients.length && routes.length; k++) {
       const rt = routes[(k * 5) % routes.length];
-      edge('http', clients[k].id, rt.id, { method: rt.method, path: rt.path, line: clients[k].loc.line + 2 }, RES.fetch);
+      edge(
+        'http',
+        clients[k].id,
+        rt.id,
+        { method: rt.method, path: rt.path, line: clients[k].loc.line + 2 },
+        RES.fetch,
+      );
     }
 
     // ── pages, design manifests, flows ──
@@ -360,7 +762,7 @@ export function synthesize(o) {
     const pagesByApp = new Map();
     for (const a of apps) {
       const list = [];
-      const nPages = Math.max(4, Math.round(flowsPer * 1.6 / apps.length) + 3);
+      const nPages = Math.max(4, Math.round((flowsPer * 1.6) / apps.length) + 3);
       for (let k = 0; k < nPages; k++) {
         const noun = NOUNS[(k * 3 + s) % NOUNS.length];
         const route = `/${a.domain}/${kebab(noun)}${k >= NOUNS.length ? '-' + k : ''}${k % 4 === 1 ? '/:id' : ''}`;
@@ -376,20 +778,52 @@ export function synthesize(o) {
     const sourceGroups = GROUPS;
     const manifests = [];
     for (let m = 0; m < manifestsPer; m++) {
-      const path = m === 0 ? 'docs/design/screens.json' : `apps/web-${apps[m % apps.length].domain}/docs/design/screens.json`;
-      manifests.push({ id: `${repo}::design::${path}`, path, apps: apps.filter((_, i) => i % manifestsPer === m || manifestsPer === 1), flows: [] });
+      const path =
+        m === 0 ? 'docs/design/screens.json' : `apps/web-${apps[m % apps.length].domain}/docs/design/screens.json`;
+      manifests.push({
+        id: `${repo}::design::${path}`,
+        path,
+        apps: apps.filter((_, i) => i % manifestsPer === m || manifestsPer === 1),
+        flows: [],
+      });
     }
     let screenNo = 0;
     for (const man of manifests) {
       const screens = man.apps.flatMap((a) => pagesByApp.get(a).map((pg) => ({ ...pg, app: a })));
-      nodes.push({ id: man.id, kind: 'design', name: `${cap(man.apps[0]?.domain || repo)} — screens`, tags: ['design'], signature: `${screens.length} screens · modified ${AT} (manifest)`, loc: { repo, path: man.path, line: 1 }, facets: { business: { label: `${cap(man.apps[0]?.domain || repo)} — screens` } } });
+      nodes.push({
+        id: man.id,
+        kind: 'design',
+        name: `${cap(man.apps[0]?.domain || repo)} — screens`,
+        tags: ['design'],
+        signature: `${screens.length} screens · modified ${AT} (manifest)`,
+        loc: { repo, path: man.path, line: 1 },
+        facets: { business: { label: `${cap(man.apps[0]?.domain || repo)} — screens` } },
+      });
       for (const pg of screens) {
         screenNo++;
         const sid = `${repo.toUpperCase()}-${String(screenNo).padStart(3, '0')}`;
         const node = {
-          id: pg.id, kind: 'page', name: pg.route, lang: 'ts', tags: ['ux', `design:${sid.toLowerCase()}`],
-          design: { status: pg.built ? 'both' : 'design-only', origin: 'manifest', designId: man.id, id: sid, name: `${pg.noun} ${['list', 'detail', 'editor', 'review'][pg.k % 4]}`, lastModified: AT, freshness: 'manifest', operations: routes.slice(pg.k % routes.length, (pg.k % routes.length) + 2).map((x) => x.opId) },
-          facets: { business: { label: `${pg.noun} ${['list', 'detail', 'editor', 'review'][pg.k % 4]}`, description: `Where the ${pg.app.domain} team works with ${pg.noun.toLowerCase()}s.` } },
+          id: pg.id,
+          kind: 'page',
+          name: pg.route,
+          lang: 'ts',
+          tags: ['ux', `design:${sid.toLowerCase()}`],
+          design: {
+            status: pg.built ? 'both' : 'design-only',
+            origin: 'manifest',
+            designId: man.id,
+            id: sid,
+            name: `${pg.noun} ${['list', 'detail', 'editor', 'review'][pg.k % 4]}`,
+            lastModified: AT,
+            freshness: 'manifest',
+            operations: routes.slice(pg.k % routes.length, (pg.k % routes.length) + 2).map((x) => x.opId),
+          },
+          facets: {
+            business: {
+              label: `${pg.noun} ${['list', 'detail', 'editor', 'review'][pg.k % 4]}`,
+              description: `Where the ${pg.app.domain} team works with ${pg.noun.toLowerCase()}s.`,
+            },
+          },
           project: projRef(pg.app),
         };
         if (pg.built) node.loc = { repo, path: `${pg.app.root}/src/main.tsx`, line: 5 + pg.k };
@@ -414,11 +848,32 @@ export function synthesize(o) {
       const steps = Array.from({ length: n }, (_, k) => man.screens[(start + k) % man.screens.length]);
       sourceFlows.push({ id, fid, steps });
       nodes.push({
-        id, kind: 'flow', name, tags: ['entrypoint', 'flow', `design:${fid}`],
+        id,
+        kind: 'flow',
+        name,
+        tags: ['entrypoint', 'flow', `design:${fid}`],
         docs: `A ${persona} user ${VERBS[f % VERBS.length]}s a ${noun} and checks it before it goes out.`,
-        design: { status: steps.every((x) => x.built) ? 'both' : 'design-only', origin: 'manifest', designId: man.id, id: fid, name, persona, group, order: (f % 4) + 1, position: man.flows.length, lastModified: AT, freshness: 'manifest',
-          ...(f > 0 && f % 5 === 0 ? { requires: [`${repo}-flow-${f - 1}`] } : {}), ...(f % 7 === 0 && f + 1 < flowsPer ? { leadsTo: [`${repo}-flow-${f + 1}`] } : {}) },
-        facets: { business: { label: name, description: `A ${persona} user ${VERBS[f % VERBS.length]}s a ${noun} and checks it before it goes out.` } },
+        design: {
+          status: steps.every((x) => x.built) ? 'both' : 'design-only',
+          origin: 'manifest',
+          designId: man.id,
+          id: fid,
+          name,
+          persona,
+          group,
+          order: (f % 4) + 1,
+          position: man.flows.length,
+          lastModified: AT,
+          freshness: 'manifest',
+          ...(f > 0 && f % 5 === 0 ? { requires: [`${repo}-flow-${f - 1}`] } : {}),
+          ...(f % 7 === 0 && f + 1 < flowsPer ? { leadsTo: [`${repo}-flow-${f + 1}`] } : {}),
+        },
+        facets: {
+          business: {
+            label: name,
+            description: `A ${persona} user ${VERBS[f % VERBS.length]}s a ${noun} and checks it before it goes out.`,
+          },
+        },
       });
       man.flows.push(id);
       edge('contains', man.id, id, undefined, RES.scan);
@@ -429,9 +884,21 @@ export function synthesize(o) {
       (p.e2eTests || []).forEach((tid, k) => {
         const fl = sourceFlows[k % Math.max(1, sourceFlows.length)];
         if (!fl) return;
-        if (k % 2 === 0) { edge('covers', tid, fl.id, { evidence: 'declared', declared: fl.fid }, { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: `@covers ${fl.fid}` }); covers.declared++; }
+        if (k % 2 === 0) {
+          edge(
+            'covers',
+            tid,
+            fl.id,
+            { evidence: 'declared', declared: fl.fid },
+            { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: `@covers ${fl.fid}` },
+          );
+          covers.declared++;
+        }
         const pg = fl.steps[k % fl.steps.length];
-        if (pg.built) { edge('covers', tid, pg.id, { evidence: 'static', signal: 'goto', line: 4 }, RES.route); covers.static++; }
+        if (pg.built) {
+          edge('covers', tid, pg.id, { evidence: 'static', signal: 'goto', line: 4 }, RES.route);
+          covers.static++;
+        }
       });
     }
 
@@ -439,33 +906,113 @@ export function synthesize(o) {
     for (let k = 0; k < Math.max(5, Math.round(perSource / 4)); k++) {
       workN++;
       const id = `work::jira-perf::PERF-${workN}`;
-      nodes.push({ id, kind: 'work', name: `PERF-${workN} ${cap(pick(VERBS))} the ${pick(NOUNS).toLowerCase()} screen`, tags: ['work', 'story'] });
+      nodes.push({
+        id,
+        kind: 'work',
+        name: `PERF-${workN} ${cap(pick(VERBS))} the ${pick(NOUNS).toLowerCase()} screen`,
+        tags: ['work', 'story'],
+      });
       const p = P[(k * 3) % P.length];
-      for (let j = 0; j < 3 && p.fns.length; j++) edge('tracks', id, p.fns[(k + j * 5) % p.fns.length].id, { via: 'commit' }, RES.work);
+      for (let j = 0; j < 3 && p.fns.length; j++)
+        edge('tracks', id, p.fns[(k + j * 5) % p.fns.length].id, { via: 'commit' }, RES.work);
     }
 
     // ── per-source meta ──
     meta.projects[repo] = {
       tool: 'nx',
-      projects: P.map((p) => ({ name: p.name, root: p.root, type: p.type, tags: p.tags, ...(p.implicitDependencies ? { implicitDependencies: p.implicitDependencies } : {}), sourceRoot: p.root + '/src', via: 'project.json' })),
-      tagDimensions: [{ key: 'domain', prefix: 'scope:', label: 'Domain' }, { key: 'type', prefix: 'type:', label: 'Type' }, { key: 'platform', prefix: 'platform:', label: 'Platform' }],
-      tagValues: { type: { app: 'Application', feature: 'Feature', ui: 'UI', util: 'Utility', 'data-access': 'Data access', e2e: 'End-to-end' } },
-      imports: [...imports.values()].sort((a, b) => (a.from + a.to).localeCompare(b.from + b.to)).map((x) => ({
-        from: x.from, to: x.to, imports: x.imports, files: x.files.size,
-        top: [...x.top.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([path, n]) => ({ path, imports: n })),
+      projects: P.map((p) => ({
+        name: p.name,
+        root: p.root,
+        type: p.type,
+        tags: p.tags,
+        ...(p.implicitDependencies ? { implicitDependencies: p.implicitDependencies } : {}),
+        sourceRoot: p.root + '/src',
+        via: 'project.json',
       })),
-      dependencies: P.flatMap((p) => p.deps.map((q) => ({ from: p.name, to: q.name, type: p.layer === 'e2e' ? 'implicit' : 'static', via: 'nx-graph' }))),
-      graphFile: { path: '.nx/workspace-data/project-graph.json', projects: P.length, dependencies: P.reduce((n, p) => n + p.deps.length, 0) },
+      tagDimensions: [
+        { key: 'domain', prefix: 'scope:', label: 'Domain' },
+        { key: 'type', prefix: 'type:', label: 'Type' },
+        { key: 'platform', prefix: 'platform:', label: 'Platform' },
+      ],
+      tagValues: {
+        type: {
+          app: 'Application',
+          feature: 'Feature',
+          ui: 'UI',
+          util: 'Utility',
+          'data-access': 'Data access',
+          e2e: 'End-to-end',
+        },
+      },
+      imports: [...imports.values()]
+        .sort((a, b) => (a.from + a.to).localeCompare(b.from + b.to))
+        .map((x) => ({
+          from: x.from,
+          to: x.to,
+          imports: x.imports,
+          files: x.files.size,
+          top: [...x.top.entries()]
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .slice(0, 5)
+            .map(([path, n]) => ({ path, imports: n })),
+        })),
+      dependencies: P.flatMap((p) =>
+        p.deps.map((q) => ({
+          from: p.name,
+          to: q.name,
+          type: p.layer === 'e2e' ? 'implicit' : 'static',
+          via: 'nx-graph',
+        })),
+      ),
+      graphFile: {
+        path: '.nx/workspace-data/project-graph.json',
+        projects: P.length,
+        dependencies: P.reduce((n, p) => n + p.deps.length, 0),
+      },
     };
     meta.journeys[repo] = {
-      personas: sourcePersonas.map(([id, name]) => ({ id, name, description: `The ${name.toLowerCase()} people who use the ${repo} screens.`, declared: true, from: 'docs/design/screens.json' })),
-      groups: sourceGroups.map(([id, name]) => ({ id, name, description: `${name}.`, declared: true, from: 'docs/design/screens.json' })),
-      flows: {}, notes: [],
+      personas: sourcePersonas.map(([id, name]) => ({
+        id,
+        name,
+        description: `The ${name.toLowerCase()} people who use the ${repo} screens.`,
+        declared: true,
+        from: 'docs/design/screens.json',
+      })),
+      groups: sourceGroups.map(([id, name]) => ({
+        id,
+        name,
+        description: `${name}.`,
+        declared: true,
+        from: 'docs/design/screens.json',
+      })),
+      flows: {},
+      notes: [],
     };
     meta.tests[repo] = {
-      files: testFiles, cases: testCases, edges: covers, runs: testRuns,
-      reports: [{ path: 'coverage/results.json', kind: 'results', runner: 'vitest', level: 'unit', mtime: AT, runId: hex(s * 977 + 13), freshness: 'unchanged', glob: 'coverage/results.json', matched: 1, reason: 'ok', joined: testRuns, rows: testRuns, unjoined: 0 }],
-      gaps: [], blindSpots: [], sourceDigest: hex(s * 31 + 7),
+      files: testFiles,
+      cases: testCases,
+      edges: covers,
+      runs: testRuns,
+      reports: [
+        {
+          path: 'coverage/results.json',
+          kind: 'results',
+          runner: 'vitest',
+          level: 'unit',
+          mtime: AT,
+          runId: hex(s * 977 + 13),
+          freshness: 'unchanged',
+          glob: 'coverage/results.json',
+          matched: 1,
+          reason: 'ok',
+          joined: testRuns,
+          rows: testRuns,
+          unjoined: 0,
+        },
+      ],
+      gaps: [],
+      blindSpots: [],
+      sourceDigest: hex(s * 31 + 7),
     };
     meta.stores[repo] = { drivers: [{ spec: 'pg', files: 12 }], named: { sdk: tables.length }, unnamed: 0 };
     meta.packages[repo] = { builtins: [{ spec: 'node:fs', files: 3 }] };
@@ -477,13 +1024,26 @@ export function synthesize(o) {
     meta: {
       ...meta,
       files: repos.reduce((n, k) => n + meta.repos[k].files, 0),
-      sourceHash: hex(o.seed * 101 + 5), sourceDigest: hex(o.seed * 103 + 9),
-      workspace: 'nx', sync: 1, digest: hex(o.seed * 107 + 3), tz: 'UTC', generatedAt: AT,
+      sourceHash: hex(o.seed * 101 + 5),
+      sourceDigest: hex(o.seed * 103 + 9),
+      workspace: 'nx',
+      sync: 1,
+      digest: hex(o.seed * 107 + 3),
+      tz: 'UTC',
+      generatedAt: AT,
       farsight: { version: 'synthetic', built: AT, commit: 'synthetic', source: 'workspace' },
-      synthetic: { preset: o.preset, seed: o.seed, sources: o.sources, projects: o.projects, flows: o.flows, manifests: o.manifests },
+      synthetic: {
+        preset: o.preset,
+        seed: o.seed,
+        sources: o.sources,
+        projects: o.projects,
+        flows: o.flows,
+        manifests: o.manifests,
+      },
     },
     roots: {},
-    nodes, edges,
+    nodes,
+    edges,
   };
   return graph;
 }
@@ -493,10 +1053,19 @@ export function writeGraph(graph, out) {
   mkdirSync(dirname(resolve(out)), { recursive: true });
   const fd = openSync(out, 'w');
   let bytes = 0;
-  const put = (s) => { bytes += writeSync(fd, s); };
+  const put = (s) => {
+    bytes += writeSync(fd, s);
+  };
   put('{"meta":' + JSON.stringify(graph.meta) + ',"roots":' + JSON.stringify(graph.roots) + ',"nodes":[');
   const batch = (arr) => {
-    for (let i = 0; i < arr.length; i += 2000) put((i ? ',' : '') + arr.slice(i, i + 2000).map((x) => JSON.stringify(x)).join(','));
+    for (let i = 0; i < arr.length; i += 2000)
+      put(
+        (i ? ',' : '') +
+          arr
+            .slice(i, i + 2000)
+            .map((x) => JSON.stringify(x))
+            .join(','),
+      );
   };
   batch(graph.nodes);
   put('],"edges":[');
@@ -508,15 +1077,26 @@ export function writeGraph(graph, out) {
 
 /** A workspace settings file naming every source, so the server's scope menu has the sources a real one would. */
 export function writeSettings(dir, graph) {
-  const sources = Object.keys(graph.meta.repos).map((name) => ({ id: name, name, type: 'local', path: name, enabled: true }));
+  const sources = Object.keys(graph.meta.repos).map((name) => ({
+    id: name,
+    name,
+    type: 'local',
+    path: name,
+    enabled: true,
+  }));
   mkdirSync(join(dir, '.farsight'), { recursive: true });
-  writeFileSync(join(dir, '.farsight', 'settings.json'), JSON.stringify({ theme: 'dark', defaultLens: 'hybrid', flags: { map: true }, sources, collections: [] }, null, 2));
+  writeFileSync(
+    join(dir, '.farsight', 'settings.json'),
+    JSON.stringify({ theme: 'dark', defaultLens: 'hybrid', flags: { map: true }, sources, collections: [] }, null, 2),
+  );
 }
 
 if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('synth-graph.mjs')) {
   const o = parseArgs(process.argv.slice(2));
   if (o.help) {
-    console.log('node scripts/synth-graph.mjs [--preset full|small] [--out graph.json] [--seed N] [--sources N] [--projects N] [--nodes N] [--flows N] [--manifests N] [--settings dir]');
+    console.log(
+      'node scripts/synth-graph.mjs [--preset full|small] [--out graph.json] [--seed N] [--sources N] [--projects N] [--nodes N] [--flows N] [--manifests N] [--settings dir]',
+    );
     process.exit(0);
   }
   const t0 = performance.now();
@@ -526,5 +1106,7 @@ if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith
   const flows = g.nodes.filter((n) => n.kind === 'flow').length;
   const designs = g.nodes.filter((n) => n.kind === 'design').length;
   const projects = Object.values(g.meta.projects).reduce((n, m) => n + m.projects.length, 0);
-  console.log(`${o.preset}: ${Object.keys(g.meta.repos).length} sources · ${projects} projects · ${g.nodes.length} nodes · ${g.edges.length} edges · ${flows} flows in ${designs} manifests · ${(bytes / 1e6).toFixed(1)} MB → ${o.out} (${((performance.now() - t0) / 1000).toFixed(1)} s)`);
+  console.log(
+    `${o.preset}: ${Object.keys(g.meta.repos).length} sources · ${projects} projects · ${g.nodes.length} nodes · ${g.edges.length} edges · ${flows} flows in ${designs} manifests · ${(bytes / 1e6).toFixed(1)} MB → ${o.out} (${((performance.now() - t0) / 1000).toFixed(1)} s)`,
+  );
 }

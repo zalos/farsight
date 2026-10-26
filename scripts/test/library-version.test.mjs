@@ -14,7 +14,8 @@ test('paired library version changes are explicit and leave the application vers
     }
     const stamp = join(root, 'packages/code-parser/src/version.ts');
     writeFileSync(stamp, "export const PARSER_VERSION = '0.1.0';\n");
-    const app = join(root, 'package.json'); writeFileSync(app, '{"version":"9.0.0"}');
+    const app = join(root, 'package.json');
+    writeFileSync(app, '{"version":"9.0.0"}');
     assert.equal(libraryVersion(root), '0.1.0');
     assert.equal(libraryVersion(root, '0.2.0', { dryRun: true }), '0.2.0');
     assert.equal(libraryVersion(root), '0.1.0');
@@ -24,5 +25,7 @@ test('paired library version changes are explicit and leave the application vers
     assert.equal(libraryVersion(root), '0.2.0');
     assert.equal(JSON.parse(readFileSync(app, 'utf8')).version, '9.0.0');
     assert.match(readFileSync(stamp, 'utf8'), /'0.2.0'/);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

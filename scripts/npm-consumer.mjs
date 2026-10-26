@@ -16,16 +16,27 @@ const run = promisify(execFile);
 /** The caller's environment without any npm configuration, plus the scratch-local settings. */
 export function cleanNpmEnv(scratch, base = process.env) {
   const env = Object.fromEntries(Object.entries(base).filter(([key]) => !/^npm_/i.test(key)));
-  const userconfig = join(scratch, 'npmrc'), globalconfig = join(scratch, 'global-npmrc');
+  const userconfig = join(scratch, 'npmrc'),
+    globalconfig = join(scratch, 'global-npmrc');
   for (const file of [userconfig, globalconfig]) writeFileSync(file, '');
   return {
     ...env,
-    XDG_CONFIG_HOME: join(scratch, 'user-config'), XDG_STATE_HOME: join(scratch, 'user-state'),
-    npm_config_userconfig: userconfig, npm_config_globalconfig: globalconfig,
-    npm_config_cache: join(scratch, 'npm-cache'), npm_config_update_notifier: 'false',
-    npm_config_audit: 'false', npm_config_fund: 'false',
+    XDG_CONFIG_HOME: join(scratch, 'user-config'),
+    XDG_STATE_HOME: join(scratch, 'user-state'),
+    npm_config_userconfig: userconfig,
+    npm_config_globalconfig: globalconfig,
+    npm_config_cache: join(scratch, 'npm-cache'),
+    npm_config_update_notifier: 'false',
+    npm_config_audit: 'false',
+    npm_config_fund: 'false',
     // Explicit offline acceptance uses an already populated cache; npm itself still resolves installed dependencies.
-    ...(base.FARSIGHT_NPM_OFFLINE_CACHE ? { npm_config_cache: base.FARSIGHT_NPM_OFFLINE_CACHE, npm_config_offline: 'true', npm_config_ignore_scripts: 'true' } : {}),
+    ...(base.FARSIGHT_NPM_OFFLINE_CACHE
+      ? {
+          npm_config_cache: base.FARSIGHT_NPM_OFFLINE_CACHE,
+          npm_config_offline: 'true',
+          npm_config_ignore_scripts: 'true',
+        }
+      : {}),
     ...(base.FARSIGHT_NPM_REGISTRY ? { npm_config_registry: base.FARSIGHT_NPM_REGISTRY } : {}),
   };
 }
@@ -37,16 +48,21 @@ export async function npmConsumer(prefix, tarballs) {
     const dir = join(scratch, 'consumer');
     mkdirSync(dir);
     const env = cleanNpmEnv(scratch);
-    const npm = (args) => run('npm', args, { cwd: dir, env, timeout: 180_000, maxBuffer: 8_000_000 }).catch((error) => {
-      throw new Error(`npm ${args[0]} failed in a clean consumer:\n${error.stderr || error.message}`);
-    });
+    const npm = (args) =>
+      run('npm', args, { cwd: dir, env, timeout: 180_000, maxBuffer: 8_000_000 }).catch((error) => {
+        throw new Error(`npm ${args[0]} failed in a clean consumer:\n${error.stderr || error.message}`);
+      });
     await npm(['init', '-y']);
     await npm(['install', ...tarballs]);
     return {
-      scratch, dir, env, cleanup,
+      scratch,
+      dir,
+      env,
+      cleanup,
       manifest: () => JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')),
       bin: (name) => join(dir, 'node_modules', '.bin', name),
-      exec: (file, args, options = {}) => run(file, args, { cwd: dir, env, timeout: 180_000, maxBuffer: 8_000_000, ...options }),
+      exec: (file, args, options = {}) =>
+        run(file, args, { cwd: dir, env, timeout: 180_000, maxBuffer: 8_000_000, ...options }),
     };
   } catch (error) {
     cleanup();
