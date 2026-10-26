@@ -1,5 +1,16 @@
 # Farsight — shared Codex / Claude memory
 
+## Sentinel v2 P0-1 tooling — 2026-10-26
+
+Branch `build/prettier-eslint-lefthook` adds pinned Prettier/ESLint/lefthook, frozen lint suppressions, the CI lint
+job, the proposal's unchanged AST checker and planted tests, hook migration and contributor guidance. No product
+code or CI selector changed. `.npmrc` excludes only `uri-js` from shared pnpm hoisting: ESLint's Ajv retains its own
+dependency, while fast-uri's unrelated benchmark import stays outside Sentinel's pinned runtime closure.
+Node 24/pnpm 9 build and package typechecks (14 each), formatting/lint/catalog/actionlint, 244 script tests and 38
+unchanged Sentinel closure/preparation cases passed. Workspace tests passed 3,380 cases with 161 gated skips and zero failures.
+Shared LFS hook hashes are unchanged; branch commits pass and a bad subject was rejected after formatting/re-staging.
+The lead owns making `lint` required after its first green CI run. Code formatting and frozen lint debt remain later work.
+
 ## Sentinel session closeout — 2026-10-23
 
 The current recap, owner decisions, open issues and ordered release plan are at the repository root:
