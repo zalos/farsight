@@ -7,8 +7,9 @@
 //    module), a string literal containing three or more prose words must come
 //    from the catalog via t(...). Pragmatic detectable rule: a single- or
 //    double-quoted literal matching three word tokens in a row
-//    (/[A-Za-z][a-z’']* +[a-z][a-z’']* +[a-z]/) fails unless the same line
-//    calls t( or carries a `str:ok` pragma comment with a reason.
+//    (/[A-Za-z][a-z’']* +[a-z][a-z’']* +[a-z]/) fails unless its line or the
+//    following statement continuation calls t( or carries a `str:ok` pragma
+//    comment with a reason. The bounded forward scan is documented below.
 //    Deliberately NOT covered (documented grandfathering, migrated by the
 //    passes that rewrite them):
 //      - lib/graph-render.js + surfaces/journeys.js + store.js — pre-split
@@ -135,6 +136,21 @@ const viewerHtml = readFileSync(join(pub, 'viewer.html'), 'utf8');
 
 // ── RULE 1: raw prose literals in chrome files ──────────────────────────────
 const PROSE = /[A-Za-z][a-z’']* +[a-z][a-z’']* +[a-z]/;
+
+function statementAllowsProse(lines, start) {
+  // Keep this text scan bounded: the literal's line plus at most 39 following
+  // lines, stopping at a blank line or a line ending in ; (before a // comment).
+  // Check the closing line too, so a trailing // str:ok applies to the statement.
+  for (let i = start; i < Math.min(lines.length, start + 40); i++) {
+    const line = lines[i];
+    if (!line.trim()) break;
+    const code = line.replace(/^\s*(\/\/|\*|\/\*\*?).*$/, '');
+    if (/\bt\(/.test(code) || /\/\/\s*str:ok\b/.test(line)) return true;
+    if (/;\s*(?:\/\/.*)?$/.test(line)) break;
+  }
+  return false;
+}
+
 // legacy journey-overlay prose kept verbatim from viewer.js (pre-catalog);
 // P5 rewrites the journeys surface and migrates these.
 // 'Forks along this journey', 'No forks recorded along this journey' and
@@ -173,7 +189,7 @@ for (const file of appFiles) {
       const lit = (m[1] ?? m[2]) || '';
       // strip html tags/attrs so class soup doesn't trip the prose matcher
       const text = lit.replace(/<[^>]*>/g, ' ').replace(/\b[\w-]+=\\?"[^"]*\\?"/g, ' ');
-      if (PROSE.test(text)) {
+      if (PROSE.test(text) && !statementAllowsProse(lines, i)) {
         failures.push(`RULE1 ${rel}:${i + 1} raw prose literal outside t(): ${JSON.stringify(lit.slice(0, 60))}`);
       }
     }
