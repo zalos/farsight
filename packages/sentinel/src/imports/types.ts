@@ -9,44 +9,87 @@
 
 /** Why a whole import is refused. Fixed codes and a bounded opaque diagnostic path: never a member name or value from the report. */
 export const IMPORT_REFUSAL_CODES = Object.freeze([
-  'sentinel.import.fileUnreadable', 'sentinel.import.notRegularFile', 'sentinel.import.linkRefused', 'sentinel.import.hardLinkRefused',
-  'sentinel.import.fileChanged', 'sentinel.import.tooLarge', 'sentinel.import.archiveUnsupported', 'sentinel.import.invalidUtf8',
-  'sentinel.import.jsonMalformed', 'sentinel.import.jsonDuplicateKey', 'sentinel.import.jsonTooDeep', 'sentinel.import.budgetExhausted',
-  'sentinel.import.deadlineExceeded', 'sentinel.import.manifestInvalid', 'sentinel.import.formatMismatch', 'sentinel.import.formatMalformed',
-  'sentinel.import.producerMismatch', 'sentinel.import.outputTooLarge',
+  'sentinel.import.fileUnreadable',
+  'sentinel.import.notRegularFile',
+  'sentinel.import.linkRefused',
+  'sentinel.import.hardLinkRefused',
+  'sentinel.import.fileChanged',
+  'sentinel.import.tooLarge',
+  'sentinel.import.archiveUnsupported',
+  'sentinel.import.invalidUtf8',
+  'sentinel.import.jsonMalformed',
+  'sentinel.import.jsonDuplicateKey',
+  'sentinel.import.jsonTooDeep',
+  'sentinel.import.budgetExhausted',
+  'sentinel.import.deadlineExceeded',
+  'sentinel.import.manifestInvalid',
+  'sentinel.import.formatMismatch',
+  'sentinel.import.formatMalformed',
+  'sentinel.import.producerMismatch',
+  'sentinel.import.outputTooLarge',
 ] as const);
-export type ImportRefusalCode = typeof IMPORT_REFUSAL_CODES[number];
+export type ImportRefusalCode = (typeof IMPORT_REFUSAL_CODES)[number];
 
 /** Why one part of an accepted document is not a fact. The document is still read; this part stays unknown. */
 export const IMPORT_UNKNOWN_CODES = Object.freeze([
-  'sentinel.import.referenceUnresolved', 'sentinel.import.referenceConflict', 'sentinel.import.externalProperties',
-  'sentinel.import.noExchange', 'sentinel.import.noResponse', 'sentinel.import.responseConflict', 'sentinel.import.missingHeader',
-  'sentinel.import.headerMalformed', 'sentinel.import.headerFolded', 'sentinel.import.headerTruncated', 'sentinel.import.headerAmbiguous',
-  'sentinel.import.statusMalformed', 'sentinel.import.versionUnsupported', 'sentinel.import.redirect',
-  'sentinel.import.requestMalformed', 'sentinel.import.requestInconsistent', 'sentinel.import.originUnknown',
-  'sentinel.import.outsideStatedScope', 'sentinel.import.cookieMalformed', 'sentinel.import.commaAmbiguous',
-  'sentinel.import.attributeDuplicate', 'sentinel.import.attributeMalformed', 'sentinel.import.sameSiteUnrecognized',
-  'sentinel.import.selectorAmbiguous', 'sentinel.import.duplicateInResponse', 'sentinel.import.deletionCookie',
-  'sentinel.import.sequenceUnsupported', 'sentinel.import.locationConflict', 'sentinel.import.locationUnresolved',
-  'sentinel.import.hashInvalid', 'sentinel.import.uriRejected', 'sentinel.import.producerUnknown',
+  'sentinel.import.referenceUnresolved',
+  'sentinel.import.referenceConflict',
+  'sentinel.import.externalProperties',
+  'sentinel.import.noExchange',
+  'sentinel.import.noResponse',
+  'sentinel.import.responseConflict',
+  'sentinel.import.missingHeader',
+  'sentinel.import.headerMalformed',
+  'sentinel.import.headerFolded',
+  'sentinel.import.headerTruncated',
+  'sentinel.import.headerAmbiguous',
+  'sentinel.import.statusMalformed',
+  'sentinel.import.versionUnsupported',
+  'sentinel.import.redirect',
+  'sentinel.import.requestMalformed',
+  'sentinel.import.requestInconsistent',
+  'sentinel.import.originUnknown',
+  'sentinel.import.outsideStatedScope',
+  'sentinel.import.cookieMalformed',
+  'sentinel.import.commaAmbiguous',
+  'sentinel.import.attributeDuplicate',
+  'sentinel.import.attributeMalformed',
+  'sentinel.import.sameSiteUnrecognized',
+  'sentinel.import.selectorAmbiguous',
+  'sentinel.import.duplicateInResponse',
+  'sentinel.import.deletionCookie',
+  'sentinel.import.sequenceUnsupported',
+  'sentinel.import.locationConflict',
+  'sentinel.import.locationUnresolved',
+  'sentinel.import.hashInvalid',
+  'sentinel.import.uriRejected',
+  'sentinel.import.producerUnknown',
 ] as const);
-export type ImportUnknownCode = typeof IMPORT_UNKNOWN_CODES[number];
+export type ImportUnknownCode = (typeof IMPORT_UNKNOWN_CODES)[number];
 
 /** What every normalized import says about itself, whatever it contains. */
 export const IMPORT_LIMITATION_KEYS = Object.freeze([
-  'sentinel.import.importedNotExecuted', 'sentinel.import.toolScopeOnly', 'sentinel.import.noWholeApplicationClaim',
-  'sentinel.import.suppliedBytesOnly', 'sentinel.import.callerStatedManifest', 'sentinel.import.unbound',
+  'sentinel.import.importedNotExecuted',
+  'sentinel.import.toolScopeOnly',
+  'sentinel.import.noWholeApplicationClaim',
+  'sentinel.import.suppliedBytesOnly',
+  'sentinel.import.callerStatedManifest',
+  'sentinel.import.unbound',
 ] as const);
 
-export const IMPORT_FORMATS = Object.freeze(['sarif-2.1.0', 'zap-traditional-json', 'zap-traditional-json-plus'] as const);
-export type ImportFormat = typeof IMPORT_FORMATS[number];
+export const IMPORT_FORMATS = Object.freeze([
+  'sarif-2.1.0',
+  'zap-traditional-json',
+  'zap-traditional-json-plus',
+] as const);
+export type ImportFormat = (typeof IMPORT_FORMATS)[number];
 
 /** The adapter's own identity: a different version may read the same bytes differently, so it is part of the output. */
 export const IMPORT_ADAPTER = Object.freeze({ id: 'sentinel.import.reports', version: '3' });
 
 /** The three attributes a Set-Cookie line can show. Integrity and confidentiality are never derived from a report. */
 export const COOKIE_PROPERTIES = Object.freeze(['cookie-secure', 'cookie-http-only', 'cookie-same-site'] as const);
-export type CookieProperty = typeof COOKIE_PROPERTIES[number];
+export type CookieProperty = (typeof COOKIE_PROPERTIES)[number];
 
 /** Hard ceilings, global per import. No caller, manifest or report can raise them. */
 export const IMPORT_CEILINGS = Object.freeze({
@@ -75,11 +118,21 @@ export type ImportLimits = { -readonly [K in keyof typeof IMPORT_CEILINGS]: numb
 export class ImportRefusal extends Error {
   readonly pointer: string | null;
 
-  constructor(readonly code: ImportRefusalCode, pointer: string | null = null) {
+  constructor(
+    readonly code: ImportRefusalCode,
+    pointer: string | null = null,
+  ) {
     // Diagnostics never echo member names, including names supplied to this constructor directly. Only numeric
     // positions survive; all member segments are opaque. Bound before splitting as well as on the stored property.
-    const safe = pointer === null ? null : pointer.slice(0, 256).split('/').map((part, i) =>
-      i === 0 && part === '' ? '' : /^[0-9]{1,10}$/.test(part) ? part : '*').join('/').slice(0, 256);
+    const safe =
+      pointer === null
+        ? null
+        : pointer
+            .slice(0, 256)
+            .split('/')
+            .map((part, i) => (i === 0 && part === '' ? '' : /^[0-9]{1,10}$/.test(part) ? part : '*'))
+            .join('/')
+            .slice(0, 256);
     super(safe === null ? code : `${code} at ${safe}`);
     this.pointer = safe;
     this.name = 'ImportRefusal';
@@ -99,10 +152,12 @@ export class ImportBudget {
   constructor(limits: Partial<ImportLimits> = {}, clock: () => bigint = process.hrtime.bigint) {
     // Invalid knobs use the existing typed refusal, never Object.entries' raw TypeError. Undefined means the
     // optional limits were omitted; an explicitly undefined field still fails the finite-integer check below.
-    if (limits === null || typeof limits !== 'object' || Array.isArray(limits)) throw new ImportRefusal('sentinel.import.budgetExhausted');
+    if (limits === null || typeof limits !== 'object' || Array.isArray(limits))
+      throw new ImportRefusal('sentinel.import.budgetExhausted');
     const merged = { ...IMPORT_CEILINGS } as ImportLimits;
     for (const [k, v] of Object.entries(limits) as [keyof ImportLimits, number][]) {
-      if (!Object.hasOwn(IMPORT_CEILINGS, k) || !Number.isSafeInteger(v) || v < 0) throw new ImportRefusal('sentinel.import.budgetExhausted');
+      if (!Object.hasOwn(IMPORT_CEILINGS, k) || !Number.isSafeInteger(v) || v < 0)
+        throw new ImportRefusal('sentinel.import.budgetExhausted');
       merged[k] = Math.min(v, IMPORT_CEILINGS[k]);
     }
     this.limits = Object.freeze(merged);
@@ -115,7 +170,10 @@ export class ImportBudget {
     this.#work += n;
     if (this.#work > this.limits.work) throw new ImportRefusal('sentinel.import.budgetExhausted');
     this.#sinceClock += n;
-    if (this.#sinceClock >= 4096) { this.#sinceClock = 0; this.check(); }
+    if (this.#sinceClock >= 4096) {
+      this.#sinceClock = 0;
+      this.check();
+    }
   }
 
   /** Reads the clock now. */
@@ -124,7 +182,20 @@ export class ImportBudget {
   }
 
   /** Counts `n` more of a global limit, refusing past it. */
-  count(limit: 'claims' | 'locations' | 'exchanges' | 'headerLines' | 'cookies' | 'observations' | 'unknowns' | 'ignored' | 'jsonValues' | 'decodedStringBytes', n = 1): void {
+  count(
+    limit:
+      | 'claims'
+      | 'locations'
+      | 'exchanges'
+      | 'headerLines'
+      | 'cookies'
+      | 'observations'
+      | 'unknowns'
+      | 'ignored'
+      | 'jsonValues'
+      | 'decodedStringBytes',
+    n = 1,
+  ): void {
     const used = (this.#used.get(limit) ?? 0) + n;
     if (used > this.limits[limit]) throw new ImportRefusal('sentinel.import.budgetExhausted');
     this.#used.set(limit, used);
@@ -134,4 +205,5 @@ export class ImportBudget {
 
 export type Json = null | boolean | number | string | readonly Json[] | { readonly [k: string]: Json };
 export type JsonObject = { readonly [k: string]: Json };
-export const isObject = (v: Json | undefined): v is JsonObject => typeof v === 'object' && v !== null && !Array.isArray(v);
+export const isObject = (v: Json | undefined): v is JsonObject =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);

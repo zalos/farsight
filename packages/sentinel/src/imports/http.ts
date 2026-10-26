@@ -4,10 +4,23 @@
 // here contacts the target; a URL is only compared as text.
 import { ImportBudget, type ImportUnknownCode } from './types.js';
 
-export interface HeaderLine { readonly name: string; readonly lower: string; readonly value: string }
-export type Head<T> = { readonly ok: true; readonly start: T; readonly headers: readonly HeaderLine[] } | { readonly ok: false; readonly code: ImportUnknownCode };
-export interface StatusLine { readonly version: '1.0' | '1.1'; readonly status: number }
-export interface RequestLine { readonly method: string; readonly target: string; readonly version: '1.0' | '1.1' }
+export interface HeaderLine {
+  readonly name: string;
+  readonly lower: string;
+  readonly value: string;
+}
+export type Head<T> =
+  | { readonly ok: true; readonly start: T; readonly headers: readonly HeaderLine[] }
+  | { readonly ok: false; readonly code: ImportUnknownCode };
+export interface StatusLine {
+  readonly version: '1.0' | '1.1';
+  readonly status: number;
+}
+export interface RequestLine {
+  readonly method: string;
+  readonly target: string;
+  readonly version: '1.0' | '1.1';
+}
 
 export const TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 /** A field value: visible ASCII, obs-text, space and tab; no other control character. */
@@ -15,10 +28,12 @@ const FIELD_VALUE = /^[\t\x20-\x7e\x80-\uffff]*$/;
 const STATUS = /^HTTP\/([0-9])(?:\.([0-9]))? ([0-9]{3})(?: [\t\x20-\x7e\x80-\uffff]*)?$/;
 const REQUEST = /^([!#$%&'*+\-.^_`|~0-9A-Za-z]+) ([\x21-\x7e]+) HTTP\/([0-9])(?:\.([0-9]))?$/;
 
-export function validFieldValue(v: string): boolean { return FIELD_VALUE.test(v); }
+export function validFieldValue(v: string): boolean {
+  return FIELD_VALUE.test(v);
+}
 
 function version(major: string, minor: string | undefined): '1.0' | '1.1' | undefined {
-  return major === '1' && (minor === '0' || minor === '1') ? `1.${minor}` as '1.0' | '1.1' : undefined;
+  return major === '1' && (minor === '0' || minor === '1') ? (`1.${minor}` as '1.0' | '1.1') : undefined;
 }
 
 export function parseStatusLine(line: string): StatusLine | ImportUnknownCode {
@@ -40,14 +55,19 @@ export function parseRequestLine(line: string): RequestLine | ImportUnknownCode 
 }
 
 /** Splits one recorded head into its first line and header lines; any irregularity is an unknown, not a guess. */
-export function parseHead<T>(text: string, first: (line: string) => T | ImportUnknownCode, budget: ImportBudget): Head<T> {
+export function parseHead<T>(
+  text: string,
+  first: (line: string) => T | ImportUnknownCode,
+  budget: ImportBudget,
+): Head<T> {
   budget.work(Math.ceil(text.length / 64) + 1);
   if (!text.endsWith('\r\n\r\n')) return { ok: false, code: 'sentinel.import.headerTruncated' };
   const lines = text.slice(0, -4).split('\r\n');
   budget.count('headerLines', lines.length);
   for (const line of lines) {
     if (line.includes('\r') || line.includes('\n')) return { ok: false, code: 'sentinel.import.headerMalformed' };
-    if (Buffer.byteLength(line, 'utf8') > budget.limits.headerLineBytes) return { ok: false, code: 'sentinel.import.headerMalformed' };
+    if (Buffer.byteLength(line, 'utf8') > budget.limits.headerLineBytes)
+      return { ok: false, code: 'sentinel.import.headerMalformed' };
   }
   const start = first(lines[0]!);
   if (typeof start === 'string') return { ok: false, code: start as ImportUnknownCode };
@@ -80,7 +100,11 @@ export function absoluteTarget(target: string): { readonly origin: string; reado
   const path = (question === -1 ? tail : tail.slice(0, question)) || '/';
   const query = question === -1 ? '' : tail.slice(question);
   let url: URL;
-  try { url = new URL(target); } catch { return undefined; }
+  try {
+    url = new URL(target);
+  } catch {
+    return undefined;
+  }
   if (url.username || url.password || (url.protocol !== 'http:' && url.protocol !== 'https:')) return undefined;
   // URL removes dot segments, including encoded dots: those rewrites cannot establish a raw target match. Query
   // serialization may escape legal apostrophes or drop an empty '?'; never use it for comparison or reconstruction.
@@ -102,7 +126,7 @@ export function isCanonicalOrigin(origin: string): boolean {
  * origin-form needs exactly one. Duplicate or contradictory Host is conservative report inconsistency, not an RFC
  * invalidity judgment. This only compares report fields and never reads an origin from the caller's manifest. */
 export function hostAgrees(headers: readonly HeaderLine[], target: string, required: boolean): boolean {
-  const hosts = headers.filter(h => h.lower === 'host');
+  const hosts = headers.filter((h) => h.lower === 'host');
   if (hosts.length === 0) return !required;
   if (hosts.length !== 1) return false;
   const absolute = absoluteTarget(target);

@@ -2,7 +2,9 @@
 // application and none is ever built or run here: they are captured, parsed by the public parser and read as source.
 // Each case is a whole small repository; a test writes it into a temporary Git repository and captures it.
 
-export const POM = (over: { boot?: string; extraDeps?: string; properties?: string } = {}) => `<?xml version="1.0" encoding="UTF-8"?>
+export const POM = (
+  over: { boot?: string; extraDeps?: string; properties?: string } = {},
+) => `<?xml version="1.0" encoding="UTF-8"?>
 <!-- Synthetic Sentinel E2 fixture. Never built. -->
 <project xmlns="http://maven.apache.org/POM/4.0.0">
   <modelVersion>4.0.0</modelVersion>
@@ -146,15 +148,19 @@ export const MATCHER_MISMATCH = app({
 });
 
 // ---- E2 case 4: method security only ----
-export const METHOD_SECURITY = (enable: string | null) => app({
-  security: enable === null ? undefined : `${SECURITY_IMPORTS}
+export const METHOD_SECURITY = (enable: string | null) =>
+  app({
+    security:
+      enable === null
+        ? undefined
+        : `${SECURITY_IMPORTS}
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 
 @Configuration
 ${enable}
 public class SecurityConfig {}
 `,
-  routes: controller(`
+    routes: controller(`
   @PreAuthorize("hasRole('ADMIN')")
   @GetMapping("/reports")
   public Map<String, Object> reports() { return Map.of(); }
@@ -170,22 +176,23 @@ public class SecurityConfig {}
   @PreAuthorize("@guard.check(#id)")
   @GetMapping("/custom")
   public Map<String, Object> custom() { return Map.of(); }`),
-});
+  });
 
 // ---- E2 case 5: a custom filter in the chain, and a servlet filter bean ----
-export const CUSTOM_FILTER = (filterBean: boolean) => app({
-  security: security(`
+export const CUSTOM_FILTER = (filterBean: boolean) =>
+  app({
+    security: security(`
   @Bean
   public SecurityFilterChain chain(HttpSecurity http) throws Exception {
     http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
         .addFilterBefore(new HeaderFilter(), org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class);
     return http.build();
   }`),
-  routes: controller(`
+    routes: controller(`
   @GetMapping("/data")
   public Map<String, Object> data() { return Map.of(); }`),
-  extra: {
-    'src/main/java/app/HeaderFilter.java': `package app;
+    extra: {
+      'src/main/java/app/HeaderFilter.java': `package app;
 
 import jakarta.servlet.*;
 import java.io.IOException;
@@ -196,8 +203,8 @@ public class HeaderFilter implements Filter {
   }
 }
 `,
-  },
-});
+    },
+  });
 
 // ---- E2 case 6: a profile-conditioned chain ahead of a catch-all chain ----
 export const PROFILE_CHAIN = app({

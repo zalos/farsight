@@ -6,8 +6,18 @@ import { deepFreeze } from '../policy/immutable.js';
 import { ExecutionError } from './errors.js';
 
 export const BUILTIN_WORKERS = deepFreeze({
-  'framework-controls': { asset: 'frameworks/controls/worker', export: 'runFrameworkControlsWorker', driver: 'frameworks/controls/driver', closureRefusalExit: 71 },
-  'bounded-paths': { asset: 'analysis/paths/worker', export: 'runBoundedPathsWorker', driver: 'analysis/paths/driver', closureRefusalExit: 71 },
+  'framework-controls': {
+    asset: 'frameworks/controls/worker',
+    export: 'runFrameworkControlsWorker',
+    driver: 'frameworks/controls/driver',
+    closureRefusalExit: 71,
+  },
+  'bounded-paths': {
+    asset: 'analysis/paths/worker',
+    export: 'runBoundedPathsWorker',
+    driver: 'analysis/paths/driver',
+    closureRefusalExit: 71,
+  },
 } as const);
 export type BuiltinWorkerId = keyof typeof BUILTIN_WORKERS;
 export function builtinWorker(id: unknown) {
@@ -17,18 +27,45 @@ export function builtinWorker(id: unknown) {
   return BUILTIN_WORKERS[id as BuiltinWorkerId];
 }
 
-
 /** Classification only: the coordinator supplies its genuine trusted adapter, driver and raw supervisor outcome. */
-export function closureRefusalOf(adapter: TrustedAdapter | null, driver: CheckDriver | undefined, outcome: WorkerOutcome) {
-  if (!adapter || adapter.kind !== 'built-in' || adapter.isolation !== 'child' || !Object.hasOwn(BUILTIN_WORKERS, adapter.id)) return undefined;
+export function closureRefusalOf(
+  adapter: TrustedAdapter | null,
+  driver: CheckDriver | undefined,
+  outcome: WorkerOutcome,
+) {
+  if (
+    !adapter ||
+    adapter.kind !== 'built-in' ||
+    adapter.isolation !== 'child' ||
+    !Object.hasOwn(BUILTIN_WORKERS, adapter.id)
+  )
+    return undefined;
   const descriptor = BUILTIN_WORKERS[adapter.id as BuiltinWorkerId];
-  if (!('closureRefusalExit' in descriptor) || driver?.adapterId !== adapter.id || driver.implementationDigest !== adapter.digest
-    || outcome.adapter.id !== adapter.id || outcome.adapter.digest !== adapter.digest
-    || outcome.state !== 'failed' || outcome.code !== 'sentinel.execution.workerExited' || outcome.worker?.kind !== 'owned-child'
-    || outcome.exit?.exitCode !== descriptor.closureRefusalExit || outcome.exit.exitSignal !== null
-    || outcome.protocol.frames !== 0 || outcome.protocol.bytes !== 0 || outcome.result !== undefined || outcome.outputs.length !== 0) return undefined;
-  return { code: 'sentinel.execution.closureRefused' as const, detail: {
-    originalCode: outcome.code, exitCode: outcome.exit.exitCode, exitSignal: outcome.exit.exitSignal,
-    phase: 'before-hello', adapter: { id: adapter.id, digest: adapter.digest },
-  } };
+  if (
+    !('closureRefusalExit' in descriptor) ||
+    driver?.adapterId !== adapter.id ||
+    driver.implementationDigest !== adapter.digest ||
+    outcome.adapter.id !== adapter.id ||
+    outcome.adapter.digest !== adapter.digest ||
+    outcome.state !== 'failed' ||
+    outcome.code !== 'sentinel.execution.workerExited' ||
+    outcome.worker?.kind !== 'owned-child' ||
+    outcome.exit?.exitCode !== descriptor.closureRefusalExit ||
+    outcome.exit.exitSignal !== null ||
+    outcome.protocol.frames !== 0 ||
+    outcome.protocol.bytes !== 0 ||
+    outcome.result !== undefined ||
+    outcome.outputs.length !== 0
+  )
+    return undefined;
+  return {
+    code: 'sentinel.execution.closureRefused' as const,
+    detail: {
+      originalCode: outcome.code,
+      exitCode: outcome.exit.exitCode,
+      exitSignal: outcome.exit.exitSignal,
+      phase: 'before-hello',
+      adapter: { id: adapter.id, digest: adapter.digest },
+    },
+  };
 }

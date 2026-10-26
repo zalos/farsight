@@ -29,8 +29,11 @@ export interface CurrentLock {
 
 /** Any unsafe owner-private file below (a link, another account's, open to others) is the service record error. */
 function safely<T>(fn: () => T): T {
-  try { return fn(); } catch (e) {
-    if ((e instanceof PolicyError && e.code === UNSAFE) || e instanceof UnsafeRecordError) throw new ServiceError('sentinel.service.recordUnsafe');
+  try {
+    return fn();
+  } catch (e) {
+    if ((e instanceof PolicyError && e.code === UNSAFE) || e instanceof UnsafeRecordError)
+      throw new ServiceError('sentinel.service.recordUnsafe');
     throw e;
   }
 }
@@ -46,7 +49,10 @@ export class RuleLockBook {
   readonly #base: string;
 
   /** `trustDir` is the owner's private Sentinel state (adoption, receipts). `hooks` is a crash-test seam only. */
-  constructor(trustDir: string, options: { hooks?: PublishHooks; repairReads?: boolean; stillWithin?: () => void } = {}) {
+  constructor(
+    trustDir: string,
+    options: { hooks?: PublishHooks; repairReads?: boolean; stillWithin?: () => void } = {},
+  ) {
     this.#repairReads = options.repairReads !== false;
     this.#stillWithin = options.stillWithin;
     this.#hooks = options.hooks ?? {};
@@ -70,12 +76,21 @@ export class RuleLockBook {
   /** One link's target, or null when the link does not exist. */
   #link(name: string): string | null {
     this.#stillWithin?.();
-    const bytes = safely(() => readPublished(dirname(join(this.#dir, name)), basename(name), MAX_POINTER_BYTES, { repairTemporaryAliases: this.#repairReads }));
+    const bytes = safely(() =>
+      readPublished(dirname(join(this.#dir, name)), basename(name), MAX_POINTER_BYTES, {
+        repairTemporaryAliases: this.#repairReads,
+      }),
+    );
     this.#stillWithin?.();
     if (!bytes) return null;
     let v: { schema?: unknown; digest?: unknown };
-    try { v = JSON.parse(bytes.toString('utf8')); } catch { throw new ServiceError('sentinel.service.recordUnsafe'); }
-    if (v?.schema !== 'sentinel-lock-link/draft-1' || typeof v.digest !== 'string' || !DIGEST.test(v.digest)) throw new ServiceError('sentinel.service.recordUnsafe');
+    try {
+      v = JSON.parse(bytes.toString('utf8'));
+    } catch {
+      throw new ServiceError('sentinel.service.recordUnsafe');
+    }
+    if (v?.schema !== 'sentinel-lock-link/draft-1' || typeof v.digest !== 'string' || !DIGEST.test(v.digest))
+      throw new ServiceError('sentinel.service.recordUnsafe');
     return v.digest;
   }
 
@@ -89,19 +104,35 @@ export class RuleLockBook {
   read(digest: string): RuleLockEnvelope {
     if (!DIGEST.test(digest)) throw new ServiceError('sentinel.service.recordUnsafe');
     this.#stillWithin?.();
-    const bytes = safely(() => readPublished(this.#revisions, `${digest.slice(7)}.json`, MAX_LOCK_BYTES, { repairTemporaryAliases: this.#repairReads }));
+    const bytes = safely(() =>
+      readPublished(this.#revisions, `${digest.slice(7)}.json`, MAX_LOCK_BYTES, {
+        repairTemporaryAliases: this.#repairReads,
+      }),
+    );
     this.#stillWithin?.();
     if (!bytes) throw new ServiceError('sentinel.service.recordUnsafe');
     let value: unknown;
-    try { value = JSON.parse(bytes.toString('utf8')); } catch { throw new ServiceError('sentinel.service.recordUnsafe'); }
+    try {
+      value = JSON.parse(bytes.toString('utf8'));
+    } catch {
+      throw new ServiceError('sentinel.service.recordUnsafe');
+    }
     return verifyPinnedLock(value, digest);
   }
 
   /** Files a revision under its digest, once. A revision already filed must be the same lock. Returns the digest. */
   store(lock: RuleLockEnvelope): string {
     const digest = lockDigest(lock);
-    safely(() => { ensureDurableDir(this.#revisions, this.#base); ensurePrivateDir(this.#revisions, UNSAFE); });
-    const created = publishOnce(this.#revisions, `${digest.slice(7)}.json`, Buffer.from(JSON.stringify(lock)), this.#hooks);
+    safely(() => {
+      ensureDurableDir(this.#revisions, this.#base);
+      ensurePrivateDir(this.#revisions, UNSAFE);
+    });
+    const created = publishOnce(
+      this.#revisions,
+      `${digest.slice(7)}.json`,
+      Buffer.from(JSON.stringify(lock)),
+      this.#hooks,
+    );
     if (!created) this.read(digest);
     return digest;
   }
@@ -115,8 +146,16 @@ export class RuleLockBook {
     if (expected !== null) this.read(expected);
     const dir = expected === null ? this.#dir : join(this.#dir, 'next');
     const name = expected === null ? 'first' : `${expected.slice(7)}.json`;
-    safely(() => { ensureDurableDir(dir, this.#base); ensurePrivateDir(dir, UNSAFE); });
-    const linked = publishOnce(dir, name, Buffer.from(JSON.stringify({ schema: 'sentinel-lock-link/draft-1', digest })), this.#hooks);
+    safely(() => {
+      ensureDurableDir(dir, this.#base);
+      ensurePrivateDir(dir, UNSAFE);
+    });
+    const linked = publishOnce(
+      dir,
+      name,
+      Buffer.from(JSON.stringify({ schema: 'sentinel-lock-link/draft-1', digest })),
+      this.#hooks,
+    );
     if (!linked) throw new ServiceError('sentinel.service.lockChanged');
   }
 
@@ -127,11 +166,18 @@ export class RuleLockBook {
   storePack(files: ReadonlyMap<string, Uint8Array>): string {
     const pack = validatePack(new Map(files));
     const digest = pack.entry.packDigest;
-    const record = { schema: 'sentinel-pack-files/draft-1', packDigest: digest,
-      files: [...files.keys()].sort().map(path => [path, Buffer.from(files.get(path)!).toString('base64')]) };
+    const record = {
+      schema: 'sentinel-pack-files/draft-1',
+      packDigest: digest,
+      files: [...files.keys()].sort().map((path) => [path, Buffer.from(files.get(path)!).toString('base64')]),
+    };
     const dir = join(this.#dir, 'packs');
-    safely(() => { ensureDurableDir(dir, this.#base); ensurePrivateDir(dir, UNSAFE); });
-    if (!publishOnce(dir, `${digest.slice(7)}.json`, Buffer.from(JSON.stringify(record)), this.#hooks)) this.readPack(digest);
+    safely(() => {
+      ensureDurableDir(dir, this.#base);
+      ensurePrivateDir(dir, UNSAFE);
+    });
+    if (!publishOnce(dir, `${digest.slice(7)}.json`, Buffer.from(JSON.stringify(record)), this.#hooks))
+      this.readPack(digest);
     return digest;
   }
 
@@ -144,15 +190,25 @@ export class RuleLockBook {
   readPackFiles(packDigest: string): ReadonlyMap<string, Uint8Array> {
     if (!DIGEST.test(packDigest)) throw new ServiceError('sentinel.service.recordUnsafe');
     this.#stillWithin?.();
-    const bytes = safely(() => readPublished(join(this.#dir, 'packs'), `${packDigest.slice(7)}.json`, Math.ceil(MAX_PACK_BYTES * 1.4) + 65536, { repairTemporaryAliases: this.#repairReads }));
+    const bytes = safely(() =>
+      readPublished(join(this.#dir, 'packs'), `${packDigest.slice(7)}.json`, Math.ceil(MAX_PACK_BYTES * 1.4) + 65536, {
+        repairTemporaryAliases: this.#repairReads,
+      }),
+    );
     this.#stillWithin?.();
     if (!bytes) throw new ServiceError('sentinel.service.packUnavailable');
     let v: { schema?: unknown; packDigest?: unknown; files?: unknown };
-    try { v = JSON.parse(bytes.toString('utf8')); } catch { throw new ServiceError('sentinel.service.recordUnsafe'); }
-    if (v?.schema !== 'sentinel-pack-files/draft-1' || v.packDigest !== packDigest || !Array.isArray(v.files)) throw new ServiceError('sentinel.service.recordUnsafe');
+    try {
+      v = JSON.parse(bytes.toString('utf8'));
+    } catch {
+      throw new ServiceError('sentinel.service.recordUnsafe');
+    }
+    if (v?.schema !== 'sentinel-pack-files/draft-1' || v.packDigest !== packDigest || !Array.isArray(v.files))
+      throw new ServiceError('sentinel.service.recordUnsafe');
     const files = new Map<string, Uint8Array>();
     for (const f of v.files as unknown[]) {
-      if (!Array.isArray(f) || typeof f[0] !== 'string' || typeof f[1] !== 'string' || files.has(f[0])) throw new ServiceError('sentinel.service.recordUnsafe');
+      if (!Array.isArray(f) || typeof f[0] !== 'string' || typeof f[1] !== 'string' || files.has(f[0]))
+        throw new ServiceError('sentinel.service.recordUnsafe');
       files.set(f[0], Buffer.from(f[1], 'base64'));
     }
     const pack = validatePack(files);
@@ -162,7 +218,6 @@ export class RuleLockBook {
 
   /** The validated packs the given lock names, from their stored bytes. */
   packsOf(lock: RuleLockEnvelope): ValidatedPack[] {
-    return lock.packs.map(p => this.readPack(p.packDigest));
+    return lock.packs.map((p) => this.readPack(p.packDigest));
   }
-
 }

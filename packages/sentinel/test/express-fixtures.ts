@@ -95,7 +95,8 @@ export default app;
 `);
 
 /** Nested routers: /api requires a user, /api/admin also requires the admin role, and an app route below /api. */
-export const NESTED = files(`import express from 'express';
+export const NESTED = files(
+  `import express from 'express';
 import api from './routes/api.js';
 
 const app = express();
@@ -105,8 +106,9 @@ app.get('/api/health', (req, res) => { res.json({ ok: true }); });
 app.get('/status', (req, res) => { res.json({ ok: true }); });
 
 export default app;
-`, {
-  'src/routes/api.ts': `import { Router } from 'express';
+`,
+  {
+    'src/routes/api.ts': `import { Router } from 'express';
 import { requireUser } from '../auth.js';
 import admin from './admin.js';
 
@@ -117,7 +119,7 @@ router.get('/me', (req, res) => { res.json({}); });
 
 export default router;
 `,
-  'src/routes/admin.ts': `import express from 'express';
+    'src/routes/admin.ts': `import express from 'express';
 import { requireRole } from '../auth.js';
 
 const router = express.Router();
@@ -126,4 +128,5 @@ router.get('/stats', (req, res) => { res.json({}); });
 
 export default router;
 `,
-});
+  },
+);

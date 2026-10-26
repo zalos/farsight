@@ -34,34 +34,60 @@ function readSealed(dir: string, artifact: ArtifactId): Uint8Array | undefined {
   const m = /^sha256:([0-9a-f]{64})$/.exec(artifact);
   if (!m) return undefined;
   let fd: number;
-  try { fd = openSync(join(dir, m[1]!), FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0)); } catch { return undefined; }
+  try {
+    fd = openSync(join(dir, m[1]!), FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0));
+  } catch {
+    return undefined;
+  }
   try {
     const st = fstatSync(fd);
     if (!st.isFile()) return undefined;
     const buf = Buffer.alloc(st.size);
     let off = 0;
-    while (off < st.size) { const n = readSync(fd, buf, off, st.size - off, off); if (n === 0) break; off += n; }
+    while (off < st.size) {
+      const n = readSync(fd, buf, off, st.size - off, off);
+      if (n === 0) break;
+      off += n;
+    }
     return off === st.size ? buf : undefined;
-  } finally { closeSync(fd); }
+  } finally {
+    closeSync(fd);
+  }
 }
 
-export async function runSecretsAttempt(service: ExecutionService, attempt: SecretsAttempt): Promise<SecretsScanResult> {
+export async function runSecretsAttempt(
+  service: ExecutionService,
+  attempt: SecretsAttempt,
+): Promise<SecretsScanResult> {
   const adapter = attempt.adapter ?? GITLEAKS_PRODUCTION_BUILD;
   const jobDir = mkdtempSync(join(attempt.scratch, 'gitleaks-job-'));
   try {
-    const built = buildSecretsJob({ snapshot: attempt.snapshot, sourceId: attempt.sourceId, targets: attempt.targets }, jobDir, adapter);
+    const built = buildSecretsJob(
+      { snapshot: attempt.snapshot, sourceId: attempt.sourceId, targets: attempt.targets },
+      jobDir,
+      adapter,
+    );
     const outcome = await service.run({
-      adapterId: adapter.definition.id, attemptId: attempt.attemptId, work: attempt.work, inputs: built.inputs,
+      adapterId: adapter.definition.id,
+      attemptId: attempt.attemptId,
+      work: attempt.work,
+      inputs: built.inputs,
       ...(attempt.signal ? { signal: attempt.signal } : {}),
     });
     try {
       attempt.inspect?.(outcome);
-      const byId = new Map(outcome.outputs.map(o => [o.id, o.path]));
+      const byId = new Map(outcome.outputs.map((o) => [o.id, o.path]));
       const sealed = join(outcome.workDir, 'input');
       return normalizeSecretsRun({
-        job: built.job, jobDigest: built.jobDigest, outcome, observedAt: (attempt.now?.() ?? new Date()).toISOString(),
-        outputBytes: id => { const p = byId.get(id); return p ? readFileSync(p) : undefined; },
-        targetBytes: a => readSealed(sealed, a),
+        job: built.job,
+        jobDigest: built.jobDigest,
+        outcome,
+        observedAt: (attempt.now?.() ?? new Date()).toISOString(),
+        outputBytes: (id) => {
+          const p = byId.get(id);
+          return p ? readFileSync(p) : undefined;
+        },
+        targetBytes: (a) => readSealed(sealed, a),
         ...(attempt.qualifyingArchitecture ? { qualifyingArchitecture: attempt.qualifyingArchitecture } : {}),
       });
     } finally {

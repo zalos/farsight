@@ -29,8 +29,15 @@ export function treeFiles(extra: Record<string, string | Buffer | null> = {}): R
     'src/clean.ts': 'export const nothingSecret = 1;\n',
     'notes/allowed.md': `example ${VALUE} gitleaks:allow\n`,
     // Fingerprints for both findings in every form a path could take: none of them may suppress anything.
-    '.gitleaksignore': ['config/service.env:github-pat:2', 'notes/allowed.md:github-pat:1', 'scan/tree/config/service.env:github-pat:2',
-      'scan/tree/notes/allowed.md:github-pat:1', 'tree/config/service.env:github-pat:2', 'tree/notes/allowed.md:github-pat:1'].join('\n') + '\n',
+    '.gitleaksignore':
+      [
+        'config/service.env:github-pat:2',
+        'notes/allowed.md:github-pat:1',
+        'scan/tree/config/service.env:github-pat:2',
+        'scan/tree/notes/allowed.md:github-pat:1',
+        'tree/config/service.env:github-pat:2',
+        'tree/notes/allowed.md:github-pat:1',
+      ].join('\n') + '\n',
     ...extra,
   };
   return Object.fromEntries(Object.entries(files).filter((e): e is [string, string | Buffer] => e[1] !== null));
@@ -54,14 +61,48 @@ export function captured(dir: string, files: Record<string, string | Buffer>) {
  * as written, upper-cased, and with every s → ſ and k → K (Kelvin); near misses that must not match are included.
  */
 export function allowlistCorpus(): string[] {
-  const fold = (w: string) => [...new Set([w, w.toUpperCase(), w.replaceAll('s', 'ſ'), w.replaceAll('k', 'K'), w.replaceAll('S', 'ſ')])];
-  const exts = ['png', 'gif', 'jpeg', 'svg', 'tiff', 'ttf', 'woff2', 'docx', 'xlsx', 'pdf', 'bin', 'socket', 'vsidx', 'suo', 'wsuo', 'dll', 'pdb', 'exe', 'gltf'];
+  const fold = (w: string) => [
+    ...new Set([w, w.toUpperCase(), w.replaceAll('s', 'ſ'), w.replaceAll('k', 'K'), w.replaceAll('S', 'ſ')]),
+  ];
+  const exts = [
+    'png',
+    'gif',
+    'jpeg',
+    'svg',
+    'tiff',
+    'ttf',
+    'woff2',
+    'docx',
+    'xlsx',
+    'pdf',
+    'bin',
+    'socket',
+    'vsidx',
+    'suo',
+    'wsuo',
+    'dll',
+    'pdb',
+    'exe',
+    'gltf',
+  ];
   const out = new Set<string>();
-  for (const ext of exts) for (const v of fold(ext)) { out.add(`data/config.${v}`); out.add(`dir.${v}/token.env`); }
+  for (const ext of exts)
+    for (const v of fold(ext)) {
+      out.add(`data/config.${v}`);
+      out.add(`dir.${v}/token.env`);
+    }
   for (const v of fold('dist-info')) out.add(`site/pkg-1.0.${v}/token.env`);
   for (const v of fold('virtualenv')) out.add(`${v}/lib/token.env`);
   for (const v of fold('python')) out.add(`x/lib/${v}3.11/token.env`);
-  for (const near of ['data/config.sockets', 'data/configsocket', 'images/token.env', 'data/config.ſockets', 'png/token.env', 'data/config.ṕng']) out.add(near);
+  for (const near of [
+    'data/config.sockets',
+    'data/configsocket',
+    'images/token.env',
+    'data/config.ſockets',
+    'png/token.env',
+    'data/config.ṕng',
+  ])
+    out.add(near);
   return [...out].sort();
 }
 
@@ -69,10 +110,23 @@ export function allowlistCorpus(): string[] {
  * A snapshot holding the captured files as included entries of one source, and the targets naming them by entry, the
  * way the coordinator hands a scan its files. `extra` entries (other kinds, other sources) can sit beside them.
  */
-export function snapshotFor(snapshotId: string, sourceId: string, files: ReturnType<typeof captured>, extra: object[] = []) {
+export function snapshotFor(
+  snapshotId: string,
+  sourceId: string,
+  files: ReturnType<typeof captured>,
+  extra: object[] = [],
+) {
   const entries: any[] = [...extra];
   const targets = files.map((f) => {
-    entries.push({ sourceId, relativePath: f.relativePath, kind: 'file', disposition: 'included', content: f.artifact, bytes: Buffer.from(require_(f.path)).length, generated: false });
+    entries.push({
+      sourceId,
+      relativePath: f.relativePath,
+      kind: 'file',
+      disposition: 'included',
+      content: f.artifact,
+      bytes: Buffer.from(require_(f.path)).length,
+      generated: false,
+    });
     return { entry: entries.length - 1, path: f.path };
   });
   return { snapshot: { id: snapshotId, entries }, targets };

@@ -1,7 +1,18 @@
 // Bounded static call paths (PR 18). A path says one graph node can reach another through the public parser's call
 // edges within stated bounds; it never says data flows along it. Sentinel has no qualified data-flow engine (E3), so
 // these are structural candidates only, each tied to the exact parser analysis and bounds that produced it.
-import type { ArtifactId, ByteSpan, CatalogKey, Count, Digest, Id, NodeId, RelativePath, ScopedReason, ShortText } from './common.js';
+import type {
+  ArtifactId,
+  ByteSpan,
+  CatalogKey,
+  Count,
+  Digest,
+  Id,
+  NodeId,
+  RelativePath,
+  ScopedReason,
+  ShortText,
+} from './common.js';
 
 /** The edge kinds a path may follow. Guard, validation and test edges are never traversed: they are not calls. */
 export type PathEdgeKind = 'calls' | 'http' | 'renders';

@@ -33,49 +33,75 @@ export function effectOf(v: Value): Effect {
   switch (v.kind) {
     case 'builtin':
       // Express's own body parsers and static server: they parse or serve, and never refuse for these properties.
-      return v.inert ? { kind: 'pass-through', at: [v.at] } : { kind: 'unknown', reason: 'sentinel.express.middlewareEffectUnknown', mayHandleErrors: false, at: [v.at] };
-    case 'foreign': return { kind: 'unknown', reason: 'sentinel.express.middlewareThirdParty', mayHandleErrors: true, at: [v.at] };
-    case 'function': return functionEffect(v);
-    case 'object': return { kind: 'unknown', reason: 'sentinel.express.registrationUnsupported', mayHandleErrors: true, at: [v.obj.at] };
-    case 'unknown': return { kind: 'unknown', reason: 'sentinel.express.middlewareUnresolved', mayHandleErrors: true, at: [v.at] };
-    default: return { kind: 'unknown', reason: 'sentinel.express.middlewareUnresolved', mayHandleErrors: true, at: [] };
+      return v.inert
+        ? { kind: 'pass-through', at: [v.at] }
+        : { kind: 'unknown', reason: 'sentinel.express.middlewareEffectUnknown', mayHandleErrors: false, at: [v.at] };
+    case 'foreign':
+      return { kind: 'unknown', reason: 'sentinel.express.middlewareThirdParty', mayHandleErrors: true, at: [v.at] };
+    case 'function':
+      return functionEffect(v);
+    case 'object':
+      return {
+        kind: 'unknown',
+        reason: 'sentinel.express.registrationUnsupported',
+        mayHandleErrors: true,
+        at: [v.obj.at],
+      };
+    case 'unknown':
+      return { kind: 'unknown', reason: 'sentinel.express.middlewareUnresolved', mayHandleErrors: true, at: [v.at] };
+    default:
+      return { kind: 'unknown', reason: 'sentinel.express.middlewareUnresolved', mayHandleErrors: true, at: [] };
   }
 }
 
 function functionEffect(v: Extract<Value, { kind: 'function' }>): Effect {
   const fn = v.node;
   const at: At[] = [...v.via, { file: v.file, node: fn }];
-  const unknown = (reason: ExpressReason = 'sentinel.express.middlewareEffectUnknown', mayHandleErrors = false): Effect => ({ kind: 'unknown', reason, mayHandleErrors, at });
+  const unknown = (
+    reason: ExpressReason = 'sentinel.express.middlewareEffectUnknown',
+    mayHandleErrors = false,
+  ): Effect => ({ kind: 'unknown', reason, mayHandleErrors, at });
   const params = fn.params as JsNode[];
   // A default or destructured parameter changes the arity Express reads: whether it is an error handler is unknown.
-  if (params.some(p => p.type !== 'Identifier')) return unknown('sentinel.express.middlewareEffectUnknown', true);
+  if (params.some((p) => p.type !== 'Identifier')) return unknown('sentinel.express.middlewareEffectUnknown', true);
   if (params.length === 4) {
     // It stays on the error path only if it never calls next, or calls it with the error it received.
-    const [err, , , next] = params.map(p => p.name as string);
+    const [err, , , next] = params.map((p) => p.name as string);
     let resumes = false;
     walk(fn.body as JsNode, (n, parents) => {
       if (n.type !== 'Identifier' || n.name !== next) return;
       const p = parents[parents.length - 1];
-      const passesError = p?.type === 'CallExpression' && p.callee === n && (p.arguments as JsNode[]).length === 1 && identifierName((p.arguments as JsNode[])[0]) === err;
+      const passesError =
+        p?.type === 'CallExpression' &&
+        p.callee === n &&
+        (p.arguments as JsNode[]).length === 1 &&
+        identifierName((p.arguments as JsNode[])[0]) === err;
       if (!passesError) resumes = true;
     });
     return { kind: 'error-only', resumes, at };
   }
   if (fn.async || fn.generator) return unknown();
   if (params.length !== 3 && params.length !== 2) return unknown();
-  const [req, res, next] = params.map(p => p.name as string);
+  const [req, res, next] = params.map((p) => p.name as string);
   if (!next) return unknown(); // a two-parameter function never passes the request on: it is a handler
   // next('route') / next('router') skip the rest of the route or router: that is not a refusal, and not read.
   let skips = false;
-  walk(fn.body as JsNode, n => {
-    if (n.type === 'CallExpression' && identifierName(n.callee as JsNode) === next && (n.arguments as JsNode[]).length) {
+  walk(fn.body as JsNode, (n) => {
+    if (
+      n.type === 'CallExpression' &&
+      identifierName(n.callee as JsNode) === next &&
+      (n.arguments as JsNode[]).length
+    ) {
       const a = stringValue((n.arguments as JsNode[])[0]);
       if (a === 'route' || a === 'router') skips = true;
     }
   });
   if (skips) return unknown('sentinel.express.nextSkip');
   const body = fn.body as JsNode;
-  const stmts = body.type === 'BlockStatement' ? body.body as JsNode[] : [{ type: 'ExpressionStatement', start: body.start, end: body.end, expression: body } as JsNode];
+  const stmts =
+    body.type === 'BlockStatement'
+      ? (body.body as JsNode[])
+      : [{ type: 'ExpressionStatement', start: body.start, end: body.end, expression: body } as JsNode];
   if (!stmts.length) return unknown();
   if (!isNextCall(stmts[stmts.length - 1]!, next)) return unknown();
   const before = stmts.slice(0, -1);
@@ -85,7 +111,12 @@ function functionEffect(v: Extract<Value, { kind: 'function' }>): Effect {
     const status = refusalStatus(s.consequent as JsNode, res!);
     const property = status !== undefined ? STATUS_PROPERTY[status] : undefined;
     if (!property || !requestCondition(s.test as JsNode, req!, v.bound)) return unknown();
-    if (countRefs(fn.body as JsNode, next) !== 1 || countRefs(s.test as JsNode, res!) || countRefs(s.test as JsNode, next)) return unknown();
+    if (
+      countRefs(fn.body as JsNode, next) !== 1 ||
+      countRefs(s.test as JsNode, res!) ||
+      countRefs(s.test as JsNode, next)
+    )
+      return unknown();
     return { kind: 'refusal', property, at: [...at, { file: v.file, node: s }] };
   }
   // A pass-through: no response, no write to the request, no request object handed on.
@@ -100,29 +131,50 @@ function functionEffect(v: Extract<Value, { kind: 'function' }>): Effect {
 }
 
 function isNextCall(s: JsNode, next: string): boolean {
-  const e = s.type === 'ExpressionStatement' ? unwrap(s.expression as JsNode) : s.type === 'ReturnStatement' ? unwrap(s.argument as JsNode) : undefined;
-  return e?.type === 'CallExpression' && identifierName(e.callee as JsNode) === next && (e.arguments as JsNode[]).length === 0;
+  const e =
+    s.type === 'ExpressionStatement'
+      ? unwrap(s.expression as JsNode)
+      : s.type === 'ReturnStatement'
+        ? unwrap(s.argument as JsNode)
+        : undefined;
+  return (
+    e?.type === 'CallExpression' &&
+    identifierName(e.callee as JsNode) === next &&
+    (e.arguments as JsNode[]).length === 0
+  );
 }
 
 /** The literal status a branch responds with and then stops, or undefined. */
 function refusalStatus(branch: JsNode, res: string): number | undefined {
-  const stmts = branch.type === 'BlockStatement' ? branch.body as JsNode[] : [branch];
+  const stmts = branch.type === 'BlockStatement' ? (branch.body as JsNode[]) : [branch];
   let response: JsNode | undefined;
   if (stmts.length === 1 && stmts[0]!.type === 'ReturnStatement') response = unwrap(stmts[0]!.argument as JsNode);
-  else if (stmts.length === 2 && stmts[0]!.type === 'ExpressionStatement' && stmts[1]!.type === 'ReturnStatement' && !stmts[1]!.argument) response = unwrap(stmts[0]!.expression as JsNode);
+  else if (
+    stmts.length === 2 &&
+    stmts[0]!.type === 'ExpressionStatement' &&
+    stmts[1]!.type === 'ReturnStatement' &&
+    !stmts[1]!.argument
+  )
+    response = unwrap(stmts[0]!.expression as JsNode);
   if (response?.type !== 'CallExpression') return undefined;
   const callee = unwrap(response.callee as JsNode);
   if (callee?.type !== 'MemberExpression' || callee.computed) return undefined;
   const method = identifierName(callee.property as JsNode);
   const args = response.arguments as JsNode[];
   // res.sendStatus(N)
-  if (method === 'sendStatus' && identifierName(callee.object as JsNode) === res && args.length === 1) return numberValue(args[0]);
+  if (method === 'sendStatus' && identifierName(callee.object as JsNode) === res && args.length === 1)
+    return numberValue(args[0]);
   // res.status(N).json(...) | .send(...) | .end(...), with literal bodies only (evaluating them runs no code).
   if (!method || !RESPONSE_ENDS.has(method) || !args.every(literalBody)) return undefined;
   const inner = unwrap(callee.object as JsNode);
   if (inner?.type !== 'CallExpression') return undefined;
   const ic = unwrap(inner.callee as JsNode);
-  if (ic?.type !== 'MemberExpression' || identifierName(ic.property as JsNode) !== 'status' || identifierName(ic.object as JsNode) !== res) return undefined;
+  if (
+    ic?.type !== 'MemberExpression' ||
+    identifierName(ic.property as JsNode) !== 'status' ||
+    identifierName(ic.object as JsNode) !== res
+  )
+    return undefined;
   const iargs = inner.arguments as JsNode[];
   return iargs.length === 1 ? numberValue(iargs[0]) : undefined;
 }
@@ -132,8 +184,11 @@ function literalBody(n: JsNode): boolean {
   if (!u) return false;
   if (stringValue(u) !== undefined || numberValue(u) !== undefined) return true;
   if (u.type === 'Literal') return true;
-  if (u.type === 'ObjectExpression') return (u.properties as JsNode[]).every(p => p.type === 'Property' && !p.computed && literalBody(p.value as JsNode));
-  if (u.type === 'ArrayExpression') return (u.elements as (JsNode | null)[]).every(e => !!e && literalBody(e));
+  if (u.type === 'ObjectExpression')
+    return (u.properties as JsNode[]).every(
+      (p) => p.type === 'Property' && !p.computed && literalBody(p.value as JsNode),
+    );
+  if (u.type === 'ArrayExpression') return (u.elements as (JsNode | null)[]).every((e) => !!e && literalBody(e));
   return false;
 }
 
@@ -160,7 +215,10 @@ function requestCondition(test: JsNode, req: string, bound: ReadonlyMap<string, 
   return false;
 }
 
-const isAbsent = (n: JsNode) => { const u = unwrap(n); return (u?.type === 'Literal' && u.value === null) || identifierName(u) === 'undefined'; };
+const isAbsent = (n: JsNode) => {
+  const u = unwrap(n);
+  return (u?.type === 'Literal' && u.value === null) || identifierName(u) === 'undefined';
+};
 
 function requestValue(n: JsNode, req: string): boolean {
   let u = unwrap(n);
@@ -169,7 +227,14 @@ function requestValue(n: JsNode, req: string): boolean {
     const callee = unwrap(u.callee as JsNode);
     const path = memberPath(callee);
     const args = u.arguments as JsNode[];
-    return !!path && path.length === 2 && path[0] === req && (path[1] === 'get' || path[1] === 'header') && args.length === 1 && stringValue(args[0]) !== undefined;
+    return (
+      !!path &&
+      path.length === 2 &&
+      path[0] === req &&
+      (path[1] === 'get' || path[1] === 'header') &&
+      args.length === 1 &&
+      stringValue(args[0]) !== undefined
+    );
   }
   const path = memberPath(u);
   return !!path && path.length >= 2 && path[0] === req;
@@ -179,13 +244,27 @@ function requestValue(n: JsNode, req: string): boolean {
 function onlyRequestValues(call: JsNode, req: string): boolean {
   let ok = true;
   walk(call, (n, parents) => {
-    if (n.type === 'AssignmentExpression' || n.type === 'UpdateExpression' || (n.type === 'UnaryExpression' && n.operator === 'delete')) ok = false;
+    if (
+      n.type === 'AssignmentExpression' ||
+      n.type === 'UpdateExpression' ||
+      (n.type === 'UnaryExpression' && n.operator === 'delete')
+    )
+      ok = false;
     if (n.type !== 'Identifier' || n.name !== req) return;
     const p = parents[parents.length - 1];
-    const prop = p?.type === 'MemberExpression' && p.object === n && !p.computed ? identifierName(p.property as JsNode) : undefined;
+    const prop =
+      p?.type === 'MemberExpression' && p.object === n && !p.computed
+        ? identifierName(p.property as JsNode)
+        : undefined;
     const gp = parents[parents.length - 2];
     // `req.method` read as a value, not called and not the object of a further member access.
-    if (!prop || !REQUEST_VALUES.has(prop) || (gp?.type === 'CallExpression' && gp.callee === p) || (gp?.type === 'MemberExpression' && gp.object === p)) ok = false;
+    if (
+      !prop ||
+      !REQUEST_VALUES.has(prop) ||
+      (gp?.type === 'CallExpression' && gp.callee === p) ||
+      (gp?.type === 'MemberExpression' && gp.object === p)
+    )
+      ok = false;
   });
   return ok;
 }

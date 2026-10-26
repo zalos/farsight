@@ -7,9 +7,23 @@ import { compareTimestamps } from '../validate.js';
 import { approvedDecisionAuthority, decisionHistoryAuthority, type ApprovedDecision } from './dispositions.js';
 import { checkedBasis, fail, timestamp, validDigest, type DecisionBasis } from './decision-data.js';
 
-export type DecisionPathReason = 'no-decision' | 'expired' | 'finding-changed' | 'source-changed' | 'environment-changed' | 'deployment-changed'
-  | 'new-surface' | 'route-changed' | 'control-changed' | 'resolution-changed' | 'framework-changed' | 'unresolved' | 'assertion-unverified'
-  | 'accepted-risk' | 'false-positive' | 'deferred';
+export type DecisionPathReason =
+  | 'no-decision'
+  | 'expired'
+  | 'finding-changed'
+  | 'source-changed'
+  | 'environment-changed'
+  | 'deployment-changed'
+  | 'new-surface'
+  | 'route-changed'
+  | 'control-changed'
+  | 'resolution-changed'
+  | 'framework-changed'
+  | 'unresolved'
+  | 'assertion-unverified'
+  | 'accepted-risk'
+  | 'false-positive'
+  | 'deferred';
 export interface EvaluatedDecisionPath {
   readonly surfaceId: NodeId;
   readonly dispositionId: string | null;
@@ -33,22 +47,44 @@ const evaluations = new WeakMap<object, DecisionEvaluation>();
 /** Only an evaluation made by this fold has provenance; serialization is an inert historical record. */
 export const decisionEvaluationAuthority = (value: unknown): DecisionEvaluation | undefined =>
   value && typeof value === 'object' ? evaluations.get(value) : undefined;
-export function evaluateDecisions(approvals: readonly ApprovedDecision[], basisInput: DecisionBasis, options: { workspace: string; at: string }): DecisionEvaluation {
+export function evaluateDecisions(
+  approvals: readonly ApprovedDecision[],
+  basisInput: DecisionBasis,
+  options: { workspace: string; at: string },
+): DecisionEvaluation {
   const basis = checkedBasis(basisInput);
-  if (!validDigest(options.workspace) || !timestamp(options.at)) fail('sentinel.decision.invalidInput', 'evaluation needs exact workspace and time');
+  if (!validDigest(options.workspace) || !timestamp(options.at))
+    fail('sentinel.decision.invalidInput', 'evaluation needs exact workspace and time');
   const history = decisionHistoryAuthority(approvals);
-  if (!history || history.workspace !== options.workspace) return fail('sentinel.decision.unauthorized', 'evaluation requires a complete current journal read');
-  const authority = approvals.map(a => {
+  if (!history || history.workspace !== options.workspace)
+    return fail('sentinel.decision.unauthorized', 'evaluation requires a complete current journal read');
+  const authority = approvals.map((a) => {
     const actual = approvedDecisionAuthority(a);
-    if (!actual || actual.workspace !== options.workspace) return fail('sentinel.decision.unauthorized', 'evaluation requires genuine approvals for this workspace');
+    if (!actual || actual.workspace !== options.workspace)
+      return fail('sentinel.decision.unauthorized', 'evaluation requires genuine approvals for this workspace');
     return actual;
   });
-  const paths = basis.paths.map(path => {
-    const candidates = authority.filter(a => a.value.basis.findingId === basis.findingId && a.value.disposition.scope.surfaceIds.includes(path.surfaceId) && compareTimestamps(a.approvedAt, options.at) <= 0)
+  const paths = basis.paths.map((path) => {
+    const candidates = authority
+      .filter(
+        (a) =>
+          a.value.basis.findingId === basis.findingId &&
+          a.value.disposition.scope.surfaceIds.includes(path.surfaceId) &&
+          compareTimestamps(a.approvedAt, options.at) <= 0,
+      )
       .sort((a, b) => b.sequence - a.sequence);
     const selected = candidates[0];
-    const out = (reason: DecisionPathReason, validity: EvaluatedDecisionPath['validity'] = 'invalidated', state: EvaluatedDecisionPath['state'] = 'open'): EvaluatedDecisionPath =>
-      ({ surfaceId: path.surfaceId, dispositionId: selected?.value.disposition.id ?? null, state, validity, reason });
+    const out = (
+      reason: DecisionPathReason,
+      validity: EvaluatedDecisionPath['validity'] = 'invalidated',
+      state: EvaluatedDecisionPath['state'] = 'open',
+    ): EvaluatedDecisionPath => ({
+      surfaceId: path.surfaceId,
+      dispositionId: selected?.value.disposition.id ?? null,
+      state,
+      validity,
+      reason,
+    });
     if (!selected) return out('no-decision', 'none');
     const { disposition: d, basis: old } = selected.value;
     // A historical view cannot accidentally apply a decision made later.
@@ -58,11 +94,12 @@ export function evaluateDecisions(approvals: readonly ApprovedDecision[], basisI
     if (old.findingFingerprint !== basis.findingFingerprint) return out('finding-changed');
     if (old.environmentDigest !== basis.environmentDigest) return out('environment-changed');
     if (old.deploymentDigest !== basis.deploymentDigest) return out('deployment-changed');
-    const before = old.paths.find(p => p.surfaceId === path.surfaceId);
+    const before = old.paths.find((p) => p.surfaceId === path.surfaceId);
     if (!before) return out('new-surface');
     if (before.routeDigest !== path.routeDigest) return out('route-changed');
     if (before.controlDigest !== path.controlDigest) return out('control-changed');
-    if (before.resolutionDigest !== path.resolutionDigest || before.resolution !== path.resolution) return out('resolution-changed');
+    if (before.resolutionDigest !== path.resolutionDigest || before.resolution !== path.resolution)
+      return out('resolution-changed');
     if (before.frameworkDigest !== path.frameworkDigest) return out('framework-changed');
     if (before.resolution !== 'exact' || path.resolution !== 'exact') return out('unresolved');
     if (d.decision === 'accepted-risk') return out('accepted-risk', 'valid', 'accepted-risk');
@@ -71,8 +108,18 @@ export function evaluateDecisions(approvals: readonly ApprovedDecision[], basisI
     // Until the bounded importer establishes provenance, even a JSON runtime-observed label is unverified.
     return out('assertion-unverified');
   });
-  const result = snapshot<DecisionEvaluation>({ schema: 'sentinel-decision-evaluation/1', workspace: options.workspace,
-    findingId: basis.findingId, findingFingerprint: basis.findingFingerprint, snapshotId: basis.snapshotId, sourceId: basis.sourceId,
-    basisDigest: canonicalDigest(basis), journalHead: history.head, evaluatedAt: options.at, paths });
-  evaluations.set(result, result); return result;
+  const result = snapshot<DecisionEvaluation>({
+    schema: 'sentinel-decision-evaluation/1',
+    workspace: options.workspace,
+    findingId: basis.findingId,
+    findingFingerprint: basis.findingFingerprint,
+    snapshotId: basis.snapshotId,
+    sourceId: basis.sourceId,
+    basisDigest: canonicalDigest(basis),
+    journalHead: history.head,
+    evaluatedAt: options.at,
+    paths,
+  });
+  evaluations.set(result, result);
+  return result;
 }

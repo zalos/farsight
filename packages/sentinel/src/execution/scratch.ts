@@ -23,13 +23,25 @@ export const PREP_PREFIX = 'prep.';
 /** Remove a tree this coordinator owns, reopening the read-only folders a restore or an attempt seals. */
 export function removeOwned(path: string): void {
   const open = (dir: string) => {
-    try { chmodSync(dir, 0o700); } catch { return; }
+    try {
+      chmodSync(dir, 0o700);
+    } catch {
+      return;
+    }
     let names: string[] = [];
-    try { names = readdirSync(dir); } catch { return; }
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return;
+    }
     for (const name of names) {
       const p = join(dir, name);
       let s;
-      try { s = lstatSync(p); } catch { continue; }
+      try {
+        s = lstatSync(p);
+      } catch {
+        continue;
+      }
       if (s.isDirectory()) open(p);
     }
   };
@@ -44,14 +56,23 @@ export interface ScratchReconciliation {
 }
 
 /** After recovery: remove what dead owners left that is provably no longer in use; keep everything else. */
-export function reconcileScratch(scratchRoot: string, store: SentinelStore, recovery: RecoveryReport,
+export function reconcileScratch(
+  scratchRoot: string,
+  store: SentinelStore,
+  recovery: RecoveryReport,
   /** Records acknowledged as terminal-unknown: kept for audit, and never proof that anything stopped. */
-  terminalUnknown: readonly string[]): ScratchReconciliation {
+  terminalUnknown: readonly string[],
+): ScratchReconciliation {
   const out: ScratchReconciliation = { removedRestores: [], removedWorkDirs: [], kept: [] };
   let names: string[];
-  try { names = readdirSync(scratchRoot); } catch { return out; }
+  try {
+    names = readdirSync(scratchRoot);
+  } catch {
+    return out;
+  }
   const held = new Set<string>([
-    ...recovery.obligations.map(o => o.attempt), ...recovery.pendingIntents.map(i => i.attempt),
+    ...recovery.obligations.map((o) => o.attempt),
+    ...recovery.pendingIntents.map((i) => i.attempt),
   ]);
   // An acknowledgement that cleanup will not be confirmed is not a stop: while any terminal-unknown record exists,
   // the worker it describes may still be alive and using its folder, so every attempt folder is kept.
@@ -61,18 +82,26 @@ export function reconcileScratch(scratchRoot: string, store: SentinelStore, reco
     const path = join(scratchRoot, name);
     if (name.startsWith(RESTORE_PREFIX)) {
       const epoch = name.slice(RESTORE_PREFIX.length, name.lastIndexOf('.'));
-      if (epoch && epoch !== store.epoch && UUID.test(name.slice(name.lastIndexOf('.') + 1))) { removeOwned(path); out.removedRestores.push(name); }
-      else out.kept.push(name);
+      if (epoch && epoch !== store.epoch && UUID.test(name.slice(name.lastIndexOf('.') + 1))) {
+        removeOwned(path);
+        out.removedRestores.push(name);
+      } else out.kept.push(name);
       continue;
     }
     const cut = name.length - 37;
     const prep = name.startsWith(PREP_PREFIX);
-    const attemptId = cut > 0 && name[cut] === (prep ? '.' : '-') && UUID.test(name.slice(cut + 1)) ? name.slice(prep ? PREP_PREFIX.length : 0, cut) : null;
+    const attemptId =
+      cut > 0 && name[cut] === (prep ? '.' : '-') && UUID.test(name.slice(cut + 1))
+        ? name.slice(prep ? PREP_PREFIX.length : 0, cut)
+        : null;
     const attempt = attemptId ? store.ledger.getAttempt(attemptId) : null;
     // An attempt never recorded (its owner died before recording it) is ours only through its worker record, settled
     // by this recovery. A container whose removal is unconfirmed or an unreadable record could belong to any attempt.
     const ended = attempt ? attempt.state !== 'running' : attemptId !== null && settled.has(attemptId);
-    if (!ended || held.has(attemptId!) || uncertain) { out.kept.push(name); continue; }
+    if (!ended || held.has(attemptId!) || uncertain) {
+      out.kept.push(name);
+      continue;
+    }
     removeOwned(path);
     out.removedWorkDirs.push(name);
   }

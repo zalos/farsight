@@ -7,7 +7,13 @@
 // not adopted, changed or invalid) fall back to the built-in defaults, which grant nothing.
 import { containsCredentialShape } from '@farsight/core/dist/credential-shapes.js';
 import type {
-  EffectivePolicyEnvelope, PolicyThresholds, RefusedRequest, RepoConfigEnvelope, SettingsEnvelope, SettingsTrust, Severity,
+  EffectivePolicyEnvelope,
+  PolicyThresholds,
+  RefusedRequest,
+  RepoConfigEnvelope,
+  SettingsEnvelope,
+  SettingsTrust,
+  Severity,
 } from '../contracts/index.js';
 import { SEVERITIES } from '../contracts/index.js';
 import { validateEnvelope } from '../validate.js';
@@ -32,29 +38,56 @@ export const DEFAULT_SETTINGS: SettingsEnvelope = deepFreeze<SettingsEnvelope>({
 });
 
 function decode(bytes: Uint8Array): unknown {
-  try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch {
+  try {
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch {
     return policyFail('sentinel.policy.settingsInvalid', 'not UTF-8 JSON');
   }
 }
 
 /** Every string in the value except the named keychain-reference fields. */
 function* strings(value: unknown, path: string, skip: (path: string) => boolean): Generator<[string, string]> {
-  if (typeof value === 'string') { if (!skip(path)) yield [path, value]; return; }
-  if (Array.isArray(value)) { for (let i = 0; i < value.length; i++) yield* strings(value[i], `${path}/${i}`, skip); return; }
-  if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) yield* strings(v, `${path}/${k}`, skip);
+  if (typeof value === 'string') {
+    if (!skip(path)) yield [path, value];
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) yield* strings(value[i], `${path}/${i}`, skip);
+    return;
+  }
+  if (value && typeof value === 'object')
+    for (const [k, v] of Object.entries(value)) yield* strings(v, `${path}/${k}`, skip);
 }
 
 /** Parses settings bytes. A secret-shaped value anywhere but a keychain field is refused without echoing it. */
 export function parseSettings(bytes: Uint8Array): SettingsEnvelope {
   const value = decode(bytes);
   const checked = validateEnvelope('settings', value);
-  if (!checked.ok) return policyFail('sentinel.policy.settingsInvalid', `${checked.errors[0]?.path || '/'}: ${checked.errors[0]?.message ?? 'invalid'}`);
+  if (!checked.ok)
+    return policyFail(
+      'sentinel.policy.settingsInvalid',
+      `${checked.errors[0]?.path || '/'}: ${checked.errors[0]?.message ?? 'invalid'}`,
+    );
   // Only schema-validated native identity digests are metadata. Preserve the real settings bytes; filter an elided clone.
-  const secretView=structuredClone(checked.value);
-  for(const provider of secretView.providers)if(provider.kind==='claude-cli'&&provider.nativeProfile){const pins=provider.nativeProfile as unknown as Record<string,unknown>;for(const key of ['executableDigest','helperDigest','profileDigest'])if(typeof pins[key]==='string'&&/^sha256:[a-f0-9]{64}$/.test(pins[key] as string))delete pins[key]}
-  for(const provider of secretView.providers)if(provider.kind==='copilot-cli'&&provider.copilotProfile){const pins=provider.copilotProfile as unknown as Record<string,unknown>;for(const key of ['executableDigest','runtimeDigest','profileDigest'])if(typeof pins[key]==='string'&&/^sha256:[a-f0-9]{64}$/.test(pins[key] as string))delete pins[key]}
-  for (const [path, text] of strings(secretView, '', p => /^\/providers\/\d+\/credential$/.test(p))) {
-    if (containsCredentialShape(text)) policyFail('sentinel.policy.credentialValue', `${path} holds a value shaped like a credential; settings hold keychain references only`);
+  const secretView = structuredClone(checked.value);
+  for (const provider of secretView.providers)
+    if (provider.kind === 'claude-cli' && provider.nativeProfile) {
+      const pins = provider.nativeProfile as unknown as Record<string, unknown>;
+      for (const key of ['executableDigest', 'helperDigest', 'profileDigest'])
+        if (typeof pins[key] === 'string' && /^sha256:[a-f0-9]{64}$/.test(pins[key] as string)) delete pins[key];
+    }
+  for (const provider of secretView.providers)
+    if (provider.kind === 'copilot-cli' && provider.copilotProfile) {
+      const pins = provider.copilotProfile as unknown as Record<string, unknown>;
+      for (const key of ['executableDigest', 'runtimeDigest', 'profileDigest'])
+        if (typeof pins[key] === 'string' && /^sha256:[a-f0-9]{64}$/.test(pins[key] as string)) delete pins[key];
+    }
+  for (const [path, text] of strings(secretView, '', (p) => /^\/providers\/\d+\/credential$/.test(p))) {
+    if (containsCredentialShape(text))
+      policyFail(
+        'sentinel.policy.credentialValue',
+        `${path} holds a value shaped like a credential; settings hold keychain references only`,
+      );
   }
   return checked.value;
 }
@@ -62,7 +95,11 @@ export function parseSettings(bytes: Uint8Array): SettingsEnvelope {
 /** Parses repository scan intent. It is a request, so it is validated but never trusted. */
 export function parseRepoConfig(bytes: Uint8Array): RepoConfigEnvelope {
   const checked = validateEnvelope('repoconfig', decode(bytes));
-  if (!checked.ok) return policyFail('sentinel.policy.settingsInvalid', `${checked.errors[0]?.path || '/'}: ${checked.errors[0]?.message ?? 'invalid'}`);
+  if (!checked.ok)
+    return policyFail(
+      'sentinel.policy.settingsInvalid',
+      `${checked.errors[0]?.path || '/'}: ${checked.errors[0]?.message ?? 'invalid'}`,
+    );
   return checked.value;
 }
 
@@ -106,7 +143,8 @@ export interface PolicyInputs {
 export function effectivePolicy(given: PolicyInputs): EffectivePolicy {
   const inputs = snapshot(given);
   // `adopted` without settings bytes is not a trust state anyone can hold: it is reported as invalid.
-  const trust: SettingsTrust = inputs.trust === 'adopted' && (!inputs.settings || !inputs.settingsDigest) ? 'invalid' : inputs.trust;
+  const trust: SettingsTrust =
+    inputs.trust === 'adopted' && (!inputs.settings || !inputs.settingsDigest) ? 'invalid' : inputs.trust;
   const trusted: SettingsEnvelope = trust === 'adopted' ? inputs.settings! : snapshot(DEFAULT_SETTINGS);
   const repo = inputs.repoConfig;
   const refused: RefusedRequest[] = [];
@@ -114,7 +152,8 @@ export function effectivePolicy(given: PolicyInputs): EffectivePolicy {
   const mandatory = new Set(trusted.mandatoryRules);
   const requested = new Set(repo?.requestedRules ?? []);
   for (const r of repo?.disabledRules ?? []) {
-    if (mandatory.has(r)) refused.push({ request: 'disable-rule', subject: r, reasonCode: 'sentinel.policy.mandatoryRuleKept' });
+    if (mandatory.has(r))
+      refused.push({ request: 'disable-rule', subject: r, reasonCode: 'sentinel.policy.mandatoryRuleKept' });
     requested.delete(r);
   }
   const rules = [...new Set([...mandatory, ...requested])].sort();
@@ -124,10 +163,19 @@ export function effectivePolicy(given: PolicyInputs): EffectivePolicy {
   let failOnSeverity = t.failOnSeverity;
   if (want.failOnSeverity !== undefined) {
     if (rank(want.failOnSeverity) <= rank(t.failOnSeverity)) failOnSeverity = want.failOnSeverity;
-    else refused.push({ request: 'weaken-threshold', subject: 'failOnSeverity', reasonCode: 'sentinel.policy.thresholdNotWeakened' });
+    else
+      refused.push({
+        request: 'weaken-threshold',
+        subject: 'failOnSeverity',
+        reasonCode: 'sentinel.policy.thresholdNotWeakened',
+      });
   }
   if (want.requireCompleteCoverage === false && t.requireCompleteCoverage) {
-    refused.push({ request: 'weaken-threshold', subject: 'requireCompleteCoverage', reasonCode: 'sentinel.policy.thresholdNotWeakened' });
+    refused.push({
+      request: 'weaken-threshold',
+      subject: 'requireCompleteCoverage',
+      reasonCode: 'sentinel.policy.thresholdNotWeakened',
+    });
   }
   const thresholds: PolicyThresholds = {
     failOnSeverity,
@@ -136,11 +184,16 @@ export function effectivePolicy(given: PolicyInputs): EffectivePolicy {
   };
 
   for (const s of repo?.suppressions ?? []) {
-    refused.push({ request: 'suppression', subject: `${s.familyId} ${s.scopeId}`.slice(0, 200), reasonCode: 'sentinel.policy.suppressionNotApproved' });
+    refused.push({
+      request: 'suppression',
+      subject: `${s.familyId} ${s.scopeId}`.slice(0, 200),
+      reasonCode: 'sentinel.policy.suppressionNotApproved',
+    });
   }
-  const providers = new Set(trusted.providers.map(p => p.id));
+  const providers = new Set(trusted.providers.map((p) => p.id));
   for (const p of repo?.providers ?? []) {
-    if (!providers.has(p)) refused.push({ request: 'provider', subject: p, reasonCode: 'sentinel.policy.providerNotTrusted' });
+    if (!providers.has(p))
+      refused.push({ request: 'provider', subject: p, reasonCode: 'sentinel.policy.providerNotTrusted' });
   }
 
   const view: EffectivePolicyEnvelope = {
@@ -149,20 +202,44 @@ export function effectivePolicy(given: PolicyInputs): EffectivePolicy {
     ...(trusted.hostedReviewSecretScan === undefined ? {} : { hostedReviewSecretScan: trusted.hostedReviewSecretScan }),
     settingsDigest: trust === 'adopted' ? inputs.settingsDigest : null,
     repoConfigDigest: inputs.repoConfigDigest,
-    rules: rules.map(familyId => ({
-      familyId, source: mandatory.has(familyId) && requested.has(familyId) ? 'both' : mandatory.has(familyId) ? 'mandatory' : 'requested',
+    rules: rules.map((familyId) => ({
+      familyId,
+      source:
+        mandatory.has(familyId) && requested.has(familyId)
+          ? 'both'
+          : mandatory.has(familyId)
+            ? 'mandatory'
+            : 'requested',
     })),
     thresholds,
     agentActions: trusted.agentActions,
-    grants: trusted.grants.map(g => ({
-      actions: [...g.actions], principals: [...(g.principals ?? ['human'])], confirm: g.confirm ?? 'default', scoped: g.scope !== undefined,
+    grants: trusted.grants.map((g) => ({
+      actions: [...g.actions],
+      principals: [...(g.principals ?? ['human'])],
+      confirm: g.confirm ?? 'default',
+      scoped: g.scope !== undefined,
     })),
-    providers: trusted.providers.map(p => ({ id: p.id, kind: p.kind, disclosure: p.disclosure, credential: p.credential ? 'keychain' : 'none' })),
+    providers: trusted.providers.map((p) => ({
+      id: p.id,
+      kind: p.kind,
+      disclosure: p.disclosure,
+      credential: p.credential ? 'keychain' : 'none',
+    })),
     refused,
   };
   const checked = validateEnvelope('policy', view);
-  if (!checked.ok) policyFail('sentinel.policy.settingsInvalid', `the effective policy does not validate: ${checked.errors[0]?.message ?? 'invalid'}`);
-  const result: EffectivePolicy = deepFreeze({ settings: trusted, thresholds, rules, view, revision: canonicalDigest({ kind: 'sentinel-effective-policy/1', settings: trusted, view }) });
+  if (!checked.ok)
+    policyFail(
+      'sentinel.policy.settingsInvalid',
+      `the effective policy does not validate: ${checked.errors[0]?.message ?? 'invalid'}`,
+    );
+  const result: EffectivePolicy = deepFreeze({
+    settings: trusted,
+    thresholds,
+    rules,
+    view,
+    revision: canonicalDigest({ kind: 'sentinel-effective-policy/1', settings: trusted, view }),
+  });
   effective.add(result);
   return result;
 }

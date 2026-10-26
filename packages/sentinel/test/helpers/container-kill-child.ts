@@ -18,20 +18,25 @@ const behaviours = scenario === 'cancel' || scenario === 'none-cancel' ? { A: 'h
 const registry = await containerRegistry(behaviours);
 const runId = 'run-e4';
 const admitted = store.ledger.latestPlan(runId);
-const setup = admitted ? null : await syntheticPlan(store, root!, behaviours, { runId, registry, adapterPrefix: 'canary' });
+const setup = admitted
+  ? null
+  : await syntheticPlan(store, root!, behaviours, { runId, registry, adapterPrefix: 'canary' });
 const ids = setup?.ids ?? unitIdsOf((await loadPlan(store, runId, admitted!.revision)).plan);
 const wrapRunner = (real: any) => ({
   ...real,
   run: async (args: readonly string[], signal?: AbortSignal) => {
-    if (args[0] === 'create' && scenario === 'before-create' && attemptOf(args) === bAttempt()) process.kill(process.pid, 'SIGKILL');
+    if (args[0] === 'create' && scenario === 'before-create' && attemptOf(args) === bAttempt())
+      process.kill(process.pid, 'SIGKILL');
     const r = await real.run(args, signal);
-    if (args[0] === 'create' && scenario === 'lost-reply' && attemptOf(args) === bAttempt()) process.kill(process.pid, 'SIGKILL');
+    if (args[0] === 'create' && scenario === 'lost-reply' && attemptOf(args) === bAttempt())
+      process.kill(process.pid, 'SIGKILL');
     return r;
   },
 });
 let b: string | undefined;
 const bAttempt = () => b;
-const attemptOf = (args: readonly string[]) => args.find(a => a.startsWith(`${LABELS.attempt}=`))?.slice(LABELS.attempt.length + 1);
+const attemptOf = (args: readonly string[]) =>
+  args.find((a) => a.startsWith(`${LABELS.attempt}=`))?.slice(LABELS.attempt.length + 1);
 const hooks = {
   at: (boundary: string, ctx: { work: { id: string }; attemptId: string }) => {
     if (ctx.work.id === ids.B && boundary === 'before-spawn') b = ctx.attemptId;
@@ -41,8 +46,19 @@ const hooks = {
     }
   },
 };
-const c = await Coordinator.open({ store, runId, ...(setup ? { run: setup.run } : {}), registry, scratchRoot: join(root!, 'work'), containers: true, hooks,
-  cleanupWaitMs: Number(waitMs ?? 30_000), backendOptions: { wrapRunner } });
+const c = await Coordinator.open({
+  store,
+  runId,
+  ...(setup ? { run: setup.run } : {}),
+  registry,
+  scratchRoot: join(root!, 'work'),
+  containers: true,
+  hooks,
+  cleanupWaitMs: Number(waitMs ?? 30_000),
+  backendOptions: { wrapRunner },
+});
 const summary = await c.run();
 store.close();
-process.stdout.write(`${JSON.stringify({ ids, state: summary.state, published: summary.published, clean: summary.clean, blocked: summary.blockedByCleanup, recovery: summary.recovery })}\n`);
+process.stdout.write(
+  `${JSON.stringify({ ids, state: summary.state, published: summary.published, clean: summary.clean, blocked: summary.blockedByCleanup, recovery: summary.recovery })}\n`,
+);

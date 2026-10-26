@@ -28,46 +28,68 @@ export interface ExecutionProfileRecord {
   parse: { selection: ParserSelection; limits: Required<ParserLimits> };
 }
 
-const refuse = (reason: string): never => { throw new ExecutionError('sentinel.execution.planInvalid', { reason }); };
+const refuse = (reason: string): never => {
+  throw new ExecutionError('sentinel.execution.planInvalid', { reason });
+};
 // Canonical comparison: a record read back from the store has its keys in canonical order.
 const sameJson = (a: unknown, b: unknown) => Buffer.from(canonicalJsonBytes(a)).equals(canonicalJsonBytes(b));
 
 /** The record for a planner profile, the resources each stage is granted, and the parse operation's settings. */
-export function executionProfileRecord(profile: PlannerProfile, resources: Record<PlanStage, ResourcePolicy>,
-  parse: ExecutionProfileRecord['parse']): ExecutionProfileRecord {
-  const pin = (id: Id | undefined) => (id === undefined ? null : { adapterId: id, digest: profile.registry.get(id).digest });
+export function executionProfileRecord(
+  profile: PlannerProfile,
+  resources: Record<PlanStage, ResourcePolicy>,
+  parse: ExecutionProfileRecord['parse'],
+): ExecutionProfileRecord {
+  const pin = (id: Id | undefined) =>
+    id === undefined ? null : { adapterId: id, digest: profile.registry.get(id).digest };
   const o = profile.operations ?? {};
   return structuredClone({
-    schema: EXECUTION_PROFILE_SCHEMA, id: profile.id,
-    adapters: [...profile.registry.ids].sort().map(id => ({ adapterId: id, digest: profile.registry.get(id).digest })),
-    capabilities: profile.capabilities.facts.map(f => ({ capability: f.capability, adapterId: f.adapterId, adapterDigest: f.adapterDigest }))
+    schema: EXECUTION_PROFILE_SCHEMA,
+    id: profile.id,
+    adapters: [...profile.registry.ids]
+      .sort()
+      .map((id) => ({ adapterId: id, digest: profile.registry.get(id).digest })),
+    capabilities: profile.capabilities.facts
+      .map((f) => ({ capability: f.capability, adapterId: f.adapterId, adapterDigest: f.adapterDigest }))
       .sort((a, b) => (a.capability + a.adapterId < b.capability + b.adapterId ? -1 : 1)),
     permits: [...new Set(profile.permits)].sort(),
     operations: { capture: pin(o.capture), parse: pin(o.parse), inventory: pin(o.inventory) },
-    resources, parse,
+    resources,
+    parse,
   });
 }
 
 /** The plan was made under this profile: same id and operations, and every adapter and fact it pins is the profile's. */
 export function checkProfileForPlan(record: ExecutionProfileRecord, plan: PlanEnvelope): void {
-  if (record?.schema !== EXECUTION_PROFILE_SCHEMA) refuse('the execution profile is not a sentinel-execution-profile/draft-1 record');
+  if (record?.schema !== EXECUTION_PROFILE_SCHEMA)
+    refuse('the execution profile is not a sentinel-execution-profile/draft-1 record');
   if (record.id !== plan.pins.profileId) refuse('the plan was made under another profile');
-  if (!sameJson(record.operations, plan.pins.operations)) refuse('the plan binds other bootstrap operations than the profile');
-  const adapters = new Map(record.adapters.map(a => [a.adapterId, a.digest]));
-  for (const a of plan.pins.adapters) if (adapters.get(a.adapterId) !== a.digest) refuse(`the plan pins adapter ${a.adapterId} at another digest than the profile`);
+  if (!sameJson(record.operations, plan.pins.operations))
+    refuse('the plan binds other bootstrap operations than the profile');
+  const adapters = new Map(record.adapters.map((a) => [a.adapterId, a.digest]));
+  for (const a of plan.pins.adapters)
+    if (adapters.get(a.adapterId) !== a.digest)
+      refuse(`the plan pins adapter ${a.adapterId} at another digest than the profile`);
   for (const c of plan.pins.capabilities) {
-    if (!record.capabilities.some(f => f.capability === c.capability && f.adapterId === c.adapterId && f.adapterDigest === c.adapterDigest)) {
+    if (
+      !record.capabilities.some(
+        (f) => f.capability === c.capability && f.adapterId === c.adapterId && f.adapterDigest === c.adapterDigest,
+      )
+    ) {
       refuse(`the plan relies on capability ${c.capability} the profile does not establish`);
     }
-    if (!record.permits.includes(c.capability)) refuse(`the plan relies on capability ${c.capability} the profile does not permit`);
+    if (!record.permits.includes(c.capability))
+      refuse(`the plan relies on capability ${c.capability} the profile does not permit`);
   }
-  for (const stage of ['capture', 'parse', 'inventory', 'check'] as const) if (!record.resources?.[stage]) refuse(`the profile grants no resources to the ${stage} stage`);
+  for (const stage of ['capture', 'parse', 'inventory', 'check'] as const)
+    if (!record.resources?.[stage]) refuse(`the profile grants no resources to the ${stage} stage`);
 }
 
 /** Every adapter the profile names is registered now with the same digest: nothing changed since admission. */
 export function checkProfileRegistry(record: ExecutionProfileRecord, registry: AdapterRegistry): void {
   for (const a of record.adapters) {
     if (!registry.ids.includes(a.adapterId)) refuse(`adapter ${a.adapterId} is no longer registered`);
-    if (registry.get(a.adapterId).digest !== a.digest) refuse(`adapter ${a.adapterId} is registered with another digest than the profile recorded`);
+    if (registry.get(a.adapterId).digest !== a.digest)
+      refuse(`adapter ${a.adapterId} is registered with another digest than the profile recorded`);
   }
 }

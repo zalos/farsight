@@ -23,7 +23,8 @@ export const ASSESSED_SCOPE_SCHEMA = 'sentinel-coverage-scope/draft-1';
 export const LIMITATIONS_SCHEMA = 'sentinel-coverage-limitations/draft-1';
 
 const ORDER: readonly CoverageGranularity[] = ['per-file-per-rule', 'per-file', 'aggregate'];
-export const coarser = (a: CoverageGranularity, b: CoverageGranularity): CoverageGranularity => (ORDER.indexOf(a) >= ORDER.indexOf(b) ? a : b);
+export const coarser = (a: CoverageGranularity, b: CoverageGranularity): CoverageGranularity =>
+  ORDER.indexOf(a) >= ORDER.indexOf(b) ? a : b;
 const idOf = (v: unknown): ArtifactId => `sha256:${createHash('sha256').update(canonicalJsonBytes(v)).digest('hex')}`;
 
 /**
@@ -63,7 +64,8 @@ export function extentOf(scope: string, index: ScopeIndex): ScopeExtent {
   const prefix = `${c.sourceId}:`;
   if (!scope.startsWith(prefix)) return { kind: 'unknown', sourceId: c.sourceId };
   const rest = scope.slice(prefix.length);
-  if (rest.endsWith('/') && rest.length > 1 && !rest.startsWith('/') && !rest.startsWith('#') && !rest.startsWith(':')) return { kind: 'folder', sourceId: c.sourceId, path: rest };
+  if (rest.endsWith('/') && rest.length > 1 && !rest.startsWith('/') && !rest.startsWith('#') && !rest.startsWith(':'))
+    return { kind: 'folder', sourceId: c.sourceId, path: rest };
   if (index.files.has(`${c.sourceId}\u0000${rest}`)) return { kind: 'path', sourceId: c.sourceId, path: rest };
   return { kind: 'unknown', sourceId: c.sourceId };
 }
@@ -80,7 +82,11 @@ export function overlaps(a: ScopeExtent, b: ScopeExtent): boolean {
 }
 
 /** Whether a scope a result names bears on a check: its own scope, or any scope not proven disjoint from it. */
-export function bearsOn(scope: string, c: Pick<PlanCheck, 'scopeId' | 'scopeKind' | 'sourceId'>, index: ScopeIndex): boolean {
+export function bearsOn(
+  scope: string,
+  c: Pick<PlanCheck, 'scopeId' | 'scopeKind' | 'sourceId'>,
+  index: ScopeIndex,
+): boolean {
   if (scope === c.scopeId) return true;
   return overlaps(extentOf(scope, index), extentOf(c.scopeId, index));
 }
@@ -91,10 +97,18 @@ export interface CoverageRecords {
   records: Array<{ value: unknown; schema: string }>;
 }
 
-export function coverageRecords(input: { runId: Id; attemptId: Id; work: { id: Id; revision: number }; checks: readonly PlanCheck[];
-  adapterGranularity: CoverageGranularity; result: ResultMessage; recordedAt: string; scopes: ScopeIndex }): CoverageRecords {
+export function coverageRecords(input: {
+  runId: Id;
+  attemptId: Id;
+  work: { id: Id; revision: number };
+  checks: readonly PlanCheck[];
+  adapterGranularity: CoverageGranularity;
+  result: ResultMessage;
+  recordedAt: string;
+  scopes: ScopeIndex;
+}): CoverageRecords {
   const { result } = input;
-  const covered = new Set(result.coveredChecks.map(c => c.checkId));
+  const covered = new Set(result.coveredChecks.map((c) => c.checkId));
   const scanned = new Set(result.scannedSet);
   const granularity = coarser(input.adapterGranularity, result.granularity);
   const envelopes: CoverageEnvelope[] = [];
@@ -102,25 +116,58 @@ export function coverageRecords(input: { runId: Id; attemptId: Id; work: { id: I
   // A limitation the result reports for a scope that bears on none of the unit's checks cannot be attributed: it is
   // kept as a limitation of every check, never dropped. (With unknown extents overlapping, this is a scope proven
   // disjoint from every check of the unit, kept anyway.)
-  const unattributed = (xs: readonly ScopedReason[]) => xs.filter(x => !input.checks.some(c => bearsOn(x.scopeId, c, input.scopes)));
+  const unattributed = (xs: readonly ScopedReason[]) =>
+    xs.filter((x) => !input.checks.some((c) => bearsOn(x.scopeId, c, input.scopes)));
   const strayRows = { skipped: unattributed(result.skipped), unresolved: unattributed(result.unresolvedFrontiers) };
   for (const c of input.checks) {
     const pick = (xs: readonly ScopedReason[], stray: readonly ScopedReason[]) =>
-      [...xs.filter(x => bearsOn(x.scopeId, c, input.scopes)), ...stray].map(x => ({ scopeId: x.scopeId, reasonCode: x.reasonCode }));
+      [...xs.filter((x) => bearsOn(x.scopeId, c, input.scopes)), ...stray].map((x) => ({
+        scopeId: x.scopeId,
+        reasonCode: x.reasonCode,
+      }));
     const skipped: ScopedReason[] = pick(result.skipped, strayRows.skipped);
     const unresolved = pick(result.unresolvedFrontiers, strayRows.unresolved);
-    const status: CoverageStatus = !covered.has(c.id) ? 'not-run'
-      : scanned.has(c.scopeId) && skipped.length === 0 && unresolved.length === 0 ? 'complete' : 'partial';
-    const scope = { schema: ASSESSED_SCOPE_SCHEMA, checkId: c.id, scopeKind: c.scopeKind, scopeId: c.scopeId, scanned: scanned.has(c.scopeId) };
-    const limitations = { schema: LIMITATIONS_SCHEMA, checkId: c.id, skipped, unresolved, resultGranularity: result.granularity, adapterGranularity: input.adapterGranularity };
+    const status: CoverageStatus = !covered.has(c.id)
+      ? 'not-run'
+      : scanned.has(c.scopeId) && skipped.length === 0 && unresolved.length === 0
+        ? 'complete'
+        : 'partial';
+    const scope = {
+      schema: ASSESSED_SCOPE_SCHEMA,
+      checkId: c.id,
+      scopeKind: c.scopeKind,
+      scopeId: c.scopeId,
+      scanned: scanned.has(c.scopeId),
+    };
+    const limitations = {
+      schema: LIMITATIONS_SCHEMA,
+      checkId: c.id,
+      skipped,
+      unresolved,
+      resultGranularity: result.granularity,
+      adapterGranularity: input.adapterGranularity,
+    };
     const envelope: CoverageEnvelope = {
-      schema: COVERAGE_SCHEMA, id: `cov-${createHash('sha256').update(`${input.runId}\u0000${c.id}\u0000${input.attemptId}`).digest('hex').slice(0, 40)}`,
-      runId: input.runId, checkId: c.id, workId: input.work.id, workRevision: input.work.revision, status, granularity,
-      assessedScopeArtifact: idOf(scope), limitationsArtifact: idOf(limitations), basis: { kind: 'executed', attemptId: input.attemptId },
-      skipped, recordedAt: input.recordedAt,
+      schema: COVERAGE_SCHEMA,
+      id: `cov-${createHash('sha256').update(`${input.runId}\u0000${c.id}\u0000${input.attemptId}`).digest('hex').slice(0, 40)}`,
+      runId: input.runId,
+      checkId: c.id,
+      workId: input.work.id,
+      workRevision: input.work.revision,
+      status,
+      granularity,
+      assessedScopeArtifact: idOf(scope),
+      limitationsArtifact: idOf(limitations),
+      basis: { kind: 'executed', attemptId: input.attemptId },
+      skipped,
+      recordedAt: input.recordedAt,
     };
     envelopes.push(envelope);
-    records.push({ value: scope, schema: ASSESSED_SCOPE_SCHEMA }, { value: limitations, schema: LIMITATIONS_SCHEMA }, { value: envelope, schema: COVERAGE_SCHEMA });
+    records.push(
+      { value: scope, schema: ASSESSED_SCOPE_SCHEMA },
+      { value: limitations, schema: LIMITATIONS_SCHEMA },
+      { value: envelope, schema: COVERAGE_SCHEMA },
+    );
   }
   return { envelopes, records };
 }

@@ -28,17 +28,29 @@ export interface ExecutionServiceOptions {
   wrapRunner?: (runner: DockerRunner) => DockerRunner;
 }
 
-export async function createExecutionService(store: SentinelStore, options: ExecutionServiceOptions): Promise<ExecutionService> {
+export async function createExecutionService(
+  store: SentinelStore,
+  options: ExecutionServiceOptions,
+): Promise<ExecutionService> {
   const owner = boundOwner(store);
   owner.assertHeld();
   const registry = options.registry ?? TRUSTED_ADAPTERS;
   const backend = options.containers
-    ? await ContainerBackend.connect({ privateDir: options.scratchRoot, ...(options.signal ? { signal: options.signal } : {}), ...(options.wrapRunner ? { wrapRunner: options.wrapRunner } : {}) })
+    ? await ContainerBackend.connect({
+        privateDir: options.scratchRoot,
+        ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.wrapRunner ? { wrapRunner: options.wrapRunner } : {}),
+      })
     : undefined;
   return Object.freeze({
     ...(backend ? { backend } : {}),
-    run: (attempt: ServiceAttempt) => superviseAttempt({
-      ...attempt, owner, registry, scratchRoot: options.scratchRoot, ...(backend ? { backend } : {}),
-    }),
+    run: (attempt: ServiceAttempt) =>
+      superviseAttempt({
+        ...attempt,
+        owner,
+        registry,
+        scratchRoot: options.scratchRoot,
+        ...(backend ? { backend } : {}),
+      }),
   });
 }

@@ -21,8 +21,13 @@ export class LedgerCheckpointStore implements CheckpointStore {
     const row = this.#ledger.loadCheckpoint(sessionId);
     if (!row) return null;
     const v = parseEnvelope('checkpoint', row.body);
-    if (!v.ok) return reviewFail('sentinel.review.checkpoint', `the stored checkpoint does not validate: ${v.errors[0]?.code} ${v.errors[0]?.path}`);
-    if (v.value.sessionId !== sessionId) reviewFail('sentinel.review.checkpoint', 'the stored checkpoint is not this session’s');
+    if (!v.ok)
+      return reviewFail(
+        'sentinel.review.checkpoint',
+        `the stored checkpoint does not validate: ${v.errors[0]?.code} ${v.errors[0]?.path}`,
+      );
+    if (v.value.sessionId !== sessionId)
+      reviewFail('sentinel.review.checkpoint', 'the stored checkpoint is not this session’s');
     return v.value;
   }
   async save(cp: ReviewCheckpoint): Promise<void> {

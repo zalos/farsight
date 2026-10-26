@@ -21,12 +21,18 @@ const { ensurePrivateDir } = await imp('policy/user-state.js');
 const { acquireChecksBundle, checksAcquisitionIntent, loadChecksBundle } = await imp('adapters/trivy/index.js');
 ensurePrivateDir(dir, 'sentinel.policy.trustDirUnsafe');
 const existing = loadChecksBundle(join(dir, 'checks'));
-if (existing) { console.log(JSON.stringify({ acquired: false, bundle: existing.bundle })); process.exit(0); }
+if (existing) {
+  console.log(JSON.stringify({ acquired: false, bundle: existing.bundle }));
+  process.exit(0);
+}
 const book = new ReceiptBook(join(dir, 'receipts'));
 const sha = (s) => `sha256:${createHash('sha256').update(s).digest('hex')}`;
 const intent = checksAcquisitionIntent();
 const binding = { intent, stateDigest: sha('owner acquisition'), policyRevision: sha('owner acquisition') };
-const receipt = issueReceipt(book, { channel: 'owner-cli', principal: 'owner' }, binding, { now: new Date(), ttlMs: 60_000 });
+const receipt = issueReceipt(book, { channel: 'owner-cli', principal: 'owner' }, binding, {
+  now: new Date(),
+  ttlMs: 60_000,
+});
 const spent = book.consume(receipt.id, binding, new Date());
 const bundle = await acquireChecksBundle({ dir: join(dir, 'checks'), receipt: spent });
 console.log(JSON.stringify({ acquired: true, bundle }));

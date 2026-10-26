@@ -4,9 +4,25 @@ export const NEST_PACK = Object.freeze({
   version: '0.1.0',
   framework: 'nest' as const,
   /** Exact captured versions only: @nestjs/common and @nestjs/core 10.4.15 (and class-validator 0.14.1 for validation). */
-  versions: Object.freeze({ '@nestjs/common': '10.4.15', '@nestjs/core': '10.4.15', '@nestjs/platform-express': '10.4.15', 'class-validator': '0.14.1' }),
+  versions: Object.freeze({
+    '@nestjs/common': '10.4.15',
+    '@nestjs/core': '10.4.15',
+    '@nestjs/platform-express': '10.4.15',
+    'class-validator': '0.14.1',
+  }),
   /** Nest's request order for one handler: guards, then interceptors, then pipes; each global, controller, method (pipes also per parameter). */
-  order: Object.freeze(['guard:global', 'guard:controller', 'guard:method', 'interceptor:global', 'interceptor:controller', 'interceptor:method', 'pipe:global', 'pipe:controller', 'pipe:method', 'pipe:parameter']),
+  order: Object.freeze([
+    'guard:global',
+    'guard:controller',
+    'guard:method',
+    'interceptor:global',
+    'interceptor:controller',
+    'interceptor:method',
+    'pipe:global',
+    'pipe:controller',
+    'pipe:method',
+    'pipe:parameter',
+  ]),
   supported: Object.freeze([
     'app.useGlobalGuards / useGlobalInterceptors / useGlobalPipes on the one NestFactory.create application, literal arguments',
     '{ provide: APP_GUARD | APP_INTERCEPTOR | APP_PIPE, useClass } in a module reachable from the bootstrap module',

@@ -17,7 +17,11 @@ export interface Reconciliation {
  * `observed` lists every non-folder path (and every folder the walker could not open) under the source root,
  * `/`-separated and relative to it.
  */
-export function reconcileInventory(snapshot: SnapshotEnvelope, sourceId: string, observed: Iterable<string>): Reconciliation {
+export function reconcileInventory(
+  snapshot: SnapshotEnvelope,
+  sourceId: string,
+  observed: Iterable<string>,
+): Reconciliation {
   const entries = new Map<string, CaptureEntry>();
   const boundaries = new Set<string>();
   for (const e of snapshot.entries) {
@@ -40,12 +44,19 @@ export function reconcileInventory(snapshot: SnapshotEnvelope, sourceId: string,
     let covered = false;
     for (let i = parts.length - 1; i >= 1 && !covered; i--) {
       const prefix = parts.slice(0, i).join('/');
-      if (boundaries.has(prefix)) { covered = true; seen.add(prefix); }
+      if (boundaries.has(prefix)) {
+        covered = true;
+        seen.add(prefix);
+      }
     }
     if (covered) insideBoundary++;
     else unaccounted.push(path);
   }
-  const notObserved = [...entries.keys()].filter(p => !seen.has(p)).sort();
-  return Object.freeze({ byDisposition: Object.freeze(byDisposition), insideBoundary, unaccounted: Object.freeze(unaccounted.sort()),
-    notObserved: Object.freeze(notObserved) });
+  const notObserved = [...entries.keys()].filter((p) => !seen.has(p)).sort();
+  return Object.freeze({
+    byDisposition: Object.freeze(byDisposition),
+    insideBoundary,
+    unaccounted: Object.freeze(unaccounted.sort()),
+    notObserved: Object.freeze(notObserved),
+  });
 }

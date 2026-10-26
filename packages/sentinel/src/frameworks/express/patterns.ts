@@ -17,7 +17,10 @@ export function segments(path: string): Segment[] | undefined {
   const out: Segment[] = [];
   for (const p of path.slice(1).split('/')) {
     const param = /^:([A-Za-z0-9_]+)$/.exec(p);
-    if (param) { out.push({ kind: 'param', name: param[1]! }); continue; }
+    if (param) {
+      out.push({ kind: 'param', name: param[1]! });
+      continue;
+    }
     // Anything path-to-regexp 0.1.x gives a meaning beyond a literal (`*`, `?`, `+`, groups, a parameter inside a
     // segment) is outside the subset.
     if (p === '' || /[*?+()[\]:{}$^|]/.test(p)) return undefined;
@@ -31,7 +34,7 @@ export function joinPaths(mount: string, path: string): string | undefined {
   const m = segments(mount);
   const p = segments(path);
   if (!m || !p) return undefined;
-  const all = [...mount === '/' ? [] : mount.slice(1).split('/'), ...path === '/' ? [] : path.slice(1).split('/')];
+  const all = [...(mount === '/' ? [] : mount.slice(1).split('/')), ...(path === '/' ? [] : path.slice(1).split('/'))];
   return all.length ? `/${all.join('/')}` : '/';
 }
 
@@ -50,7 +53,9 @@ export function matchPath(template: string, pattern: string, prefix: boolean): M
     const ps = p[i]!;
     const ts = t[i]!;
     if (ps.kind === 'param') continue;
-    if (ts.kind === 'literal') { if (ts.text !== ps.text) return 'no-match'; } else partial = true;
+    if (ts.kind === 'literal') {
+      if (ts.text !== ps.text) return 'no-match';
+    } else partial = true;
   }
   return partial ? 'unknown' : 'match';
 }
@@ -74,7 +79,7 @@ export function matchMethod(routeMethod: string, layerMethods: readonly string[]
   if (layerMethods === 'all') return 'match';
   const wanted = requestMethods(routeMethod);
   // An Express `get` route answers HEAD too.
-  const handled = new Set(layerMethods.flatMap(m => requestMethods(m)));
-  const hits = wanted.filter(m => handled.has(m)).length;
+  const handled = new Set(layerMethods.flatMap((m) => requestMethods(m)));
+  const hits = wanted.filter((m) => handled.has(m)).length;
   return hits === wanted.length ? 'match' : hits === 0 ? 'no-match' : 'unknown';
 }

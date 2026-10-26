@@ -14,7 +14,9 @@ const manifest = JSON.parse(readFileSync(`${pkgDir}package.json`, 'utf8'));
 const cli = (...args: string[]) => spawnSync(process.execPath, [`${pkgDir}dist/cli.js`, ...args], { encoding: 'utf8' });
 
 function filesUnder(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? filesUnder(join(dir, e.name)) : [join(dir, e.name)]);
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? filesUnder(join(dir, e.name)) : [join(dir, e.name)],
+  );
 }
 
 test('the package is optional, private and exports only files that exist', () => {
@@ -27,11 +29,21 @@ test('the package is optional, private and exports only files that exist', () =>
   // oxc-parser (the version the public parser pins) because the Express pack reads source syntax itself (ADR 31).
   assert.equal(manifest.dependencies?.zod, '3.25.76');
   assert.equal(manifest.dependencies?.['@modelcontextprotocol/sdk'], '1.32.0');
-  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@modelcontextprotocol/sdk', '@types/node', '@vscode/tree-sitter-wasm', 'ajv', 'oxc-parser', 'zod']);
+  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), [
+    '@farsight/code-parser',
+    '@farsight/core',
+    '@farsight/graph',
+    '@modelcontextprotocol/sdk',
+    '@types/node',
+    '@vscode/tree-sitter-wasm',
+    'ajv',
+    'oxc-parser',
+    'zod',
+  ]);
   assert.equal(manifest.bin['farsight-sentinel'], './dist/cli.js');
   for (const [key, target] of Object.entries(manifest.exports as Record<string, any>)) {
     if (key.includes('*')) continue;
-    for (const file of typeof target === 'string' ? [target] : Object.values(target) as string[]) {
+    for (const file of typeof target === 'string' ? [target] : (Object.values(target) as string[])) {
       assert.ok(existsSync(join(pkgDir, file)), `${key} → ${file}`);
     }
   }
@@ -47,7 +59,7 @@ test('no Farsight package depends on or imports Sentinel', () => {
     }
     const src = join(packagesDir, dir, 'src');
     if (!existsSync(src)) continue;
-    for (const file of filesUnder(src).filter(f => /\.(ts|js|mjs)$/.test(f))) {
+    for (const file of filesUnder(src).filter((f) => /\.(ts|js|mjs)$/.test(f))) {
       assert.doesNotMatch(readFileSync(file, 'utf8'), /@farsight\/sentinel|packages\/sentinel\//, file);
     }
   }
@@ -72,11 +84,22 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'owner-ui/process.js': ['node:crypto'],
   'owner-ui/operations.js': ['node:crypto', 'node:path'],
   'owner-ui/receipts.js': ['node:crypto'],
-  'owner-ui/server.js': ['@farsight/core/dist/sentinel-companion.js', '@farsight/core/dist/strings.js', 'node:crypto', 'node:http'],
+  'owner-ui/server.js': [
+    '@farsight/core/dist/sentinel-companion.js',
+    '@farsight/core/dist/strings.js',
+    'node:crypto',
+    'node:http',
+  ],
   'owner-ui/session.js': ['node:crypto'],
   'service/controls.js': ['@farsight/core/dist/strings.js'],
   'service/readonly.js': ['@farsight/core/dist/strings.js', 'node:crypto', 'node:perf_hooks'],
-  'service/mcp.js': ['@farsight/core/dist/strings-sentinel-service.js', '@farsight/core/dist/strings.js', '@modelcontextprotocol/sdk/server/index.js', '@modelcontextprotocol/sdk/server/stdio.js', '@modelcontextprotocol/sdk/types.js'],
+  'service/mcp.js': [
+    '@farsight/core/dist/strings-sentinel-service.js',
+    '@farsight/core/dist/strings.js',
+    '@modelcontextprotocol/sdk/server/index.js',
+    '@modelcontextprotocol/sdk/server/stdio.js',
+    '@modelcontextprotocol/sdk/types.js',
+  ],
   'service/path-request-file.js': ['node:fs'],
   'service/path-adapter.js': ['node:path'],
   'service/scanner-assets.js': ['node:crypto', 'node:fs', 'node:path'],
@@ -144,8 +167,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'review/errors.js': ['@farsight/core/dist/strings-sentinel-review.js'],
   'review/evidence.js': ['node:crypto'],
   'review/instructions.js': ['node:crypto'],
-  'review/plan.js':['node:crypto'],
-  'service/review-adapter.js':['node:path'],
+  'review/plan.js': ['node:crypto'],
+  'service/review-adapter.js': ['node:path'],
   'review/session.js': ['node:fs', 'node:path'],
   // Model providers (PR 21): the only network client in the package, and the keychain read through core's reader.
   'review/providers/broker.js': ['node:crypto'],
@@ -163,7 +186,14 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'review/providers/cli-copilot-profile.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:os', 'node:path'],
   'review/providers/cli-copilot-proxy.js': ['node:dns/promises', 'node:net'],
   'review/providers/cli-native-call.js': ['node:child_process', 'node:fs/promises'],
-  'review/providers/cli-native-helper.js': ['node:child_process', 'node:crypto', 'node:fs', 'node:fs/promises', 'node:path', 'node:url'],
+  'review/providers/cli-native-helper.js': [
+    'node:child_process',
+    'node:crypto',
+    'node:fs',
+    'node:fs/promises',
+    'node:path',
+    'node:url',
+  ],
   'review/providers/cli-native-profile.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:path'],
   'review/providers/cli-native-proxy.js': ['node:dns/promises', 'node:net'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
@@ -179,11 +209,24 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'policy/user-state.js': ['node:crypto', 'node:fs', 'node:path'],
   // Rule packs are read as data: listed and opened, never imported, evaluated or spawned.
   'rules/pack.js': ['node:fs', 'node:path'],
-  'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-decisions.js', '@farsight/core/dist/strings-sentinel-owner-ui.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:fs', 'node:path'],
+  'cli.js': [
+    '@farsight/core/dist/strings-sentinel-cli.js',
+    '@farsight/core/dist/strings-sentinel-decisions.js',
+    '@farsight/core/dist/strings-sentinel-owner-ui.js',
+    '@farsight/core/dist/strings-sentinel-service.js',
+    'node:fs',
+    'node:path',
+  ],
   // The full report: reads the store's accepted evidence, an owner-supplied graph file, and writes one new file.
   // The per-store report key: random bytes kept once in the owner's trust folder.
   'service/report-key.js': ['node:crypto', 'node:path'],
-  'service/full-report.js': ['@farsight/core/dist/strings.js', '@farsight/graph', 'node:crypto', 'node:fs', 'node:path'],
+  'service/full-report.js': [
+    '@farsight/core/dist/strings.js',
+    '@farsight/graph',
+    'node:crypto',
+    'node:fs',
+    'node:path',
+  ],
   'cli/init.js': ['node:crypto', 'node:fs', 'node:path'],
   // The foundation-preview detector, a built-in worker: it reads its copied inputs and writes one artifact.
   'adapters/preview-detector.js': ['node:crypto', 'node:fs'],
@@ -217,13 +260,17 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'planner/boundary.js': ['node:crypto'],
   // The store's reason codes are catalog words; core's catalog is the only Farsight module the library reads.
   'store/errors.js': ['@farsight/core/dist/strings-sentinel-store.js'],
-  'evidence/owner-cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:path'],
+  'evidence/owner-cli.js': [
+    '@farsight/core/dist/strings-sentinel-cli.js',
+    '@farsight/core/dist/strings-sentinel-service.js',
+    'node:path',
+  ],
   'evidence/import-operation.js': ['node:crypto'],
   'evidence/owner-context.js': ['node:fs', 'node:path'],
   'evidence/audit.js': ['node:fs', 'node:path'],
   'store/ledger-json.js': ['node:crypto'],
   // Scope-local counters and a monotonic clock; neither performs I/O or starts work on import.
-    'store/admission-fence.js': ['node:async_hooks'],
+  'store/admission-fence.js': ['node:async_hooks'],
   'store/read-budget.js': ['node:async_hooks', 'node:perf_hooks', 'node:timers/promises'],
   'store/ledger.js': ['node:fs', 'node:path'],
   'store/migrations.js': ['node:crypto', 'node:fs', 'node:path'],
@@ -240,13 +287,21 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'snapshot/inventory.js': ['node:crypto', 'node:fs', 'node:path'],
   'snapshot/materialize.js': ['node:fs', 'node:path'],
   // The public parser, loaded on first parse only (its TS/JS adapter has a native binding); graph is pure JSON helpers.
-  'snapshot/parser.js': ['@farsight/core/dist/strings-sentinel-parser.js', '@farsight/graph', 'dynamic:@farsight/code-parser', 'dynamic:@farsight/code-parser/adapters/java',
-    'dynamic:@farsight/code-parser/adapters/tsjs', 'node:crypto', 'node:fs', 'node:path'],
+  'snapshot/parser.js': [
+    '@farsight/core/dist/strings-sentinel-parser.js',
+    '@farsight/graph',
+    'dynamic:@farsight/code-parser',
+    'dynamic:@farsight/code-parser/adapters/java',
+    'dynamic:@farsight/code-parser/adapters/tsjs',
+    'node:crypto',
+    'node:fs',
+    'node:path',
+  ],
   'snapshot/policy.js': ['node:crypto', 'node:path'],
   // Findings and reports (ADR 38): pure folds over observations, captured bytes and a pinned context; core's own
   // journey, impact and persona folds and its catalog; no process, no network, no file access.
-  'findings/owner-journal.js': ['node:crypto','node:fs','node:path'],
-  'findings/owner-cli.js': ['@farsight/core/dist/strings.js','node:path'],
+  'findings/owner-journal.js': ['node:crypto', 'node:fs', 'node:path'],
+  'findings/owner-cli.js': ['@farsight/core/dist/strings.js', 'node:path'],
   'findings/owner-report.js': ['@farsight/core/dist/strings.js'],
   'findings/dispositions.js': ['node:crypto', 'node:fs', 'node:path'],
   'findings/correlate.js': ['@farsight/graph', 'node:crypto'],
@@ -254,7 +309,12 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'reports/context.js': ['@farsight/graph', 'node:crypto'],
   'reports/document.js': ['@farsight/core/dist/strings.js', '@farsight/graph', 'node:crypto'],
   'reports/index.js': ['@farsight/graph'],
-  'reports/place.js': ['@farsight/core/dist/affected.js', '@farsight/core/dist/impact.js', '@farsight/core/dist/journeys.js', '@farsight/core/dist/query.js'],
+  'reports/place.js': [
+    '@farsight/core/dist/affected.js',
+    '@farsight/core/dist/impact.js',
+    '@farsight/core/dist/journeys.js',
+    '@farsight/core/dist/query.js',
+  ],
   // Bounded call paths and attested deep import (ADR 36): pure over parser evidence and captured bytes; no engine, no process.
   'analysis/paths/paths.js': ['@farsight/graph', 'node:crypto'],
   'analysis/paths/protocol.js': ['node:crypto'],
@@ -270,7 +330,14 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'imports/sarif.js': ['@farsight/graph'],
   // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
   // The framework inspection worker (ADR 44): sealed inputs by digest, one output file; it runs only as its own entry.
-  'frameworks/controls/closure.js': ['node:crypto', 'node:fs', 'node:module', 'node:path', 'node:url', 'require:oxc-parser'],
+  'frameworks/controls/closure.js': [
+    'node:crypto',
+    'node:fs',
+    'node:module',
+    'node:path',
+    'node:url',
+    'require:oxc-parser',
+  ],
   'frameworks/controls/worker.js': ['node:crypto', 'node:fs', 'node:url'],
   'frameworks/express/pack.js': ['@farsight/graph', 'node:crypto'],
   'frameworks/express/syntax.js': ['dynamic:oxc-parser'],
@@ -280,7 +347,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
 test('the library imports only its reviewed modules, and nothing that could start work at import', () => {
   const dist = `${pkgDir}dist/`;
   const found: Record<string, string[]> = {};
-  for (const file of filesUnder(dist).filter(f => f.endsWith('.js'))) {
+  for (const file of filesUnder(dist).filter((f) => f.endsWith('.js'))) {
     let text = readFileSync(file, 'utf8');
     // The framework inspection worker's entry is generated text (ADR 44): it must import the worker dynamically, after
     // checking the closure, so its template is not this module's own imports. Exactly that one template is set aside.
@@ -290,8 +357,11 @@ test('the library imports only its reviewed modules, and nothing that could star
       text = text.replace(template, '');
     }
     const specs = new Set<string>();
-    for (const m of text.matchAll(/\bcreateRequire\(import\.meta\.url\)\(['"]([^'"]+)['"]\)/g)) specs.add(`require:${m[1]}`);
-    for (const m of text.matchAll(/(?:^|[\s;])(?:import|export)\s[^;'"]*?from\s*['"]([^'"]+)['"]|^\s*import\s*['"]([^'"]+)['"]/gm)) {
+    for (const m of text.matchAll(/\bcreateRequire\(import\.meta\.url\)\(['"]([^'"]+)['"]\)/g))
+      specs.add(`require:${m[1]}`);
+    for (const m of text.matchAll(
+      /(?:^|[\s;])(?:import|export)\s[^;'"]*?from\s*['"]([^'"]+)['"]|^\s*import\s*['"]([^'"]+)['"]/gm,
+    )) {
       const spec = m[1] ?? m[2]!;
       if (!spec.startsWith('.')) specs.add(spec);
     }
@@ -305,21 +375,35 @@ test('the library imports only its reviewed modules, and nothing that could star
   }
   assert.deepEqual(found, ALLOWED_IMPORTS);
   const paths = readFileSync(`${dist}store/paths.js`, 'utf8');
-  const spawns = [...paths.matchAll(/(?<![.\w])(spawnSync|spawn|execFileSync|execFile|execSync|exec|fork)\s*\(([^,)]*)/g)].map(m => `${m[1]}(${m[2]!.trim()}`);
-  assert.deepEqual(spawns, ["spawnSync('/sbin/mount'"], 'the only process the store may start is the macOS mount table');
+  const spawns = [
+    ...paths.matchAll(/(?<![.\w])(spawnSync|spawn|execFileSync|execFile|execSync|exec|fork)\s*\(([^,)]*)/g),
+  ].map((m) => `${m[1]}(${m[2]!.trim()}`);
+  assert.deepEqual(
+    spawns,
+    ["spawnSync('/sbin/mount'"],
+    'the only process the store may start is the macOS mount table',
+  );
   // Worker execution starts processes in exactly one module, always with an argument list and never a shell.
   const processes = readFileSync(`${dist}execution/processes.js`, 'utf8');
   assert.equal([...processes.matchAll(/shell: false/g)].length, 3);
   assert.doesNotMatch(processes, /shell: true|execSync|exec\(/);
   // Outside it, only the service launcher starts a process: this executable's `serve`, an argument list, no shell.
   const launch = readFileSync(`${dist}service/launch.js`, 'utf8');
-  assert.deepEqual([...launch.matchAll(/(?<![.\w])(spawnSync|spawn|execFileSync|execFile|execSync|exec|fork)\s*\(([^,)]*)/g)].map(m => `${m[1]}(${m[2]!.trim()}`),
-    ['spawn(process.execPath']);
+  assert.deepEqual(
+    [...launch.matchAll(/(?<![.\w])(spawnSync|spawn|execFileSync|execFile|execSync|exec|fork)\s*\(([^,)]*)/g)].map(
+      (m) => `${m[1]}(${m[2]!.trim()}`,
+    ),
+    ['spawn(process.execPath'],
+  );
   assert.match(launch, /shell: false/);
   assert.match(launch, /'serve', '--workspace'/);
   // The Gitleaks adapter starts nothing itself: its worker is shell text the container runs.
   for (const f of ['adapter', 'job', 'normalize', 'run', 'rules', 'worker-source', 'index']) {
-    assert.doesNotMatch(readFileSync(`${dist}adapters/gitleaks/${f}.js`, 'utf8'), /node:child_process|(?<![.\w])(spawn|spawnSync|exec|execSync|execFile|execFileSync|fork)\(/, `adapters/gitleaks/${f}.js starts no process`);
+    assert.doesNotMatch(
+      readFileSync(`${dist}adapters/gitleaks/${f}.js`, 'utf8'),
+      /node:child_process|(?<![.\w])(spawn|spawnSync|exec|execSync|execFile|execFileSync|fork)\(/,
+      `adapters/gitleaks/${f}.js starts no process`,
+    );
   }
 });
 
@@ -341,19 +425,30 @@ function probe(code: string): { spawns: string[]; sqlite: boolean; files: string
       process.stderr.write('\\n@@' + JSON.stringify({ spawns, sqlite }) + '\\n');
     `;
     writeFileSync(join(dir, 'probe.mjs'), script);
-    const r = spawnSync(process.execPath, ['probe.mjs'], { cwd: dir, encoding: 'utf8', timeout: 20_000,
-      env: { ...process.env, HOME: dir, TMPDIR: dir } });
+    const r = spawnSync(process.execPath, ['probe.mjs'], {
+      cwd: dir,
+      encoding: 'utf8',
+      timeout: 20_000,
+      env: { ...process.env, HOME: dir, TMPDIR: dir },
+    });
     assert.equal(r.status, 0, r.stderr);
     const marker = r.stderr.lastIndexOf('\n@@');
     const facts = JSON.parse(r.stderr.slice(marker + 3));
-    return { ...facts, files: readdirSync(dir).filter(f => f !== 'probe.mjs'), stdout: r.stdout, stderr: r.stderr.slice(0, marker) };
+    return {
+      ...facts,
+      files: readdirSync(dir).filter((f) => f !== 'probe.mjs'),
+      stdout: r.stdout,
+      stderr: r.stderr.slice(0, marker),
+    };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
 
 test('importing the root and the store, and asking the CLI for help, start nothing', () => {
-  const lib = probe(`await import(${JSON.stringify(`${pkgDir}dist/index.js`)}); await import(${JSON.stringify(`${pkgDir}dist/store/index.js`)}); await import(${JSON.stringify(`${pkgDir}dist/snapshot/index.js`)});`);
+  const lib = probe(
+    `await import(${JSON.stringify(`${pkgDir}dist/index.js`)}); await import(${JSON.stringify(`${pkgDir}dist/store/index.js`)}); await import(${JSON.stringify(`${pkgDir}dist/snapshot/index.js`)});`,
+  );
   assert.deepEqual(lib.spawns, [], 'no child process at import');
   assert.equal(lib.sqlite, false, 'node:sqlite is not loaded until a store is opened');
   assert.deepEqual(lib.files, [], 'no file is created at import');
@@ -365,8 +460,10 @@ test('importing the root and the store, and asking the CLI for help, start nothi
   assert.match(help.stdout, /pinned scanners/);
   // Positive controls: the probe sees SQLite once loaded, and a spawn made through a named import.
   assert.equal(probe(`await import('node:sqlite');`).sqlite, true);
-  assert.deepEqual(probe(`const { spawnSync } = await import('node:child_process'); spawnSync(process.execPath, ['-e', '0']);`).spawns,
-    [`spawnSync ${process.execPath}`]);
+  assert.deepEqual(
+    probe(`const { spawnSync } = await import('node:child_process'); spawnSync(process.execPath, ['-e', '0']);`).spawns,
+    [`spawnSync ${process.execPath}`],
+  );
 });
 
 test('help and version describe explicit pinned scanner execution', () => {
@@ -385,29 +482,67 @@ test('public scanner command support is conditional on explicit adopted pinned a
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import', 'reports', 'report-imports', 'dispositions', 'mcp', 'farsight-host-bridge']);
-  assert.equal(listed.find(c=>c.id==='farsight-host-bridge')?.reasonCode,'sentinel.capability.draftHostBridge');
-  assert.equal(listed.find(c => c.id === 'framework-express')?.reasonCode, 'sentinel.capability.draftExpress');
-  assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
-  assert.deepEqual([listed.find(c=>c.id==='dispositions')?.state,listed.find(c=>c.id==='dispositions')?.reasonCode],['available-draft','sentinel.capability.draftDecisions']);
-  assert.equal(listed.find(c => c.id === 'interprocedural-flow')?.state, 'unavailable', 'no deep engine is claimed');
-  assert.equal(listed.find(c => c.id === 'framework-spring')?.reasonCode, 'sentinel.capability.draftSpring');
-  assert.equal(listed.find(c => c.id === 'rules-and-planning')?.state, 'available-draft');
-  assert.ok(listed.filter(c => c.state !== 'unavailable').every(c => c.state === 'available-draft'));
+  assert.deepEqual(
+    listed.filter((c) => c.state !== 'unavailable').map((c) => c.id),
+    [
+      'contract-validation',
+      'ledger',
+      'source-capture',
+      'parser-reconciliation',
+      'trusted-policy',
+      'rules-and-planning',
+      'worker-isolation',
+      'coordinator',
+      'scan-cli',
+      'pattern-scan',
+      'secrets-scan',
+      'dependency-advisories',
+      'infrastructure-ci-checks',
+      'framework-express',
+      'framework-spring',
+      'bounded-call-paths',
+      'deep-import',
+      'reports',
+      'report-imports',
+      'dispositions',
+      'mcp',
+      'farsight-host-bridge',
+    ],
+  );
+  assert.equal(listed.find((c) => c.id === 'farsight-host-bridge')?.reasonCode, 'sentinel.capability.draftHostBridge');
+  assert.equal(listed.find((c) => c.id === 'framework-express')?.reasonCode, 'sentinel.capability.draftExpress');
+  assert.equal(listed.find((c) => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
+  assert.deepEqual(
+    [listed.find((c) => c.id === 'dispositions')?.state, listed.find((c) => c.id === 'dispositions')?.reasonCode],
+    ['available-draft', 'sentinel.capability.draftDecisions'],
+  );
+  assert.equal(listed.find((c) => c.id === 'interprocedural-flow')?.state, 'unavailable', 'no deep engine is claimed');
+  assert.equal(listed.find((c) => c.id === 'framework-spring')?.reasonCode, 'sentinel.capability.draftSpring');
+  assert.equal(listed.find((c) => c.id === 'rules-and-planning')?.state, 'available-draft');
+  assert.ok(listed.filter((c) => c.state !== 'unavailable').every((c) => c.state === 'available-draft'));
   for (const c of listed) assert.match(c.reasonCode, /^sentinel\.capability\./);
-  assert.equal(listed.find(c => c.id === 'interprocedural-flow')?.reasonCode, 'sentinel.capability.noQualifiedEngine');
+  assert.equal(
+    listed.find((c) => c.id === 'interprocedural-flow')?.reasonCode,
+    'sentinel.capability.noQualifiedEngine',
+  );
 });
 
 test('planned commands refuse with exit 3 and start nothing', () => {
   for (const command of ['bundle']) {
     const r = cli(command, '--json');
     assert.equal(r.status, 3, command);
-    assert.match(r.stderr, new RegExp(`^unavailable: ${command} is not implemented in this draft build \\(planned in PR \\d+\\)\\. Nothing was started\\.`));
+    assert.match(
+      r.stderr,
+      new RegExp(
+        `^unavailable: ${command} is not implemented in this draft build \\(planned in PR \\d+\\)\\. Nothing was started\\.`,
+      ),
+    );
     // JSON says unavailable, with every verdict not asked: never a scan result.
     const body = JSON.parse(r.stdout);
     assert.equal(body.outcome, 'unavailable', command);
     assert.equal(body.exitCode, 3);
-    for (const v of Object.values(body.verdicts) as Array<{ asked: boolean; allowed: boolean }>) assert.deepEqual([v.asked, v.allowed], [false, false]);
+    for (const v of Object.values(body.verdicts) as Array<{ asked: boolean; allowed: boolean }>)
+      assert.deepEqual([v.asked, v.allowed], [false, false]);
     assert.equal(cli(command).stdout, '', 'without --json nothing is printed to stdout');
   }
   assert.equal(cli('scan-everything').status, 3);
@@ -430,7 +565,10 @@ test('validate checks a file against its draft schema', () => {
     assert.equal(body.facts.errors[0].code, 'sentinel.contract.unsupportedVersion');
     assert.deepEqual(body.facts.errors[0].supported, ['sentinel-run/draft-1']);
     const human = cli('validate', 'run', bad);
-    assert.equal(human.stderr, 'invalid sentinel-run/draft-1\n  sentinel.contract.unsupportedVersion /schema version not supported\n');
+    assert.equal(
+      human.stderr,
+      'invalid sentinel-run/draft-1\n  sentinel.contract.unsupportedVersion /schema version not supported\n',
+    );
     assert.equal(cli('validate', 'run', dir).status, 3, 'a directory is refused');
     assert.equal(cli('validate', 'run', join(dir, 'missing.json')).status, 3);
     assert.equal(cli('validate', 'ledger', bad).status, 3, 'an unknown kind is refused');
@@ -442,12 +580,29 @@ test('validate checks a file against its draft schema', () => {
 test('every printed word is a registered catalog entry with a definition', async () => {
   const { STRINGS } = await import('@farsight/core/dist/strings.js');
   const cliText = readFileSync(`${pkgDir}src/cli.ts`, 'utf8');
-  const used = new Set([...cliText.matchAll(/word\('(sentinel\.[^']+)'/g)].map(m => m[1]!));
+  const used = new Set([...cliText.matchAll(/word\('(sentinel\.[^']+)'/g)].map((m) => m[1]!));
   for (const c of CAPABILITIES) used.add(c.reasonCode);
-  for (const code of ['unknownKind', 'tooLarge', 'malformedJson', 'missingVersion', 'wrongKind', 'unsupportedVersion', 'invalid', 'invariant', 'errorLimit']) used.add(`sentinel.contract.${code}`);
+  for (const code of [
+    'unknownKind',
+    'tooLarge',
+    'malformedJson',
+    'missingVersion',
+    'wrongKind',
+    'unsupportedVersion',
+    'invalid',
+    'invariant',
+    'errorLimit',
+  ])
+    used.add(`sentinel.contract.${code}`);
   used.add('sentinel.protocol.noSharedVersion');
   for (const code of [...POLICY_ERROR_CODES, ...POLICY_REASON_CODES, ...NEST_REASON_CODES]) used.add(code);
-  assert.deepEqual(Object.keys(STRINGS).filter(k => k.startsWith('sentinel.nest.')).sort(), [...NEST_REASON_CODES].sort(), 'the Nest catalog and the pack\'s codes are one list');
+  assert.deepEqual(
+    Object.keys(STRINGS)
+      .filter((k) => k.startsWith('sentinel.nest.'))
+      .sort(),
+    [...NEST_REASON_CODES].sort(),
+    "the Nest catalog and the pack's codes are one list",
+  );
   assert.ok(used.size > 30);
   for (const key of used) {
     const entry = STRINGS[key];
@@ -462,10 +617,9 @@ test('the PR 01 feasibility fixtures are still in place', () => {
   }
 });
 
-
-test('decision fault injection stays outside the named package and findings exports',async()=>{
-  const findings=await import('../dist/findings/index.js');
-  assert.equal('setOwnerDecisionAppendFailureForTest' in findings,false);
-  assert.equal(Object.hasOwn(manifest.exports,'./findings/owner-decision-test-hooks'),false);
-  assert.equal(Object.hasOwn(manifest.exports,'./findings/*'),false);
+test('decision fault injection stays outside the named package and findings exports', async () => {
+  const findings = await import('../dist/findings/index.js');
+  assert.equal('setOwnerDecisionAppendFailureForTest' in findings, false);
+  assert.equal(Object.hasOwn(manifest.exports, './findings/owner-decision-test-hooks'), false);
+  assert.equal(Object.hasOwn(manifest.exports, './findings/*'), false);
 });

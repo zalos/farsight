@@ -12,15 +12,24 @@ export type RuleLanguage = 'typescript' | 'javascript' | 'java';
  * What one check of the rule is about: one file, one surface (route/handler), a manifest, CI config, an
  * infrastructure configuration file (a Dockerfile, Kubernetes YAML, Terraform), or the whole repository.
  */
-export type RuleScopeKind = 'source-file' | 'surface' | 'dependency-manifest' | 'ci-config' | 'infrastructure-config' | 'repository';
+export type RuleScopeKind =
+  'source-file' | 'surface' | 'dependency-manifest' | 'ci-config' | 'infrastructure-config' | 'repository';
 
 /**
  * A property a stage must establish before the rule can be checked. A profile that lacks one leaves the check
  * unsupported; nothing weaker runs under the rule's identity.
  */
 export type RuleCapability =
-  | 'source-bytes' | 'pattern-match' | 'source-span' | 'call-occurrence' | 'resolved-receiver-type'
-  | 'framework-order' | 'interprocedural-flow' | 'runtime-observation' | 'dependency-manifest' | 'advisory-database';
+  | 'source-bytes'
+  | 'pattern-match'
+  | 'source-span'
+  | 'call-occurrence'
+  | 'resolved-receiver-type'
+  | 'framework-order'
+  | 'interprocedural-flow'
+  | 'runtime-observation'
+  | 'dependency-manifest'
+  | 'advisory-database';
 
 /** What a result means: a candidate location to review, or a finding the rule's evidence establishes. */
 export type RuleMeaning = 'candidate' | 'finding';
@@ -30,7 +39,8 @@ export type Severity = 'info' | 'low' | 'medium' | 'high' | 'critical';
 
 /** Evidence a result of the rule must carry. */
 /** call-path means a retained bounded query result, including no-path/frontier; never security or data-flow evidence. */
-export type RuleEvidence = 'source-span' | 'matched-pattern' | 'control-fact' | 'dependency-version' | 'advisory-id' | 'call-path';
+export type RuleEvidence =
+  'source-span' | 'matched-pattern' | 'control-fact' | 'dependency-version' | 'advisory-id' | 'call-path';
 
 /** Frameworks with planned control-fact packs (PRs 14–17). */
 export type FrameworkId = 'next' | 'express' | 'nest' | 'spring';

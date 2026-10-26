@@ -25,7 +25,13 @@ export async function storeIn(root: string) {
 }
 
 /** Run one attempt through the internal execution service bound to that public store. */
-export async function runAttempt(store: Awaited<ReturnType<typeof storeIn>>, scratchRoot: string, registry: any, attempt: Record<string, unknown>, containers = false) {
+export async function runAttempt(
+  store: Awaited<ReturnType<typeof storeIn>>,
+  scratchRoot: string,
+  registry: any,
+  attempt: Record<string, unknown>,
+  containers = false,
+) {
   const service = await createExecutionService(store, { scratchRoot, registry, containers });
   return service.run(attempt as any);
 }
@@ -42,17 +48,39 @@ export function inputs(root: string, contents: string[] = ['synthetic input one\
 }
 
 /** One built-in adapter per behaviour: a two-line wrapper module that sets the behaviour and imports the worker. */
-export function builtInRegistry(root: string, behaviours: string[], limits: Record<string, number> = {}, argument?: string) {
+export function builtInRegistry(
+  root: string,
+  behaviours: string[],
+  limits: Record<string, number> = {},
+  argument?: string,
+) {
   const dir = join(root, 'adapters');
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  return createAdapterRegistry(behaviours.map(b => {
-    const module = join(dir, `${b}.mjs`);
-    writeFileSync(module, `globalThis.SENTINEL_BEHAVIOR = ${JSON.stringify(b)}; globalThis.SENTINEL_ARGUMENT = ${JSON.stringify(argument ?? null)};\nawait import(${JSON.stringify(new URL(`file://${WORKER}`).href)});\n`);
-    const merged: Record<string, number> = { timeoutMs: 15_000, cancelGraceMs: 1_000, helloTimeoutMs: 5_000, ...limits };
-    merged.helloTimeoutMs = Math.min(merged.helloTimeoutMs!, merged.timeoutMs!);
-    merged.cancelGraceMs = Math.min(merged.cancelGraceMs!, merged.timeoutMs!);
-    return { id: `test-${b}`, version: '0.0.0-test', kind: 'built-in' as const, isolation: 'child' as const, module, limits: merged };
-  }));
+  return createAdapterRegistry(
+    behaviours.map((b) => {
+      const module = join(dir, `${b}.mjs`);
+      writeFileSync(
+        module,
+        `globalThis.SENTINEL_BEHAVIOR = ${JSON.stringify(b)}; globalThis.SENTINEL_ARGUMENT = ${JSON.stringify(argument ?? null)};\nawait import(${JSON.stringify(new URL(`file://${WORKER}`).href)});\n`,
+      );
+      const merged: Record<string, number> = {
+        timeoutMs: 15_000,
+        cancelGraceMs: 1_000,
+        helloTimeoutMs: 5_000,
+        ...limits,
+      };
+      merged.helloTimeoutMs = Math.min(merged.helloTimeoutMs!, merged.timeoutMs!);
+      merged.cancelGraceMs = Math.min(merged.cancelGraceMs!, merged.timeoutMs!);
+      return {
+        id: `test-${b}`,
+        version: '0.0.0-test',
+        kind: 'built-in' as const,
+        isolation: 'child' as const,
+        module,
+        limits: merged,
+      };
+    }),
+  );
 }
 
 export const work = { id: 'work-synthetic', revision: 1 };
@@ -61,9 +89,16 @@ export const work = { id: 'work-synthetic', revision: 1 };
 export function removeScratch(root: string) {
   const walk = (d: string) => {
     for (const e of readdirSync(d, { withFileTypes: true })) {
-      if (e.isDirectory() && !e.isSymbolicLink()) { chmodSync(join(d, e.name), 0o700); walk(join(d, e.name)); }
+      if (e.isDirectory() && !e.isSymbolicLink()) {
+        chmodSync(join(d, e.name), 0o700);
+        walk(join(d, e.name));
+      }
     }
   };
-  try { walk(root); } catch { /* already gone */ }
+  try {
+    walk(root);
+  } catch {
+    /* already gone */
+  }
   rmSync(root, { recursive: true, force: true });
 }

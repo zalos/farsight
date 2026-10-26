@@ -4,7 +4,19 @@
 // changed entry fails the restore. No restored file is executable, whatever it was in the source: its original mode
 // is provenance in the materialization, never applied, so restoring a snapshot cannot make project code runnable.
 // The tree is read-only by default (files 0400, folders 0500); writable restores give files 0600, folders 0700.
-import { chmodSync, closeSync, constants as FS, fstatSync, lstatSync, mkdirSync, openSync, readSync, readdirSync, realpathSync, writeSync } from 'node:fs';
+import {
+  chmodSync,
+  closeSync,
+  constants as FS,
+  fstatSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readSync,
+  readdirSync,
+  realpathSync,
+  writeSync,
+} from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import type { ArtifactId, IncludedFileEntry, SnapshotEnvelope } from '../contracts/index.js';
 import type { SentinelStore, SnapshotRecord } from '../store/index.js';
@@ -46,15 +58,27 @@ export type RestoreStore = Pick<SentinelStore, 'readArtifact' | 'ledger'>;
 
 async function readCanonical(store: RestoreStore, id: ArtifactId): Promise<unknown> {
   let bytes: Buffer;
-  try { bytes = await store.readArtifact(id); } catch (e) { throw new SnapshotError('sentinel.capture.notSnapshot', 'its artifact cannot be read', { cause: e }); }
+  try {
+    bytes = await store.readArtifact(id);
+  } catch (e) {
+    throw new SnapshotError('sentinel.capture.notSnapshot', 'its artifact cannot be read', { cause: e });
+  }
   let value: unknown;
-  try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch { throw new SnapshotError('sentinel.capture.notSnapshot'); }
-  if (!canonicalJsonBytes(value).equals(bytes)) throw new SnapshotError('sentinel.capture.notSnapshot', 'not canonical JSON');
+  try {
+    value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch {
+    throw new SnapshotError('sentinel.capture.notSnapshot');
+  }
+  if (!canonicalJsonBytes(value).equals(bytes))
+    throw new SnapshotError('sentinel.capture.notSnapshot', 'not canonical JSON');
   return value;
 }
 
 /** Reads and checks a stored snapshot manifest: canonical JSON that satisfies its contract. */
-export async function readSnapshot(store: Pick<SentinelStore, 'readArtifact'>, manifest: ArtifactId): Promise<SnapshotEnvelope> {
+export async function readSnapshot(
+  store: Pick<SentinelStore, 'readArtifact'>,
+  manifest: ArtifactId,
+): Promise<SnapshotEnvelope> {
   const valid = validateEnvelope('snapshot', await readCanonical(store as RestoreStore, manifest));
   if (!valid.ok) throw new SnapshotError('sentinel.capture.notSnapshot', 'the manifest does not satisfy its contract');
   return valid.value;
@@ -66,31 +90,59 @@ export async function readSnapshot(store: Pick<SentinelStore, 'readArtifact'>, m
  */
 export async function openSnapshot(store: RestoreStore, snapshotId: string): Promise<OpenedSnapshot> {
   let record: SnapshotRecord | undefined;
-  try { record = store.ledger.getSnapshot(snapshotId); } catch (e) { throw new SnapshotError('sentinel.capture.notSnapshot', '', { cause: e }); }
+  try {
+    record = store.ledger.getSnapshot(snapshotId);
+  } catch (e) {
+    throw new SnapshotError('sentinel.capture.notSnapshot', '', { cause: e });
+  }
   if (!record) throw new SnapshotError('sentinel.capture.notSnapshot', 'no admitted snapshot has that id');
   const snapshot = await readSnapshot(store, record.manifest);
   const materialization = validateMaterialization(await readCanonical(store, record.materialization));
-  if (snapshot.id !== record.snapshotId || snapshot.inventoryDigest !== record.inventoryDigest
-    || materialization.snapshotId !== record.snapshotId || materialization.inventoryDigest !== record.inventoryDigest) {
-    throw new SnapshotError('sentinel.capture.notSnapshot', 'the manifest, the materialization and the record disagree');
+  if (
+    snapshot.id !== record.snapshotId ||
+    snapshot.inventoryDigest !== record.inventoryDigest ||
+    materialization.snapshotId !== record.snapshotId ||
+    materialization.inventoryDigest !== record.inventoryDigest
+  ) {
+    throw new SnapshotError(
+      'sentinel.capture.notSnapshot',
+      'the manifest, the materialization and the record disagree',
+    );
   }
-  const included = snapshot.entries.filter((e): e is IncludedFileEntry => e.kind === 'file' && e.disposition === 'included');
-  const expected = new Map(included.map(e => [`${e.sourceId}\u0000${e.relativePath}`, e.content]));
-  const sources = new Set(snapshot.sources.map(s => s.sourceId));
+  const included = snapshot.entries.filter(
+    (e): e is IncludedFileEntry => e.kind === 'file' && e.disposition === 'included',
+  );
+  const expected = new Map(included.map((e) => [`${e.sourceId}\u0000${e.relativePath}`, e.content]));
+  const sources = new Set(snapshot.sources.map((s) => s.sourceId));
   let files = 0;
   for (const s of materialization.sources) {
-    if (!sources.has(s.sourceId)) throw new SnapshotError('sentinel.capture.notSnapshot', 'the materialization names an uncaptured source');
+    if (!sources.has(s.sourceId))
+      throw new SnapshotError('sentinel.capture.notSnapshot', 'the materialization names an uncaptured source');
     for (const f of s.files) {
       if (expected.get(`${s.sourceId}\u0000${f.path}`) !== f.content) {
-        throw new SnapshotError('sentinel.capture.notSnapshot', 'the materialization and the manifest disagree on a file');
+        throw new SnapshotError(
+          'sentinel.capture.notSnapshot',
+          'the materialization and the manifest disagree on a file',
+        );
       }
       files++;
     }
   }
-  if (files !== expected.size) throw new SnapshotError('sentinel.capture.notSnapshot', 'the materialization omits an included file');
+  if (files !== expected.size)
+    throw new SnapshotError('sentinel.capture.notSnapshot', 'the materialization omits an included file');
   // The recorded inventory identity must be exactly what these bytes and these facts hash to.
-  const recomputed = inventoryDigestOf(snapshot.capture.mode, snapshot.capture.policyDigest, snapshot.sources, snapshot.entries, materialization.sources);
-  if (recomputed !== record.inventoryDigest) throw new SnapshotError('sentinel.capture.notSnapshot', 'the inventory digest does not match its manifest and materialization');
+  const recomputed = inventoryDigestOf(
+    snapshot.capture.mode,
+    snapshot.capture.policyDigest,
+    snapshot.sources,
+    snapshot.entries,
+    materialization.sources,
+  );
+  if (recomputed !== record.inventoryDigest)
+    throw new SnapshotError(
+      'sentinel.capture.notSnapshot',
+      'the inventory digest does not match its manifest and materialization',
+    );
   return Object.freeze({ record, snapshot, materialization });
 }
 
@@ -99,7 +151,9 @@ function writeNew(path: string, bytes: Buffer): void {
   try {
     let off = 0;
     while (off < bytes.length) off += writeSync(fd, bytes, off, bytes.length - off, off);
-  } finally { closeSync(fd); }
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function readBack(path: string): Buffer {
@@ -109,9 +163,15 @@ function readBack(path: string): Buffer {
     if (!st.isFile()) throw new SnapshotError('sentinel.capture.restoreIntegrity', 'not a regular file');
     const buf = Buffer.alloc(st.size);
     let off = 0;
-    while (off < st.size) { const n = readSync(fd, buf, off, st.size - off, off); if (n === 0) break; off += n; }
+    while (off < st.size) {
+      const n = readSync(fd, buf, off, st.size - off, off);
+      if (n === 0) break;
+      off += n;
+    }
     return buf.subarray(0, off);
-  } finally { closeSync(fd); }
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /** Every entry under `dir`: files and folders separately, refusing any link or special file. */
@@ -120,24 +180,39 @@ function listTree(dir: string, rel = '', out = { files: [] as string[], dirs: []
     const abs = join(dir, name);
     const path = rel === '' ? name : `${rel}/${name}`;
     const st = lstatSync(abs);
-    if (st.isDirectory()) { out.dirs.push(path); listTree(abs, path, out); }
-    else if (st.isFile()) out.files.push(path);
+    if (st.isDirectory()) {
+      out.dirs.push(path);
+      listTree(abs, path, out);
+    } else if (st.isFile()) out.files.push(path);
     else throw new SnapshotError('sentinel.capture.restoreIntegrity', `${path} is not a regular file`);
   }
   return out;
 }
 
-const ancestors = (p: string) => p.split('/').slice(0, -1).map((_, i, parts) => parts.slice(0, i + 1).join('/'));
+const ancestors = (p: string) =>
+  p
+    .split('/')
+    .slice(0, -1)
+    .map((_, i, parts) => parts.slice(0, i + 1).join('/'));
 
 /**
  * Restores an admitted snapshot into `target`, which must not exist and whose parent must be a canonical folder.
  * Each source is written under `<target>/<sourceId>/`: its listed folders (empty ones too) and its included files.
  */
-export async function restoreSnapshot(store: RestoreStore, snapshotId: string, target: string, options: RestoreOptions = {}):
-  Promise<RestoredSnapshot> {
-  if (typeof target !== 'string' || !isAbsolute(target)) throw new SnapshotError('sentinel.capture.restoreTargetUnsafe');
+export async function restoreSnapshot(
+  store: RestoreStore,
+  snapshotId: string,
+  target: string,
+  options: RestoreOptions = {},
+): Promise<RestoredSnapshot> {
+  if (typeof target !== 'string' || !isAbsolute(target))
+    throw new SnapshotError('sentinel.capture.restoreTargetUnsafe');
   let parent: string;
-  try { parent = realpathSync.native(dirname(target)); } catch { throw new SnapshotError('sentinel.capture.restoreTargetUnsafe'); }
+  try {
+    parent = realpathSync.native(dirname(target));
+  } catch {
+    throw new SnapshotError('sentinel.capture.restoreTargetUnsafe');
+  }
   if (join(parent, basename(target)) !== target) throw new SnapshotError('sentinel.capture.restoreTargetUnsafe');
   const opened = await openSnapshot(store, snapshotId);
   const { snapshot, materialization } = opened;
@@ -145,35 +220,54 @@ export async function restoreSnapshot(store: RestoreStore, snapshotId: string, t
   // A snapshot written by capture never holds these; one assembled elsewhere is refused before anything is written.
   for (const s of materialization.sources) {
     const folded = new Map<string, string>();
-    for (const p of [...s.directories, ...s.files.map(f => f.path)].flatMap(p => [...ancestors(p), p])) {
+    for (const p of [...s.directories, ...s.files.map((f) => f.path)].flatMap((p) => [...ancestors(p), p])) {
       const seen = folded.get(foldPath(p));
-      if (seen !== undefined && seen !== p) throw new SnapshotError('sentinel.capture.restoreIntegrity', 'paths that collide by letter case');
+      if (seen !== undefined && seen !== p)
+        throw new SnapshotError('sentinel.capture.restoreIntegrity', 'paths that collide by letter case');
       folded.set(foldPath(p), p);
     }
   }
 
-  try { mkdirSync(target, { mode: 0o700 }); } catch { throw new SnapshotError('sentinel.capture.restoreTargetUnsafe'); }
+  try {
+    mkdirSync(target, { mode: 0o700 });
+  } catch {
+    throw new SnapshotError('sentinel.capture.restoreTargetUnsafe');
+  }
   const sources: RestoredSource[] = [];
   for (const source of snapshot.sources) {
     const root = join(target, source.sourceId);
     mkdirSync(root, { mode: 0o700 });
-    const m = materialization.sources.find(s => s.sourceId === source.sourceId);
+    const m = materialization.sources.find((s) => s.sourceId === source.sourceId);
     const files = m?.files ?? [];
     const dirs = new Set(m?.directories ?? []);
     for (const f of files) for (const a of ancestors(f.path)) dirs.add(a);
     for (const d of [...dirs].sort()) mkdirSync(join(root, ...d.split('/')), { recursive: true, mode: 0o700 });
     for (const f of files) {
       const bytes = await store.readArtifact(f.content);
-      if (contentId(bytes) !== f.content) throw new SnapshotError('sentinel.capture.restoreIntegrity', `${f.path}: stored bytes differ from the snapshot`);
-      try { writeNew(join(root, ...f.path.split('/')), bytes); } catch (e) {
-        throw new SnapshotError('sentinel.capture.restoreIntegrity', `${f.path}: ${(e as NodeJS.ErrnoException).code ?? 'write failed'}`);
+      if (contentId(bytes) !== f.content)
+        throw new SnapshotError(
+          'sentinel.capture.restoreIntegrity',
+          `${f.path}: stored bytes differ from the snapshot`,
+        );
+      try {
+        writeNew(join(root, ...f.path.split('/')), bytes);
+      } catch (e) {
+        throw new SnapshotError(
+          'sentinel.capture.restoreIntegrity',
+          `${f.path}: ${(e as NodeJS.ErrnoException).code ?? 'write failed'}`,
+        );
       }
     }
     // The tree must be exactly the snapshot's folders and files, each file with its captured bytes.
     const listed = listTree(root);
-    if (JSON.stringify(listed.files.sort()) !== JSON.stringify(files.map(f => f.path).sort())
-      || JSON.stringify(listed.dirs.sort()) !== JSON.stringify([...dirs].sort())) {
-      throw new SnapshotError('sentinel.capture.restoreIntegrity', `${source.sourceId}: the restored tree differs from the snapshot`);
+    if (
+      JSON.stringify(listed.files.sort()) !== JSON.stringify(files.map((f) => f.path).sort()) ||
+      JSON.stringify(listed.dirs.sort()) !== JSON.stringify([...dirs].sort())
+    ) {
+      throw new SnapshotError(
+        'sentinel.capture.restoreIntegrity',
+        `${source.sourceId}: the restored tree differs from the snapshot`,
+      );
     }
     for (const f of files) {
       if (contentId(readBack(join(root, ...f.path.split('/')))) !== f.content) {

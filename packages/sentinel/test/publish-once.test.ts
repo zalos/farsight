@@ -3,7 +3,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, lstatSync, mkdtempSync, readdirSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  lstatSync,
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { publishOnce, readPublished, UnsafeRecordError } from '../dist/service/publish-once.js';
@@ -37,11 +46,13 @@ function readInChild(kind: 'record' | 'key', dir: string, name: string) {
     } catch (e) { process.stdout.write(e.name + ':' + e.message); process.exitCode = 2; }
   `;
   return spawnSync(process.execPath, ['--input-type=module', '--eval', code, kind, dir, name], {
-    encoding: 'utf8', timeout: 2_000, killSignal: 'SIGKILL',
+    encoding: 'utf8',
+    timeout: 2_000,
+    killSignal: 'SIGKILL',
   });
 }
 
-test('private regular records retain exact once-only publication, bounded reads and process reopen', supported, t => {
+test('private regular records retain exact once-only publication, bounded reads and process reopen', supported, (t) => {
   const dir = folder(t);
   const bytes = Buffer.from('inert owner record');
   assert.equal(readPublished(dir, 'record', 32), undefined);
@@ -57,7 +68,7 @@ test('private regular records retain exact once-only publication, bounded reads 
   assert.equal(read.stdout, 'read');
 });
 
-test('an actual FIFO at a published record name is refused without a writer', supported, t => {
+test('an actual FIFO at a published record name is refused without a writer', supported, (t) => {
   const dir = folder(t);
   const path = join(dir, 'record');
   fifo(path);
@@ -69,7 +80,7 @@ test('an actual FIFO at a published record name is refused without a writer', su
   assert.deepEqual(readdirSync(dir), ['record'], 'refusal creates no replacement or temporary record');
 });
 
-test('the report-key caller refuses an actual FIFO and can reopen the same restored regular key', supported, t => {
+test('the report-key caller refuses an actual FIFO and can reopen the same restored regular key', supported, (t) => {
   const trust = folder(t);
   const storeId = 'sentinel-original-fixture-store';
   const original = withheldLocationKey(trust, storeId);
@@ -96,7 +107,7 @@ test('the report-key caller refuses an actual FIFO and can reopen the same resto
 });
 
 // The key is deliberately outside the portable store; absent state cannot prove an older key existed.
-test('losing the owner-private report key starts a new identity domain for the same store', supported, t => {
+test('losing the owner-private report key starts a new identity domain for the same store', supported, (t) => {
   const trust = folder(t);
   const storeId = 'sentinel-key-loss-fixture-store';
   const before = withheldLocationKey(trust, storeId);

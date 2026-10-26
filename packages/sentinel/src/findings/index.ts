@@ -8,8 +8,17 @@ export { matchFindings, MatchError } from './match.js';
 export type { MatchableFinding, MatchResult } from './match.js';
 export { compareAssessments } from './compare.js';
 export type {
-  AssessmentSide, CheckAssessment, Comparison, ComparisonRequest, CompatibilityMapping, CurrentLabel, CurrentOutcome, CurrentSurfaces,
-  DetectionConditions, HistoricalLabel, HistoricalOutcome,
+  AssessmentSide,
+  CheckAssessment,
+  Comparison,
+  ComparisonRequest,
+  CompatibilityMapping,
+  CurrentLabel,
+  CurrentOutcome,
+  CurrentSurfaces,
+  DetectionConditions,
+  HistoricalLabel,
+  HistoricalOutcome,
 } from './compare.js';
 
 // Scoped decisions: only proposals/read models are public. Approval stays in the package's owner CLI boundary.

@@ -27,8 +27,14 @@ export type DirectorySync = 'synced' | 'unsupported';
 export function syncDirectory(path: string, options: { allowUnsupported?: boolean } = {}): DirectorySync {
   durabilityIo.trace?.(path);
   let fd: number;
-  try { fd = openSync(path, constants.O_RDONLY | constants.O_DIRECTORY); } catch (e) {
-    throw new ExecutionError('sentinel.execution.durabilityFailed', { path, osCode: (e as NodeJS.ErrnoException).code ?? 'unknown', operation: 'open' }, { cause: e });
+  try {
+    fd = openSync(path, constants.O_RDONLY | constants.O_DIRECTORY);
+  } catch (e) {
+    throw new ExecutionError(
+      'sentinel.execution.durabilityFailed',
+      { path, osCode: (e as NodeJS.ErrnoException).code ?? 'unknown', operation: 'open' },
+      { cause: e },
+    );
   }
   try {
     durabilityIo.fsyncSync(fd);
@@ -36,7 +42,11 @@ export function syncDirectory(path: string, options: { allowUnsupported?: boolea
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code ?? 'unknown';
     if (UNSUPPORTED.has(code) && options.allowUnsupported) return 'unsupported';
-    throw new ExecutionError('sentinel.execution.durabilityFailed', { path, osCode: code, operation: 'fsync' }, { cause: e });
+    throw new ExecutionError(
+      'sentinel.execution.durabilityFailed',
+      { path, osCode: code, operation: 'fsync' },
+      { cause: e },
+    );
   } finally {
     closeSync(fd);
   }
@@ -44,7 +54,13 @@ export function syncDirectory(path: string, options: { allowUnsupported?: boolea
 
 /** fsync a file descriptor; every failure is an error (file data must be durable). */
 export function syncFile(fd: number, path: string): void {
-  try { durabilityIo.fsyncSync(fd); } catch (e) {
-    throw new ExecutionError('sentinel.execution.durabilityFailed', { path, osCode: (e as NodeJS.ErrnoException).code ?? 'unknown', operation: 'fsync' }, { cause: e });
+  try {
+    durabilityIo.fsyncSync(fd);
+  } catch (e) {
+    throw new ExecutionError(
+      'sentinel.execution.durabilityFailed',
+      { path, osCode: (e as NodeJS.ErrnoException).code ?? 'unknown', operation: 'fsync' },
+      { cause: e },
+    );
   }
 }

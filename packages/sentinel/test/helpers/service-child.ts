@@ -29,10 +29,16 @@ try {
     runs[runId] = planned.run;
   }
   drivers = await syntheticServiceDrivers(store, registry, runIds[0]!);
-} finally { store.close(); }
+} finally {
+  store.close();
+}
 writeFileSync(envelopes, JSON.stringify(runs));
 
 const stop = new AbortController();
 process.once('SIGTERM', () => stop.abort());
-await serveWorkspace(ws, { idleMs: 0, signal: stop.signal, service: { registry, drivers, runEnvelope: (id: string) => runs[id] as never },
-  onListening: () => process.stdout.write('listening\n') });
+await serveWorkspace(ws, {
+  idleMs: 0,
+  signal: stop.signal,
+  service: { registry, drivers, runEnvelope: (id: string) => runs[id] as never },
+  onListening: () => process.stdout.write('listening\n'),
+});

@@ -29,11 +29,18 @@ const invalid = (detail: string) => new PlanError('sentinel.plan.invalidInput', 
  * about an adapter the registry does not hold is refused. Only a table built here is accepted by the planner.
  */
 export function createCapabilityTable(registry: AdapterRegistry, facts: readonly CapabilityFact[]): CapabilityTable {
-  const out = facts.map(f => {
-    if (!f || typeof f.capability !== 'string' || !f.capability || typeof f.evidence !== 'string' || !f.evidence) throw invalid('a capability fact names its capability and evidence');
-    if (!registry.ids.includes(f.adapterId)) throw invalid(`capability ${f.capability}: adapter ${f.adapterId} is not in the trusted registry`);
-    return Object.freeze({ capability: f.capability, adapterId: f.adapterId, evidence: f.evidence,
-      ...(f.perFileParse ? { perFileParse: true } : {}), adapterDigest: registry.get(f.adapterId).digest });
+  const out = facts.map((f) => {
+    if (!f || typeof f.capability !== 'string' || !f.capability || typeof f.evidence !== 'string' || !f.evidence)
+      throw invalid('a capability fact names its capability and evidence');
+    if (!registry.ids.includes(f.adapterId))
+      throw invalid(`capability ${f.capability}: adapter ${f.adapterId} is not in the trusted registry`);
+    return Object.freeze({
+      capability: f.capability,
+      adapterId: f.adapterId,
+      evidence: f.evidence,
+      ...(f.perFileParse ? { perFileParse: true } : {}),
+      adapterDigest: registry.get(f.adapterId).digest,
+    });
   });
   const table = Object.freeze({ facts: Object.freeze(out) });
   tables.add(table);
@@ -52,9 +59,18 @@ export interface CapabilityAnswer {
 }
 
 /** Whether `capability` is available: established by a still-registered adapter, and permitted. */
-export function capabilityOf(table: CapabilityTable, registry: AdapterRegistry, permits: ReadonlySet<string>, capability: string): CapabilityAnswer {
-  const fact = table.facts.find(f => f.capability === capability && registry.ids.includes(f.adapterId)
-    && registry.get(f.adapterId).digest === f.adapterDigest);
+export function capabilityOf(
+  table: CapabilityTable,
+  registry: AdapterRegistry,
+  permits: ReadonlySet<string>,
+  capability: string,
+): CapabilityAnswer {
+  const fact = table.facts.find(
+    (f) =>
+      f.capability === capability &&
+      registry.ids.includes(f.adapterId) &&
+      registry.get(f.adapterId).digest === f.adapterDigest,
+  );
   if (!fact) return { available: false, reasonCode: 'sentinel.plan.capabilityUnavailable' };
   if (!permits.has(capability)) return { available: false, reasonCode: 'sentinel.plan.capabilityNotPermitted' };
   return { available: true, fact };

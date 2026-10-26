@@ -23,13 +23,25 @@ export const MAX_FRAME_BYTES = 1024 * 1024;
 const SUN_PATH: Readonly<Record<string, number>> = { darwin: 104, linux: 108 };
 
 export type IpcErrorCode =
-  | 'sentinel.ipc.platformUnsupported' | 'sentinel.ipc.pathTooLong' | 'sentinel.ipc.runtimeDirUnsafe'
-  | 'sentinel.ipc.socketUnsafe' | 'sentinel.ipc.socketInUse' | 'sentinel.ipc.frameTooLarge'
-  | 'sentinel.ipc.frameMalformed' | 'sentinel.ipc.handshakeMismatch' | 'sentinel.ipc.notListening'
-  | 'sentinel.ipc.timeout' | 'sentinel.ipc.canceled' | 'sentinel.ipc.socketIndeterminate' | 'sentinel.ipc.runtimeDirInsideSource';
+  | 'sentinel.ipc.platformUnsupported'
+  | 'sentinel.ipc.pathTooLong'
+  | 'sentinel.ipc.runtimeDirUnsafe'
+  | 'sentinel.ipc.socketUnsafe'
+  | 'sentinel.ipc.socketInUse'
+  | 'sentinel.ipc.frameTooLarge'
+  | 'sentinel.ipc.frameMalformed'
+  | 'sentinel.ipc.handshakeMismatch'
+  | 'sentinel.ipc.notListening'
+  | 'sentinel.ipc.timeout'
+  | 'sentinel.ipc.canceled'
+  | 'sentinel.ipc.socketIndeterminate'
+  | 'sentinel.ipc.runtimeDirInsideSource';
 
 export class IpcError extends Error {
-  constructor(readonly code: IpcErrorCode, readonly detail = '') {
+  constructor(
+    readonly code: IpcErrorCode,
+    readonly detail = '',
+  ) {
     super(detail ? `${code}: ${detail}` : code);
     this.name = 'IpcError';
   }
@@ -48,7 +60,8 @@ export const fitsSocketPath = (path: string, platform: string = process.platform
   Buffer.byteLength(path, 'utf8') <= socketPathLimit(platform);
 
 function assertPrivateDir(path: string, st: Stats): void {
-  if (st.isSymbolicLink() || !st.isDirectory()) throw new IpcError('sentinel.ipc.runtimeDirUnsafe', 'not a real folder');
+  if (st.isSymbolicLink() || !st.isDirectory())
+    throw new IpcError('sentinel.ipc.runtimeDirUnsafe', 'not a real folder');
   if (UID !== undefined && st.uid !== UID) throw new IpcError('sentinel.ipc.runtimeDirUnsafe', 'owned by another user');
   if ((st.mode & 0o077) !== 0) throw new IpcError('sentinel.ipc.runtimeDirUnsafe', 'open to other users');
   void path;
@@ -61,7 +74,8 @@ export interface RuntimeAddress {
 }
 
 /** True when canonical `inner` is `outer` or below it. */
-const within = (inner: string, outer: string) => inner === outer || inner.startsWith(outer.endsWith('/') ? outer : `${outer}/`);
+const within = (inner: string, outer: string) =>
+  inner === outer || inner.startsWith(outer.endsWith('/') ? outer : `${outer}/`);
 
 /** A usable base folder from the environment: absolute, canonical, a real folder. */
 function baseOf(value: string | undefined): string | undefined {
@@ -70,7 +84,9 @@ function baseOf(value: string | undefined): string | undefined {
     const real = realpathSync.native(value);
     const st = lstatSync(real);
     return st.isDirectory() && !st.isSymbolicLink() ? real : undefined;
-  } catch { return undefined; }
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -78,7 +94,10 @@ function baseOf(value: string | undefined): string | undefined {
  * base that fits; otherwise a new unpredictable folder under /tmp, which the store descriptor then records.
  */
 export function runtimeAddress(options: {
-  storePath: string; ownerNonce: string; env?: NodeJS.ProcessEnv; platform?: string;
+  storePath: string;
+  ownerNonce: string;
+  env?: NodeJS.ProcessEnv;
+  platform?: string;
   /** The canonical roots the owner captures: the runtime folder is never made inside one. */
   sources?: readonly string[];
 }): RuntimeAddress {
@@ -91,10 +110,13 @@ export function runtimeAddress(options: {
   for (const base of [baseOf(env.XDG_RUNTIME_DIR), baseOf(env.TMPDIR)]) {
     if (!base) continue;
     const dir = join(base, `fss-${key}`);
-    if (sources.some(s => within(dir, s) || within(s, dir))) throw new IpcError('sentinel.ipc.runtimeDirInsideSource', dir);
+    if (sources.some((s) => within(dir, s) || within(s, dir)))
+      throw new IpcError('sentinel.ipc.runtimeDirInsideSource', dir);
     const socket = join(dir, 's');
     if (!fitsSocketPath(socket, platform)) continue;
-    try { mkdirSync(dir, { mode: 0o700 }); } catch (e) {
+    try {
+      mkdirSync(dir, { mode: 0o700 });
+    } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') continue;
     }
     assertPrivateDir(dir, lstatSync(dir));
@@ -103,26 +125,37 @@ export function runtimeAddress(options: {
   const tmp = baseOf('/tmp');
   if (!tmp) throw new IpcError('sentinel.ipc.runtimeDirUnsafe', 'no usable temporary folder');
   // A fresh child of /tmp is inside a source only when /tmp itself is (a source under /tmp gets a new sibling).
-  if (sources.some(s => within(tmp, s))) throw new IpcError('sentinel.ipc.runtimeDirInsideSource', tmp);
+  if (sources.some((s) => within(tmp, s))) throw new IpcError('sentinel.ipc.runtimeDirInsideSource', tmp);
   const dir = mkdtempSync(join(tmp, 'fss-'));
   chmodSync(dir, 0o700);
   assertPrivateDir(dir, lstatSync(dir));
   const socket = join(dir, 's');
-  if (!fitsSocketPath(socket, platform)) throw new IpcError('sentinel.ipc.pathTooLong', `${Buffer.byteLength(socket)} bytes`);
+  if (!fitsSocketPath(socket, platform))
+    throw new IpcError('sentinel.ipc.pathTooLong', `${Buffer.byteLength(socket)} bytes`);
   return Object.freeze({ dir, socket });
 }
 
 /** Checks a recorded address before it is used: its folder private and ours, its length within the platform's. */
 export function checkAddress(address: RuntimeAddress, platform: string = process.platform): void {
-  if (!fitsSocketPath(address.socket, platform)) throw new IpcError('sentinel.ipc.pathTooLong', `${Buffer.byteLength(address.socket)} bytes`);
-  if (join(address.dir, 's') !== address.socket) throw new IpcError('sentinel.ipc.socketUnsafe', 'the socket is not in its runtime folder');
+  if (!fitsSocketPath(address.socket, platform))
+    throw new IpcError('sentinel.ipc.pathTooLong', `${Buffer.byteLength(address.socket)} bytes`);
+  if (join(address.dir, 's') !== address.socket)
+    throw new IpcError('sentinel.ipc.socketUnsafe', 'the socket is not in its runtime folder');
   let st: Stats;
-  try { st = lstatSync(address.dir); } catch { throw new IpcError('sentinel.ipc.notListening', 'no runtime folder'); }
+  try {
+    st = lstatSync(address.dir);
+  } catch {
+    throw new IpcError('sentinel.ipc.notListening', 'no runtime folder');
+  }
   assertPrivateDir(address.dir, st);
 }
 
 function socketStat(path: string): Stats | undefined {
-  try { return lstatSync(path); } catch { return undefined; }
+  try {
+    return lstatSync(path);
+  } catch {
+    return undefined;
+  }
 }
 
 function assertOwnSocket(st: Stats): void {
@@ -154,7 +187,9 @@ export class FrameDecoder {
       if (this.#buf.length < 4 + n) break;
       const body = this.#buf.subarray(4, 4 + n);
       this.#buf = this.#buf.subarray(4 + n);
-      try { out.push(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body))); } catch {
+      try {
+        out.push(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)));
+      } catch {
         throw new IpcError('sentinel.ipc.frameMalformed');
       }
     }
@@ -183,8 +218,17 @@ export interface ServiceIdentity {
   readonly ownerNonce: string;
 }
 
-export interface ServiceRequest { readonly id: number; readonly op: string; readonly body: unknown }
-export type ServiceHandler = (op: string, body: unknown, by: ReturnType<typeof requestedByOf>, context?: { readonly signal: AbortSignal }) => Promise<unknown>;
+export interface ServiceRequest {
+  readonly id: number;
+  readonly op: string;
+  readonly body: unknown;
+}
+export type ServiceHandler = (
+  op: string,
+  body: unknown,
+  by: ReturnType<typeof requestedByOf>,
+  context?: { readonly signal: AbortSignal },
+) => Promise<unknown>;
 
 export interface OwnerSocket {
   readonly address: RuntimeAddress;
@@ -203,7 +247,12 @@ export interface ListenOptions {
   readonly connect?: (path: string) => Socket;
 }
 
-export async function listenOwnerSocket(address: RuntimeAddress, identity: ServiceIdentity, handler: ServiceHandler, options: ListenOptions = {}): Promise<OwnerSocket> {
+export async function listenOwnerSocket(
+  address: RuntimeAddress,
+  identity: ServiceIdentity,
+  handler: ServiceHandler,
+  options: ListenOptions = {},
+): Promise<OwnerSocket> {
   checkAddress(address);
   const existing = socketStat(address.socket);
   if (existing) {
@@ -216,45 +265,70 @@ export async function listenOwnerSocket(address: RuntimeAddress, identity: Servi
     // Removed only if the name is still the very socket that refused, not one a new service bound meanwhile.
     const now = socketStat(address.socket);
     if (now) {
-      if (!now.isSocket() || now.dev !== existing.dev || now.ino !== existing.ino) throw new IpcError('sentinel.ipc.socketIndeterminate', 'the socket changed while it was checked');
+      if (!now.isSocket() || now.dev !== existing.dev || now.ino !== existing.ino)
+        throw new IpcError('sentinel.ipc.socketIndeterminate', 'the socket changed while it was checked');
       unlinkSync(address.socket);
     }
   }
   const accepted = new Set<Socket>();
   let closing = false;
-  const server: Server = createServer(socket => {
-    if (closing) { socket.destroy(); return; }
-    accepted.add(socket); socket.once('close', () => accepted.delete(socket));
+  const server: Server = createServer((socket) => {
+    if (closing) {
+      socket.destroy();
+      return;
+    }
+    accepted.add(socket);
+    socket.once('close', () => accepted.delete(socket));
     serveConnection(socket, identity, handler);
   });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
-    server.listen(address.socket, () => { server.off('error', reject); resolve(); });
+    server.listen(address.socket, () => {
+      server.off('error', reject);
+      resolve();
+    });
   });
   chmodSync(address.socket, 0o600);
   assertOwnSocket(lstatSync(address.socket));
   return Object.freeze({
     address,
-    close: () => new Promise<void>(resolve => {
-      closing = true;
-      server.close(() => {
-        try { if (socketStat(address.socket)?.isSocket()) unlinkSync(address.socket); } catch { /* already gone */ }
-        resolve();
-      });
-      // These sockets were accepted by this listener only. A connected idle reader cannot retain the owner
-      // after its buffers expire; service.stop has already waited for accepted run tasks to settle.
-      for (const socket of accepted) socket.destroy();
-    }),
+    close: () =>
+      new Promise<void>((resolve) => {
+        closing = true;
+        server.close(() => {
+          try {
+            if (socketStat(address.socket)?.isSocket()) unlinkSync(address.socket);
+          } catch {
+            /* already gone */
+          }
+          resolve();
+        });
+        // These sockets were accepted by this listener only. A connected idle reader cannot retain the owner
+        // after its buffers expire; service.stop has already waited for accepted run tasks to settle.
+        for (const socket of accepted) socket.destroy();
+      }),
   });
 }
 
 /** `live` when something accepts, `stale` only on a refused connection or a missing name, else `unknown:<code>`. */
 function probeSocket(path: string, open: (path: string) => Socket): Promise<'live' | 'stale' | `unknown:${string}`> {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     let s: Socket;
-    try { s = open(path); } catch (e) { resolve(`unknown:${(e as NodeJS.ErrnoException).code ?? 'error'}`); return; }
-    const timer = setTimeout(() => { s.destroy(); resolve('unknown:ETIMEDOUT'); }, 2000);
-    s.once('connect', () => { clearTimeout(timer); s.destroy(); resolve('live'); });
+    try {
+      s = open(path);
+    } catch (e) {
+      resolve(`unknown:${(e as NodeJS.ErrnoException).code ?? 'error'}`);
+      return;
+    }
+    const timer = setTimeout(() => {
+      s.destroy();
+      resolve('unknown:ETIMEDOUT');
+    }, 2000);
+    s.once('connect', () => {
+      clearTimeout(timer);
+      s.destroy();
+      resolve('live');
+    });
     s.once('error', (e: NodeJS.ErrnoException) => {
       clearTimeout(timer);
       resolve(e.code === 'ECONNREFUSED' || e.code === 'ENOENT' ? 'stale' : `unknown:${e.code ?? 'error'}`);
@@ -273,55 +347,130 @@ function serveConnection(socket: Socket, identity: ServiceIdentity, handler: Ser
   const send = (v: unknown) => {
     if (socket.destroyed) return;
     let frame: Buffer;
-    try { frame = encodeFrame(v); } catch (e) {
+    try {
+      frame = encodeFrame(v);
+    } catch (e) {
       const id = isRecord(v) ? v.id : undefined;
-      try { frame = encodeFrame({ type: 'response', id, ok: false, code: e instanceof IpcError ? e.code : 'sentinel.ipc.frameMalformed' }); } catch {
+      try {
+        frame = encodeFrame({
+          type: 'response',
+          id,
+          ok: false,
+          code: e instanceof IpcError ? e.code : 'sentinel.ipc.frameMalformed',
+        });
+      } catch {
         socket.destroy();
         return;
       }
     }
-    try { socket.write(frame); } catch { socket.destroy(); }
+    try {
+      socket.write(frame);
+    } catch {
+      socket.destroy();
+    }
   };
-  const refuse = (code: string) => { send({ type: 'error', code }); socket.end(); };
-  socket.on('data', chunk => {
+  const refuse = (code: string) => {
+    send({ type: 'error', code });
+    socket.end();
+  };
+  socket.on('data', (chunk) => {
     let frames: unknown[];
-    try { frames = decoder.push(chunk); } catch (e) { refuse(e instanceof IpcError ? e.code : 'sentinel.ipc.frameMalformed'); return; }
+    try {
+      frames = decoder.push(chunk);
+    } catch (e) {
+      refuse(e instanceof IpcError ? e.code : 'sentinel.ipc.frameMalformed');
+      return;
+    }
     for (const f of frames) {
-      if (!isRecord(f)) { refuse('sentinel.ipc.frameMalformed'); return; }
+      if (!isRecord(f)) {
+        refuse('sentinel.ipc.frameMalformed');
+        return;
+      }
       if (!by) {
-        if (f.protocol !== SERVICE_PROTOCOL || f.type !== 'hello' || typeof f.client !== 'string' || !Object.hasOwn(GRANTS, f.client)) {
+        if (
+          f.protocol !== SERVICE_PROTOCOL ||
+          f.type !== 'hello' ||
+          typeof f.client !== 'string' ||
+          !Object.hasOwn(GRANTS, f.client)
+        ) {
           refuse('sentinel.ipc.handshakeMismatch');
           return;
         }
         // The hello names a client kind and nothing else: any requester claim in it is refused too.
-        try { refuseActorClaims({ ...f, client: undefined }); } catch (e) { refuse((e as ActorError).code); return; }
+        try {
+          refuseActorClaims({ ...f, client: undefined });
+        } catch (e) {
+          refuse((e as ActorError).code);
+          return;
+        }
         // Through the one actor rule: a service connection is a non-owner, whatever it asked for.
         by = requestedByOf({ kind: 'service-connection', granted: GRANTS[f.client as ClientKind] });
-        send({ protocol: SERVICE_PROTOCOL, type: 'welcome', storeId: identity.storeId, ownerNonce: identity.ownerNonce });
+        send({
+          protocol: SERVICE_PROTOCOL,
+          type: 'welcome',
+          storeId: identity.storeId,
+          ownerNonce: identity.ownerNonce,
+        });
         continue;
       }
       if (f.type === 'cancel') {
-        if (Object.keys(f).length !== 2 || typeof f.id !== 'number' || !Number.isSafeInteger(f.id)) { refuse('sentinel.ipc.frameMalformed'); return; }
+        if (Object.keys(f).length !== 2 || typeof f.id !== 'number' || !Number.isSafeInteger(f.id)) {
+          refuse('sentinel.ipc.frameMalformed');
+          return;
+        }
         reads.get(f.id)?.abort();
         continue;
       }
       const id = typeof f.id === 'number' && Number.isSafeInteger(f.id) ? f.id : undefined;
-      if (id === undefined || typeof f.op !== 'string' || f.type !== 'request' || inflight.has(id) || inflight.size >= 128) { refuse('sentinel.ipc.frameMalformed'); return; }
+      if (
+        id === undefined ||
+        typeof f.op !== 'string' ||
+        f.type !== 'request' ||
+        inflight.has(id) ||
+        inflight.size >= 128
+      ) {
+        refuse('sentinel.ipc.frameMalformed');
+        return;
+      }
       const granted = by;
       inflight.add(id);
-      const read = f.op === 'run.inspect' || f.op === 'report.open' || f.op === 'prepare.resume' || f.op === 'owner-ui.process' ? new AbortController() : undefined;
+      const read =
+        f.op === 'run.inspect' || f.op === 'report.open' || f.op === 'prepare.resume' || f.op === 'owner-ui.process'
+          ? new AbortController()
+          : undefined;
       if (read) reads.set(id, read);
       Promise.resolve()
-        .then(() => handler(f.op as string, refuseActorClaims(f.body), granted, read ? { signal: read.signal } : undefined))
-        .then(value => send({ type: 'response', id, ok: true, value }),
-          error => send({ type: 'response', id, ok: false, code: typeof error?.code === 'string' && /^sentinel\.[a-zA-Z.]{1,120}$/.test(error.code) ? error.code : 'sentinel.ipc.requestFailed' }))
+        .then(() =>
+          handler(f.op as string, refuseActorClaims(f.body), granted, read ? { signal: read.signal } : undefined),
+        )
+        .then(
+          (value) => send({ type: 'response', id, ok: true, value }),
+          (error) =>
+            send({
+              type: 'response',
+              id,
+              ok: false,
+              code:
+                typeof error?.code === 'string' && /^sentinel\.[a-zA-Z.]{1,120}$/.test(error.code)
+                  ? error.code
+                  : 'sentinel.ipc.requestFailed',
+            }),
+        )
         .catch(() => socket.destroy())
-        .finally(() => { inflight.delete(id); reads.delete(id); });
+        .finally(() => {
+          inflight.delete(id);
+          reads.delete(id);
+        });
     }
   });
-  const abortReads = () => { for (const read of reads.values()) read.abort(); };
+  const abortReads = () => {
+    for (const read of reads.values()) read.abort();
+  };
   socket.on('end', abortReads); // A peer can finish its read channel before the full socket close event.
-  socket.on('close', () => { abortReads(); reads.clear(); });
+  socket.on('close', () => {
+    abortReads();
+    reads.clear();
+  });
   socket.on('error', () => socket.destroy());
 }
 
@@ -359,7 +508,12 @@ export const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
  * caller. Whatever ends the handshake, its timer and listeners are removed and, unless it succeeded, only this
  * connection is destroyed; the listening endpoint and its other clients are untouched.
  */
-export async function connectOwnerSocket(address: RuntimeAddress, expect: ServiceIdentity, client: ClientKind, options: ConnectOptions = {}): Promise<ServiceClient> {
+export async function connectOwnerSocket(
+  address: RuntimeAddress,
+  expect: ServiceIdentity,
+  client: ClientKind,
+  options: ConnectOptions = {},
+): Promise<ServiceClient> {
   checkAddress(address);
   const st = socketStat(address.socket);
   if (!st) throw new IpcError('sentinel.ipc.notListening');
@@ -371,26 +525,45 @@ export async function connectOwnerSocket(address: RuntimeAddress, expect: Servic
   const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: unknown) => void }>();
   // The handshake settles exactly once: welcomed, refused, closed, failed, timed out or canceled.
   let settle: ((outcome: true | IpcError) => void) | undefined;
-  const handshake = new Promise<true | IpcError>(resolve => { settle = resolve; });
-  const finish = (outcome: true | IpcError) => { const s = settle; settle = undefined; s?.(outcome); };
+  const handshake = new Promise<true | IpcError>((resolve) => {
+    settle = resolve;
+  });
+  const finish = (outcome: true | IpcError) => {
+    const s = settle;
+    settle = undefined;
+    s?.(outcome);
+  };
   const timer = setTimeout(() => finish(new IpcError('sentinel.ipc.timeout', 'no welcome in time')), timeoutMs);
   const onAbort = () => finish(new IpcError('sentinel.ipc.canceled'));
   options.signal?.addEventListener('abort', onAbort, { once: true });
   socket.once('connect', () => {
-    try { socket.write(encodeFrame({ protocol: SERVICE_PROTOCOL, type: 'hello', client })); } catch { finish(new IpcError('sentinel.ipc.frameMalformed')); }
+    try {
+      socket.write(encodeFrame({ protocol: SERVICE_PROTOCOL, type: 'hello', client }));
+    } catch {
+      finish(new IpcError('sentinel.ipc.frameMalformed'));
+    }
   });
-  socket.on('data', chunk => {
+  socket.on('data', (chunk) => {
     let frames: unknown[];
-    try { frames = decoder.push(chunk); } catch { socket.destroy(); return; }
+    try {
+      frames = decoder.push(chunk);
+    } catch {
+      socket.destroy();
+      return;
+    }
     for (const f of frames) {
       if (!isRecord(f)) continue;
       if (f.type === 'welcome') {
-        finish(f.protocol === SERVICE_PROTOCOL && f.storeId === expect.storeId && f.ownerNonce === expect.ownerNonce
-          ? true : new IpcError('sentinel.ipc.handshakeMismatch'));
+        finish(
+          f.protocol === SERVICE_PROTOCOL && f.storeId === expect.storeId && f.ownerNonce === expect.ownerNonce
+            ? true
+            : new IpcError('sentinel.ipc.handshakeMismatch'),
+        );
       } else if (f.type === 'response' && typeof f.id === 'number' && pending.has(f.id)) {
         const p = pending.get(f.id)!;
         pending.delete(f.id);
-        if (f.ok === true) p.resolve(f.value); else p.reject(new IpcError(String(f.code ?? 'sentinel.ipc.requestFailed') as IpcErrorCode));
+        if (f.ok === true) p.resolve(f.value);
+        else p.reject(new IpcError(String(f.code ?? 'sentinel.ipc.requestFailed') as IpcErrorCode));
       } else if (f.type === 'error') {
         finish(new IpcError('sentinel.ipc.handshakeMismatch'));
       }
@@ -398,41 +571,70 @@ export async function connectOwnerSocket(address: RuntimeAddress, expect: Servic
   });
   let closed = false;
   let connected = false;
-  socket.once('connect', () => { connected = true; });
+  socket.once('connect', () => {
+    connected = true;
+  });
   socket.on('close', () => {
     closed = true;
-    finish(new IpcError(connected ? 'sentinel.ipc.handshakeMismatch' : 'sentinel.ipc.notListening', 'connection closed'));
+    finish(
+      new IpcError(connected ? 'sentinel.ipc.handshakeMismatch' : 'sentinel.ipc.notListening', 'connection closed'),
+    );
     for (const p of pending.values()) p.reject(new IpcError('sentinel.ipc.notListening', 'connection closed'));
     pending.clear();
   });
-  socket.on('error', e => {
+  socket.on('error', (e) => {
     if (!connected) finish(new IpcError('sentinel.ipc.notListening', (e as NodeJS.ErrnoException).code ?? ''));
     socket.destroy();
   });
   const outcome = await handshake;
   clearTimeout(timer);
   options.signal?.removeEventListener('abort', onAbort);
-  if (outcome !== true) { socket.destroy(); throw outcome; }
+  if (outcome !== true) {
+    socket.destroy();
+    throw outcome;
+  }
   let next = 1;
   return Object.freeze({
     request(op: string, body: unknown, options: RequestOptions = {}): Promise<unknown> {
       refuseActorClaims(body);
-      if (closed || socket.destroyed) return Promise.reject(new IpcError('sentinel.ipc.notListening', 'connection closed'));
+      if (closed || socket.destroyed)
+        return Promise.reject(new IpcError('sentinel.ipc.notListening', 'connection closed'));
       if (options.signal?.aborted) return Promise.reject(new IpcError('sentinel.ipc.canceled'));
       const frame = encodeFrame({ type: 'request', id: next, op, body }); // too large: refused before it is pending
       const id = next++;
       const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
       return new Promise((resolve, reject) => {
-        const settle = (fn: () => void) => { clearTimeout(timer); options.signal?.removeEventListener('abort', onAbort); pending.delete(id); fn(); };
-        const cancelRead = () => { if ((op === 'run.inspect' || op === 'report.open' || op === 'prepare.resume') && !socket.destroyed) { try { socket.write(encodeFrame({ type: 'cancel', id })); } catch { /* connection failure already rejects */ } } };
-        const timer = setTimeout(() => { cancelRead(); settle(() => reject(new IpcError('sentinel.ipc.timeout'))); }, timeoutMs);
-        const onAbort = () => { cancelRead(); settle(() => reject(new IpcError('sentinel.ipc.canceled'))); };
+        const settle = (fn: () => void) => {
+          clearTimeout(timer);
+          options.signal?.removeEventListener('abort', onAbort);
+          pending.delete(id);
+          fn();
+        };
+        const cancelRead = () => {
+          if ((op === 'run.inspect' || op === 'report.open' || op === 'prepare.resume') && !socket.destroyed) {
+            try {
+              socket.write(encodeFrame({ type: 'cancel', id }));
+            } catch {
+              /* connection failure already rejects */
+            }
+          }
+        };
+        const timer = setTimeout(() => {
+          cancelRead();
+          settle(() => reject(new IpcError('sentinel.ipc.timeout')));
+        }, timeoutMs);
+        const onAbort = () => {
+          cancelRead();
+          settle(() => reject(new IpcError('sentinel.ipc.canceled')));
+        };
         options.signal?.addEventListener('abort', onAbort, { once: true });
-        pending.set(id, { resolve: v => settle(() => resolve(v)), reject: e => settle(() => reject(e)) });
+        pending.set(id, { resolve: (v) => settle(() => resolve(v)), reject: (e) => settle(() => reject(e)) });
         socket.write(frame);
       });
     },
-    get closed() { return closed || socket.destroyed; },
+    get closed() {
+      return closed || socket.destroyed;
+    },
     storeId: expect.storeId,
     close: () => socket.destroy(),
   });

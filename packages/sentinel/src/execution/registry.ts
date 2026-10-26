@@ -14,7 +14,7 @@
 // A check adapter also states the finest coverage granularity its engine can establish (`coverage`, default
 // `aggregate`). The coordinator never records coverage finer than this, whatever a result claims.
 // No production external adapter is registered yet; PR 10 onwards adds them with their measured pins.
-import {reviewOperationPath} from './assets.js';
+import { reviewOperationPath } from './assets.js';
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
@@ -54,18 +54,35 @@ export interface AdapterLimits {
 
 /** The accepted ceilings (and the defaults). */
 export const ACCEPTED_CEILINGS: Readonly<AdapterLimits> = Object.freeze({
-  memoryBytes: 2_147_483_648, cpus: 2, pids: 128, tmpfsBytes: 268_435_456, timeoutMs: 120_000,
-  stdoutBytes: 3_932_160, stderrBytes: 262_144, maxFrameBytes: 1_048_576,
+  memoryBytes: 2_147_483_648,
+  cpus: 2,
+  pids: 128,
+  tmpfsBytes: 268_435_456,
+  timeoutMs: 120_000,
+  stdoutBytes: 3_932_160,
+  stderrBytes: 262_144,
+  maxFrameBytes: 1_048_576,
   // No accepted figure exists for the output folder; the per-object ceiling (maxDecodedObjectBytes, 16 MiB) bounds
   // what the store can accept, and this is held to the scratch figure the matrix accepted for temporary storage.
-  outputBytes: 268_435_456, cancelGraceMs: 5_000, helloTimeoutMs: 15_000,
+  outputBytes: 268_435_456,
+  cancelGraceMs: 5_000,
+  helloTimeoutMs: 15_000,
 });
 export const DEFAULT_ADAPTER_LIMITS: Readonly<AdapterLimits> = ACCEPTED_CEILINGS;
 export const MAX_PROCESS_OUTPUT_BYTES = 4_194_304;
 
 const LIMIT_FLOORS: Record<keyof AdapterLimits, number> = {
-  memoryBytes: 16 * 1024 * 1024, cpus: 1, pids: 8, tmpfsBytes: 1024 * 1024, timeoutMs: 100, stdoutBytes: 1024,
-  stderrBytes: 0, maxFrameBytes: 1024, outputBytes: 0, cancelGraceMs: 0, helloTimeoutMs: 100,
+  memoryBytes: 16 * 1024 * 1024,
+  cpus: 1,
+  pids: 8,
+  tmpfsBytes: 1024 * 1024,
+  timeoutMs: 100,
+  stdoutBytes: 1024,
+  stderrBytes: 0,
+  maxFrameBytes: 1024,
+  outputBytes: 0,
+  cancelGraceMs: 0,
+  helloTimeoutMs: 100,
 };
 
 export const IMAGE_REFERENCE = /^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$/;
@@ -98,7 +115,7 @@ export interface BuiltInAdapterDefinition {
 
 export type BootstrapOperation = 'capture' | 'parse' | 'inventory';
 
-export type CoordinatorOperation=BootstrapOperation|'review-guided'|'review-general';
+export type CoordinatorOperation = BootstrapOperation | 'review-guided' | 'review-general';
 
 export interface OperationAdapterDefinition {
   id: Id;
@@ -110,17 +127,32 @@ export interface OperationAdapterDefinition {
 export type AdapterDefinition = ExternalAdapterDefinition | BuiltInAdapterDefinition | OperationAdapterDefinition;
 
 export type TrustedAdapter =
-  | (Readonly<Omit<ExternalAdapterDefinition, 'limits' | 'coverage'>> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits>; readonly coverage: CoverageGranularity })
-  | (Readonly<Omit<BuiltInAdapterDefinition, 'limits' | 'coverage'>> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits>; readonly moduleDigest: Digest; readonly coverage: CoverageGranularity })
-  | (Readonly<OperationAdapterDefinition> & { readonly digest: Digest; readonly limits: Readonly<AdapterLimits>; readonly moduleDigest: Digest; readonly coverage: 'aggregate' });
+  | (Readonly<Omit<ExternalAdapterDefinition, 'limits' | 'coverage'>> & {
+      readonly digest: Digest;
+      readonly limits: Readonly<AdapterLimits>;
+      readonly coverage: CoverageGranularity;
+    })
+  | (Readonly<Omit<BuiltInAdapterDefinition, 'limits' | 'coverage'>> & {
+      readonly digest: Digest;
+      readonly limits: Readonly<AdapterLimits>;
+      readonly moduleDigest: Digest;
+      readonly coverage: CoverageGranularity;
+    })
+  | (Readonly<OperationAdapterDefinition> & {
+      readonly digest: Digest;
+      readonly limits: Readonly<AdapterLimits>;
+      readonly moduleDigest: Digest;
+      readonly coverage: 'aggregate';
+    });
 
 /**
  * The file each bootstrap operation's implementation runs from, as that module itself reports it (import.meta.url),
  * so the digest stays the implementation's bytes whether the code is in the workspace dist or a packed bundle chunk.
  */
 const OPERATION_MODULES: Readonly<Record<BootstrapOperation, string>> = Object.freeze({
-  capture: CAPTURE_IMPLEMENTATION_URL, parse: PARSE_IMPLEMENTATION_URL, inventory: INVENTORY_IMPLEMENTATION_URL,
-
+  capture: CAPTURE_IMPLEMENTATION_URL,
+  parse: PARSE_IMPLEMENTATION_URL,
+  inventory: INVENTORY_IMPLEMENTATION_URL,
 });
 const GRANULARITIES: readonly CoverageGranularity[] = ['per-file-per-rule', 'per-file', 'aggregate'];
 const coverageOf = (v: unknown): CoverageGranularity => {
@@ -136,7 +168,9 @@ export interface AdapterRegistry {
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const sha256 = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
-const invalid = (reason: string): never => { throw new ExecutionError('sentinel.execution.adapterInvalid', { reason }); };
+const invalid = (reason: string): never => {
+  throw new ExecutionError('sentinel.execution.adapterInvalid', { reason });
+};
 
 function limitsOf(partial: Partial<AdapterLimits> | undefined): Readonly<AdapterLimits> {
   for (const key of Object.keys(partial ?? {})) if (!(key in ACCEPTED_CEILINGS)) invalid(`unknown limit ${key}`);
@@ -151,7 +185,8 @@ function limitsOf(partial: Partial<AdapterLimits> | undefined): Readonly<Adapter
     // May lower an accepted ceiling, never raise one.
     if (!Number.isSafeInteger(v) || v < LIMIT_FLOORS[key] || v > ACCEPTED_CEILINGS[key]) invalid(`limit ${key}`);
   }
-  if (limits.stdoutBytes + limits.stderrBytes > MAX_PROCESS_OUTPUT_BYTES) invalid('stdout and stderr exceed the process output ceiling');
+  if (limits.stdoutBytes + limits.stderrBytes > MAX_PROCESS_OUTPUT_BYTES)
+    invalid('stdout and stderr exceed the process output ceiling');
   if (limits.maxFrameBytes > limits.stdoutBytes) invalid('limit maxFrameBytes');
   if (limits.helloTimeoutMs > limits.timeoutMs || limits.cancelGraceMs > limits.timeoutMs) invalid('limit timeouts');
   return Object.freeze(limits);
@@ -183,7 +218,11 @@ export function effectiveLimits(adapter: Readonly<AdapterLimits>, policy?: Resou
 /** Hash a built-in module's bytes; refuses links and non-files. */
 export function moduleDigestOf(path: string): Digest {
   let s;
-  try { s = lstatSync(path); } catch { return invalid('module unreadable'); }
+  try {
+    s = lstatSync(path);
+  } catch {
+    return invalid('module unreadable');
+  }
   if (!s.isFile()) invalid('module is not a regular file');
   return sha256(readFileSync(path));
 }
@@ -193,28 +232,65 @@ function trusted(def: AdapterDefinition): TrustedAdapter {
   if (!ID.test(def.id ?? '')) invalid('id');
   if (typeof def.version !== 'string' || !def.version || def.version.length > 64) invalid('version');
   if (def.kind === 'operation') {
-    const reviewing=def.operation==='review-guided'||def.operation==='review-general';
-    if (!reviewing&&!Object.hasOwn(OPERATION_MODULES, def.operation ?? '')) invalid('operation');
-    const moduleDigest = moduleDigestOf(reviewing?reviewOperationPath():fileURLToPath(OPERATION_MODULES[def.operation as BootstrapOperation]));
+    const reviewing = def.operation === 'review-guided' || def.operation === 'review-general';
+    if (!reviewing && !Object.hasOwn(OPERATION_MODULES, def.operation ?? '')) invalid('operation');
+    const moduleDigest = moduleDigestOf(
+      reviewing ? reviewOperationPath() : fileURLToPath(OPERATION_MODULES[def.operation as BootstrapOperation]),
+    );
     const body = { id: def.id, version: def.version, kind: def.kind, operation: def.operation, moduleDigest };
-    return Object.freeze({ ...body, limits: ACCEPTED_CEILINGS, coverage: 'aggregate' as const, digest: sha256(canonicalJsonBytes(body)) });
+    return Object.freeze({
+      ...body,
+      limits: ACCEPTED_CEILINGS,
+      coverage: 'aggregate' as const,
+      digest: sha256(canonicalJsonBytes(body)),
+    });
   }
   const limits = limitsOf(def.limits);
   const coverage = coverageOf(def.coverage);
   if (def.kind === 'external') {
-    if (def.isolation !== 'container') throw new ExecutionError('sentinel.execution.adapterIsolationRefused', { adapter: (def as AdapterDefinition).id });
+    if (def.isolation !== 'container')
+      throw new ExecutionError('sentinel.execution.adapterIsolationRefused', {
+        adapter: (def as AdapterDefinition).id,
+      });
     if (!IMAGE_REFERENCE.test(def.image ?? '')) invalid('image must be pinned as repository@sha256:<digest>');
-    if (!Array.isArray(def.command) || !def.command.length || def.command.length > 64
-      || def.command.some(a => typeof a !== 'string' || a.length > 65_536 || a.includes('\0'))
-      || def.command.reduce((n, a) => n + a.length, 0) > 262_144) invalid('command');
-    const body = { id: def.id, version: def.version, kind: def.kind, isolation: def.isolation, image: def.image, command: [...def.command], limits, coverage };
-    return Object.freeze({ ...body, command: Object.freeze([...def.command]), digest: sha256(canonicalJsonBytes(body)) });
+    if (
+      !Array.isArray(def.command) ||
+      !def.command.length ||
+      def.command.length > 64 ||
+      def.command.some((a) => typeof a !== 'string' || a.length > 65_536 || a.includes('\0')) ||
+      def.command.reduce((n, a) => n + a.length, 0) > 262_144
+    )
+      invalid('command');
+    const body = {
+      id: def.id,
+      version: def.version,
+      kind: def.kind,
+      isolation: def.isolation,
+      image: def.image,
+      command: [...def.command],
+      limits,
+      coverage,
+    };
+    return Object.freeze({
+      ...body,
+      command: Object.freeze([...def.command]),
+      digest: sha256(canonicalJsonBytes(body)),
+    });
   }
   if (def.kind === 'built-in') {
     if (def.isolation !== 'child') invalid('built-in workers run as a child process');
     if (typeof def.module !== 'string' || !isAbsolute(def.module)) invalid('module must be an absolute path');
     const moduleDigest = moduleDigestOf(def.module);
-    const body = { id: def.id, version: def.version, kind: def.kind, isolation: def.isolation, module: def.module, moduleDigest, limits, coverage };
+    const body = {
+      id: def.id,
+      version: def.version,
+      kind: def.kind,
+      isolation: def.isolation,
+      module: def.module,
+      moduleDigest,
+      limits,
+      coverage,
+    };
     return Object.freeze({ ...body, digest: sha256(canonicalJsonBytes(body)) });
   }
   return invalid('kind');
@@ -232,7 +308,8 @@ export function createAdapterRegistry(definitions: readonly AdapterDefinition[])
     ids,
     get(id: Id): TrustedAdapter {
       const adapter = byId.get(id);
-      if (!adapter) throw new ExecutionError('sentinel.execution.adapterUnknown', { adapter: String(id).slice(0, 128) });
+      if (!adapter)
+        throw new ExecutionError('sentinel.execution.adapterUnknown', { adapter: String(id).slice(0, 128) });
       return adapter;
     },
   });

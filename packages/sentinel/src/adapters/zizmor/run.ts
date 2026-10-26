@@ -28,12 +28,21 @@ export async function runZizmorAttempt(service: ExecutionService, attempt: Zizmo
     const built = buildZizmorJob(attempt.targets, jobDir, attempt.adapter);
     const adapterId = attempt.adapterId ?? attempt.adapter?.definition.id ?? ZIZMOR_ADAPTER.id;
     if (!built.jobDigest) return notRunZizmor(built.job, adapterId);
-    const outcome = await service.run({ adapterId, attemptId: attempt.attemptId, work: attempt.work, inputs: built.inputs, ...(attempt.signal ? { signal: attempt.signal } : {}) });
+    const outcome = await service.run({
+      adapterId,
+      attemptId: attempt.attemptId,
+      work: attempt.work,
+      inputs: built.inputs,
+      ...(attempt.signal ? { signal: attempt.signal } : {}),
+    });
     try {
-      const byId = new Map(outcome.outputs.map(o => [o.id, o.path]));
+      const byId = new Map(outcome.outputs.map((o) => [o.id, o.path]));
       return normalizeZizmorRun({
-        job: built.job, jobDigest: built.jobDigest, outcome,
-        outputBytes: id => readFileSync(byId.get(id)!), targetBytes: a => readSealedInput(outcome.workDir, a),
+        job: built.job,
+        jobDigest: built.jobDigest,
+        outcome,
+        outputBytes: (id) => readFileSync(byId.get(id)!),
+        targetBytes: (a) => readSealedInput(outcome.workDir, a),
         ...(attempt.qualifyingArchitecture ? { qualifyingArchitecture: attempt.qualifyingArchitecture } : {}),
       });
     } finally {

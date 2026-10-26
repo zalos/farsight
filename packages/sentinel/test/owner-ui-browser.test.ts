@@ -1,50 +1,478 @@
 // Actual browser → paired Farsight host → companion → production socket → genuine admitted work.
-import{tmpdir}from'node:os';import{test}from'node:test';import assert from'node:assert/strict';import{join}from'node:path';import{spawn,execFileSync}from'node:child_process';import{fileURLToPath}from'node:url';import{createHash}from'node:crypto';import{mkdirSync,rmSync,writeFileSync,readdirSync,readFileSync}from'node:fs';import{chromium}from'@playwright/test';
-import{loadPlan}from'../dist/execution/plans.js';
-import{adoptWorkspaceSettings}from'../dist/service/local.js';import{execFile}from'node:child_process';import{promisify}from'node:util';
-import{PreparationJournal}from'../dist/service/preparation-journal.js';
-import{OwnerService}from'../dist/service/owner-service.js';import{listenOwnerSocket,runtimeAddress,newOwnerNonce}from'../dist/transport/ipc.js';import{writePrivateFileAtomic}from'../dist/policy/user-state.js';import{startOwnerUi}from'../dist/owner-ui/server.js';import{preparationFixture}from'./helpers/preparation-fixture.ts';import{needsStore}from'./snapshot-helpers.ts';
-const cli=fileURLToPath(new URL('../../cli/dist/cli.js',import.meta.url)),port=Number(process.env.SENTINEL_OWNER_UI_PORT??4583),wait=(ms:number)=>new Promise(r=>setTimeout(r,ms));
-test('actual owner iframe prepares/confirms, reads retained stages after source removal, separately starts and delivers report',{...needsStore,skip:process.env.SENTINEL_OWNER_UI_BROWSER!=='1'?'explicit SENTINEL_OWNER_UI_BROWSER=1 browser gate':needsStore.skip,timeout:90000},async t=>{
- try{const occupied=execFileSync('lsof',['-nP',`-iTCP:${port}`,'-sTCP:LISTEN'],{encoding:'utf8'});assert.equal(occupied.trim(),'','owned browser port occupied');}catch(e:any){if(e.status!==1)throw e;}
- const f=await preparationFixture(t),oldState=process.env.XDG_STATE_HOME;process.env.XDG_STATE_HOME=join(f.dir,'owner');const service=new OwnerService(f.store,f.ws,{registry:f.registry}),nonce=newOwnerNonce(),address=runtimeAddress({storePath:f.store.storePath,ownerNonce:nonce,sources:[f.ws.path]});let child:ReturnType<typeof spawn>|undefined,companion:Awaited<ReturnType<typeof startOwnerUi>>|undefined,browser:Awaited<ReturnType<typeof chromium.launch>>|undefined;
- const socket=await listenOwnerSocket(address,{storeId:f.store.storeId,ownerNonce:nonce},(op,body,by,context)=>service.handle(op,body,by,context));writePrivateFileAtomic(join(f.ws.trustDir,'services'),createHash('sha256').update(f.ws.storePath).digest('hex').slice(0,32)+'.json',Buffer.from(JSON.stringify({schema:'sentinel-service/draft-1',storePath:f.ws.storePath,storeId:f.store.storeId,ownerNonce:nonce,address,pid:process.pid,startedAt:new Date().toISOString()})),'sentinel.receipt.storeUnsafe');
- const evidence=process.env.SENTINEL_OWNER_UI_EVIDENCE??join(tmpdir(),'sol-owner-ui-'+process.pid+'-'+Date.now());const errors:string[]=[],consoleErrors:string[]=[],http:any[]=[];
- try{
-  mkdirSync(evidence,{recursive:true});
-  const graph=join(f.dir,'graph.json');execFileSync(process.execPath,[cli,'ingest',f.ws.path,'--repo','original-owner-fixture','--out',graph],{cwd:f.dir,env:process.env,timeout:30000});child=spawn(process.execPath,[cli,'serve',graph,'--port',String(port)],{cwd:f.ws.path,env:process.env,stdio:['ignore','pipe','pipe']});let logs='';child.stderr?.on('data',b=>logs+=b);child.stdout?.on('data',b=>logs+=b);for(let i=0;i<200;i++){try{const v:any=await(await fetch(`http://127.0.0.1:${port}/api/version`)).json();if(v.session?.instance)break;}catch{}if(child.exitCode!==null)assert.fail(logs);await wait(30);}
-  companion=await startOwnerUi(f.ws,`http://127.0.0.1:${port}`);browser=await chromium.launch({headless:true});const context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text());});page.on('response',r=>{if(r.status()>=400){const row:any={status:r.status(),url:r.url()};http.push(row);void r.text().then(body=>row.body=body);}});
-  await page.goto(`http://127.0.0.1:${port}/#/sentinel`);const frame=page.frameLocator('iframe[title="Sentinel"]');await frame.getByRole('button',{name:'Preview fresh capture',exact:true}).waitFor({timeout:15000});
-  // A second browser context has no owner-origin reload token. Its spent pairing link is a
-  // friendly refusal, while the genuine original paired tab remains usable and authorizes nothing.
-  const beforeDuplicate=f.store.ledger.currentSequence(),duplicateContext=await browser.newContext(),duplicate=await duplicateContext.newPage();
-  await duplicate.goto(`http://127.0.0.1:${port}/#/sentinel`);await duplicate.frameLocator('iframe[title="Sentinel"]').getByRole('heading',{name:'This pairing link has already been used or is no longer available.',exact:true}).waitFor();await duplicate.screenshot({path:join(evidence,'used-pairing-link.png'),fullPage:true});await duplicateContext.close();assert.equal(f.store.ledger.currentSequence(),beforeDuplicate);assert.equal(await frame.getByRole('button',{name:'Preview fresh capture',exact:true}).isEnabled(),true);
-  const settingsPath=join(f.ws.path,'.farsight/sentinel/settings.json'),settingsBytes=readFileSync(settingsPath),settings=JSON.parse(settingsBytes.toString());
-  const policy=(deny:boolean)=>{writeFileSync(settingsPath,deny?JSON.stringify({...settings,grants:[]}):settingsBytes);assert.equal(adoptWorkspaceSettings(f.ws,{confirm:true,now:new Date()}).outcome,'prepared');};
-  async function refuseUi(){policy(true);await frame.getByRole('button',{name:'Preview fresh capture',exact:true}).click();const[answer]=await Promise.all([page.waitForResponse(r=>r.url().endsWith('/confirm')),frame.getByRole('button',{name:'Confirm preparation',exact:true}).click()]);assert.equal((await answer.json()).outcome,'configuration-failure');policy(false);}
-  await refuseUi();const cliResult=await promisify(execFile)(process.execPath,[fileURLToPath(new URL('../dist/cli.js',import.meta.url)),'prepare','--confirm','--workspace',f.ws.path,'--json'],{env:process.env,timeout:30000});assert.equal(JSON.parse(cliResult.stdout).outcome,'submitted','definitively refused UI request must not poison the actual owner CLI');for(let i=0;i<600&&service.busy;i++)await wait(10);
-  await refuseUi();await frame.getByRole('button',{name:'Preview fresh capture',exact:true}).click();await frame.getByRole('button',{name:'Confirm preparation',exact:true}).click();await frame.locator('#status').getByText('prepared',{exact:true}).waitFor({timeout:20000});await frame.getByText('Prepared; analysis has not started.',{exact:true}).waitFor();
-  const beforeReadFailure=f.store.ledger.currentSequence();await page.route('**/status',r=>r.abort());await frame.getByRole('button',{name:'Refresh retained state',exact:true}).click();await frame.locator('#message').getByText('The owner connection could not be verified. Actions are disabled; refresh retained state to reconnect.',{exact:true}).waitFor();assert.equal(await frame.getByRole('button',{name:'Preview start or resume',exact:true}).isDisabled(),true);assert.equal(f.store.ledger.currentSequence(),beforeReadFailure);const expectedReadFailureConsole=consoleErrors.splice(0);await page.unroute('**/status');await frame.getByRole('button',{name:'Refresh retained state',exact:true}).click();await frame.getByRole('button',{name:'Preview start or resume',exact:true}).waitFor();for(let i=0;i<50&&await frame.getByRole('button',{name:'Preview start or resume',exact:true}).isDisabled();i++)await wait(20);assert.equal(await frame.getByRole('button',{name:'Preview start or resume',exact:true}).isEnabled(),true);
-  // Advance only the browser's display clock; the genuine retained deadline and owner remain unchanged.
-  const deadline=Date.parse((await frame.locator('#status time').getAttribute('datetime'))!);await page.clock.setFixedTime(new Date(deadline+1));await frame.getByRole('button',{name:'Refresh retained state',exact:true}).click();await frame.getByText('The original run deadline has passed. Prepare a new run to continue.',{exact:true}).waitFor();assert.equal(await frame.getByRole('button',{name:'Preview start or resume',exact:true}).isDisabled(),true);await page.clock.setFixedTime(new Date());await frame.getByRole('button',{name:'Refresh retained state',exact:true}).click();await frame.getByText('Prepared; analysis has not started.',{exact:true}).waitFor();assert.equal(f.store.ledger.currentSequence(),beforeReadFailure);
-  const above=await frame.locator('#run-controls').evaluate(e=>e.getBoundingClientRect().top<document.getElementById('process-graph')!.getBoundingClientRect().top);assert.equal(above,true,'run status and controls precede the graph');
-  await page.screenshot({path:join(evidence,'prepared-dark.png'),fullPage:true});
-  rmSync(join(f.ws.path,'src'),{recursive:true});await frame.getByRole('button',{name:'Retained inputs',exact:true}).click();await frame.locator('#rows tbody tr').first().waitFor();await frame.getByRole('button',{name:'Preview start or resume',exact:true}).click();await frame.getByRole('button',{name:'Confirm this run action',exact:true}).click();await frame.locator('#status').getByText('completed',{exact:true}).waitFor({timeout:25000});await frame.getByRole('button',{name:'Read shareable report',exact:true}).click();await frame.locator('#report-text[data-format-digest]').waitFor({timeout:25000});assert.ok((await frame.locator('#report-text').textContent())!.length>100);await page.evaluate(()=>{(window as any).applyTheme('dark');});await frame.locator('body[data-theme=dark]').waitFor();await page.screenshot({path:join(evidence,'completed-report-dark.png'),fullPage:true});
-  assert.equal(await frame.getByRole('button',{name:'Preview start or resume',exact:true}).isDisabled(),true);await frame.getByRole('button',{name:'Retained outputs',exact:true}).click();assert.ok(await frame.locator('#rows tbody tr').count()>0);const original=new PreparationJournal(f.store).list().find(r=>r.phase==='prepared')!,originalRun=f.store.ledger.getRun(original.runId!)!,oldPlan=await loadPlan(f.store,original.runId!),oldPublications=oldPlan.plan.units.map(u=>f.store.ledger.getPublication(u));assert.ok(oldPublications.some(p=>p?.outputs.length));
-  await frame.getByRole('button',{name:'Preview linked rerun',exact:true}).click();await frame.getByRole('button',{name:'Confirm preparation',exact:true}).click();for(let i=0;i<600&&!new PreparationJournal(f.store).list().some(r=>r.parentId===original.runId);i++)await wait(10);for(let i=0;i<600&&service.busy;i++)await wait(10);const linked=new PreparationJournal(f.store).list().find(r=>r.parentId===original.runId)!;assert.equal(linked.phase,'prepared');assert.equal(linked.parentId,original.runId);assert.notEqual(linked.runId,original.runId);assert.equal(f.store.ledger.getRun(linked.runId!)!.envelope.parentId,original.runId);assert.deepEqual(f.store.ledger.getRun(original.runId!),originalRun);assert.deepEqual(oldPlan.plan.units.map(u=>f.store.ledger.getPublication(u)),oldPublications);
-  await frame.getByRole('button',{name:'Refresh retained state',exact:true}).click();await frame.locator('#report-text:not([data-format-digest])').waitFor({state:'attached'});assert.equal(await frame.locator('#report-text').textContent(),'');assert.equal(await frame.locator('#report-text').getAttribute('data-format-digest'),null);await frame.getByRole('button',{name:'Capture and parse evidence',exact:true}).click();await frame.getByRole('button',{name:'Stages and work',exact:true}).click();await frame.locator('#rows tbody tr').nth(1).waitFor({timeout:15000});await page.screenshot({path:join(evidence,'linked-bootstrap-dark.png'),fullPage:true});
-  // Inspect genuine retained child and parent through opaque list handles; reports are explicit and selection-bound.
-  await frame.getByRole('button',{name:'Refresh run list',exact:true}).click();await frame.locator('#run-choice option').nth(2).waitFor({state:'attached'});const runOptions=await frame.locator('#run-choice option').evaluateAll(options=>options.map(o=>(o as HTMLOptionElement).value));assert.ok(runOptions.length>=3);assert.ok(runOptions.slice(1).every(k=>/^h[a-f0-9]{32}$/.test(k)));await frame.locator('#run-choice').selectOption(runOptions[2]);await frame.locator('#status').getByText('completed',{exact:true}).waitFor();await frame.getByRole('button',{name:'Refresh process graph',exact:true}).click();await frame.locator('#process-graph .process-card').first().waitFor();await frame.locator('#process-graph .process-links path').first().waitFor({state:'attached'});await frame.locator('#process-graph .process-card summary').last().click();await frame.locator('#process-graph .process-card[open] details summary').filter({hasText:'Retained inputs'}).first().click();await frame.locator('#process-graph .process-card[open] table tbody tr').first().waitFor();await frame.locator('#process-graph .process-card[open]').getByText('120 seconds',{exact:true}).waitFor();await frame.locator('#process-graph .process-card[open]').getByText('2 GiB',{exact:true}).waitFor();await frame.locator('#process-graph .process-card[open]').getByText('4 MiB',{exact:true}).waitFor();await page.screenshot({path:join(evidence,'process-expanded-dark.png'),fullPage:true});
-  await frame.locator('#run-choice').selectOption(runOptions[1]);await frame.locator('#status').getByText(f.store.ledger.getRun(linked.runId!)!.state,{exact:true}).waitFor();assert.equal(await frame.getByRole('button',{name:'Read shareable report',exact:true}).isDisabled(),true);await frame.getByRole('button',{name:'Preview start or resume',exact:true}).click();await frame.getByRole('button',{name:'Confirm this run action',exact:true}).click();await frame.locator('#status').getByText('completed',{exact:true}).waitFor({timeout:25000});await frame.locator('#baseline-choice').selectOption(runOptions[2]);const[comparisonResponse]=await Promise.all([page.waitForResponse(r=>r.url().endsWith('/report')),frame.getByRole('button',{name:'Regenerate differential report',exact:true}).click()]);const comparisonDelivery=await comparisonResponse.json();assert.equal(comparisonDelivery.current.runId,linked.runId);assert.equal(comparisonDelivery.baseline.runId,original.runId);await frame.locator('#report-text[data-format-digest]').waitFor({timeout:25000});const comparison=await frame.locator('#report-text').textContent();assert.ok(comparison!.length>100);assert.equal(await frame.locator('#report-text').getAttribute('data-format-digest'),'sha256:'+createHash('sha256').update(comparison!).digest('hex'));await page.screenshot({path:join(evidence,'process-comparison-dark.png'),fullPage:true});assert.deepEqual(oldPlan.plan.units.map(u=>f.store.ledger.getPublication(u)),oldPublications);
-  // Hold a real delivered canonical report at the network, change the baseline, then let the old read finish.
-  let releaseDelivery!:()=>void,deliveryReached!:()=>void,hold=true;const released=new Promise<void>(r=>releaseDelivery=r),reached=new Promise<void>(r=>deliveryReached=r),route=async(r:any)=>{if(hold){hold=false;deliveryReached();await released;}await r.continue();};await page.route('**/delivery',route);await frame.getByRole('button',{name:'Regenerate differential report',exact:true}).click();await reached;await frame.locator('#baseline-choice').selectOption('');const lastChunk=page.waitForResponse(async r=>r.url().endsWith('/delivery')&&(await r.json()).nextOffset===null);releaseDelivery();await lastChunk;const stale=await frame.locator('#report-text').evaluate(async e=>{await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));return{text:e.textContent,digest:e.getAttribute('data-format-digest')};});assert.deepEqual(stale,{text:'',digest:null});await page.unroute('**/delivery',route);await frame.locator('#baseline-choice').selectOption(runOptions[2]);await frame.getByRole('button',{name:'Regenerate differential report',exact:true}).click();await frame.locator('#report-text[data-format-digest]').waitFor({timeout:25000});
+import { tmpdir } from 'node:os';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { join } from 'node:path';
+import { spawn, execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import { mkdirSync, rmSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
+import { chromium } from '@playwright/test';
+import { loadPlan } from '../dist/execution/plans.js';
+import { adoptWorkspaceSettings } from '../dist/service/local.js';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { PreparationJournal } from '../dist/service/preparation-journal.js';
+import { OwnerService } from '../dist/service/owner-service.js';
+import { listenOwnerSocket, runtimeAddress, newOwnerNonce } from '../dist/transport/ipc.js';
+import { writePrivateFileAtomic } from '../dist/policy/user-state.js';
+import { startOwnerUi } from '../dist/owner-ui/server.js';
+import { preparationFixture } from './helpers/preparation-fixture.ts';
+import { needsStore } from './snapshot-helpers.ts';
+const cli = fileURLToPath(new URL('../../cli/dist/cli.js', import.meta.url)),
+  port = Number(process.env.SENTINEL_OWNER_UI_PORT ?? 4583),
+  wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+test(
+  'actual owner iframe prepares/confirms, reads retained stages after source removal, separately starts and delivers report',
+  {
+    ...needsStore,
+    skip:
+      process.env.SENTINEL_OWNER_UI_BROWSER !== '1'
+        ? 'explicit SENTINEL_OWNER_UI_BROWSER=1 browser gate'
+        : needsStore.skip,
+    timeout: 90000,
+  },
+  async (t) => {
+    try {
+      const occupied = execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' });
+      assert.equal(occupied.trim(), '', 'owned browser port occupied');
+    } catch (e: any) {
+      if (e.status !== 1) throw e;
+    }
+    const f = await preparationFixture(t),
+      oldState = process.env.XDG_STATE_HOME;
+    process.env.XDG_STATE_HOME = join(f.dir, 'owner');
+    const service = new OwnerService(f.store, f.ws, { registry: f.registry }),
+      nonce = newOwnerNonce(),
+      address = runtimeAddress({ storePath: f.store.storePath, ownerNonce: nonce, sources: [f.ws.path] });
+    let child: ReturnType<typeof spawn> | undefined,
+      companion: Awaited<ReturnType<typeof startOwnerUi>> | undefined,
+      browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+    const socket = await listenOwnerSocket(
+      address,
+      { storeId: f.store.storeId, ownerNonce: nonce },
+      (op, body, by, context) => service.handle(op, body, by, context),
+    );
+    writePrivateFileAtomic(
+      join(f.ws.trustDir, 'services'),
+      createHash('sha256').update(f.ws.storePath).digest('hex').slice(0, 32) + '.json',
+      Buffer.from(
+        JSON.stringify({
+          schema: 'sentinel-service/draft-1',
+          storePath: f.ws.storePath,
+          storeId: f.store.storeId,
+          ownerNonce: nonce,
+          address,
+          pid: process.pid,
+          startedAt: new Date().toISOString(),
+        }),
+      ),
+      'sentinel.receipt.storeUnsafe',
+    );
+    const evidence =
+      process.env.SENTINEL_OWNER_UI_EVIDENCE ?? join(tmpdir(), 'sol-owner-ui-' + process.pid + '-' + Date.now());
+    const errors: string[] = [],
+      consoleErrors: string[] = [],
+      http: any[] = [];
+    try {
+      mkdirSync(evidence, { recursive: true });
+      const graph = join(f.dir, 'graph.json');
+      execFileSync(process.execPath, [cli, 'ingest', f.ws.path, '--repo', 'original-owner-fixture', '--out', graph], {
+        cwd: f.dir,
+        env: process.env,
+        timeout: 30000,
+      });
+      child = spawn(process.execPath, [cli, 'serve', graph, '--port', String(port)], {
+        cwd: f.ws.path,
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let logs = '';
+      child.stderr?.on('data', (b) => (logs += b));
+      child.stdout?.on('data', (b) => (logs += b));
+      for (let i = 0; i < 200; i++) {
+        try {
+          const v: any = await (await fetch(`http://127.0.0.1:${port}/api/version`)).json();
+          if (v.session?.instance) break;
+        } catch {}
+        if (child.exitCode !== null) assert.fail(logs);
+        await wait(30);
+      }
+      companion = await startOwnerUi(f.ws, `http://127.0.0.1:${port}`);
+      browser = await chromium.launch({ headless: true });
+      const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } }),
+        page = await context.newPage();
+      page.on('pageerror', (e) => errors.push(e.message));
+      page.on('console', (m) => {
+        if (m.type() === 'error') consoleErrors.push(m.text());
+      });
+      page.on('response', (r) => {
+        if (r.status() >= 400) {
+          const row: any = { status: r.status(), url: r.url() };
+          http.push(row);
+          void r.text().then((body) => (row.body = body));
+        }
+      });
+      await page.goto(`http://127.0.0.1:${port}/#/sentinel`);
+      const frame = page.frameLocator('iframe[title="Sentinel"]');
+      await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).waitFor({ timeout: 15000 });
+      // A second browser context has no owner-origin reload token. Its spent pairing link is a
+      // friendly refusal, while the genuine original paired tab remains usable and authorizes nothing.
+      const beforeDuplicate = f.store.ledger.currentSequence(),
+        duplicateContext = await browser.newContext(),
+        duplicate = await duplicateContext.newPage();
+      await duplicate.goto(`http://127.0.0.1:${port}/#/sentinel`);
+      await duplicate
+        .frameLocator('iframe[title="Sentinel"]')
+        .getByRole('heading', {
+          name: 'This pairing link has already been used or is no longer available.',
+          exact: true,
+        })
+        .waitFor();
+      await duplicate.screenshot({ path: join(evidence, 'used-pairing-link.png'), fullPage: true });
+      await duplicateContext.close();
+      assert.equal(f.store.ledger.currentSequence(), beforeDuplicate);
+      assert.equal(await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).isEnabled(), true);
+      const settingsPath = join(f.ws.path, '.farsight/sentinel/settings.json'),
+        settingsBytes = readFileSync(settingsPath),
+        settings = JSON.parse(settingsBytes.toString());
+      const policy = (deny: boolean) => {
+        writeFileSync(settingsPath, deny ? JSON.stringify({ ...settings, grants: [] }) : settingsBytes);
+        assert.equal(adoptWorkspaceSettings(f.ws, { confirm: true, now: new Date() }).outcome, 'prepared');
+      };
+      async function refuseUi() {
+        policy(true);
+        await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).click();
+        const [answer] = await Promise.all([
+          page.waitForResponse((r) => r.url().endsWith('/confirm')),
+          frame.getByRole('button', { name: 'Confirm preparation', exact: true }).click(),
+        ]);
+        assert.equal((await answer.json()).outcome, 'configuration-failure');
+        policy(false);
+      }
+      await refuseUi();
+      const cliResult = await promisify(execFile)(
+        process.execPath,
+        [
+          fileURLToPath(new URL('../dist/cli.js', import.meta.url)),
+          'prepare',
+          '--confirm',
+          '--workspace',
+          f.ws.path,
+          '--json',
+        ],
+        { env: process.env, timeout: 30000 },
+      );
+      assert.equal(
+        JSON.parse(cliResult.stdout).outcome,
+        'submitted',
+        'definitively refused UI request must not poison the actual owner CLI',
+      );
+      for (let i = 0; i < 600 && service.busy; i++) await wait(10);
+      await refuseUi();
+      await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).click();
+      await frame.getByRole('button', { name: 'Confirm preparation', exact: true }).click();
+      await frame.locator('#status').getByText('prepared', { exact: true }).waitFor({ timeout: 20000 });
+      await frame.getByText('Prepared; analysis has not started.', { exact: true }).waitFor();
+      const beforeReadFailure = f.store.ledger.currentSequence();
+      await page.route('**/status', (r) => r.abort());
+      await frame.getByRole('button', { name: 'Refresh retained state', exact: true }).click();
+      await frame
+        .locator('#message')
+        .getByText(
+          'The owner connection could not be verified. Actions are disabled; refresh retained state to reconnect.',
+          { exact: true },
+        )
+        .waitFor();
+      assert.equal(
+        await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).isDisabled(),
+        true,
+      );
+      assert.equal(f.store.ledger.currentSequence(), beforeReadFailure);
+      const expectedReadFailureConsole = consoleErrors.splice(0);
+      await page.unroute('**/status');
+      await frame.getByRole('button', { name: 'Refresh retained state', exact: true }).click();
+      await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).waitFor();
+      for (
+        let i = 0;
+        i < 50 && (await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).isDisabled());
+        i++
+      )
+        await wait(20);
+      assert.equal(await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).isEnabled(), true);
+      // Advance only the browser's display clock; the genuine retained deadline and owner remain unchanged.
+      const deadline = Date.parse((await frame.locator('#status time').getAttribute('datetime'))!);
+      await page.clock.setFixedTime(new Date(deadline + 1));
+      await frame.getByRole('button', { name: 'Refresh retained state', exact: true }).click();
+      await frame
+        .getByText('The original run deadline has passed. Prepare a new run to continue.', { exact: true })
+        .waitFor();
+      assert.equal(
+        await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).isDisabled(),
+        true,
+      );
+      await page.clock.setFixedTime(new Date());
+      await frame.getByRole('button', { name: 'Refresh retained state', exact: true }).click();
+      await frame.getByText('Prepared; analysis has not started.', { exact: true }).waitFor();
+      assert.equal(f.store.ledger.currentSequence(), beforeReadFailure);
+      const above = await frame
+        .locator('#run-controls')
+        .evaluate(
+          (e) => e.getBoundingClientRect().top < document.getElementById('process-graph')!.getBoundingClientRect().top,
+        );
+      assert.equal(above, true, 'run status and controls precede the graph');
+      await page.screenshot({ path: join(evidence, 'prepared-dark.png'), fullPage: true });
+      rmSync(join(f.ws.path, 'src'), { recursive: true });
+      await frame.getByRole('button', { name: 'Retained inputs', exact: true }).click();
+      await frame.locator('#rows tbody tr').first().waitFor();
+      await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).click();
+      await frame.getByRole('button', { name: 'Confirm this run action', exact: true }).click();
+      await frame.locator('#status').getByText('completed', { exact: true }).waitFor({ timeout: 25000 });
+      await frame.getByRole('button', { name: 'Read shareable report', exact: true }).click();
+      await frame.locator('#report-text[data-format-digest]').waitFor({ timeout: 25000 });
+      assert.ok((await frame.locator('#report-text').textContent())!.length > 100);
+      await page.evaluate(() => {
+        (window as any).applyTheme('dark');
+      });
+      await frame.locator('body[data-theme=dark]').waitFor();
+      await page.screenshot({ path: join(evidence, 'completed-report-dark.png'), fullPage: true });
+      assert.equal(
+        await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).isDisabled(),
+        true,
+      );
+      await frame.getByRole('button', { name: 'Retained outputs', exact: true }).click();
+      assert.ok((await frame.locator('#rows tbody tr').count()) > 0);
+      const original = new PreparationJournal(f.store).list().find((r) => r.phase === 'prepared')!,
+        originalRun = f.store.ledger.getRun(original.runId!)!,
+        oldPlan = await loadPlan(f.store, original.runId!),
+        oldPublications = oldPlan.plan.units.map((u) => f.store.ledger.getPublication(u));
+      assert.ok(oldPublications.some((p) => p?.outputs.length));
+      await frame.getByRole('button', { name: 'Preview linked rerun', exact: true }).click();
+      await frame.getByRole('button', { name: 'Confirm preparation', exact: true }).click();
+      for (
+        let i = 0;
+        i < 600 && !new PreparationJournal(f.store).list().some((r) => r.parentId === original.runId);
+        i++
+      )
+        await wait(10);
+      for (let i = 0; i < 600 && service.busy; i++) await wait(10);
+      const linked = new PreparationJournal(f.store).list().find((r) => r.parentId === original.runId)!;
+      assert.equal(linked.phase, 'prepared');
+      assert.equal(linked.parentId, original.runId);
+      assert.notEqual(linked.runId, original.runId);
+      assert.equal(f.store.ledger.getRun(linked.runId!)!.envelope.parentId, original.runId);
+      assert.deepEqual(f.store.ledger.getRun(original.runId!), originalRun);
+      assert.deepEqual(
+        oldPlan.plan.units.map((u) => f.store.ledger.getPublication(u)),
+        oldPublications,
+      );
+      await frame.getByRole('button', { name: 'Refresh retained state', exact: true }).click();
+      await frame.locator('#report-text:not([data-format-digest])').waitFor({ state: 'attached' });
+      assert.equal(await frame.locator('#report-text').textContent(), '');
+      assert.equal(await frame.locator('#report-text').getAttribute('data-format-digest'), null);
+      await frame.getByRole('button', { name: 'Capture and parse evidence', exact: true }).click();
+      await frame.getByRole('button', { name: 'Stages and work', exact: true }).click();
+      await frame.locator('#rows tbody tr').nth(1).waitFor({ timeout: 15000 });
+      await page.screenshot({ path: join(evidence, 'linked-bootstrap-dark.png'), fullPage: true });
+      // Inspect genuine retained child and parent through opaque list handles; reports are explicit and selection-bound.
+      await frame.getByRole('button', { name: 'Refresh run list', exact: true }).click();
+      await frame.locator('#run-choice option').nth(2).waitFor({ state: 'attached' });
+      const runOptions = await frame
+        .locator('#run-choice option')
+        .evaluateAll((options) => options.map((o) => (o as HTMLOptionElement).value));
+      assert.ok(runOptions.length >= 3);
+      assert.ok(runOptions.slice(1).every((k) => /^h[a-f0-9]{32}$/.test(k)));
+      await frame.locator('#run-choice').selectOption(runOptions[2]);
+      await frame.locator('#status').getByText('completed', { exact: true }).waitFor();
+      await frame.getByRole('button', { name: 'Refresh process graph', exact: true }).click();
+      await frame.locator('#process-graph .process-card').first().waitFor();
+      await frame.locator('#process-graph .process-links path').first().waitFor({ state: 'attached' });
+      await frame.locator('#process-graph .process-card summary').last().click();
+      await frame
+        .locator('#process-graph .process-card[open] details summary')
+        .filter({ hasText: 'Retained inputs' })
+        .first()
+        .click();
+      await frame.locator('#process-graph .process-card[open] table tbody tr').first().waitFor();
+      await frame.locator('#process-graph .process-card[open]').getByText('120 seconds', { exact: true }).waitFor();
+      await frame.locator('#process-graph .process-card[open]').getByText('2 GiB', { exact: true }).waitFor();
+      await frame.locator('#process-graph .process-card[open]').getByText('4 MiB', { exact: true }).waitFor();
+      await page.screenshot({ path: join(evidence, 'process-expanded-dark.png'), fullPage: true });
+      await frame.locator('#run-choice').selectOption(runOptions[1]);
+      await frame.locator('#status').getByText(f.store.ledger.getRun(linked.runId!)!.state, { exact: true }).waitFor();
+      assert.equal(await frame.getByRole('button', { name: 'Read shareable report', exact: true }).isDisabled(), true);
+      await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).click();
+      await frame.getByRole('button', { name: 'Confirm this run action', exact: true }).click();
+      await frame.locator('#status').getByText('completed', { exact: true }).waitFor({ timeout: 25000 });
+      await frame.locator('#baseline-choice').selectOption(runOptions[2]);
+      const [comparisonResponse] = await Promise.all([
+        page.waitForResponse((r) => r.url().endsWith('/report')),
+        frame.getByRole('button', { name: 'Regenerate differential report', exact: true }).click(),
+      ]);
+      const comparisonDelivery = await comparisonResponse.json();
+      assert.equal(comparisonDelivery.current.runId, linked.runId);
+      assert.equal(comparisonDelivery.baseline.runId, original.runId);
+      await frame.locator('#report-text[data-format-digest]').waitFor({ timeout: 25000 });
+      const comparison = await frame.locator('#report-text').textContent();
+      assert.ok(comparison!.length > 100);
+      assert.equal(
+        await frame.locator('#report-text').getAttribute('data-format-digest'),
+        'sha256:' + createHash('sha256').update(comparison!).digest('hex'),
+      );
+      await page.screenshot({ path: join(evidence, 'process-comparison-dark.png'), fullPage: true });
+      assert.deepEqual(
+        oldPlan.plan.units.map((u) => f.store.ledger.getPublication(u)),
+        oldPublications,
+      );
+      // Hold a real delivered canonical report at the network, change the baseline, then let the old read finish.
+      let releaseDelivery!: () => void,
+        deliveryReached!: () => void,
+        hold = true;
+      const released = new Promise<void>((r) => (releaseDelivery = r)),
+        reached = new Promise<void>((r) => (deliveryReached = r)),
+        route = async (r: any) => {
+          if (hold) {
+            hold = false;
+            deliveryReached();
+            await released;
+          }
+          await r.continue();
+        };
+      await page.route('**/delivery', route);
+      await frame.getByRole('button', { name: 'Regenerate differential report', exact: true }).click();
+      await reached;
+      await frame.locator('#baseline-choice').selectOption('');
+      const lastChunk = page.waitForResponse(
+        async (r) => r.url().endsWith('/delivery') && (await r.json()).nextOffset === null,
+      );
+      releaseDelivery();
+      await lastChunk;
+      const stale = await frame.locator('#report-text').evaluate(async (e) => {
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        return { text: e.textContent, digest: e.getAttribute('data-format-digest') };
+      });
+      assert.deepEqual(stale, { text: '', digest: null });
+      await page.unroute('**/delivery', route);
+      await frame.locator('#baseline-choice').selectOption(runOptions[2]);
+      await frame.getByRole('button', { name: 'Regenerate differential report', exact: true }).click();
+      await frame.locator('#report-text[data-format-digest]').waitFor({ timeout: 25000 });
 
-  await frame.getByRole('button',{name:'Preview fresh capture',exact:true}).click();await frame.getByRole('button',{name:'Confirm preparation',exact:true}).waitFor();const beforeHistory=f.store.ledger.currentSequence();await page.evaluate(()=>{location.hash='#/sentinel@sync:1';});await frame.locator('#readonly').waitFor({state:'visible'});await wait(100);assert.equal(f.store.ledger.currentSequence(),beforeHistory);assert.equal(await frame.getByRole('button',{name:'Preview fresh capture',exact:true}).isDisabled(),true);await page.screenshot({path:join(evidence,'historical-veto-dark.png'),fullPage:true});await page.evaluate(()=>{location.hash='#/sentinel';});await frame.locator('#readonly').waitFor({state:'hidden'});
-  await page.evaluate(()=>{(window as any).applyTheme('light');});await frame.locator('body[data-theme=light]').waitFor();await page.screenshot({path:join(evidence,'linked-light.png'),fullPage:true});
-  await page.reload();await frame.getByRole('button',{name:'Preview fresh capture',exact:true}).waitFor({timeout:15000});await frame.locator('#status').getByText('completed',{exact:true}).waitFor({timeout:15000});await page.screenshot({path:join(evidence,'reconnected.png'),fullPage:true});assert.deepEqual(errors,[]);assert.deepEqual(consoleErrors,[],JSON.stringify({http,consoleErrors}));assert.deepEqual(http,[]);
-  // Keep the old actual parent page but replace only our own host process at the same origin. The immediate
-  // host-instance fence must refuse its pending confirmation before issuing/spending another UI receipt.
-  const beforeRestart=f.store.ledger.currentSequence(),receiptNames=readdirSync(join(f.ws.trustDir,'receipts')).sort();child.kill('SIGTERM');await new Promise(r=>child!.once('exit',r));child=spawn(process.execPath,[cli,'serve',graph,'--port',String(port),'--read-only'],{cwd:f.ws.path,env:process.env,stdio:['ignore','pipe','pipe']});child.stderr?.on('data',b=>logs+=b);for(let i=0;i<200;i++){try{const v:any=await(await fetch(`http://127.0.0.1:${port}/api/version`)).json();if(v.session?.readOnly)break;}catch{}await wait(20);}
-  await frame.getByRole('button',{name:'Preview fresh capture',exact:true}).click();await frame.getByRole('button',{name:'Confirm preparation',exact:true}).click();await frame.locator('#message').getByText('The paired application is unavailable or changed.',{exact:true}).waitFor();assert.equal(f.store.ledger.currentSequence(),beforeRestart);assert.deepEqual(readdirSync(join(f.ws.trustDir,'receipts')).sort(),receiptNames);assert.deepEqual(errors,[]);assert.equal(http.length,1);assert.equal(http[0].status,400);assert.ok(http[0].url.endsWith('/confirm'));const expectedGuardHttp=http.splice(0),expectedGuardConsole=consoleErrors.splice(0);await page.screenshot({path:join(evidence,'host-restart-refused.png'),fullPage:true});writeFileSync(join(evidence,'result.json'),JSON.stringify({genuineOwner:true,browser:'chromium',sourceRemoved:true,prepare:true,usedPairingLinkRecovery:true,connectionFailureDisablesActions:true,browserDeadlineDisplayRefusesLateStart:true,expectedReadFailureConsole,controlsBeforeGraph:true,preparedNotAnalysis:true,policyRefusalThenUiAndCliRecovery:true,separateStart:true,report:true,reload:true,linkedRerun:true,originalOutputsRetained:true,bootstrapEvidence:true,historicalVeto:true,hostRestartRefused:true,bothThemes:true,processDag:true,expandedWorkIo:true,retainedParentChildSelection:true,manualComparison:true,staleBaselineDeliveryRefused:true,expectedGuardHttp,expectedGuardConsole,errors,consoleErrors,http,hostLog:logs},null,2));
- }finally{try{writeFileSync(join(evidence,'diagnostic.json'),JSON.stringify({errors,consoleErrors,http},null,2));}catch{}await browser?.close();await companion?.close();await service.stop();await socket.close();if(child&&child.exitCode===null&&child.signalCode===null){child.kill('SIGTERM');await Promise.race([new Promise(r=>child!.once('exit',r)),wait(2000)]);if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');}if(oldState===undefined)delete process.env.XDG_STATE_HOME;else process.env.XDG_STATE_HOME=oldState;}
-});
+      await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).click();
+      await frame.getByRole('button', { name: 'Confirm preparation', exact: true }).waitFor();
+      const beforeHistory = f.store.ledger.currentSequence();
+      await page.evaluate(() => {
+        location.hash = '#/sentinel@sync:1';
+      });
+      await frame.locator('#readonly').waitFor({ state: 'visible' });
+      await wait(100);
+      assert.equal(f.store.ledger.currentSequence(), beforeHistory);
+      assert.equal(await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).isDisabled(), true);
+      await page.screenshot({ path: join(evidence, 'historical-veto-dark.png'), fullPage: true });
+      await page.evaluate(() => {
+        location.hash = '#/sentinel';
+      });
+      await frame.locator('#readonly').waitFor({ state: 'hidden' });
+      await page.evaluate(() => {
+        (window as any).applyTheme('light');
+      });
+      await frame.locator('body[data-theme=light]').waitFor();
+      await page.screenshot({ path: join(evidence, 'linked-light.png'), fullPage: true });
+      await page.reload();
+      await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).waitFor({ timeout: 15000 });
+      await frame.locator('#status').getByText('completed', { exact: true }).waitFor({ timeout: 15000 });
+      await page.screenshot({ path: join(evidence, 'reconnected.png'), fullPage: true });
+      assert.deepEqual(errors, []);
+      assert.deepEqual(consoleErrors, [], JSON.stringify({ http, consoleErrors }));
+      assert.deepEqual(http, []);
+      // Keep the old actual parent page but replace only our own host process at the same origin. The immediate
+      // host-instance fence must refuse its pending confirmation before issuing/spending another UI receipt.
+      const beforeRestart = f.store.ledger.currentSequence(),
+        receiptNames = readdirSync(join(f.ws.trustDir, 'receipts')).sort();
+      child.kill('SIGTERM');
+      await new Promise((r) => child!.once('exit', r));
+      child = spawn(process.execPath, [cli, 'serve', graph, '--port', String(port), '--read-only'], {
+        cwd: f.ws.path,
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      child.stderr?.on('data', (b) => (logs += b));
+      for (let i = 0; i < 200; i++) {
+        try {
+          const v: any = await (await fetch(`http://127.0.0.1:${port}/api/version`)).json();
+          if (v.session?.readOnly) break;
+        } catch {}
+        await wait(20);
+      }
+      await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).click();
+      await frame.getByRole('button', { name: 'Confirm preparation', exact: true }).click();
+      await frame
+        .locator('#message')
+        .getByText('The paired application is unavailable or changed.', { exact: true })
+        .waitFor();
+      assert.equal(f.store.ledger.currentSequence(), beforeRestart);
+      assert.deepEqual(readdirSync(join(f.ws.trustDir, 'receipts')).sort(), receiptNames);
+      assert.deepEqual(errors, []);
+      assert.equal(http.length, 1);
+      assert.equal(http[0].status, 400);
+      assert.ok(http[0].url.endsWith('/confirm'));
+      const expectedGuardHttp = http.splice(0),
+        expectedGuardConsole = consoleErrors.splice(0);
+      await page.screenshot({ path: join(evidence, 'host-restart-refused.png'), fullPage: true });
+      writeFileSync(
+        join(evidence, 'result.json'),
+        JSON.stringify(
+          {
+            genuineOwner: true,
+            browser: 'chromium',
+            sourceRemoved: true,
+            prepare: true,
+            usedPairingLinkRecovery: true,
+            connectionFailureDisablesActions: true,
+            browserDeadlineDisplayRefusesLateStart: true,
+            expectedReadFailureConsole,
+            controlsBeforeGraph: true,
+            preparedNotAnalysis: true,
+            policyRefusalThenUiAndCliRecovery: true,
+            separateStart: true,
+            report: true,
+            reload: true,
+            linkedRerun: true,
+            originalOutputsRetained: true,
+            bootstrapEvidence: true,
+            historicalVeto: true,
+            hostRestartRefused: true,
+            bothThemes: true,
+            processDag: true,
+            expandedWorkIo: true,
+            retainedParentChildSelection: true,
+            manualComparison: true,
+            staleBaselineDeliveryRefused: true,
+            expectedGuardHttp,
+            expectedGuardConsole,
+            errors,
+            consoleErrors,
+            http,
+            hostLog: logs,
+          },
+          null,
+          2,
+        ),
+      );
+    } finally {
+      try {
+        writeFileSync(join(evidence, 'diagnostic.json'), JSON.stringify({ errors, consoleErrors, http }, null, 2));
+      } catch {}
+      await browser?.close();
+      await companion?.close();
+      await service.stop();
+      await socket.close();
+      if (child && child.exitCode === null && child.signalCode === null) {
+        child.kill('SIGTERM');
+        await Promise.race([new Promise((r) => child!.once('exit', r)), wait(2000)]);
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      }
+      if (oldState === undefined) delete process.env.XDG_STATE_HOME;
+      else process.env.XDG_STATE_HOME = oldState;
+    }
+  },
+);

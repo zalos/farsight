@@ -22,7 +22,15 @@ export const lockDigest = (lock: RuleLockEnvelope): string => canonicalDigest(lo
 
 /** The first lock: nothing promoted yet. */
 export function emptyLock(now: Date): RuleLockEnvelope {
-  return deepFreeze({ schema: 'sentinel-rulelock/draft-1', revision: 1, previous: null, packs: [], tools: [], databases: [], createdAt: stamp(now) });
+  return deepFreeze({
+    schema: 'sentinel-rulelock/draft-1',
+    revision: 1,
+    previous: null,
+    packs: [],
+    tools: [],
+    databases: [],
+    createdAt: stamp(now),
+  });
 }
 
 /**
@@ -32,13 +40,15 @@ export function emptyLock(now: Date): RuleLockEnvelope {
  */
 function candidateEntry(c: PromotionCandidate): object {
   if (c.kind === 'pack') {
-    if (!isValidatedPack(c.pack)) policyFail('sentinel.rules.promotionUnauthorized', 'a pack is promoted only as validatePack returned it');
+    if (!isValidatedPack(c.pack))
+      policyFail('sentinel.rules.promotionUnauthorized', 'a pack is promoted only as validatePack returned it');
     return structuredClone(c.pack.entry);
   }
   return structuredClone(c.kind === 'tool' ? c.tool : c.database);
 }
 
-const entryDigest = (kind: PromotionCandidate['kind'], entry: object) => canonicalDigest({ kind: `sentinel-lock-candidate/${kind}/1`, entry });
+const entryDigest = (kind: PromotionCandidate['kind'], entry: object) =>
+  canonicalDigest({ kind: `sentinel-lock-candidate/${kind}/1`, entry });
 
 /** The candidate's digest: the canonical digest of the complete entry promotion would write. */
 export function candidateDigest(c: PromotionCandidate): string {
@@ -66,8 +76,13 @@ function intentFor(lock: RuleLockEnvelope, kind: PromotionCandidate['kind'], inp
 /** Verifies that a loaded lock is the one a plan pinned; any other lock is refused, never substituted. */
 export function verifyPinnedLock(value: unknown, pinned: string): RuleLockEnvelope {
   const checked = validateEnvelope('rulelock', value);
-  if (!checked.ok) return policyFail('sentinel.rules.lockInvalid', `${checked.errors[0]?.path || '/'}: ${checked.errors[0]?.message ?? 'invalid'}`);
-  if (lockDigest(checked.value) !== pinned) policyFail('sentinel.rules.lockInvalid', 'the lock is not the revision the plan pinned');
+  if (!checked.ok)
+    return policyFail(
+      'sentinel.rules.lockInvalid',
+      `${checked.errors[0]?.path || '/'}: ${checked.errors[0]?.message ?? 'invalid'}`,
+    );
+  if (lockDigest(checked.value) !== pinned)
+    policyFail('sentinel.rules.lockInvalid', 'the lock is not the revision the plan pinned');
   return deepFreeze(checked.value);
 }
 
@@ -75,32 +90,56 @@ export function verifyPinnedLock(value: unknown, pinned: string): RuleLockEnvelo
  * A new lock revision with the candidate promoted. The given lock is unchanged. The entry written is the private copy
  * whose digest the receipt confirmed, so a candidate edited after confirmation is refused, never half-applied.
  */
-export function promote(lock: RuleLockEnvelope, c: PromotionCandidate, receipt: ConsumedReceipt, now: Date): RuleLockEnvelope {
+export function promote(
+  lock: RuleLockEnvelope,
+  c: PromotionCandidate,
+  receipt: ConsumedReceipt,
+  now: Date,
+): RuleLockEnvelope {
   const authority = receiptAuthority(receipt);
-  if (!authority) return policyFail('sentinel.rules.promotionUnauthorized', 'promotion needs the owner’s spent receipt');
+  if (!authority)
+    return policyFail('sentinel.rules.promotionUnauthorized', 'promotion needs the owner’s spent receipt');
   const base: RuleLockEnvelope = structuredClone(lock);
   const entry = candidateEntry(c);
   const intent = intentFor(base, c.kind, entryDigest(c.kind, entry));
   if (authority.action !== intent.action || authority.intentDigest !== intentDigest(intent)) {
-    policyFail('sentinel.rules.promotionUnauthorized', 'the receipt confirms another candidate or another lock revision');
+    policyFail(
+      'sentinel.rules.promotionUnauthorized',
+      'the receipt confirms another candidate or another lock revision',
+    );
   }
   const promotion = { receipt: authority.digest, at: stamp(now) };
-  const next: RuleLockEnvelope = { ...base, revision: base.revision + 1, previous: lockDigest(base), createdAt: stamp(now) };
+  const next: RuleLockEnvelope = {
+    ...base,
+    revision: base.revision + 1,
+    previous: lockDigest(base),
+    createdAt: stamp(now),
+  };
   if (c.kind === 'pack') {
     const pack = entry as Omit<LockedPack, 'promotion'>;
-    const others = next.packs.filter(p => p.packId !== pack.packId);
-    const taken = new Set(others.flatMap(p => p.rules.map(r => r.familyId)));
-    const clash = pack.rules.find(r => taken.has(r.familyId));
+    const others = next.packs.filter((p) => p.packId !== pack.packId);
+    const taken = new Set(others.flatMap((p) => p.rules.map((r) => r.familyId)));
+    const clash = pack.rules.find((r) => taken.has(r.familyId));
     if (clash) policyFail('sentinel.rules.familyConflict', `${clash.familyId} is already locked by another pack`);
     next.packs = [...others, { ...pack, promotion }].sort((a, b) => (a.packId < b.packId ? -1 : 1));
   } else if (c.kind === 'tool') {
     const tool = entry as Omit<LockedTool, 'promotion'>;
-    next.tools = [...next.tools.filter(t => !(t.adapterId === tool.adapterId && t.platform === tool.platform)), { ...tool, promotion }];
+    next.tools = [
+      ...next.tools.filter((t) => !(t.adapterId === tool.adapterId && t.platform === tool.platform)),
+      { ...tool, promotion },
+    ];
   } else {
     const database = entry as Omit<LockedDatabase, 'promotion'>;
-    next.databases = [...next.databases.filter(d => d.databaseId !== database.databaseId), { ...database, promotion }];
+    next.databases = [
+      ...next.databases.filter((d) => d.databaseId !== database.databaseId),
+      { ...database, promotion },
+    ];
   }
   const checked = validateEnvelope('rulelock', next);
-  if (!checked.ok) policyFail(c.kind === 'pack' ? 'sentinel.rules.lockInvalid' : 'sentinel.rules.candidateInvalid', `${checked.errors[0]?.path || '/'}: ${checked.errors[0]?.message ?? 'invalid'}`);
+  if (!checked.ok)
+    policyFail(
+      c.kind === 'pack' ? 'sentinel.rules.lockInvalid' : 'sentinel.rules.candidateInvalid',
+      `${checked.errors[0]?.path || '/'}: ${checked.errors[0]?.message ?? 'invalid'}`,
+    );
   return deepFreeze(next);
 }

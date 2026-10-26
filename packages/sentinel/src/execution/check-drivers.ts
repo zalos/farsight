@@ -40,7 +40,12 @@ export interface RuleFiles {
   readonly files: readonly { readonly path: string; readonly digest: Digest; readonly bytes: Uint8Array }[];
 }
 
-export const ANALYSIS_ROLES = Object.freeze(['analysis-result', 'analysis-index', 'analysis-artifact', 'snapshot-manifest'] as const);
+export const ANALYSIS_ROLES = Object.freeze([
+  'analysis-result',
+  'analysis-index',
+  'analysis-artifact',
+  'snapshot-manifest',
+] as const);
 export interface RetainedAnalysis {
   readonly sourceId: Id;
   readonly snapshotId: Id;
@@ -56,7 +61,7 @@ export interface RetainedAnalysis {
 /** Fixed roles and ORIGINAL hash-checked bytes; JSON reserialization cannot silently change their identities. */
 export function retainedAuxiliary(context: DriverContext): PreparedJob['auxiliary'] {
   const bytes = retainedBytesOf(context.analysis);
-  return ANALYSIS_ROLES.map(role => {
+  return ANALYSIS_ROLES.map((role) => {
     const path = join(context.workDir, `sentinel-${role}.json`);
     writeFileSync(path, bytes[role], { flag: 'wx', mode: 0o600 });
     return { path, role };
@@ -98,9 +103,15 @@ export interface PreparedJob {
 
 export interface NormalizedOutcome {
   /** The coverage view the coordinator turns into canonical records (bounded by the adapter's granularity). */
-  readonly coverage: Pick<ResultMessage, 'coveredChecks' | 'scannedSet' | 'skipped' | 'unresolvedFrontiers'> & { readonly actualReadSet?: ResultMessage['actualReadSet'] } & { readonly granularity: CoverageGranularity };
+  readonly coverage: Pick<ResultMessage, 'coveredChecks' | 'scannedSet' | 'skipped' | 'unresolvedFrontiers'> & {
+    readonly actualReadSet?: ResultMessage['actualReadSet'];
+  } & { readonly granularity: CoverageGranularity };
   /** Records published with the result (observations, provenance), as canonical JSON. */
-  readonly records: readonly { readonly value: unknown; readonly schema: string; readonly privacy?: 'metadata' | 'source-derived' | 'source' }[];
+  readonly records: readonly {
+    readonly value: unknown;
+    readonly schema: string;
+    readonly privacy?: 'metadata' | 'source-derived' | 'source';
+  }[];
 }
 
 export interface VerifiedAttempt {
@@ -128,7 +139,11 @@ export interface CheckDriver {
    * The exact rule revisions this driver's engine runs, by their pinned definition digest. A plan whose checks name
    * any other rule for this adapter is refused before anything runs: no arbitrary rule can claim coverage.
    */
-  supportedRules(): readonly { readonly familyId: string; readonly revision: number; readonly definitionDigest: Digest }[];
+  supportedRules(): readonly {
+    readonly familyId: string;
+    readonly revision: number;
+    readonly definitionDigest: Digest;
+  }[];
   prepare(context: DriverContext): Promise<PreparedJob>;
   normalize(context: DriverContext, verified: VerifiedAttempt): Promise<NormalizedOutcome>;
 }
@@ -139,56 +154,97 @@ export interface CheckDriverRegistry {
 }
 
 const drivers = new WeakSet<object>();
-const refuse = (reason: string): never => { throw new ExecutionError('sentinel.execution.adapterInvalid', { reason }); };
+const refuse = (reason: string): never => {
+  throw new ExecutionError('sentinel.execution.adapterInvalid', { reason });
+};
 
 /**
  * Bind drivers to the trusted registry: each names a registered check adapter (not an operation) at exactly its
  * digest, once. Only a registry built here is accepted by the coordinator.
  */
-export function createCheckDriverRegistry(list: readonly CheckDriver[], registry: AdapterRegistry): CheckDriverRegistry {
+export function createCheckDriverRegistry(
+  list: readonly CheckDriver[],
+  registry: AdapterRegistry,
+): CheckDriverRegistry {
   const byId = new Map<Id, CheckDriver>();
   for (const d of list) {
-    if (!d || typeof d.prepare !== 'function' || typeof d.normalize !== 'function' || typeof d.supportedRules !== 'function') refuse('a driver has supportedRules, prepare and normalize');
+    if (
+      !d ||
+      typeof d.prepare !== 'function' ||
+      typeof d.normalize !== 'function' ||
+      typeof d.supportedRules !== 'function'
+    )
+      refuse('a driver has supportedRules, prepare and normalize');
     if (!registry.ids.includes(d.adapterId)) refuse(`driver for ${d.adapterId}: the adapter is not registered`);
     const adapter = registry.get(d.adapterId);
     if (adapter.kind === 'operation') refuse(`driver for ${d.adapterId}: an operation runs no check`);
-    if (adapter.digest !== d.implementationDigest) refuse(`driver for ${d.adapterId}: written for another implementation digest`);
+    if (adapter.digest !== d.implementationDigest)
+      refuse(`driver for ${d.adapterId}: written for another implementation digest`);
     if (byId.has(d.adapterId)) refuse(`two drivers for ${d.adapterId}`);
     const reads = d.reads;
-    if (reads !== undefined && (!reads || typeof reads !== 'object' || Array.isArray(reads)
-      || Object.getPrototypeOf(reads) !== Object.prototype || Reflect.ownKeys(reads).some(key => key !== 'analysis')
-      || Object.entries(Object.getOwnPropertyDescriptors(reads)).some(([key, descriptor]) => key !== 'analysis' || !('value' in descriptor) || descriptor.value !== true))) refuse('driver reads declares only analysis: true');
-    byId.set(d.adapterId, Object.freeze({ ...d, reads: reads === undefined ? undefined : Object.freeze({ analysis: Object.hasOwn(reads, 'analysis') ? true as const : undefined }) }));
+    if (
+      reads !== undefined &&
+      (!reads ||
+        typeof reads !== 'object' ||
+        Array.isArray(reads) ||
+        Object.getPrototypeOf(reads) !== Object.prototype ||
+        Reflect.ownKeys(reads).some((key) => key !== 'analysis') ||
+        Object.entries(Object.getOwnPropertyDescriptors(reads)).some(
+          ([key, descriptor]) => key !== 'analysis' || !('value' in descriptor) || descriptor.value !== true,
+        ))
+    )
+      refuse('driver reads declares only analysis: true');
+    byId.set(
+      d.adapterId,
+      Object.freeze({
+        ...d,
+        reads:
+          reads === undefined
+            ? undefined
+            : Object.freeze({ analysis: Object.hasOwn(reads, 'analysis') ? (true as const) : undefined }),
+      }),
+    );
   }
   const out = Object.freeze({ ids: Object.freeze([...byId.keys()]), driverFor: (id: Id) => byId.get(id) });
   drivers.add(out);
   return out;
 }
 
-export const isCheckDriverRegistry = (v: unknown): v is CheckDriverRegistry => typeof v === 'object' && v !== null && drivers.has(v);
+export const isCheckDriverRegistry = (v: unknown): v is CheckDriverRegistry =>
+  typeof v === 'object' && v !== null && drivers.has(v);
 
-export const fileDigest = (path: string): Digest => `sha256:${createHash('sha256').update(readFileSync(path)).digest('hex')}`;
+export const fileDigest = (path: string): Digest =>
+  `sha256:${createHash('sha256').update(readFileSync(path)).digest('hex')}`;
 
 /**
  * Every check unit of the plan runs through a driver, and every rule its checks name is one its driver supports at
  * exactly the pinned definition digest. Returns the reason the plan cannot run, or undefined.
  */
-export function driverRefusal(plan: Readonly<PlanEnvelope>, registry: CheckDriverRegistry, adapters: AdapterRegistry): string | undefined {
-  const pins = new Map(plan.pins.rules.map(r => [`${r.familyId}@${r.revision}`, r]));
+export function driverRefusal(
+  plan: Readonly<PlanEnvelope>,
+  registry: CheckDriverRegistry,
+  adapters: AdapterRegistry,
+): string | undefined {
+  const pins = new Map(plan.pins.rules.map((r) => [`${r.familyId}@${r.revision}`, r]));
   for (const u of plan.units) {
     if (u.stage !== 'check' || u.adapterId === null) continue;
     const d = registry.driverFor(u.adapterId);
     if (!d) return `adapter ${u.adapterId} has no trusted driver`;
     if (!adapters.ids.includes(u.adapterId)) return `adapter ${u.adapterId} is not in the executing registry`;
     const adapter = adapters.get(u.adapterId);
-    if (adapter.kind === 'operation' || d.implementationDigest !== adapter.digest || d.implementationDigest !== u.implementationDigest) {
+    if (
+      adapter.kind === 'operation' ||
+      d.implementationDigest !== adapter.digest ||
+      d.implementationDigest !== u.implementationDigest
+    ) {
       return `the driver for ${u.adapterId} is written for another implementation digest than the executing adapter and admitted unit`;
     }
-    const supported = new Set(d.supportedRules().map(r => `${r.familyId}@${r.revision}@${r.definitionDigest}`));
+    const supported = new Set(d.supportedRules().map((r) => `${r.familyId}@${r.revision}@${r.definitionDigest}`));
     for (const id of u.checks) {
-      const c = plan.checks.find(x => x.id === id)!;
+      const c = plan.checks.find((x) => x.id === id)!;
       const pin = pins.get(`${c.familyId}@${c.ruleRevision}`);
-      if (!pin || !supported.has(`${pin.familyId}@${pin.revision}@${pin.definitionDigest}`)) return `the driver for ${u.adapterId} does not run rule ${c.familyId} revision ${c.ruleRevision} at its pinned definition`;
+      if (!pin || !supported.has(`${pin.familyId}@${pin.revision}@${pin.definitionDigest}`))
+        return `the driver for ${u.adapterId} does not run rule ${c.familyId} revision ${c.ruleRevision} at its pinned definition`;
     }
   }
   return undefined;

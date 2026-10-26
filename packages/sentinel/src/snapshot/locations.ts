@@ -3,7 +3,12 @@
 // its path, and only when the snapshot, the source, the entry kind and the content digest all agree, so two files with
 // the same bytes resolve to their own entries and a reference cannot be pointed at another file. It reads nothing but
 // the snapshot it is given and does one bounded lookup.
-import type { CaptureEntry, IncludedFileEntry, SnapshotEnvelope, WithheldLocationEvidence } from '../contracts/index.js';
+import type {
+  CaptureEntry,
+  IncludedFileEntry,
+  SnapshotEnvelope,
+  WithheldLocationEvidence,
+} from '../contracts/index.js';
 import type { SnapshotErrorCode } from './errors.js';
 
 export type ResolvedLocation =
@@ -12,9 +17,13 @@ export type ResolvedLocation =
 
 const refused = { ok: false, reasonCode: 'sentinel.capture.locationUnresolved' } as const;
 
-export function resolveWithheldLocation(snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>, evidence: WithheldLocationEvidence): ResolvedLocation {
+export function resolveWithheldLocation(
+  snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>,
+  evidence: WithheldLocationEvidence,
+): ResolvedLocation {
   if (!evidence || evidence.location !== 'withheld' || evidence.snapshotId !== snapshot.id) return refused;
-  if (!Number.isSafeInteger(evidence.entry) || evidence.entry < 0 || evidence.entry >= snapshot.entries.length) return refused;
+  if (!Number.isSafeInteger(evidence.entry) || evidence.entry < 0 || evidence.entry >= snapshot.entries.length)
+    return refused;
   const entry: CaptureEntry | undefined = snapshot.entries[evidence.entry];
   if (!entry || entry.kind !== 'file' || entry.disposition !== 'included') return refused;
   if (entry.sourceId !== evidence.sourceId || entry.content !== evidence.content) return refused;

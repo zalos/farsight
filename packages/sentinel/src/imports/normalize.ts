@@ -11,14 +11,28 @@ import { Collector } from './collect.js';
 import { checkedManifest, type ImportManifest } from './manifest.js';
 import { readSarif } from './sarif.js';
 import { parseStrictJson } from './strict-json.js';
-import { IMPORT_ADAPTER, IMPORT_LIMITATION_KEYS, ImportBudget, ImportRefusal, type ImportFormat, type ImportLimits, type ImportRefusalCode, type Json } from './types.js';
+import {
+  IMPORT_ADAPTER,
+  IMPORT_LIMITATION_KEYS,
+  ImportBudget,
+  ImportRefusal,
+  type ImportFormat,
+  type ImportLimits,
+  type ImportRefusalCode,
+  type Json,
+} from './types.js';
 import { readZap } from './zap.js';
 
 export interface NormalizedImport {
   readonly schema: 'sentinel-import-normalized/draft-1';
   readonly adapter: { readonly id: string; readonly version: string };
   readonly format: ImportFormat;
-  readonly input: { readonly rawDigest: string; readonly rawBytes: number; readonly byteOrderMark: boolean; readonly manifestDigest: string };
+  readonly input: {
+    readonly rawDigest: string;
+    readonly rawBytes: number;
+    readonly byteOrderMark: boolean;
+    readonly manifestDigest: string;
+  };
   /** The manifest as the caller stated it. Nothing in it is verified. */
   readonly callerStated: Pick<ImportManifest, 'producer' | 'tested' | 'context'>;
   readonly tool: Json;
@@ -32,7 +46,12 @@ export interface NormalizedImport {
 
 export type ImportResult =
   | { readonly status: 'refused'; readonly code: ImportRefusalCode; readonly pointer: string | null }
-  | { readonly status: 'normalized'; readonly document: NormalizedImport; readonly canonical: string; readonly digest: string };
+  | {
+      readonly status: 'normalized';
+      readonly document: NormalizedImport;
+      readonly canonical: string;
+      readonly digest: string;
+    };
 
 export interface ImportOptions {
   /** May only lower the hard ceilings. */
@@ -55,8 +74,13 @@ function deepFreeze<T>(v: T, budget: ImportBudget): T {
 /** Normalizes report bytes under a manifest. Refusals carry a fixed code and an opaque bounded diagnostic path, never report content. */
 export function normalizeImport(report: Uint8Array, manifest: Uint8Array, options: ImportOptions = {}): ImportResult {
   let budget: ImportBudget;
-  try { budget = new ImportBudget(options.limits, options.clock); } catch (e) { return refused(e); }
-  if (!(report instanceof Uint8Array) || !(manifest instanceof Uint8Array)) return { status: 'refused', code: 'sentinel.import.fileUnreadable', pointer: null };
+  try {
+    budget = new ImportBudget(options.limits, options.clock);
+  } catch (e) {
+    return refused(e);
+  }
+  if (!(report instanceof Uint8Array) || !(manifest instanceof Uint8Array))
+    return { status: 'refused', code: 'sentinel.import.fileUnreadable', pointer: null };
   // Refuse before the defensive copy: the synchronous API must honor lowered byte caps too.
   if (report.byteLength > budget.limits.rawBytes || manifest.byteLength > budget.limits.manifestBytes) {
     return { status: 'refused', code: 'sentinel.import.tooLarge', pointer: null };
@@ -67,18 +91,26 @@ export function normalizeImport(report: Uint8Array, manifest: Uint8Array, option
     const man = Buffer.from(manifest);
     budget.check();
     return run(raw, man, budget);
-  } catch (e) { return refused(e); }
+  } catch (e) {
+    return refused(e);
+  }
 }
 
 /** Reads both files with the bounded reader, then normalizes them. */
 export function importFromFiles(reportPath: string, manifestPath: string, options: ImportOptions = {}): ImportResult {
   let budget: ImportBudget;
-  try { budget = new ImportBudget(options.limits, options.clock); } catch (e) { return refused(e); }
+  try {
+    budget = new ImportBudget(options.limits, options.clock);
+  } catch (e) {
+    return refused(e);
+  }
   try {
     const man = readImportFile(manifestPath, budget.limits.manifestBytes, budget);
     const raw = readImportFile(reportPath, budget.limits.rawBytes, budget);
     return run(raw, man, budget);
-  } catch (e) { return refused(e); }
+  } catch (e) {
+    return refused(e);
+  }
 }
 
 function refused(e: unknown): ImportResult {
@@ -95,7 +127,10 @@ function run(raw: Buffer, man: Buffer, budget: ImportBudget): ImportResult {
   budget.check();
   const parsed = parseStrictJson(raw, budget);
   const c = new Collector(rawDigest, manifest, budget);
-  const tool = manifest.format === 'sarif-2.1.0' ? readSarif(parsed.value, c) : readZap(parsed.value, c, manifest.format === 'zap-traditional-json-plus');
+  const tool =
+    manifest.format === 'sarif-2.1.0'
+      ? readSarif(parsed.value, c)
+      : readZap(parsed.value, c, manifest.format === 'zap-traditional-json-plus');
   budget.check();
   const document: NormalizedImport = {
     schema: 'sentinel-import-normalized/draft-1',
@@ -103,13 +138,19 @@ function run(raw: Buffer, man: Buffer, budget: ImportBudget): ImportResult {
     format: manifest.format,
     input: { rawDigest, rawBytes: raw.length, byteOrderMark: parsed.byteOrderMark, manifestDigest: sha(man) },
     callerStated: { producer: manifest.producer, tested: manifest.tested, context: manifest.context },
-    tool, claims: c.claims, exchanges: c.exchanges, cookies: c.cookies, unknowns: c.unknowns, ignored: c.ignored,
+    tool,
+    claims: c.claims,
+    exchanges: c.exchanges,
+    cookies: c.cookies,
+    unknowns: c.unknowns,
+    ignored: c.ignored,
     limitationKeys: [...IMPORT_LIMITATION_KEYS],
   };
   budget.check();
   const canonical = canonicalJson(document);
   budget.work(Math.ceil(canonical.length / 64) + 1);
-  if (Buffer.byteLength(canonical, 'utf8') > budget.limits.normalizedBytes) throw new ImportRefusal('sentinel.import.outputTooLarge');
+  if (Buffer.byteLength(canonical, 'utf8') > budget.limits.normalizedBytes)
+    throw new ImportRefusal('sentinel.import.outputTooLarge');
   budget.check();
   const digest = sha(canonical);
   deepFreeze(document, budget);

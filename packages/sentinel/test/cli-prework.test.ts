@@ -4,7 +4,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { connect, Socket as NetSocket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,13 +26,22 @@ import { OUTCOME_EXIT_CODES, isFinalPolicyResult, result } from '../dist/cli/out
 import { ActorError, assertMayConfirm, refuseActorClaims, requestedByOf } from '../dist/cli/actor.js';
 import { initialSettings, initWorkspace, InitError } from '../dist/cli/init.js';
 import {
-  FrameDecoder, IpcError, MAX_FRAME_BYTES, connectOwnerSocket, encodeFrame, fitsSocketPath, listenOwnerSocket, newOwnerNonce,
-  runtimeAddress, socketPathLimit,
+  FrameDecoder,
+  IpcError,
+  MAX_FRAME_BYTES,
+  connectOwnerSocket,
+  encodeFrame,
+  fitsSocketPath,
+  listenOwnerSocket,
+  newOwnerNonce,
+  runtimeAddress,
+  socketPathLimit,
 } from '../dist/transport/ipc.js';
 import { checkPreviewReport, renderPreviewJson, renderPreviewMarkdown } from '../dist/reports/preview.js';
 
 const CLI = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
-const cli = (args: string[], cwd?: string) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', cwd, timeout: 20_000 });
+const cli = (args: string[], cwd?: string) =>
+  spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', cwd, timeout: 20_000 });
 
 function scratch(t: { after(fn: () => void): void }, prefix = 'sentinel-cli-'): string {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), prefix)));
@@ -29,8 +50,16 @@ function scratch(t: { after(fn: () => void): void }, prefix = 'sentinel-cli-'): 
 }
 
 test('arguments: each command takes only its own flags; typos and repeats are refused, never ignored', () => {
-  const ok = (argv: string[]) => { const r = parseArgs(argv); assert.ok(r.ok, JSON.stringify(r)); return r.parsed; };
-  const no = (argv: string[], code: string) => { const r = parseArgs(argv); assert.ok(!r.ok); assert.equal(r.code, code, argv.join(' ')); };
+  const ok = (argv: string[]) => {
+    const r = parseArgs(argv);
+    assert.ok(r.ok, JSON.stringify(r));
+    return r.parsed;
+  };
+  const no = (argv: string[], code: string) => {
+    const r = parseArgs(argv);
+    assert.ok(!r.ok);
+    assert.equal(r.code, code, argv.join(' '));
+  };
   assert.equal(ok([]).command, 'help');
   assert.equal(ok(['--version']).command, 'version');
   assert.deepEqual(ok(['init', '--workspace', '/w', '--json']).flags, { '--workspace': '/w', '--json': true });
@@ -46,7 +75,23 @@ test('arguments: each command takes only its own flags; typos and repeats are re
   no(['scan-everything'], 'sentinel.args.unknownCommand');
   // A command this build does not run is refused as unavailable, whatever its arguments.
   assert.equal(ok(['compare', 'run-b', 'run-a']).command, 'compare');
-  assert.equal(ok(['report', 'run-a', '--full', '--disclosure', 'private', '--context', 'g.json', '--repo', 'app', '--out', 'r.html', '--confirm']).command, 'report');
+  assert.equal(
+    ok([
+      'report',
+      'run-a',
+      '--full',
+      '--disclosure',
+      'private',
+      '--context',
+      'g.json',
+      '--repo',
+      'app',
+      '--out',
+      'r.html',
+      '--confirm',
+    ]).command,
+    'report',
+  );
   assert.equal(ok(['rerun', 'r']).command, 'rerun');
   no(['rerun'], 'sentinel.args.missingArgument');
   no(['wait'], 'sentinel.args.missingArgument');
@@ -55,55 +100,132 @@ test('arguments: each command takes only its own flags; typos and repeats are re
   assert.equal(ok(['cancel', 'r', '--confirm']).flags['--confirm'], true);
   assert.equal(ok(['resume', 'r', '--confirm']).flags['--confirm'], true);
   no(['run'], 'sentinel.args.missingArgument');
-  assert.ok(parseArgs(['nonsense', '--json']).ok === false && (parseArgs(['nonsense', '--json']) as { json: boolean }).json);
+  assert.ok(
+    parseArgs(['nonsense', '--json']).ok === false && (parseArgs(['nonsense', '--json']) as { json: boolean }).json,
+  );
 });
 
 test('outcomes: Sentinel exit codes, and no confirmation or submission can read as a finished scan', () => {
   assert.deepEqual(OUTCOME_EXIT_CODES, {
-    'satisfied': 0, 'finding-policy-failed': 1, 'required-coverage-incomplete': 2, 'configuration-failure': 3, 'awaiting-confirmation': 4,
-    proposed:0, applied:0, read: 0, accepted: 0, abandoned: 0, 'delivery-failed': 3, submitted: 0, requested: 0, answered: 0, prepared: 0, kept: 0, unavailable: 3, refused: 3,
+    'satisfied': 0,
+    'finding-policy-failed': 1,
+    'required-coverage-incomplete': 2,
+    'configuration-failure': 3,
+    'awaiting-confirmation': 4,
+    proposed: 0,
+    applied: 0,
+    read: 0,
+    accepted: 0,
+    abandoned: 0,
+    'delivery-failed': 3,
+    submitted: 0,
+    requested: 0,
+    answered: 0,
+    prepared: 0,
+    kept: 0,
+    unavailable: 3,
+    refused: 3,
   });
-  for (const o of ['proposed','applied','read','accepted','abandoned','delivery-failed','awaiting-confirmation', 'submitted', 'requested', 'unavailable', 'prepared', 'kept', 'answered', 'refused', 'configuration-failure'] as const) {
+  for (const o of [
+    'proposed',
+    'applied',
+    'read',
+    'accepted',
+    'abandoned',
+    'delivery-failed',
+    'awaiting-confirmation',
+    'submitted',
+    'requested',
+    'unavailable',
+    'prepared',
+    'kept',
+    'answered',
+    'refused',
+    'configuration-failure',
+  ] as const) {
     assert.equal(isFinalPolicyResult(o), false, o);
   }
-  for (const o of ['satisfied', 'finding-policy-failed', 'required-coverage-incomplete'] as const) assert.equal(isFinalPolicyResult(o), true);
+  for (const o of ['satisfied', 'finding-policy-failed', 'required-coverage-incomplete'] as const)
+    assert.equal(isFinalPolicyResult(o), true);
   const r = result('run', 'awaiting-confirmation');
   assert.deepEqual([r.outcome, r.exitCode], ['awaiting-confirmation', 4]);
-  assert.deepEqual(Object.keys(r.verdicts), ['policy', 'capability', 'credential'], 'JSON always carries the three verdicts');
-  assert.ok(Object.values(r.verdicts).every(v => !v.asked && !v.allowed));
+  assert.deepEqual(
+    Object.keys(r.verdicts),
+    ['policy', 'capability', 'credential'],
+    'JSON always carries the three verdicts',
+  );
+  assert.ok(Object.values(r.verdicts).every((v) => !v.asked && !v.allowed));
   // A detached submission exits 0 but its word is never "satisfied".
   assert.deepEqual([result('run', 'submitted').outcome, result('run', 'submitted').exitCode], ['submitted', 0]);
 });
 
-test('the actor is the entrypoint\'s: a payload cannot name one, and only the owner channel can confirm', () => {
+test("the actor is the entrypoint's: a payload cannot name one, and only the owner channel can confirm", () => {
   assert.deepEqual(requestedByOf({ kind: 'owner-cli' }), { principal: 'human', channel: 'owner-cli' });
-  assert.deepEqual(requestedByOf({ kind: 'service-connection', granted: { principal: 'agent', channel: 'mcp' } }), { principal: 'agent', channel: 'mcp' });
-  for (const granted of [{ principal: 'human', channel: 'owner-cli' }, { principal: 'human', channel: 'mcp' }, { principal: 'agent', channel: 'owner-cli' }]) {
-    assert.throws(() => requestedByOf({ kind: 'service-connection', granted: granted as never }),
-      (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.ownerChannelNotGrantable', JSON.stringify(granted));
+  assert.deepEqual(requestedByOf({ kind: 'service-connection', granted: { principal: 'agent', channel: 'mcp' } }), {
+    principal: 'agent',
+    channel: 'mcp',
+  });
+  for (const granted of [
+    { principal: 'human', channel: 'owner-cli' },
+    { principal: 'human', channel: 'mcp' },
+    { principal: 'agent', channel: 'owner-cli' },
+  ]) {
+    assert.throws(
+      () => requestedByOf({ kind: 'service-connection', granted: granted as never }),
+      (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.ownerChannelNotGrantable',
+      JSON.stringify(granted),
+    );
   }
-  for (const body of [{ actor: 'human' }, { plan: { requestedBy: { principal: 'human' } } }, [{ x: { who: 'owner' } }], { confirmedBy: 'owner' }]) {
-    assert.throws(() => refuseActorClaims(body), (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.payloadClaim', JSON.stringify(body));
+  for (const body of [
+    { actor: 'human' },
+    { plan: { requestedBy: { principal: 'human' } } },
+    [{ x: { who: 'owner' } }],
+    { confirmedBy: 'owner' },
+  ]) {
+    assert.throws(
+      () => refuseActorClaims(body),
+      (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.payloadClaim',
+      JSON.stringify(body),
+    );
   }
-  assert.deepEqual(refuseActorClaims({ planId: 'p', options: { detach: true }, receiptId: 'r-1' }), { planId: 'p', options: { detach: true }, receiptId: 'r-1' },
-    'a receipt id may travel; the service verifies it');
+  assert.deepEqual(
+    refuseActorClaims({ planId: 'p', options: { detach: true }, receiptId: 'r-1' }),
+    { planId: 'p', options: { detach: true }, receiptId: 'r-1' },
+    'a receipt id may travel; the service verifies it',
+  );
   assertMayConfirm({ principal: 'human', channel: 'owner-cli' });
-  for (const by of [{ principal: 'agent', channel: 'mcp' }, { principal: 'human', channel: 'http-bridge' }, { principal: 'agent', channel: 'owner-cli' }] as const) {
-    assert.throws(() => assertMayConfirm(by), (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.confirmNotOwner', JSON.stringify(by));
+  for (const by of [
+    { principal: 'agent', channel: 'mcp' },
+    { principal: 'human', channel: 'http-bridge' },
+    { principal: 'agent', channel: 'owner-cli' },
+  ] as const) {
+    assert.throws(
+      () => assertMayConfirm(by),
+      (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.confirmNotOwner',
+      JSON.stringify(by),
+    );
   }
 });
 
-test('init writes the private settings once and never again; it downloads and starts nothing', t => {
+test('init writes the private settings once and never again; it downloads and starts nothing', (t) => {
   const ws = scratch(t);
   const first = initWorkspace({ workspace: ws });
   assert.equal(first.outcome, 'prepared');
   const path = join(ws, '.farsight/sentinel/settings.json');
   assert.equal(first.path, path);
   assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), JSON.parse(JSON.stringify(initialSettings('static'))));
-  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')).grants, [
-    { actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'], principals: ['human'], scope: { profiles: ['static'] } },
-    { actions: ['rule.promote', 'tool.acquire', 'context.pin'], principals: ['human'] },
-  ], 'the owner only; never an agent');
+  assert.deepEqual(
+    JSON.parse(readFileSync(path, 'utf8')).grants,
+    [
+      {
+        actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'],
+        principals: ['human'],
+        scope: { profiles: ['static'] },
+      },
+      { actions: ['rule.promote', 'tool.acquire', 'context.pin'], principals: ['human'] },
+    ],
+    'the owner only; never an agent',
+  );
   assert.equal(statSync(path).mode & 0o777, 0o600);
   assert.equal(statSync(join(ws, '.farsight/sentinel')).mode & 0o777, 0o700);
   // Twice: the owner's edits survive byte for byte.
@@ -113,7 +235,11 @@ test('init writes the private settings once and never again; it downloads and st
   assert.equal(second.outcome, 'kept');
   assert.equal(readFileSync(path, 'utf8'), edited);
   assert.notEqual(second.digest, first.digest);
-  assert.deepEqual(readFileSync(path, 'utf8').match(/keychain|password|token/gi), null, 'the defaults hold no credential');
+  assert.deepEqual(
+    readFileSync(path, 'utf8').match(/keychain|password|token/gi),
+    null,
+    'the defaults hold no credential',
+  );
   // The executable: twice, as an npm-only consumer would, from the workspace.
   const ws2 = scratch(t);
   const a = cli(['init', '--json'], ws2);
@@ -128,13 +254,22 @@ test('init writes the private settings once and never again; it downloads and st
   assert.deepEqual(readFileSync(join(ws2, '.farsight/sentinel/settings.json')), before);
 });
 
-test('init refuses an unsafe path or an unknown profile and leaves a foreign file as it is', t => {
+test('init refuses an unsafe path or an unknown profile and leaves a foreign file as it is', (t) => {
   const ws = scratch(t);
-  assert.throws(() => initWorkspace({ workspace: 'relative' }), (e: unknown) => e instanceof InitError && e.code === 'sentinel.init.workspaceUnsafe');
-  assert.throws(() => initWorkspace({ workspace: ws, profile: 'deep' }), (e: unknown) => e instanceof InitError && e.code === 'sentinel.init.profileUnknown');
+  assert.throws(
+    () => initWorkspace({ workspace: 'relative' }),
+    (e: unknown) => e instanceof InitError && e.code === 'sentinel.init.workspaceUnsafe',
+  );
+  assert.throws(
+    () => initWorkspace({ workspace: ws, profile: 'deep' }),
+    (e: unknown) => e instanceof InitError && e.code === 'sentinel.init.profileUnknown',
+  );
   mkdirSync(join(ws, '.farsight/sentinel'), { recursive: true, mode: 0o700 });
   symlinkSync(join(ws, 'elsewhere.json'), join(ws, '.farsight/sentinel/settings.json'));
-  assert.throws(() => initWorkspace({ workspace: ws }), (e: unknown) => e instanceof InitError && e.code === 'sentinel.init.settingsUnsafe');
+  assert.throws(
+    () => initWorkspace({ workspace: ws }),
+    (e: unknown) => e instanceof InitError && e.code === 'sentinel.init.settingsUnsafe',
+  );
   assert.equal(existsSync(join(ws, 'elsewhere.json')), false, 'a link is never followed or written through');
   const ws2 = scratch(t);
   mkdirSync(join(ws2, '.farsight/sentinel'), { recursive: true, mode: 0o700 });
@@ -147,17 +282,23 @@ test('init refuses an unsafe path or an unknown profile and leaves a foreign fil
   const ws3 = scratch(t);
   initWorkspace({ workspace: ws3 });
   const p3 = join(ws3, '.farsight/sentinel/settings.json');
-  const withSecret = JSON.stringify({ ...JSON.parse(readFileSync(p3, 'utf8')), mandatoryRules: ['ghp_' + 'a'.repeat(36)] });
+  const withSecret = JSON.stringify({
+    ...JSON.parse(readFileSync(p3, 'utf8')),
+    mandatoryRules: ['ghp_' + 'a'.repeat(36)],
+  });
   writeFileSync(p3, withSecret);
   const again = initWorkspace({ workspace: ws3 });
   assert.deepEqual([again.outcome, again.recognised], ['kept', false]);
   assert.equal(readFileSync(p3, 'utf8'), withSecret);
 });
 
-test('socket paths are measured in bytes with room for the terminator, and fall back to a short private folder', t => {
+test('socket paths are measured in bytes with room for the terminator, and fall back to a short private folder', (t) => {
   assert.equal(socketPathLimit('darwin'), 103);
   assert.equal(socketPathLimit('linux'), 107);
-  assert.throws(() => socketPathLimit('win32'), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.platformUnsupported');
+  assert.throws(
+    () => socketPathLimit('win32'),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.platformUnsupported',
+  );
   assert.equal(fitsSocketPath(`/${'a'.repeat(102)}`, 'darwin'), true);
   assert.equal(fitsSocketPath(`/${'a'.repeat(103)}`, 'darwin'), false, '104 bytes leave no room for the terminator');
   assert.equal(fitsSocketPath(`/${'é'.repeat(51)}`, 'darwin'), true, '103 bytes');
@@ -173,10 +314,16 @@ test('socket paths are measured in bytes with room for the terminator, and fall 
   const base = scratch(t, 'snb-');
   const nonce = newOwnerNonce();
   const first = runtimeAddress({ storePath: '/s', ownerNonce: nonce, env: { TMPDIR: base } });
-  assert.equal(runtimeAddress({ storePath: '/s', ownerNonce: nonce, env: { TMPDIR: base } }).socket, first.socket, 'stable for one owner');
+  assert.equal(
+    runtimeAddress({ storePath: '/s', ownerNonce: nonce, env: { TMPDIR: base } }).socket,
+    first.socket,
+    'stable for one owner',
+  );
   chmodSync(first.dir, 0o755);
-  assert.throws(() => runtimeAddress({ storePath: '/s', ownerNonce: nonce, env: { TMPDIR: base } }),
-    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.runtimeDirUnsafe');
+  assert.throws(
+    () => runtimeAddress({ storePath: '/s', ownerNonce: nonce, env: { TMPDIR: base } }),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.runtimeDirUnsafe',
+  );
 });
 
 test('frames are bounded and well formed', () => {
@@ -186,82 +333,128 @@ test('frames are bounded and well formed', () => {
   assert.deepEqual(d.push(two.subarray(5)), [{ a: 1 }, { b: 'é' }]);
   const huge = Buffer.alloc(4);
   huge.writeUInt32BE(MAX_FRAME_BYTES + 1, 0);
-  assert.throws(() => new FrameDecoder().push(huge), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameTooLarge');
+  assert.throws(
+    () => new FrameDecoder().push(huge),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameTooLarge',
+  );
   const bad = Buffer.concat([Buffer.from([0, 0, 0, 2]), Buffer.from('{x')]);
-  assert.throws(() => new FrameDecoder().push(bad), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameMalformed');
-  assert.throws(() => encodeFrame('x'.repeat(MAX_FRAME_BYTES)), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameTooLarge');
+  assert.throws(
+    () => new FrameDecoder().push(bad),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameMalformed',
+  );
+  assert.throws(
+    () => encodeFrame('x'.repeat(MAX_FRAME_BYTES)),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameTooLarge',
+  );
 });
 
-test('the owner socket: private, handshaken, granted per client kind, refusing payload actors and impostors', async t => {
+test('the owner socket: private, handshaken, granted per client kind, refusing payload actors and impostors', async (t) => {
   const base = scratch(t, 'snc-');
   const identity = { storeId: 'store-1', ownerNonce: newOwnerNonce() };
-  const address = runtimeAddress({ storePath: '/canonical/store', ownerNonce: identity.ownerNonce, env: { TMPDIR: base } });
+  const address = runtimeAddress({
+    storePath: '/canonical/store',
+    ownerNonce: identity.ownerNonce,
+    env: { TMPDIR: base },
+  });
   const seen: unknown[] = [];
-  const server = await listenOwnerSocket(address, identity, async (op, body, by) => { seen.push({ op, body, by }); return { op, by }; });
+  const server = await listenOwnerSocket(address, identity, async (op, body, by) => {
+    seen.push({ op, body, by });
+    return { op, by };
+  });
   t.after(() => server.close());
   assert.equal(lstatSync(address.socket).mode & 0o777, 0o600);
   assert.ok(lstatSync(address.socket).isSocket());
 
   const mcp = await connectOwnerSocket(address, identity, 'mcp');
-  assert.deepEqual(await mcp.request('status', { runId: 'r-1' }), { op: 'status', by: { principal: 'agent', channel: 'mcp' } });
-  assert.throws(() => mcp.request('run.start', { planId: 'p', requestedBy: { principal: 'human' } }), (e: unknown) => e instanceof ActorError);
+  assert.deepEqual(await mcp.request('status', { runId: 'r-1' }), {
+    op: 'status',
+    by: { principal: 'agent', channel: 'mcp' },
+  });
+  assert.throws(
+    () => mcp.request('run.start', { planId: 'p', requestedBy: { principal: 'human' } }),
+    (e: unknown) => e instanceof ActorError,
+  );
   mcp.close();
   // Even the owner's own CLI is a non-owner over the socket: no hello selects owner authority, so it cannot confirm.
   const owner = await connectOwnerSocket(address, identity, 'cli');
-  const granted = await owner.request('status', {}) as { by: { principal: 'human' | 'agent'; channel: 'owner-cli' } };
+  const granted = (await owner.request('status', {})) as { by: { principal: 'human' | 'agent'; channel: 'owner-cli' } };
   assert.deepEqual(granted.by, { principal: 'agent', channel: 'local-service' });
-  assert.throws(() => assertMayConfirm(granted.by), (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.confirmNotOwner');
+  assert.throws(
+    () => assertMayConfirm(granted.by),
+    (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.confirmNotOwner',
+  );
   owner.close();
   // A hello that tries to claim more is refused before any request runs.
   const sneaky = connect(address.socket);
-  await new Promise(r => sneaky.once('connect', r));
+  await new Promise((r) => sneaky.once('connect', r));
   const sneakyReplies = new FrameDecoder();
   const sneakyGot: unknown[] = [];
-  sneaky.on('data', c => sneakyGot.push(...sneakyReplies.push(c)));
-  sneaky.write(encodeFrame({ protocol: 'sentinel-service/draft-1', type: 'hello', client: 'cli', principal: 'human', channel: 'owner-cli' }));
-  await new Promise(r => setTimeout(r, 150));
+  sneaky.on('data', (c) => sneakyGot.push(...sneakyReplies.push(c)));
+  sneaky.write(
+    encodeFrame({
+      protocol: 'sentinel-service/draft-1',
+      type: 'hello',
+      client: 'cli',
+      principal: 'human',
+      channel: 'owner-cli',
+    }),
+  );
+  await new Promise((r) => setTimeout(r, 150));
   sneaky.destroy();
   assert.deepEqual(sneakyGot[0], { type: 'error', code: 'sentinel.actor.payloadClaim' });
 
   // A raw client that skips the guard is refused by the service too.
   const raw = connect(address.socket);
-  await new Promise(r => raw.once('connect', r));
+  await new Promise((r) => raw.once('connect', r));
   const replies = new FrameDecoder();
   const got: unknown[] = [];
-  raw.on('data', c => got.push(...replies.push(c)));
+  raw.on('data', (c) => got.push(...replies.push(c)));
   raw.write(encodeFrame({ protocol: 'sentinel-service/draft-1', type: 'hello', client: 'mcp' }));
   raw.write(encodeFrame({ type: 'request', id: 1, op: 'run.start', body: { actor: 'human' } }));
-  await new Promise(r => setTimeout(r, 200));
+  await new Promise((r) => setTimeout(r, 200));
   raw.destroy();
-  assert.deepEqual((got[1] as { ok: boolean; code: string }), { type: 'response', id: 1, ok: false, code: 'sentinel.actor.payloadClaim' });
-  assert.ok(!seen.some(s => (s as { op: string }).op === 'run.start'), 'the handler never saw it');
+  assert.deepEqual(got[1] as { ok: boolean; code: string }, {
+    type: 'response',
+    id: 1,
+    ok: false,
+    code: 'sentinel.actor.payloadClaim',
+  });
+  assert.ok(!seen.some((s) => (s as { op: string }).op === 'run.start'), 'the handler never saw it');
 
   // A client that expects another store or owner refuses the service.
-  await assert.rejects(connectOwnerSocket(address, { ...identity, storeId: 'store-2' }, 'cli'),
-    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.handshakeMismatch');
+  await assert.rejects(
+    connectOwnerSocket(address, { ...identity, storeId: 'store-2' }, 'cli'),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.handshakeMismatch',
+  );
   // A second service for the same address refuses while the first still answers.
-  await assert.rejects(listenOwnerSocket(address, identity, async () => null), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.socketInUse');
+  await assert.rejects(
+    listenOwnerSocket(address, identity, async () => null),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.socketInUse',
+  );
 });
 
-test('a stale socket of ours is replaced; a file or an open folder at the address is refused', async t => {
+test('a stale socket of ours is replaced; a file or an open folder at the address is refused', async (t) => {
   const base = scratch(t, 'snd-');
   const identity = { storeId: 'store-1', ownerNonce: newOwnerNonce() };
   const address = runtimeAddress({ storePath: '/s', ownerNonce: identity.ownerNonce, env: { TMPDIR: base } });
   // A process that dies while listening leaves its socket file behind.
   // A service of ours that dies while listening: its socket file (0600, as ours always is) is left behind. The
   // child's listen error, or no answer in time, fails the fixture rather than hanging it.
-  const child = spawn(process.execPath, ['-e', `const p = ${JSON.stringify(address.socket)};
+  const child = spawn(process.execPath, [
+    '-e',
+    `const p = ${JSON.stringify(address.socket)};
     const s = require('node:net').createServer();
     s.on('error', e => { process.stderr.write(String(e.code)); process.exit(3); });
-    s.listen(p, () => { require('node:fs').chmodSync(p, 0o600); process.stdout.write('up'); });`]);
+    s.listen(p, () => { require('node:fs').chmodSync(p, 0o600); process.stdout.write('up'); });`,
+  ]);
   const up = await Promise.race([
-    new Promise(r => child.stdout.once('data', () => r('up'))),
-    new Promise(r => child.once('exit', code => r(`exit ${code}`))),
-    new Promise(r => setTimeout(() => r('timeout'), 10_000)),
+    new Promise((r) => child.stdout.once('data', () => r('up'))),
+    new Promise((r) => child.once('exit', (code) => r(`exit ${code}`))),
+    new Promise((r) => setTimeout(() => r('timeout'), 10_000)),
   ]);
   assert.equal(up, 'up');
   child.kill('SIGKILL');
-  await new Promise(r => child.once('exit', r));
+  await new Promise((r) => child.once('exit', r));
   assert.ok(lstatSync(address.socket).isSocket(), 'the stale socket is still there');
   assert.equal(lstatSync(address.socket).mode & 0o777, 0o600);
   const server = await listenOwnerSocket(address, identity, async () => 'ok');
@@ -271,21 +464,49 @@ test('a stale socket of ours is replaced; a file or an open folder at the addres
   await server.close();
 
   writeFileSync(address.socket, 'not a socket');
-  await assert.rejects(listenOwnerSocket(address, identity, async () => null), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.socketUnsafe');
-  await assert.rejects(connectOwnerSocket(address, identity, 'cli'), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.socketUnsafe');
+  await assert.rejects(
+    listenOwnerSocket(address, identity, async () => null),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.socketUnsafe',
+  );
+  await assert.rejects(
+    connectOwnerSocket(address, identity, 'cli'),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.socketUnsafe',
+  );
   rmSync(address.socket);
   chmodSync(address.dir, 0o755);
-  await assert.rejects(connectOwnerSocket(address, identity, 'cli'), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.runtimeDirUnsafe');
+  await assert.rejects(
+    connectOwnerSocket(address, identity, 'cli'),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.runtimeDirUnsafe',
+  );
 });
 
 test('the preview report is labelled, scoped and regenerates from its stored document alone', () => {
   const doc = {
-    schema: 'sentinel-preview-report/draft-1' as const, label: 'foundation-preview' as const, runId: 'run-1', snapshotId: 'snap-1',
-    ledgerSequence: 42, generatedAt: '2026-10-22T00:00:00Z',
+    schema: 'sentinel-preview-report/draft-1' as const,
+    label: 'foundation-preview' as const,
+    runId: 'run-1',
+    snapshotId: 'snap-1',
+    ledgerSequence: 42,
+    generatedAt: '2026-10-22T00:00:00Z',
     counts: [
-      { n: 2, unit: 'sentinel.count.findings', scope: 'sentinel.scope.report', source: 'preview fixture detector',
-        breakdown: [{ key: 'sentinel.count.part.high', n: 1 }, { key: 'sentinel.count.part.low', n: 1 }], recheck: { cli: 'farsight-sentinel report run-1 --json' } },
-      { n: 1, unit: 'sentinel.count.unknownBoundaries', scope: 'sentinel.scope.inventory', source: 'snapshot inventory', recheck: { cli: 'farsight-sentinel report run-1' } },
+      {
+        n: 2,
+        unit: 'sentinel.count.findings',
+        scope: 'sentinel.scope.report',
+        source: 'preview fixture detector',
+        breakdown: [
+          { key: 'sentinel.count.part.high', n: 1 },
+          { key: 'sentinel.count.part.low', n: 1 },
+        ],
+        recheck: { cli: 'farsight-sentinel report run-1 --json' },
+      },
+      {
+        n: 1,
+        unit: 'sentinel.count.unknownBoundaries',
+        scope: 'sentinel.scope.inventory',
+        source: 'snapshot inventory',
+        recheck: { cli: 'farsight-sentinel report run-1' },
+      },
     ],
     limitations: ['sentinel.report.previewOnly', 'sentinel.report.noScannerCoverage'],
   };
@@ -299,7 +520,8 @@ test('the preview report is labelled, scoped and regenerates from its stored doc
   const stored = JSON.parse(json);
   assert.equal(renderPreviewJson(stored), json);
   assert.equal(renderPreviewMarkdown(stored), md);
-  const bad = (over: object) => assert.throws(() => checkPreviewReport({ ...doc, ...over } as never), /sentinel\.report\.invalid/);
+  const bad = (over: object) =>
+    assert.throws(() => checkPreviewReport({ ...doc, ...over } as never), /sentinel\.report\.invalid/);
   bad({ limitations: ['sentinel.report.previewOnly'] });
   bad({ label: 'full' });
   bad({ counts: [{ ...doc.counts[0], breakdown: [{ key: 'sentinel.count.part.high', n: 1 }] }] });
@@ -309,40 +531,70 @@ test('the preview report is labelled, scoped and regenerates from its stored doc
 
 test('every glossary term has a business twin, and no twin carries a developer unit', async () => {
   const { STRINGS } = await import('@farsight/core/dist/strings.js');
-  const terms = Object.keys(STRINGS).filter(k => k.startsWith('sentinel.term.') && !k.startsWith('sentinel.term.biz.'));
+  const terms = Object.keys(STRINGS).filter(
+    (k) => k.startsWith('sentinel.term.') && !k.startsWith('sentinel.term.biz.'),
+  );
   assert.ok(terms.length >= 13);
   for (const k of terms) {
     const twin = STRINGS[k.replace('sentinel.term.', 'sentinel.term.biz.')];
     assert.ok(twin?.define && twin.professional, k);
-    assert.doesNotMatch(twin.professional, /\b(SARIF|CWE|SCC|frontier|epoch|attempt|publication|span|steps?|hops?)\b/i, k);
+    assert.doesNotMatch(
+      twin.professional,
+      /\b(SARIF|CWE|SCC|frontier|epoch|attempt|publication|span|steps?|hops?)\b/i,
+      k,
+    );
   }
 });
 
-test('one connection cannot take the daemon down, and a client never waits forever', async t => {
+test('one connection cannot take the daemon down, and a client never waits forever', async (t) => {
   const base = scratch(t, 'sne-');
   const identity = { storeId: 'store-1', ownerNonce: newOwnerNonce() };
   const address = runtimeAddress({ storePath: '/s', ownerNonce: identity.ownerNonce, env: { TMPDIR: base } });
   let release: (() => void) | undefined;
-  const server = await listenOwnerSocket(address, identity, async op => {
+  const server = await listenOwnerSocket(address, identity, async (op) => {
     if (op === 'huge') return 'x'.repeat(MAX_FRAME_BYTES + 10);
-    if (op === 'circular') { const a: Record<string, unknown> = {}; a.a = a; return a; }
-    if (op === 'slow') { await new Promise<void>(r => { release = r; }); return 'late'; }
+    if (op === 'circular') {
+      const a: Record<string, unknown> = {};
+      a.a = a;
+      return a;
+    }
+    if (op === 'slow') {
+      await new Promise<void>((r) => {
+        release = r;
+      });
+      return 'late';
+    }
     return 'ok';
   });
   t.after(() => server.close());
   const a = await connectOwnerSocket(address, identity, 'mcp');
   const b = await connectOwnerSocket(address, identity, 'mcp');
   // An answer too large (or not JSON) is a typed refusal of that request; the connection and the daemon carry on.
-  await assert.rejects(a.request('huge', {}), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameTooLarge');
-  await assert.rejects(a.request('circular', {}), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameMalformed');
+  await assert.rejects(
+    a.request('huge', {}),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameTooLarge',
+  );
+  await assert.rejects(
+    a.request('circular', {}),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameMalformed',
+  );
   assert.equal(await a.request('ping', {}), 'ok');
   assert.equal(await b.request('ping', {}), 'ok', 'other clients are unaffected');
   // A request too large to send is refused before it is pending.
-  assert.throws(() => a.request('ping', { blob: 'x'.repeat(MAX_FRAME_BYTES) }), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameTooLarge');
+  assert.throws(
+    () => a.request('ping', { blob: 'x'.repeat(MAX_FRAME_BYTES) }),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameTooLarge',
+  );
   // Deadlines and cancellation reject promptly; the service keeps working on what it admitted.
-  await assert.rejects(a.request('slow', {}, { timeoutMs: 50 }), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.timeout');
+  await assert.rejects(
+    a.request('slow', {}, { timeoutMs: 50 }),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.timeout',
+  );
   const ctl = new AbortController();
-  const canceled = assert.rejects(a.request('slow', {}, { signal: ctl.signal }), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.canceled');
+  const canceled = assert.rejects(
+    a.request('slow', {}, { signal: ctl.signal }),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.canceled',
+  );
   ctl.abort();
   await canceled;
   // A request in flight when its connection closes rejects; one made after the close rejects at once.
@@ -351,27 +603,45 @@ test('one connection cannot take the daemon down, and a client never waits forev
   await assert.rejects(pending, (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.notListening');
   assert.equal(b.closed, true);
   const started = Date.now();
-  await assert.rejects(b.request('ping', {}), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.notListening');
+  await assert.rejects(
+    b.request('ping', {}),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.notListening',
+  );
   assert.ok(Date.now() - started < 1000);
   release?.();
   assert.equal(await a.request('ping', {}), 'ok', 'the daemon is still serving');
   a.close();
 });
 
-test('every command keeps the JSON result contract: outcome, exit code, three verdicts, facts', t => {
+test('every command keeps the JSON result contract: outcome, exit code, three verdicts, facts', (t) => {
   const dir = scratch(t);
   const valid = fileURLToPath(new URL('./contracts/valid/report.json', import.meta.url));
   const cases: [string[], number][] = [
-    [['help'], 0], [['--help'], 0], [['version'], 0], [['capabilities'], 0],
-    [['validate', 'report', valid], 0], [['validate', 'run', '/nonexistent/run.json'], 3], [['validate', 'run', dir], 3],
-    [['validate', 'ledger', valid], 3], [['validate'], 3], [['scan-everything'], 3], [['init', '--worksapce', dir], 3],
-    [['wait', 'r'], 3], [['run', 'x', '--detach', '--workspace', dir], 3], [['init', '--workspace', 'relative'], 3],
+    [['help'], 0],
+    [['--help'], 0],
+    [['version'], 0],
+    [['capabilities'], 0],
+    [['validate', 'report', valid], 0],
+    [['validate', 'run', '/nonexistent/run.json'], 3],
+    [['validate', 'run', dir], 3],
+    [['validate', 'ledger', valid], 3],
+    [['validate'], 3],
+    [['scan-everything'], 3],
+    [['init', '--worksapce', dir], 3],
+    [['wait', 'r'], 3],
+    [['run', 'x', '--detach', '--workspace', dir], 3],
+    [['init', '--workspace', 'relative'], 3],
   ];
   for (const [args, exit] of cases) {
     const r = cli([...args, '--json'], dir);
     assert.equal(r.status, exit, `${args.join(' ')}: ${r.stderr}`);
     let body: any;
-    assert.doesNotThrow(() => { body = JSON.parse(r.stdout); }, `${args.join(' ')} printed JSON`);
+    assert.doesNotThrow(
+      () => {
+        body = JSON.parse(r.stdout);
+      },
+      `${args.join(' ')} printed JSON`,
+    );
     assert.equal(body.exitCode, exit, args.join(' '));
     assert.equal(typeof body.outcome, 'string');
     assert.deepEqual(Object.keys(body.verdicts), ['policy', 'capability', 'credential'], args.join(' '));
@@ -380,35 +650,60 @@ test('every command keeps the JSON result contract: outcome, exit code, three ve
   }
 });
 
-test('init refuses an existing settings file it cannot read, with a typed result, and leaves it as it is', { skip: process.getuid?.() === 0 && 'root reads any file' }, t => {
-  const ws = scratch(t);
-  initWorkspace({ workspace: ws });
-  const path = join(ws, '.farsight/sentinel/settings.json');
-  const before = readFileSync(path);
-  chmodSync(path, 0o000);
-  assert.throws(() => initWorkspace({ workspace: ws }), (e: unknown) => e instanceof InitError && e.code === 'sentinel.init.settingsUnsafe');
-  const r = cli(['init', '--json'], ws);
-  assert.equal(r.status, 3, r.stderr);
-  assert.deepEqual([JSON.parse(r.stdout).outcome, JSON.parse(r.stdout).reasonCode], ['refused', 'sentinel.init.settingsUnsafe']);
-  assert.doesNotMatch(r.stderr, /\n\s+at /, 'no stack trace');
-  assert.equal(statSync(path).mode & 0o777, 0o000, 'not touched');
-  chmodSync(path, 0o600);
-  assert.deepEqual(readFileSync(path), before);
-  // An unreadable folder on the way is a typed refusal too.
-  const ws2 = scratch(t);
-  mkdirSync(join(ws2, '.farsight'), { mode: 0o000 });
-  try {
-    const r2 = cli(['init', '--json'], ws2);
-    assert.equal(r2.status, 3);
-    assert.match(JSON.parse(r2.stdout).reasonCode, /^sentinel\.init\./);
-  } finally { chmodSync(join(ws2, '.farsight'), 0o700); }
-});
+test(
+  'init refuses an existing settings file it cannot read, with a typed result, and leaves it as it is',
+  { skip: process.getuid?.() === 0 && 'root reads any file' },
+  (t) => {
+    const ws = scratch(t);
+    initWorkspace({ workspace: ws });
+    const path = join(ws, '.farsight/sentinel/settings.json');
+    const before = readFileSync(path);
+    chmodSync(path, 0o000);
+    assert.throws(
+      () => initWorkspace({ workspace: ws }),
+      (e: unknown) => e instanceof InitError && e.code === 'sentinel.init.settingsUnsafe',
+    );
+    const r = cli(['init', '--json'], ws);
+    assert.equal(r.status, 3, r.stderr);
+    assert.deepEqual(
+      [JSON.parse(r.stdout).outcome, JSON.parse(r.stdout).reasonCode],
+      ['refused', 'sentinel.init.settingsUnsafe'],
+    );
+    assert.doesNotMatch(r.stderr, /\n\s+at /, 'no stack trace');
+    assert.equal(statSync(path).mode & 0o777, 0o000, 'not touched');
+    chmodSync(path, 0o600);
+    assert.deepEqual(readFileSync(path), before);
+    // An unreadable folder on the way is a typed refusal too.
+    const ws2 = scratch(t);
+    mkdirSync(join(ws2, '.farsight'), { mode: 0o000 });
+    try {
+      const r2 = cli(['init', '--json'], ws2);
+      assert.equal(r2.status, 3);
+      assert.match(JSON.parse(r2.stdout).reasonCode, /^sentinel\.init\./);
+    } finally {
+      chmodSync(join(ws2, '.farsight'), 0o700);
+    }
+  },
+);
 
 test('the preview report refuses malformed counts and documents before rendering anything', () => {
-  const count = { n: 2, unit: 'sentinel.count.findings', scope: 'sentinel.scope.report', source: 'fixture', recheck: { cli: 'farsight-sentinel report r' } };
+  const count = {
+    n: 2,
+    unit: 'sentinel.count.findings',
+    scope: 'sentinel.scope.report',
+    source: 'fixture',
+    recheck: { cli: 'farsight-sentinel report r' },
+  };
   const doc = (counts: unknown[], over: Record<string, unknown> = {}) => ({
-    schema: 'sentinel-preview-report/draft-1', label: 'foundation-preview', runId: 'r', snapshotId: 's', ledgerSequence: 1,
-    generatedAt: '2026-10-22T00:00:00Z', counts, limitations: ['sentinel.report.previewOnly', 'sentinel.report.noScannerCoverage'], ...over,
+    schema: 'sentinel-preview-report/draft-1',
+    label: 'foundation-preview',
+    runId: 'r',
+    snapshotId: 's',
+    ledgerSequence: 1,
+    generatedAt: '2026-10-22T00:00:00Z',
+    counts,
+    limitations: ['sentinel.report.previewOnly', 'sentinel.report.noScannerCoverage'],
+    ...over,
   });
   assert.doesNotThrow(() => renderPreviewMarkdown(doc([count]) as never));
   const refused = (d: unknown, why: string) => {
@@ -418,13 +713,40 @@ test('the preview report refuses malformed counts and documents before rendering
   refused(doc([{ ...count, unit: 'sentinel.report.previewTitle' }]), 'a unit with no {n}');
   refused(doc([{ ...count, unit: 'sentinel.count.nothing' }]), 'a unit not in the catalog');
   refused(doc([{ ...count, source: '' }]), 'an empty source');
-  refused(doc([{ ...count, breakdown: [{ key: 'sentinel.count.part.high', n: 3 }, { key: 'sentinel.count.part.low', n: -1 }] }]), 'a negative part that still sums');
+  refused(
+    doc([
+      {
+        ...count,
+        breakdown: [
+          { key: 'sentinel.count.part.high', n: 3 },
+          { key: 'sentinel.count.part.low', n: -1 },
+        ],
+      },
+    ]),
+    'a negative part that still sums',
+  );
   refused(doc([{ ...count, breakdown: [{ key: 'sentinel.count.part.nope', n: 2 }] }]), 'an unknown part key');
-  refused(doc([{ ...count, breakdown: [{ key: 'sentinel.count.part.high', n: 1.5 }, { key: 'sentinel.count.part.low', n: 0.5 }] }]), 'fractional parts');
+  refused(
+    doc([
+      {
+        ...count,
+        breakdown: [
+          { key: 'sentinel.count.part.high', n: 1.5 },
+          { key: 'sentinel.count.part.low', n: 0.5 },
+        ],
+      },
+    ]),
+    'fractional parts',
+  );
   refused(doc([{ ...count, n: -1 }]), 'a negative count');
   refused(doc([{ ...count, extra: 1 }]), 'an unknown count field');
   refused(doc([count], { extra: 1 }), 'an unknown report field');
-  refused(doc([count], { limitations: ['sentinel.report.previewOnly', 'sentinel.report.noScannerCoverage', 'sentinel.report.madeUp'] }), 'an unknown limitation');
+  refused(
+    doc([count], {
+      limitations: ['sentinel.report.previewOnly', 'sentinel.report.noScannerCoverage', 'sentinel.report.madeUp'],
+    }),
+    'an unknown limitation',
+  );
   refused(doc([count], { counts: 'all' }), 'counts that are not a list');
   refused(null, 'no document');
 });
@@ -432,16 +754,26 @@ test('the preview report refuses malformed counts and documents before rendering
 test('a claim nested past the depth bound is refused, not skipped', () => {
   let deep: Record<string, unknown> = { actor: 'human' };
   for (let i = 0; i < 34; i++) deep = { next: deep };
-  assert.throws(() => refuseActorClaims(deep), (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.payloadTooDeep');
+  assert.throws(
+    () => refuseActorClaims(deep),
+    (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.payloadTooDeep',
+  );
   let harmless: Record<string, unknown> = { ok: true };
   for (let i = 0; i < 34; i++) harmless = { next: harmless };
-  assert.throws(() => refuseActorClaims(harmless), (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.payloadTooDeep', 'too deep is refused whatever it holds');
+  assert.throws(
+    () => refuseActorClaims(harmless),
+    (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.payloadTooDeep',
+    'too deep is refused whatever it holds',
+  );
   let shallow: Record<string, unknown> = { actor: 'human' };
   for (let i = 0; i < 30; i++) shallow = { next: shallow };
-  assert.throws(() => refuseActorClaims(shallow), (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.payloadClaim');
+  assert.throws(
+    () => refuseActorClaims(shallow),
+    (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.payloadClaim',
+  );
 });
 
-test('only a refused connection proves a socket stale: any other error leaves a live service in place', async t => {
+test('only a refused connection proves a socket stale: any other error leaves a live service in place', async (t) => {
   const base = scratch(t, 'snf-');
   const identity = { storeId: 'store-1', ownerNonce: newOwnerNonce() };
   const address = runtimeAddress({ storePath: '/s', ownerNonce: identity.ownerNonce, env: { TMPDIR: base } });
@@ -454,19 +786,27 @@ test('only a refused connection proves a socket stale: any other error leaves a 
     queueMicrotask(() => s.emit('error', Object.assign(new Error('too many open files'), { code: 'EMFILE' })));
     return s;
   };
-  await assert.rejects(listenOwnerSocket(address, identity, async () => 'second', { connect: failing }),
-    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.socketIndeterminate' && /EMFILE/.test(e.message));
+  await assert.rejects(
+    listenOwnerSocket(address, identity, async () => 'second', { connect: failing }),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.socketIndeterminate' && /EMFILE/.test(e.message),
+  );
   assert.equal(lstatSync(address.socket).ino, inode, 'the live socket was not unlinked or replaced');
   const c = await connectOwnerSocket(address, identity, 'mcp');
   assert.equal(await c.request('who', {}), 'first', 'the original service still answers');
   c.close();
   // A probe that throws synchronously is indeterminate too.
-  await assert.rejects(listenOwnerSocket(address, identity, async () => 'third', { connect: () => { throw Object.assign(new Error('x'), { code: 'EACCES' }); } }),
-    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.socketIndeterminate');
+  await assert.rejects(
+    listenOwnerSocket(address, identity, async () => 'third', {
+      connect: () => {
+        throw Object.assign(new Error('x'), { code: 'EACCES' });
+      },
+    }),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.socketIndeterminate',
+  );
   assert.equal(lstatSync(address.socket).ino, inode);
 });
 
-test('connecting has its own deadline and cancel: a peer that accepts and never welcomes cannot hold the caller', async t => {
+test('connecting has its own deadline and cancel: a peer that accepts and never welcomes cannot hold the caller', async (t) => {
   const { createServer } = await import('node:net');
   const base = scratch(t, 'snw-');
   const identity = { storeId: 'store-1', ownerNonce: newOwnerNonce() };
@@ -474,32 +814,52 @@ test('connecting has its own deadline and cancel: a peer that accepts and never 
   // A private socket of ours that accepts every connection and never sends a welcome.
   const peers: NetSocket[] = [];
   const closedPeers: NetSocket[] = [];
-  const silent = createServer(s => { peers.push(s); s.resume(); s.on('close', () => closedPeers.push(s)); s.on('error', () => {}); });
-  await new Promise<void>(r => silent.listen(address.socket, () => r()));
+  const silent = createServer((s) => {
+    peers.push(s);
+    s.resume();
+    s.on('close', () => closedPeers.push(s));
+    s.on('error', () => {});
+  });
+  await new Promise<void>((r) => silent.listen(address.socket, () => r()));
   chmodSync(address.socket, 0o600);
-  t.after(() => new Promise<void>(r => { for (const p of peers) p.destroy(); silent.close(() => r()); }));
+  t.after(
+    () =>
+      new Promise<void>((r) => {
+        for (const p of peers) p.destroy();
+        silent.close(() => r());
+      }),
+  );
   // Another client already connected to the same endpoint.
   const other = connect(address.socket);
-  await new Promise(r => other.once('connect', r));
+  await new Promise((r) => other.once('connect', r));
 
   let started = Date.now();
-  await assert.rejects(connectOwnerSocket(address, identity, 'cli', { timeoutMs: 200 }), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.timeout');
+  await assert.rejects(
+    connectOwnerSocket(address, identity, 'cli', { timeoutMs: 200 }),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.timeout',
+  );
   assert.ok(Date.now() - started < 2000, 'the deadline covers the welcome, not only the connection');
   const ctl = new AbortController();
   started = Date.now();
-  const canceled = assert.rejects(connectOwnerSocket(address, identity, 'cli', { signal: ctl.signal, timeoutMs: 60_000 }), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.canceled');
+  const canceled = assert.rejects(
+    connectOwnerSocket(address, identity, 'cli', { signal: ctl.signal, timeoutMs: 60_000 }),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.canceled',
+  );
   setTimeout(() => ctl.abort(), 50);
   await canceled;
   assert.ok(Date.now() - started < 2000);
-  await assert.rejects(connectOwnerSocket(address, identity, 'cli', { signal: AbortSignal.abort() }), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.canceled');
+  await assert.rejects(
+    connectOwnerSocket(address, identity, 'cli', { signal: AbortSignal.abort() }),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.canceled',
+  );
 
   // Each abandoned handshake closed only its own connection; the endpoint and the other client are untouched.
-  for (let i = 0; i < 100 && closedPeers.length < 2; i++) await new Promise(r => setTimeout(r, 10));
+  for (let i = 0; i < 100 && closedPeers.length < 2; i++) await new Promise((r) => setTimeout(r, 10));
   assert.equal(closedPeers.length, 2, 'the timed-out and the canceled connections were closed by the caller');
   assert.ok(lstatSync(address.socket).isSocket(), 'the endpoint is still there');
   assert.equal(other.destroyed, false, 'another client keeps its connection');
   const again = connect(address.socket);
-  await new Promise(r => again.once('connect', r));
+  await new Promise((r) => again.once('connect', r));
   again.destroy();
   other.destroy();
 
@@ -510,7 +870,10 @@ test('connecting has its own deadline and cancel: a peer that accepts and never 
   const owner = await listenOwnerSocket(liveAddress, liveId, async () => 'ok');
   t.after(() => owner.close());
   const existing = await connectOwnerSocket(liveAddress, liveId, 'mcp', { timeoutMs: 2000 });
-  await assert.rejects(connectOwnerSocket(liveAddress, liveId, 'cli', { signal: AbortSignal.abort() }), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.canceled');
+  await assert.rejects(
+    connectOwnerSocket(liveAddress, liveId, 'cli', { signal: AbortSignal.abort() }),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.canceled',
+  );
   assert.equal(await existing.request('ping', {}), 'ok');
   const fresh = await connectOwnerSocket(liveAddress, liveId, 'cli');
   assert.equal(await fresh.request('ping', {}), 'ok');
@@ -534,5 +897,7 @@ test('the full report refuses what it would not honour: an unknown disclosure or
       assert.match(r.stderr, detail);
     }
     assert.ok(!existsSync(join(dir, 'r.md')), 'nothing was written');
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
