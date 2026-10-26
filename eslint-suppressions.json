@@ -1,0 +1,977 @@
+{
+  ".claude/skills/e2e-playwright/scripts/check-e2e-setup.mjs": {
+    "no-undef": {
+      "count": 5
+    }
+  },
+  "e2e/tests/map-journey-links.pw.spec.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/cli/src/affected.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/cli/src/cli.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    },
+    "no-fallthrough": {
+      "count": 6
+    }
+  },
+  "packages/cli/test/journeys-cli.test.ts": {
+    "no-regex-spaces": {
+      "count": 1
+    }
+  },
+  "packages/code-parser/src/java/index.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/code-parser/src/lifecycle.ts": {
+    "no-useless-escape": {
+      "count": 2
+    }
+  },
+  "packages/code-parser/src/shared/docs.ts": {
+    "no-irregular-whitespace": {
+      "count": 2
+    }
+  },
+  "packages/code-parser/src/shared/file-kinds.ts": {
+    "no-irregular-whitespace": {
+      "count": 3
+    }
+  },
+  "packages/code-parser/src/shared/files.ts": {
+    "preserve-caught-error": {
+      "count": 2
+    }
+  },
+  "packages/code-parser/src/shared/labels.ts": {
+    "no-irregular-whitespace": {
+      "count": 1
+    }
+  },
+  "packages/code-parser/src/shared/sql.ts": {
+    "no-useless-escape": {
+      "count": 1
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/code-parser/src/tsjs.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "no-useless-assignment": {
+      "count": 1
+    },
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "packages/core/src/config.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/core/src/design.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/core/src/journeys.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/core/src/openapi.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "packages/core/src/tour.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/core/src/version.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/core/test/coverage.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/echo/src/cli.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/echo/src/config.ts": {
+    "no-control-regex": {
+      "count": 3
+    }
+  },
+  "packages/echo/src/hook-research.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/echo/src/installation.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/echo/src/model-setup.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/echo/src/models.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/echo/src/portal.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/echo/src/runtime.ts": {
+    "preserve-caught-error": {
+      "count": 3
+    }
+  },
+  "packages/echo/src/secrets.ts": {
+    "no-control-regex": {
+      "count": 1
+    },
+    "preserve-caught-error": {
+      "count": 2
+    }
+  },
+  "packages/echo/src/sessions.ts": {
+    "no-control-regex": {
+      "count": 1
+    },
+    "preserve-caught-error": {
+      "count": 5
+    }
+  },
+  "packages/echo/src/settings-lock.ts": {
+    "preserve-caught-error": {
+      "count": 3
+    }
+  },
+  "packages/echo/src/smoke.ts": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "packages/echo/src/submind.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/echo/src/workspace-hooks.ts": {
+    "no-useless-escape": {
+      "count": 1
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/graph/test/graph.test.ts": {
+    "@typescript-eslint/no-non-null-asserted-optional-chain": {
+      "count": 1
+    }
+  },
+  "packages/mcp/src/run.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/mcp/test/mcp-tools.test.ts": {
+    "no-regex-spaces": {
+      "count": 1
+    }
+  },
+  "packages/parsers/src/decisions.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/parsers/src/design/index.ts": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "packages/parsers/src/openapi/read.ts": {
+    "prefer-const": {
+      "count": 1
+    },
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "packages/parsers/src/tests/cases.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 4
+    },
+    "no-irregular-whitespace": {
+      "count": 1
+    }
+  },
+  "packages/parsers/src/tests/index.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/scripts/qualify-osv-database.mjs": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/adapters/gitleaks/job.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/adapters/osv/worker-source.ts": {
+    "no-useless-escape": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/analysis/paths/body.ts": {
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/cli/args.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/cli/init.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/contracts/preparation.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/contracts/report.ts": {
+    "@typescript-eslint/no-empty-object-type": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/evidence/owner-cli.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/execution/coordinator.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "no-ex-assign": {
+      "count": 2
+    },
+    "no-unused-private-class-members": {
+      "count": 1
+    },
+    "no-useless-assignment": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/execution/scratch.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/findings/decision-data.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/frameworks/controls/closure.ts": {
+    "no-useless-assignment": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/frameworks/controls/worker.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/frameworks/next/analyze.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/frameworks/spring/config.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/frameworks/spring/syntax.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/imports/sarif.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/imports/strict-json.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/imports/zap.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/owner-ui/server.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/owner-ui/view.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/planner/planner.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/reports/html.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/reports/markdown.ts": {
+    "no-control-regex": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/review/evidence.ts": {
+    "no-control-regex": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/review/providers/budget.ts": {
+    "no-useless-escape": {
+      "count": 4
+    }
+  },
+  "packages/sentinel/src/review/providers/cli-copilot-wire.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/review/providers/cli-native-call.ts": {
+    "@typescript-eslint/no-unused-expressions": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/review/providers/credentials.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/review/providers/kinds.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/review/providers/profile.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/review/providers/selection.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/review/session.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 4
+    }
+  },
+  "packages/sentinel/src/review/validator.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/service/canonical.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/service/full-report.ts": {
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/service/inspection-report.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/service/local.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/service/scanner-assets.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/test/analysis-paths.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/cgroup-memory.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/cli-copilot.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 7
+    }
+  },
+  "packages/sentinel/test/cli-preview-e2e.test.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/cli-rules.test.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/cli-scanners-e2e.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/test/drivers-canonical.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/test/drivers-conformance.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/evidence-acceptance.test.ts": {
+    "prefer-const": {
+      "count": 4
+    }
+  },
+  "packages/sentinel/test/evidence-cli-review.test.ts": {
+    "no-useless-assignment": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/test/evidence-cli.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/execution-bootstrap.test.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/execution-coordinator.test.ts": {
+    "prefer-const": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/test/execution-driver-boundaries.test.ts": {
+    "prefer-const": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/test/execution-protocol.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/test/framework-canonical-helpers.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/framework-canonical.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/test/gitleaks-cli.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/helpers/isolation-diagnostic.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/next-matcher.test.ts": {
+    "no-regex-spaces": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/path-admission.test.ts": {
+    "@typescript-eslint/no-this-alias": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/path-owner.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 11
+    }
+  },
+  "packages/sentinel/test/pattern-adapter.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/preparation-assets-native.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 8
+    }
+  },
+  "packages/sentinel/test/preparation-public.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/test/preparation-publication-crash.test.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/preparation-receipt-admission.test.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/preparation-service.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/providers.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/review-instructions-retained.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/review.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/secrets-gitleaks.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/service-detached.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/service-full-report-secrets.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/service-policy.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/service-readonly-native.test.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/service-readonly-transport.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/service-readonly.test.ts": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/snapshot-helpers.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/sol-report-helpers.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 7
+    }
+  },
+  "packages/sentinel/test/sol-report-redaction-neighbors.test.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/sol-report-short-production.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/test/store-plans.test.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/test/store-read-budget.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/lib/export.js": {
+    "no-useless-assignment": {
+      "count": 1
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/lib/graph-render.js": {
+    "no-unused-vars": {
+      "count": 1
+    },
+    "prefer-const": {
+      "count": 4
+    }
+  },
+  "packages/server/public/app/lib/journey-draw.js": {
+    "no-unused-vars": {
+      "count": 2
+    },
+    "no-useless-assignment": {
+      "count": 5
+    }
+  },
+  "packages/server/public/app/lib/tooltip.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/shell.js": {
+    "no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/server/public/app/stories.js": {
+    "no-unused-vars": {
+      "count": 1
+    },
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/strings.js": {
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/surfaces/apis.js": {
+    "no-unused-vars": {
+      "count": 3
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/surfaces/codemap.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/surfaces/journey-drill.js": {
+    "no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/server/public/app/surfaces/journeys.js": {
+    "no-unused-vars": {
+      "count": 2
+    },
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/surfaces/map-affected.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/surfaces/map-compare.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/surfaces/map-lanes.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/surfaces/map-property.js": {
+    "no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/server/public/app/surfaces/map-stops.js": {
+    "no-unused-vars": {
+      "count": 1
+    },
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/surfaces/map.js": {
+    "no-unused-vars": {
+      "count": 4
+    },
+    "no-useless-assignment": {
+      "count": 3
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/surfaces/portfolio.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/surfaces/readiness.js": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/surfaces/roles.js": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/server/public/app/work-chips.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/server/src/index.ts": {
+    "no-useless-assignment": {
+      "count": 2
+    }
+  },
+  "packages/server/src/work.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/server/test/front-door.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/test/one-fact.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/work-azdo/src/auth.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "packages/work-azdo/src/html.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "packages/work-azdo/src/provider.ts": {
+    "@typescript-eslint/no-unused-expressions": {
+      "count": 1
+    }
+  },
+  "packages/work-azdo/test/html.test.ts": {
+    "no-regex-spaces": {
+      "count": 1
+    }
+  },
+  "packages/work-azdo/test/provider.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/work-fixture/test/engine-followup.test.ts": {
+    "require-yield": {
+      "count": 1
+    }
+  },
+  "packages/work/src/change.ts": {
+    "preserve-caught-error": {
+      "count": 2
+    }
+  },
+  "packages/work/src/engine.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "scripts/lint-strings.mjs": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/sentinel-feasibility-frameworks.mjs": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/sentinel-feasibility-scanners.mjs": {
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "scripts/sentinel-feasibility.mjs": {
+    "no-control-regex": {
+      "count": 3
+    }
+  },
+  "scripts/sentinel-feasibility/runtime-matrix/resources.mjs": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "scripts/sentinel-feasibility/storage.mjs": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "scripts/sentinel-release-acceptance.mjs": {
+    "no-unused-vars": {
+      "count": 2
+    }
+  },
+  "scripts/test-sentinel-decisions-consumer.mjs": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "scripts/test-sentinel-evidence-consumer.mjs": {
+    "no-unsafe-finally": {
+      "count": 1
+    }
+  },
+  "scripts/test-sentinel-framework-consumer.mjs": {
+    "no-regex-spaces": {
+      "count": 1
+    }
+  },
+  "scripts/test-sentinel-instructions-consumer.mjs": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/test-sentinel-mcp-controls-consumer.mjs": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "scripts/test/release-workflows.test.mjs": {
+    "no-regex-spaces": {
+      "count": 1
+    }
+  },
+  "scripts/test/release.test.mjs": {
+    "no-regex-spaces": {
+      "count": 2
+    }
+  },
+  "scripts/test/sentinel-feasibility-engines.test.mjs": {
+    "no-useless-escape": {
+      "count": 2
+    }
+  },
+  "scripts/test/sentinel-feasibility-frameworks-lifecycle.test.mjs": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "scripts/test/sentinel-feasibility-frameworks.test.mjs": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/test/sentinel-feasibility-runtime.test.mjs": {
+    "no-useless-escape": {
+      "count": 2
+    }
+  },
+  "scripts/test/sentinel-feasibility.test.mjs": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "scripts/test/sentinel-scanner-cli-workflow.test.mjs": {
+    "no-regex-spaces": {
+      "count": 1
+    }
+  },
+  "tools/recap-md/recap-md.mjs": {
+    "no-useless-assignment": {
+      "count": 1
+    },
+    "preserve-caught-error": {
+      "count": 2
+    }
+  }
+}

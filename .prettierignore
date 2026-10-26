@@ -1,0 +1,64 @@
+# Generated, rewritten byte for byte and drift-checked in CI (graph-schema --check, sentinel schemas:check)
+packages/graph/src/schema.ts
+packages/sentinel/src/schemas.generated.ts
+
+# Inputs whose bytes or line numbers tests, scanners or retained evidence assert
+examples/
+prototypes/
+**/fixtures/
+packages/sentinel/rules/
+# the PR 01 feasibility harness: sha256-pinned in docs/proposals/farsight-sentinel/evidence/
+scripts/sentinel-feasibility.mjs
+scripts/sentinel-feasibility-*.mjs
+scripts/sentinel-feasibility/
+
+# String catalogs: one key per line by design
+packages/core/src/strings.ts
+packages/core/src/strings-*.ts
+
+# Build output and local state (.claude/worktrees is ignored only by .git/info/exclude, which Prettier does not read)
+**/dist/
+build/
+coverage/
+graph.json
+.farsight/
+.echo/
+.claude/worktrees/
+.agents/
+.private/
+.pnpm-store/
+_to_delete/
+e2e/test-results/
+e2e/.playwright-report/
+e2e/perf/test-results/
+pnpm-lock.yaml
+eslint-suppressions.json
+
+# This phase formats JavaScript and TypeScript only
+*.json
+*.jsonc
+*.json5
+*.md
+*.yml
+*.yaml
+*.html
+*.css
+
+# Not formatted yet: each style PR deletes its line; delete the block when it is empty
+packages/sentinel/
+scripts/
+packages/core/
+packages/server/
+packages/parsers/
+packages/code-parser/
+packages/mcp/
+packages/cli/
+packages/echo/
+packages/graph/
+packages/work/
+packages/work-azdo/
+packages/work-jira/
+packages/work-fixture/
+packages/app/
+e2e/
+tools/
