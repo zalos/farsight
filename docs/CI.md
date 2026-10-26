@@ -14,6 +14,8 @@ in the explicit zero-skip test list. Ordinary package acceptance runs the framew
 ## What runs
 
 The six required check names are **affected checks · validate · e2e · echo-package · secrets · commits**.
+The new **lint** check runs alongside selected runtime checks. After its first green run, the lead adds it to branch
+protection, making seven required checks; that protection change is separate from this tooling PR.
 Branch protection requires them from GitHub Actions, requires the branch to be up to date, and applies to admins.
 A small `changes` job (displayed as **affected checks**) tests and runs
 `scripts/ci-changes.mjs`, then the affected runtime jobs run in parallel on `ubuntu-latest`. No dependency install
@@ -23,6 +25,7 @@ from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store c
 | job | steps | timeout |
 |---|---|---|
 | **affected checks** | test `scripts/ci-changes.mjs` and select suites from the changed paths | 5 min |
+| **lint** (required after its first green run) | `pnpm install --frozen-lockfile` → `pnpm format:check` → `pnpm lint`; a PR whose title starts with `style` also compares JS/TS ASTs against its merge base | 10 min |
 | **validate** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm -r typecheck` → `pnpm -r test` → `pnpm test:scripts` → `pnpm lint:strings`; includes Echo's unit tests | 20 min |
 | **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm e2e:typecheck` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → `SENTINEL_REPORT_BROWSER=1` offline report delivery and print (exactly one case, zero skips) → `pnpm e2e` → `pnpm e2e:perf` on the small preset (`FARSIGHT_PERF_PRESET=small`; the table is the `e2e-perf-results` artifact) | 30 min |
 | **secrets** | gitleaks over the pushed or PR commits (below) | 10 min |
@@ -65,6 +68,13 @@ acceptance is recorded only after the selected job actually passes on its exact 
 Gitleaks and the remaining plan gates remain separate.
 
 ### Which changes select which checks
+
+`lint` runs whenever validate, e2e, Echo packaging, Sentinel packaging or isolation is selected (missing outputs run
+it too); a documentation-only change skips it. Prettier checks JS/TS only, with existing areas temporarily listed in
+`.prettierignore`. ESLint freezes existing error counts per file and rule in `eslint-suppressions.json`; it rejects
+new errors, while `pnpm lint:report` also shows structure warnings. After deliberately fixing old errors, run
+`pnpm lint --prune-suppressions`. A formatting-only PR uses `pnpm verify:format -- <merge-base> <head>` and the
+per-PR checklist in [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 These are deliberately broad suite boundaries, not an inferred per-test dependency graph. Mixed changes take the
 union of the matching checks. Secrets and PR commit conventions always run, including for documentation.
@@ -194,11 +204,26 @@ pnpm exec playwright install chromium   # once per @playwright/test version
 pnpm e2e
 ```
 
-`pnpm lint:commits --message 'fix(cli): …'` tries a PR title against the `commits` job's rule; the `commit-msg` hook
-that `pnpm install` installs (`scripts/install-hooks.mjs`) runs the same check on every local commit.
-
 `node .claude/skills/e2e-playwright/scripts/check-e2e-setup.mjs` checks the e2e prerequisites before a run.
 Set `CI=1` to get the runner's Playwright behaviour: `test.only` fails the run, and a failed test is retried once.
+
+## Git hooks and existing installs
+
+`pnpm lint:commits --message 'fix(cli): …'` tries a PR title against the `commits` job's rule. On branches with
+`lefthook.yml`, `pnpm install` installs pre-commit's main-branch guard, formatting and lint, plus the commit-msg lint
+(`scripts/install-hooks.mjs`). A branch without `lefthook.yml` silently skips these checks: lefthook exits 0 without
+a warning. Such a branch relies on CI's `commits` check until it rebases. Never commit on main from a worktree whose
+branch predates lefthook.
+
+Linked worktrees share one hooks directory. Installing from a worktree embeds that worktree's absolute lefthook
+binary path in the shared hooks; removing the worktree breaks those hooks. After this PR merges, run `pnpm install`
+once in the primary checkout so the hooks point at a lasting path. Keep `no_auto_install: true` so commits cannot
+rewrite shared hooks. Never name Git LFS hooks (`pre-push`, `post-checkout`, `post-commit`, `post-merge`) in
+`lefthook.yml`, and never pop a `lefthook auto backup` stash entry.
+
+After pulling this change into an existing worktree, run `pnpm install --config.confirm-modules-purge=false` once.
+The changed `.npmrc` hoist settings make pnpm 9 ask to purge `node_modules`; without a terminal, it can silently exit
+0 without installing. The flag allows the purge and completes installation. CI's fresh install is unaffected.
 
 ## The perf suite
 

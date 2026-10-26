@@ -66,6 +66,35 @@ jobs:
           GITLEAKS_VERSION: 8.30.1 # the config's [[allowlists]] syntax; bump deliberately
           GITLEAKS_ENABLE_COMMENTS: false
 
+  # Required. Runs whenever any runtime check is selected (code, config or dependency changes);
+  # a documentation-only change skips it explicitly, which satisfies the required check.
+  lint:
+    name: lint
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.validate != 'false' || needs.changes.outputs.e2e != 'false' || needs.changes.outputs.echo != 'false' || needs.changes.outputs.sentinel != 'false' || needs.changes.outputs.isolation != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the style-PR check reads the merge base; no LFS assets needed
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Formatting (Prettier)
+        run: pnpm format:check
+      - name: Lint (ESLint errors; existing ones are frozen in eslint-suppressions.json)
+        run: pnpm lint
+      - name: A style pull request changes no program (AST-identical to its merge base)
+        if: ${{ github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'style') }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ast-equivalence.mjs "$(git merge-base "$BASE_SHA" "$HEAD_SHA")" "$HEAD_SHA"
+
   validate:
     name: validate
     needs: changes
