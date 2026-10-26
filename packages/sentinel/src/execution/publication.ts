@@ -16,9 +16,12 @@ import type { PublicationReceipt, StagedArtifact } from '../store/store-types.js
 import type { VerifiedOutput } from './supervisor.js';
 
 export const PUBLICATION_BOUNDARIES = ['before-staging', 'after-staging', 'after-objects', 'after-publish'] as const;
-export type PublicationBoundary = typeof PUBLICATION_BOUNDARIES[number];
+export type PublicationBoundary = (typeof PUBLICATION_BOUNDARIES)[number];
 
-export interface BoundaryContext { work: WorkRef; attemptId: Id }
+export interface BoundaryContext {
+  work: WorkRef;
+  attemptId: Id;
+}
 
 /** Test seam: called at each boundary. Production passes none. */
 export interface PublicationHooks {
@@ -53,16 +56,35 @@ export async function publishOutcome(request: PublishRequest): Promise<Publicati
   const { store, work, attemptId, hooks } = request;
   const context = { work, attemptId };
   const stageId = stageIdFor(attemptId);
-  const artifactIds = request.outputs.map(o => o.id);
+  const artifactIds = request.outputs.map((o) => o.id);
   const resultIdentity = store.objects.identifyCanonicalJson(request.result);
-  const records = (request.records ?? []).map(r => ({ ...r, identity: store.objects.identifyCanonicalJson(r.value) }));
-  const recordIds = records.map(r => r.identity.id);
+  const records = (request.records ?? []).map((r) => ({
+    ...r,
+    identity: store.objects.identifyCanonicalJson(r.value),
+  }));
+  const recordIds = records.map((r) => r.identity.id);
   const staged: StagedArtifact[] = [
-    { id: resultIdentity.id, schema: RESULT_SCHEMA, privacy: 'source-derived', links: [...new Set(artifactIds)].filter(id => id !== resultIdentity.id) },
-    ...records.filter((r, i) => r.identity.id !== resultIdentity.id && recordIds.indexOf(r.identity.id) === i && !artifactIds.includes(r.identity.id))
-      .map(r => ({ id: r.identity.id, schema: r.schema, privacy: r.privacy ?? 'metadata' })),
-    ...request.outputs.filter(o => o.id !== resultIdentity.id)
-      .map(o => ({ id: o.id, schema: o.mediaType.slice(0, 128) || 'application/octet-stream', privacy: 'source-derived' as const })),
+    {
+      id: resultIdentity.id,
+      schema: RESULT_SCHEMA,
+      privacy: 'source-derived',
+      links: [...new Set(artifactIds)].filter((id) => id !== resultIdentity.id),
+    },
+    ...records
+      .filter(
+        (r, i) =>
+          r.identity.id !== resultIdentity.id &&
+          recordIds.indexOf(r.identity.id) === i &&
+          !artifactIds.includes(r.identity.id),
+      )
+      .map((r) => ({ id: r.identity.id, schema: r.schema, privacy: r.privacy ?? 'metadata' })),
+    ...request.outputs
+      .filter((o) => o.id !== resultIdentity.id)
+      .map((o) => ({
+        id: o.id,
+        schema: o.mediaType.slice(0, 128) || 'application/octet-stream',
+        privacy: 'source-derived' as const,
+      })),
   ];
 
   request.beforeAccept?.();
@@ -76,7 +98,7 @@ export async function publishOutcome(request: PublishRequest): Promise<Publicati
     receipts = [await store.objects.putCanonicalJson(request.result, { expect: resultIdentity })];
     request.beforeAccept?.();
     for (const r of records) {
-      if (staged.some(s => s.id === r.identity.id && s.schema === r.schema)) {
+      if (staged.some((s) => s.id === r.identity.id && s.schema === r.schema)) {
         receipts.push(await store.objects.putCanonicalJson(r.value, { expect: r.identity }));
         request.beforeAccept?.();
       }
@@ -89,15 +111,25 @@ export async function publishOutcome(request: PublishRequest): Promise<Publicati
     }
   } catch (error) {
     // Nothing is accepted; the stage is removed so its pins do not outlive the attempt. Its bytes wait for collection.
-    try { store.ledger.abortStaging(stageId); } catch { /* recovery aborts a stage left open */ }
+    try {
+      store.ledger.abortStaging(stageId);
+    } catch {
+      /* recovery aborts a stage left open */
+    }
     throw error;
   }
   hooks?.at?.('after-objects', context);
   const outputs = [...new Set([resultIdentity.id, ...recordIds, ...artifactIds])];
-  receipts = receipts.filter((r, i) => receipts.findIndex(x => x.id === r.id) === i);
+  receipts = receipts.filter((r, i) => receipts.findIndex((x) => x.id === r.id) === i);
   // No await from here to the acceptance: what beforeAccept checked still holds when the ledger commits.
-  try { request.beforeAccept?.(); } catch (error) {
-    try { store.ledger.abortStaging(stageId); } catch { /* recovery aborts a stage left open */ }
+  try {
+    request.beforeAccept?.();
+  } catch (error) {
+    try {
+      store.ledger.abortStaging(stageId);
+    } catch {
+      /* recovery aborts a stage left open */
+    }
     throw error;
   }
   const receipt = store.ledger.publish({ work, attemptId, stageId, receipts, outputs, endedAt: request.endedAt });

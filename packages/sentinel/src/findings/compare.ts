@@ -34,7 +34,15 @@ export interface CompatibilityMapping {
 
 export interface ComparableFinding extends MatchableFinding {
   readonly ruleFamilyId: string;
-  readonly anchors: readonly { readonly sourceId: string; readonly relativePath: string | null; readonly withheld?: boolean; readonly content?: string; readonly locationKey?: string | null; readonly nodeId: string | null; readonly span: { readonly startByte: number; readonly endByte: number } }[];
+  readonly anchors: readonly {
+    readonly sourceId: string;
+    readonly relativePath: string | null;
+    readonly withheld?: boolean;
+    readonly content?: string;
+    readonly locationKey?: string | null;
+    readonly nodeId: string | null;
+    readonly span: { readonly startByte: number; readonly endByte: number };
+  }[];
 }
 
 export interface AssessmentSide<F extends ComparableFinding = ComparableFinding> {
@@ -51,14 +59,24 @@ export interface CurrentSurfaces {
   readonly graph: { readonly nodeIds: ReadonlySet<string>; readonly analysedFiles: ReadonlySet<string> } | null;
 }
 
-export type CurrentLabel = 'new' | 'persistent' | 'changed-evidence' | 'changed-detection' | 'reopened' | 'reopened-disposition-expired';
-export type HistoricalLabel = 'resolved-by-comparable-check' | 'removed-surface' | 'unassessed-in-current-scope' | 'changed-detection' | 'incomparable-conditions' | 'changed-evidence';
+export type CurrentLabel =
+  'new' | 'persistent' | 'changed-evidence' | 'changed-detection' | 'reopened' | 'reopened-disposition-expired';
+export type HistoricalLabel =
+  | 'resolved-by-comparable-check'
+  | 'removed-surface'
+  | 'unassessed-in-current-scope'
+  | 'changed-detection'
+  | 'incomparable-conditions'
+  | 'changed-evidence';
 
 export interface CurrentOutcome {
   readonly findingId: string;
   readonly label: CurrentLabel;
   readonly reasonCode: string;
-  readonly match?: { readonly kind: 'exact' | 'probable' | 'ambiguous'; readonly baselineFindingIds: readonly string[] };
+  readonly match?: {
+    readonly kind: 'exact' | 'probable' | 'ambiguous';
+    readonly baselineFindingIds: readonly string[];
+  };
 }
 export interface HistoricalOutcome {
   readonly baselineFindingId: string;
@@ -83,64 +101,142 @@ export interface Comparison {
   readonly historical: readonly HistoricalOutcome[];
 }
 
-const same = (a: DetectionConditions, b: DetectionConditions, keys: readonly (keyof DetectionConditions)[]) => keys.every(k => a[k] === b[k]);
+const same = (a: DetectionConditions, b: DetectionConditions, keys: readonly (keyof DetectionConditions)[]) =>
+  keys.every((k) => a[k] === b[k]);
 const DETECTION: readonly (keyof DetectionConditions)[] = ['ruleRevision', 'engine', 'capabilities'];
 const CONDITIONS: readonly (keyof DetectionConditions)[] = ['environment', 'relevantLimits'];
 
-function detectionEquivalent(rule: string, b: DetectionConditions, c: DetectionConditions, mappings: readonly CompatibilityMapping[]): boolean {
+function detectionEquivalent(
+  rule: string,
+  b: DetectionConditions,
+  c: DetectionConditions,
+  mappings: readonly CompatibilityMapping[],
+): boolean {
   if (same(b, c, DETECTION)) return true;
-  return mappings.some(m => m.ruleFamilyId === rule && same(m.from, b, [...DETECTION, ...CONDITIONS]) && same(m.to, c, [...DETECTION, ...CONDITIONS]));
+  return mappings.some(
+    (m) =>
+      m.ruleFamilyId === rule &&
+      same(m.from, b, [...DETECTION, ...CONDITIONS]) &&
+      same(m.to, c, [...DETECTION, ...CONDITIONS]),
+  );
 }
 
 /** The one assessment of a rule family in a run; several (or none) cannot establish anything. */
 function checkOf(side: AssessmentSide, rule: string): CheckAssessment | 'none' | 'several' {
-  const hits = side.checks.filter(c => c.ruleFamilyId === rule);
+  const hits = side.checks.filter((c) => c.ruleFamilyId === rule);
   return hits.length === 0 ? 'none' : hits.length > 1 ? 'several' : hits[0]!;
 }
 
-const fileKey = (a: { sourceId: string; relativePath: string | null; content?: string; locationKey?: string | null }) => (a.relativePath === null ? `${a.sourceId}:withheld:${a.locationKey ?? ''}:${a.content ?? ''}` : `${a.sourceId}:${a.relativePath}`);
+const fileKey = (a: {
+  sourceId: string;
+  relativePath: string | null;
+  content?: string;
+  locationKey?: string | null;
+}) =>
+  a.relativePath === null
+    ? `${a.sourceId}:withheld:${a.locationKey ?? ''}:${a.content ?? ''}`
+    : `${a.sourceId}:${a.relativePath}`;
 
 export function compareAssessments<F extends ComparableFinding>(request: ComparisonRequest<F>): Comparison {
   const { baseline, current } = request;
   const mappings = request.compatibility ?? [];
-  const byIdB = new Map(baseline.findings.map(f => [f.id, f]));
-  const byIdC = new Map(current.findings.map(f => [f.id, f]));
+  const byIdB = new Map(baseline.findings.map((f) => [f.id, f]));
+  const byIdC = new Map(current.findings.map((f) => [f.id, f]));
   const m = matchFindings(baseline.findings, current.findings);
   const out: CurrentOutcome[] = [];
   const historical: HistoricalOutcome[] = [];
   const expired = baseline.expiredDispositions ?? new Set<string>();
 
   for (const p of m.exact) {
-    const b = byIdB.get(p.baseline)!, c = byIdC.get(p.current)!;
-    const moved = JSON.stringify(b.anchors.map(a => [fileKey(a), a.span.startByte, a.span.endByte])) !== JSON.stringify(c.anchors.map(a => [fileKey(a), a.span.startByte, a.span.endByte]));
+    const b = byIdB.get(p.baseline)!,
+      c = byIdC.get(p.current)!;
+    const moved =
+      JSON.stringify(b.anchors.map((a) => [fileKey(a), a.span.startByte, a.span.endByte])) !==
+      JSON.stringify(c.anchors.map((a) => [fileKey(a), a.span.startByte, a.span.endByte]));
     const match = { kind: 'exact' as const, baselineFindingIds: [p.baseline] };
-    if (expired.has(p.baseline)) out.push({ findingId: p.current, label: 'reopened-disposition-expired', reasonCode: 'sentinel.compare.dispositionExpired', match });
-    else out.push({ findingId: p.current, label: moved ? 'changed-evidence' : 'persistent', reasonCode: moved ? 'sentinel.compare.evidenceMoved' : 'sentinel.compare.sameEvidence', match });
+    if (expired.has(p.baseline))
+      out.push({
+        findingId: p.current,
+        label: 'reopened-disposition-expired',
+        reasonCode: 'sentinel.compare.dispositionExpired',
+        match,
+      });
+    else
+      out.push({
+        findingId: p.current,
+        label: moved ? 'changed-evidence' : 'persistent',
+        reasonCode: moved ? 'sentinel.compare.evidenceMoved' : 'sentinel.compare.sameEvidence',
+        match,
+      });
   }
   for (const p of m.probable) {
     // The cited code changed inside the same declarations: the issue continues, pending review; it is not resolved.
-    out.push({ findingId: p.current, label: 'changed-evidence', reasonCode: 'sentinel.compare.probableMatch', match: { kind: 'probable', baselineFindingIds: [p.baseline] } });
+    out.push({
+      findingId: p.current,
+      label: 'changed-evidence',
+      reasonCode: 'sentinel.compare.probableMatch',
+      match: { kind: 'probable', baselineFindingIds: [p.baseline] },
+    });
   }
   for (const g of m.ambiguous) {
-    for (const c of g.current) out.push({ findingId: c, label: 'changed-evidence', reasonCode: 'sentinel.compare.ambiguousMatch', match: { kind: 'ambiguous', baselineFindingIds: [...g.baseline] } });
-    for (const b of g.baseline) historical.push({ baselineFindingId: b, label: 'changed-evidence', reasonCode: 'sentinel.compare.ambiguousMatch', match: { kind: 'ambiguous', baselineFindingIds: [...g.baseline] } });
+    for (const c of g.current)
+      out.push({
+        findingId: c,
+        label: 'changed-evidence',
+        reasonCode: 'sentinel.compare.ambiguousMatch',
+        match: { kind: 'ambiguous', baselineFindingIds: [...g.baseline] },
+      });
+    for (const b of g.baseline)
+      historical.push({
+        baselineFindingId: b,
+        label: 'changed-evidence',
+        reasonCode: 'sentinel.compare.ambiguousMatch',
+        match: { kind: 'ambiguous', baselineFindingIds: [...g.baseline] },
+      });
   }
 
   // Current findings no baseline finding continues: reopened, changed detection, or new.
   const resolved = baseline.resolved ?? [];
-  const reopened = resolved.length ? matchFindings(resolved, m.unmatchedCurrent.map(id => byIdC.get(id)!)) : undefined;
+  const reopened = resolved.length
+    ? matchFindings(
+        resolved,
+        m.unmatchedCurrent.map((id) => byIdC.get(id)!),
+      )
+    : undefined;
   const reopenedBy = new Map<string, string>();
-  for (const p of [...reopened?.exact ?? [], ...reopened?.probable ?? []]) reopenedBy.set(p.current, p.baseline);
+  for (const p of [...(reopened?.exact ?? []), ...(reopened?.probable ?? [])]) reopenedBy.set(p.current, p.baseline);
   for (const id of m.unmatchedCurrent) {
     const c = byIdC.get(id)!;
-    if (reopenedBy.has(id)) { out.push({ findingId: id, label: 'reopened', reasonCode: 'sentinel.compare.reopened', match: { kind: 'exact', baselineFindingIds: [reopenedBy.get(id)!] } }); continue; }
+    if (reopenedBy.has(id)) {
+      out.push({
+        findingId: id,
+        label: 'reopened',
+        reasonCode: 'sentinel.compare.reopened',
+        match: { kind: 'exact', baselineFindingIds: [reopenedBy.get(id)!] },
+      });
+      continue;
+    }
     const bc = checkOf(baseline, c.ruleFamilyId);
     const cc = checkOf(current, c.ruleFamilyId);
-    if (bc !== 'none' && bc !== 'several' && cc !== 'none' && cc !== 'several' && !detectionEquivalent(c.ruleFamilyId, bc.conditions, cc.conditions, mappings)) {
+    if (
+      bc !== 'none' &&
+      bc !== 'several' &&
+      cc !== 'none' &&
+      cc !== 'several' &&
+      !detectionEquivalent(c.ruleFamilyId, bc.conditions, cc.conditions, mappings)
+    ) {
       out.push({ findingId: id, label: 'changed-detection', reasonCode: 'sentinel.compare.detectionChanged' });
     } else {
-      const assessed = bc !== 'none' && bc !== 'several' && bc.status === 'complete' && c.anchors.every(a => bc.files.has(fileKey(a)));
-      out.push({ findingId: id, label: 'new', reasonCode: assessed ? 'sentinel.compare.newInAssessedScope' : 'sentinel.compare.notPreviouslyAssessed' });
+      const assessed =
+        bc !== 'none' &&
+        bc !== 'several' &&
+        bc.status === 'complete' &&
+        c.anchors.every((a) => bc.files.has(fileKey(a)));
+      out.push({
+        findingId: id,
+        label: 'new',
+        reasonCode: assessed ? 'sentinel.compare.newInAssessedScope' : 'sentinel.compare.notPreviouslyAssessed',
+      });
     }
   }
 
@@ -149,38 +245,56 @@ export function compareAssessments<F extends ComparableFinding>(request: Compari
     const b = byIdB.get(id)!;
     historical.push({ baselineFindingId: id, ...historicalOutcome(b, current, baseline, mappings) });
   }
-  return { current: out.sort((a, b) => (a.findingId < b.findingId ? -1 : 1)), historical: historical.sort((a, b) => (a.baselineFindingId < b.baselineFindingId ? -1 : 1)) };
+  return {
+    current: out.sort((a, b) => (a.findingId < b.findingId ? -1 : 1)),
+    historical: historical.sort((a, b) => (a.baselineFindingId < b.baselineFindingId ? -1 : 1)),
+  };
 }
 
-function historicalOutcome(b: ComparableFinding, current: ComparisonRequest<ComparableFinding>['current'], baseline: AssessmentSide, mappings: readonly CompatibilityMapping[]): { label: HistoricalLabel; reasonCode: string } {
+function historicalOutcome(
+  b: ComparableFinding,
+  current: ComparisonRequest<ComparableFinding>['current'],
+  baseline: AssessmentSide,
+  mappings: readonly CompatibilityMapping[],
+): { label: HistoricalLabel; reasonCode: string } {
   const s = current.surfaces;
   // A withheld location cannot be looked for: whether its code is still there is unknown, so it is never resolved.
-  if (b.anchors.some(a => a.relativePath === null)) return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.locationWithheld' };
+  if (b.anchors.some((a) => a.relativePath === null))
+    return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.locationWithheld' };
   const files = [...new Set(b.anchors.map(fileKey))];
-  const underUnknown = (f: string) => s.unknownScope.some(u => f.startsWith(u));
+  const underUnknown = (f: string) => s.unknownScope.some((u) => f.startsWith(u));
   // A file under a folder capture could not list is unknown, never removed.
-  if (files.some(underUnknown)) return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.unknownScope' };
+  if (files.some(underUnknown))
+    return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.unknownScope' };
   // Any anchor's code gone (all of it or part: a removed source with the sink still there) is a removed surface,
   // never a clean recheck of the issue as it was.
-  if (files.every(f => !s.files.has(f))) return { label: 'removed-surface', reasonCode: 'sentinel.compare.fileRemoved' };
-  if (files.some(f => !s.files.has(f))) return { label: 'removed-surface', reasonCode: 'sentinel.compare.partRemoved' };
-  const symbols = [...new Set(b.anchors.map(a => a.nodeId).filter((n): n is string => !!n))];
-  const verifiable = !!s.graph && files.every(f => s.graph!.analysedFiles.has(f));
+  if (files.every((f) => !s.files.has(f)))
+    return { label: 'removed-surface', reasonCode: 'sentinel.compare.fileRemoved' };
+  if (files.some((f) => !s.files.has(f)))
+    return { label: 'removed-surface', reasonCode: 'sentinel.compare.partRemoved' };
+  const symbols = [...new Set(b.anchors.map((a) => a.nodeId).filter((n): n is string => !!n))];
+  const verifiable = !!s.graph && files.every((f) => s.graph!.analysedFiles.has(f));
   if (symbols.length && verifiable) {
-    const gone = symbols.filter(n => !s.graph!.nodeIds.has(n)).length;
+    const gone = symbols.filter((n) => !s.graph!.nodeIds.has(n)).length;
     if (gone === symbols.length) return { label: 'removed-surface', reasonCode: 'sentinel.compare.symbolRemoved' };
     if (gone) return { label: 'removed-surface', reasonCode: 'sentinel.compare.partRemoved' };
   }
   const cc = checkOf(current, b.ruleFamilyId);
   if (cc === 'none') return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.noCurrentCheck' };
   if (cc === 'several') return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.checksConflict' };
-  if (cc.status !== 'complete') return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.checkIncomplete' };
-  if (!files.every(f => cc.files.has(f))) return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.scopeNarrowed' };
+  if (cc.status !== 'complete')
+    return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.checkIncomplete' };
+  if (!files.every((f) => cc.files.has(f)))
+    return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.scopeNarrowed' };
   // Resolution needs the issue's code shown to be still there; without a current analysis of its files it is not.
-  if (symbols.length && !verifiable) return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.surfaceUnverified' };
+  if (symbols.length && !verifiable)
+    return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.surfaceUnverified' };
   const bc = checkOf(baseline, b.ruleFamilyId);
-  if (bc === 'none' || bc === 'several') return { label: 'incomparable-conditions', reasonCode: 'sentinel.compare.baselineConditionsUnknown' };
-  if (!detectionEquivalent(b.ruleFamilyId, bc.conditions, cc.conditions, mappings)) return { label: 'changed-detection', reasonCode: 'sentinel.compare.detectionChanged' };
-  if (!same(bc.conditions, cc.conditions, CONDITIONS)) return { label: 'incomparable-conditions', reasonCode: 'sentinel.compare.conditionsDiffer' };
+  if (bc === 'none' || bc === 'several')
+    return { label: 'incomparable-conditions', reasonCode: 'sentinel.compare.baselineConditionsUnknown' };
+  if (!detectionEquivalent(b.ruleFamilyId, bc.conditions, cc.conditions, mappings))
+    return { label: 'changed-detection', reasonCode: 'sentinel.compare.detectionChanged' };
+  if (!same(bc.conditions, cc.conditions, CONDITIONS))
+    return { label: 'incomparable-conditions', reasonCode: 'sentinel.compare.conditionsDiffer' };
   return { label: 'resolved-by-comparable-check', reasonCode: 'sentinel.compare.comparableCheckClean' };
 }

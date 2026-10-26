@@ -2,7 +2,16 @@
 // scope the caller says was tested. All of it is caller-stated data. It narrows what is read (an observation outside
 // it stays unbound) and is compared with what the report says about itself; it never proves an owner association, a
 // deployment, a run or a source. Closed fields, bounded lists.
-import { COOKIE_PROPERTIES, IMPORT_FORMATS, ImportBudget, ImportRefusal, isObject, type CookieProperty, type ImportFormat, type Json } from './types.js';
+import {
+  COOKIE_PROPERTIES,
+  IMPORT_FORMATS,
+  ImportBudget,
+  ImportRefusal,
+  isObject,
+  type CookieProperty,
+  type ImportFormat,
+  type Json,
+} from './types.js';
 import { TOKEN, isCanonicalOrigin } from './http.js';
 import { parseStrictJson } from './strict-json.js';
 
@@ -18,7 +27,7 @@ export interface ImportManifest {
     readonly directions: readonly ('inbound' | 'outbound')[];
   };
   /** Identifiers the caller associates with the report. Recorded as stated; nothing here checks them. */
-  readonly context: { readonly [k in typeof CONTEXT_KEYS[number]]?: string };
+  readonly context: { readonly [k in (typeof CONTEXT_KEYS)[number]]?: string };
 }
 
 const CONTEXT_KEYS = ['runId', 'snapshotId', 'sourceId', 'environmentDigest', 'deploymentDigest'] as const;
@@ -26,9 +35,16 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const TEXT = /^[\x20-\x7e]{1,256}$/;
 
-const invalid = (pointer: string): never => { throw new ImportRefusal('sentinel.import.manifestInvalid', pointer); };
+const invalid = (pointer: string): never => {
+  throw new ImportRefusal('sentinel.import.manifestInvalid', pointer);
+};
 
-function closed(v: Json | undefined, pointer: string, required: readonly string[], optional: readonly string[] = []): asserts v is { readonly [k: string]: Json } {
+function closed(
+  v: Json | undefined,
+  pointer: string,
+  required: readonly string[],
+  optional: readonly string[] = [],
+): asserts v is { readonly [k: string]: Json } {
   if (!isObject(v)) invalid(pointer);
   const o = v as { readonly [k: string]: Json };
   for (const k of required) if (!Object.hasOwn(o, k)) invalid(`${pointer}/${k}`);
@@ -51,11 +67,20 @@ const nullableText = (v: Json | undefined, pointer: string): string | null => {
   return v;
 };
 
-export function checkedManifest(bytes: Uint8Array, budget: ImportBudget): { manifest: ImportManifest; byteOrderMark: boolean } {
+export function checkedManifest(
+  bytes: Uint8Array,
+  budget: ImportBudget,
+): { manifest: ImportManifest; byteOrderMark: boolean } {
   if (bytes.length > budget.limits.manifestBytes) throw new ImportRefusal('sentinel.import.tooLarge');
   let parsed;
-  try { parsed = parseStrictJson(bytes, budget); } catch (e) {
-    if (e instanceof ImportRefusal && (e.code === 'sentinel.import.deadlineExceeded' || e.code === 'sentinel.import.budgetExhausted')) throw e;
+  try {
+    parsed = parseStrictJson(bytes, budget);
+  } catch (e) {
+    if (
+      e instanceof ImportRefusal &&
+      (e.code === 'sentinel.import.deadlineExceeded' || e.code === 'sentinel.import.budgetExhausted')
+    )
+      throw e;
     return invalid('');
   }
   const m = parsed.value;
@@ -63,13 +88,23 @@ export function checkedManifest(bytes: Uint8Array, budget: ImportBudget): { mani
   if (m.schema !== 'sentinel-import-manifest/draft-1') invalid('/schema');
   if (typeof m.format !== 'string' || !(IMPORT_FORMATS as readonly string[]).includes(m.format)) invalid('/format');
   closed(m.producer, '/producer', ['name', 'version']);
-  const producer = { name: nullableText(m.producer.name, '/producer/name'), version: nullableText(m.producer.version, '/producer/version') };
+  const producer = {
+    name: nullableText(m.producer.name, '/producer/name'),
+    version: nullableText(m.producer.version, '/producer/version'),
+  };
   closed(m.tested, '/tested', ['origins', 'methods', 'properties', 'directions']);
   const tested = {
     origins: stringList(m.tested.origins, '/tested/origins', 16, isCanonicalOrigin),
-    methods: stringList(m.tested.methods, '/tested/methods', 16, s => s.length <= 32 && TOKEN.test(s)),
-    properties: stringList(m.tested.properties, '/tested/properties', COOKIE_PROPERTIES.length, s => (COOKIE_PROPERTIES as readonly string[]).includes(s)) as CookieProperty[],
-    directions: stringList(m.tested.directions, '/tested/directions', 2, s => s === 'inbound' || s === 'outbound') as ('inbound' | 'outbound')[],
+    methods: stringList(m.tested.methods, '/tested/methods', 16, (s) => s.length <= 32 && TOKEN.test(s)),
+    properties: stringList(m.tested.properties, '/tested/properties', COOKIE_PROPERTIES.length, (s) =>
+      (COOKIE_PROPERTIES as readonly string[]).includes(s),
+    ) as CookieProperty[],
+    directions: stringList(
+      m.tested.directions,
+      '/tested/directions',
+      2,
+      (s) => s === 'inbound' || s === 'outbound',
+    ) as ('inbound' | 'outbound')[],
   };
   const context: Record<string, string> = {};
   if (m.context !== undefined) {
@@ -83,7 +118,13 @@ export function checkedManifest(bytes: Uint8Array, budget: ImportBudget): { mani
     }
   }
   return {
-    manifest: { schema: 'sentinel-import-manifest/draft-1', format: m.format as ImportFormat, producer, tested, context },
+    manifest: {
+      schema: 'sentinel-import-manifest/draft-1',
+      format: m.format as ImportFormat,
+      producer,
+      tested,
+      context,
+    },
     byteOrderMark: parsed.byteOrderMark,
   };
 }

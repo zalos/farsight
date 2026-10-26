@@ -32,14 +32,21 @@ export async function runOsvAttempt(service: ExecutionService, attempt: OsvAttem
   try {
     const built = buildOsvJob(attempt.targets, attempt.snapshots, jobDir, attempt.adapter);
     const outcome = await service.run({
-      adapterId: attempt.adapterId ?? attempt.adapter?.definition.id ?? OSV_ADAPTER.id, attemptId: attempt.attemptId, work: attempt.work,
-      inputs: built.inputs, ...(attempt.signal ? { signal: attempt.signal } : {}),
+      adapterId: attempt.adapterId ?? attempt.adapter?.definition.id ?? OSV_ADAPTER.id,
+      attemptId: attempt.attemptId,
+      work: attempt.work,
+      inputs: built.inputs,
+      ...(attempt.signal ? { signal: attempt.signal } : {}),
     });
     try {
-      const byId = new Map(outcome.outputs.map(o => [o.id, o.path]));
+      const byId = new Map(outcome.outputs.map((o) => [o.id, o.path]));
       return normalizeOsvRun({
-        job: built.job, jobDigest: built.jobDigest, outcome, policy: attempt.policy,
-        outputBytes: id => readFileSync(byId.get(id)!), targetBytes: a => readSealedInput(outcome.workDir, a),
+        job: built.job,
+        jobDigest: built.jobDigest,
+        outcome,
+        policy: attempt.policy,
+        outputBytes: (id) => readFileSync(byId.get(id)!),
+        targetBytes: (a) => readSealedInput(outcome.workDir, a),
         ...(attempt.qualifyingArchitecture ? { qualifyingArchitecture: attempt.qualifyingArchitecture } : {}),
       });
     } finally {

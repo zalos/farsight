@@ -64,7 +64,10 @@ export interface DriverPrepared {
 }
 
 /** The worker binding fields omitted from a kernel's worker-free not-run facts. */
-export type ResultBinding = Pick<ResultMessage, 'protocol' | 'type' | 'attemptId' | 'work' | 'coordinatorEpoch' | 'seq' | 'inputFingerprint'>;
+export type ResultBinding = Pick<
+  ResultMessage,
+  'protocol' | 'type' | 'attemptId' | 'work' | 'coordinatorEpoch' | 'seq' | 'inputFingerprint'
+>;
 
 export interface DriverNormalize {
   readonly context: unknown;
@@ -79,7 +82,10 @@ export interface DriverNormalize {
 }
 
 /** A normalized record to publish with the result (findings, the normalized report). */
-export interface DriverRecord { readonly value: unknown; readonly schema: string }
+export interface DriverRecord {
+  readonly value: unknown;
+  readonly schema: string;
+}
 
 export interface DriverNormalized {
   /** The worker's result with its binding unchanged and its coverage facts replaced by the driver's. */

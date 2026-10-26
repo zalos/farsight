@@ -1,20 +1,176 @@
 // Closed public pin discovery; wrong binary must never execute or read credentials.
-import {test} from 'node:test';import assert from 'node:assert/strict';import {spawnSync} from 'node:child_process';import {mkdirSync,writeFileSync,existsSync,readdirSync} from 'node:fs';import {join} from 'node:path';import {scratch} from './snapshot-helpers.ts';import {parseArgs} from '../dist/cli/args.js';
-const cli=new URL('../dist/cli.js',import.meta.url).pathname;
-test('model pin discovery is an explicit closed JSON-only capability read',()=>{assert.equal(parseArgs(['capabilities','--models','--json']).ok,true);for(const args of [['capabilities','--models'],['capabilities','--models','--json','--workspace','private-original'],['capabilities','--models','--json','private-original']])assert.equal(parseArgs(args).ok,false)});
-test('public discovery refuses the first wrong executable without running it or creating owner state',t=>{const dir=scratch(t,'sentinel-model-caps-'),bin=join(dir,'bin'),home=join(dir,'home'),state=join(dir,'state'),marker=join(dir,'ran');mkdirSync(bin);mkdirSync(home);writeFileSync(join(bin,'claude'),'#!/bin/sh\necho bad > '+JSON.stringify(marker)+'\n',{mode:0o700});const before=readdirSync(dir);const run=spawnSync(process.execPath,[cli,'capabilities','--models','--json'],{cwd:dir,env:{PATH:bin,HOME:home,XDG_STATE_HOME:state},encoding:'utf8',timeout:10000,maxBuffer:16384});assert.equal(run.status,3);const output=JSON.parse(run.stdout);assert.equal(output.reasonCode,'sentinel.provider.capabilityUntested');assert.deepEqual(output.facts.modelProfiles,[]);assert.equal(output.facts.authentication,'unobserved');assert.equal(output.facts.inference,'unobserved');assert.equal(existsSync(marker),false);assert.equal(existsSync(state),false);assert.deepEqual(readdirSync(dir),before);assert.equal(run.stdout.includes(dir),false);assert.equal(run.stderr,'')});
-
-import {parseSettings} from '../dist/policy/settings.js';import {readFileSync} from 'node:fs';import {trustedPolicy} from './provider-helpers.ts';
-test('ordinary public repository above the fixed guided segment cap gets an actionable typed refusal without inference',t=>{
- const dir=scratch(t,'sentinel-model-cap-'),ws=join(dir,'workspace');mkdirSync(join(ws,'src'),{recursive:true});for(let i=0;i<33;i++)writeFileSync(join(ws,'src',`original-${i}.ts`),'export const original = 1;\n');
- const home=join(dir,'home');mkdirSync(home);const env={...process.env,HOME:home,XDG_STATE_HOME:join(dir,'state')};const run=(...args:string[])=>{const r=spawnSync(process.execPath,[cli,...args,'--workspace',ws,'--json'],{env,cwd:ws,encoding:'utf8',timeout:30000,maxBuffer:262144});return{status:r.status,body:JSON.parse(r.stdout)}};
- assert.equal(run('init').status,0);const p=join(ws,'.farsight/sentinel/settings.json'),settings=JSON.parse(readFileSync(p,'utf8')),provider=structuredClone(trustedPolicy({ollama:'http://127.0.0.1:9'}).settings.providers[0]);provider.models[0]!.capability.revision=null;settings.providers=[provider];settings.reviewModels={stages:[{stage:'guided',providerId:provider.id,modelId:provider.models[0]!.id}],segments:[]};writeFileSync(p,JSON.stringify(settings));assert.equal(run('settings','adopt','--confirm').status,0);assert.equal(run('rules','promote','builtin:foundation-preview','--confirm').status,0);const result=run('plan');assert.equal(result.status,3);assert.equal(result.body.reasonCode,'sentinel.review.planLimit');
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { scratch } from './snapshot-helpers.ts';
+import { parseArgs } from '../dist/cli/args.js';
+const cli = new URL('../dist/cli.js', import.meta.url).pathname;
+test('model pin discovery is an explicit closed JSON-only capability read', () => {
+  assert.equal(parseArgs(['capabilities', '--models', '--json']).ok, true);
+  for (const args of [
+    ['capabilities', '--models'],
+    ['capabilities', '--models', '--json', '--workspace', 'private-original'],
+    ['capabilities', '--models', '--json', 'private-original'],
+  ])
+    assert.equal(parseArgs(args).ok, false);
+});
+test('public discovery refuses the first wrong executable without running it or creating owner state', (t) => {
+  const dir = scratch(t, 'sentinel-model-caps-'),
+    bin = join(dir, 'bin'),
+    home = join(dir, 'home'),
+    state = join(dir, 'state'),
+    marker = join(dir, 'ran');
+  mkdirSync(bin);
+  mkdirSync(home);
+  writeFileSync(join(bin, 'claude'), '#!/bin/sh\necho bad > ' + JSON.stringify(marker) + '\n', { mode: 0o700 });
+  const before = readdirSync(dir);
+  const run = spawnSync(process.execPath, [cli, 'capabilities', '--models', '--json'], {
+    cwd: dir,
+    env: { PATH: bin, HOME: home, XDG_STATE_HOME: state },
+    encoding: 'utf8',
+    timeout: 10000,
+    maxBuffer: 16384,
+  });
+  assert.equal(run.status, 3);
+  const output = JSON.parse(run.stdout);
+  assert.equal(output.reasonCode, 'sentinel.provider.capabilityUntested');
+  assert.deepEqual(output.facts.modelProfiles, []);
+  assert.equal(output.facts.authentication, 'unobserved');
+  assert.equal(output.facts.inference, 'unobserved');
+  assert.equal(existsSync(marker), false);
+  assert.equal(existsSync(state), false);
+  assert.deepEqual(readdirSync(dir), before);
+  assert.equal(run.stdout.includes(dir), false);
+  assert.equal(run.stderr, '');
 });
 
-test('public native settings adoption accepts only declared native digest metadata without weakening other credential rejection',t=>{
- const dir=scratch(t,'sentinel-model-adopt-'),ws=join(dir,'workspace');mkdirSync(ws);const home=join(dir,'home');mkdirSync(home);const env={...process.env,HOME:home,XDG_STATE_HOME:join(dir,'state')};const run=(...args:string[])=>{const r=spawnSync(process.execPath,[cli,...args,'--workspace',ws,'--json'],{env,cwd:ws,encoding:'utf8',timeout:10000,maxBuffer:32768});return{status:r.status,body:JSON.parse(r.stdout)}};
- assert.equal(run('init').status,0);const path=join(ws,'.farsight/sentinel/settings.json'),settings=JSON.parse(readFileSync(path,'utf8')),digest='sha256:'+ 'a'.repeat(64),model='claude-haiku-4-5-20251001';settings.providers=[{id:'native-claude',kind:'claude-cli',endpoint:'https://api.anthropic.com',credential:null,disclosure:'hosted',nativeProfile:{id:'claude-code-2.1.282-darwin-arm64-seatbelt-v1',executableDigest:digest,helperDigest:digest,profileDigest:digest},budget:{maxTokens:400000,maxCost:null,currency:null},models:[{id:'haiku',model,limits:{maxRequestBytes:65536,maxResponseBytes:16384,timeoutMs:60000,maxOutputTokens:512,contextTokens:200000,maxMessages:32,templateTokensPerMessage:8},pricing:{kind:'subscription-quota',basis:'owner-subscription'},terms:{retention:'unknown',training:'unknown',source:'owner unverified declaration',recordedAt:'2026-10-23'},capability:{schema:'sentinel-model-capability/draft-1',kind:'claude-cli',origin:'https://api.anthropic.com',model,listed:true,revision:null,probedAt:'2026-10-23T00:00:00.000000000Z'}}]}];
- writeFileSync(path,JSON.stringify(settings));const adopted=run('settings','adopt','--confirm');assert.equal(adopted.status,0,JSON.stringify(adopted));assert.equal(parseSettings(Buffer.from(JSON.stringify(settings))).providers[0]!.nativeProfile!.helperDigest,digest);
- const original=structuredClone(settings);settings.providers[0].nativeProfile.helperDigest='sha256:not-valid';writeFileSync(path,JSON.stringify(settings));assert.equal(run('settings','adopt','--confirm').body.reasonCode,'sentinel.policy.settingsInvalid');Object.assign(settings,structuredClone(original));settings.providers[0].kind='ollama';writeFileSync(path,JSON.stringify(settings));assert.notEqual(run('settings','adopt','--confirm').status,0);Object.assign(settings,structuredClone(original));
- settings.providers[0].models[0].terms.source='original-private-value-'.repeat(3);writeFileSync(path,JSON.stringify(settings));const refused=run('settings','adopt','--confirm');assert.equal(refused.status,3);assert.equal(refused.body.reasonCode,'sentinel.policy.credentialValue');assert.equal(JSON.stringify(refused).includes('original-private-value'),false);
+import { parseSettings } from '../dist/policy/settings.js';
+import { readFileSync } from 'node:fs';
+import { trustedPolicy } from './provider-helpers.ts';
+test('ordinary public repository above the fixed guided segment cap gets an actionable typed refusal without inference', (t) => {
+  const dir = scratch(t, 'sentinel-model-cap-'),
+    ws = join(dir, 'workspace');
+  mkdirSync(join(ws, 'src'), { recursive: true });
+  for (let i = 0; i < 33; i++) writeFileSync(join(ws, 'src', `original-${i}.ts`), 'export const original = 1;\n');
+  const home = join(dir, 'home');
+  mkdirSync(home);
+  const env = { ...process.env, HOME: home, XDG_STATE_HOME: join(dir, 'state') };
+  const run = (...args: string[]) => {
+    const r = spawnSync(process.execPath, [cli, ...args, '--workspace', ws, '--json'], {
+      env,
+      cwd: ws,
+      encoding: 'utf8',
+      timeout: 30000,
+      maxBuffer: 262144,
+    });
+    return { status: r.status, body: JSON.parse(r.stdout) };
+  };
+  assert.equal(run('init').status, 0);
+  const p = join(ws, '.farsight/sentinel/settings.json'),
+    settings = JSON.parse(readFileSync(p, 'utf8')),
+    provider = structuredClone(trustedPolicy({ ollama: 'http://127.0.0.1:9' }).settings.providers[0]);
+  provider.models[0]!.capability.revision = null;
+  settings.providers = [provider];
+  settings.reviewModels = {
+    stages: [{ stage: 'guided', providerId: provider.id, modelId: provider.models[0]!.id }],
+    segments: [],
+  };
+  writeFileSync(p, JSON.stringify(settings));
+  assert.equal(run('settings', 'adopt', '--confirm').status, 0);
+  assert.equal(run('rules', 'promote', 'builtin:foundation-preview', '--confirm').status, 0);
+  const result = run('plan');
+  assert.equal(result.status, 3);
+  assert.equal(result.body.reasonCode, 'sentinel.review.planLimit');
+});
+
+test('public native settings adoption accepts only declared native digest metadata without weakening other credential rejection', (t) => {
+  const dir = scratch(t, 'sentinel-model-adopt-'),
+    ws = join(dir, 'workspace');
+  mkdirSync(ws);
+  const home = join(dir, 'home');
+  mkdirSync(home);
+  const env = { ...process.env, HOME: home, XDG_STATE_HOME: join(dir, 'state') };
+  const run = (...args: string[]) => {
+    const r = spawnSync(process.execPath, [cli, ...args, '--workspace', ws, '--json'], {
+      env,
+      cwd: ws,
+      encoding: 'utf8',
+      timeout: 10000,
+      maxBuffer: 32768,
+    });
+    return { status: r.status, body: JSON.parse(r.stdout) };
+  };
+  assert.equal(run('init').status, 0);
+  const path = join(ws, '.farsight/sentinel/settings.json'),
+    settings = JSON.parse(readFileSync(path, 'utf8')),
+    digest = 'sha256:' + 'a'.repeat(64),
+    model = 'claude-haiku-4-5-20251001';
+  settings.providers = [
+    {
+      id: 'native-claude',
+      kind: 'claude-cli',
+      endpoint: 'https://api.anthropic.com',
+      credential: null,
+      disclosure: 'hosted',
+      nativeProfile: {
+        id: 'claude-code-2.1.282-darwin-arm64-seatbelt-v1',
+        executableDigest: digest,
+        helperDigest: digest,
+        profileDigest: digest,
+      },
+      budget: { maxTokens: 400000, maxCost: null, currency: null },
+      models: [
+        {
+          id: 'haiku',
+          model,
+          limits: {
+            maxRequestBytes: 65536,
+            maxResponseBytes: 16384,
+            timeoutMs: 60000,
+            maxOutputTokens: 512,
+            contextTokens: 200000,
+            maxMessages: 32,
+            templateTokensPerMessage: 8,
+          },
+          pricing: { kind: 'subscription-quota', basis: 'owner-subscription' },
+          terms: {
+            retention: 'unknown',
+            training: 'unknown',
+            source: 'owner unverified declaration',
+            recordedAt: '2026-10-23',
+          },
+          capability: {
+            schema: 'sentinel-model-capability/draft-1',
+            kind: 'claude-cli',
+            origin: 'https://api.anthropic.com',
+            model,
+            listed: true,
+            revision: null,
+            probedAt: '2026-10-23T00:00:00.000000000Z',
+          },
+        },
+      ],
+    },
+  ];
+  writeFileSync(path, JSON.stringify(settings));
+  const adopted = run('settings', 'adopt', '--confirm');
+  assert.equal(adopted.status, 0, JSON.stringify(adopted));
+  assert.equal(parseSettings(Buffer.from(JSON.stringify(settings))).providers[0]!.nativeProfile!.helperDigest, digest);
+  const original = structuredClone(settings);
+  settings.providers[0].nativeProfile.helperDigest = 'sha256:not-valid';
+  writeFileSync(path, JSON.stringify(settings));
+  assert.equal(run('settings', 'adopt', '--confirm').body.reasonCode, 'sentinel.policy.settingsInvalid');
+  Object.assign(settings, structuredClone(original));
+  settings.providers[0].kind = 'ollama';
+  writeFileSync(path, JSON.stringify(settings));
+  assert.notEqual(run('settings', 'adopt', '--confirm').status, 0);
+  Object.assign(settings, structuredClone(original));
+  settings.providers[0].models[0].terms.source = 'original-private-value-'.repeat(3);
+  writeFileSync(path, JSON.stringify(settings));
+  const refused = run('settings', 'adopt', '--confirm');
+  assert.equal(refused.status, 3);
+  assert.equal(refused.body.reasonCode, 'sentinel.policy.credentialValue');
+  assert.equal(JSON.stringify(refused).includes('original-private-value'), false);
 });

@@ -22,8 +22,20 @@ import { analyzeNext } from '../next/index.js';
 import { analyzeSpring } from '../spring/index.js';
 import { FRAMEWORKS, type FrameworkName, type LibraryOutcome } from './facts.js';
 
-import { FRAMEWORK_CONTROLS_ADAPTER_ID, CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_SCHEMA, CONTROLS_OUTPUT_MEDIA, type ControlsJob, type ControlsOutput } from './definitions.js';
-export { FRAMEWORK_CONTROLS_ADAPTER_ID, CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_SCHEMA, CONTROLS_OUTPUT_MEDIA } from './definitions.js';
+import {
+  FRAMEWORK_CONTROLS_ADAPTER_ID,
+  CONTROLS_JOB_SCHEMA,
+  CONTROLS_OUTPUT_SCHEMA,
+  CONTROLS_OUTPUT_MEDIA,
+  type ControlsJob,
+  type ControlsOutput,
+} from './definitions.js';
+export {
+  FRAMEWORK_CONTROLS_ADAPTER_ID,
+  CONTROLS_JOB_SCHEMA,
+  CONTROLS_OUTPUT_SCHEMA,
+  CONTROLS_OUTPUT_MEDIA,
+} from './definitions.js';
 export type { ControlsJob, ControlsOutput } from './definitions.js';
 
 const P = 'sentinel-worker/draft-1';
@@ -50,25 +62,66 @@ export async function inspectSealed(job: ControlsJob, read: (id: string) => Uint
   const artifact = json(read(job.analysis.artifact));
   const result = json(read(job.analysis.result));
   const index = json(read(job.analysis.index));
-  if (snapshot?.id !== job.snapshotId || result?.sourceId !== job.sourceId || index?.sourceId !== job.sourceId) throw new Refused('the job does not bind these inputs');
+  if (snapshot?.id !== job.snapshotId || result?.sourceId !== job.sourceId || index?.sourceId !== job.sourceId)
+    throw new Refused('the job does not bind these inputs');
   const readAsync = async (id: ArtifactId) => read(id);
-  const run = async (framework: FrameworkName, f: () => Promise<{ envelopes: readonly ControlFactsEnvelope[]; frontiers?: LibraryOutcome['frontiers'] }>): Promise<LibraryOutcome> => {
+  const run = async (
+    framework: FrameworkName,
+    f: () => Promise<{ envelopes: readonly ControlFactsEnvelope[]; frontiers?: LibraryOutcome['frontiers'] }>,
+  ): Promise<LibraryOutcome> => {
     try {
       const out = await f();
-      return { framework, packDigest: out.envelopes[0]?.packDigest ?? null, envelopes: out.envelopes, ...(out.frontiers ? { frontiers: out.frontiers } : {}) };
+      return {
+        framework,
+        packDigest: out.envelopes[0]?.packDigest ?? null,
+        envelopes: out.envelopes,
+        ...(out.frontiers ? { frontiers: out.frontiers } : {}),
+      };
     } catch {
       // A library that refuses its inputs says so with a fixed reason; its own message may quote the source.
       return { framework, packDigest: null, envelopes: [], refused: 'sentinel.controls.libraryRefused' };
     }
   };
-  const outcomes: Record<FrameworkName, () => Promise<{ envelopes: readonly ControlFactsEnvelope[]; frontiers?: LibraryOutcome['frontiers'] }>> = {
+  const outcomes: Record<
+    FrameworkName,
+    () => Promise<{ envelopes: readonly ControlFactsEnvelope[]; frontiers?: LibraryOutcome['frontiers'] }>
+  > = {
     next: async () => {
-      const r = await analyzeNext({ snapshot, analysis: { sourceId: job.sourceId, artifact, result, index }, read: readAsync, properties: [...job.properties] });
+      const r = await analyzeNext({
+        snapshot,
+        analysis: { sourceId: job.sourceId, artifact, result, index },
+        read: readAsync,
+        properties: [...job.properties],
+      });
       return { envelopes: r.envelopes, frontiers: r.frontiers };
     },
-    express: async () => ({ envelopes: [await analyzeExpress({ snapshot, sourceId: job.sourceId, analysis: { artifact, index }, readContent: readAsync })] }),
-    nest: async () => ({ envelopes: [(await analyzeNest({ snapshot, sourceId: job.sourceId, graph: artifact.graph, readArtifact: readAsync })).controls] }),
-    spring: async () => ({ envelopes: [await analyzeSpring({ snapshot, sourceId: job.sourceId, analysis: { artifact, index }, readContent: readAsync, environment: { activeProfiles: null } })] }),
+    express: async () => ({
+      envelopes: [
+        await analyzeExpress({
+          snapshot,
+          sourceId: job.sourceId,
+          analysis: { artifact, index },
+          readContent: readAsync,
+        }),
+      ],
+    }),
+    nest: async () => ({
+      envelopes: [
+        (await analyzeNest({ snapshot, sourceId: job.sourceId, graph: artifact.graph, readArtifact: readAsync }))
+          .controls,
+      ],
+    }),
+    spring: async () => ({
+      envelopes: [
+        await analyzeSpring({
+          snapshot,
+          sourceId: job.sourceId,
+          analysis: { artifact, index },
+          readContent: readAsync,
+          environment: { activeProfiles: null },
+        }),
+      ],
+    }),
   };
   const libraries: LibraryOutcome[] = [];
   for (const framework of FRAMEWORKS) libraries.push(await run(framework, outcomes[framework]));
@@ -85,34 +138,69 @@ export async function runFrameworkControlsWorker(): Promise<void> {
   let buffered = '';
   process.stdin.on('data', (b: Buffer) => {
     buffered += b.toString('utf8');
-    for (let nl; (nl = buffered.indexOf('\n')) >= 0;) { lines.push(JSON.parse(buffered.slice(0, nl))); buffered = buffered.slice(nl + 1); wake?.(); }
+    for (let nl; (nl = buffered.indexOf('\n')) >= 0;) {
+      lines.push(JSON.parse(buffered.slice(0, nl)));
+      buffered = buffered.slice(nl + 1);
+      wake?.();
+    }
   });
-  const next = async () => { while (!lines.length) await new Promise<void>(r => { wake = r; }); return lines.shift()!; };
-  send({ protocol: P, type: 'hello', supported: [P], adapterId: process.env.SENTINEL_ADAPTER_ID, adapterDigest: process.env.SENTINEL_ADAPTER_DIGEST });
+  const next = async () => {
+    while (!lines.length)
+      await new Promise<void>((r) => {
+        wake = r;
+      });
+    return lines.shift()!;
+  };
+  send({
+    protocol: P,
+    type: 'hello',
+    supported: [P],
+    adapterId: process.env.SENTINEL_ADAPTER_ID,
+    adapterDigest: process.env.SENTINEL_ADAPTER_DIGEST,
+  });
   if ((await next()).type !== 'welcome') process.exit(9);
   const start = await next();
   if (start.type !== 'start') process.exit(9);
   const binding = { attemptId: start.attemptId, work: start.work, coordinatorEpoch: start.coordinatorEpoch };
   let seq = 0;
-  const refuse = (code: string) => { send({ protocol: P, type: 'diagnostic', ...binding, seq: seq++, code }); process.exit(3); };
+  const refuse = (code: string) => {
+    send({ protocol: P, type: 'diagnostic', ...binding, seq: seq++, code });
+    process.exit(3);
+  };
   const inputs = new Set<string>((start.inputs ?? []) as string[]);
   const read = sealedReader(IN, inputs);
   // The coordinator alone selects the job role; unrelated captured JSON is never inspected as a job.
-  if (typeof start.job !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(start.job) || !inputs.has(start.job)) return refuse('sentinel.controls.jobInvalid');
+  if (typeof start.job !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(start.job) || !inputs.has(start.job))
+    return refuse('sentinel.controls.jobInvalid');
   let libraries: LibraryOutcome[];
   try {
     const job = json(read(start.job)) as ControlsJob;
     if (job?.schema !== CONTROLS_JOB_SCHEMA) return refuse('sentinel.controls.jobInvalid');
     libraries = await inspectSealed(job, read);
-  } catch { return refuse('sentinel.controls.jobInvalid'); }
-  const doc = Buffer.from(JSON.stringify({ schema: CONTROLS_OUTPUT_SCHEMA, job: start.job, libraries } satisfies ControlsOutput));
+  } catch {
+    return refuse('sentinel.controls.jobInvalid');
+  }
+  const doc = Buffer.from(
+    JSON.stringify({ schema: CONTROLS_OUTPUT_SCHEMA, job: start.job, libraries } satisfies ControlsOutput),
+  );
   const h = hex(doc);
   writeFileSync(`${OUT}/${h}`, doc);
   send({
-    protocol: P, type: 'result', ...binding, seq: seq++, inputFingerprint: start.inputFingerprint, granularity: 'aggregate',
-    artifacts: [{ id: `sha256:${h}`, mediaType: CONTROLS_OUTPUT_MEDIA, bytes: doc.length }], observations: [],
+    protocol: P,
+    type: 'result',
+    ...binding,
+    seq: seq++,
+    inputFingerprint: start.inputFingerprint,
+    granularity: 'aggregate',
+    artifacts: [{ id: `sha256:${h}`, mediaType: CONTROLS_OUTPUT_MEDIA, bytes: doc.length }],
+    observations: [],
     // No self-reported coverage: only the driver's view of this document counts.
-    coveredChecks: [], scannedSet: [], skipped: [], actualReadSet: [], unresolvedFrontiers: [], diagnostics: [],
+    coveredChecks: [],
+    scannedSet: [],
+    skipped: [],
+    actualReadSet: [],
+    unresolvedFrontiers: [],
+    diagnostics: [],
   });
 }
 

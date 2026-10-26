@@ -11,7 +11,7 @@
 // A run's result is read back from the ledger: its recorded outcome and the coverage its units published. A run
 // that rests on the foundation-preview rule is required coverage incomplete whatever it records, and this build
 // never prints a satisfied result (findings are not judged against the policy until the full report exists).
-import {hasConfiguredReviews,reviewsFor,REVIEW_ADAPTERS} from './review-adapter.js';
+import { hasConfiguredReviews, reviewsFor, REVIEW_ADAPTERS } from './review-adapter.js';
 import { createHash } from 'node:crypto';
 import type { ActionEffect } from '../contracts/policy.js';
 import type { RunEnvelope } from '../contracts/run.js';
@@ -25,7 +25,14 @@ import type { DockerRunner } from '../execution/isolation.js';
 /** A scratch lease's container client wrapper (scratch-lease.ts), so the lease knows when its clients exited. */
 export type WrapRunner = (runner: DockerRunner) => DockerRunner;
 import { checkProfileRegistry } from '../execution/profile.js';
-import { planAnalysis, planBootstrap, plannerAnalysisFrom, plannerLockFrom, plannerPolicyFrom, plannerSnapshotFrom } from '../planner/index.js';
+import {
+  planAnalysis,
+  planBootstrap,
+  plannerAnalysisFrom,
+  plannerLockFrom,
+  plannerPolicyFrom,
+  plannerSnapshotFrom,
+} from '../planner/index.js';
 import type { EffectivePolicy } from '../policy/index.js';
 import { captureSnapshot } from '../snapshot/capture.js';
 import { openSnapshot } from '../snapshot/materialize.js';
@@ -39,12 +46,28 @@ import { ServiceError } from './owner-service.js';
 import { scannerReportOf } from '../reports/scanner.js';
 import { retainedBootstrapForReport } from '../execution/retained-bootstrap.js';
 import type { BootstrapEvidence } from '../execution/bootstrap.js';
-import { publicRegistry, publicProfile, scannerExecution, externalDrivers, publicAvailability } from './scanner-profile.js';
+import {
+  publicRegistry,
+  publicProfile,
+  scannerExecution,
+  externalDrivers,
+  publicAvailability,
+} from './scanner-profile.js';
 import { checkPlanDatabases } from './scanner-assets.js';
 import { recordRunFailure, runFailureFacts } from './run-failure.js';
 import { withAsyncAdmissionFence } from '../store/admission-fence.js';
-import { preparationRunContext, recordPreparationBootstrap, type PreparationRunIdentity } from './preparation-inputs.js';
-import { SELECTION_SCHEMA, selectionClosure, unitIdentity, unitsToRun, type RerunSelection } from '../execution/selection.js';
+import {
+  preparationRunContext,
+  recordPreparationBootstrap,
+  type PreparationRunIdentity,
+} from './preparation-inputs.js';
+import {
+  SELECTION_SCHEMA,
+  selectionClosure,
+  unitIdentity,
+  unitsToRun,
+  type RerunSelection,
+} from '../execution/selection.js';
 
 const digest = (v: unknown) => `sha256:${createHash('sha256').update(canonicalJsonBytes(v)).digest('hex')}`;
 export const WORKSPACE_SOURCE = 'workspace';
@@ -65,14 +88,22 @@ export interface CanonicalDisclosure {
   readonly unitIds: readonly string[];
   readonly ruleGaps: number;
   readonly requiredCoverageAchievable: boolean;
-  readonly reviews?:readonly {kind:string;segmentId:string;selection:import('../contracts/instructions.js').ReviewProviderSelection;terms:import('../contracts/plan.js').PlannedReview['terms'];instructionDigest:string;skills:'none-selected';vendorInstructions:'unobserved'}[];
+  readonly reviews?: readonly {
+    kind: string;
+    segmentId: string;
+    selection: import('../contracts/instructions.js').ReviewProviderSelection;
+    terms: import('../contracts/plan.js').PlannedReview['terms'];
+    instructionDigest: string;
+    skills: 'none-selected';
+    vendorInstructions: 'unobserved';
+  }[];
   readonly label: 'foundation-preview' | 'deterministic';
 }
 
 /** The identity a write on a run is decided against: its current admitted revision. */
 export interface CurrentPlan {
-  readonly model?:{providerId:string;bindingDigest:string;budget:import('../contracts/policy.js').Budget};
-  readonly modelConflict?:true;
+  readonly model?: { providerId: string; bindingDigest: string; budget: import('../contracts/policy.js').Budget };
+  readonly modelConflict?: true;
   readonly runId: string;
   readonly revision: number;
   readonly planDigest: string;
@@ -82,7 +113,9 @@ export interface CurrentPlan {
 }
 
 /** A plan resting on the foundation-preview detector, whatever its rules are called. */
-const isPreview = (plan: PlanRevision) => !plan.pins.rules.some(r => externalDrivers().has(r.adapterId)) && plan.pins.rules.some(r => r.adapterId === PREVIEW_DETECTOR_ID || r.familyId === PREVIEW_RULE);
+const isPreview = (plan: PlanRevision) =>
+  !plan.pins.rules.some((r) => externalDrivers().has(r.adapterId)) &&
+  plan.pins.rules.some((r) => r.adapterId === PREVIEW_DETECTOR_ID || r.familyId === PREVIEW_RULE);
 
 /** Refuses a plan that would ask a shipped check adapter to run a rule it does not implement exactly. */
 export function assertSupportedRules(plan: Pick<PlanRevision, 'pins'>): void {
@@ -93,18 +126,52 @@ export function assertSupportedRules(plan: Pick<PlanRevision, 'pins'>): void {
 /** Effects follow executable admitted units; only the exact package preview is a local artifact operation. */
 export function planEffects(plan: Pick<PlanRevision, 'units'>): readonly ActionEffect[] {
   const preview = publicRegistry().get(PREVIEW_DETECTOR_ID).digest;
-  const tool = plan.units.some(unit => unit.stage === 'check' && (unit.adapterId !== PREVIEW_DETECTOR_ID || unit.implementationDigest !== preview));
-  const reviews=plan.units.filter(u=>u.review);return Object.freeze([...new Set<ActionEffect>(['local-artifacts',...(tool?['tool-execution' as const]:[]),...(reviews.length?['paid-inference' as const]:[]),...(reviews.some(u=>u.review!.terms.disclosure==='hosted')?['source-disclosure' as const,'network' as const]:[])])]);
+  const tool = plan.units.some(
+    (unit) =>
+      unit.stage === 'check' && (unit.adapterId !== PREVIEW_DETECTOR_ID || unit.implementationDigest !== preview),
+  );
+  const reviews = plan.units.filter((u) => u.review);
+  return Object.freeze([
+    ...new Set<ActionEffect>([
+      'local-artifacts',
+      ...(tool ? ['tool-execution' as const] : []),
+      ...(reviews.length ? ['paid-inference' as const] : []),
+      ...(reviews.some((u) => u.review!.terms.disclosure === 'hosted')
+        ? ['source-disclosure' as const, 'network' as const]
+        : []),
+    ]),
+  ]);
 }
 
 function disclose(plan: PlanRevision): CanonicalDisclosure {
   return Object.freeze({
-    planId: plan.runId, runId: plan.runId, revision: plan.revision, planDigest: plan.digest, snapshotId: plan.pins.snapshotId!,
-    effects: planEffects(plan), checks: Object.freeze({ ...plan.tallies.checks }), units: plan.units.length,
-    unitIds: Object.freeze(plan.units.map(u => u.id).sort()),
-    ruleGaps: plan.ruleGaps.length, requiredCoverageAchievable: plan.requiredCoverageAchievable,
-    ...(plan.units.some(u=>u.review)?{reviews:plan.units.filter(u=>u.review).map(u=>({kind:u.stage,segmentId:u.review!.segmentId,selection:u.review!.selection,terms:u.review!.terms,instructionDigest:u.review!.instructionDigest,skills:'none-selected' as const,vendorInstructions:'unobserved' as const}))}:{}),
-    label: isPreview(plan) ? 'foundation-preview' as const : 'deterministic' as const,
+    planId: plan.runId,
+    runId: plan.runId,
+    revision: plan.revision,
+    planDigest: plan.digest,
+    snapshotId: plan.pins.snapshotId!,
+    effects: planEffects(plan),
+    checks: Object.freeze({ ...plan.tallies.checks }),
+    units: plan.units.length,
+    unitIds: Object.freeze(plan.units.map((u) => u.id).sort()),
+    ruleGaps: plan.ruleGaps.length,
+    requiredCoverageAchievable: plan.requiredCoverageAchievable,
+    ...(plan.units.some((u) => u.review)
+      ? {
+          reviews: plan.units
+            .filter((u) => u.review)
+            .map((u) => ({
+              kind: u.stage,
+              segmentId: u.review!.segmentId,
+              selection: u.review!.selection,
+              terms: u.review!.terms,
+              instructionDigest: u.review!.instructionDigest,
+              skills: 'none-selected' as const,
+              vendorInstructions: 'unobserved' as const,
+            })),
+        }
+      : {}),
+    label: isPreview(plan) ? ('foundation-preview' as const) : ('deterministic' as const),
   });
 }
 
@@ -116,9 +183,29 @@ export async function currentPlan(store: SentinelStore, runId: string): Promise<
   const admitted = await loadPlan(store, runId, revision);
   // A selected rerun's effects are those of the units it runs; held units start nothing.
   const runs = admitted.selection ? unitsToRun(admitted.selection) : null;
-  const effects = planEffects(runs ? { units: admitted.plan.units.filter(u => runs.has(u.id)) } : admitted.plan);
-  const reviews=admitted.plan.units.filter(u=>u.review),bindings=new Set(reviews.map(u=>u.review!.selection.bindingDigest)),first=reviews[0]?.review;
-  return Object.freeze({...(bindings.size>1?{modelConflict:true as const}:first?{model:{providerId:first.selection.providerId,bindingDigest:first.selection.bindingDigest,budget:first.terms.budget}}:{}),runId, revision, planDigest: admitted.plan.digest, policyRevision: admitted.plan.pins.policyDigest ?? '', kind: admitted.plan.kind, effects });
+  const effects = planEffects(runs ? { units: admitted.plan.units.filter((u) => runs.has(u.id)) } : admitted.plan);
+  const reviews = admitted.plan.units.filter((u) => u.review),
+    bindings = new Set(reviews.map((u) => u.review!.selection.bindingDigest)),
+    first = reviews[0]?.review;
+  return Object.freeze({
+    ...(bindings.size > 1
+      ? { modelConflict: true as const }
+      : first
+        ? {
+            model: {
+              providerId: first.selection.providerId,
+              bindingDigest: first.selection.bindingDigest,
+              budget: first.terms.budget,
+            },
+          }
+        : {}),
+    runId,
+    revision,
+    planDigest: admitted.plan.digest,
+    policyRevision: admitted.plan.pins.policyDigest ?? '',
+    kind: admitted.plan.kind,
+    effects,
+  });
 }
 
 const backendOf = (wrapRunner: WrapRunner | undefined) => (wrapRunner ? { backendOptions: { wrapRunner } } : {});
@@ -128,63 +215,132 @@ const backendOf = (wrapRunner: WrapRunner | undefined) => (wrapRunner ? { backen
  * profile again is the same run: its admitted analysis is disclosed again (`kept`), nothing is captured twice.
  */
 interface WorkspacePlanOptions {
-  workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; wrapRunner?: WrapRunner; registry?: AdapterRegistry; parentId?: string | null; now: Date;
+  workspace: string;
+  trustDir: string;
+  policy: EffectivePolicy;
+  scratchRoot: string;
+  wrapRunner?: WrapRunner;
+  registry?: AdapterRegistry;
+  parentId?: string | null;
+  now: Date;
   /** Re-plan over this admitted snapshot instead of capturing again (a retry of the run that pinned it). */
   snapshotId?: string;
   /** Test seam: the trusted profile to plan under (the shipped one by default). */
   profile?: TrustedProfile;
 }
-export async function planWorkspaceCanonical(store: SentinelStore, options: WorkspacePlanOptions): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure }> {
+export async function planWorkspaceCanonical(
+  store: SentinelStore,
+  options: WorkspacePlanOptions,
+): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure }> {
   return planWorkspaceCanonicalInner(store, options);
 }
 /** Private continuation from an opaque captured preparation, never a request-supplied profile or snapshot. */
-export async function planPreparedWorkspaceCanonical(store: SentinelStore, identity: PreparationRunIdentity, options: {
-  scratchRoot: string; wrapRunner?: WrapRunner; onCoordinator?: (coordinator: Coordinator) => void;
-}): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure }> {
+export async function planPreparedWorkspaceCanonical(
+  store: SentinelStore,
+  identity: PreparationRunIdentity,
+  options: {
+    scratchRoot: string;
+    wrapRunner?: WrapRunner;
+    onCoordinator?: (coordinator: Coordinator) => void;
+  },
+): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure }> {
   const prepared = preparationRunContext(store, identity);
-  return withAsyncAdmissionFence(store, () => prepared.clock.stillWithin(), () => planWorkspaceCanonicalInner(store, {
-    workspace: prepared.workspace, trustDir: prepared.trustDir, policy: prepared.policy, registry: prepared.registry,
-    scratchRoot: options.scratchRoot, wrapRunner: options.wrapRunner, parentId: prepared.parent?.runId ?? null,
-    now: new Date(prepared.clock.acceptedAt), snapshotId: identity.snapshotId,
-  }, { identity, onCoordinator: options.onCoordinator }));
+  return withAsyncAdmissionFence(
+    store,
+    () => prepared.clock.stillWithin(),
+    () =>
+      planWorkspaceCanonicalInner(
+        store,
+        {
+          workspace: prepared.workspace,
+          trustDir: prepared.trustDir,
+          policy: prepared.policy,
+          registry: prepared.registry,
+          scratchRoot: options.scratchRoot,
+          wrapRunner: options.wrapRunner,
+          parentId: prepared.parent?.runId ?? null,
+          now: new Date(prepared.clock.acceptedAt),
+          snapshotId: identity.snapshotId,
+        },
+        { identity, onCoordinator: options.onCoordinator },
+      ),
+  );
 }
-async function planWorkspaceCanonicalInner(store: SentinelStore, options: WorkspacePlanOptions, preparation?: {
-  identity: PreparationRunIdentity; onCoordinator?: (coordinator: Coordinator) => void;
-}): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure }> {
+async function planWorkspaceCanonicalInner(
+  store: SentinelStore,
+  options: WorkspacePlanOptions,
+  preparation?: {
+    identity: PreparationRunIdentity;
+    onCoordinator?: (coordinator: Coordinator) => void;
+  },
+): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure }> {
   const prepared = preparation ? preparationRunContext(store, preparation.identity) : null;
-  const checkpoint = () => { if (preparation) preparationRunContext(store, preparation.identity); else store.assertHeld(); };
+  const checkpoint = () => {
+    if (preparation) preparationRunContext(store, preparation.identity);
+    else store.assertHeld();
+  };
   const within = prepared ? () => prepared.clock.stillWithin() : undefined;
   const book = new RuleLockBook(options.trustDir);
   const current = prepared?.current ?? book.current();
   if (!current) throw new ServiceError('sentinel.service.noRuleLock');
   const packs = prepared?.packs ?? book.packsOf(current.lock);
   const registry = options.registry ?? publicRegistry(options.trustDir);
-  const ids = [...new Set(packs.flatMap(p => p.manifest.rules.filter(r => options.policy.rules.includes(r.familyId)).map(r => r.implementation.adapterId)))].filter(id => externalDrivers().has(id));
-  const available = prepared || options.profile ? new Set<string>() : await publicAvailability(options.trustDir, current.lock, packs, ids, options.scratchRoot, options.wrapRunner);
-  if(hasConfiguredReviews(options.policy))for(const a of REVIEW_ADAPTERS)available.add(a.id);
+  const ids = [
+    ...new Set(
+      packs.flatMap((p) =>
+        p.manifest.rules
+          .filter((r) => options.policy.rules.includes(r.familyId))
+          .map((r) => r.implementation.adapterId),
+      ),
+    ),
+  ].filter((id) => externalDrivers().has(id));
+  const available =
+    prepared || options.profile
+      ? new Set<string>()
+      : await publicAvailability(options.trustDir, current.lock, packs, ids, options.scratchRoot, options.wrapRunner);
+  if (hasConfiguredReviews(options.policy)) for (const a of REVIEW_ADAPTERS) available.add(a.id);
   const profile = prepared?.profile ?? options.profile ?? publicProfile(registry, available, packs);
-  const snapshot = prepared?.snapshot ?? (options.snapshotId !== undefined
-    ? (await openSnapshot(store, options.snapshotId)).snapshot
-    : (await captureSnapshot(store, {
-      // No folder is left out by name: `.farsight` is ordinary source. Only the exact store this process holds is
-      // excluded (snapshot/capture.ts), and the run's scratch lives inside it (scratch-lease.ts).
-      mode: 'working-copy', sources: [{ sourceId: WORKSPACE_SOURCE, repositoryId: 'local-workspace', root: options.workspace }],
-    })).snapshot);
+  const snapshot =
+    prepared?.snapshot ??
+    (options.snapshotId !== undefined
+      ? (await openSnapshot(store, options.snapshotId)).snapshot
+      : (
+          await captureSnapshot(store, {
+            // No folder is left out by name: `.farsight` is ordinary source. Only the exact store this process holds is
+            // excluded (snapshot/capture.ts), and the run's scratch lives inside it (scratch-lease.ts).
+            mode: 'working-copy',
+            sources: [{ sourceId: WORKSPACE_SOURCE, repositoryId: 'local-workspace', root: options.workspace }],
+          })
+        ).snapshot);
   checkpoint();
   // The run is what it would read and do: the captured inventory (not the capture's time), the lock, the policy and
   // the profile. The same content under the same terms plans to the same run.
-  const key = { inventory: snapshot.inventoryDigest, lock: current.digest, policy: options.policy.revision, profile: profile.digest, parent: options.parentId ?? null };
+  const key = {
+    inventory: snapshot.inventoryDigest,
+    lock: current.digest,
+    policy: options.policy.revision,
+    profile: profile.digest,
+    parent: options.parentId ?? null,
+  };
   const runId = workspaceRunIdentity(store, key);
   const latest = store.ledger.latestPlan(runId);
   const analysisFor = (boot: PlanRevision, evidence: BootstrapEvidence) => {
-    const inventory = boot.units.find(u => u.stage === 'inventory')!;
-    const deterministic=planAnalysis({
-      runId, revision: 2, previous: boot, bootstrap: [{ id: inventory.id, revision: inventory.revision }], profile: profile.planner,
-      snapshot: plannerSnapshotFrom(evidence.snapshot), analyses: evidence.analyses.map(a => plannerAnalysisFrom(a as never)),
-      lock: plannerLockFrom(current.lock, packs, current.digest), policy: plannerPolicyFrom(options.policy),
+    const inventory = boot.units.find((u) => u.stage === 'inventory')!;
+    const deterministic = planAnalysis({
+      runId,
+      revision: 2,
+      previous: boot,
+      bootstrap: [{ id: inventory.id, revision: inventory.revision }],
+      profile: profile.planner,
+      snapshot: plannerSnapshotFrom(evidence.snapshot),
+      analyses: evidence.analyses.map((a) => plannerAnalysisFrom(a as never)),
+      lock: plannerLockFrom(current.lock, packs, current.digest),
+      policy: plannerPolicyFrom(options.policy),
       limits: options.policy.rules.includes(PREVIEW_RULE) ? ANALYSIS_LIMITS : { maxScopesPerWork: 32 },
     });
-    return hasConfiguredReviews(options.policy)?reviewsFor(deterministic,evidence,options.policy,registry,packs):{plan:deterministic,artifacts:[]};
+    return hasConfiguredReviews(options.policy)
+      ? reviewsFor(deterministic, evidence, options.policy, registry, packs)
+      : { plan: deterministic, artifacts: [] };
   };
   if (latest?.kind === 'analysis') {
     const active = store.ledger.getRun(runId);
@@ -193,13 +349,21 @@ async function planWorkspaceCanonicalInner(store: SentinelStore, options: Worksp
     if (active?.planRevision === 1 && !['completed', 'canceled', 'canceling'].includes(active.state)) {
       let expected: PlanRevision;
       try {
-        const first = await loadPlan(store, runId, 1), next = await loadPlan(store, runId, latest.revision);
-        if (first.plan.kind !== 'bootstrap' || next.plan.revision !== 2 || next.plan.previous !== first.plan.digest || next.selection
-          || !canonicalJsonBytes(first.profile).equals(canonicalJsonBytes(profile.record))
-          || !canonicalJsonBytes(next.profile).equals(canonicalJsonBytes(profile.record))) throw new Error('not the immediate current-terms bootstrap successor');
+        const first = await loadPlan(store, runId, 1),
+          next = await loadPlan(store, runId, latest.revision);
+        if (
+          first.plan.kind !== 'bootstrap' ||
+          next.plan.revision !== 2 ||
+          next.plan.previous !== first.plan.digest ||
+          next.selection ||
+          !canonicalJsonBytes(first.profile).equals(canonicalJsonBytes(profile.record)) ||
+          !canonicalJsonBytes(next.profile).equals(canonicalJsonBytes(profile.record))
+        )
+          throw new Error('not the immediate current-terms bootstrap successor');
         const evidence = await retainedBootstrapForReport(store, runId, next);
         expected = analysisFor(first.plan, evidence).plan;
-        if (expected.digest !== next.plan.digest || evidence.snapshot.id !== snapshot.id) throw new Error('not the canonical successor from accepted evidence');
+        if (expected.digest !== next.plan.digest || evidence.snapshot.id !== snapshot.id)
+          throw new Error('not the canonical successor from accepted evidence');
         assertSupportedRules(expected);
         if (!options.profile) checkPlanDatabases(expected, current.lock);
       } catch {
@@ -216,61 +380,134 @@ async function planWorkspaceCanonicalInner(store: SentinelStore, options: Worksp
     return { outcome: 'kept', disclosure: disclose(kept) };
   }
 
-  const boot = latest ? (await loadPlan(store, runId, 1)).plan : planBootstrap({ runId, sourceIds: [WORKSPACE_SOURCE], profile: profile.planner });
+  const boot = latest
+    ? (await loadPlan(store, runId, 1)).plan
+    : planBootstrap({ runId, sourceIds: [WORKSPACE_SOURCE], profile: profile.planner });
   checkpoint();
-  if (!latest) await admitPlan(store, { plan: boot, ruleLock: null, policy: null, profile: profile.record }, within, prepared ? checkpoint : undefined);
+  if (!latest)
+    await admitPlan(
+      store,
+      { plan: boot, ruleLock: null, policy: null, profile: profile.record },
+      within,
+      prepared ? checkpoint : undefined,
+    );
   if (preparation) await recordPreparationBootstrap(store, preparation.identity);
   checkpoint();
   const recorded = store.ledger.getRun(runId)?.envelope;
-  const run: RunEnvelope = recorded ?? {
-    schema: 'sentinel-run/draft-1', id: runId, parentId: options.parentId ?? null, baselineId: null, snapshotId: snapshot.id, planRevision: 1,
-    coordinatorEpoch: store.epoch, ruleLockDigest: current.digest, toolLockDigest: current.digest, policyRevisionDigest: options.policy.revision,
-    requestedScope: { sourceIds: [WORKSPACE_SOURCE], profile: profile.planner.id }, budgets: { maxTokens: null, maxCost: null, deadlineMs: 600_000 },
-    createdAt: options.now.toISOString(), state: 'planned',
-  } as RunEnvelope;
+  const run: RunEnvelope =
+    recorded ??
+    ({
+      schema: 'sentinel-run/draft-1',
+      id: runId,
+      parentId: options.parentId ?? null,
+      baselineId: null,
+      snapshotId: snapshot.id,
+      planRevision: 1,
+      coordinatorEpoch: store.epoch,
+      ruleLockDigest: current.digest,
+      toolLockDigest: current.digest,
+      policyRevisionDigest: options.policy.revision,
+      requestedScope: { sourceIds: [WORKSPACE_SOURCE], profile: profile.planner.id },
+      budgets: { maxTokens: null, maxCost: null, deadlineMs: 600_000 },
+      createdAt: options.now.toISOString(),
+      state: 'planned',
+    } as RunEnvelope);
   // A run whose bootstrap already ended without publishing is finished: it is not run again. Planning the same
   // content again names it, and `rerun` plans a new run after it.
-  const ended = recorded && (store.ledger.getRun(runId)?.state === 'completed' || store.ledger.getRun(runId)?.state === 'canceled');
+  const ended =
+    recorded && (store.ledger.getRun(runId)?.state === 'completed' || store.ledger.getRun(runId)?.state === 'canceled');
   let booted: RunSummary | undefined;
   if (!ended) {
-    const coordinator = await Coordinator.open({ store, runId, ...(recorded ? {} : { run }), registry, scratchRoot: options.scratchRoot, ...backendOf(options.wrapRunner) });
+    const coordinator = await Coordinator.open({
+      store,
+      runId,
+      ...(recorded ? {} : { run }),
+      registry,
+      scratchRoot: options.scratchRoot,
+      ...backendOf(options.wrapRunner),
+    });
     preparation?.onCoordinator?.(coordinator);
     within?.();
     booted = await coordinator.run();
   }
   checkpoint();
-  if (!booted || booted.kind !== 'bootstrap' || booted.published < boot.units.length) throw new ServiceError('sentinel.service.bootstrapFailed', { runId });
+  if (!booted || booted.kind !== 'bootstrap' || booted.published < boot.units.length)
+    throw new ServiceError('sentinel.service.bootstrapFailed', { runId });
 
-  const inventory = boot.units.find(u => u.stage === 'inventory')!;
+  const inventory = boot.units.find((u) => u.stage === 'inventory')!;
   const evidence = await loadBootstrap(store, runId, { id: inventory.id, revision: inventory.revision });
-  const reviewed = analysisFor(boot, evidence),analysis=reviewed.plan;
+  const reviewed = analysisFor(boot, evidence),
+    analysis = reviewed.plan;
   // Before admission: a shipped check adapter runs only the exact rules it implements.
   assertSupportedRules(analysis);
   if (!options.profile) checkPlanDatabases(analysis, current.lock);
   checkpoint();
-  await admitPlan(store, { plan: analysis, ruleLock: current.lock, policy: options.policy, profile: profile.record, reviewArtifacts: reviewed.artifacts }, within, prepared ? checkpoint : undefined);
+  await admitPlan(
+    store,
+    {
+      plan: analysis,
+      ruleLock: current.lock,
+      policy: options.policy,
+      profile: profile.record,
+      reviewArtifacts: reviewed.artifacts,
+    },
+    within,
+    prepared ? checkpoint : undefined,
+  );
   checkpoint();
   store.ledger.advanceRunPlan(runId, analysis.revision);
   return { outcome: 'prepared', disclosure: disclose(analysis) };
 }
 
 /** Executes the run's current admitted revision. The coordinator records coverage and the outcome. */
-export async function executeRun(store: SentinelStore, runId: string, options: { scratchRoot: string; wrapRunner?: WrapRunner; registry?: AdapterRegistry; run?: RunEnvelope; trustDir?: string; drivers?: import('../execution/check-drivers.js').CheckDriverRegistry;review?:import('../review/dispatch.js').ReviewRuntime }): Promise<RunSummary> {
+export async function executeRun(
+  store: SentinelStore,
+  runId: string,
+  options: {
+    scratchRoot: string;
+    wrapRunner?: WrapRunner;
+    registry?: AdapterRegistry;
+    run?: RunEnvelope;
+    trustDir?: string;
+    drivers?: import('../execution/check-drivers.js').CheckDriverRegistry;
+    review?: import('../review/dispatch.js').ReviewRuntime;
+  },
+): Promise<RunSummary> {
   // Again before anything runs: an admitted plan from elsewhere is held to the same exact rules.
   const plan = await currentPlan(store, runId);
   if (plan) assertSupportedRules((await loadPlan(store, runId, plan.revision)).plan);
   const registry = options.registry ?? publicRegistry(options.trustDir);
-  const assets = options.drivers ? { drivers: options.drivers } : await scannerExecution(store, runId, options.trustDir, options.scratchRoot, registry, options.wrapRunner);
-  const run = options.run ?? await rerunEnvelopeOf(store, runId);
-  const coordinator = await Coordinator.open({ ...assets,...(options.review?{review:options.review}:{}), store, runId, registry, scratchRoot: options.scratchRoot, ...backendOf(options.wrapRunner), ...(run ? { run } : {}) });
-  try { return await coordinator.run(); } catch (error) {
-    try { recordRunFailure(store, runId, error); } catch { /* preserve the original error when the store cannot retain it */ }
+  const assets = options.drivers
+    ? { drivers: options.drivers }
+    : await scannerExecution(store, runId, options.trustDir, options.scratchRoot, registry, options.wrapRunner);
+  const run = options.run ?? (await rerunEnvelopeOf(store, runId));
+  const coordinator = await Coordinator.open({
+    ...assets,
+    ...(options.review ? { review: options.review } : {}),
+    store,
+    runId,
+    registry,
+    scratchRoot: options.scratchRoot,
+    ...backendOf(options.wrapRunner),
+    ...(run ? { run } : {}),
+  });
+  try {
+    return await coordinator.run();
+  } catch (error) {
+    try {
+      recordRunFailure(store, runId, error);
+    } catch {
+      /* preserve the original error when the store cannot retain it */
+    }
     throw error;
   }
 }
 
 /** Every finding the preview detector published for the run's current revision. */
-export async function previewFindingsOf(store: SentinelStore, runId: string): Promise<{ findings: unknown[]; scanned: number; skipped: number } | undefined> {
+export async function previewFindingsOf(
+  store: SentinelStore,
+  runId: string,
+): Promise<{ findings: unknown[]; scanned: number; skipped: number } | undefined> {
   const plan = await currentPlan(store, runId);
   if (!plan || plan.kind !== 'analysis') return undefined;
   const admitted = await loadPlan(store, runId, plan.revision);
@@ -279,7 +516,9 @@ export async function previewFindingsOf(store: SentinelStore, runId: string): Pr
   for (const u of admitted.plan.units) {
     const pub = store.ledger.getPublication({ id: u.id, revision: u.revision });
     if (!pub) continue;
-    for (const o of pub.outputs.filter(x => x.schema === PREVIEW_FINDINGS_SCHEMA || x.schema === 'application/json')) {
+    for (const o of pub.outputs.filter(
+      (x) => x.schema === PREVIEW_FINDINGS_SCHEMA || x.schema === 'application/json',
+    )) {
       try {
         const v = JSON.parse((await store.readArtifact(o.id as never)).toString('utf8'));
         if (v?.schema !== PREVIEW_FINDINGS_SCHEMA) continue;
@@ -287,7 +526,9 @@ export async function previewFindingsOf(store: SentinelStore, runId: string): Pr
         out.findings.push(...v.findings);
         out.scanned += v.scanned.length;
         out.skipped += v.skipped.length;
-      } catch { /* another output */ }
+      } catch {
+        /* another output */
+      }
     }
   }
   return any ? out : undefined;
@@ -305,8 +546,11 @@ export async function previewFindingsOf(store: SentinelStore, runId: string): Pr
  * from the store and this installation alone, so it reads the same after a disconnect or a restart. Undefined when it
  * can; otherwise why not, as the refusal a start would meet.
  */
-export async function notExecutableHere(store: SentinelStore, runId: string, registry: AdapterRegistry = publicRegistry()):
-  Promise<{ error: string; reason?: string } | undefined> {
+export async function notExecutableHere(
+  store: SentinelStore,
+  runId: string,
+  registry: AdapterRegistry = publicRegistry(),
+): Promise<{ error: string; reason?: string } | undefined> {
   const plan = await currentPlan(store, runId);
   if (!plan) return undefined;
   const admitted = await loadPlan(store, runId, plan.revision);
@@ -316,49 +560,127 @@ export async function notExecutableHere(store: SentinelStore, runId: string, reg
   } catch (e) {
     const code = (e as { code?: unknown }).code;
     const reason = (e as { detail?: { reason?: unknown } }).detail?.reason;
-    return { error: typeof code === 'string' ? code : 'sentinel.execution.planInvalid', ...(typeof reason === 'string' ? { reason } : {}) };
+    return {
+      error: typeof code === 'string' ? code : 'sentinel.execution.planInvalid',
+      ...(typeof reason === 'string' ? { reason } : {}),
+    };
   }
   return undefined;
 }
 
-export async function canonicalResult(store: SentinelStore, command: string, runId: string, options: { executing: boolean; verdicts?: PrintedVerdicts; facts?: Record<string, unknown>;
-  /** The registry that would execute it (this installation's by default). */
-  registry?: AdapterRegistry; trustDir?: string }): Promise<CommandResult> {
+export async function canonicalResult(
+  store: SentinelStore,
+  command: string,
+  runId: string,
+  options: {
+    executing: boolean;
+    verdicts?: PrintedVerdicts;
+    facts?: Record<string, unknown>;
+    /** The registry that would execute it (this installation's by default). */
+    registry?: AdapterRegistry;
+    trustDir?: string;
+  },
+): Promise<CommandResult> {
   const base = options.verdicts ? { verdicts: options.verdicts } : {};
   const recorded = store.ledger.getRun(runId);
   const plan = await currentPlan(store, runId);
-  if (!plan) return result(command, 'configuration-failure', { ...base, reasonCode: 'sentinel.service.runUnknown', facts: { runId } });
+  if (!plan)
+    return result(command, 'configuration-failure', {
+      ...base,
+      reasonCode: 'sentinel.service.runUnknown',
+      facts: { runId },
+    });
   if (!recorded) {
     // A selected rerun is admitted before it is first run: waiting for `run`, exactly as admitted.
     const admitted = await loadPlan(store, runId, plan.revision);
-    if (!admitted.selection) return result(command, 'configuration-failure', { ...base, reasonCode: 'sentinel.service.runUnknown', facts: { runId } });
-    return result(command, 'prepared', { ...base, reasonCode: 'sentinel.service.runAwaiting',
-      facts: { ...(options.facts ?? {}), runId, state: 'planned', revision: plan.revision, parentId: admitted.selection.parent.runId,
-        units: unitsToRun(admitted.selection).size, held: admitted.selection.held.length } });
+    if (!admitted.selection)
+      return result(command, 'configuration-failure', {
+        ...base,
+        reasonCode: 'sentinel.service.runUnknown',
+        facts: { runId },
+      });
+    return result(command, 'prepared', {
+      ...base,
+      reasonCode: 'sentinel.service.runAwaiting',
+      facts: {
+        ...(options.facts ?? {}),
+        runId,
+        state: 'planned',
+        revision: plan.revision,
+        parentId: admitted.selection.parent.runId,
+        units: unitsToRun(admitted.selection).size,
+        held: admitted.selection.held.length,
+      },
+    });
   }
   const state = recorded.state;
   const admitted = await loadPlan(store, runId, plan.revision);
   const preview = isPreview(admitted.plan);
   const findings = state === 'completed' ? await previewFindingsOf(store, runId) : undefined;
-  const scanner = state === 'completed' ? await scannerReportOf(store, runId, new Date(), {trustDir:options.trustDir}) : undefined;
+  const scanner =
+    state === 'completed' ? await scannerReportOf(store, runId, new Date(), { trustDir: options.trustDir }) : undefined;
   const diagnostic = runFailureFacts(store, runId);
-  const facts = { ...(options.facts ?? {}), ...diagnostic, runId, state, revision: plan.revision, runOutcome: recorded.outcome ?? null,
-    previewFindings: findings?.findings.length ?? null, ...(scanner ? { observations: scanner.observations.length, requiredChecks: scanner.coverage.required, requiredComplete: scanner.coverage.requiredComplete, requiredCoverageComplete: scanner.coverage.complete } : {}), label: preview ? 'foundation-preview' : 'deterministic' };
+  const facts = {
+    ...(options.facts ?? {}),
+    ...diagnostic,
+    runId,
+    state,
+    revision: plan.revision,
+    runOutcome: recorded.outcome ?? null,
+    previewFindings: findings?.findings.length ?? null,
+    ...(scanner
+      ? {
+          observations: scanner.observations.length,
+          requiredChecks: scanner.coverage.required,
+          requiredComplete: scanner.coverage.requiredComplete,
+          requiredCoverageComplete: scanner.coverage.complete,
+        }
+      : {}),
+    label: preview ? 'foundation-preview' : 'deterministic',
+  };
   if (state === 'completed') {
-    if (recorded.outcome === 'execution-failure') return result(command, 'configuration-failure', { ...base, facts, reasonCode: 'sentinel.service.executionFailed' });
-    if (preview) return result(command, 'required-coverage-incomplete', { ...base, facts, reasonCode: 'sentinel.service.previewNotCoverage' });
-    return result(command, 'required-coverage-incomplete', { ...base, facts,
-      reasonCode: recorded.outcome === 'complete-coverage' ? 'sentinel.service.policyNotEvaluated' : 'sentinel.service.coverageIncomplete' });
+    if (recorded.outcome === 'execution-failure')
+      return result(command, 'configuration-failure', {
+        ...base,
+        facts,
+        reasonCode: 'sentinel.service.executionFailed',
+      });
+    if (preview)
+      return result(command, 'required-coverage-incomplete', {
+        ...base,
+        facts,
+        reasonCode: 'sentinel.service.previewNotCoverage',
+      });
+    return result(command, 'required-coverage-incomplete', {
+      ...base,
+      facts,
+      reasonCode:
+        recorded.outcome === 'complete-coverage'
+          ? 'sentinel.service.policyNotEvaluated'
+          : 'sentinel.service.coverageIncomplete',
+    });
   }
-  if (state === 'canceled' || (state === 'paused' && !options.executing)) return result(command, 'configuration-failure', { ...base, facts, reasonCode: 'sentinel.service.runNotCompleted' });
+  if (state === 'canceled' || (state === 'paused' && !options.executing))
+    return result(command, 'configuration-failure', { ...base, facts, reasonCode: 'sentinel.service.runNotCompleted' });
   if (!options.executing) {
     // Not executing and not ended: `run` would execute it, unless this installation cannot. Then saying it waits (or
     // was interrupted) would mislead; it needs a new plan made by this installation.
     const blocked = await notExecutableHere(store, runId, options.registry);
-    if (blocked) return result(command, 'configuration-failure', { ...base, facts: { ...facts, ...blocked }, reasonCode: 'sentinel.service.runNotExecutable' });
+    if (blocked)
+      return result(command, 'configuration-failure', {
+        ...base,
+        facts: { ...facts, ...blocked },
+        reasonCode: 'sentinel.service.runNotExecutable',
+      });
     // Planned and admitted, with none of its analysis started yet: waiting for `run`, not interrupted.
-    const untouched = admitted.plan.kind === 'analysis' && admitted.plan.units.every(u => !store.ledger.getWork({ id: u.id, revision: u.revision }));
-    return result(command, untouched && !diagnostic.error ? 'prepared' : 'configuration-failure', { ...base, facts, reasonCode: untouched && !diagnostic.error ? 'sentinel.service.runAwaiting' : 'sentinel.service.runInterrupted' });
+    const untouched =
+      admitted.plan.kind === 'analysis' &&
+      admitted.plan.units.every((u) => !store.ledger.getWork({ id: u.id, revision: u.revision }));
+    return result(command, untouched && !diagnostic.error ? 'prepared' : 'configuration-failure', {
+      ...base,
+      facts,
+      reasonCode: untouched && !diagnostic.error ? 'sentinel.service.runAwaiting' : 'sentinel.service.runInterrupted',
+    });
   }
   return result(command, 'submitted', { ...base, facts });
 }
@@ -396,28 +718,45 @@ const sortedIds = (x: Iterable<string>) => [...x].sort();
 async function parentClosure(store: SentinelStore, parentId: string, selected: readonly string[]) {
   const parent = store.ledger.getRun(parentId);
   if (!parent) return { reasonCode: 'sentinel.service.runUnknown' } as Refusal;
-  if (parent.state !== 'completed' && parent.state !== 'canceled') return { reasonCode: 'sentinel.service.runNotEnded' } as Refusal;
+  if (parent.state !== 'completed' && parent.state !== 'canceled')
+    return { reasonCode: 'sentinel.service.runNotEnded' } as Refusal;
   const plan = await currentPlan(store, parentId);
   if (!plan) return { reasonCode: 'sentinel.service.planUnknown' } as Refusal;
   const admitted = await loadPlan(store, parentId, plan.revision);
   const revision = admitted.plan;
-  const units = new Map(revision.units.map(u => [u.id, u]));
-  const unknown = selected.filter(id => !units.has(id));
+  const units = new Map(revision.units.map((u) => [u.id, u]));
+  const unknown = selected.filter((id) => !units.has(id));
   if (unknown.length) return { reasonCode: 'sentinel.service.stageUnknown', facts: { unknown } } as Refusal;
   const chosen = new Set(selected.length ? selected : [...units.keys()]);
   const dependents = new Map<string, string[]>();
-  for (const u of revision.units) for (const d of u.dependencies) if (units.has(d.id)) dependents.set(d.id, [...(dependents.get(d.id) ?? []), u.id]);
+  for (const u of revision.units)
+    for (const d of u.dependencies) if (units.has(d.id)) dependents.set(d.id, [...(dependents.get(d.id) ?? []), u.id]);
   const downstream = new Set<string>();
-  const walkDown = (id: string) => { for (const n of dependents.get(id) ?? []) if (!chosen.has(n) && !downstream.has(n)) { downstream.add(n); walkDown(n); } };
+  const walkDown = (id: string) => {
+    for (const n of dependents.get(id) ?? [])
+      if (!chosen.has(n) && !downstream.has(n)) {
+        downstream.add(n);
+        walkDown(n);
+      }
+  };
   for (const id of chosen) walkDown(id);
   const rerun = new Set([...chosen, ...downstream]);
-  const prerequisites = new Set<string>(revision.reused.map(r => r.id));
-  const walkUp = (id: string) => { for (const d of units.get(id)?.dependencies ?? []) if (!rerun.has(d.id) && !prerequisites.has(d.id)) { prerequisites.add(d.id); walkUp(d.id); } };
+  const prerequisites = new Set<string>(revision.reused.map((r) => r.id));
+  const walkUp = (id: string) => {
+    for (const d of units.get(id)?.dependencies ?? [])
+      if (!rerun.has(d.id) && !prerequisites.has(d.id)) {
+        prerequisites.add(d.id);
+        walkUp(d.id);
+      }
+  };
   for (const id of rerun) walkUp(id);
   let bootstrap: BootstrapEvidence | undefined;
   if (rerun.size < units.size) {
-    try { bootstrap = await retainedBootstrapForReport(store, parentId, admitted); }
-    catch { return { reasonCode: 'sentinel.service.bootstrapUnavailable', facts: { parentId } } as Refusal; }
+    try {
+      bootstrap = await retainedBootstrapForReport(store, parentId, admitted);
+    } catch {
+      return { reasonCode: 'sentinel.service.bootstrapUnavailable', facts: { parentId } } as Refusal;
+    }
   }
   return { parent, revision, admitted, units, chosen, downstream, rerun, prerequisites, bootstrap };
 }
@@ -428,14 +767,24 @@ async function parentClosure(store: SentinelStore, parentId: string, selected: r
  * are reused (prerequisites and the published bootstrap). A strict subset is then planned under the terms in effect
  * now (selectedRerun) and the preview says exactly what that plan runs and holds; nothing is written.
  */
-export async function previewRerun(store: SentinelStore, parentId: string, selected: readonly string[], terms?: RerunTerms): Promise<RerunPreview | Refusal> {
+export async function previewRerun(
+  store: SentinelStore,
+  parentId: string,
+  selected: readonly string[],
+  terms?: RerunTerms,
+): Promise<RerunPreview | Refusal> {
   const closure = await parentClosure(store, parentId, selected);
   if ('reasonCode' in closure) return closure;
   const { parent, revision, units, chosen, downstream, rerun, prerequisites } = closure;
   const base = {
-    parentId, snapshotId: parent.envelope.snapshotId, selected: sortedIds(chosen), downstream: sortedIds(downstream), prerequisites: sortedIds(prerequisites),
-    checks: [...rerun].reduce((n, id) => n + (units.get(id)?.checks.length ?? 0), 0), all: rerun.size === units.size,
-    effects: planEffects({ units: revision.units.filter(unit => rerun.has(unit.id)) }),
+    parentId,
+    snapshotId: parent.envelope.snapshotId,
+    selected: sortedIds(chosen),
+    downstream: sortedIds(downstream),
+    prerequisites: sortedIds(prerequisites),
+    checks: [...rerun].reduce((n, id) => n + (units.get(id)?.checks.length ?? 0), 0),
+    all: rerun.size === units.size,
+    effects: planEffects({ units: revision.units.filter((unit) => rerun.has(unit.id)) }),
   };
   if (base.all || !terms) return Object.freeze(base);
   const planned = await selectedRerun(store, parentId, [...chosen], terms);
@@ -444,9 +793,16 @@ export async function previewRerun(store: SentinelStore, parentId: string, selec
 }
 
 /** Internal shared identity calculation; it reads no source or live capability and grants no admission. */
-export function workspaceRunIdentity(store: SentinelStore, key: {
-  readonly inventory: string; readonly lock: string; readonly policy: string; readonly profile: string; readonly parent: string | null;
-}): string {
+export function workspaceRunIdentity(
+  store: SentinelStore,
+  key: {
+    readonly inventory: string;
+    readonly lock: string;
+    readonly policy: string;
+    readonly profile: string;
+    readonly parent: string | null;
+  },
+): string {
   return key.parent ? rerunIdOf(store, key, true) : `run-${digest(key).slice(7, 39)}`;
 }
 
@@ -489,8 +845,16 @@ async function currentTerms(terms: RerunTerms) {
   if (!current) throw new ServiceError('sentinel.service.noRuleLock');
   const packs = book.packsOf(current.lock);
   const registry = terms.registry ?? publicRegistry(terms.trustDir);
-  const ids = [...new Set(packs.flatMap(p => p.manifest.rules.filter(r => terms.policy.rules.includes(r.familyId)).map(r => r.implementation.adapterId)))].filter(id => externalDrivers().has(id));
-  const available = terms.profile ? new Set<string>() : await publicAvailability(terms.trustDir, current.lock, packs, ids, terms.scratchRoot, terms.wrapRunner);
+  const ids = [
+    ...new Set(
+      packs.flatMap((p) =>
+        p.manifest.rules.filter((r) => terms.policy.rules.includes(r.familyId)).map((r) => r.implementation.adapterId),
+      ),
+    ),
+  ].filter((id) => externalDrivers().has(id));
+  const available = terms.profile
+    ? new Set<string>()
+    : await publicAvailability(terms.trustDir, current.lock, packs, ids, terms.scratchRoot, terms.wrapRunner);
   const profile = terms.profile ?? publicProfile(registry, available, packs);
   return { current, packs, profile };
 }
@@ -503,56 +867,110 @@ async function currentTerms(terms: RerunTerms) {
  * prerequisite the revision would have to reuse, or a parent without a published bootstrap is refused, never
  * widened.
  */
-export async function selectedRerun(store: SentinelStore, parentId: string, selected: readonly string[], terms: RerunTerms) {
+export async function selectedRerun(
+  store: SentinelStore,
+  parentId: string,
+  selected: readonly string[],
+  terms: RerunTerms,
+) {
   const closure = await parentClosure(store, parentId, selected);
   if ('reasonCode' in closure) return closure;
   const { parent, revision: parentPlan, units: parentUnits, chosen } = closure;
-  if (parentPlan.kind !== 'analysis') return { reasonCode: 'sentinel.service.bootstrapUnavailable', facts: { parentId } } as Refusal;
+  if (parentPlan.kind !== 'analysis')
+    return { reasonCode: 'sentinel.service.bootstrapUnavailable', facts: { parentId } } as Refusal;
   // The same retained proof used by reporting: exact admitted selected edges and the actual accepted inventory
   // operation. A fresh whole-analysis rerun still follows its separate bootstrap path.
   let evidence = closure.bootstrap;
   if (!evidence) {
-    try { evidence = await retainedBootstrapForReport(store, parentId, closure.admitted); }
-    catch { return { reasonCode: 'sentinel.service.bootstrapUnavailable', facts: { parentId } } as Refusal; }
+    try {
+      evidence = await retainedBootstrapForReport(store, parentId, closure.admitted);
+    } catch {
+      return { reasonCode: 'sentinel.service.bootstrapUnavailable', facts: { parentId } } as Refusal;
+    }
   }
   const { current, packs, profile } = await currentTerms(terms);
   const selectedIds = sortedIds(chosen);
-  const runId = rerunIdOf(store, { rerun: parentId, parentPlan: parentPlan.digest, selected: selectedIds, lock: current.digest, policy: terms.policy.revision, profile: profile.digest });
+  const runId = rerunIdOf(store, {
+    rerun: parentId,
+    parentPlan: parentPlan.digest,
+    selected: selectedIds,
+    lock: current.digest,
+    policy: terms.policy.revision,
+    profile: profile.digest,
+  });
   const plan = planAnalysis({
-    runId, revision: 1, previous: null, bootstrap: parentPlan.reused.map(r => ({ id: r.id, revision: r.revision })), profile: profile.planner,
-    snapshot: plannerSnapshotFrom(evidence.snapshot), analyses: evidence.analyses.map(a => plannerAnalysisFrom(a as never)),
-    lock: plannerLockFrom(current.lock, packs, current.digest), policy: plannerPolicyFrom(terms.policy),
+    runId,
+    revision: 1,
+    previous: null,
+    bootstrap: parentPlan.reused.map((r) => ({ id: r.id, revision: r.revision })),
+    profile: profile.planner,
+    snapshot: plannerSnapshotFrom(evidence.snapshot),
+    analyses: evidence.analyses.map((a) => plannerAnalysisFrom(a as never)),
+    lock: plannerLockFrom(current.lock, packs, current.digest),
+    policy: plannerPolicyFrom(terms.policy),
     limits: terms.policy.rules.includes(PREVIEW_RULE) ? ANALYSIS_LIMITS : { maxScopesPerWork: 32 },
   });
   assertSupportedRules(plan);
   if (!terms.profile) checkPlanDatabases(plan, current.lock);
   // Each selected parent unit must be the same work under the terms now; nothing is matched loosely.
-  const byIdentity = new Map(plan.units.map(u => [unitIdentity(u), u.id]));
+  const byIdentity = new Map(plan.units.map((u) => [unitIdentity(u), u.id]));
   const parentOf = new Map<string, string>();
-  for (const u of parentPlan.units) { const child = byIdentity.get(unitIdentity(u)); if (child) parentOf.set(child, u.id); }
-  const stale = selectedIds.filter(id => !byIdentity.has(unitIdentity(parentUnits.get(id)!)));
+  for (const u of parentPlan.units) {
+    const child = byIdentity.get(unitIdentity(u));
+    if (child) parentOf.set(child, u.id);
+  }
+  const stale = selectedIds.filter((id) => !byIdentity.has(unitIdentity(parentUnits.get(id)!)));
   if (stale.length) return { reasonCode: 'sentinel.service.selectionStale', facts: { stale } } as Refusal;
-  const mapped = selectedIds.map(id => ({ parentUnit: id, unit: byIdentity.get(unitIdentity(parentUnits.get(id)!))! }));
+  const mapped = selectedIds.map((id) => ({
+    parentUnit: id,
+    unit: byIdentity.get(unitIdentity(parentUnits.get(id)!))!,
+  }));
   // Downstream within the rerun's own revision. OPEN GATE: a unit that runs and needs an analysis unit that does not
   // is refused, even when the parent published that unit under exactly these terms. Consuming such genuine parent
   // publications (and counting held results as coverage) is PR 27's; until then selections are fail-closed here. The
   // shipped planner's check units depend only on the bootstrap, so today this refusal is reached only by such plans.
-  const { run, needed } = selectionClosure(plan.units, mapped.map(m => m.unit));
+  const { run, needed } = selectionClosure(
+    plan.units,
+    mapped.map((m) => m.unit),
+  );
   if (needed.length) return { reasonCode: 'sentinel.service.prerequisiteNotReusable', facts: { needed } } as Refusal;
-  const downstream = sortedIds([...run].filter(id => !mapped.some(m => m.unit === id)));
-  const held = plan.units.filter(u => !run.has(u.id)).map(u => ({ unit: u.id, parentUnit: parentOf.get(u.id) ?? null })).sort((a, b) => (a.unit < b.unit ? -1 : 1));
+  const downstream = sortedIds([...run].filter((id) => !mapped.some((m) => m.unit === id)));
+  const held = plan.units
+    .filter((u) => !run.has(u.id))
+    .map((u) => ({ unit: u.id, parentUnit: parentOf.get(u.id) ?? null }))
+    .sort((a, b) => (a.unit < b.unit ? -1 : 1));
   const selection: RerunSelection = {
-    schema: SELECTION_SCHEMA, parent: { runId: parentId, revision: parentPlan.revision, planDigest: parentPlan.digest, snapshotId: parent.envelope.snapshotId },
-    selected: mapped, downstream, held, reused: plan.reused.map(r => ({ id: r.id, revision: r.revision })),
+    schema: SELECTION_SCHEMA,
+    parent: {
+      runId: parentId,
+      revision: parentPlan.revision,
+      planDigest: parentPlan.digest,
+      snapshotId: parent.envelope.snapshotId,
+    },
+    selected: mapped,
+    downstream,
+    held,
+    reused: plan.reused.map((r) => ({ id: r.id, revision: r.revision })),
   };
-  const heldSet = new Set(held.map(h => h.unit));
-  const requiredHeld = plan.checks.filter(c => c.required && c.state === 'planned' && c.unit && heldSet.has(c.unit.id)).length
-    + plan.checks.filter(c => c.required && c.state !== 'planned').length + plan.ruleGaps.filter(g => g.required).length;
+  const heldSet = new Set(held.map((h) => h.unit));
+  const requiredHeld =
+    plan.checks.filter((c) => c.required && c.state === 'planned' && c.unit && heldSet.has(c.unit.id)).length +
+    plan.checks.filter((c) => c.required && c.state !== 'planned').length +
+    plan.ruleGaps.filter((g) => g.required).length;
   const preview: RerunPreview = Object.freeze({
-    parentId, snapshotId: parent.envelope.snapshotId, selected: selectedIds, downstream, prerequisites: sortedIds(plan.reused.map(r => r.id)),
-    checks: plan.units.filter(u => run.has(u.id)).reduce((n, u) => n + u.checks.length, 0), all: false,
-    effects: planEffects({ units: plan.units.filter(u => run.has(u.id)) }),
-    runId, planDigest: plan.digest, units: sortedIds(run), held, requiredHeld,
+    parentId,
+    snapshotId: parent.envelope.snapshotId,
+    selected: selectedIds,
+    downstream,
+    prerequisites: sortedIds(plan.reused.map((r) => r.id)),
+    checks: plan.units.filter((u) => run.has(u.id)).reduce((n, u) => n + u.checks.length, 0),
+    all: false,
+    effects: planEffects({ units: plan.units.filter((u) => run.has(u.id)) }),
+    runId,
+    planDigest: plan.digest,
+    units: sortedIds(run),
+    held,
+    requiredHeld,
   });
   return { preview, plan, selection, current, profile };
 }
@@ -566,10 +984,20 @@ export async function rerunEnvelopeOf(store: SentinelStore, runId: string): Prom
   const parent = store.ledger.getRun(s.parent.runId);
   if (!parent) return undefined;
   return {
-    schema: 'sentinel-run/draft-1', id: runId, parentId: s.parent.runId, baselineId: null, snapshotId: s.parent.snapshotId, planRevision: 1,
-    coordinatorEpoch: store.epoch, ruleLockDigest: admitted.plan.pins.ruleLockDigest!, toolLockDigest: admitted.plan.pins.ruleLockDigest!,
-    policyRevisionDigest: admitted.plan.pins.policyDigest!, requestedScope: { sourceIds: [...parent.envelope.requestedScope.sourceIds], profile: admitted.plan.pins.profileId },
-    budgets: structuredClone(parent.envelope.budgets), createdAt: record.admittedAt, state: 'planned',
+    schema: 'sentinel-run/draft-1',
+    id: runId,
+    parentId: s.parent.runId,
+    baselineId: null,
+    snapshotId: s.parent.snapshotId,
+    planRevision: 1,
+    coordinatorEpoch: store.epoch,
+    ruleLockDigest: admitted.plan.pins.ruleLockDigest!,
+    toolLockDigest: admitted.plan.pins.ruleLockDigest!,
+    policyRevisionDigest: admitted.plan.pins.policyDigest!,
+    requestedScope: { sourceIds: [...parent.envelope.requestedScope.sourceIds], profile: admitted.plan.pins.profileId },
+    budgets: structuredClone(parent.envelope.budgets),
+    createdAt: record.admittedAt,
+    state: 'planned',
   } as RunEnvelope;
 }
 
@@ -579,9 +1007,21 @@ export async function rerunEnvelopeOf(store: SentinelStore, runId: string): Prom
  * analysis is re-planned from a fresh bootstrap over that snapshot; a strict subset runs exactly its selection
  * (selectedRerun), reusing the parent's published bootstrap, and is admitted with the selection that holds the rest.
  */
-export async function rerunRun(store: SentinelStore, parentId: string, selected: readonly string[], options: {
-  workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; wrapRunner?: WrapRunner; registry?: AdapterRegistry; now: Date; profile?: TrustedProfile;
-}): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure; preview: RerunPreview } | Refusal> {
+export async function rerunRun(
+  store: SentinelStore,
+  parentId: string,
+  selected: readonly string[],
+  options: {
+    workspace: string;
+    trustDir: string;
+    policy: EffectivePolicy;
+    scratchRoot: string;
+    wrapRunner?: WrapRunner;
+    registry?: AdapterRegistry;
+    now: Date;
+    profile?: TrustedProfile;
+  },
+): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure; preview: RerunPreview } | Refusal> {
   const preview = await previewRerun(store, parentId, selected);
   if ('reasonCode' in preview) return preview;
   if (preview.all) {
@@ -593,10 +1033,17 @@ export async function rerunRun(store: SentinelStore, parentId: string, selected:
   const existing = store.ledger.latestPlan(planned.preview.runId!);
   if (existing) {
     const kept = await loadPlan(store, planned.preview.runId!, existing.revision);
-    if (kept.plan.digest !== planned.plan.digest) return { reasonCode: 'sentinel.service.selectionStale', facts: { runId: planned.preview.runId } };
+    if (kept.plan.digest !== planned.plan.digest)
+      return { reasonCode: 'sentinel.service.selectionStale', facts: { runId: planned.preview.runId } };
     return { outcome: 'kept', disclosure: disclose(kept.plan), preview: planned.preview };
   }
-  await admitPlan(store, { plan: planned.plan, ruleLock: planned.current.lock, policy: options.policy, profile: planned.profile.record, selection: planned.selection });
+  await admitPlan(store, {
+    plan: planned.plan,
+    ruleLock: planned.current.lock,
+    policy: options.policy,
+    profile: planned.profile.record,
+    selection: planned.selection,
+  });
   return { outcome: 'prepared', disclosure: disclose(planned.plan), preview: planned.preview };
 }
 
@@ -605,12 +1052,24 @@ export async function rerunRun(store: SentinelStore, parentId: string, selected:
  * recapture, under the lock and policy current now, waiting to be run. A run that has not ended is resumed instead;
  * a new snapshot of changed source is a new `plan`.
  */
-export async function followRun(store: SentinelStore, parentId: string, mode: 'retry', options: {
-  workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; wrapRunner?: WrapRunner; registry?: AdapterRegistry; now: Date;
-}): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure } | { reasonCode: string }> {
+export async function followRun(
+  store: SentinelStore,
+  parentId: string,
+  mode: 'retry',
+  options: {
+    workspace: string;
+    trustDir: string;
+    policy: EffectivePolicy;
+    scratchRoot: string;
+    wrapRunner?: WrapRunner;
+    registry?: AdapterRegistry;
+    now: Date;
+  },
+): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure } | { reasonCode: string }> {
   const parent = store.ledger.getRun(parentId);
   if (!parent) return { reasonCode: 'sentinel.service.runUnknown' };
-  if (parent.state !== 'completed' && parent.state !== 'canceled') return { reasonCode: 'sentinel.service.runNotEnded' };
+  if (parent.state !== 'completed' && parent.state !== 'canceled')
+    return { reasonCode: 'sentinel.service.runNotEnded' };
   void mode;
   return planWorkspaceCanonical(store, { ...options, parentId, snapshotId: parent.envelope.snapshotId });
 }

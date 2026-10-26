@@ -11,7 +11,10 @@ export const PREVIEW_REPORT_SCHEMA = 'sentinel-preview-report/draft-1';
 /** The scopes a preview report's counts may carry (core COUNT_SCOPES' Sentinel entries). */
 const SCOPES = new Set(['sentinel.scope.report', 'sentinel.scope.inventory', 'sentinel.scope.finding']);
 /** Always printed with a preview, whatever its counts say. */
-export const PREVIEW_LIMITATIONS = Object.freeze(['sentinel.report.previewOnly', 'sentinel.report.noScannerCoverage'] as const);
+export const PREVIEW_LIMITATIONS = Object.freeze([
+  'sentinel.report.previewOnly',
+  'sentinel.report.noScannerCoverage',
+] as const);
 
 export interface PreviewReport {
   readonly schema: typeof PREVIEW_REPORT_SCHEMA;
@@ -26,7 +29,10 @@ export interface PreviewReport {
 }
 
 export class ReportError extends Error {
-  constructor(readonly code: 'sentinel.report.invalid', readonly detail: string) {
+  constructor(
+    readonly code: 'sentinel.report.invalid',
+    readonly detail: string,
+  ) {
     super(`${code}: ${detail}`);
     this.name = 'ReportError';
   }
@@ -44,32 +50,49 @@ const KNOWN_LIMITATIONS = new Set<string>(PREVIEW_LIMITATIONS);
  * source, a breakdown of catalog parts that sums) plus whole, non-negative parts. Anything else is refused.
  */
 export function checkPreviewReport(doc: PreviewReport): PreviewReport {
-  const bad = (d: string): never => { throw new ReportError('sentinel.report.invalid', d); };
+  const bad = (d: string): never => {
+    throw new ReportError('sentinel.report.invalid', d);
+  };
   if (!isRecord(doc)) bad('not an object');
   const only = (o: Record<string, unknown>, keys: string[], what: string) => {
     for (const k of Object.keys(o)) if (!keys.includes(k)) bad(`${what} has an unknown field ${k}`);
   };
-  only(doc as unknown as Record<string, unknown>, ['schema', 'label', 'runId', 'snapshotId', 'ledgerSequence', 'generatedAt', 'counts', 'limitations'], 'the report');
+  only(
+    doc as unknown as Record<string, unknown>,
+    ['schema', 'label', 'runId', 'snapshotId', 'ledgerSequence', 'generatedAt', 'counts', 'limitations'],
+    'the report',
+  );
   if (doc.schema !== PREVIEW_REPORT_SCHEMA || doc.label !== 'foundation-preview') bad('not a preview report');
-  if (typeof doc.runId !== 'string' || typeof doc.snapshotId !== 'string' || typeof doc.generatedAt !== 'string') bad('identity');
+  if (typeof doc.runId !== 'string' || typeof doc.snapshotId !== 'string' || typeof doc.generatedAt !== 'string')
+    bad('identity');
   if (!Number.isSafeInteger(doc.ledgerSequence) || doc.ledgerSequence < 0) bad('ledger sequence');
-  if (!Array.isArray(doc.limitations) || doc.limitations.some(l => typeof l !== 'string' || !KNOWN_LIMITATIONS.has(l))) bad('limitations');
+  if (
+    !Array.isArray(doc.limitations) ||
+    doc.limitations.some((l) => typeof l !== 'string' || !KNOWN_LIMITATIONS.has(l))
+  )
+    bad('limitations');
   for (const l of PREVIEW_LIMITATIONS) if (!doc.limitations.includes(l)) bad(`missing limitation ${l}`);
   if (!Array.isArray(doc.counts) || doc.counts.length > 64) bad('counts');
   doc.counts.forEach((c, i) => {
     if (!isRecord(c)) bad(`count ${i} is not an object`);
-    only(c as unknown as Record<string, unknown>, ['n', 'of', 'unit', 'bizUnit', 'scope', 'source', 'breakdown', 'recheck'], `count ${i}`);
+    only(
+      c as unknown as Record<string, unknown>,
+      ['n', 'of', 'unit', 'bizUnit', 'scope', 'source', 'breakdown', 'recheck'],
+      `count ${i}`,
+    );
     if (!SCOPES.has(c.scope)) bad(`count ${i}: scope ${String(c.scope)}`);
     if (c.breakdown !== undefined) {
       if (!Array.isArray(c.breakdown)) bad(`count ${i}: breakdown`);
       c.breakdown.forEach((p, j) => {
-        if (!isRecord(p) || typeof p.key !== 'string' || !Number.isSafeInteger(p.n) || p.n < 0) bad(`count ${i}: part ${j} is not a whole, non-negative part`);
+        if (!isRecord(p) || typeof p.key !== 'string' || !Number.isSafeInteger(p.n) || p.n < 0)
+          bad(`count ${i}: part ${j} is not a whole, non-negative part`);
         only(p as unknown as Record<string, unknown>, ['key', 'n', 'label'], `count ${i} part ${j}`);
       });
     }
     const problems = countedProblems(c as never, `count ${i}`);
     if (problems.length) bad(problems[0]!);
-    if (!isRecord(c.recheck) || typeof c.recheck.cli !== 'string' || !c.recheck.cli) bad(`count ${i}: no recheck command`);
+    if (!isRecord(c.recheck) || typeof c.recheck.cli !== 'string' || !c.recheck.cli)
+      bad(`count ${i}: no recheck command`);
   });
   return doc;
 }
@@ -80,7 +103,7 @@ const fill = (template: string, values: Record<string, number | string>) =>
 function countLine(c: ReportCount): string {
   const singular = c.n === 1 ? word(`${c.unit}One`) : undefined;
   const text = fill(singular ?? word(c.unit)!, { n: c.n, m: c.of ?? '' });
-  const parts = (c.breakdown ?? []).map(p => fill(word(p.key) ?? p.key, { n: p.n }));
+  const parts = (c.breakdown ?? []).map((p) => fill(word(p.key) ?? p.key, { n: p.n }));
   return `- ${text} ${word(c.scope)}${parts.length ? ` (${parts.join(', ')})` : ''} — re-check: \`${c.recheck!.cli}\``;
 }
 
@@ -105,7 +128,7 @@ export function renderPreviewMarkdown(doc: PreviewReport): string {
     '',
     `## ${word('sentinel.report.limitationsHeading')}`,
     '',
-    ...doc.limitations.map(l => `- ${word(l) ?? l}`),
+    ...doc.limitations.map((l) => `- ${word(l) ?? l}`),
     '',
   ].join('\n');
 }

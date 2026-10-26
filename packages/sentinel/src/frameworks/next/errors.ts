@@ -4,7 +4,7 @@
 import { sentinelNextWord } from '@farsight/core/dist/strings-sentinel-next.js';
 
 export const NEXT_ERROR_CODES = Object.freeze(['sentinel.next.invalidInput', 'sentinel.next.integrity'] as const);
-export type NextErrorCode = typeof NEXT_ERROR_CODES[number];
+export type NextErrorCode = (typeof NEXT_ERROR_CODES)[number];
 
 export class NextPackError extends Error {
   readonly code: NextErrorCode;

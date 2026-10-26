@@ -48,7 +48,7 @@ export interface InfluenceManifest {
   readonly checks: readonly Id[];
   readonly scopes: readonly string[];
   readonly inputs: PlannedWork['inputs'];
-  readonly review?:PlannedWork['review'];
+  readonly review?: PlannedWork['review'];
   readonly pins: PlanRevision['pins'];
 }
 
@@ -62,15 +62,18 @@ export const canonicalArtifactId = (value: unknown): ArtifactId =>
   `sha256:${createHash('sha256').update(canonicalJsonBytes(value)).digest('hex')}`;
 
 function sealedPlan(plan: PlanRevision): PlanRevision {
-  if (!validateEnvelope('plan', plan).ok || !verifyPlanRevision(plan)) throw mismatch('the plan revision does not validate or match its digest');
+  if (!validateEnvelope('plan', plan).ok || !verifyPlanRevision(plan))
+    throw mismatch('the plan revision does not validate or match its digest');
   return plan;
 }
 
 // Exact primitive values only: JSON serialization otherwise unboxes wrappers and invokes caller conversion hooks.
 // Read each property once, then serialize only values the former strict id/revision comparison could match.
 const refKey = (r: WorkRef): string => {
-  const id = r?.id, revision = r?.revision;
-  if (typeof id !== 'string' || typeof revision !== 'number') throw invalid('the work reference is not a unit of this plan');
+  const id = r?.id,
+    revision = r?.revision;
+  if (typeof id !== 'string' || typeof revision !== 'number')
+    throw invalid('the work reference is not a unit of this plan');
   return JSON.stringify([id, revision]);
 };
 
@@ -118,16 +121,31 @@ const unitIn = (index: PlanIndex, ref: WorkRef): PlannedWork => {
   return unit;
 };
 
-function manifestIn(plan: PlanRevision, index: PlanIndex, ref: WorkRef): { readonly manifest: InfluenceManifest; readonly id: ArtifactId } {
+function manifestIn(
+  plan: PlanRevision,
+  index: PlanIndex,
+  ref: WorkRef,
+): { readonly manifest: InfluenceManifest; readonly id: ArtifactId } {
   const u = unitIn(index, ref);
   const known = index.manifests.get(refKey(u));
   if (known) return known;
-  const manifest: InfluenceManifest = deepFreeze(structuredClone({
-    schema: 'sentinel-influence/draft-1' as const, plan: { runId: plan.runId, revision: plan.revision, digest: plan.digest },
-    unit: { id: u.id, revision: u.revision }, stage: u.stage, inputFingerprint: u.inputFingerprint,
-    implementationDigest: u.implementationDigest, adapterId: u.adapterId, dependencies: u.dependencies.map(d => ({ ...d })),
-    checks: [...u.checks], scopes: [...u.scopes], inputs: u.inputs.map(i => ({ ...i })), pins: plan.pins,...(u.review?{review:u.review}:{}),
-  }));
+  const manifest: InfluenceManifest = deepFreeze(
+    structuredClone({
+      schema: 'sentinel-influence/draft-1' as const,
+      plan: { runId: plan.runId, revision: plan.revision, digest: plan.digest },
+      unit: { id: u.id, revision: u.revision },
+      stage: u.stage,
+      inputFingerprint: u.inputFingerprint,
+      implementationDigest: u.implementationDigest,
+      adapterId: u.adapterId,
+      dependencies: u.dependencies.map((d) => ({ ...d })),
+      checks: [...u.checks],
+      scopes: [...u.scopes],
+      inputs: u.inputs.map((i) => ({ ...i })),
+      pins: plan.pins,
+      ...(u.review ? { review: u.review } : {}),
+    }),
+  );
   const built = Object.freeze({ manifest, id: canonicalArtifactId(manifest) });
   // Only an owned (immutable) plan keeps what it built; a caller's plan is re-read on every call.
   if (owned.has(plan)) index.manifests.set(refKey(u), built);
@@ -152,25 +170,42 @@ export function workEnvelopesFor(given: PlanRevision, conversion: WorkConversion
   // One validated, frozen copy for the whole conversion: its units are then read by lookup, not re-validated each.
   const plan = owned.has(given) ? given : ownedPlanRevision(given);
   const index = indexOf(plan);
-  const tools = new Set(plan.pins.tools.map(t => t.adapterId));
-  return plan.units.map(u => {
+  const tools = new Set(plan.pins.tools.map((t) => t.adapterId));
+  return plan.units.map((u) => {
     const { manifest, id: manifestId } = manifestIn(plan, index, u);
-    const resources = conversion.execution.resources[u.stage==='review-guided'||u.stage==='review-general'?'check':u.stage];
+    const resources =
+      conversion.execution.resources[u.stage === 'review-guided' || u.stage === 'review-general' ? 'check' : u.stage];
     if (!resources) throw invalid(`the profile grants no resources to the ${u.stage} stage`);
-    const kind: StageKind = u.review?'agentic':u.adapterId !== null && tools.has(u.adapterId) ? 'external-tool' : 'coded';
+    const kind: StageKind = u.review
+      ? 'agentic'
+      : u.adapterId !== null && tools.has(u.adapterId)
+        ? 'external-tool'
+        : 'coded';
     const common = {
-      schema: 'sentinel-work/draft-1' as const, id: u.id, revision: u.revision, runId: plan.runId, planRevision: plan.revision,
+      schema: 'sentinel-work/draft-1' as const,
+      id: u.id,
+      revision: u.revision,
+      runId: plan.runId,
+      planRevision: plan.revision,
       stage: { contract: u.contract, contractVersion: 'draft-1', kind, implementationDigest: u.implementationDigest },
-      inputFingerprint: u.inputFingerprint, influenceManifest: manifestId,
-      dependencies: u.dependencies.map(d => ({ id: d.id, revision: d.revision })), resources: { ...resources },
-      coordinatorEpoch: conversion.coordinatorEpoch, createdAt: conversion.createdAt, activeAttemptId: null,
+      inputFingerprint: u.inputFingerprint,
+      influenceManifest: manifestId,
+      dependencies: u.dependencies.map((d) => ({ id: d.id, revision: d.revision })),
+      resources: { ...resources },
+      coordinatorEpoch: conversion.coordinatorEpoch,
+      createdAt: conversion.createdAt,
+      activeAttemptId: null,
     };
     // A unit without a registered operation is blocked with its reason: nothing generic may run it.
-    const envelope: WorkEnvelope = u.adapterId === null
-      ? { ...common, state: 'blocked', reasonCode: 'sentinel.plan.operationUnbound' }
-      : { ...common, state: u.dependencies.length ? 'pending' : 'ready' };
+    const envelope: WorkEnvelope =
+      u.adapterId === null
+        ? { ...common, state: 'blocked', reasonCode: 'sentinel.plan.operationUnbound' }
+        : { ...common, state: u.dependencies.length ? 'pending' : 'ready' };
     const checked = validateEnvelope('work', envelope);
-    if (!checked.ok) throw invalid(`${u.id} is not a valid work envelope: ${checked.errors[0]?.path || '/'} ${checked.errors[0]?.message ?? ''}`);
+    if (!checked.ok)
+      throw invalid(
+        `${u.id} is not a valid work envelope: ${checked.errors[0]?.path || '/'} ${checked.errors[0]?.message ?? ''}`,
+      );
     // The whole binding is a private deep-frozen copy: neither the envelope nor the manifest it names can change.
     return deepFreeze(structuredClone({ envelope: checked.value, manifest }));
   });
@@ -190,8 +225,11 @@ export function adapterOf(plan: PlanRevision, ref: WorkRef): Id | null {
  * The captured files a unit reads, by their content artifact, from the snapshot the plan pins. A listed input that
  * the snapshot does not hold as an included file is refused rather than skipped.
  */
-export function capturedInputsOf(plan: PlanRevision, ref: WorkRef, snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>):
-  { sourceId: Id; relativePath: string; id: ArtifactId }[] {
+export function capturedInputsOf(
+  plan: PlanRevision,
+  ref: WorkRef,
+  snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>,
+): { sourceId: Id; relativePath: string; id: ArtifactId }[] {
   const unit = unitIn(indexOf(plan), ref);
   if (plan.pins.snapshotId !== snapshot.id) throw mismatch('the snapshot is not the one the plan pins');
   return inputsIncluded(unit, includedFiles(snapshot));
@@ -199,17 +237,24 @@ export function capturedInputsOf(plan: PlanRevision, ref: WorkRef, snapshot: Pic
 
 const includedFiles = (snapshot: Pick<SnapshotEnvelope, 'entries'>): ReadonlyMap<string, ArtifactId> => {
   const included = new Map<string, ArtifactId>();
-  for (const e of snapshot.entries) if (e.kind === 'file' && e.disposition === 'included') included.set(`${e.sourceId}\u0000${e.relativePath}`, e.content);
+  for (const e of snapshot.entries)
+    if (e.kind === 'file' && e.disposition === 'included')
+      included.set(`${e.sourceId}\u0000${e.relativePath}`, e.content);
   return included;
 };
 
-function inputsIncluded(unit: PlannedWork, included: ReadonlyMap<string, ArtifactId>): { sourceId: Id; relativePath: string; id: ArtifactId }[] {
-  return deepFreeze(unit.inputs.map(i => {
-    const id = included.get(`${i.sourceId}\u0000${i.relativePath}`);
-    if (!id) throw mismatch(`${i.sourceId}:${i.relativePath} is not an included file of the pinned snapshot`);
-    if (id !== i.content) throw mismatch(`${i.sourceId}:${i.relativePath} holds other bytes than the plan pinned`);
-    return { sourceId: i.sourceId, relativePath: i.relativePath, id };
-  }));
+function inputsIncluded(
+  unit: PlannedWork,
+  included: ReadonlyMap<string, ArtifactId>,
+): { sourceId: Id; relativePath: string; id: ArtifactId }[] {
+  return deepFreeze(
+    unit.inputs.map((i) => {
+      const id = included.get(`${i.sourceId}\u0000${i.relativePath}`);
+      if (!id) throw mismatch(`${i.sourceId}:${i.relativePath} is not an included file of the pinned snapshot`);
+      if (id !== i.content) throw mismatch(`${i.sourceId}:${i.relativePath} holds other bytes than the plan pinned`);
+      return { sourceId: i.sourceId, relativePath: i.relativePath, id };
+    }),
+  );
 }
 
 /** A captured input as the coordinator's supervisor takes it: the artifact and where its bytes are now. */
@@ -239,10 +284,13 @@ export interface PlanBoundaryParts {
 export function verifyWorkEnvelope(plan: PlanRevision, work: WorkEnvelope): void {
   const index = indexOf(plan);
   const unit = unitIn(index, work);
-  const deps = (r: readonly WorkRef[]) => JSON.stringify(r.map(d => [d.id, d.revision]));
+  const deps = (r: readonly WorkRef[]) => JSON.stringify(r.map((d) => [d.id, d.revision]));
   const checks: Array<[string, unknown, unknown]> = [
-    ['run', work.runId, plan.runId], ['plan revision', work.planRevision, plan.revision], ['stage contract', work.stage.contract, unit.contract],
-    ['implementation', work.stage.implementationDigest, unit.implementationDigest], ['input fingerprint', work.inputFingerprint, unit.inputFingerprint],
+    ['run', work.runId, plan.runId],
+    ['plan revision', work.planRevision, plan.revision],
+    ['stage contract', work.stage.contract, unit.contract],
+    ['implementation', work.stage.implementationDigest, unit.implementationDigest],
+    ['input fingerprint', work.inputFingerprint, unit.inputFingerprint],
     ['dependencies', deps(work.dependencies), deps(unit.dependencies)],
     ['influence manifest', work.influenceManifest, manifestIn(plan, index, unit).id],
   ];
@@ -274,16 +322,26 @@ export function planBoundaryFor(given: PlanRevision, request: BoundaryRequest): 
   const checked = validateEnvelope('run', run);
   if (!checked.ok) throw invalid(`the run is not a valid run envelope: ${checked.errors[0]?.path || '/'}`);
   const pairs: Array<[string, unknown, unknown]> = [
-    ['run id', run.id, plan.runId], ['plan revision', run.planRevision, plan.revision], ['snapshot', run.snapshotId, plan.pins.snapshotId],
-    ['rule lock', run.ruleLockDigest, plan.pins.ruleLockDigest], ['policy revision', run.policyRevisionDigest, plan.pins.policyDigest],
+    ['run id', run.id, plan.runId],
+    ['plan revision', run.planRevision, plan.revision],
+    ['snapshot', run.snapshotId, plan.pins.snapshotId],
+    ['rule lock', run.ruleLockDigest, plan.pins.ruleLockDigest],
+    ['policy revision', run.policyRevisionDigest, plan.pins.policyDigest],
     ['coordinator epoch', run.coordinatorEpoch, request.conversion.coordinatorEpoch],
     // The run asked for exactly what was planned: the plan's analysed sources, under the plan's profile.
-    ['requested sources', [...run.requestedScope.sourceIds].sort().join('\u0000'), plan.pins.analyses.map(a => a.sourceId).sort().join('\u0000')],
+    [
+      'requested sources',
+      [...run.requestedScope.sourceIds].sort().join('\u0000'),
+      plan.pins.analyses
+        .map((a) => a.sourceId)
+        .sort()
+        .join('\u0000'),
+    ],
     ['requested profile', run.requestedScope.profile, plan.pins.profileId],
   ];
   for (const [what, got, want] of pairs) if (got !== want) throw mismatch(`the run's ${what} is not the plan's`);
   const converted = workEnvelopesFor(plan, request.conversion);
-  const works = converted.map(c => c.envelope);
+  const works = converted.map((c) => c.envelope);
   const keys = new Set(works.map(refKey));
   const known = (w: WorkEnvelope) => {
     if (!w || !keys.has(refKey(w))) throw invalid('the work is not part of this boundary');
@@ -291,13 +349,19 @@ export function planBoundaryFor(given: PlanRevision, request: BoundaryRequest): 
   };
   let included: ReadonlyMap<string, ArtifactId> | undefined;
   return Object.freeze({
-    run: deepFreeze(structuredClone(checked.value)), works: Object.freeze(works), plan,
+    run: deepFreeze(structuredClone(checked.value)),
+    works: Object.freeze(works),
+    plan,
     checksFor: (w: WorkEnvelope) => Object.freeze([...known(w).checks]),
     adapterFor: (w: WorkEnvelope) => known(w).adapterId!,
     inputsFor: (w: WorkEnvelope) => {
       const unit = known(w);
       if (plan.pins.snapshotId !== snapshot.id) throw mismatch('the snapshot is not the one the plan pins');
-      return Object.freeze(inputsIncluded(unit, included ??= includedFiles(snapshot)).map(i => Object.freeze({ id: i.id, path: request.pathOf(i) })));
+      return Object.freeze(
+        inputsIncluded(unit, (included ??= includedFiles(snapshot))).map((i) =>
+          Object.freeze({ id: i.id, path: request.pathOf(i) }),
+        ),
+      );
     },
   });
 }
@@ -308,7 +372,8 @@ export function planBoundaryFor(given: PlanRevision, request: BoundaryRequest): 
  */
 export function verifyInputSet(plan: PlanRevision, ref: WorkRef, actual: readonly { readonly id: ArtifactId }[]): void {
   const unit = unitIn(indexOf(plan), ref);
-  const want = unit.inputs.map(i => i.content).sort();
-  const got = actual.map(i => i.id).sort();
-  if (got.length !== want.length || got.some((id, i) => id !== want[i])) throw mismatch(`${ref.id}: the captured inputs are not exactly the plan's`);
+  const want = unit.inputs.map((i) => i.content).sort();
+  const got = actual.map((i) => i.id).sort();
+  if (got.length !== want.length || got.some((id, i) => id !== want[i]))
+    throw mismatch(`${ref.id}: the captured inputs are not exactly the plan's`);
 }

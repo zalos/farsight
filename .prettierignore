@@ -46,7 +46,6 @@
 
 # Not formatted yet: each style PR deletes its line; delete the block when it is empty
 /.claude/
-/packages/sentinel/
 /scripts/
 /packages/core/
 /packages/server/

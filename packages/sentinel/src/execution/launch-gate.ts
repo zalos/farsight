@@ -24,9 +24,14 @@ function readExactly(length: number): Buffer | null {
   const pause = new Int32Array(new SharedArrayBuffer(4));
   while (have < length) {
     let n: number;
-    try { n = readSync(0, buf, have, length - have, null); } catch (e) {
+    try {
+      n = readSync(0, buf, have, length - have, null);
+    } catch (e) {
       // Liveness only: a non-blocking descriptor waits and retries; it can never authorize anything by itself.
-      if ((e as NodeJS.ErrnoException).code === 'EAGAIN') { Atomics.wait(pause, 0, 0, 10); continue; }
+      if ((e as NodeJS.ErrnoException).code === 'EAGAIN') {
+        Atomics.wait(pause, 0, 0, 10);
+        continue;
+      }
       return null;
     }
     if (n === 0) return null;

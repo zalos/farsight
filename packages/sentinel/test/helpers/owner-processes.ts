@@ -18,20 +18,43 @@ export class OwnerProcesses {
   #children: OwnerChild[] = [];
 
   async spawn(storePath: string, waitMs = 250): Promise<OwnerChild> {
-    const child = fork(childPath, [storePath, String(waitMs)], { execArgv, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    const child = fork(childPath, [storePath, String(waitMs)], {
+      execArgv,
+      stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+    });
     const inbox: any[] = [];
     const waiters: ((m: any) => void)[] = [];
-    child.on('message', m => { const w = waiters.shift(); if (w) w(m); else inbox.push(m); });
-    const exit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
+    child.on('message', (m) => {
+      const w = waiters.shift();
+      if (w) w(m);
+      else inbox.push(m);
+    });
+    const exit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
+      child.once('exit', (code, signal) => resolve({ code, signal })),
+    );
     const handle: OwnerChild = {
-      child, exit,
-      send: m => child.send(m),
-      next: (timeoutMs = 10_000) => inbox.length ? Promise.resolve(inbox.shift()) : new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('owner child message deadline')), timeoutMs);
-        const waiter = (m: any) => { clearTimeout(timer); resolve(m); };
-        waiters.push(waiter);
-        exit.then(() => { const i = waiters.indexOf(waiter); if (i >= 0) { waiters.splice(i, 1); clearTimeout(timer); reject(new Error('owner child exited')); } });
-      }),
+      child,
+      exit,
+      send: (m) => child.send(m),
+      next: (timeoutMs = 10_000) =>
+        inbox.length
+          ? Promise.resolve(inbox.shift())
+          : new Promise((resolve, reject) => {
+              const timer = setTimeout(() => reject(new Error('owner child message deadline')), timeoutMs);
+              const waiter = (m: any) => {
+                clearTimeout(timer);
+                resolve(m);
+              };
+              waiters.push(waiter);
+              exit.then(() => {
+                const i = waiters.indexOf(waiter);
+                if (i >= 0) {
+                  waiters.splice(i, 1);
+                  clearTimeout(timer);
+                  reject(new Error('owner child exited'));
+                }
+              });
+            }),
     };
     this.#children.push(handle);
     const ready = await handle.next();
@@ -45,10 +68,12 @@ export class OwnerProcesses {
   }
 
   async cleanup() {
-    await Promise.all(this.#children.map(h => {
-      if (h.child.exitCode === null && h.child.signalCode === null) h.child.kill('SIGKILL');
-      return h.exit;
-    }));
+    await Promise.all(
+      this.#children.map((h) => {
+        if (h.child.exitCode === null && h.child.signalCode === null) h.child.kill('SIGKILL');
+        return h.exit;
+      }),
+    );
     this.#children = [];
   }
 }

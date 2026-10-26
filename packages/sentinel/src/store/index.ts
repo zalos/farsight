@@ -17,18 +17,38 @@ import { StoreError, STORE_ERROR_CODES, type StoreErrorCode } from './errors.js'
 import { inspectReachability, type GcErrorCode, type PrunePlan, type ReachabilityReport } from './gc.js';
 import { openLedger, type Ledger } from './ledger.js';
 import {
-  ledgerObjectVerifier, planPruneFromLedger, reachabilityFromLedger, refFromLedgerReceipt, toLedgerReceipt,
+  ledgerObjectVerifier,
+  planPruneFromLedger,
+  reachabilityFromLedger,
+  refFromLedgerReceipt,
+  toLedgerReceipt,
 } from './objects-ledger.js';
 import {
-  ObjectStore, ObjectStoreError, canonicalJsonBytes, identify, rawDigestOf, type ObjectCheck, type ObjectStoreErrorCode,
+  ObjectStore,
+  ObjectStoreError,
+  canonicalJsonBytes,
+  identify,
+  rawDigestOf,
+  type ObjectCheck,
+  type ObjectStoreErrorCode,
 } from './objects.js';
 import { acquireStoreOwner, type StoreOwner } from './owner.js';
 import { bindOwner } from './owner-binding.js';
 import { budgetedObjectRead, readBudgetCheckpoint, readBudgetFailure } from './read-budget.js';
 import type { FilesystemIdentity } from './paths.js';
-import { SQLITE_RELEASE_POLICY, qualificationFor, type QualifiedRuntime, type QualificationStatus, type SqliteReleasePolicy } from './runtime.js';
 import {
-  LEDGER_ERROR_CODES, LedgerError, type ArtifactCodec, type LedgerErrorCode, type MigrationReport,
+  SQLITE_RELEASE_POLICY,
+  qualificationFor,
+  type QualifiedRuntime,
+  type QualificationStatus,
+  type SqliteReleasePolicy,
+} from './runtime.js';
+import {
+  LEDGER_ERROR_CODES,
+  LedgerError,
+  type ArtifactCodec,
+  type LedgerErrorCode,
+  type MigrationReport,
   type ObjectReceipt as LedgerObjectReceipt,
 } from './store-types.js';
 
@@ -37,13 +57,29 @@ export type { QualifiedRuntime, QualificationStatus, SqliteReleasePolicy };
 export type { StoreErrorCode, LedgerErrorCode, ObjectStoreErrorCode, GcErrorCode, FilesystemIdentity, MigrationReport };
 export type { ReachabilityReport, PrunePlan, ObjectCheck, ArtifactCodec };
 export {
-  ARTIFACT_CODECS, ARTIFACT_PRIVACY, LEDGER_EVENT_KINDS, ATTEMPT_END_STATES, MAX_ARTIFACT_BYTES, MAX_EVENT_PAGE,
+  ARTIFACT_CODECS,
+  ARTIFACT_PRIVACY,
+  LEDGER_EVENT_KINDS,
+  ATTEMPT_END_STATES,
+  MAX_ARTIFACT_BYTES,
+  MAX_EVENT_PAGE,
   MAX_SNAPSHOT_ARTIFACTS,
 } from './store-types.js';
 export type {
-  ArtifactPrivacy, StagedArtifact, StageId, PublishInput, PublicationReceipt, EndAttemptInput, AttemptEndState,
-  AdmitSnapshotInput, SnapshotRecord,
-  IdempotencyRef, LedgerEvent, LedgerEventKind, EventPage, GcSnapshot,
+  ArtifactPrivacy,
+  StagedArtifact,
+  StageId,
+  PublishInput,
+  PublicationReceipt,
+  EndAttemptInput,
+  AttemptEndState,
+  AdmitSnapshotInput,
+  SnapshotRecord,
+  IdempotencyRef,
+  LedgerEvent,
+  LedgerEventKind,
+  EventPage,
+  GcSnapshot,
 } from './store-types.js';
 
 /**
@@ -66,11 +102,38 @@ export interface OpenStoreOptions {
 }
 
 /** The ledger's domain operations. There is no connection, statement, transaction callback or close here. */
-export type StoreLedger = Pick<Ledger,
-  | 'createRun' | 'setRunState' | 'createWork' | 'startAttempt' | 'endAttempt' | 'registerStaging' | 'abortStaging'
-  | 'publish' | 'pinReport' | 'readEvents' | 'getWork' | 'getAttempt' | 'getPublication' | 'objectsOf'
-  | 'currentSequence' | 'admitSnapshot' | 'getSnapshot' | 'admitPlan' | 'getPlan' | 'latestPlan' | 'listPlans' | 'advanceRunPlan' | 'setWorkState' | 'interruptStaleAttempts' | 'getRun'
-  | 'listRuns' | 'listAttempts' | 'countAttempts' | 'listOpenStages'>;
+export type StoreLedger = Pick<
+  Ledger,
+  | 'createRun'
+  | 'setRunState'
+  | 'createWork'
+  | 'startAttempt'
+  | 'endAttempt'
+  | 'registerStaging'
+  | 'abortStaging'
+  | 'publish'
+  | 'pinReport'
+  | 'readEvents'
+  | 'getWork'
+  | 'getAttempt'
+  | 'getPublication'
+  | 'objectsOf'
+  | 'currentSequence'
+  | 'admitSnapshot'
+  | 'getSnapshot'
+  | 'admitPlan'
+  | 'getPlan'
+  | 'latestPlan'
+  | 'listPlans'
+  | 'advanceRunPlan'
+  | 'setWorkState'
+  | 'interruptStaleAttempts'
+  | 'getRun'
+  | 'listRuns'
+  | 'listAttempts'
+  | 'countAttempts'
+  | 'listOpenStages'
+>;
 
 export interface StoreObjects {
   /** The artifact id and size of bytes, computed without writing. */
@@ -154,15 +217,45 @@ export async function openStore(storePath: string, options: OpenStoreOptions = {
     });
     return facade(owner, ledger, objects);
   } catch (error) {
-    try { owner.close(); } catch { /* the open's own failure is the one to report; the lock is released regardless */ }
+    try {
+      owner.close();
+    } catch {
+      /* the open's own failure is the one to report; the lock is released regardless */
+    }
     throw error;
   }
 }
 
 const LEDGER_METHODS = [
-  'createRun', 'setRunState', 'createWork', 'startAttempt', 'endAttempt', 'registerStaging', 'abortStaging',
-  'publish', 'pinReport', 'readEvents', 'getWork', 'getAttempt', 'getPublication', 'objectsOf', 'currentSequence',
-  'admitSnapshot', 'getSnapshot', 'admitPlan', 'getPlan', 'latestPlan', 'listPlans', 'advanceRunPlan', 'setWorkState', 'interruptStaleAttempts', 'getRun', 'listRuns', 'listAttempts', 'countAttempts', 'listOpenStages',
+  'createRun',
+  'setRunState',
+  'createWork',
+  'startAttempt',
+  'endAttempt',
+  'registerStaging',
+  'abortStaging',
+  'publish',
+  'pinReport',
+  'readEvents',
+  'getWork',
+  'getAttempt',
+  'getPublication',
+  'objectsOf',
+  'currentSequence',
+  'admitSnapshot',
+  'getSnapshot',
+  'admitPlan',
+  'getPlan',
+  'latestPlan',
+  'listPlans',
+  'advanceRunPlan',
+  'setWorkState',
+  'interruptStaleAttempts',
+  'getRun',
+  'listRuns',
+  'listAttempts',
+  'countAttempts',
+  'listOpenStages',
 ] as const satisfies readonly (keyof StoreLedger)[];
 
 const objectRef = (receipt: StoredObject) => {
@@ -177,41 +270,67 @@ const identityOf = (bytes: Uint8Array): ObjectIdentityRef => {
 };
 
 function facade(owner: StoreOwner, ledger: Ledger, store: ObjectStore): SentinelStore {
-  const ledgerView = Object.freeze(Object.fromEntries(
-    LEDGER_METHODS.map(name => [name, (...args: unknown[]) => {
-      try { return (ledger[name] as (...args: unknown[]) => unknown).apply(ledger, args); }
-      catch (error) { readBudgetFailure(sentinel, error); throw error; }
-    }]),
-  )) as unknown as StoreLedger;
+  const ledgerView = Object.freeze(
+    Object.fromEntries(
+      LEDGER_METHODS.map((name) => [
+        name,
+        (...args: unknown[]) => {
+          try {
+            return (ledger[name] as (...args: unknown[]) => unknown).apply(ledger, args);
+          } catch (error) {
+            readBudgetFailure(sentinel, error);
+            throw error;
+          }
+        },
+      ]),
+    ),
+  ) as unknown as StoreLedger;
 
   // The registered identity is checked by the object store before any byte is written.
-  const putOptions = (options: PutObjectOptions = {}) => (options.expect
-    ? { expect: { artifactId: options.expect.id, rawDigest: rawDigestOf(options.expect.id), rawSize: options.expect.rawSize } }
-    : {});
+  const putOptions = (options: PutObjectOptions = {}) =>
+    options.expect
+      ? {
+          expect: {
+            artifactId: options.expect.id,
+            rawDigest: rawDigestOf(options.expect.id),
+            rawSize: options.expect.rawSize,
+          },
+        }
+      : {};
 
   const objects: StoreObjects = Object.freeze({
     identify: identityOf,
     identifyCanonicalJson: (value: unknown) => identityOf(canonicalJsonBytes(value)),
-    put: async (bytes: Uint8Array, options?: PutObjectOptions) => toLedgerReceipt(await store.put(bytes, putOptions(options))),
+    put: async (bytes: Uint8Array, options?: PutObjectOptions) =>
+      toLedgerReceipt(await store.put(bytes, putOptions(options))),
     putCanonicalJson: async (value: unknown, options?: PutObjectOptions) =>
       toLedgerReceipt(await store.putCanonicalJson(value, putOptions(options))),
     read: (ref: StoredObject) => {
       const captured = objectRef(ref);
-      return budgetedObjectRead(sentinel, { rawSize: captured.rawSize!, storedSize: captured.encodedSize! }, () => store.read(captured));
+      return budgetedObjectRead(sentinel, { rawSize: captured.rawSize!, storedSize: captured.encodedSize! }, () =>
+        store.read(captured),
+      );
     },
     readCanonicalJson: (ref: StoredObject) => {
       const captured = objectRef(ref);
-      return budgetedObjectRead(sentinel, { rawSize: captured.rawSize!, storedSize: captured.encodedSize! }, () => store.readCanonicalJson(captured));
+      return budgetedObjectRead(sentinel, { rawSize: captured.rawSize!, storedSize: captured.encodedSize! }, () =>
+        store.readCanonicalJson(captured),
+      );
     },
     check: (ref: StoredObject) => {
       const captured = objectRef(ref);
-      return budgetedObjectRead(sentinel, { rawSize: captured.rawSize!, storedSize: captured.encodedSize! }, () => store.check(captured));
+      return budgetedObjectRead(sentinel, { rawSize: captured.rawSize!, storedSize: captured.encodedSize! }, () =>
+        store.check(captured),
+      );
     },
   });
 
   const runtime: StoreRuntimeFacts = Object.freeze({
-    sqlite: owner.runtime.sqliteVersion, node: owner.runtime.node, platform: owner.runtime.platform,
-    arch: owner.runtime.arch, checks: owner.runtime.checks,
+    sqlite: owner.runtime.sqliteVersion,
+    node: owner.runtime.node,
+    platform: owner.runtime.platform,
+    arch: owner.runtime.arch,
+    checks: owner.runtime.checks,
   });
 
   const sentinel: SentinelStore = Object.freeze({
@@ -223,20 +342,29 @@ function facade(owner: StoreOwner, ledger: Ledger, store: ObjectStore): Sentinel
     migration: ledger.migration,
     ledger: ledgerView,
     objects,
-    get held() { return owner.held; },
+    get held() {
+      return owner.held;
+    },
     assertHeld: () => owner.assertHeld(),
     async readArtifact(id: ArtifactId): Promise<Buffer> {
       const recorded = ledgerView.objectsOf(id);
       if (recorded.length === 0) throw new LedgerError('sentinel.store.notFound', 'no accepted artifact has that id');
       let last: unknown;
       for (const receipt of recorded) {
-        try { return await objects.read(receipt); } catch (error) { readBudgetCheckpoint(sentinel); last = error; }
+        try {
+          return await objects.read(receipt);
+        } catch (error) {
+          readBudgetCheckpoint(sentinel);
+          last = error;
+        }
       }
       throw last;
     },
     checkIntegrity: () => ledger.checkIntegrity(),
-    inspect: () => inspectReachability(store, reachabilityFromLedger(ledger.gcSnapshot()),
-      { readSequence: () => ledger.currentSequence() }),
+    inspect: () =>
+      inspectReachability(store, reachabilityFromLedger(ledger.gcSnapshot()), {
+        readSequence: () => ledger.currentSequence(),
+      }),
     planPrune: () => planPruneFromLedger(store, ledger),
     close: () => owner.close(),
   });
@@ -249,15 +377,27 @@ function facade(owner: StoreOwner, ledger: Ledger, store: ObjectStore): Sentinel
 
 // Exhaustive by construction: a code added to (or removed from) a module's union fails to compile here.
 const OBJECT_CODES = {
-  'sentinel.object.invalidInput': true, 'sentinel.object.tooLarge': true, 'sentinel.object.digestMismatch': true,
-  'sentinel.object.missing': true, 'sentinel.object.corrupt': true, 'sentinel.object.corruptExisting': true,
-  'sentinel.object.wrongStore': true, 'sentinel.object.unsafePath': true, 'sentinel.object.notCanonical': true,
+  'sentinel.object.invalidInput': true,
+  'sentinel.object.tooLarge': true,
+  'sentinel.object.digestMismatch': true,
+  'sentinel.object.missing': true,
+  'sentinel.object.corrupt': true,
+  'sentinel.object.corruptExisting': true,
+  'sentinel.object.wrongStore': true,
+  'sentinel.object.unsafePath': true,
+  'sentinel.object.notCanonical': true,
   'sentinel.object.io': true,
 } as const satisfies Record<ObjectStoreErrorCode, true>;
 const GC_CODES = {
-  'sentinel.gc.incompleteSnapshot': true, 'sentinel.gc.wrongStore': true, 'sentinel.gc.invalidSnapshot': true,
-  'sentinel.gc.missingReachable': true, 'sentinel.gc.missingRecorded': true, 'sentinel.gc.corruptObject': true,
-  'sentinel.gc.sequenceUnverified': true, 'sentinel.gc.snapshotMoved': true, 'sentinel.gc.unreadableStore': true,
+  'sentinel.gc.incompleteSnapshot': true,
+  'sentinel.gc.wrongStore': true,
+  'sentinel.gc.invalidSnapshot': true,
+  'sentinel.gc.missingReachable': true,
+  'sentinel.gc.missingRecorded': true,
+  'sentinel.gc.corruptObject': true,
+  'sentinel.gc.sequenceUnverified': true,
+  'sentinel.gc.snapshotMoved': true,
+  'sentinel.gc.unreadableStore': true,
 } as const satisfies Record<GcErrorCode, true>;
 
 /** Every reason code the store can report, by the module that raises it. Each is a catalog key with a define. */

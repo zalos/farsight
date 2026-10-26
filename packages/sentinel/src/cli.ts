@@ -8,7 +8,22 @@ import { ownerDecisionCommand, decisionWire } from './findings/owner-cli.js';
 import { ownerEvidenceCommand, evidenceWire } from './evidence/owner-cli.js';
 import { REPORT_FORMATS, type ReportFormat } from './service/full-report.js';
 import {
-  privateReviewTrace, adoptWorkspaceSettings, confirmForService, currentRules, followWorkspaceRun, promoteRulePack, planWorkspace, prepareWorkspacePaths, previewReport, runPlan, describeRun, runStatus, workspaceOf, checkWorkspaceLayout, PolicyError, fullReportIn,
+  privateReviewTrace,
+  adoptWorkspaceSettings,
+  confirmForService,
+  currentRules,
+  followWorkspaceRun,
+  promoteRulePack,
+  planWorkspace,
+  prepareWorkspacePaths,
+  previewReport,
+  runPlan,
+  describeRun,
+  runStatus,
+  workspaceOf,
+  checkWorkspaceLayout,
+  PolicyError,
+  fullReportIn,
   type Workspace,
 } from './service/local.js';
 import { connectService, readServiceDescriptor, serveWorkspace } from './service/owner-service.js';
@@ -35,7 +50,11 @@ import { SENTINEL_OWNER_UI_STRINGS } from '@farsight/core/dist/strings-sentinel-
 import { sentinelServiceWord } from '@farsight/core/dist/strings-sentinel-service.js';
 
 const word = (key: string, values: Record<string, string | number> = {}) =>
-  (Object.hasOwn(SENTINEL_DECISION_STRINGS,key)?SENTINEL_DECISION_STRINGS[key]!.hud.replace(/\{([a-zA-Z]+)\}/g,(_,k:string)=>String(values[k]??'')):Object.hasOwn(SENTINEL_CLI_STRINGS, key) ? sentinelWord(key, values) : sentinelServiceWord(key, values));
+  Object.hasOwn(SENTINEL_DECISION_STRINGS, key)
+    ? SENTINEL_DECISION_STRINGS[key]!.hud.replace(/\{([a-zA-Z]+)\}/g, (_, k: string) => String(values[k] ?? ''))
+    : Object.hasOwn(SENTINEL_CLI_STRINGS, key)
+      ? sentinelWord(key, values)
+      : sentinelServiceWord(key, values);
 
 function version(): string {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
@@ -43,7 +62,7 @@ function version(): string {
 }
 
 function help(): string {
-  const planned = (Object.keys(COMMANDS) as (keyof typeof COMMANDS)[]).filter(c => COMMANDS[c] !== null);
+  const planned = (Object.keys(COMMANDS) as (keyof typeof COMMANDS)[]).filter((c) => COMMANDS[c] !== null);
   return [
     word('sentinel.cli.title'),
     '',
@@ -82,25 +101,90 @@ function help(): string {
 }
 
 let jsonOut = false;
-function out(text: string) { process.stdout.write(text.endsWith('\n') ? text : `${text}\n`); }
-function errOut(text: string) { process.stderr.write(text.endsWith('\n') ? text : `${text}\n`); }
+function out(text: string) {
+  process.stdout.write(text.endsWith('\n') ? text : `${text}\n`);
+}
+function errOut(text: string) {
+  process.stderr.write(text.endsWith('\n') ? text : `${text}\n`);
+}
 function finish(r: CommandResult): number {
   if (jsonOut) out(JSON.stringify(r, null, 2));
   return r.exitCode;
 }
 
 async function capabilities(p: ParsedCommand): Promise<number> {
-  if(p.flags['--models']===true){
-    const modelProfiles:unknown[]=[];let timedOut=false;
-    try{const {qualifyInstalledNativeClaude,CLAUDE_NATIVE_PROFILE}=await import('./review/providers/cli-native-profile.js');const runtime=await qualifyInstalledNativeClaude({deadlineAt:Date.now()+5000});modelProfiles.push({kind:'claude-cli',model:'claude-haiku-4-5-20251001',version:CLAUDE_NATIVE_PROFILE.version,platform:'darwin',architecture:'arm64',nativeProfile:{id:runtime.profileId,executableDigest:runtime.executableDigest,helperDigest:runtime.helperDigest,profileDigest:runtime.profileDigest},qualification:'local-bytes-only',authentication:'unobserved',inference:'unobserved'})}catch(e){timedOut||=(e as {code?:string})?.code==='sentinel.provider.timeout'}
-    try{const {qualifyInstalledNativeCopilot,COPILOT_NATIVE_PROFILE}=await import('./review/providers/cli-copilot-profile.js');const runtime=await qualifyInstalledNativeCopilot({deadlineAt:Date.now()+5000});modelProfiles.push({kind:'copilot-cli',model:COPILOT_NATIVE_PROFILE.model,version:COPILOT_NATIVE_PROFILE.version,platform:'darwin',architecture:'arm64',copilotProfile:{id:runtime.profileId,executableDigest:runtime.executableDigest,runtimeDigest:runtime.runtimeDigest,profileDigest:runtime.profileDigest},qualification:'local-code-closure-only',authentication:'unobserved',inference:'unobserved'})}catch(e){timedOut||=(e as {code?:string})?.code==='sentinel.provider.timeout'}
-    return finish(modelProfiles.length?result('capabilities','answered',{facts:{version:version(),modelProfiles}}):result('capabilities','unavailable',{reasonCode:timedOut?'sentinel.provider.timeout':'sentinel.provider.capabilityUntested',facts:{modelProfiles:[],qualification:'unavailable',authentication:'unobserved',inference:'unobserved'}}));
+  if (p.flags['--models'] === true) {
+    const modelProfiles: unknown[] = [];
+    let timedOut = false;
+    try {
+      const { qualifyInstalledNativeClaude, CLAUDE_NATIVE_PROFILE } =
+        await import('./review/providers/cli-native-profile.js');
+      const runtime = await qualifyInstalledNativeClaude({ deadlineAt: Date.now() + 5000 });
+      modelProfiles.push({
+        kind: 'claude-cli',
+        model: 'claude-haiku-4-5-20251001',
+        version: CLAUDE_NATIVE_PROFILE.version,
+        platform: 'darwin',
+        architecture: 'arm64',
+        nativeProfile: {
+          id: runtime.profileId,
+          executableDigest: runtime.executableDigest,
+          helperDigest: runtime.helperDigest,
+          profileDigest: runtime.profileDigest,
+        },
+        qualification: 'local-bytes-only',
+        authentication: 'unobserved',
+        inference: 'unobserved',
+      });
+    } catch (e) {
+      timedOut ||= (e as { code?: string })?.code === 'sentinel.provider.timeout';
+    }
+    try {
+      const { qualifyInstalledNativeCopilot, COPILOT_NATIVE_PROFILE } =
+        await import('./review/providers/cli-copilot-profile.js');
+      const runtime = await qualifyInstalledNativeCopilot({ deadlineAt: Date.now() + 5000 });
+      modelProfiles.push({
+        kind: 'copilot-cli',
+        model: COPILOT_NATIVE_PROFILE.model,
+        version: COPILOT_NATIVE_PROFILE.version,
+        platform: 'darwin',
+        architecture: 'arm64',
+        copilotProfile: {
+          id: runtime.profileId,
+          executableDigest: runtime.executableDigest,
+          runtimeDigest: runtime.runtimeDigest,
+          profileDigest: runtime.profileDigest,
+        },
+        qualification: 'local-code-closure-only',
+        authentication: 'unobserved',
+        inference: 'unobserved',
+      });
+    } catch (e) {
+      timedOut ||= (e as { code?: string })?.code === 'sentinel.provider.timeout';
+    }
+    return finish(
+      modelProfiles.length
+        ? result('capabilities', 'answered', { facts: { version: version(), modelProfiles } })
+        : result('capabilities', 'unavailable', {
+            reasonCode: timedOut ? 'sentinel.provider.timeout' : 'sentinel.provider.capabilityUntested',
+            facts: {
+              modelProfiles: [],
+              qualification: 'unavailable',
+              authentication: 'unobserved',
+              inference: 'unobserved',
+            },
+          }),
+    );
   }
-  if (p.json) return finish(result('capabilities', 'answered', { facts: { version: version(), capabilities: CAPABILITIES } }));
-  const state = (c: (typeof CAPABILITIES)[number]) => word(c.state === 'unavailable' ? 'sentinel.cli.stateUnavailable' : 'sentinel.cli.stateDraft');
-  const width = Math.max(...CAPABILITIES.map(c => state(c).length));
+  if (p.json)
+    return finish(result('capabilities', 'answered', { facts: { version: version(), capabilities: CAPABILITIES } }));
+  const state = (c: (typeof CAPABILITIES)[number]) =>
+    word(c.state === 'unavailable' ? 'sentinel.cli.stateUnavailable' : 'sentinel.cli.stateDraft');
+  const width = Math.max(...CAPABILITIES.map((c) => state(c).length));
   for (const c of CAPABILITIES) {
-    out(`${state(c).padEnd(width)}  ${c.id.padEnd(26)} ${word(c.reasonCode)} · ${word('sentinel.cli.plannedIn', { change: c.plannedIn })}`);
+    out(
+      `${state(c).padEnd(width)}  ${c.id.padEnd(26)} ${word(c.reasonCode)} · ${word('sentinel.cli.plannedIn', { change: c.plannedIn })}`,
+    );
   }
   return 0;
 }
@@ -112,7 +196,8 @@ function validate(p: ParsedCommand): number {
     errOut(word(reasonCode, values));
     return finish(result('validate', 'refused', { reasonCode, facts: { kind: kind ?? null } }));
   };
-  if (!kind || !file || !(ENVELOPE_KINDS as string[]).includes(kind)) return refuse('sentinel.cli.validateUsage', { kinds: ENVELOPE_KINDS.join('|') });
+  if (!kind || !file || !(ENVELOPE_KINDS as string[]).includes(kind))
+    return refuse('sentinel.cli.validateUsage', { kinds: ENVELOPE_KINDS.join('|') });
   let text: string;
   try {
     const st = statSync(file);
@@ -125,9 +210,14 @@ function validate(p: ParsedCommand): number {
   const r = parseEnvelope(kind as EnvelopeKind, text);
   const schema = ENVELOPES[kind as EnvelopeKind].schema;
   if (p.json) {
-    return finish(r.ok
-      ? result('validate', 'answered', { facts: { ok: true, schema } })
-      : result('validate', 'refused', { reasonCode: 'sentinel.cli.invalid', facts: { ok: false, schema, errors: r.errors } }));
+    return finish(
+      r.ok
+        ? result('validate', 'answered', { facts: { ok: true, schema } })
+        : result('validate', 'refused', {
+            reasonCode: 'sentinel.cli.invalid',
+            facts: { ok: false, schema, errors: r.errors },
+          }),
+    );
   }
   if (r.ok) out(word('sentinel.cli.valid', { schema }));
   else {
@@ -150,7 +240,14 @@ function init(p: ParsedCommand): number {
     errOut(word(e.code, { detail: e.detail }));
     return finish(result('init', 'refused', { reasonCode: e.code, facts: { workspace } }));
   }
-  const facts = { path: done.path, digest: done.digest, profile: done.profile, recognised: done.recognised, downloads: 0, scansStarted: 0 };
+  const facts = {
+    path: done.path,
+    digest: done.digest,
+    profile: done.profile,
+    recognised: done.recognised,
+    downloads: 0,
+    scansStarted: 0,
+  };
   if (!done.recognised) {
     errOut(word('sentinel.init.unrecognised'));
     return finish(result('init', 'refused', { reasonCode: 'sentinel.init.unrecognised', facts }));
@@ -180,7 +277,9 @@ function serviceOut(r: CommandResult, lines: string[] = []): number {
   if (!jsonOut) {
     for (const l of lines) out(l);
     const head = word(`sentinel.outcome.${r.outcome.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())}`);
-    (r.exitCode === 0 ? out : errOut)(r.reasonCode && r.reasonCode !== 'sentinel.outcome.unavailable' ? `${head}: ${word(r.reasonCode)}` : head);
+    (r.exitCode === 0 ? out : errOut)(
+      r.reasonCode && r.reasonCode !== 'sentinel.outcome.unavailable' ? `${head}: ${word(r.reasonCode)}` : head,
+    );
   }
   return finish(r);
 }
@@ -197,7 +296,7 @@ async function ensureService(ws: Workspace): Promise<ServiceClient | undefined> 
   // Two commands may start a service at once; the loser cannot open the store and exits, and both reach the winner.
   try {
     for (const end = Date.now() + SERVICE_START_MS; Date.now() < end;) {
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 100));
       const c = await connectService(ws);
       if (c) {
         // Another command's service won the race: this command's own launch is redundant and is stopped by its own
@@ -216,8 +315,17 @@ async function ensureService(ws: Workspace): Promise<ServiceClient | undefined> 
 }
 
 /** Sends one request and closes the connection: the run continues whatever happens to this command. */
-async function ask(client: ServiceClient, op: string, body: Record<string, unknown>, timeoutMs?: number): Promise<CommandResult> {
-  try { return await client.request(op, body, timeoutMs === undefined ? {} : { timeoutMs }) as CommandResult; } finally { client.close(); }
+async function ask(
+  client: ServiceClient,
+  op: string,
+  body: Record<string, unknown>,
+  timeoutMs?: number,
+): Promise<CommandResult> {
+  try {
+    return (await client.request(op, body, timeoutMs === undefined ? {} : { timeoutMs })) as CommandResult;
+  } finally {
+    client.close();
+  }
 }
 
 async function owner(p: ParsedCommand): Promise<number> {
@@ -226,8 +334,18 @@ async function owner(p: ParsedCommand): Promise<number> {
   try {
     const ws = workspaceFor(p);
     const format = typeof p.flags['--format'] === 'string' ? p.flags['--format'] : 'md';
-    if(p.command==='report'&&p.flags['--instructions']===true){const live=await connectService(ws);if(live){live.close();return serviceOut(result('report','configuration-failure',{reasonCode:'sentinel.service.ownerServiceRunning'}))}return serviceOut(await privateReviewTrace(ws,p.args.runId!));}
-    if (p.command === 'compare' || (p.command === 'report' && p.flags['--full'] === true)) return await fullReportCommand(p, ws, format, confirm, now);
+    if (p.command === 'report' && p.flags['--instructions'] === true) {
+      const live = await connectService(ws);
+      if (live) {
+        live.close();
+        return serviceOut(
+          result('report', 'configuration-failure', { reasonCode: 'sentinel.service.ownerServiceRunning' }),
+        );
+      }
+      return serviceOut(await privateReviewTrace(ws, p.args.runId!));
+    }
+    if (p.command === 'compare' || (p.command === 'report' && p.flags['--full'] === true))
+      return await fullReportCommand(p, ws, format, confirm, now);
     // The flags of the full report change nothing in the minimal report: refused rather than ignored.
     for (const flag of ['--disclosure', '--context', '--repo', '--out', '--confirm']) {
       if (p.command === 'report' && p.flags[flag] !== undefined) {
@@ -241,75 +359,173 @@ async function owner(p: ParsedCommand): Promise<number> {
     }
     if (p.command === 'assets') {
       if (p.args.action === 'acquire-database') {
-        if (p.flags['--archive'] || p.flags['--manifest'] || p.flags['--license']) return serviceOut(result('assets', 'configuration-failure', { reasonCode: 'sentinel.assets.invalid' }));
-        return serviceOut(await acquireScannerDatabase(ws, { id: p.args.assetId!, maxBytes: typeof p.flags['--max-bytes'] === 'string' ? Number(p.flags['--max-bytes']) : undefined, confirm, now }));
+        if (p.flags['--archive'] || p.flags['--manifest'] || p.flags['--license'])
+          return serviceOut(result('assets', 'configuration-failure', { reasonCode: 'sentinel.assets.invalid' }));
+        return serviceOut(
+          await acquireScannerDatabase(ws, {
+            id: p.args.assetId!,
+            maxBytes: typeof p.flags['--max-bytes'] === 'string' ? Number(p.flags['--max-bytes']) : undefined,
+            confirm,
+            now,
+          }),
+        );
       }
-      if (p.flags['--max-bytes']) return serviceOut(result('assets', 'configuration-failure', { reasonCode: 'sentinel.assets.invalid' }));
-      const kind = p.args.action === 'adopt-tool' ? 'tool' : p.args.action === 'adopt-database' ? 'database' : undefined;
-      if (!kind) return serviceOut(result('assets', 'configuration-failure', { reasonCode: 'sentinel.assets.unsupported' }));
-      const adopted = await adoptScannerAsset(ws, { kind, id: p.args.assetId!, license: typeof p.flags['--license'] === 'string' ? p.flags['--license'] : undefined, archive: typeof p.flags['--archive'] === 'string' ? p.flags['--archive'] : undefined, manifest: typeof p.flags['--manifest'] === 'string' ? p.flags['--manifest'] : undefined, confirm, now });
-      return serviceOut(adopted, adopted.facts.candidate ? [word('sentinel.assets.disclosure', { id: String(adopted.facts.id), candidate: String(adopted.facts.candidate), metadata: String(adopted.facts.metadataDigest) })] : []);
+      if (p.flags['--max-bytes'])
+        return serviceOut(result('assets', 'configuration-failure', { reasonCode: 'sentinel.assets.invalid' }));
+      const kind =
+        p.args.action === 'adopt-tool' ? 'tool' : p.args.action === 'adopt-database' ? 'database' : undefined;
+      if (!kind)
+        return serviceOut(result('assets', 'configuration-failure', { reasonCode: 'sentinel.assets.unsupported' }));
+      const adopted = await adoptScannerAsset(ws, {
+        kind,
+        id: p.args.assetId!,
+        license: typeof p.flags['--license'] === 'string' ? p.flags['--license'] : undefined,
+        archive: typeof p.flags['--archive'] === 'string' ? p.flags['--archive'] : undefined,
+        manifest: typeof p.flags['--manifest'] === 'string' ? p.flags['--manifest'] : undefined,
+        confirm,
+        now,
+      });
+      return serviceOut(
+        adopted,
+        adopted.facts.candidate
+          ? [
+              word('sentinel.assets.disclosure', {
+                id: String(adopted.facts.id),
+                candidate: String(adopted.facts.candidate),
+                metadata: String(adopted.facts.metadataDigest),
+              }),
+            ]
+          : [],
+      );
     }
     if (p.command === 'serve') return await serve(p, ws);
     if (p.command === 'wait') return await waitFor(p, ws);
-    if ((p.command === 'run' && p.flags['--detach'] === true) || p.command === 'resume' || p.command === 'pause' || p.command === 'cancel') {
+    if (
+      (p.command === 'run' && p.flags['--detach'] === true) ||
+      p.command === 'resume' ||
+      p.command === 'pause' ||
+      p.command === 'cancel'
+    ) {
       // Writes on a run. First the owner's decision against the plan (without --confirm it stops here, exit 4, and
       // starts nothing); then the service is reached and the owner's receipt is minted for exactly its store and this
       // run, and spent there once. Pause needs a run the service is executing; start, resume and cancel may start it.
       const runId = (p.args.planId ?? p.args.runId)!;
-      const action = p.command === 'pause' ? 'run.pause' as const : p.command === 'cancel' ? 'run.cancel' as const : 'run.start' as const;
+      const action =
+        p.command === 'pause'
+          ? ('run.pause' as const)
+          : p.command === 'cancel'
+            ? ('run.cancel' as const)
+            : ('run.start' as const);
       // The run's current admitted plan: from the service when one holds the store, else read from the store.
-      const describe = async (client?: ServiceClient) => (client
-        ? (await client.request('run.describe', { runId }) as CurrentPlan | null) ?? undefined
-        : describeRun(ws, runId));
+      const describe = async (client?: ServiceClient) =>
+        client
+          ? (((await client.request('run.describe', { runId })) as CurrentPlan | null) ?? undefined)
+          : describeRun(ws, runId);
       // From the service when one holds the store; else from the store. A service that another command has just
       // started holds the store before it answers: then this command waits for it and asks it, rather than failing.
       const describeNow = async (): Promise<CurrentPlan | undefined> => {
         for (const end = Date.now() + SERVICE_START_MS; ;) {
           const live = await connectService(ws);
-          if (live) { try { return await describe(live); } finally { live.close(); } }
-          try { return await describe(); } catch (e) {
+          if (live) {
+            try {
+              return await describe(live);
+            } finally {
+              live.close();
+            }
+          }
+          try {
+            return await describe();
+          } catch (e) {
             if ((e as { code?: string }).code !== 'sentinel.store.ownedElsewhere' || Date.now() >= end) throw e;
           }
-          await new Promise(r => setTimeout(r, 100));
+          await new Promise((r) => setTimeout(r, 100));
         }
       };
       const planNow = await describeNow();
-      if(action==='run.start'&&planNow?.effects.includes('paid-inference'))return serviceOut(result(p.command,'configuration-failure',{reasonCode:'sentinel.review.foregroundRequired'}));
-      const shown = confirmForService(ws, { command: p.command, action, plan: planNow, planId: runId, confirm: false, now });
-      if (!confirm || ('result' in shown && shown.result.outcome !== 'awaiting-confirmation')) return serviceOut('result' in shown ? shown.result : result(p.command, 'refused'));
+      if (action === 'run.start' && planNow?.effects.includes('paid-inference'))
+        return serviceOut(
+          result(p.command, 'configuration-failure', { reasonCode: 'sentinel.review.foregroundRequired' }),
+        );
+      const shown = confirmForService(ws, {
+        command: p.command,
+        action,
+        plan: planNow,
+        planId: runId,
+        confirm: false,
+        now,
+      });
+      if (!confirm || ('result' in shown && shown.result.outcome !== 'awaiting-confirmation'))
+        return serviceOut('result' in shown ? shown.result : result(p.command, 'refused'));
       const client = p.command === 'pause' ? await connectService(ws) : await ensureService(ws);
       if (!client) {
-        return serviceOut(result(p.command, p.command === 'pause' ? 'refused' : 'configuration-failure',
-          { reasonCode: p.command === 'pause' ? 'sentinel.service.notRunning' : 'sentinel.service.startFailed', facts: { runId } }));
+        return serviceOut(
+          result(p.command, p.command === 'pause' ? 'refused' : 'configuration-failure', {
+            reasonCode: p.command === 'pause' ? 'sentinel.service.notRunning' : 'sentinel.service.startFailed',
+            facts: { runId },
+          }),
+        );
       }
-      const confirmed = confirmForService(ws, { command: p.command, action, plan: await describe(client), planId: runId, confirm: true, now, storeId: client.storeId });
-      if ('result' in confirmed) { client.close(); return serviceOut(confirmed.result); }
-      const r = action === 'run.start'
-        ? await ask(client, 'run.start', { planId: runId, receiptId: confirmed.receiptId })
-        : await ask(client, action, { runId, receiptId: confirmed.receiptId });
-      return serviceOut(r, r.facts.runId ? [`run ${String(r.facts.runId)} · ${String(r.facts.state)}${r.facts.joined === true ? ' · joined' : ''}`] : []);
+      const confirmed = confirmForService(ws, {
+        command: p.command,
+        action,
+        plan: await describe(client),
+        planId: runId,
+        confirm: true,
+        now,
+        storeId: client.storeId,
+      });
+      if ('result' in confirmed) {
+        client.close();
+        return serviceOut(confirmed.result);
+      }
+      const r =
+        action === 'run.start'
+          ? await ask(client, 'run.start', { planId: runId, receiptId: confirmed.receiptId })
+          : await ask(client, action, { runId, receiptId: confirmed.receiptId });
+      return serviceOut(
+        r,
+        r.facts.runId
+          ? [`run ${String(r.facts.runId)} · ${String(r.facts.state)}${r.facts.joined === true ? ' · joined' : ''}`]
+          : [],
+      );
     }
     // While the service runs it alone holds the store: reads go through it, and nothing new is planned or run here.
     const live = await connectService(ws);
-    if (live && (p.command === 'plan' || p.command === 'paths' || p.command === 'run' || p.command === 'retry' || p.command === 'rerun')) {
+    if (
+      live &&
+      (p.command === 'plan' ||
+        p.command === 'paths' ||
+        p.command === 'run' ||
+        p.command === 'retry' ||
+        p.command === 'rerun')
+    ) {
       live.close();
-      return serviceOut(result(p.command, 'configuration-failure', { reasonCode: 'sentinel.service.ownerServiceRunning' }));
+      return serviceOut(
+        result(p.command, 'configuration-failure', { reasonCode: 'sentinel.service.ownerServiceRunning' }),
+      );
     }
     if (live && p.command === 'status') {
       const num = (f: string) => (typeof p.flags[f] === 'string' ? Number(p.flags[f]) : undefined);
       const after = num('--after');
       const limit = num('--limit');
-      if ((after !== undefined && !(Number.isSafeInteger(after) && after >= 0)) || (limit !== undefined && !(Number.isSafeInteger(limit) && limit >= 0))) {
+      if (
+        (after !== undefined && !(Number.isSafeInteger(after) && after >= 0)) ||
+        (limit !== undefined && !(Number.isSafeInteger(limit) && limit >= 0))
+      ) {
         live.close();
         errOut(word('sentinel.args.missingValue', { detail: '--after/--limit' }));
         return finish(result('status', 'refused', { reasonCode: 'sentinel.args.missingValue' }));
       }
-      const r = await ask(live, 'run.status', { runId: p.args.runId!, ...(after === undefined ? {} : { after }), ...(limit === undefined ? {} : { limit }) });
+      const r = await ask(live, 'run.status', {
+        runId: p.args.runId!,
+        ...(after === undefined ? {} : { after }),
+        ...(limit === undefined ? {} : { limit }),
+      });
       return serviceOut(r, r.facts.state ? [`run ${p.args.runId} · ${String(r.facts.state)}`] : []);
     }
     if (live && p.command === 'report') {
-      const doc = await ask(live, 'report', { runId: p.args.runId! }) as unknown as PreviewReport | ScannerReport | CommandResult;
+      const doc = (await ask(live, 'report', { runId: p.args.runId! })) as unknown as
+        PreviewReport | ScannerReport | CommandResult;
       return printReport(p, doc);
     }
     live?.close();
@@ -329,40 +545,91 @@ async function owner(p: ParsedCommand): Promise<number> {
         return finish(result('rules', 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
       }
       // `builtin:<name>` is a pack this package ships; anything else is a folder the owner names.
-      const named = p.args.packDir.startsWith('builtin:') ? builtinPackDir(p.args.packDir.slice('builtin:'.length)) : p.args.packDir;
+      const named = p.args.packDir.startsWith('builtin:')
+        ? builtinPackDir(p.args.packDir.slice('builtin:'.length))
+        : p.args.packDir;
       if (named === undefined) {
         errOut(word('sentinel.args.unexpectedArgument', { detail: p.args.packDir }));
         return finish(result('rules', 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
       }
       const r = promoteRulePack(ws, { packDir: realpathSync.native(named), confirm, now });
-      return serviceOut(r, [`pack ${String(r.facts.packId)} ${String(r.facts.version)} · candidate ${String(r.facts.candidate)} · replaces lock ${String(r.facts.previousLock)}${r.facts.lock ? ` · now lock ${String(r.facts.lock)}` : ''}`]);
+      return serviceOut(r, [
+        `pack ${String(r.facts.packId)} ${String(r.facts.version)} · candidate ${String(r.facts.candidate)} · replaces lock ${String(r.facts.previousLock)}${r.facts.lock ? ` · now lock ${String(r.facts.lock)}` : ''}`,
+      ]);
     }
     if (p.command === 'retry' || p.command === 'rerun') {
-      const stages = typeof p.flags['--stage'] === 'string' ? p.flags['--stage'].split(',').map(x => x.trim()).filter(Boolean) : [];
+      const stages =
+        typeof p.flags['--stage'] === 'string'
+          ? p.flags['--stage']
+              .split(',')
+              .map((x) => x.trim())
+              .filter(Boolean)
+          : [];
       const r = await followWorkspaceRun(ws, { mode: p.command, runId: p.args.runId!, stages, confirm, now });
-      return serviceOut(r, r.facts.runId && r.facts.parentId ? [`run ${String(r.facts.runId)} · follows ${String(r.facts.parentId)} · ${String(r.facts.planDigest)}`] : []);
+      return serviceOut(
+        r,
+        r.facts.runId && r.facts.parentId
+          ? [`run ${String(r.facts.runId)} · follows ${String(r.facts.parentId)} · ${String(r.facts.planDigest)}`]
+          : [],
+      );
     }
     if (p.command === 'paths') {
-      const r=await prepareWorkspacePaths(ws,{ancestorRunId:p.args.ancestorRunId!,requestFile:p.flags['--request'] as string,confirm,now});
-      return serviceOut(r,r.facts.runId?[word('sentinel.cli.pathsPrepared',{run:String(r.facts.runId),request:String(r.facts.request)})]:[]);
+      const r = await prepareWorkspacePaths(ws, {
+        ancestorRunId: p.args.ancestorRunId!,
+        requestFile: p.flags['--request'] as string,
+        confirm,
+        now,
+      });
+      return serviceOut(
+        r,
+        r.facts.runId
+          ? [word('sentinel.cli.pathsPrepared', { run: String(r.facts.runId), request: String(r.facts.request) })]
+          : [],
+      );
     }
     if (p.command === 'plan') {
       const r = await planWorkspace(ws, { confirm, now });
-      return serviceOut(r, r.disclosure ? [`plan ${r.disclosure.planId} · ${r.disclosure.planDigest} · effects: ${r.disclosure.effects.join(', ')} · ${word(r.disclosure.label === 'foundation-preview' ? 'sentinel.report.previewOnly' : 'sentinel.report.scannerSlice')}`] : []);
+      return serviceOut(
+        r,
+        r.disclosure
+          ? [
+              `plan ${r.disclosure.planId} · ${r.disclosure.planDigest} · effects: ${r.disclosure.effects.join(', ')} · ${word(r.disclosure.label === 'foundation-preview' ? 'sentinel.report.previewOnly' : 'sentinel.report.scannerSlice')}`,
+            ]
+          : [],
+      );
     }
     if (p.command === 'run') {
-      const r = await runPlan(ws, { planId: p.args.planId!, confirm, confirmModels:p.flags['--confirm-models']===true, now });
-      return serviceOut(r, r.facts.runId ? [`run ${String(r.facts.runId)} · ${String(r.facts.state)} · preview findings: ${String(r.facts.previewFindings)}`] : []);
+      const r = await runPlan(ws, {
+        planId: p.args.planId!,
+        confirm,
+        confirmModels: p.flags['--confirm-models'] === true,
+        now,
+      });
+      return serviceOut(
+        r,
+        r.facts.runId
+          ? [
+              `run ${String(r.facts.runId)} · ${String(r.facts.state)} · preview findings: ${String(r.facts.previewFindings)}`,
+            ]
+          : [],
+      );
     }
     if (p.command === 'status') {
       const num = (f: string) => (typeof p.flags[f] === 'string' ? Number(p.flags[f]) : undefined);
       const after = num('--after');
       const limit = num('--limit');
-      if ((after !== undefined && !Number.isSafeInteger(after)) || (limit !== undefined && !Number.isSafeInteger(limit))) {
+      if (
+        (after !== undefined && !Number.isSafeInteger(after)) ||
+        (limit !== undefined && !Number.isSafeInteger(limit))
+      ) {
         errOut(word('sentinel.args.missingValue', { detail: '--after/--limit' }));
         return finish(result('status', 'refused', { reasonCode: 'sentinel.args.missingValue' }));
       }
-      const r = await runStatus(ws, { runId: p.args.runId!, ...(after === undefined ? {} : { after }), ...(limit === undefined ? {} : { limit }) });
+      const r = await runStatus(ws, {
+        runId: p.args.runId!,
+        ...(after === undefined ? {} : { after }),
+        ...(limit === undefined ? {} : { limit }),
+      });
       return serviceOut(r, r.facts.state ? [`run ${p.args.runId} · ${String(r.facts.state)}`] : []);
     }
     // report
@@ -381,9 +648,18 @@ async function owner(p: ParsedCommand): Promise<number> {
  * `report <run> --full` and `compare <run> <baseline>`: the full report of a completed run from its accepted evidence,
  * in the store this process holds. While the background service holds the store nothing is read here.
  */
-async function fullReportCommand(p: ParsedCommand, ws: Workspace, format: string, confirm: boolean, now: Date): Promise<number> {
+async function fullReportCommand(
+  p: ParsedCommand,
+  ws: Workspace,
+  format: string,
+  confirm: boolean,
+  now: Date,
+): Promise<number> {
   const disclosure = typeof p.flags['--disclosure'] === 'string' ? p.flags['--disclosure'] : 'shareable';
-  for (const [flag, value, allowed] of [['--format', format, REPORT_FORMATS], ['--disclosure', disclosure, ['private', 'shareable']]] as const) {
+  for (const [flag, value, allowed] of [
+    ['--format', format, REPORT_FORMATS],
+    ['--disclosure', disclosure, ['private', 'shareable']],
+  ] as const) {
     if (!(allowed as readonly string[]).includes(value)) {
       errOut(word('sentinel.args.unexpectedArgument', { detail: `${flag} ${value}` }));
       return finish(result(p.command, 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
@@ -394,19 +670,37 @@ async function fullReportCommand(p: ParsedCommand, ws: Workspace, format: string
     return finish(result(p.command, 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
   }
   const live = await connectService(ws);
-  if (live) { live.close(); return serviceOut(result(p.command, 'configuration-failure', { reasonCode: 'sentinel.service.ownerServiceRunning' })); }
-  const path = (flag: string) => (typeof p.flags[flag] === 'string' ? resolve(process.cwd(), p.flags[flag] as string) : undefined);
+  if (live) {
+    live.close();
+    return serviceOut(
+      result(p.command, 'configuration-failure', { reasonCode: 'sentinel.service.ownerServiceRunning' }),
+    );
+  }
+  const path = (flag: string) =>
+    typeof p.flags[flag] === 'string' ? resolve(process.cwd(), p.flags[flag] as string) : undefined;
   const contextFile = path('--context');
   const outFile = path('--out');
   const r = await fullReportIn(ws, {
-    runId: p.args.runId!, ...(p.args.baselineRunId ? { baselineRunId: p.args.baselineRunId } : {}),
-    disclosure: disclosure as 'private' | 'shareable', format: format as ReportFormat,
-    ...(contextFile ? { contextFile } : {}), ...(typeof p.flags['--repo'] === 'string' ? { repo: p.flags['--repo'] as string } : {}),
-    ...(outFile ? { out: outFile } : {}), confirm, now,
+    runId: p.args.runId!,
+    ...(p.args.baselineRunId ? { baselineRunId: p.args.baselineRunId } : {}),
+    disclosure: disclosure as 'private' | 'shareable',
+    format: format as ReportFormat,
+    ...(contextFile ? { contextFile } : {}),
+    ...(typeof p.flags['--repo'] === 'string' ? { repo: p.flags['--repo'] as string } : {}),
+    ...(outFile ? { out: outFile } : {}),
+    confirm,
+    now,
   });
   if (jsonOut || r.text === undefined) {
     const f = r.result.facts as Record<string, any>;
-    return serviceOut(r.result, f.reportId ? [`report ${String(f.reportId)} · ${String(f.completeness)} · ${String(f.findings)} findings · ${String(f.gaps)} gaps${f.written ? ` · written ${String(f.written)}` : ''}`] : []);
+    return serviceOut(
+      r.result,
+      f.reportId
+        ? [
+            `report ${String(f.reportId)} · ${String(f.completeness)} · ${String(f.findings)} findings · ${String(f.gaps)} gaps${f.written ? ` · written ${String(f.written)}` : ''}`,
+          ]
+        : [],
+    );
   }
   out(r.text.endsWith('\n') ? r.text.slice(0, -1) : r.text);
   return r.result.exitCode;
@@ -418,7 +712,8 @@ function printReport(p: ParsedCommand, doc: PreviewReport | ScannerReport | Comm
     if ('outcome' in doc) return serviceOut(doc);
     // --json is the typed result with the report inside it; --format json alone prints the report document.
     if (jsonOut) return finish(result('report', 'answered', { facts: { report: doc } }));
-    if (doc.schema === 'sentinel-scanner-report/draft-1') out(format === 'json' ? JSON.stringify(doc, null, 2) : renderScannerMarkdown(doc));
+    if (doc.schema === 'sentinel-scanner-report/draft-1')
+      out(format === 'json' ? JSON.stringify(doc, null, 2) : renderScannerMarkdown(doc));
     else out(format === 'json' ? renderPreviewJson(doc) : renderPreviewMarkdown(doc));
     return 0;
   }
@@ -436,9 +731,19 @@ async function serve(p: ParsedCommand, ws: Workspace): Promise<number> {
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
   try {
-    await serveWorkspace(ws, { idleMs: idle, signal: stop.signal, onListening: () => {
-      if (!jsonOut) out(word(idle > 0 ? 'sentinel.service.serving' : 'sentinel.service.servingForever', { workspace: ws.path, idle }));
-    } });
+    await serveWorkspace(ws, {
+      idleMs: idle,
+      signal: stop.signal,
+      onListening: () => {
+        if (!jsonOut)
+          out(
+            word(idle > 0 ? 'sentinel.service.serving' : 'sentinel.service.servingForever', {
+              workspace: ws.path,
+              idle,
+            }),
+          );
+      },
+    });
   } finally {
     process.off('SIGINT', onSignal);
     process.off('SIGTERM', onSignal);
@@ -460,11 +765,16 @@ async function waitFor(p: ParsedCommand, ws: Workspace): Promise<number> {
     if (!client) {
       // Nothing is executing it: the store says whether it finished, stopped or was interrupted.
       const store = await openStore(ws.storePath);
-      try { return serviceOut(await canonicalResult(store, 'wait', runId, { executing: false })); } finally { store.close(); }
+      try {
+        return serviceOut(await canonicalResult(store, 'wait', runId, { executing: false }));
+      } finally {
+        store.close();
+      }
     }
     const slice = Math.max(0, Math.min(end - Date.now(), 20_000));
     const r = await ask(client, 'run.wait', { runId, timeoutMs: slice }, slice + 10_000);
-    if (r.outcome !== 'submitted' || Date.now() >= end) return serviceOut(r, r.facts.state ? [`run ${runId} · ${String(r.facts.state)}`] : []);
+    if (r.outcome !== 'submitted' || Date.now() >= end)
+      return serviceOut(r, r.facts.state ? [`run ${runId} · ${String(r.facts.state)}`] : []);
   }
 }
 
@@ -472,16 +782,29 @@ export async function main(argv: string[]): Promise<number> {
   const parsed = parseArgs(argv);
   jsonOut = parsed.ok ? parsed.parsed.json : parsed.json;
   if (!parsed.ok) {
-    const name=argv.find(a=>a!=='--json'),evidence=name==='evidence'||name==='decision',code=evidence?(name==='decision'?'sentinel.decision.inputRefused':'sentinel.evidence.inputRefused'):parsed.code;
-    errOut(evidence?word(code):word(code, { detail: parsed.detail }));
-    return finish(result(evidence?name!:'unknown', 'refused', { reasonCode: code }));
+    const name = argv.find((a) => a !== '--json'),
+      evidence = name === 'evidence' || name === 'decision',
+      code = evidence
+        ? name === 'decision'
+          ? 'sentinel.decision.inputRefused'
+          : 'sentinel.evidence.inputRefused'
+        : parsed.code;
+    errOut(evidence ? word(code) : word(code, { detail: parsed.detail }));
+    return finish(result(evidence ? name! : 'unknown', 'refused', { reasonCode: code }));
   }
   const p = parsed.parsed;
   try {
     return await dispatch(p);
   } catch (e) {
     // Whatever failed, the caller gets a typed result and a catalog word, not a stack trace.
-    errOut(word('sentinel.cli.unexpected', { detail: (e as { code?: unknown }).code !== undefined ? String((e as { code?: unknown }).code) : (e as Error)?.name ?? 'error' }));
+    errOut(
+      word('sentinel.cli.unexpected', {
+        detail:
+          (e as { code?: unknown }).code !== undefined
+            ? String((e as { code?: unknown }).code)
+            : ((e as Error)?.name ?? 'error'),
+      }),
+    );
     return finish(result(p.command, 'configuration-failure', { reasonCode: 'sentinel.cli.unexpected' }));
   }
 }
@@ -490,40 +813,90 @@ async function dispatch(p: ParsedCommand): Promise<number> {
   switch (p.command) {
     case 'help':
       if (p.json) return finish(result('help', 'answered', { facts: { text: help() } }));
-      out(help()); return 0;
+      out(help());
+      return 0;
     case 'version': {
       const facts = { version: version(), contracts: ENVELOPES.run.schema.split('/')[1]! };
       if (p.json) return finish(result('version', 'answered', { facts }));
-      out(word('sentinel.cli.version', { version: facts.version, draft: facts.contracts })); return 0;
+      out(word('sentinel.cli.version', { version: facts.version, draft: facts.contracts }));
+      return 0;
     }
     case 'decision': {
-      try{const wire=decisionWire(await ownerDecisionCommand(workspaceFor(p),p),p.json);
-      (p.json||wire.result.exitCode===0?out:errOut)(wire.text);return wire.result.exitCode;}catch{
-        const wire=decisionWire({result:result('decision','refused',{reasonCode:'sentinel.decision.unavailable'})},p.json);
-        (p.json?out:errOut)(wire.text);return wire.result.exitCode;
+      try {
+        const wire = decisionWire(await ownerDecisionCommand(workspaceFor(p), p), p.json);
+        (p.json || wire.result.exitCode === 0 ? out : errOut)(wire.text);
+        return wire.result.exitCode;
+      } catch {
+        const wire = decisionWire(
+          { result: result('decision', 'refused', { reasonCode: 'sentinel.decision.unavailable' }) },
+          p.json,
+        );
+        (p.json ? out : errOut)(wire.text);
+        return wire.result.exitCode;
       }
     }
     case 'evidence': {
-      try{
-        const wire=evidenceWire(await ownerEvidenceCommand(workspaceFor(p),p),p.json);
-        (p.json||wire.result.exitCode===0?out:errOut)(wire.text);return wire.result.exitCode;
-      }catch{
-        const wire=evidenceWire({result:result('evidence','refused',{reasonCode:'sentinel.evidence.storageRefused'})},p.json);
-        (p.json?out:errOut)(wire.text);return wire.result.exitCode;
+      try {
+        const wire = evidenceWire(await ownerEvidenceCommand(workspaceFor(p), p), p.json);
+        (p.json || wire.result.exitCode === 0 ? out : errOut)(wire.text);
+        return wire.result.exitCode;
+      } catch {
+        const wire = evidenceWire(
+          { result: result('evidence', 'refused', { reasonCode: 'sentinel.evidence.storageRefused' }) },
+          p.json,
+        );
+        (p.json ? out : errOut)(wire.text);
+        return wire.result.exitCode;
       }
     }
-    case 'capabilities': return capabilities(p);
-    case 'owner-ui': {const origin=p.flags['--farsight-origin'];if(typeof origin!=='string')return finish(result('owner-ui','configuration-failure',{reasonCode:'sentinel.ownerUi.invalid'}));return(await import('./owner-ui/server.js')).runOwnerUi(workspaceFor(p),origin);}
-    case 'mcp': return (await import('./service/mcp.js')).runMcp(workspaceFor(p));
-    case 'prepare': return serviceOut(await (await import('./service/preparation-client.js')).prepareCommand(workspaceFor(p),{action:p.args.action,confirm:p.flags['--confirm']===true,requestKey:typeof p.flags['--request-key']==='string'?p.flags['--request-key']:undefined,parentId:typeof p.flags['--parent']==='string'?p.flags['--parent']:undefined}));
-    case 'validate': return validate(p);
-    case 'init': return init(p);
-    case 'settings': case 'plan': case 'paths': case 'run': case 'status': case 'report': case 'compare':
-    case 'serve': case 'wait': case 'pause': case 'resume': case 'cancel': case 'rules': case 'assets': case 'retry': case 'rerun': return owner(p);
+    case 'capabilities':
+      return capabilities(p);
+    case 'owner-ui': {
+      const origin = p.flags['--farsight-origin'];
+      if (typeof origin !== 'string')
+        return finish(result('owner-ui', 'configuration-failure', { reasonCode: 'sentinel.ownerUi.invalid' }));
+      return (await import('./owner-ui/server.js')).runOwnerUi(workspaceFor(p), origin);
+    }
+    case 'mcp':
+      return (await import('./service/mcp.js')).runMcp(workspaceFor(p));
+    case 'prepare':
+      return serviceOut(
+        await (
+          await import('./service/preparation-client.js')
+        ).prepareCommand(workspaceFor(p), {
+          action: p.args.action,
+          confirm: p.flags['--confirm'] === true,
+          requestKey: typeof p.flags['--request-key'] === 'string' ? p.flags['--request-key'] : undefined,
+          parentId: typeof p.flags['--parent'] === 'string' ? p.flags['--parent'] : undefined,
+        }),
+      );
+    case 'validate':
+      return validate(p);
+    case 'init':
+      return init(p);
+    case 'settings':
+    case 'plan':
+    case 'paths':
+    case 'run':
+    case 'status':
+    case 'report':
+    case 'compare':
+    case 'serve':
+    case 'wait':
+    case 'pause':
+    case 'resume':
+    case 'cancel':
+    case 'rules':
+    case 'assets':
+    case 'retry':
+    case 'rerun':
+      return owner(p);
     default: {
       const change = plannedIn(p.command)!;
       errOut(word('sentinel.cli.unavailable', { command: p.command, change }));
-      return finish(result(p.command, 'unavailable', { reasonCode: 'sentinel.outcome.unavailable', facts: { plannedIn: change } }));
+      return finish(
+        result(p.command, 'unavailable', { reasonCode: 'sentinel.outcome.unavailable', facts: { plannedIn: change } }),
+      );
     }
   }
 }

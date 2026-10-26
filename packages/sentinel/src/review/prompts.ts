@@ -22,23 +22,31 @@ const UNTRUSTED = [
 ].join('\n');
 
 export const GUIDED_PROMPT: PromptArtifact = Object.freeze({
-  id: 'sentinel.review.guided', version: 1,
+  id: 'sentinel.review.guided',
+  version: 1,
   text: [
     'You are reviewing source code for one named security rule, within a fixed scope of files.',
     'Decide whether the code in scope shows the weakness the rule describes. Read the rule first, then the code.',
-    UNTRUSTED, GRAMMAR,
+    UNTRUSTED,
+    GRAMMAR,
   ].join('\n\n'),
 });
 
 export const GENERAL_PROMPT: PromptArtifact = Object.freeze({
-  id: 'sentinel.review.general', version: 1,
+  id: 'sentinel.review.general',
+  version: 1,
   text: [
     'You are reviewing a fixed partition of source files for security weaknesses of any kind.',
     'This partition was chosen without regard to scanner results; report only what the cited code shows.',
-    UNTRUSTED, GRAMMAR,
+    UNTRUSTED,
+    GRAMMAR,
   ].join('\n\n'),
 });
 
-export interface PromptArtifact { readonly id: string; readonly version: number; readonly text: string }
+export interface PromptArtifact {
+  readonly id: string;
+  readonly version: number;
+  readonly text: string;
+}
 
 export const promptDigest = (p: PromptArtifact): string => canonicalDigest(p);

@@ -22,7 +22,11 @@ export function decodeUtf8(bytes: Uint8Array, budget: ImportBudget): { text: str
   budget.check();
   const bom = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
   let text: string;
-  try { text = decoder.decode(bom ? bytes.subarray(3) : bytes); } catch { throw new ImportRefusal('sentinel.import.invalidUtf8'); }
+  try {
+    text = decoder.decode(bom ? bytes.subarray(3) : bytes);
+  } catch {
+    throw new ImportRefusal('sentinel.import.invalidUtf8');
+  }
   budget.work(Math.ceil(bytes.length / 64) + 1);
   budget.check();
   return { text, byteOrderMark: bom };
@@ -41,13 +45,23 @@ export function parseStrictJson(bytes: Uint8Array, budget: ImportBudget): Parsed
 
 class Parser {
   i = 0;
-  constructor(readonly s: string, readonly b: ImportBudget) {}
+  constructor(
+    readonly s: string,
+    readonly b: ImportBudget,
+  ) {}
 
-  fail(code: 'sentinel.import.jsonMalformed' | 'sentinel.import.jsonDuplicateKey' | 'sentinel.import.jsonTooDeep', pointer: string): never {
+  fail(
+    code: 'sentinel.import.jsonMalformed' | 'sentinel.import.jsonDuplicateKey' | 'sentinel.import.jsonTooDeep',
+    pointer: string,
+  ): never {
     throw new ImportRefusal(code, pointer.slice(0, 256));
   }
 
-  ws(): void { WS.lastIndex = this.i; WS.exec(this.s); this.i = WS.lastIndex; }
+  ws(): void {
+    WS.lastIndex = this.i;
+    WS.exec(this.s);
+    this.i = WS.lastIndex;
+  }
 
   value(depth: number, ptr: string): Json {
     if (depth > this.b.limits.jsonDepth) this.fail('sentinel.import.jsonTooDeep', ptr);
@@ -56,9 +70,18 @@ class Parser {
     if (c === 0x7b) return this.object(depth, ptr);
     if (c === 0x5b) return this.array(depth, ptr);
     if (c === 0x22) return this.string(ptr);
-    if (this.s.startsWith('true', this.i)) { this.i += 4; return true; }
-    if (this.s.startsWith('false', this.i)) { this.i += 5; return false; }
-    if (this.s.startsWith('null', this.i)) { this.i += 4; return null; }
+    if (this.s.startsWith('true', this.i)) {
+      this.i += 4;
+      return true;
+    }
+    if (this.s.startsWith('false', this.i)) {
+      this.i += 5;
+      return false;
+    }
+    if (this.s.startsWith('null', this.i)) {
+      this.i += 4;
+      return null;
+    }
     NUMBER.lastIndex = this.i;
     const m = NUMBER.exec(this.s);
     if (!m || m[0].length === 0 || m[0].length > 64) this.fail('sentinel.import.jsonMalformed', ptr);
@@ -73,7 +96,10 @@ class Parser {
     const out: Record<string, Json> = Object.create(null);
     let members = 0;
     this.ws();
-    if (this.s.charCodeAt(this.i) === 0x7d) { this.i++; return out; }
+    if (this.s.charCodeAt(this.i) === 0x7d) {
+      this.i++;
+      return out;
+    }
     for (;;) {
       this.ws();
       if (this.s.charCodeAt(this.i) !== 0x22) this.fail('sentinel.import.jsonMalformed', ptr);
@@ -82,7 +108,8 @@ class Parser {
       // used verbatim for duplicate detection and output, including __proto__ and U+FEFF string data.
       const child = `${ptr}/${members}`;
       if (Object.hasOwn(out, key)) this.fail('sentinel.import.jsonDuplicateKey', child);
-      if (++members > this.b.limits.objectMembers) throw new ImportRefusal('sentinel.import.budgetExhausted', ptr.slice(0, 256));
+      if (++members > this.b.limits.objectMembers)
+        throw new ImportRefusal('sentinel.import.budgetExhausted', ptr.slice(0, 256));
       this.ws();
       if (this.s.charCodeAt(this.i) !== 0x3a) this.fail('sentinel.import.jsonMalformed', child);
       this.i++;
@@ -99,7 +126,10 @@ class Parser {
     this.i++;
     const out: Json[] = [];
     this.ws();
-    if (this.s.charCodeAt(this.i) === 0x5d) { this.i++; return out; }
+    if (this.s.charCodeAt(this.i) === 0x5d) {
+      this.i++;
+      return out;
+    }
     for (;;) {
       this.ws();
       out.push(this.value(depth + 1, `${ptr}/${out.length}`));
@@ -117,7 +147,8 @@ class Parser {
     const add = (part: string) => {
       const bytes = Buffer.byteLength(part, 'utf8');
       length += bytes;
-      if (length > this.b.limits.stringBytes) throw new ImportRefusal('sentinel.import.budgetExhausted', ptr.slice(0, 256));
+      if (length > this.b.limits.stringBytes)
+        throw new ImportRefusal('sentinel.import.budgetExhausted', ptr.slice(0, 256));
       this.b.count('decodedStringBytes', bytes);
       parts.push(part);
     };
@@ -126,24 +157,46 @@ class Parser {
       if (RUN.exec(this.s)) {
         let end = RUN.lastIndex;
         // Do not charge a raw surrogate pair as two replacement characters when a bounded run divides it.
-        const last = this.s.charCodeAt(end - 1), next = this.s.charCodeAt(end);
+        const last = this.s.charCodeAt(end - 1),
+          next = this.s.charCodeAt(end);
         if (last >= 0xd800 && last <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) end++;
-        add(this.s.slice(this.i, end)); this.i = end; continue;
+        add(this.s.slice(this.i, end));
+        this.i = end;
+        continue;
       }
       const c = this.s.charCodeAt(this.i);
-      if (c === 0x22) { this.i++; return parts.length === 1 ? parts[0]! : parts.join(''); }
+      if (c === 0x22) {
+        this.i++;
+        return parts.length === 1 ? parts[0]! : parts.join('');
+      }
       if (c !== 0x5c) this.fail('sentinel.import.jsonMalformed', ptr);
       const e = this.s[this.i + 1];
       this.i += 2;
       switch (e) {
-        case '"': add('"'); break;
-        case '\\': add('\\'); break;
-        case '/': add('/'); break;
-        case 'b': add('\b'); break;
-        case 'f': add('\f'); break;
-        case 'n': add('\n'); break;
-        case 'r': add('\r'); break;
-        case 't': add('\t'); break;
+        case '"':
+          add('"');
+          break;
+        case '\\':
+          add('\\');
+          break;
+        case '/':
+          add('/');
+          break;
+        case 'b':
+          add('\b');
+          break;
+        case 'f':
+          add('\f');
+          break;
+        case 'n':
+          add('\n');
+          break;
+        case 'r':
+          add('\r');
+          break;
+        case 't':
+          add('\t');
+          break;
         case 'u': {
           const hi = this.hex(ptr);
           if (hi >= 0xdc00 && hi <= 0xdfff) this.fail('sentinel.import.jsonMalformed', ptr);
@@ -156,7 +209,8 @@ class Parser {
           } else add(String.fromCharCode(hi));
           break;
         }
-        default: this.fail('sentinel.import.jsonMalformed', ptr);
+        default:
+          this.fail('sentinel.import.jsonMalformed', ptr);
       }
     }
   }

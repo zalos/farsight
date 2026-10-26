@@ -8,7 +8,14 @@ import { toSarif } from './sarif.js';
 import { canonicalJson } from '@farsight/graph';
 
 export { pinApplicationContext, contextPinIntent, PROJECTION_VERSION } from './context.js';
-export type { ContextGraph, ContextInput, ContextRequest, ContextBinding, PinnedContext, PlaceReason } from './context.js';
+export type {
+  ContextGraph,
+  ContextInput,
+  ContextRequest,
+  ContextBinding,
+  PinnedContext,
+  PlaceReason,
+} from './context.js';
 export { placeFiles, placeNodes, unplaced } from './place.js';
 export { buildReport, findingsOf, DISCLOSURE_PROFILES, REPORT_SOURCE, ReportError } from './document.js';
 export type { BaselineFindingSummary, DisclosureProfile, PlannedCheck, ReportBuild, ReportInput } from './document.js';
@@ -21,5 +28,11 @@ export { countText, COUNT_ORDER } from './words.js';
 export async function generateReport(input: ReportInput) {
   const build = await buildReport(input);
   const { document } = build;
-  return { ...build, json: canonicalJson(document), markdown: renderMarkdown(document), html: renderHtml(document), sarif: toSarif(document) };
+  return {
+    ...build,
+    json: canonicalJson(document),
+    markdown: renderMarkdown(document),
+    html: renderHtml(document),
+    sarif: toSarif(document),
+  };
 }

@@ -12,17 +12,25 @@ export async function loadParser(): Promise<void> {
 
 export type AstNode = { type: string; start: number; end: number; [k: string]: any };
 
-const isNode = (v: unknown): v is AstNode => typeof v === 'object' && v !== null && typeof (v as AstNode).type === 'string';
+const isNode = (v: unknown): v is AstNode =>
+  typeof v === 'object' && v !== null && typeof (v as AstNode).type === 'string';
 
 export function walk(node: unknown, visit: (n: AstNode) => boolean | void): void {
-  if (Array.isArray(node)) { for (const c of node) walk(c, visit); return; }
+  if (Array.isArray(node)) {
+    for (const c of node) walk(c, visit);
+    return;
+  }
   if (!isNode(node)) return;
   if (visit(node) === false) return;
-  for (const [k, v] of Object.entries(node)) if (k !== 'start' && k !== 'end' && k !== 'type' && typeof v === 'object' && v !== null) walk(v, visit);
+  for (const [k, v] of Object.entries(node))
+    if (k !== 'start' && k !== 'end' && k !== 'type' && typeof v === 'object' && v !== null) walk(v, visit);
 }
 
 /** A span of the captured bytes: zero-based, half-open UTF-8 offsets, checked against the text. */
-export interface Span { readonly startByte: number; readonly endByte: number }
+export interface Span {
+  readonly startByte: number;
+  readonly endByte: number;
+}
 
 /** One parsed file: its text, a UTF-16 → UTF-8 offset map, its imports and the AST. */
 export interface ParsedFile {
@@ -35,13 +43,19 @@ export interface ParsedFile {
 }
 
 export class SyntaxFailure extends Error {
-  constructor(readonly reason: 'invalidUtf8' | 'parseError') { super(reason); }
+  constructor(readonly reason: 'invalidUtf8' | 'parseError') {
+    super(reason);
+  }
 }
 
 /** Parses one captured file. Refuses bytes that are not valid UTF-8 and files with syntax errors. */
 export function parseFile(path: string, bytes: Uint8Array): ParsedFile {
   let text: string;
-  try { text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); } catch { throw new SyntaxFailure('invalidUtf8'); }
+  try {
+    text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    throw new SyntaxFailure('invalidUtf8');
+  }
   if (!parseSync) throw new Error('loadParser() must complete before parseFile()');
   const result = parseSync(path, text, { sourceType: 'module', lang: path.endsWith('x') ? 'tsx' : 'ts' });
   if ((result as any).errors?.length) throw new SyntaxFailure('parseError');
@@ -53,7 +67,8 @@ export function parseFile(path: string, bytes: Uint8Array): ParsedFile {
     for (const sp of s.specifiers ?? []) {
       if (sp.importKind === 'type') continue;
       const local = String(sp.local?.name ?? '');
-      if (sp.type === 'ImportSpecifier') imports.set(local, { module, imported: String(sp.imported?.name ?? sp.imported?.value ?? '') });
+      if (sp.type === 'ImportSpecifier')
+        imports.set(local, { module, imported: String(sp.imported?.name ?? sp.imported?.value ?? '') });
       else if (sp.type === 'ImportNamespaceSpecifier') imports.set(local, { module, imported: '*' });
       else if (sp.type === 'ImportDefaultSpecifier') imports.set(local, { module, imported: 'default' });
     }
@@ -66,9 +81,13 @@ export function parseFile(path: string, bytes: Uint8Array): ParsedFile {
     return Buffer.byteLength(text.slice(0, offset), 'utf8');
   };
   return Object.freeze({
-    path, text, program, imports,
+    path,
+    text,
+    program,
+    imports,
     span: (n: { start: number; end: number }) => {
-      const s = byteAt(n.start), e = byteAt(n.end);
+      const s = byteAt(n.start),
+        e = byteAt(n.end);
       return s === null || e === null || e < s ? null : { startByte: s, endByte: e };
     },
   });
@@ -78,16 +97,27 @@ export function parseFile(path: string, bytes: Uint8Array): ParsedFile {
 export function refName(n: AstNode | undefined): { local: string; member?: string } | null {
   if (!n) return null;
   if (n.type === 'Identifier') return { local: String(n.name) };
-  if ((n.type === 'MemberExpression' || n.type === 'StaticMemberExpression') && !n.computed && n.object?.type === 'Identifier' && n.property) {
+  if (
+    (n.type === 'MemberExpression' || n.type === 'StaticMemberExpression') &&
+    !n.computed &&
+    n.object?.type === 'Identifier' &&
+    n.property
+  ) {
     return { local: String(n.object.name), member: String(n.property.name) };
   }
   return null;
 }
 
 /** What a local reference means: imported from a module (with the exported name), or declared in this file. */
-export function resolveRef(file: ParsedFile, ref: { local: string; member?: string }): { module: string | null; name: string } {
+export function resolveRef(
+  file: ParsedFile,
+  ref: { local: string; member?: string },
+): { module: string | null; name: string } {
   const imp = file.imports.get(ref.local);
-  if (imp) return imp.imported === '*' ? { module: imp.module, name: ref.member ?? '*' } : { module: imp.module, name: ref.member ? `${imp.imported}.${ref.member}` : imp.imported };
+  if (imp)
+    return imp.imported === '*'
+      ? { module: imp.module, name: ref.member ?? '*' }
+      : { module: imp.module, name: ref.member ? `${imp.imported}.${ref.member}` : imp.imported };
   return { module: null, name: ref.member ? `${ref.local}.${ref.member}` : ref.local };
 }
 
@@ -108,16 +138,36 @@ export function classesOf(file: ParsedFile): AstNode[] {
 }
 
 const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
-const SCOPE_TYPES = new Set([...FUNCTION_TYPES, 'BlockStatement', 'StaticBlock', 'CatchClause', 'ForStatement', 'ForInStatement', 'ForOfStatement', 'ClassDeclaration', 'ClassExpression', 'SwitchStatement']);
+const SCOPE_TYPES = new Set([
+  ...FUNCTION_TYPES,
+  'BlockStatement',
+  'StaticBlock',
+  'CatchClause',
+  'ForStatement',
+  'ForInStatement',
+  'ForOfStatement',
+  'ClassDeclaration',
+  'ClassExpression',
+  'SwitchStatement',
+]);
 export const isFunction = (n: AstNode | undefined) => !!n && FUNCTION_TYPES.has(n.type);
 
 /** Like `walk`, with the chain of ancestors (outermost first) of each node. */
-export function walkWithAncestors(node: unknown, visit: (n: AstNode, ancestors: readonly AstNode[]) => boolean | void, ancestors: AstNode[] = []): void {
-  if (Array.isArray(node)) { for (const c of node) walkWithAncestors(c, visit, ancestors); return; }
+export function walkWithAncestors(
+  node: unknown,
+  visit: (n: AstNode, ancestors: readonly AstNode[]) => boolean | void,
+  ancestors: AstNode[] = [],
+): void {
+  if (Array.isArray(node)) {
+    for (const c of node) walkWithAncestors(c, visit, ancestors);
+    return;
+  }
   if (!isNode(node)) return;
   if (visit(node, ancestors) === false) return;
   ancestors.push(node);
-  for (const [k, v] of Object.entries(node)) if (k !== 'start' && k !== 'end' && k !== 'type' && typeof v === 'object' && v !== null) walkWithAncestors(v, visit, ancestors);
+  for (const [k, v] of Object.entries(node))
+    if (k !== 'start' && k !== 'end' && k !== 'type' && typeof v === 'object' && v !== null)
+      walkWithAncestors(v, visit, ancestors);
   ancestors.pop();
 }
 
@@ -125,13 +175,26 @@ export function walkWithAncestors(node: unknown, visit: (n: AstNode, ancestors: 
 export function patternNames(p: AstNode | undefined, out: string[] = []): string[] {
   if (!p) return out;
   switch (p.type) {
-    case 'Identifier': out.push(String(p.name)); break;
-    case 'AssignmentPattern': patternNames(p.left, out); break;
-    case 'RestElement': patternNames(p.argument, out); break;
-    case 'ArrayPattern': for (const e of p.elements ?? []) patternNames(e, out); break;
-    case 'ObjectPattern': for (const q of p.properties ?? []) patternNames(q.type === 'RestElement' ? q : q.value, out); break;
-    case 'TSParameterProperty': patternNames(p.parameter, out); break;
-    default: break;
+    case 'Identifier':
+      out.push(String(p.name));
+      break;
+    case 'AssignmentPattern':
+      patternNames(p.left, out);
+      break;
+    case 'RestElement':
+      patternNames(p.argument, out);
+      break;
+    case 'ArrayPattern':
+      for (const e of p.elements ?? []) patternNames(e, out);
+      break;
+    case 'ObjectPattern':
+      for (const q of p.properties ?? []) patternNames(q.type === 'RestElement' ? q : q.value, out);
+      break;
+    case 'TSParameterProperty':
+      patternNames(p.parameter, out);
+      break;
+    default:
+      break;
   }
   return out;
 }
@@ -140,16 +203,24 @@ export function patternNames(p: AstNode | undefined, out: string[] = []): string
 function scopeBindings(scope: AstNode): Set<string> {
   const names = new Set<string>();
   if (isFunction(scope)) {
-    for (const p of scope.params ?? []) patternNames(p, [] as string[]).forEach(n => names.add(n));
+    for (const p of scope.params ?? []) patternNames(p, [] as string[]).forEach((n) => names.add(n));
     if (scope.type === 'FunctionExpression' && scope.id) names.add(String(scope.id.name));
   }
-  if (scope.type === 'CatchClause') patternNames(scope.param).forEach(n => names.add(n));
+  if (scope.type === 'CatchClause') patternNames(scope.param).forEach((n) => names.add(n));
   if (scope.type === 'ClassExpression' && scope.id) names.add(String(scope.id.name));
   const body = isFunction(scope) ? scope.body : scope.type === 'CatchClause' ? scope.body : scope;
-  walk(body, n => {
-    if (n !== body && isFunction(n)) { if (n.type === 'FunctionDeclaration' && n.id) names.add(String(n.id.name)); return false; }
-    if (n.type === 'VariableDeclarator') patternNames(n.id).forEach(x => names.add(x));
-    if ((n.type === 'ClassDeclaration' || n.type === 'TSEnumDeclaration' || n.type === 'TSModuleDeclaration') && n.id && n !== scope) names.add(String(n.id.name));
+  walk(body, (n) => {
+    if (n !== body && isFunction(n)) {
+      if (n.type === 'FunctionDeclaration' && n.id) names.add(String(n.id.name));
+      return false;
+    }
+    if (n.type === 'VariableDeclarator') patternNames(n.id).forEach((x) => names.add(x));
+    if (
+      (n.type === 'ClassDeclaration' || n.type === 'TSEnumDeclaration' || n.type === 'TSModuleDeclaration') &&
+      n.id &&
+      n !== scope
+    )
+      names.add(String(n.id.name));
     if (n.type === 'ImportDeclaration') return false;
     return undefined;
   });
@@ -164,7 +235,7 @@ export function bindsName(scope: AstNode, name: string): boolean {
 /** True when `name`, referenced at `offset`, is bound by a scope nested inside the module: not the module's import. */
 export function shadowedAt(file: ParsedFile, name: string, offset: number): boolean {
   let hit = false;
-  walk(file.program, n => {
+  walk(file.program, (n) => {
     if (hit || offset < n.start || offset >= n.end) return false;
     if (n !== file.program && SCOPE_TYPES.has(n.type) && scopeBindings(n).has(name)) hit = true;
     return undefined;
@@ -173,7 +244,12 @@ export function shadowedAt(file: ParsedFile, name: string, offset: number): bool
 }
 
 /** `resolveRef` with lexical scope: a name a nested scope rebinds at `at` is local, whatever the module imports. */
-export function resolveAt(file: ParsedFile, ref: { local: string; member?: string }, at: number): { module: string | null; name: string; shadowed: boolean } {
-  if (shadowedAt(file, ref.local, at)) return { module: null, name: ref.member ? `${ref.local}.${ref.member}` : ref.local, shadowed: true };
+export function resolveAt(
+  file: ParsedFile,
+  ref: { local: string; member?: string },
+  at: number,
+): { module: string | null; name: string; shadowed: boolean } {
+  if (shadowedAt(file, ref.local, at))
+    return { module: null, name: ref.member ? `${ref.local}.${ref.member}` : ref.local, shadowed: true };
   return { ...resolveRef(file, ref), shadowed: false };
 }

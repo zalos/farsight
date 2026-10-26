@@ -11,8 +11,25 @@
  * listed (`of`, `await`, `yield` and `async` can, so they count), and a word read as a property (`obj.return(`) or a
  * private name is always a call.
  */
-const NOT_CALLS = new Set(['if', 'for', 'while', 'switch', 'catch', 'with', 'return', 'typeof', 'void', 'delete', 'in',
-  'instanceof', 'case', 'do', 'else', 'throw', 'function']);
+const NOT_CALLS = new Set([
+  'if',
+  'for',
+  'while',
+  'switch',
+  'catch',
+  'with',
+  'return',
+  'typeof',
+  'void',
+  'delete',
+  'in',
+  'instanceof',
+  'case',
+  'do',
+  'else',
+  'throw',
+  'function',
+]);
 /** Identifier characters, Unicode included: `π()` is a call. */
 const ID_CHAR = /[\p{ID_Continue}$\u200c\u200d]/u;
 const ID_START = /[\p{ID_Start}$_]/u;
@@ -28,23 +45,28 @@ export interface BodyScan {
 export function scanBody(text: string, functionNames: ReadonlySet<string>, ownName: string | undefined): BodyScan {
   let callSites = 0;
   // A declaration header names the function and its parameters; it is not a call.
-  const header = /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*[A-Za-z_$][\w$]*\s*(?:<[^>(]*>)?\s*\(/.exec(text)
-    ?? /^\s*(?:(?:public|private|protected|static|async|readonly|override|abstract|get|set)\s+)*\*?\s*[A-Za-z_$#][\w$]*\s*(?:<[^>(]*>)?\s*\([^)]*\)\s*(?::[^{]*)?\{/.exec(text);
+  const header =
+    /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*[A-Za-z_$][\w$]*\s*(?:<[^>(]*>)?\s*\(/.exec(text) ??
+    /^\s*(?:(?:public|private|protected|static|async|readonly|override|abstract|get|set)\s+)*\*?\s*[A-Za-z_$#][\w$]*\s*(?:<[^>(]*>)?\s*\([^)]*\)\s*(?::[^{]*)?\{/.exec(
+      text,
+    );
   const skipUntil = header ? header[0].length : 0;
   for (let i = 0; i < text.length; i++) {
     const c = text[i]!;
     if (c === '`') {
       // A tagged template is a call: an identifier, `)` or `]` right before the backtick.
       const p = prevSignificant(text, i);
-      if (p >= skipUntil && (ID_CHAR.test(text[p]!) || /[)\]]/.test(text[p]!)) && !endsWithWord(text, p, NOT_CALLS)) callSites++;
+      if (p >= skipUntil && (ID_CHAR.test(text[p]!) || /[)\]]/.test(text[p]!)) && !endsWithWord(text, p, NOT_CALLS))
+        callSites++;
       continue;
     }
     if (c !== '(' || i < skipUntil) continue;
     const p = prevSignificant(text, i);
     if (p < 0) continue;
     const before = text[p]!;
-    if (ID_CHAR.test(before)) { if (!endsWithWord(text, p, NOT_CALLS)) callSites++; }
-    else if (/[)\].>/]/.test(before)) callSites++;
+    if (ID_CHAR.test(before)) {
+      if (!endsWithWord(text, p, NOT_CALLS)) callSites++;
+    } else if (/[)\].>/]/.test(before)) callSites++;
     // Anything else directly before a parenthesis that is not an operator or opener could still be a callee.
     else if (!/[(,;{}=!&|?:+\-*%^~<\[]/.test(before)) callSites++;
   }
@@ -88,8 +110,13 @@ function endsWithWord(text: string, end: number, words: ReadonlySet<string>): bo
  */
 export function localNames(text: string, ownName: string | undefined): Set<string> {
   const out = new Set<string>();
-  const addAll = (part: string) => { for (const m of part.matchAll(IDENT)) out.add(m[0]); };
-  for (const m of text.matchAll(/\b(?:const|let|var|class|function\s*\*?)\s+([\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*)/gu)) out.add(m[1]!);
+  const addAll = (part: string) => {
+    for (const m of part.matchAll(IDENT)) out.add(m[0]);
+  };
+  for (const m of text.matchAll(
+    /\b(?:const|let|var|class|function\s*\*?)\s+([\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*)/gu,
+  ))
+    out.add(m[1]!);
   for (const m of text.matchAll(/\b(?:const|let|var)\s*([{[][^=;]*?[}\]])\s*=/gu)) addAll(m[1]!);
   for (const m of text.matchAll(/\bcatch\s*\(([^)]*)\)/gu)) addAll(m[1]!);
   // Parameter lists: every name inside any parenthesised group. Telling a parameter list from a call's arguments needs
@@ -98,8 +125,12 @@ export function localNames(text: string, ownName: string | undefined): Set<strin
   for (const m of text.matchAll(/\(([^()]*)\)/gu)) addAll(m[1]!);
   for (let i = 0; i < text.length; i++) {
     if (text[i] !== '(') continue;
-    let depth = 0, j = i;
-    for (; j < text.length; j++) { if (text[j] === '(') depth++; else if (text[j] === ')' && --depth === 0) break; }
+    let depth = 0,
+      j = i;
+    for (; j < text.length; j++) {
+      if (text[j] === '(') depth++;
+      else if (text[j] === ')' && --depth === 0) break;
+    }
     addAll(text.slice(i + 1, j));
   }
   for (const m of text.matchAll(/([\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*)\s*=>/gu)) out.add(m[1]!);

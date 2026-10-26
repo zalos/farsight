@@ -13,7 +13,17 @@
 // is not an operating-system guarantee against a concurrent process that changes the tree between checks.
 // Pack descriptors are opened per read and closed before it returns, so nothing stays open after close().
 import { createHash } from 'node:crypto';
-import { closeSync, fstatSync, lstatSync, openSync, readSync, readdirSync, realpathSync, constants as FS, type BigIntStats } from 'node:fs';
+import {
+  closeSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readSync,
+  readdirSync,
+  realpathSync,
+  constants as FS,
+  type BigIntStats,
+} from 'node:fs';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 import { constants as zconstants, inflateSync } from 'node:zlib';
 
@@ -22,13 +32,19 @@ export type GitHashAlgorithm = 'sha1' | 'sha256';
 
 export class GitReadError extends Error {
   /** `limit`: the object may be intact, but reading it would exceed a bound this reader keeps (never `corrupt`). */
-  constructor(readonly code: 'unsupported' | 'corrupt' | 'notRepository' | 'unresolved' | 'limit', message: string) {
+  constructor(
+    readonly code: 'unsupported' | 'corrupt' | 'notRepository' | 'unresolved' | 'limit',
+    message: string,
+  ) {
     super(message);
     this.name = 'GitReadError';
   }
 }
 
-export interface GitObject { readonly type: GitObjectType; readonly data: Buffer }
+export interface GitObject {
+  readonly type: GitObjectType;
+  readonly data: Buffer;
+}
 
 /** One entry of a recursively listed tree, in tree order. `name` is the raw name bytes. */
 export interface GitTreeEntry {
@@ -125,20 +141,29 @@ export class GitReadBudget {
   }
 
   /** Bytes and objects currently reserved by every repository using this budget. */
-  get usedBytes(): number { return this.#bytes; }
-  get usedObjects(): number { return this.#objects; }
+  get usedBytes(): number {
+    return this.#bytes;
+  }
+  get usedObjects(): number {
+    return this.#objects;
+  }
 
   /**
    * Reserves `bytes` and `objects` before they are allocated, or throws `unsupported`. Returns an idempotent
    * release. Used by GitRepository; exposed so a caller can see and test its accounting.
    */
   reserve(bytes: number, objects: number, what: string): () => void {
-    if (!Number.isSafeInteger(bytes) || bytes < 0 || !Number.isSafeInteger(objects) || objects < 0) throw new RangeError('a reservation is a non-negative integer');
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || !Number.isSafeInteger(objects) || objects < 0)
+      throw new RangeError('a reservation is a non-negative integer');
     if (this.#bytes + bytes > this.limits.maxRetainedBytes) {
-      throw unsafe(`${what} needs ${bytes} bytes; the shared Git read budget has ${this.limits.maxRetainedBytes - this.#bytes} of ${this.limits.maxRetainedBytes} left`);
+      throw unsafe(
+        `${what} needs ${bytes} bytes; the shared Git read budget has ${this.limits.maxRetainedBytes - this.#bytes} of ${this.limits.maxRetainedBytes} left`,
+      );
     }
     if (this.#objects + objects > this.limits.maxPackObjects) {
-      throw unsafe(`${what} lists ${objects} objects; the shared Git read budget has ${this.limits.maxPackObjects - this.#objects} of ${this.limits.maxPackObjects} left`);
+      throw unsafe(
+        `${what} lists ${objects} objects; the shared Git read budget has ${this.limits.maxPackObjects - this.#objects} of ${this.limits.maxPackObjects} left`,
+      );
     }
     this.#bytes += bytes;
     this.#objects += objects;
@@ -154,12 +179,12 @@ export class GitReadBudget {
 
 interface Pack {
   readonly segments: readonly string[]; // objects/pack/<name>.pack under the common directory
-  readonly identity: string;            // dev:ino of the pack when its index was loaded
+  readonly identity: string; // dev:ino of the pack when its index was loaded
   readonly size: number;
-  readonly names: Buffer;               // N × hash length, strictly ascending
-  readonly offsets: Float64Array;       // index order
-  readonly sorted: Float64Array;        // strictly ascending offsets, for span lengths
-  readonly end: number;                 // pack size minus trailer
+  readonly names: Buffer; // N × hash length, strictly ascending
+  readonly offsets: Float64Array; // index order
+  readonly sorted: Float64Array; // strictly ascending offsets, for span lengths
+  readonly end: number; // pack size minus trailer
   readonly fanout: Uint32Array;
   readonly index: number;
 }
@@ -176,7 +201,11 @@ interface ParsedIndex {
 }
 
 /** One delta resolution: every step (an offset base or an object-id base) counts against one budget. */
-interface Chain { steps: number; bytes: number; readonly seen: Set<string> }
+interface Chain {
+  steps: number;
+  bytes: number;
+  readonly seen: Set<string>;
+}
 
 const NOFOLLOW = FS.O_NOFOLLOW ?? 0;
 const NONBLOCK = FS.O_NONBLOCK ?? 0;
@@ -185,7 +214,9 @@ const idOf = (st: BigIntStats) => `${st.dev}:${st.ino}`;
 const errno = (e: unknown) => (e as NodeJS.ErrnoException | undefined)?.code;
 
 function lstatBig(path: string): BigIntStats | undefined {
-  try { return lstatSync(path, { bigint: true }); } catch (e) {
+  try {
+    return lstatSync(path, { bigint: true });
+  } catch (e) {
     if (errno(e) === 'ENOENT' || errno(e) === 'ENOTDIR') return undefined;
     throw unsafe(`cannot inspect a path in the Git directory (${errno(e) ?? 'error'})`);
   }
@@ -204,7 +235,8 @@ function checkSegments(segments: readonly string[]): void {
 function walkFolders(root: string, segments: readonly string[]): string[] | undefined {
   const ids: string[] = [];
   const rootSt = lstatBig(root);
-  if (!rootSt || rootSt.isSymbolicLink() || !rootSt.isDirectory()) throw unsafe('a granted Git root is not a real folder');
+  if (!rootSt || rootSt.isSymbolicLink() || !rootSt.isDirectory())
+    throw unsafe('a granted Git root is not a real folder');
   ids.push(idOf(rootSt));
   for (let i = 0; i < segments.length - 1; i++) {
     const st = lstatBig(join(root, ...segments.slice(0, i + 1)));
@@ -217,7 +249,7 @@ function walkFolders(root: string, segments: readonly string[]): string[] | unde
 }
 
 function sameFolders(root: string, segments: readonly string[], ids: readonly string[]): boolean {
-  const now: (string | undefined)[] = [lstatBig(root)].map(st => (st && !st.isSymbolicLink() ? idOf(st) : undefined));
+  const now: (string | undefined)[] = [lstatBig(root)].map((st) => (st && !st.isSymbolicLink() ? idOf(st) : undefined));
   for (let i = 0; i < segments.length - 1; i++) {
     const st = lstatBig(join(root, ...segments.slice(0, i + 1)));
     now.push(st && !st.isSymbolicLink() ? idOf(st) : undefined);
@@ -229,15 +261,22 @@ function sameFolders(root: string, segments: readonly string[], ids: readonly st
  * Opens `root/segments` as a regular file without following a link or blocking, runs `body` with the descriptor
  * and its fstat, then verifies that the folders and the file were not replaced. Undefined when absent.
  */
-function withFile<T>(root: string, segments: readonly string[], body: (fd: number, st: BigIntStats) => T): T | undefined {
+function withFile<T>(
+  root: string,
+  segments: readonly string[],
+  body: (fd: number, st: BigIntStats) => T,
+): T | undefined {
   checkSegments(segments);
   const ids = walkFolders(root, segments);
   if (!ids) return undefined;
   const path = join(root, ...segments);
   let fd: number;
-  try { fd = openSync(path, FS.O_RDONLY | NOFOLLOW | NONBLOCK); } catch (e) {
+  try {
+    fd = openSync(path, FS.O_RDONLY | NOFOLLOW | NONBLOCK);
+  } catch (e) {
     if (errno(e) === 'ENOENT' || errno(e) === 'ENOTDIR') return undefined;
-    if (errno(e) === 'ELOOP' || errno(e) === 'EMLINK') throw unsafe('a symbolic link inside the Git directory is not followed');
+    if (errno(e) === 'ELOOP' || errno(e) === 'EMLINK')
+      throw unsafe('a symbolic link inside the Git directory is not followed');
     throw unsafe(`cannot open a file in the Git directory (${errno(e) ?? 'error'})`);
   }
   try {
@@ -249,7 +288,9 @@ function withFile<T>(root: string, segments: readonly string[], body: (fd: numbe
       throw unsafe('a Git file or folder changed while it was read');
     }
     return result;
-  } finally { closeSync(fd); }
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /** Reads exactly `length` bytes at `position`, or fails. */
@@ -265,9 +306,15 @@ function readExactly(fd: number, length: number, position: number, what: string)
 }
 
 /** A whole file under a granted root, refused (with `code`) when larger than `maxBytes`. Undefined when absent. */
-function readUnder(root: string, segments: readonly string[], maxBytes: number, code: 'corrupt' | 'unsupported'): Buffer | undefined {
+function readUnder(
+  root: string,
+  segments: readonly string[],
+  maxBytes: number,
+  code: 'corrupt' | 'unsupported',
+): Buffer | undefined {
   return withFile(root, segments, (fd, st) => {
-    if (st.size > BigInt(maxBytes)) throw new GitReadError(code, `${segments.join('/')} is larger than ${maxBytes} bytes`);
+    if (st.size > BigInt(maxBytes))
+      throw new GitReadError(code, `${segments.join('/')} is larger than ${maxBytes} bytes`);
     const size = Number(st.size);
     const buf = readExactly(fd, size, 0, segments.join('/'));
     if (readSync(fd, Buffer.alloc(1), 0, 1, size) !== 0) throw unsafe(`${segments.join('/')} grew while it was read`);
@@ -286,20 +333,31 @@ function listUnder(root: string, segments: readonly string[]): string[] | undefi
   const st = lstatBig(join(root, ...segments));
   if (!st || st.isSymbolicLink() || !st.isDirectory()) throw unsafe('a Git folder is not a real folder');
   let names: string[];
-  try { names = readdirSync(join(root, ...segments)); } catch (e) { throw unsafe(`cannot list a Git folder (${errno(e) ?? 'error'})`); }
+  try {
+    names = readdirSync(join(root, ...segments));
+  } catch (e) {
+    throw unsafe(`cannot list a Git folder (${errno(e) ?? 'error'})`);
+  }
   if (!sameFolders(root, [...segments, '.'], ids)) throw unsafe('a Git folder changed while it was listed');
   return names;
 }
 
 /** A full ref name git itself would accept, restricted to safe characters: no `.`/`..` segment, no `.lock`. */
 export function isSafeRefName(name: string): boolean {
-  if (name.length > MAX_REF_NAME || !name.startsWith('refs/') || name.includes('..') || name.endsWith('/')) return false;
-  return name.split('/').every(seg => /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(seg) && !seg.endsWith('.') && !seg.endsWith('.lock'));
+  if (name.length > MAX_REF_NAME || !name.startsWith('refs/') || name.includes('..') || name.endsWith('/'))
+    return false;
+  return name
+    .split('/')
+    .every((seg) => /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(seg) && !seg.endsWith('.') && !seg.endsWith('.lock'));
 }
 
 function canonicalDir(path: string, what: string): string {
   let real: string;
-  try { real = realpathSync.native(path); } catch { throw new GitReadError('notRepository', `${what} does not exist`); }
+  try {
+    real = realpathSync.native(path);
+  } catch {
+    throw new GitReadError('notRepository', `${what} does not exist`);
+  }
   const st = lstatBig(real);
   if (!st || !st.isDirectory()) throw new GitReadError('notRepository', `${what} is not a folder`);
   return real;
@@ -313,9 +371,13 @@ function configValue(text: string, section: string, key: string): string | undef
     const line = raw.replace(/[#;].*$/, '').trim();
     if (!line) continue;
     const head = /^\[\s*([A-Za-z0-9.-]+)(?:\s+"[^"]*")?\s*\]$/.exec(line);
-    if (head) { current = head[1]!.toLowerCase(); continue; }
+    if (head) {
+      current = head[1]!.toLowerCase();
+      continue;
+    }
     const kv = /^([A-Za-z][A-Za-z0-9-]*)\s*(?:=\s*(.*))?$/.exec(line);
-    if (kv && current === section && kv[1]!.toLowerCase() === key) found = (kv[2] ?? 'true').trim().replace(/^"(.*)"$/, '$1');
+    if (kv && current === section && kv[1]!.toLowerCase() === key)
+      found = (kv[2] ?? 'true').trim().replace(/^"(.*)"$/, '$1');
   }
   return found;
 }
@@ -349,7 +411,13 @@ export class GitRepository {
   /** Releases for the budget this repository's loaded indexes hold. */
   #held: Array<() => void> = [];
 
-  private constructor(gitDir: string, commonDir: string, algorithm: GitHashAlgorithm, limits: GitReadLimits, budget: GitReadBudget) {
+  private constructor(
+    gitDir: string,
+    commonDir: string,
+    algorithm: GitHashAlgorithm,
+    limits: GitReadLimits,
+    budget: GitReadBudget,
+  ) {
     this.gitDir = gitDir;
     this.commonDir = commonDir;
     this.algorithm = algorithm;
@@ -365,7 +433,8 @@ export class GitRepository {
    */
   static open(root: string, options: GitOpenOptions = {}): GitRepository {
     const limits = resolveLimits(options.limits);
-    if (options.budget !== undefined && !(options.budget instanceof GitReadBudget)) throw new TypeError('budget must be a GitReadBudget');
+    if (options.budget !== undefined && !(options.budget instanceof GitReadBudget))
+      throw new TypeError('budget must be a GitReadBudget');
     const rootReal = canonicalDir(root, 'the source root');
     const dotGit = lstatBig(join(rootReal, '.git'));
     if (!dotGit) throw new GitReadError('notRepository', 'no .git at the source root');
@@ -378,7 +447,10 @@ export class GitRepository {
       gitDir = canonicalDir(resolve(rootReal, m[1]!), 'the Git directory');
     } else throw new GitReadError('notRepository', '.git is neither a directory nor a gitdir file');
     const inside = gitDir.startsWith(rootReal + sep);
-    if (!inside && (options.gitDir === undefined || canonicalDir(options.gitDir, 'the permitted Git directory') !== gitDir)) {
+    if (
+      !inside &&
+      (options.gitDir === undefined || canonicalDir(options.gitDir, 'the permitted Git directory') !== gitDir)
+    ) {
       throw unsafe('the Git directory is outside the source root and was not explicitly permitted');
     }
     let commonDir = gitDir;
@@ -388,16 +460,20 @@ export class GitRepository {
       if (!named) throw new GitReadError('corrupt', 'the commondir file is empty');
       commonDir = canonicalDir(isAbsolute(named) ? named : resolve(gitDir, named), 'the common Git directory');
     }
-    const permitted = options.commonDir === undefined ? undefined : canonicalDir(options.commonDir, 'the permitted common directory');
+    const permitted =
+      options.commonDir === undefined ? undefined : canonicalDir(options.commonDir, 'the permitted common directory');
     if (commonDir !== gitDir && permitted !== commonDir) {
       throw unsafe('the common Git directory is not the Git directory and was not explicitly permitted');
     }
-    if (permitted !== undefined && permitted !== commonDir) throw unsafe('the permitted common directory is not the one the repository names');
+    if (permitted !== undefined && permitted !== commonDir)
+      throw unsafe('the permitted common directory is not the one the repository names');
     const config = readText(commonDir, ['config']) ?? '';
     const format = (configValue(config, 'extensions', 'objectformat') ?? 'sha1').toLowerCase();
-    if (format !== 'sha1' && format !== 'sha256') throw new GitReadError('unsupported', `object format ${format} is not supported`);
+    if (format !== 'sha1' && format !== 'sha256')
+      throw new GitReadError('unsupported', `object format ${format} is not supported`);
     const refStorage = configValue(config, 'extensions', 'refstorage');
-    if (refStorage && refStorage.toLowerCase() !== 'files') throw new GitReadError('unsupported', `ref storage ${refStorage} is not supported`);
+    if (refStorage && refStorage.toLowerCase() !== 'files')
+      throw new GitReadError('unsupported', `ref storage ${refStorage} is not supported`);
     return new GitRepository(gitDir, commonDir, format, limits, options.budget ?? new GitReadBudget());
   }
 
@@ -475,8 +551,13 @@ export class GitRepository {
     while (i < data.length) {
       const space = data.indexOf(0x20, i);
       const nul = data.indexOf(0x00, space + 1);
-      if (space < 0 || nul < 0 || nul + 1 + raw > data.length) throw new GitReadError('corrupt', `tree ${oid} is malformed`);
-      out.push({ mode: data.toString('latin1', i, space), name: Buffer.from(data.subarray(space + 1, nul)), oid: data.toString('hex', nul + 1, nul + 1 + raw) });
+      if (space < 0 || nul < 0 || nul + 1 + raw > data.length)
+        throw new GitReadError('corrupt', `tree ${oid} is malformed`);
+      out.push({
+        mode: data.toString('latin1', i, space),
+        name: Buffer.from(data.subarray(space + 1, nul)),
+        oid: data.toString('hex', nul + 1, nul + 1 + raw),
+      });
       i = nul + 1 + raw;
     }
     return out;
@@ -500,7 +581,8 @@ export class GitRepository {
       if (!located) return undefined;
       obj = this.#readPacked(located.pack, located.offset, maxBytes, this.#chain());
     }
-    if (this.hashObject(obj.type, obj.data) !== oid) throw new GitReadError('corrupt', `object ${oid} does not hash to its id`);
+    if (this.hashObject(obj.type, obj.data) !== oid)
+      throw new GitReadError('corrupt', `object ${oid} does not hash to its id`);
     return obj;
   }
 
@@ -519,7 +601,9 @@ export class GitRepository {
     this.#packsLoaded = false;
   }
 
-  #chain(): Chain { return { steps: 0, bytes: 0, seen: new Set() }; }
+  #chain(): Chain {
+    return { steps: 0, bytes: 0, seen: new Set() };
+  }
 
   #step(chain: Chain, key: string): void {
     if (chain.seen.has(key)) throw new GitReadError('corrupt', 'a delta chain refers back to itself');
@@ -535,12 +619,16 @@ export class GitRepository {
     const loose = this.#looseFile(oid);
     if (!loose) return undefined;
     let raw: Buffer;
-    try { raw = inflateSync(loose, { maxOutputLength: maxBytes + 64 }); } catch (e) {
-      if ((e as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE') throw new GitReadError('corrupt', `object ${oid} exceeds the size limit`);
+    try {
+      raw = inflateSync(loose, { maxOutputLength: maxBytes + 64 });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE')
+        throw new GitReadError('corrupt', `object ${oid} exceeds the size limit`);
       throw new GitReadError('corrupt', `loose object ${oid} does not inflate`);
     }
     const header = looseHeader(raw);
-    if (!header || header.size !== raw.length - header.end) throw new GitReadError('corrupt', `loose object ${oid} has a bad header`);
+    if (!header || header.size !== raw.length - header.end)
+      throw new GitReadError('corrupt', `loose object ${oid} has a bad header`);
     if (header.size > maxBytes) throw new GitReadError('corrupt', `object ${oid} exceeds the size limit`);
     return { type: header.type, data: raw.subarray(header.end) };
   }
@@ -550,7 +638,11 @@ export class GitRepository {
     const bytes = this.#looseFile(oid);
     if (bytes) {
       // Inflate only as much of the stream as the header needs: the header ends at the first NUL.
-      const head = inflateHeader(bytes, out => out.indexOf(0) >= 0 || out.length > MAX_LOOSE_HEADER, `loose object ${oid}`);
+      const head = inflateHeader(
+        bytes,
+        (out) => out.indexOf(0) >= 0 || out.length > MAX_LOOSE_HEADER,
+        `loose object ${oid}`,
+      );
       const header = looseHeader(head);
       if (!header) throw new GitReadError('corrupt', `loose object ${oid} has no header`);
       return { type: header.type, size: header.size };
@@ -567,9 +659,13 @@ export class GitRepository {
   #loadPacks(): void {
     if (this.#packsLoaded) return;
     const listed = listUnder(this.commonDir, ['objects', 'pack']);
-    if (!listed) { this.#packsLoaded = true; return; }
-    const names = listed.filter(n => /^[A-Za-z0-9_-][A-Za-z0-9._-]*\.idx$/.test(n)).sort();
-    if (names.length > this.limits.maxPacks) throw unsafe(`${names.length} pack indexes exceed the limit of ${this.limits.maxPacks}`);
+    if (!listed) {
+      this.#packsLoaded = true;
+      return;
+    }
+    const names = listed.filter((n) => /^[A-Za-z0-9_-][A-Za-z0-9._-]*\.idx$/.test(n)).sort();
+    if (names.length > this.limits.maxPacks)
+      throw unsafe(`${names.length} pack indexes exceed the limit of ${this.limits.maxPacks}`);
     const raw = this.hexLength / 2;
     const loaded: Pack[] = [];
     const holds: Array<() => void> = [];
@@ -583,23 +679,29 @@ export class GitRepository {
         let parsed: ParsedIndex | undefined;
         try {
           const idx = withFile(this.commonDir, ['objects', 'pack', idxName], (fd, st) => {
-            if (st.size > BigInt(this.limits.maxIndexBytes)) throw unsafe(`pack index ${idxName} is larger than ${this.limits.maxIndexBytes} bytes`);
+            if (st.size > BigInt(this.limits.maxIndexBytes))
+              throw unsafe(`pack index ${idxName} is larger than ${this.limits.maxIndexBytes} bytes`);
             const size = Number(st.size);
             releaseTemp = this.budget.reserve(size, 0, `reading pack index ${idxName}`);
             const buf = readExactly(fd, size, 0, `pack index ${idxName}`);
-            if (readSync(fd, Buffer.alloc(1), 0, 1, size) !== 0) throw unsafe(`pack index ${idxName} grew while it was read`);
+            if (readSync(fd, Buffer.alloc(1), 0, 1, size) !== 0)
+              throw unsafe(`pack index ${idxName} grew while it was read`);
             return buf;
           });
           if (!idx) continue;
           parsed = this.#parseIndex(idx, idxName, (n, bytes) => {
             // Checked before the parsed arrays are allocated: per repository, then against the shared budget.
-            if (objects + n > this.limits.maxPackObjects) throw unsafe(`pack indexes list more than ${this.limits.maxPackObjects} objects`);
-            if (cache + bytes > this.limits.maxIndexCacheBytes) throw unsafe(`pack indexes need more than ${this.limits.maxIndexCacheBytes} bytes of memory`);
+            if (objects + n > this.limits.maxPackObjects)
+              throw unsafe(`pack indexes list more than ${this.limits.maxPackObjects} objects`);
+            if (cache + bytes > this.limits.maxIndexCacheBytes)
+              throw unsafe(`pack indexes need more than ${this.limits.maxIndexCacheBytes} bytes of memory`);
             holds.push(this.budget.reserve(bytes, n, `pack index ${idxName}`));
             objects += n;
             cache += bytes;
           });
-        } finally { releaseTemp?.(); }
+        } finally {
+          releaseTemp?.();
+        }
         // The pack must exist, start with its header naming the same object count, and end with the checksum the
         // index records. An index without its pack holds nothing readable.
         const pack = withFile(this.commonDir, ['objects', 'pack', packName], (fd, st) => {
@@ -607,20 +709,36 @@ export class GitRepository {
           if (size < 12 + raw) throw new GitReadError('corrupt', `pack ${packName} is truncated`);
           const head = readExactly(fd, 12, 0, `pack ${packName}`);
           const version = head.readUInt32BE(4);
-          if (head.toString('latin1', 0, 4) !== 'PACK' || (version !== 2 && version !== 3)) throw new GitReadError('unsupported', `pack ${packName} is not version 2 or 3`);
-          if (head.readUInt32BE(8) !== parsed!.n) throw new GitReadError('corrupt', `pack ${packName} and its index disagree on the object count`);
+          if (head.toString('latin1', 0, 4) !== 'PACK' || (version !== 2 && version !== 3))
+            throw new GitReadError('unsupported', `pack ${packName} is not version 2 or 3`);
+          if (head.readUInt32BE(8) !== parsed!.n)
+            throw new GitReadError('corrupt', `pack ${packName} and its index disagree on the object count`);
           if (!readExactly(fd, raw, size - raw, `pack ${packName}`).equals(parsed!.packChecksum)) {
             throw new GitReadError('corrupt', `pack ${packName} does not match its index`);
           }
           return { identity: idOf(st), size };
         });
-        if (!pack) { holds.pop()?.(); objects -= parsed.n; cache -= parsed.bytes; continue; }
+        if (!pack) {
+          holds.pop()?.();
+          objects -= parsed.n;
+          cache -= parsed.bytes;
+          continue;
+        }
         const end = pack.size - raw;
         if (parsed.n > 0 && (parsed.sorted[0]! < 12 || parsed.sorted[parsed.n - 1]! >= end)) {
           throw new GitReadError('corrupt', `pack index ${idxName} has an offset outside its pack`);
         }
-        loaded.push({ segments: ['objects', 'pack', packName], identity: pack.identity, size: pack.size, names: parsed.names,
-          offsets: parsed.offsets, sorted: parsed.sorted, end, fanout: parsed.fanout, index: loaded.length });
+        loaded.push({
+          segments: ['objects', 'pack', packName],
+          identity: pack.identity,
+          size: pack.size,
+          names: parsed.names,
+          offsets: parsed.offsets,
+          sorted: parsed.sorted,
+          end,
+          fanout: parsed.fanout,
+          index: loaded.length,
+        });
       }
     } catch (error) {
       for (const release of holds) release();
@@ -639,14 +757,21 @@ export class GitRepository {
       throw new GitReadError('unsupported', `pack index ${idxName} is not version 2`);
     }
     const body = idx.subarray(0, idx.length - raw);
-    if (!createHash(this.algorithm).update(body).digest().equals(idx.subarray(idx.length - raw))) throw bad('fails its checksum');
+    if (
+      !createHash(this.algorithm)
+        .update(body)
+        .digest()
+        .equals(idx.subarray(idx.length - raw))
+    )
+      throw bad('fails its checksum');
     const fanout = new Uint32Array(256);
     for (let i = 0; i < 256; i++) {
       fanout[i] = idx.readUInt32BE(8 + i * 4);
       if (i > 0 && fanout[i]! < fanout[i - 1]!) throw bad('has a decreasing fan-out table');
     }
     const n = fanout[255]!;
-    if (n > this.limits.maxIndexObjects) throw unsafe(`pack index ${idxName} lists more than ${this.limits.maxIndexObjects} objects`);
+    if (n > this.limits.maxIndexObjects)
+      throw unsafe(`pack index ${idxName} lists more than ${this.limits.maxIndexObjects} objects`);
     const namesStart = 8 + 1024;
     const crcStart = namesStart + n * raw;
     const offStart = crcStart + n * 4;
@@ -664,8 +789,10 @@ export class GitRepository {
       const at = namesStart + i * raw;
       const first = idx[at]!;
       while (bucket < first) bucket++;
-      if (i < (first === 0 ? 0 : fanout[first - 1]!) || i >= fanout[first]!) throw bad('has a name outside its fan-out bucket');
-      if (i > 0 && Buffer.compare(idx.subarray(at - raw, at), idx.subarray(at, at + raw)) >= 0) throw bad('has unsorted or repeated names');
+      if (i < (first === 0 ? 0 : fanout[first - 1]!) || i >= fanout[first]!)
+        throw bad('has a name outside its fan-out bucket');
+      if (i > 0 && Buffer.compare(idx.subarray(at - raw, at), idx.subarray(at, at + raw)) >= 0)
+        throw bad('has unsorted or repeated names');
     }
     const offsets = new Float64Array(n);
     for (let i = 0; i < n; i++) {
@@ -680,8 +807,15 @@ export class GitRepository {
     }
     const sorted = Float64Array.from(offsets).sort();
     for (let i = 1; i < n; i++) if (sorted[i]! <= sorted[i - 1]!) throw bad('lists one pack offset twice');
-    return { n, bytes, fanout, names: Buffer.from(idx.subarray(namesStart, crcStart)), offsets, sorted,
-      packChecksum: Buffer.from(idx.subarray(idx.length - 2 * raw, idx.length - raw)) };
+    return {
+      n,
+      bytes,
+      fanout,
+      names: Buffer.from(idx.subarray(namesStart, crcStart)),
+      offsets,
+      sorted,
+      packChecksum: Buffer.from(idx.subarray(idx.length - 2 * raw, idx.length - raw)),
+    };
   }
 
   #locate(oid: string): { pack: Pack; offset: number } | undefined {
@@ -695,7 +829,8 @@ export class GitRepository {
         const mid = (lo + hi) >>> 1;
         const c = Buffer.compare(pack.names.subarray(mid * raw, mid * raw + raw), key);
         if (c === 0) return { pack, offset: pack.offsets[mid]! };
-        if (c < 0) lo = mid + 1; else hi = mid;
+        if (c < 0) lo = mid + 1;
+        else hi = mid;
       }
     }
     return undefined;
@@ -704,14 +839,21 @@ export class GitRepository {
   /** One object's bytes, through a descriptor opened for this read only and checked to be the indexed pack. */
   #span(pack: Pack, offset: number): Buffer {
     // The object's bytes run to the next object's offset (or the trailer).
-    let lo = 0, hi = pack.sorted.length;
-    while (lo < hi) { const mid = (lo + hi) >>> 1; if (pack.sorted[mid]! <= offset) lo = mid + 1; else hi = mid; }
+    let lo = 0,
+      hi = pack.sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (pack.sorted[mid]! <= offset) lo = mid + 1;
+      else hi = mid;
+    }
     const next = lo < pack.sorted.length ? pack.sorted[lo]! : pack.end;
-    if (offset < 12 || next <= offset || next > pack.end) throw new GitReadError('corrupt', 'pack offsets are inconsistent');
+    if (offset < 12 || next <= offset || next > pack.end)
+      throw new GitReadError('corrupt', 'pack offsets are inconsistent');
     const length = next - offset;
     if (length > MAX_LOOSE_FILE + 64) throw new GitReadError('corrupt', 'packed object is too large');
     const buf = withFile(this.commonDir, pack.segments, (fd, st) => {
-      if (idOf(st) !== pack.identity || Number(st.size) !== pack.size) throw unsafe('a pack file changed after its index was read');
+      if (idOf(st) !== pack.identity || Number(st.size) !== pack.size)
+        throw unsafe('a pack file changed after its index was read');
       return readExactly(fd, length, offset, 'a pack file');
     });
     if (!buf) throw new GitReadError('corrupt', 'a pack file disappeared after its index was read');
@@ -741,17 +883,23 @@ export class GitRepository {
     // A delta's result size is the second varint of its inflated delta data; its type is the base's.
     const base = this.#deltaBase(pack, offset, buf, h);
     // The delta data opens with two varints (base size, result size): inflate only until both are complete.
-    const inflated = inflateHeader(buf.subarray(base.dataAt), out => varintsComplete(out, 2), 'a delta');
+    const inflated = inflateHeader(buf.subarray(base.dataAt), (out) => varintsComplete(out, 2), 'a delta');
     const reader = { i: 0 };
     varint(inflated, reader);
     const size = varint(inflated, reader);
-    const baseType = base.pack ? this.#packedHeader(base.pack, base.offset!, chain).type : this.#headerByOid(base.oid!, chain, true)?.type;
+    const baseType = base.pack
+      ? this.#packedHeader(base.pack, base.offset!, chain).type
+      : this.#headerByOid(base.oid!, chain, true)?.type;
     if (!baseType) throw new GitReadError('corrupt', 'delta base is missing');
     return { type: baseType, size };
   }
 
-  #deltaBase(pack: Pack, offset: number, buf: Buffer, h: { type: number; at: number }):
-    { pack?: Pack; offset?: number; oid?: string; dataAt: number } {
+  #deltaBase(
+    pack: Pack,
+    offset: number,
+    buf: Buffer,
+    h: { type: number; at: number },
+  ): { pack?: Pack; offset?: number; oid?: string; dataAt: number } {
     if (h.type === 6) {
       let i = h.at;
       if (i >= buf.length) throw new GitReadError('corrupt', 'ofs-delta offset is malformed');
@@ -763,7 +911,8 @@ export class GitRepository {
         rel = (rel + 1) * 128 + (byte & 0x7f);
       }
       const baseOffset = offset - rel;
-      if (baseOffset < 12 || baseOffset >= offset) throw new GitReadError('corrupt', 'ofs-delta base is outside the pack');
+      if (baseOffset < 12 || baseOffset >= offset)
+        throw new GitReadError('corrupt', 'ofs-delta base is outside the pack');
       return { pack, offset: baseOffset, dataAt: i };
     }
     if (h.type === 7) {
@@ -786,15 +935,21 @@ export class GitRepository {
   }
 
   /** Inflates one entry; a delta's compressed span is released before its base is read. */
-  #inflateEntry(pack: Pack, offset: number, maxBytes: number, chain: Chain):
-    GitObject | { delta: Buffer; base: { pack?: Pack; offset?: number; oid?: string } } {
+  #inflateEntry(
+    pack: Pack,
+    offset: number,
+    maxBytes: number,
+    chain: Chain,
+  ): GitObject | { delta: Buffer; base: { pack?: Pack; offset?: number; oid?: string } } {
     const buf = this.#span(pack, offset);
     const h = this.#parseEntryHeader(buf);
     const direct = TYPE_BY_NUMBER[h.type];
     if (direct) {
       if (h.size > maxBytes) throw new GitReadError('corrupt', 'object exceeds the size limit');
       let data: Buffer;
-      try { data = inflateSync(buf.subarray(h.at), { maxOutputLength: Math.max(h.size, 1) }); } catch {
+      try {
+        data = inflateSync(buf.subarray(h.at), { maxOutputLength: Math.max(h.size, 1) });
+      } catch {
         throw new GitReadError('corrupt', 'packed object does not inflate within its declared size');
       }
       if (data.length !== h.size) throw new GitReadError('corrupt', 'packed object size differs from its header');
@@ -802,9 +957,12 @@ export class GitRepository {
     }
     const base = this.#deltaBase(pack, offset, buf, h);
     if (h.size > maxBytes + 1024 * 1024) throw new GitReadError('corrupt', 'delta exceeds the size limit');
-    if (chain.bytes + h.size > this.limits.maxDeltaChainBytes) throw new GitReadError('corrupt', 'delta chain exceeds its memory budget');
+    if (chain.bytes + h.size > this.limits.maxDeltaChainBytes)
+      throw new GitReadError('corrupt', 'delta chain exceeds its memory budget');
     let delta: Buffer;
-    try { delta = inflateSync(buf.subarray(base.dataAt), { maxOutputLength: Math.max(h.size, 1) }); } catch {
+    try {
+      delta = inflateSync(buf.subarray(base.dataAt), { maxOutputLength: Math.max(h.size, 1) });
+    } catch {
       throw new GitReadError('corrupt', 'delta does not inflate within its declared size');
     }
     chain.bytes += delta.length;
@@ -815,7 +973,8 @@ export class GitRepository {
     this.#step(chain, `oid:${oid}`);
     const loose = this.#readLoose(oid, maxBytes);
     if (loose) {
-      if (this.hashObject(loose.type, loose.data) !== oid) throw new GitReadError('corrupt', `delta base ${oid} does not hash to its id`);
+      if (this.hashObject(loose.type, loose.data) !== oid)
+        throw new GitReadError('corrupt', `delta base ${oid} does not hash to its id`);
       return loose;
     }
     const located = this.#locate(oid);
@@ -852,7 +1011,13 @@ type Probe = { kind: 'out'; out: Buffer } | { kind: 'big' } | { kind: 'invalid' 
 
 function probe(compressed: Buffer, length: number): Probe {
   try {
-    return { kind: 'out', out: inflateSync(compressed.subarray(0, length), { finishFlush: zconstants.Z_SYNC_FLUSH, maxOutputLength: HEADER_OUTPUT_CAP }) };
+    return {
+      kind: 'out',
+      out: inflateSync(compressed.subarray(0, length), {
+        finishFlush: zconstants.Z_SYNC_FLUSH,
+        maxOutputLength: HEADER_OUTPUT_CAP,
+      }),
+    };
   } catch (e) {
     return (e as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE' ? { kind: 'big' } : { kind: 'invalid' };
   }
@@ -876,18 +1041,27 @@ export function inflateHeader(compressed: Buffer, complete: (out: Buffer) => boo
   let lo = 0;
   let hi = Math.min(64, limit);
   let at = probe(compressed, hi);
-  while (!settled(at) && hi < limit) { lo = hi; hi = Math.min(hi * 2, limit); at = probe(compressed, hi); }
+  while (!settled(at) && hi < limit) {
+    lo = hi;
+    hi = Math.min(hi * 2, limit);
+    at = probe(compressed, hi);
+  }
   if (!settled(at)) {
-    if (limit < compressed.length) throw new GitReadError('limit', `${what}: no header within the first ${limit} compressed bytes`);
+    if (limit < compressed.length)
+      throw new GitReadError('limit', `${what}: no header within the first ${limit} compressed bytes`);
     return (at as { out: Buffer }).out;
   }
   while (hi - lo > 1) {
     const mid = lo + Math.floor((hi - lo) / 2);
     const p = probe(compressed, mid);
-    if (settled(p)) { hi = mid; at = p; } else lo = mid;
+    if (settled(p)) {
+      hi = mid;
+      at = p;
+    } else lo = mid;
   }
   if (at.kind === 'invalid') throw new GitReadError('corrupt', `${what} does not inflate`);
-  if (at.kind === 'big') throw new GitReadError('limit', `${what}: the header's prefix decodes past ${HEADER_OUTPUT_CAP} bytes`);
+  if (at.kind === 'big')
+    throw new GitReadError('limit', `${what}: the header's prefix decodes past ${HEADER_OUTPUT_CAP} bytes`);
   return at.out;
 }
 
@@ -906,7 +1080,9 @@ function varintsComplete(buf: Buffer, count: number): boolean {
 }
 
 function varint(buf: Buffer, r: { i: number }): number {
-  let result = 0, shift = 0, byte: number;
+  let result = 0,
+    shift = 0,
+    byte: number;
   do {
     if (r.i >= buf.length || shift > 49) throw new GitReadError('corrupt', 'delta varint is malformed');
     byte = buf[r.i++]!;
@@ -927,15 +1103,25 @@ function applyDelta(base: Buffer, delta: Buffer, maxBytes: number): Buffer {
   while (r.i < delta.length) {
     const op = delta[r.i++]!;
     if (op & 0x80) {
-      let off = 0, len = 0;
-      for (let b = 0; b < 4; b++) if (op & (1 << b)) { if (r.i >= delta.length) throw new GitReadError('corrupt', 'delta copy truncated'); off += delta[r.i++]! * 2 ** (8 * b); }
-      for (let b = 0; b < 3; b++) if (op & (1 << (4 + b))) { if (r.i >= delta.length) throw new GitReadError('corrupt', 'delta copy truncated'); len += delta[r.i++]! * 2 ** (8 * b); }
+      let off = 0,
+        len = 0;
+      for (let b = 0; b < 4; b++)
+        if (op & (1 << b)) {
+          if (r.i >= delta.length) throw new GitReadError('corrupt', 'delta copy truncated');
+          off += delta[r.i++]! * 2 ** (8 * b);
+        }
+      for (let b = 0; b < 3; b++)
+        if (op & (1 << (4 + b))) {
+          if (r.i >= delta.length) throw new GitReadError('corrupt', 'delta copy truncated');
+          len += delta[r.i++]! * 2 ** (8 * b);
+        }
       if (len === 0) len = 0x10000;
       if (off + len > base.length || o + len > resultSize) throw new GitReadError('corrupt', 'delta copy out of range');
       base.copy(out, o, off, off + len);
       o += len;
     } else if (op > 0) {
-      if (r.i + op > delta.length || o + op > resultSize) throw new GitReadError('corrupt', 'delta insert out of range');
+      if (r.i + op > delta.length || o + op > resultSize)
+        throw new GitReadError('corrupt', 'delta insert out of range');
       delta.copy(out, o, r.i, r.i + op);
       r.i += op;
       o += op;

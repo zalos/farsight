@@ -24,8 +24,22 @@ export const PATTERN_ENGINE = Object.freeze({
  * default.
  */
 export const ENGINE_ARGS: readonly string[] = Object.freeze([
-  '--json', '--verbose', '--dataflow-traces', '--metrics=off', '--disable-version-check', '--jobs', '1', '--timeout', '20',
-  '--max-target-bytes', '1000000', '--disable-nosem', '--no-git-ignore', '--no-rewrite-rule-ids', '--oss-only', '--time',
+  '--json',
+  '--verbose',
+  '--dataflow-traces',
+  '--metrics=off',
+  '--disable-version-check',
+  '--jobs',
+  '1',
+  '--timeout',
+  '20',
+  '--max-target-bytes',
+  '1000000',
+  '--disable-nosem',
+  '--no-git-ignore',
+  '--no-rewrite-rule-ids',
+  '--oss-only',
+  '--time',
 ]);
 /**
  * The pinned reference is a multi-platform OCI index. Only the platform measured in conformance counts; another
@@ -33,17 +47,25 @@ export const ENGINE_ARGS: readonly string[] = Object.freeze([
  */
 export const PATTERN_IMAGE_PLATFORMS = Object.freeze([
   Object.freeze({
-    platform: 'linux/arm64', architecture: 'arm64', state: 'measured' as const,
+    platform: 'linux/arm64',
+    architecture: 'arm64',
+    state: 'measured' as const,
     manifest: 'sha256:db0579f992f6597840f96b249119f4999d44ffbc9e3f0a8854c367183e474c24',
-    evidence: 'darwin-arm64 host, Docker Desktop 4.65.0 with Engine 29.2.1, Linux 6.12 aarch64 server; pattern conformance 2026-10-22',
+    evidence:
+      'darwin-arm64 host, Docker Desktop 4.65.0 with Engine 29.2.1, Linux 6.12 aarch64 server; pattern conformance 2026-10-22',
   }),
   Object.freeze({
-    platform: 'linux/amd64', architecture: 'amd64', state: 'measured' as const,
+    platform: 'linux/amd64',
+    architecture: 'amd64',
+    state: 'measured' as const,
     manifest: 'sha256:c47e426f7f0cfa19af6d7877560d0a7135f683b8090ad0efc97c4ec7810dc435',
-    evidence: 'native Ubuntu 24.04.5 x64, Docker 28.0.4, Node 24.21.0; 22 conformance tests, zero skips and installed worker six findings; https://github.com/zalos/farsight/actions/runs/39790599932',
+    evidence:
+      'native Ubuntu 24.04.5 x64, Docker 28.0.4, Node 24.21.0; 22 conformance tests, zero skips and installed worker six findings; https://github.com/zalos/farsight/actions/runs/39790599932',
   }),
 ]);
-export const MEASURED_ARCHITECTURES: ReadonlySet<string> = new Set(PATTERN_IMAGE_PLATFORMS.filter(p => p.state === 'measured').map(p => p.architecture));
+export const MEASURED_ARCHITECTURES: ReadonlySet<string> = new Set(
+  PATTERN_IMAGE_PLATFORMS.filter((p) => p.state === 'measured').map((p) => p.architecture),
+);
 
 /** Files over this size are skipped by the engine (reported, never silently dropped). */
 export const MAX_TARGET_BYTES = 1_000_000;
@@ -62,9 +84,14 @@ export interface PatternAdapterBuild {
  * Builds an adapter around the shim with these engine arguments. Production uses ENGINE_ARGS only; a test variant
  * gets its own shim digest and therefore its own adapter digest, so it can never pass for the qualified adapter.
  */
-export function buildPatternAdapter(options: { id?: string; engineArgs?: readonly string[] } = {}): PatternAdapterBuild {
+export function buildPatternAdapter(
+  options: { id?: string; engineArgs?: readonly string[] } = {},
+): PatternAdapterBuild {
   const engineArgs = Object.freeze([...(options.engineArgs ?? ENGINE_ARGS)]);
-  const workerBytes = Buffer.from(PATTERN_WORKER_SOURCE.replace('[ENGINE_ARGS_JSON]', JSON.stringify(engineArgs)), 'utf8');
+  const workerBytes = Buffer.from(
+    PATTERN_WORKER_SOURCE.replace('[ENGINE_ARGS_JSON]', JSON.stringify(engineArgs)),
+    'utf8',
+  );
   const workerDigest = `sha256:${createHash('sha256').update(workerBytes).digest('hex')}`;
   const definition = Object.freeze({
     id: options.id ?? 'pattern-semgrep',

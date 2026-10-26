@@ -25,16 +25,25 @@ export const CONTROL_FAMILIES: Readonly<Record<string, InspectedProperty>> = Obj
   'sentinel.controls.authorization': 'authorization',
   'sentinel.controls.input-validation': 'input-validation',
 });
-export const INSPECTED_PROPERTIES: readonly InspectedProperty[] = Object.freeze(['authentication', 'authorization', 'input-validation'] as const);
+export const INSPECTED_PROPERTIES: readonly InspectedProperty[] = Object.freeze([
+  'authentication',
+  'authorization',
+  'input-validation',
+] as const);
 export const FRAMEWORKS = Object.freeze(['next', 'express', 'nest', 'spring'] as const);
-export type FrameworkName = typeof FRAMEWORKS[number];
+export type FrameworkName = (typeof FRAMEWORKS)[number];
 
 export const CONTROLS_REASONS = Object.freeze([
-  'sentinel.controls.unclaimed', 'sentinel.controls.propertyNotModeled', 'sentinel.controls.conflict',
-  'sentinel.controls.analysisUnavailable', 'sentinel.controls.libraryRefused', 'sentinel.controls.familyUnsupported',
-  'sentinel.controls.surfaceExtentUnproven', 'sentinel.controls.surfaceOutsideExtent',
+  'sentinel.controls.unclaimed',
+  'sentinel.controls.propertyNotModeled',
+  'sentinel.controls.conflict',
+  'sentinel.controls.analysisUnavailable',
+  'sentinel.controls.libraryRefused',
+  'sentinel.controls.familyUnsupported',
+  'sentinel.controls.surfaceExtentUnproven',
+  'sentinel.controls.surfaceOutsideExtent',
 ] as const);
-export type ControlsReason = typeof CONTROLS_REASONS[number];
+export type ControlsReason = (typeof CONTROLS_REASONS)[number];
 
 /** What one library did over the source: its envelopes, or the fixed reason it could not run. */
 export interface LibraryOutcome {
@@ -49,7 +58,11 @@ export interface LibraryOutcome {
 }
 
 /** An inspection check as the plan assigned it. */
-export interface InspectionCheck { readonly id: string; readonly familyId: string; readonly scopeId: string }
+export interface InspectionCheck {
+  readonly id: string;
+  readonly familyId: string;
+  readonly scopeId: string;
+}
 
 export interface InspectionCoverage {
   readonly granularity: 'aggregate';
@@ -78,13 +91,19 @@ export interface InspectedRow {
   readonly verdict: Exclude<ControlVerdict, 'unknown'> | null;
   readonly reasonCode: string | null;
   /** The claiming libraries and their own verdict. */
-  readonly claims: readonly { readonly framework: FrameworkName; readonly verdict: ControlVerdict; readonly factId: string }[];
+  readonly claims: readonly {
+    readonly framework: FrameworkName;
+    readonly verdict: ControlVerdict;
+    readonly factId: string;
+  }[];
 }
 
 /** Whether a library found its framework in the source: it claims a surface, resolved a version or names a source gap. */
 export function libraryPresent(lib: LibraryOutcome): boolean {
   if (lib.refused) return false;
-  return (lib.frontiers?.length ?? 0) > 0 || lib.envelopes.some(e => e.facts.length > 0 || e.framework.version !== null);
+  return (
+    (lib.frontiers?.length ?? 0) > 0 || lib.envelopes.some((e) => e.facts.length > 0 || e.framework.version !== null)
+  );
 }
 
 /**
@@ -92,27 +111,36 @@ export function libraryPresent(lib: LibraryOutcome): boolean {
  * extent (the parser's route and page node ids for this source, as the planner reads them); `report` is the digest the
  * covered checks name (the inspection report's identity, computed by the caller).
  */
-export function inspect(checks: readonly InspectionCheck[], libraries: readonly LibraryOutcome[], surfaces: readonly string[], report: string): { coverage: InspectionCoverage; rows: InspectedRow[]; checks: CheckInspection[] } {
+export function inspect(
+  checks: readonly InspectionCheck[],
+  libraries: readonly LibraryOutcome[],
+  surfaces: readonly string[],
+  report: string,
+): { coverage: InspectionCoverage; rows: InspectedRow[]; checks: CheckInspection[] } {
   const states: CheckInspection[] = [];
   const covered = new Set<string>();
   const scanned = new Set<string>();
   const skipped = new Map<string, ScopedReason>();
   const frontiers = new Map<string, ScopedReason>();
-  const skip = (scopeId: string, reasonCode: string) => skipped.set(`${scopeId}\u0000${reasonCode}`, { scopeId, reasonCode });
+  const skip = (scopeId: string, reasonCode: string) =>
+    skipped.set(`${scopeId}\u0000${reasonCode}`, { scopeId, reasonCode });
   // A library's frontiers bear on the inspection only where it found its framework: the Nest library's "no bootstrap"
   // in a repository without Nest limits nothing. They stay in the report either way.
   for (const lib of libraries.filter(libraryPresent)) {
     for (const f of lib.frontiers ?? []) frontiers.set(`${f.scopeId}\u0000${f.reasonCode}`, f);
-    for (const env of lib.envelopes) for (const f of env.frontiers) frontiers.set(`${f.scopeId}\u0000${f.reasonCode}`, f);
+    for (const env of lib.envelopes)
+      for (const f of env.frontiers) frontiers.set(`${f.scopeId}\u0000${f.reasonCode}`, f);
   }
-  const refused = libraries.filter(l => l.refused);
+  const refused = libraries.filter((l) => l.refused);
   const extent = [...new Set(surfaces)].sort();
   const extentIds = new Set(extent);
   // No trusted empty-surface proof exists in this slice. A recognised framework with no indexed route/page is
   // unanswered, not vacuously complete; a library may also name facts the index did not classify as a surface.
   // Keep either mismatch as one bounded source-wide reason rather than inventing rows or silently dropping it.
   const emptyExtent = extent.length === 0 && libraries.some(libraryPresent);
-  const outsideExtent = libraries.some(l => l.envelopes.some(e => e.facts.some(f => !extentIds.has(f.surfaceId))));
+  const outsideExtent = libraries.some((l) =>
+    l.envelopes.some((e) => e.facts.some((f) => !extentIds.has(f.surfaceId))),
+  );
   const rows: InspectedRow[] = [];
   const rowsFor = new Map<InspectedProperty, InspectedRow[]>();
   const rowsOf = (property: InspectedProperty): InspectedRow[] => {
@@ -120,23 +148,50 @@ export function inspect(checks: readonly InspectionCheck[], libraries: readonly 
     if (have) return have;
     const out: InspectedRow[] = [];
     for (const surfaceId of extent) {
-      const claiming = libraries.filter(l => l.envelopes.some(e => e.facts.some(f => f.surfaceId === surfaceId)));
-      const claims = claiming.flatMap(l => l.envelopes.flatMap(e => e.facts.filter(f => f.surfaceId === surfaceId && f.property === property)
-        .map(f => ({ framework: l.framework, verdict: f.verdict, factId: f.id, reasonCode: f.reasonCode }))));
+      const claiming = libraries.filter((l) => l.envelopes.some((e) => e.facts.some((f) => f.surfaceId === surfaceId)));
+      const claims = claiming.flatMap((l) =>
+        l.envelopes.flatMap((e) =>
+          e.facts
+            .filter((f) => f.surfaceId === surfaceId && f.property === property)
+            .map((f) => ({ framework: l.framework, verdict: f.verdict, factId: f.id, reasonCode: f.reasonCode })),
+        ),
+      );
       const row = (state: InspectedRow['state'], verdict: InspectedRow['verdict'], reasonCode: string | null) =>
-        out.push({ surfaceId, property, state, verdict, reasonCode, claims: claims.map(({ reasonCode: _r, ...c }) => c) });
-      if (!claiming.length) { row('not-run', null, refused.length ? refused[0]!.refused! : 'sentinel.controls.unclaimed'); continue; }
-      if (!claims.length) { row('not-run', null, 'sentinel.controls.propertyNotModeled'); continue; }
-      const unknown = claims.find(c => c.verdict === 'unknown');
+        out.push({
+          surfaceId,
+          property,
+          state,
+          verdict,
+          reasonCode,
+          claims: claims.map(({ reasonCode: _r, ...c }) => c),
+        });
+      if (!claiming.length) {
+        row('not-run', null, refused.length ? refused[0]!.refused! : 'sentinel.controls.unclaimed');
+        continue;
+      }
+      if (!claims.length) {
+        row('not-run', null, 'sentinel.controls.propertyNotModeled');
+        continue;
+      }
+      const unknown = claims.find((c) => c.verdict === 'unknown');
       // Every library that claims the surface must answer the property: one that claims it and gives no fact for P
       // (Express claims a route and models no input validation) leaves P unanswered there, whatever another says.
-      const silent = claiming.some(l => !claims.some(c => c.framework === l.framework));
+      const silent = claiming.some((l) => !claims.some((c) => c.framework === l.framework));
       // One library's facts for a property are positions along the request path (a Spring chain, then method
       // security): its control applies when any position applies. Only libraries that disagree are a conflict.
-      const verdicts = new Set(claiming.map(l => (claims.some(c => c.framework === l.framework && c.verdict === 'applies') ? 'applies' : 'does-not-apply')));
+      const verdicts = new Set(
+        claiming.map((l) =>
+          claims.some((c) => c.framework === l.framework && c.verdict === 'applies') ? 'applies' : 'does-not-apply',
+        ),
+      );
       // A refused library could also have claimed this surface: what the others established is then not the whole story.
-      const limit = unknown ? (unknown.reasonCode ?? 'sentinel.controls.conflict') : silent ? 'sentinel.controls.propertyNotModeled'
-        : verdicts.size > 1 ? 'sentinel.controls.conflict' : refused[0]?.refused ?? null;
+      const limit = unknown
+        ? (unknown.reasonCode ?? 'sentinel.controls.conflict')
+        : silent
+          ? 'sentinel.controls.propertyNotModeled'
+          : verdicts.size > 1
+            ? 'sentinel.controls.conflict'
+            : (refused[0]?.refused ?? null);
       if (limit) row('partial', null, limit);
       else row('established', [...verdicts][0] as Exclude<ControlVerdict, 'unknown'>, null);
     }
@@ -151,42 +206,77 @@ export function inspect(checks: readonly InspectionCheck[], libraries: readonly 
       for (const x of r) skip(check.scopeId, x);
       states.push({ checkId: check.id, familyId: check.familyId, state, reasons: r });
     };
-    if (!property) { done('not-run', ['sentinel.controls.familyUnsupported']); continue; }
+    if (!property) {
+      done('not-run', ['sentinel.controls.familyUnsupported']);
+      continue;
+    }
     // Every library refused: nothing was inspected for this check.
-    if (libraries.length > 0 && refused.length === libraries.length) { done('not-run', refused.map(l => l.refused!)); continue; }
+    if (libraries.length > 0 && refused.length === libraries.length) {
+      done(
+        'not-run',
+        refused.map((l) => l.refused!),
+      );
+      continue;
+    }
     const mine = rowsOf(property);
     covered.add(check.id);
     scanned.add(check.scopeId);
-    const reasons = [...(emptyExtent ? ['sentinel.controls.surfaceExtentUnproven'] : []), ...(outsideExtent ? ['sentinel.controls.surfaceOutsideExtent'] : []), ...mine.filter(r => r.state !== 'established').map(r => r.reasonCode!), ...refused.map(l => l.refused!), ...[...frontiers.values()].map(f => f.reasonCode)];
+    const reasons = [
+      ...(emptyExtent ? ['sentinel.controls.surfaceExtentUnproven'] : []),
+      ...(outsideExtent ? ['sentinel.controls.surfaceOutsideExtent'] : []),
+      ...mine.filter((r) => r.state !== 'established').map((r) => r.reasonCode!),
+      ...refused.map((l) => l.refused!),
+      ...[...frontiers.values()].map((f) => f.reasonCode),
+    ];
     done(reasons.length ? 'partial' : 'complete', reasons);
   }
-  const sort = <T>(xs: Iterable<T>, key: (x: T) => string) => [...xs].sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
+  const sort = <T>(xs: Iterable<T>, key: (x: T) => string) =>
+    [...xs].sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
   return {
     coverage: {
       granularity: 'aggregate',
-      coveredChecks: sort(covered, x => x).map(checkId => ({ checkId, coverage: report })),
-      scannedSet: sort(scanned, x => x),
-      skipped: sort(skipped.values(), x => `${x.scopeId}\u0000${x.reasonCode}`),
-      unresolvedFrontiers: sort(frontiers.values(), x => `${x.scopeId}\u0000${x.reasonCode}`),
+      coveredChecks: sort(covered, (x) => x).map((checkId) => ({ checkId, coverage: report })),
+      scannedSet: sort(scanned, (x) => x),
+      skipped: sort(skipped.values(), (x) => `${x.scopeId}\u0000${x.reasonCode}`),
+      unresolvedFrontiers: sort(frontiers.values(), (x) => `${x.scopeId}\u0000${x.reasonCode}`),
     },
-    rows: sort(rows, r => `${r.surfaceId}\u0000${r.property}`),
-    checks: sort(states, c => c.checkId),
+    rows: sort(rows, (r) => `${r.surfaceId}\u0000${r.property}`),
+    checks: sort(states, (c) => c.checkId),
   };
 }
 
 /** The inspection report record value: facts with their supported scope, explicitly not an assessment. */
-export function inspectionReport(binding: Readonly<Record<string, unknown>>, libraries: readonly LibraryOutcome[], rows: readonly InspectedRow[], checks: readonly CheckInspection[],
-  scope: Readonly<Record<FrameworkName, { readonly versions: Readonly<Record<string, string>>; readonly properties: readonly string[] }>>) {
+export function inspectionReport(
+  binding: Readonly<Record<string, unknown>>,
+  libraries: readonly LibraryOutcome[],
+  rows: readonly InspectedRow[],
+  checks: readonly CheckInspection[],
+  scope: Readonly<
+    Record<
+      FrameworkName,
+      { readonly versions: Readonly<Record<string, string>>; readonly properties: readonly string[] }
+    >
+  >,
+) {
   return {
-    ...binding, kind: 'framework-inspection' as const, assessment: 'none' as const,
-    libraries: libraries.map(l => ({
-      framework: l.framework, packDigest: l.packDigest, ran: !l.refused, ...(l.refused ? { reasonCode: l.refused } : {}),
-      versions: l.envelopes.map(e => e.framework.version), envelopes: l.envelopes.length, supportedScope: scope[l.framework],
+    ...binding,
+    kind: 'framework-inspection' as const,
+    assessment: 'none' as const,
+    libraries: libraries.map((l) => ({
+      framework: l.framework,
+      packDigest: l.packDigest,
+      ran: !l.refused,
+      ...(l.refused ? { reasonCode: l.refused } : {}),
+      versions: l.envelopes.map((e) => e.framework.version),
+      envelopes: l.envelopes.length,
+      supportedScope: scope[l.framework],
     })),
-    checks, inspected: rows,
+    checks,
+    inspected: rows,
     counts: {
-      established: rows.filter(r => r.state === 'established').length, partial: rows.filter(r => r.state === 'partial').length,
-      notRun: rows.filter(r => r.state === 'not-run').length,
+      established: rows.filter((r) => r.state === 'established').length,
+      partial: rows.filter((r) => r.state === 'partial').length,
+      notRun: rows.filter((r) => r.state === 'not-run').length,
     },
   };
 }

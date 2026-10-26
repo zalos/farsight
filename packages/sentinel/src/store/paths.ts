@@ -12,7 +12,17 @@
 //   has the store's device and reports `local` (apfs or hfs). Anything else, including network, FUSE and
 //   overlay file systems, is refused.
 import { spawnSync } from 'node:child_process';
-import { lstatSync, mkdirSync, openSync, closeSync, realpathSync, statSync, statfsSync, constants, type BigIntStats } from 'node:fs';
+import {
+  lstatSync,
+  mkdirSync,
+  openSync,
+  closeSync,
+  realpathSync,
+  statSync,
+  statfsSync,
+  constants,
+  type BigIntStats,
+} from 'node:fs';
 import { dirname, isAbsolute, join, normalize, sep } from 'node:path';
 import { StoreError, ioFailure } from './errors.js';
 
@@ -32,7 +42,11 @@ export interface StoreLayout {
 }
 
 export const STORE_FILE_NAMES = Object.freeze({
-  owner: 'owner.sqlite', descriptor: 'owner.json', ledger: 'ledger.sqlite', objects: 'objects', scratch: 'scratch',
+  owner: 'owner.sqlite',
+  descriptor: 'owner.json',
+  ledger: 'ledger.sqlite',
+  objects: 'objects',
+  scratch: 'scratch',
 });
 
 // Hazard every lane must respect: POSIX advisory locks belong to the process, so closing *any* descriptor this
@@ -72,12 +86,15 @@ export interface CheckedStoreRoot {
 export const identityOf = (s: BigIntStats): FileIdentity => `${s.dev}:${s.ino}`;
 
 const uid = (): number => {
-  if (typeof process.getuid !== 'function') throw new StoreError('sentinel.store.platformUnqualified', { platform: process.platform });
+  if (typeof process.getuid !== 'function')
+    throw new StoreError('sentinel.store.platformUnqualified', { platform: process.platform });
   return process.getuid();
 };
 
 function lstatOrNull(path: string): BigIntStats | null {
-  try { return lstatSync(path, { bigint: true }); } catch (error) {
+  try {
+    return lstatSync(path, { bigint: true });
+  } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw ioFailure('lstat', error);
   }
@@ -88,9 +105,10 @@ function lstatOrNull(path: string): BigIntStats | null {
  * folder (not a link) whose spelling equals what the file system reports.
  */
 export function assertCanonicalStorePath(path: string): void {
-  if (typeof path !== 'string' || path.includes('\0') || !isAbsolute(path)) throw new StoreError('sentinel.store.pathNotAbsolute', {});
+  if (typeof path !== 'string' || path.includes('\0') || !isAbsolute(path))
+    throw new StoreError('sentinel.store.pathNotAbsolute', {});
   const parts = path.split(sep).slice(1);
-  if (path === sep || normalize(path) !== path || parts.some(p => p === '' || p === '.' || p === '..')) {
+  if (path === sep || normalize(path) !== path || parts.some((p) => p === '' || p === '.' || p === '..')) {
     throw new StoreError('sentinel.store.pathNotCanonical', { path, canonical: canonicalSpelling(path) });
   }
   let at: string = sep;
@@ -103,9 +121,15 @@ export function assertCanonicalStorePath(path: string): void {
       throw new StoreError('sentinel.store.pathNotCanonical', { path, canonical: canonicalSpelling(path) });
     }
     let real: string;
-    try { real = realpathSync.native(next); } catch (error) { throw ioFailure('realpath', error); }
-    if (real !== next) throw new StoreError('sentinel.store.pathNotCanonical', { path, canonical: canonicalSpelling(path) });
-    if (i < parts.length - 1 && !s.isDirectory()) throw new StoreError('sentinel.store.pathNotDirectory', { path: next });
+    try {
+      real = realpathSync.native(next);
+    } catch (error) {
+      throw ioFailure('realpath', error);
+    }
+    if (real !== next)
+      throw new StoreError('sentinel.store.pathNotCanonical', { path, canonical: canonicalSpelling(path) });
+    if (i < parts.length - 1 && !s.isDirectory())
+      throw new StoreError('sentinel.store.pathNotDirectory', { path: next });
     at = next;
   }
 }
@@ -115,7 +139,9 @@ export function canonicalSpelling(path: string): string {
   const rest: string[] = [];
   let at = normalize(path).replace(/[/\\]+$/, '') || sep;
   for (;;) {
-    try { return join(realpathSync.native(at), ...rest.reverse()); } catch {
+    try {
+      return join(realpathSync.native(at), ...rest.reverse());
+    } catch {
       const parent = dirname(at);
       if (parent === at) return path;
       rest.push(at.slice(parent.length).replace(/^[/\\]/, ''));
@@ -142,24 +168,37 @@ function assertSafeAncestors(root: string, me: number): void {
 function assertPrivate(path: string, s: BigIntStats, me: number, kind: 'directory' | 'file'): void {
   if (s.isSymbolicLink()) throw new StoreError('sentinel.store.pathSymlink', { path });
   if (kind === 'directory' ? !s.isDirectory() : !s.isFile()) {
-    throw new StoreError(kind === 'directory' ? 'sentinel.store.pathNotDirectory' : 'sentinel.store.fileUnsafe', { path });
+    throw new StoreError(kind === 'directory' ? 'sentinel.store.pathNotDirectory' : 'sentinel.store.fileUnsafe', {
+      path,
+    });
   }
   if (Number(s.uid) !== me) throw new StoreError('sentinel.store.pathWrongOwner', { path });
-  if ((Number(s.mode) & 0o077) !== 0) throw new StoreError('sentinel.store.pathPermissions', { path, mode: (Number(s.mode) & 0o7777).toString(8) });
-  if (kind === 'file' && s.nlink !== 1n) throw new StoreError('sentinel.store.fileUnsafe', { path, links: Number(s.nlink) });
+  if ((Number(s.mode) & 0o077) !== 0)
+    throw new StoreError('sentinel.store.pathPermissions', { path, mode: (Number(s.mode) & 0o7777).toString(8) });
+  if (kind === 'file' && s.nlink !== 1n)
+    throw new StoreError('sentinel.store.fileUnsafe', { path, links: Number(s.nlink) });
 }
 
 // Linux magic numbers from linux/magic.h: a stable kernel ABI. Overlay is excluded (copy-up changes the
 // inode the lock is bound to); FUSE, NFS, SMB/CIFS, 9p and anything unlisted are refused.
 const LINUX_LOCAL: ReadonlyMap<number, string> = new Map([
-  [0xef53, 'ext4'], [0x58465342, 'xfs'], [0x9123683e, 'btrfs'], [0x01021994, 'tmpfs'], [0x2fc12fc1, 'zfs'], [0xf2f52010, 'f2fs'],
+  [0xef53, 'ext4'],
+  [0x58465342, 'xfs'],
+  [0x9123683e, 'btrfs'],
+  [0x01021994, 'tmpfs'],
+  [0x2fc12fc1, 'zfs'],
+  [0xf2f52010, 'f2fs'],
 ]);
 const DARWIN_LOCAL = new Set(['apfs', 'hfs']);
 
 /** Measure the file system holding `path` (an existing folder). Refuses anything not known to be local. */
 export function measureFilesystem(path: string): FilesystemIdentity {
   let type: number;
-  try { type = Number(statfsSync(path).type) >>> 0; } catch (error) { throw ioFailure('statfs', error); }
+  try {
+    type = Number(statfsSync(path).type) >>> 0;
+  } catch (error) {
+    throw ioFailure('statfs', error);
+  }
   const hex = `0x${type.toString(16)}`;
   if (process.platform === 'linux') {
     const name = LINUX_LOCAL.get(type);
@@ -168,7 +207,8 @@ export function measureFilesystem(path: string): FilesystemIdentity {
   }
   if (process.platform === 'darwin') {
     const mount = darwinLocalMountOf(path);
-    if (!mount) throw new StoreError('sentinel.store.filesystemUnsupported', { filesystem: `unidentified (statfs ${hex})` });
+    if (!mount)
+      throw new StoreError('sentinel.store.filesystemUnsupported', { filesystem: `unidentified (statfs ${hex})` });
     return Object.freeze({ platform: process.platform, type: mount.type, evidence: `mount:${mount.point}` });
   }
   throw new StoreError('sentinel.store.platformUnqualified', { platform: process.platform });
@@ -181,12 +221,23 @@ export function measureFilesystem(path: string): FilesystemIdentity {
  */
 function darwinLocalMountOf(path: string): { type: string; point: string } | null {
   const dev = statSync(path, { bigint: true }).dev;
-  const out = spawnSync('/sbin/mount', [], { encoding: 'utf8', env: {}, timeout: 5_000, maxBuffer: 1 << 20, stdio: ['ignore', 'pipe', 'ignore'] });
-  if (out.status !== 0 || typeof out.stdout !== 'string') throw new StoreError('sentinel.store.filesystemUnsupported', { filesystem: 'mount table unreadable' });
+  const out = spawnSync('/sbin/mount', [], {
+    encoding: 'utf8',
+    env: {},
+    timeout: 5_000,
+    maxBuffer: 1 << 20,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (out.status !== 0 || typeof out.stdout !== 'string')
+    throw new StoreError('sentinel.store.filesystemUnsupported', { filesystem: 'mount table unreadable' });
   for (const line of out.stdout.split('\n')) {
     const m = / on (\/.*) \(([a-z0-9]+)((?:, [^()]*)?)\)$/.exec(line);
     if (!m || !DARWIN_LOCAL.has(m[2]!) || !m[3]!.split(', ').includes('local')) continue;
-    try { if (statSync(m[1]!, { bigint: true }).dev === dev) return { type: m[2]!, point: m[1]! }; } catch { /* a vanished mount is not a match */ }
+    try {
+      if (statSync(m[1]!, { bigint: true }).dev === dev) return { type: m[2]!, point: m[1]! };
+    } catch {
+      /* a vanished mount is not a match */
+    }
   }
   return null;
 }
@@ -202,7 +253,11 @@ export function prepareStoreRoot(path: string, options: { create?: boolean } = {
   let created = false;
   if (!lstatOrNull(path)) {
     if (options.create === false) throw ioFailure('stat', Object.assign(new Error('absent'), { code: 'ENOENT' }));
-    try { created = mkdirSync(path, { recursive: true, mode: 0o700 }) !== undefined; } catch (error) { throw ioFailure('mkdir', error); }
+    try {
+      created = mkdirSync(path, { recursive: true, mode: 0o700 }) !== undefined;
+    } catch (error) {
+      throw ioFailure('mkdir', error);
+    }
     // Folders created above the store are checked like any other ancestor; a concurrent creator is fine.
     assertCanonicalStorePath(path);
     assertSafeAncestors(path, me);
@@ -218,7 +273,10 @@ export function prepareStoreRoot(path: string, options: { create?: boolean } = {
  * Check a private regular file in a checked store folder, creating it 0600 when absent. An existing file is
  * only lstat'ed, never opened: opening and closing a descriptor on a locked file drops this process's lock.
  */
-export function preparePrivateFile(path: string, options: { create?: boolean } = {}): { identity: FileIdentity; created: boolean } {
+export function preparePrivateFile(
+  path: string,
+  options: { create?: boolean } = {},
+): { identity: FileIdentity; created: boolean } {
   const me = uid();
   let created = false;
   if (!lstatOrNull(path) && options.create !== false) {
@@ -245,5 +303,9 @@ export function assertPrivateFileIfPresent(path: string): void {
 
 /** True when `path` still names the same inode; false when it is gone or replaced. Never opens the file. */
 export function hasIdentity(path: string, identity: FileIdentity): boolean {
-  try { return identityOf(lstatSync(path, { bigint: true })) === identity; } catch { return false; }
+  try {
+    return identityOf(lstatSync(path, { bigint: true })) === identity;
+  } catch {
+    return false;
+  }
 }

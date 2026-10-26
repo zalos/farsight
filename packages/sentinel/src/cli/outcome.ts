@@ -36,7 +36,8 @@ export type CommandOutcome = PolicyResult | CommandEffectOutcome;
 /** The exit code of each outcome. Only the five policy results own their codes; the others never claim one. */
 export const OUTCOME_EXIT_CODES: Readonly<Record<CommandOutcome, number>> = Object.freeze({
   ...POLICY_EXIT_CODES,
-  proposed:0, applied:0,
+  proposed: 0,
+  applied: 0,
   read: 0,
   accepted: 0,
   abandoned: 0,
@@ -81,11 +82,20 @@ export interface CommandResult {
   readonly reasonCode?: string;
 }
 
-export function result(command: string, outcome: CommandOutcome, options: {
-  verdicts?: PrintedVerdicts; facts?: Record<string, unknown>; reasonCode?: string;
-} = {}): CommandResult {
+export function result(
+  command: string,
+  outcome: CommandOutcome,
+  options: {
+    verdicts?: PrintedVerdicts;
+    facts?: Record<string, unknown>;
+    reasonCode?: string;
+  } = {},
+): CommandResult {
   return Object.freeze({
-    command, outcome, exitCode: OUTCOME_EXIT_CODES[outcome], verdicts: options.verdicts ?? NOT_ASKED,
+    command,
+    outcome,
+    exitCode: OUTCOME_EXIT_CODES[outcome],
+    verdicts: options.verdicts ?? NOT_ASKED,
     facts: Object.freeze({ ...(options.facts ?? {}) }),
     ...(options.reasonCode === undefined ? {} : { reasonCode: options.reasonCode }),
   });

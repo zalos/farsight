@@ -20,20 +20,30 @@ export interface ResolvedRuleInput {
   readonly definition: {
     readonly familyId: string;
     readonly revision: number;
-    readonly applicability: { readonly languages: readonly string[]; readonly scopeKind: string; readonly frameworks?: readonly string[] };
+    readonly applicability: {
+      readonly languages: readonly string[];
+      readonly scopeKind: string;
+      readonly frameworks?: readonly string[];
+    };
     readonly requires: readonly string[];
     readonly implementation: { readonly adapterId: string; readonly rulePath: string };
   };
 }
 
 /** A pack file as the validated pack records it: its path and the digest of its bytes. */
-export interface PackFileInput { readonly path: string; readonly digest: string }
+export interface PackFileInput {
+  readonly path: string;
+  readonly digest: string;
+}
 
 export const PATTERN_UNSUPPORTED_REASONS = [
-  'sentinel.pattern.unsupported.otherAdapter', 'sentinel.pattern.unsupported.scope', 'sentinel.pattern.unsupported.framework',
-  'sentinel.pattern.unsupported.capability', 'sentinel.pattern.unsupported.language',
+  'sentinel.pattern.unsupported.otherAdapter',
+  'sentinel.pattern.unsupported.scope',
+  'sentinel.pattern.unsupported.framework',
+  'sentinel.pattern.unsupported.capability',
+  'sentinel.pattern.unsupported.language',
 ] as const;
-export type PatternUnsupportedReason = typeof PATTERN_UNSUPPORTED_REASONS[number];
+export type PatternUnsupportedReason = (typeof PATTERN_UNSUPPORTED_REASONS)[number];
 
 /** Capabilities this adapter can provide. A rule requiring anything else (framework order, interprocedural flow) is unsupported. */
 export const PATTERN_PROVIDES: ReadonlySet<string> = new Set(['source-bytes', 'pattern-match', 'source-span']);
@@ -50,30 +60,65 @@ export interface ResolvedPatternRules {
  * whose bytes do not hash to the pinned digest, or which is not in the pack, is refused outright (`ruleInvalid`):
  * that is a broken pin, not an unsupported rule.
  */
-export function patternRulesFromResolved(resolved: readonly ResolvedRuleInput[], files: readonly PackFileInput[], bytesOf: (digest: string) => Uint8Array): ResolvedPatternRules {
-  const byPath = new Map(files.map(f => [f.path, f.digest]));
+export function patternRulesFromResolved(
+  resolved: readonly ResolvedRuleInput[],
+  files: readonly PackFileInput[],
+  bytesOf: (digest: string) => Uint8Array,
+): ResolvedPatternRules {
+  const byPath = new Map(files.map((f) => [f.path, f.digest]));
   const rules: PatternRule[] = [];
   const unsupported: { familyId: string; reasonCode: PatternUnsupportedReason }[] = [];
   for (const r of resolved) {
     const d = r.definition;
-    if (d.familyId !== r.familyId || d.revision !== r.revision) patternFail('sentinel.pattern.ruleInvalid', `${r.familyId}: the definition is not the resolved rule`);
-    const gap = (reasonCode: PatternUnsupportedReason) => { unsupported.push({ familyId: r.familyId, reasonCode }); };
-    if (d.implementation.adapterId !== PATTERN_ADAPTER.id) { gap('sentinel.pattern.unsupported.otherAdapter'); continue; }
-    if (d.applicability.scopeKind !== 'source-file') { gap('sentinel.pattern.unsupported.scope'); continue; }
-    if (d.applicability.frameworks?.length) { gap('sentinel.pattern.unsupported.framework'); continue; }
-    if (d.requires.some(c => !PATTERN_PROVIDES.has(c))) { gap('sentinel.pattern.unsupported.capability'); continue; }
-    if (!d.applicability.languages.length || d.applicability.languages.some(l => !LANGUAGES.has(l))) { gap('sentinel.pattern.unsupported.language'); continue; }
+    if (d.familyId !== r.familyId || d.revision !== r.revision)
+      patternFail('sentinel.pattern.ruleInvalid', `${r.familyId}: the definition is not the resolved rule`);
+    const gap = (reasonCode: PatternUnsupportedReason) => {
+      unsupported.push({ familyId: r.familyId, reasonCode });
+    };
+    if (d.implementation.adapterId !== PATTERN_ADAPTER.id) {
+      gap('sentinel.pattern.unsupported.otherAdapter');
+      continue;
+    }
+    if (d.applicability.scopeKind !== 'source-file') {
+      gap('sentinel.pattern.unsupported.scope');
+      continue;
+    }
+    if (d.applicability.frameworks?.length) {
+      gap('sentinel.pattern.unsupported.framework');
+      continue;
+    }
+    if (d.requires.some((c) => !PATTERN_PROVIDES.has(c))) {
+      gap('sentinel.pattern.unsupported.capability');
+      continue;
+    }
+    if (!d.applicability.languages.length || d.applicability.languages.some((l) => !LANGUAGES.has(l))) {
+      gap('sentinel.pattern.unsupported.language');
+      continue;
+    }
     const digest = byPath.get(d.implementation.rulePath);
     if (!digest) patternFail('sentinel.pattern.ruleInvalid', `${r.familyId}: its detector is not in the pinned pack`);
     const bytes = bytesOf(digest!);
-    if (sha256(bytes) !== digest) patternFail('sentinel.pattern.ruleInvalid', `${r.familyId}: the detector bytes do not match the pinned digest`);
+    if (sha256(bytes) !== digest)
+      patternFail('sentinel.pattern.ruleInvalid', `${r.familyId}: the detector bytes do not match the pinned digest`);
     const rule = patternRuleOf(r.familyId, r.revision, bytes);
     const declared = [...d.applicability.languages].sort().join(',');
-    if ([...rule.languages].sort().join(',') !== declared) patternFail('sentinel.pattern.ruleInvalid', `${r.familyId}: the engine rule's languages differ from its definition`);
-    rules.push(Object.freeze({
-      ...rule, languages: Object.freeze([...d.applicability.languages] as PatternLanguage[]),
-      pins: Object.freeze({ definitionDigest: r.definitionDigest, packDigest: r.packDigest, lockDigest: r.lockDigest, detectorDigest: digest! }),
-    }));
+    if ([...rule.languages].sort().join(',') !== declared)
+      patternFail(
+        'sentinel.pattern.ruleInvalid',
+        `${r.familyId}: the engine rule's languages differ from its definition`,
+      );
+    rules.push(
+      Object.freeze({
+        ...rule,
+        languages: Object.freeze([...d.applicability.languages] as PatternLanguage[]),
+        pins: Object.freeze({
+          definitionDigest: r.definitionDigest,
+          packDigest: r.packDigest,
+          lockDigest: r.lockDigest,
+          detectorDigest: digest!,
+        }),
+      }),
+    );
   }
   return Object.freeze({ rules: Object.freeze(rules), unsupported: Object.freeze(unsupported) });
 }

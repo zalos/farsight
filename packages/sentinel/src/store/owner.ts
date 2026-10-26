@@ -19,8 +19,14 @@ import { closeSync, constants, fsyncSync, openSync, readFileSync, renameSync, un
 import type { Id } from '../contracts/common.js';
 import { StoreError, ioFailure, isSqliteBusy, sqlitePrimaryCode } from './errors.js';
 import {
-  assertPrivateFileIfPresent, hasIdentity, preparePrivateFile, prepareStoreRoot, storeLayout,
-  type FileIdentity, type FilesystemIdentity, type StoreLayout,
+  assertPrivateFileIfPresent,
+  hasIdentity,
+  preparePrivateFile,
+  prepareStoreRoot,
+  storeLayout,
+  type FileIdentity,
+  type FilesystemIdentity,
+  type StoreLayout,
 } from './paths.js';
 import { checkSqliteRuntime, type SqliteRuntime } from './runtime.js';
 
@@ -97,17 +103,24 @@ const heldInProcess = new Set<string>();
 
 export async function acquireStoreOwner(storePath: string, options: AcquireOptions = {}): Promise<StoreOwner> {
   const waitMs = options.waitMs ?? DEFAULT_WAIT_MS;
-  if (!Number.isInteger(waitMs) || waitMs < 0 || waitMs > 10_000) throw new RangeError('waitMs must be an integer from 0 to 10000');
+  if (!Number.isInteger(waitMs) || waitMs < 0 || waitMs > 10_000)
+    throw new RangeError('waitMs must be an integer from 0 to 10000');
   const runtime = await checkSqliteRuntime();
   const root = prepareStoreRoot(storePath, { create: true });
   const layout = storeLayout(root.path);
-  if (heldInProcess.has(`path:${layout.root}`)) throw new StoreError('sentinel.store.ownedElsewhere', { path: layout.root, holder: 'this process' });
+  if (heldInProcess.has(`path:${layout.root}`))
+    throw new StoreError('sentinel.store.ownedElsewhere', { path: layout.root, holder: 'this process' });
   const lockFile = preparePrivateFile(layout.owner);
-  if (heldInProcess.has(`inode:${lockFile.identity}`)) throw new StoreError('sentinel.store.ownedElsewhere', { path: layout.root, holder: 'this process' });
+  if (heldInProcess.has(`inode:${lockFile.identity}`))
+    throw new StoreError('sentinel.store.ownedElsewhere', { path: layout.root, holder: 'this process' });
   assertPrivateFileIfPresent(`${layout.owner}-journal`);
 
   let db: Db;
-  try { db = new runtime.sqlite.DatabaseSync(layout.owner); } catch (error) { throw ioFailure('open-owner', error); }
+  try {
+    db = new runtime.sqlite.DatabaseSync(layout.owner);
+  } catch (error) {
+    throw ioFailure('open-owner', error);
+  }
   const epoch: Id = `epoch-${randomUUID()}`;
   try {
     const { storeId } = lock(db, waitMs, epoch, layout.owner);
@@ -117,8 +130,14 @@ export async function acquireStoreOwner(storePath: string, options: AcquireOptio
     // Everything that can fail happens before the Owner exists: its constructor is the only place that records
     // the store as held in this process, so a failed acquisition leaves no registration behind to clean up.
     writeDescriptor(layout, {
-      format: 'sentinel-owner-descriptor/draft-1', storeId, epoch, pid: process.pid,
-      acquiredAt: new Date().toISOString(), node: runtime.node, sqlite: runtime.sqliteVersion, platform: `${runtime.platform}-${runtime.arch}`,
+      format: 'sentinel-owner-descriptor/draft-1',
+      storeId,
+      epoch,
+      pid: process.pid,
+      acquiredAt: new Date().toISOString(),
+      node: runtime.node,
+      sqlite: runtime.sqliteVersion,
+      platform: `${runtime.platform}-${runtime.arch}`,
     });
     return new Owner(db, runtime, layout, root.filesystem, root.identity, lockFile.identity, storeId, epoch);
   } catch (error) {
@@ -135,12 +154,18 @@ function lockFailure(error: unknown, path: string): StoreError {
   if (error instanceof StoreError) return error;
   if (isSqliteBusy(error)) return new StoreError('sentinel.store.ownedElsewhere', {}, { cause: error });
   const sqliteCode = sqlitePrimaryCode(error) ?? null;
-  if (sqliteCode !== null && CORRUPT_CODES.has(sqliteCode)) return new StoreError('sentinel.store.lockFileCorrupt', { path, sqliteCode }, { cause: error });
+  if (sqliteCode !== null && CORRUPT_CODES.has(sqliteCode))
+    return new StoreError('sentinel.store.lockFileCorrupt', { path, sqliteCode }, { cause: error });
   return new StoreError('sentinel.store.ioFailure', { operation: 'owner-lock', sqliteCode }, { cause: error });
 }
 
 function lock(db: Db, waitMs: number, epoch: Id, path: string): { storeId: string } {
-  const read = () => db.prepare('SELECT store_id AS storeId, generation, epoch FROM owner_store').get() as { storeId: string; generation: number; epoch: string | null };
+  const read = () =>
+    db.prepare('SELECT store_id AS storeId, generation, epoch FROM owner_store').get() as {
+      storeId: string;
+      generation: number;
+      epoch: string | null;
+    };
   try {
     db.exec(`PRAGMA busy_timeout=${waitMs}`);
     const mode = (db.prepare('PRAGMA journal_mode=DELETE').get() as { journal_mode: string }).journal_mode;
@@ -172,18 +197,35 @@ function lock(db: Db, waitMs: number, epoch: Id, path: string): { storeId: strin
 }
 
 function release(db: Db): void {
-  try { if (db.isOpen && db.isTransaction) db.exec('ROLLBACK'); } catch { /* closing below still releases the lock */ }
-  try { if (db.isOpen) db.close(); } catch { /* process exit releases it in the worst case */ }
+  try {
+    if (db.isOpen && db.isTransaction) db.exec('ROLLBACK');
+  } catch {
+    /* closing below still releases the lock */
+  }
+  try {
+    if (db.isOpen) db.close();
+  } catch {
+    /* process exit releases it in the worst case */
+  }
 }
 
 function writeDescriptor(layout: StoreLayout, descriptor: OwnerDescriptor): void {
   const tmp = `${layout.descriptor}.${descriptor.epoch}.tmp`;
   try {
     const fd = openSync(tmp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-    try { writeSync(fd, `${JSON.stringify(descriptor, null, 2)}\n`); fsyncSync(fd); } finally { closeSync(fd); }
+    try {
+      writeSync(fd, `${JSON.stringify(descriptor, null, 2)}\n`);
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
     renameSync(tmp, layout.descriptor);
   } catch (error) {
-    try { unlinkSync(tmp); } catch { /* nothing was written */ }
+    try {
+      unlinkSync(tmp);
+    } catch {
+      /* nothing was written */
+    }
     throw ioFailure('write-descriptor', error);
   }
 }
@@ -192,7 +234,9 @@ function removeOwnDescriptor(layout: StoreLayout, epoch: Id): void {
   try {
     const current = JSON.parse(readFileSync(layout.descriptor, 'utf8')) as Partial<OwnerDescriptor>;
     if (current.epoch === epoch) unlinkSync(layout.descriptor);
-  } catch { /* absent or replaced: it is informational, and not ours to remove then */ }
+  } catch {
+    /* absent or replaced: it is informational, and not ours to remove then */
+  }
 }
 
 class Owner implements StoreOwner {
@@ -220,12 +264,19 @@ class Owner implements StoreOwner {
     Object.freeze(this);
   }
 
-  get storePath(): string { return this.layout.root; }
-  get rootIdentity(): FileIdentity { return this.#rootIdentity; }
-  get held(): boolean { return this.#state === 'held'; }
+  get storePath(): string {
+    return this.layout.root;
+  }
+  get rootIdentity(): FileIdentity {
+    return this.#rootIdentity;
+  }
+  get held(): boolean {
+    return this.#state === 'held';
+  }
 
   assertHeld(): void {
-    if (this.#state === 'closed' || this.#state === 'closing') throw new StoreError('sentinel.store.ownerClosed', { path: this.layout.root });
+    if (this.#state === 'closed' || this.#state === 'closing')
+      throw new StoreError('sentinel.store.ownerClosed', { path: this.layout.root });
     if (this.#state === 'lost') throw new StoreError('sentinel.store.ownerLost', { path: this.layout.root });
     if (!hasIdentity(this.layout.root, this.#rootIdentity) || !hasIdentity(this.layout.owner, this.#lockIdentity)) {
       this.#state = 'lost';
@@ -233,8 +284,11 @@ class Owner implements StoreOwner {
     }
     let holder: string | undefined;
     try {
-      if (this.#db.isTransaction) holder = (this.#db.prepare('SELECT epoch FROM owner_hold').get() as { epoch: string } | undefined)?.epoch;
-    } catch { holder = undefined; }
+      if (this.#db.isTransaction)
+        holder = (this.#db.prepare('SELECT epoch FROM owner_hold').get() as { epoch: string } | undefined)?.epoch;
+    } catch {
+      holder = undefined;
+    }
     if (holder !== this.epoch) {
       this.#state = 'lost';
       throw new StoreError('sentinel.store.ownerLost', { path: this.layout.root });
@@ -256,7 +310,11 @@ class Owner implements StoreOwner {
     this.#state = 'closing';
     const failures: { name: string; error: unknown }[] = [];
     for (const resource of this.#resources.splice(0).reverse()) {
-      try { resource.close(); } catch (error) { failures.push({ name: resource.name ?? 'unnamed', error }); }
+      try {
+        resource.close();
+      } catch (error) {
+        failures.push({ name: resource.name ?? 'unnamed', error });
+      }
     }
     removeOwnDescriptor(this.layout, this.epoch);
     release(this.#db);
@@ -264,8 +322,11 @@ class Owner implements StoreOwner {
     heldInProcess.delete(`inode:${this.#lockIdentity}`);
     this.#state = 'closed';
     if (failures.length) {
-      throw new StoreError('sentinel.store.resourceCloseFailed', { resources: failures.map(f => f.name) },
-        { cause: failures.length === 1 ? failures[0]!.error : new AggregateError(failures.map(f => f.error)) });
+      throw new StoreError(
+        'sentinel.store.resourceCloseFailed',
+        { resources: failures.map((f) => f.name) },
+        { cause: failures.length === 1 ? failures[0]!.error : new AggregateError(failures.map((f) => f.error)) },
+      );
     }
   }
 }

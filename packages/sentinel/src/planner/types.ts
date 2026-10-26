@@ -10,11 +10,20 @@ import type { Digest, Id, Ordinal } from '../contracts/common.js';
 import type { AdapterRegistry } from '../execution/registry.js';
 import type { CapabilityTable } from './capabilities.js';
 import type {
-  PlanCheck, PlanCheckState, PlanEnvelope, PlanInput, PlanPins, PlanRuleGap, PlanStage, PlanTallies, PlanWork,
+  PlanCheck,
+  PlanCheckState,
+  PlanEnvelope,
+  PlanInput,
+  PlanPins,
+  PlanRuleGap,
+  PlanStage,
+  PlanTallies,
+  PlanWork,
 } from '../contracts/plan.js';
 
 export type PlannerLanguage = 'typescript' | 'javascript' | 'java';
-export type PlannerScopeKind = 'source-file' | 'surface' | 'dependency-manifest' | 'ci-config' | 'infrastructure-config' | 'repository';
+export type PlannerScopeKind =
+  'source-file' | 'surface' | 'dependency-manifest' | 'ci-config' | 'infrastructure-config' | 'repository';
 
 /** One locked rule with the parts of its verified definition planning needs. */
 export interface PlannerRule {
@@ -106,7 +115,11 @@ export interface PlannerLimits {
 }
 
 export const DEFAULT_PLANNER_LIMITS: PlannerLimits = Object.freeze({
-  maxChecks: 200_000, maxScopesPerWork: 256, maxChecksPerWork: 2048, maxWork: 10_000, maxRepositoryInputs: 20_000,
+  maxChecks: 200_000,
+  maxScopesPerWork: 256,
+  maxChecksPerWork: 2048,
+  maxWork: 10_000,
+  maxRepositoryInputs: 20_000,
 });
 
 // ---- the plan revision: the canonical sentinel-plan/draft-1 contract (contracts/plan.ts) ----
@@ -119,4 +132,10 @@ export type CheckState = PlanCheckState;
 export type RuleGap = PlanRuleGap;
 export type { PlanPins, PlanTallies, PlanStage, PlanInput };
 
-export const CHECK_STATES: readonly CheckState[] = Object.freeze(['planned', 'unsupported', 'applicability-unknown', 'scope-unavailable', 'scope-unknown']);
+export const CHECK_STATES: readonly CheckState[] = Object.freeze([
+  'planned',
+  'unsupported',
+  'applicability-unknown',
+  'scope-unavailable',
+  'scope-unknown',
+]);

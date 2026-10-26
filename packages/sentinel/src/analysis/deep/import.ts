@@ -12,18 +12,32 @@
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@farsight/graph';
 import type {
-  ArtifactId, DeepImportEnvelope, DeepImportLocation, Digest, ObservationEnvelope, SnapshotEnvelope, SourceEvidence,
+  ArtifactId,
+  DeepImportEnvelope,
+  DeepImportLocation,
+  Digest,
+  ObservationEnvelope,
+  SnapshotEnvelope,
+  SourceEvidence,
 } from '../../contracts/index.js';
 import { parseEnvelope, validateEnvelope } from '../../validate.js';
 import { intentDigest, receiptAuthority } from '../../policy/receipts.js';
 import type { ActionIntent } from '../../contracts/index.js';
 
 export const DEEP_REASON_CODES = Object.freeze([
-  'sentinel.deep.malformed', 'sentinel.deep.notOwnerConfirmed', 'sentinel.deep.unbound',
-  'sentinel.deep.fileNotCaptured', 'sentinel.deep.contentMismatch', 'sentinel.deep.contentUnverified', 'sentinel.deep.locationOutOfRange', 'sentinel.deep.locationNotRead',
-  'sentinel.deep.importedNotExecuted', 'sentinel.deep.toolScopeOnly', 'sentinel.deep.buildStated',
+  'sentinel.deep.malformed',
+  'sentinel.deep.notOwnerConfirmed',
+  'sentinel.deep.unbound',
+  'sentinel.deep.fileNotCaptured',
+  'sentinel.deep.contentMismatch',
+  'sentinel.deep.contentUnverified',
+  'sentinel.deep.locationOutOfRange',
+  'sentinel.deep.locationNotRead',
+  'sentinel.deep.importedNotExecuted',
+  'sentinel.deep.toolScopeOnly',
+  'sentinel.deep.buildStated',
 ] as const);
-export type DeepReason = typeof DEEP_REASON_CODES[number];
+export type DeepReason = (typeof DEEP_REASON_CODES)[number];
 
 /** What this build supports for deep analysis: no engine. Deep checks stay unsupported; import is the only path. */
 export const DEEP_ANALYSIS_SUPPORT = Object.freeze({
@@ -45,7 +59,9 @@ export function deepImportIntent(document: string | Uint8Array, snapshotId: stri
   if (!parsed.ok) return undefined;
   const doc = parsed.value as DeepImportEnvelope;
   return {
-    action: 'evidence.import', input: sha(canonicalJson(doc)), effects: ['local-artifacts'],
+    action: 'evidence.import',
+    input: sha(canonicalJson(doc)),
+    effects: ['local-artifacts'],
     budget: { maxTokens: null, maxCost: null, currency: null },
     scope: { profile: null, provider: null, targets: [`snapshot:${snapshotId}`, `source:${doc.binding.sourceId}`] },
   };
@@ -65,7 +81,12 @@ export interface DeepImportRequest {
 export type DeepImportResult =
   | { readonly status: 'refused'; readonly reasonCode: DeepReason; readonly detail: string }
   | { readonly status: 'untrusted'; readonly reasonCode: DeepReason; readonly documentDigest: Digest }
-  | { readonly status: 'unbound'; readonly reasonCode: DeepReason; readonly documentDigest: Digest; readonly files: readonly { readonly relativePath: string; readonly reasonCode: DeepReason }[] }
+  | {
+      readonly status: 'unbound';
+      readonly reasonCode: DeepReason;
+      readonly documentDigest: Digest;
+      readonly files: readonly { readonly relativePath: string; readonly reasonCode: DeepReason }[];
+    }
   | {
       readonly status: 'imported';
       readonly documentDigest: Digest;
@@ -73,7 +94,13 @@ export type DeepImportResult =
       /** Flows not accepted, by index, with why. */
       readonly unknown: readonly { readonly flow: number; readonly reasonCode: DeepReason }[];
       /** The scope the tool's claim holds over: exactly the files it read. */
-      readonly scope: { readonly sourceId: string; readonly files: readonly string[]; readonly configurationDigest: Digest; readonly mode: string; readonly buildPerformed: boolean };
+      readonly scope: {
+        readonly sourceId: string;
+        readonly files: readonly string[];
+        readonly configurationDigest: Digest;
+        readonly mode: string;
+        readonly buildPerformed: boolean;
+      };
       readonly limitationKeys: readonly DeepReason[];
     };
 
@@ -81,12 +108,24 @@ const sha = (b: string | Uint8Array): Digest => `sha256:${createHash('sha256').u
 const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024;
 
 export async function importDeepAnalysis(request: DeepImportRequest): Promise<DeepImportResult> {
-  const bytes = typeof request.document === 'string' ? Buffer.from(request.document, 'utf8') : Buffer.from(request.document);
-  if (bytes.length > MAX_DOCUMENT_BYTES) return { status: 'refused', reasonCode: 'sentinel.deep.malformed', detail: 'the document is larger than the import bound' };
+  const bytes =
+    typeof request.document === 'string' ? Buffer.from(request.document, 'utf8') : Buffer.from(request.document);
+  if (bytes.length > MAX_DOCUMENT_BYTES)
+    return {
+      status: 'refused',
+      reasonCode: 'sentinel.deep.malformed',
+      detail: 'the document is larger than the import bound',
+    };
   const text = bytes.toString('utf8');
-  if (!Buffer.from(text, 'utf8').equals(bytes)) return { status: 'refused', reasonCode: 'sentinel.deep.malformed', detail: 'the document is not valid UTF-8' };
+  if (!Buffer.from(text, 'utf8').equals(bytes))
+    return { status: 'refused', reasonCode: 'sentinel.deep.malformed', detail: 'the document is not valid UTF-8' };
   const parsed = parseEnvelope('deepimport', text);
-  if (!parsed.ok) return { status: 'refused', reasonCode: 'sentinel.deep.malformed', detail: `${parsed.errors[0]?.code ?? 'invalid'} at ${parsed.errors[0]?.path ?? '/'}` };
+  if (!parsed.ok)
+    return {
+      status: 'refused',
+      reasonCode: 'sentinel.deep.malformed',
+      detail: `${parsed.errors[0]?.code ?? 'invalid'} at ${parsed.errors[0]?.path ?? '/'}`,
+    };
   const doc = parsed.value as DeepImportEnvelope;
   const documentDigest = sha(canonicalJson(doc));
 
@@ -99,13 +138,15 @@ export async function importDeepAnalysis(request: DeepImportRequest): Promise<De
   }
 
   // (3) The binding: this snapshot, a captured source, and every file read identical to the capture.
-  if (doc.binding.snapshotId !== request.snapshot.id) return { status: 'unbound', reasonCode: 'sentinel.deep.unbound', documentDigest, files: [] };
+  if (doc.binding.snapshotId !== request.snapshot.id)
+    return { status: 'unbound', reasonCode: 'sentinel.deep.unbound', documentDigest, files: [] };
   const captured = new Map<string, { content: ArtifactId; bytes: number }>();
   let sourceKnown = false;
   for (const e of request.snapshot.entries) {
     if (e.sourceId !== doc.binding.sourceId) continue;
     sourceKnown = true;
-    if (e.kind === 'file' && e.disposition === 'included') captured.set(e.relativePath, { content: e.content, bytes: e.bytes });
+    if (e.kind === 'file' && e.disposition === 'included')
+      captured.set(e.relativePath, { content: e.content, bytes: e.bytes });
   }
   if (!sourceKnown) return { status: 'unbound', reasonCode: 'sentinel.deep.unbound', documentDigest, files: [] };
   const fileProblems: { relativePath: string; reasonCode: DeepReason }[] = [];
@@ -113,23 +154,38 @@ export async function importDeepAnalysis(request: DeepImportRequest): Promise<De
   for (const f of doc.binding.files) {
     const c = captured.get(f.relativePath);
     if (!c) fileProblems.push({ relativePath: f.relativePath, reasonCode: 'sentinel.deep.fileNotCaptured' });
-    else if (c.content !== f.content) fileProblems.push({ relativePath: f.relativePath, reasonCode: 'sentinel.deep.contentMismatch' });
-    else if (read.has(f.relativePath)) fileProblems.push({ relativePath: f.relativePath, reasonCode: 'sentinel.deep.unbound' });
+    else if (c.content !== f.content)
+      fileProblems.push({ relativePath: f.relativePath, reasonCode: 'sentinel.deep.contentMismatch' });
+    else if (read.has(f.relativePath))
+      fileProblems.push({ relativePath: f.relativePath, reasonCode: 'sentinel.deep.unbound' });
     else read.set(f.relativePath, f.content);
   }
   // The analyzer read something other than this capture: none of its results are about this source.
-  if (fileProblems.length) return { status: 'unbound', reasonCode: 'sentinel.deep.unbound', documentDigest, files: fileProblems.slice(0, 1000) };
+  if (fileProblems.length)
+    return {
+      status: 'unbound',
+      reasonCode: 'sentinel.deep.unbound',
+      documentDigest,
+      files: fileProblems.slice(0, 1000),
+    };
 
   // A location is checked against the captured bytes themselves: the reader's bytes must hash to the content id and
   // have the captured length, so a reader returning other or longer bytes cannot widen what a span may cover.
-  const capturedBytes = new Map([...captured.values()].map(c => [c.content, c.bytes]));
+  const capturedBytes = new Map([...captured.values()].map((c) => [c.content, c.bytes]));
   const lengths = new Map<string, Promise<number | undefined>>();
   const lengthOf = (content: ArtifactId) => {
     let p = lengths.get(content);
-    if (!p) lengths.set(content, p = request.readContent(content).then(bytes => {
-      const ok = sha(bytes) === content && bytes.length === capturedBytes.get(content);
-      return ok ? bytes.length : undefined;
-    }, () => undefined));
+    if (!p)
+      lengths.set(
+        content,
+        (p = request.readContent(content).then(
+          (bytes) => {
+            const ok = sha(bytes) === content && bytes.length === capturedBytes.get(content);
+            return ok ? bytes.length : undefined;
+          },
+          () => undefined,
+        )),
+      );
     return p;
   };
   const locate = async (l: DeepImportLocation): Promise<DeepReason | SourceEvidence> => {
@@ -139,17 +195,30 @@ export async function importDeepAnalysis(request: DeepImportRequest): Promise<De
     const length = await lengthOf(content);
     if (length === undefined) return 'sentinel.deep.contentUnverified';
     if (!(l.span.startByte < l.span.endByte && l.span.endByte <= length)) return 'sentinel.deep.locationOutOfRange';
-    return { snapshotId: request.snapshot.id, sourceId: doc.binding.sourceId, relativePath: l.relativePath, content, span: { startByte: l.span.startByte, endByte: l.span.endByte } };
+    return {
+      snapshotId: request.snapshot.id,
+      sourceId: doc.binding.sourceId,
+      relativePath: l.relativePath,
+      content,
+      span: { startByte: l.span.startByte, endByte: l.span.endByte },
+    };
   };
 
   const observations: ObservationEnvelope[] = [];
   const unknown: { flow: number; reasonCode: DeepReason }[] = [];
-  const limitationKeys: DeepReason[] = ['sentinel.deep.importedNotExecuted', 'sentinel.deep.toolScopeOnly', ...(doc.binding.buildPerformed ? ['sentinel.deep.buildStated' as const] : [])];
+  const limitationKeys: DeepReason[] = [
+    'sentinel.deep.importedNotExecuted',
+    'sentinel.deep.toolScopeOnly',
+    ...(doc.binding.buildPerformed ? ['sentinel.deep.buildStated' as const] : []),
+  ];
   for (let i = 0; i < doc.flows.length; i++) {
     const flow = doc.flows[i]!;
     const located = await Promise.all([flow.source, ...flow.steps, flow.sink].map(locate));
     const problem = located.find((x): x is DeepReason => typeof x === 'string');
-    if (problem) { unknown.push({ flow: i, reasonCode: problem }); continue; }
+    if (problem) {
+      unknown.push({ flow: i, reasonCode: problem });
+      continue;
+    }
     const evidence = located as SourceEvidence[];
     const observation: ObservationEnvelope = {
       schema: 'sentinel-observation/draft-1',
@@ -164,12 +233,24 @@ export async function importDeepAnalysis(request: DeepImportRequest): Promise<De
       observedAt: request.importedAt,
     };
     const valid = validateEnvelope('observation', observation);
-    if (!valid.ok) { unknown.push({ flow: i, reasonCode: 'sentinel.deep.malformed' }); continue; }
+    if (!valid.ok) {
+      unknown.push({ flow: i, reasonCode: 'sentinel.deep.malformed' });
+      continue;
+    }
     observations.push(valid.value);
   }
   return {
-    status: 'imported', documentDigest, observations, unknown,
-    scope: { sourceId: doc.binding.sourceId, files: [...read.keys()].sort(), configurationDigest: doc.binding.configurationDigest, mode: doc.binding.mode, buildPerformed: doc.binding.buildPerformed },
+    status: 'imported',
+    documentDigest,
+    observations,
+    unknown,
+    scope: {
+      sourceId: doc.binding.sourceId,
+      files: [...read.keys()].sort(),
+      configurationDigest: doc.binding.configurationDigest,
+      mode: doc.binding.mode,
+      buildPerformed: doc.binding.buildPerformed,
+    },
     limitationKeys,
   };
 }

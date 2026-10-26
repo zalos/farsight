@@ -14,10 +14,7 @@
 
 /** One path-segment position: a literal segment, or a parameter over any one non-empty segment. */
 export type SegmentItem =
-  | { readonly t: 'lit'; readonly s: string }
-  | { readonly t: 'one' }
-  | { readonly t: 'opt' }
-  | { readonly t: 'star' };
+  { readonly t: 'lit'; readonly s: string } | { readonly t: 'one' } | { readonly t: 'opt' } | { readonly t: 'star' };
 
 /** A segment language: the union of these segment sequences. */
 export type SegmentLanguage = readonly (readonly SegmentItem[])[];
@@ -42,7 +39,8 @@ export const MAX_SOURCE_LENGTH = 1024;
  */
 export function parseMatcherSource(source: string): ParsedMatcherSource {
   const no = (reason: PatternReason, detail: string) => ({ ok: false as const, reason, detail });
-  if (source.length === 0 || source.length > MAX_SOURCE_LENGTH) return no('unsupported', 'the source is empty or longer than the subset reads');
+  if (source.length === 0 || source.length > MAX_SOURCE_LENGTH)
+    return no('unsupported', 'the source is empty or longer than the subset reads');
   if (!source.startsWith('/')) return no('invalid', 'a matcher source must start with /');
   // Next appends `(/?index|/?index\.json)?` to the root source: `/` and `/index` are both matched.
   if (source === '/') return { ok: true, language: [[], [{ t: 'lit', s: 'index' }]] };
@@ -61,10 +59,12 @@ export function parseMatcherSource(source: string): ParsedMatcherSource {
     }
     if (GRAMMAR.test(seg)) {
       // A bare modifier or an unnamed parameter is a path-to-regexp parse error; the rest is valid grammar outside the subset.
-      if (/^[*+?]/.test(seg) || /(^|[^A-Za-z0-9_]):([^A-Za-z0-9_]|$)/.test(seg)) return no('invalid', `segment "${seg}" is not a valid pattern`);
+      if (/^[*+?]/.test(seg) || /(^|[^A-Za-z0-9_]):([^A-Za-z0-9_]|$)/.test(seg))
+        return no('invalid', `segment "${seg}" is not a valid pattern`);
       return no('unsupported', `segment "${seg}" uses pattern syntax outside the supported subset`);
     }
-    if (!LITERAL.test(seg)) return no('unsupported', `segment "${seg}" holds characters whose request encoding is not modelled`);
+    if (!LITERAL.test(seg))
+      return no('unsupported', `segment "${seg}" holds characters whose request encoding is not modelled`);
     items.push({ t: 'lit', s: seg });
   }
   return { ok: true, language: [items] };
@@ -87,23 +87,40 @@ export function routeLanguage(folders: readonly string[]): RouteLanguage {
   for (let i = 0; i < folders.length; i++) {
     const f = folders[i]!;
     if (f.startsWith('_')) return { ok: false, reason: 'not-routable', detail: `private folder "${f}"` };
-    if (/^\(\.{1,3}\)/.test(f) || /^\(\.\.\)\(\.\.\)/.test(f)) return { ok: false, reason: 'unsupported', detail: `intercepting route "${f}"` };
+    if (/^\(\.{1,3}\)/.test(f) || /^\(\.\.\)\(\.\.\)/.test(f))
+      return { ok: false, reason: 'unsupported', detail: `intercepting route "${f}"` };
     if (/^\([^()]+\)$/.test(f) || f.startsWith('@')) continue;
     let m: RegExpExecArray | null;
     if ((m = /^\[\[\.\.\.([A-Za-z0-9_]+)\]\]$/.exec(f))) {
-      if (i !== folders.length - 1) return { ok: false, reason: 'unsupported', detail: 'an optional catch-all that is not last' };
-      items.push({ t: 'star' }); shown.push(`[[...${m[1]}]]`); continue;
+      if (i !== folders.length - 1)
+        return { ok: false, reason: 'unsupported', detail: 'an optional catch-all that is not last' };
+      items.push({ t: 'star' });
+      shown.push(`[[...${m[1]}]]`);
+      continue;
     }
     if ((m = /^\[\.\.\.([A-Za-z0-9_]+)\]$/.exec(f))) {
       if (i !== folders.length - 1) return { ok: false, reason: 'unsupported', detail: 'a catch-all that is not last' };
-      items.push({ t: 'one' }, { t: 'star' }); shown.push(`[...${m[1]}]`); continue;
+      items.push({ t: 'one' }, { t: 'star' });
+      shown.push(`[...${m[1]}]`);
+      continue;
     }
-    if ((m = /^\[([A-Za-z0-9_]+)\]$/.exec(f))) { items.push({ t: 'one' }); shown.push(`[${m[1]}]`); continue; }
-    if (!LITERAL.test(f)) return { ok: false, reason: 'unsupported', detail: `folder "${f}" is outside the modelled segment forms` };
+    if ((m = /^\[([A-Za-z0-9_]+)\]$/.exec(f))) {
+      items.push({ t: 'one' });
+      shown.push(`[${m[1]}]`);
+      continue;
+    }
+    if (!LITERAL.test(f))
+      return { ok: false, reason: 'unsupported', detail: `folder "${f}" is outside the modelled segment forms` };
     // Next appends `(.json)?` (an unescaped `.`) to every non-root source, so a literal ending in any character
     // followed by `json` can be matched by a shorter source. Leave such a route to the unknown side.
-    if (/.json$/.test(f) && f.length > 4) return { ok: false, reason: 'unsupported', detail: `folder "${f}" ends in a form the generated .json suffix can reach` };
-    items.push({ t: 'lit', s: f }); shown.push(f);
+    if (/.json$/.test(f) && f.length > 4)
+      return {
+        ok: false,
+        reason: 'unsupported',
+        detail: `folder "${f}" ends in a form the generated .json suffix can reach`,
+      };
+    items.push({ t: 'lit', s: f });
+    shown.push(f);
   }
   return { ok: true, items, display: '/' + shown.join('/') };
 }
@@ -112,7 +129,10 @@ export function routeLanguage(folders: readonly string[]): RouteLanguage {
 
 const OTHER = '\u0000other';
 
-interface Nfa { readonly n: number; readonly items: readonly SegmentItem[] }
+interface Nfa {
+  readonly n: number;
+  readonly items: readonly SegmentItem[];
+}
 
 /** States 0..n; `star` loops at its own state, `opt`/`star` also skip by ε. */
 const nfa = (items: readonly SegmentItem[]): Nfa => ({ n: items.length, items });
@@ -135,8 +155,9 @@ function step(a: Nfa, states: ReadonlySet<number>, sym: string): Set<number> {
   for (const s of states) {
     const it = a.items[s];
     if (!it) continue;
-    if (it.t === 'lit') { if (it.s === sym) next.push(s + 1); }
-    else if (it.t === 'star') next.push(s);
+    if (it.t === 'lit') {
+      if (it.s === sym) next.push(s + 1);
+    } else if (it.t === 'star') next.push(s);
     else next.push(s + 1);
   }
   return closure(a, next);
@@ -151,7 +172,7 @@ export interface Decision {
   readonly unmatchedExample?: string;
 }
 
-const render = (syms: readonly string[]) => '/' + syms.map(s => (s === OTHER ? '{segment}' : s)).join('/');
+const render = (syms: readonly string[]) => '/' + syms.map((s) => (s === OTHER ? '{segment}' : s)).join('/');
 
 /**
  * Whether the language `m` matches every, none or only some request paths of route `r`. Exact product search over the
@@ -159,15 +180,18 @@ const render = (syms: readonly string[]) => '/' + syms.map(s => (s === OTHER ? '
  */
 export function decide(r: readonly SegmentItem[], m: SegmentLanguage, fold = false): Decision {
   const norm = (s: string) => (fold ? s.toLowerCase() : s);
-  const fix = (items: readonly SegmentItem[]) => items.map(i => (i.t === 'lit' ? { t: 'lit' as const, s: norm(i.s) } : i));
+  const fix = (items: readonly SegmentItem[]) =>
+    items.map((i) => (i.t === 'lit' ? { t: 'lit' as const, s: norm(i.s) } : i));
   const rA = nfa(fix(r));
-  const mAs = m.map(seq => nfa(fix(seq)));
-  const alphabet = [...new Set([...rA.items, ...mAs.flatMap(a => a.items)].flatMap(i => (i.t === 'lit' ? [i.s] : [])))].sort();
+  const mAs = m.map((seq) => nfa(fix(seq)));
+  const alphabet = [
+    ...new Set([...rA.items, ...mAs.flatMap((a) => a.items)].flatMap((i) => (i.t === 'lit' ? [i.s] : []))),
+  ].sort();
   // The placeholder first, so a witness names a literal only where the decision turns on it.
   alphabet.unshift(OTHER);
   type State = { r: Set<number>; m: Set<number>[]; path: string[] };
-  const key = (s: State) => [[...s.r].sort().join(','), ...s.m.map(x => [...x].sort().join(','))].join('|');
-  const start: State = { r: closure(rA, [0]), m: mAs.map(a => closure(a, [0])), path: [] };
+  const key = (s: State) => [[...s.r].sort().join(','), ...s.m.map((x) => [...x].sort().join(','))].join('|');
+  const start: State = { r: closure(rA, [0]), m: mAs.map((a) => closure(a, [0])), path: [] };
   const seen = new Set<string>([key(start)]);
   const queue: State[] = [start];
   let matched: string | undefined;
@@ -176,7 +200,8 @@ export function decide(r: readonly SegmentItem[], m: SegmentLanguage, fold = fal
     const cur = queue.shift()!;
     if (cur.r.has(rA.n)) {
       const accepted = cur.m.some((ms, i) => ms.has(mAs[i]!.n));
-      if (accepted) matched ??= render(cur.path); else unmatched ??= render(cur.path);
+      if (accepted) matched ??= render(cur.path);
+      else unmatched ??= render(cur.path);
       if (matched !== undefined && unmatched !== undefined) break;
     }
     for (const sym of alphabet) {
@@ -190,14 +215,21 @@ export function decide(r: readonly SegmentItem[], m: SegmentLanguage, fold = fal
     }
   }
   const coverage: Coverage = matched === undefined ? 'none' : unmatched === undefined ? 'all' : 'some';
-  return { coverage, ...(matched !== undefined ? { matchedExample: matched } : {}), ...(unmatched !== undefined ? { unmatchedExample: unmatched } : {}) };
+  return {
+    coverage,
+    ...(matched !== undefined ? { matchedExample: matched } : {}),
+    ...(unmatched !== undefined ? { unmatchedExample: unmatched } : {}),
+  };
 }
 
 /**
  * The same decision, refusing to answer when it depends on letter case: Next compiles the matcher to a pattern
  * whose case handling this subset does not take as settled, so a literal pair equal only case-folded is ambiguous.
  */
-export function decideCaseStable(r: readonly SegmentItem[], m: SegmentLanguage): Decision & { readonly caseAmbiguous: boolean } {
+export function decideCaseStable(
+  r: readonly SegmentItem[],
+  m: SegmentLanguage,
+): Decision & { readonly caseAmbiguous: boolean } {
   const exact = decide(r, m);
   const folded = decide(r, m, true);
   return { ...exact, caseAmbiguous: exact.coverage !== folded.coverage };

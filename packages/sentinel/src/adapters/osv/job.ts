@@ -16,11 +16,17 @@ export type DependencyFileKind = 'npm-package-lock' | 'npm-pnpm-lock' | 'maven-p
 
 /** The basename the container uses for each kind: the names OSV-Scanner recognizes, from a fixed list. */
 export const CONTAINER_BASENAME: Readonly<Record<DependencyFileKind, string>> = Object.freeze({
-  'npm-package-lock': 'package-lock.json', 'npm-pnpm-lock': 'pnpm-lock.yaml', 'maven-pom': 'pom.xml', 'cyclonedx-sbom': 'sentinel.cdx.json',
+  'npm-package-lock': 'package-lock.json',
+  'npm-pnpm-lock': 'pnpm-lock.yaml',
+  'maven-pom': 'pom.xml',
+  'cyclonedx-sbom': 'sentinel.cdx.json',
 });
 /** The ecosystems a kind needs a snapshot for. An SBOM can name either, so it needs both. */
 export const KIND_ECOSYSTEMS: Readonly<Record<DependencyFileKind, readonly Ecosystem[]>> = Object.freeze({
-  'npm-package-lock': ['npm'], 'npm-pnpm-lock': ['npm'], 'maven-pom': ['Maven'], 'cyclonedx-sbom': ['npm', 'Maven'],
+  'npm-package-lock': ['npm'],
+  'npm-pnpm-lock': ['npm'],
+  'maven-pom': ['Maven'],
+  'cyclonedx-sbom': ['npm', 'Maven'],
 });
 
 export function dependencyKindOf(relativePath: string): DependencyFileKind | undefined {
@@ -32,13 +38,30 @@ export function dependencyKindOf(relativePath: string): DependencyFileKind | und
   return undefined;
 }
 
-export interface DependencyTarget { readonly relativePath: string; readonly artifact: ArtifactId; readonly path: string }
+export interface DependencyTarget {
+  readonly relativePath: string;
+  readonly artifact: ArtifactId;
+  readonly path: string;
+}
 
 /** A verified snapshot and where its zip is now. */
-export interface SnapshotInput { readonly snapshot: AdvisorySnapshot; readonly path: string }
+export interface SnapshotInput {
+  readonly snapshot: AdvisorySnapshot;
+  readonly path: string;
+}
 
-export interface OsvJobTarget { readonly index: number; readonly relativePath: string; readonly artifact: ArtifactId; readonly kind: DependencyFileKind }
-export interface OsvUnsent { readonly relativePath: string; readonly artifact: ArtifactId; readonly kind: DependencyFileKind | null; readonly reason: 'not-dependency-file' | 'database-absent' }
+export interface OsvJobTarget {
+  readonly index: number;
+  readonly relativePath: string;
+  readonly artifact: ArtifactId;
+  readonly kind: DependencyFileKind;
+}
+export interface OsvUnsent {
+  readonly relativePath: string;
+  readonly artifact: ArtifactId;
+  readonly kind: DependencyFileKind | null;
+  readonly reason: 'not-dependency-file' | 'database-absent';
+}
 
 export interface OsvJob {
   readonly schema: 'sentinel-osv-job/draft-1';
@@ -65,17 +88,32 @@ function digestOfFile(path: string): ArtifactId {
     if (!fstatSync(fd).isFile()) osvFail('sentinel.osv.targetInvalid', 'not a regular file');
     const hash = createHash('sha256');
     const buf = Buffer.alloc(1 << 20);
-    for (let off = 0; ;) { const n = readSync(fd, buf, 0, buf.length, off); if (!n) break; hash.update(buf.subarray(0, n)); off += n; }
+    for (let off = 0; ;) {
+      const n = readSync(fd, buf, 0, buf.length, off);
+      if (!n) break;
+      hash.update(buf.subarray(0, n));
+      off += n;
+    }
     return `sha256:${hash.digest('hex')}`;
-  } finally { closeSync(fd); }
+  } finally {
+    closeSync(fd);
+  }
 }
 
-export function buildOsvJob(targets: readonly DependencyTarget[], snapshots: readonly SnapshotInput[], dir: string, adapter?: OsvAdapterBuild): BuiltOsvJob {
-  if (targets.length > MAX_OSV_TARGETS) osvFail('sentinel.osv.targetInvalid', `at most ${MAX_OSV_TARGETS} targets per attempt`);
+export function buildOsvJob(
+  targets: readonly DependencyTarget[],
+  snapshots: readonly SnapshotInput[],
+  dir: string,
+  adapter?: OsvAdapterBuild,
+): BuiltOsvJob {
+  if (targets.length > MAX_OSV_TARGETS)
+    osvFail('sentinel.osv.targetInvalid', `at most ${MAX_OSV_TARGETS} targets per attempt`);
   const byEcosystem = new Map<Ecosystem, SnapshotInput>();
   for (const s of snapshots) {
-    if (byEcosystem.has(s.snapshot.ecosystem)) osvFail('sentinel.osv.snapshotInvalid', `two snapshots for ${s.snapshot.ecosystem}`);
-    if (digestOfFile(s.path) !== s.snapshot.sha256) osvFail('sentinel.osv.snapshotInvalid', `the ${s.snapshot.ecosystem} snapshot does not match its digest`);
+    if (byEcosystem.has(s.snapshot.ecosystem))
+      osvFail('sentinel.osv.snapshotInvalid', `two snapshots for ${s.snapshot.ecosystem}`);
+    if (digestOfFile(s.path) !== s.snapshot.sha256)
+      osvFail('sentinel.osv.snapshotInvalid', `the ${s.snapshot.ecosystem} snapshot does not match its digest`);
     byEcosystem.set(s.snapshot.ecosystem, s);
   }
   const seen = new Set<string>();
@@ -85,26 +123,54 @@ export function buildOsvJob(targets: readonly DependencyTarget[], snapshots: rea
     if (!isSafeRelativePath(t.relativePath)) osvFail('sentinel.osv.targetInvalid', 'unsafe target path');
     if (seen.has(t.relativePath)) osvFail('sentinel.osv.targetInvalid', 'duplicate target path');
     seen.add(t.relativePath);
-    if (digestOfFile(t.path) !== t.artifact) osvFail('sentinel.osv.targetInvalid', `${t.relativePath} does not match its artifact id`);
+    if (digestOfFile(t.path) !== t.artifact)
+      osvFail('sentinel.osv.targetInvalid', `${t.relativePath} does not match its artifact id`);
     const kind = dependencyKindOf(t.relativePath);
-    if (!kind) { unsent.push({ relativePath: t.relativePath, artifact: t.artifact, kind: null, reason: 'not-dependency-file' }); continue; }
-    if (KIND_ECOSYSTEMS[kind].some(e => !byEcosystem.has(e))) { unsent.push({ relativePath: t.relativePath, artifact: t.artifact, kind, reason: 'database-absent' }); continue; }
+    if (!kind) {
+      unsent.push({ relativePath: t.relativePath, artifact: t.artifact, kind: null, reason: 'not-dependency-file' });
+      continue;
+    }
+    if (KIND_ECOSYSTEMS[kind].some((e) => !byEcosystem.has(e))) {
+      unsent.push({ relativePath: t.relativePath, artifact: t.artifact, kind, reason: 'database-absent' });
+      continue;
+    }
     sent.push({ index: sent.length, relativePath: t.relativePath, artifact: t.artifact, kind });
   }
-  const worker = adapter ? { bytes: adapter.workerBytes, digest: adapter.workerDigest } : { bytes: OSV_WORKER_BYTES, digest: OSV_WORKER_DIGEST };
+  const worker = adapter
+    ? { bytes: adapter.workerBytes, digest: adapter.workerDigest }
+    : { bytes: OSV_WORKER_BYTES, digest: OSV_WORKER_DIGEST };
   const lines = ['sentinel-osv-job/1', `S ${OSV_ENGINE_TIMEOUT_SECONDS}`];
   for (const [ecosystem, s] of byEcosystem) lines.push(`D ${ecosystem} ${s.snapshot.sha256.slice(7)}`);
   for (const t of sent) lines.push(`T ${t.index} ${CONTAINER_BASENAME[t.kind]} ${t.artifact.slice(7)}`);
   const text = Buffer.from(`${lines.join('\n')}\n`, 'utf8');
   const jobDigest = sha256(text);
   const job: OsvJob = Object.freeze({
-    schema: 'sentinel-osv-job/draft-1', worker: worker.digest, targets: Object.freeze(sent), unsent: Object.freeze(unsent),
-    databases: Object.freeze([...byEcosystem.values()].map(s => s.snapshot)), engineTimeoutSeconds: OSV_ENGINE_TIMEOUT_SECONDS,
+    schema: 'sentinel-osv-job/draft-1',
+    worker: worker.digest,
+    targets: Object.freeze(sent),
+    unsent: Object.freeze(unsent),
+    databases: Object.freeze([...byEcosystem.values()].map((s) => s.snapshot)),
+    engineTimeoutSeconds: OSV_ENGINE_TIMEOUT_SECONDS,
   });
-  const write = (name: string, bytes: Uint8Array) => { const p = join(dir, name); writeFileSync(p, bytes, { mode: 0o600, flag: 'wx' }); return p; };
-  const inputs: CapturedInput[] = [{ id: worker.digest, path: write('worker.sh', worker.bytes) }, { id: jobDigest, path: write('job.txt', text) }];
-  const known = new Set(inputs.map(i => i.id));
-  for (const s of byEcosystem.values()) if (!known.has(s.snapshot.sha256)) { known.add(s.snapshot.sha256); inputs.push({ id: s.snapshot.sha256, path: s.path }); }
-  for (const t of sent) if (!known.has(t.artifact)) { known.add(t.artifact); inputs.push({ id: t.artifact, path: targets.find(x => x.artifact === t.artifact)!.path }); }
+  const write = (name: string, bytes: Uint8Array) => {
+    const p = join(dir, name);
+    writeFileSync(p, bytes, { mode: 0o600, flag: 'wx' });
+    return p;
+  };
+  const inputs: CapturedInput[] = [
+    { id: worker.digest, path: write('worker.sh', worker.bytes) },
+    { id: jobDigest, path: write('job.txt', text) },
+  ];
+  const known = new Set(inputs.map((i) => i.id));
+  for (const s of byEcosystem.values())
+    if (!known.has(s.snapshot.sha256)) {
+      known.add(s.snapshot.sha256);
+      inputs.push({ id: s.snapshot.sha256, path: s.path });
+    }
+  for (const t of sent)
+    if (!known.has(t.artifact)) {
+      known.add(t.artifact);
+      inputs.push({ id: t.artifact, path: targets.find((x) => x.artifact === t.artifact)!.path });
+    }
   return Object.freeze({ job, jobDigest, inputs: Object.freeze(inputs) });
 }

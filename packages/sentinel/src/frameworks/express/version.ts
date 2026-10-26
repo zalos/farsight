@@ -17,7 +17,11 @@ export interface JsonDoc {
 /** Parses JSON with positions: valid JSON, read as an expression so each property has its span. */
 export function parseJson(text: string): JsonDoc {
   let value: unknown;
-  try { value = JSON.parse(text); } catch { return { text, value: undefined, root: undefined }; }
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return { text, value: undefined, root: undefined };
+  }
   const { program, errors } = parseProgram('document.js', `(${text}\n)`);
   if (errors) return { text, value, root: undefined };
   const stmt = (program.body as JsNode[])[0];
@@ -37,7 +41,7 @@ function hasDuplicateKeys(n: JsNode): boolean {
       if (hasDuplicateKeys(p.value as JsNode)) return true;
     }
   }
-  if (n.type === 'ArrayExpression') return (n.elements as JsNode[]).some(e => e && hasDuplicateKeys(e));
+  if (n.type === 'ArrayExpression') return (n.elements as JsNode[]).some((e) => e && hasDuplicateKeys(e));
   return false;
 }
 
@@ -45,7 +49,7 @@ function hasDuplicateKeys(n: JsNode): boolean {
 function shift(n: JsNode): JsNode {
   const out: Record<string, unknown> = { ...n, start: n.start - 1, end: n.end - 1 };
   for (const [k, v] of Object.entries(n)) {
-    if (Array.isArray(v)) out[k] = v.map(x => (x && typeof x === 'object' && 'type' in x ? shift(x as JsNode) : x));
+    if (Array.isArray(v)) out[k] = v.map((x) => (x && typeof x === 'object' && 'type' in x ? shift(x as JsNode) : x));
     else if (v && typeof v === 'object' && 'type' in v) out[k] = shift(v as JsNode);
   }
   return out as unknown as JsNode;
@@ -54,12 +58,16 @@ function shift(n: JsNode): JsNode {
 /** The property node `key` of an object node, if present. */
 export function propertyOf(obj: JsNode | undefined, key: string): JsNode | undefined {
   if (obj?.type !== 'ObjectExpression') return undefined;
-  return (obj.properties as JsNode[]).find(p => stringValue(p.key as JsNode) === key);
+  return (obj.properties as JsNode[]).find((p) => stringValue(p.key as JsNode) === key);
 }
 
 export type VersionVerdict =
   | { readonly ok: true; readonly evidence: readonly { readonly path: string; readonly node: JsNode }[] }
-  | { readonly ok: false; readonly reason: 'sentinel.express.versionUnresolved' | 'sentinel.express.versionUnsupported'; readonly evidence: readonly { readonly path: string; readonly node: JsNode }[] };
+  | {
+      readonly ok: false;
+      readonly reason: 'sentinel.express.versionUnresolved' | 'sentinel.express.versionUnsupported';
+      readonly evidence: readonly { readonly path: string; readonly node: JsNode }[];
+    };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -67,14 +75,28 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
  * Decides the version scope from the root manifest, the npm lockfile when present, and whether another lockfile or a
  * path alias for `express` exists.
  */
-export function versionScope(manifest: JsonDoc | undefined, npmLock: JsonDoc | undefined, otherLockfile: boolean, aliased: boolean): VersionVerdict {
-  const unresolved = (evidence: { path: string; node: JsNode }[] = []): VersionVerdict => ({ ok: false, reason: 'sentinel.express.versionUnresolved', evidence });
-  const unsupported = (evidence: { path: string; node: JsNode }[]): VersionVerdict => ({ ok: false, reason: 'sentinel.express.versionUnsupported', evidence });
+export function versionScope(
+  manifest: JsonDoc | undefined,
+  npmLock: JsonDoc | undefined,
+  otherLockfile: boolean,
+  aliased: boolean,
+): VersionVerdict {
+  const unresolved = (evidence: { path: string; node: JsNode }[] = []): VersionVerdict => ({
+    ok: false,
+    reason: 'sentinel.express.versionUnresolved',
+    evidence,
+  });
+  const unsupported = (evidence: { path: string; node: JsNode }[]): VersionVerdict => ({
+    ok: false,
+    reason: 'sentinel.express.versionUnsupported',
+    evidence,
+  });
   if (!manifest || !isRecord(manifest.value) || !manifest.root || aliased) return unresolved();
   const pkg = manifest.value;
   for (const key of ['overrides', 'resolutions', 'pnpm']) {
     const node = propertyOf(manifest.root, key);
-    if (node && /"express"/.test(manifest.text.slice(node.start, node.end))) return unsupported([{ path: 'package.json', node }]);
+    if (node && /"express"/.test(manifest.text.slice(node.start, node.end)))
+      return unsupported([{ path: 'package.json', node }]);
   }
   const depsNode = propertyOf(manifest.root, 'dependencies');
   const depNode = propertyOf(depsNode?.value as JsNode | undefined, 'express');
@@ -84,22 +106,35 @@ export function versionScope(manifest: JsonDoc | undefined, npmLock: JsonDoc | u
   let locked: { version: unknown; node: JsNode } | undefined;
   if (npmLock) {
     const lock = npmLock.value;
-    if (!isRecord(lock) || !npmLock.root || typeof lock.lockfileVersion !== 'number' || lock.lockfileVersion < 2 || !isRecord(lock.packages)) return unresolved([manifestEvidence]);
+    if (
+      !isRecord(lock) ||
+      !npmLock.root ||
+      typeof lock.lockfileVersion !== 'number' ||
+      lock.lockfileVersion < 2 ||
+      !isRecord(lock.packages)
+    )
+      return unresolved([manifestEvidence]);
     const entry = lock.packages['node_modules/express'];
     const node = propertyOf(propertyOf(npmLock.root, 'packages')?.value as JsNode | undefined, 'node_modules/express');
     const rootEntry = lock.packages[''];
-    const declared = isRecord(rootEntry) && isRecord(rootEntry.dependencies) ? rootEntry.dependencies.express : undefined;
+    const declared =
+      isRecord(rootEntry) && isRecord(rootEntry.dependencies) ? rootEntry.dependencies.express : undefined;
     // The lockfile must have been written for this manifest's declaration.
     if (!isRecord(entry) || !node || declared !== range) return unresolved([manifestEvidence]);
     locked = { version: entry.version, node };
   }
   if (/^\d+\.\d+\.\d+$/.test(range)) {
     if (range !== EXPRESS_VERSION) return unsupported([manifestEvidence]);
-    if (locked && locked.version !== EXPRESS_VERSION) return unsupported([manifestEvidence, { path: 'package-lock.json', node: locked.node }]);
-    return { ok: true, evidence: [manifestEvidence, ...(locked ? [{ path: 'package-lock.json', node: locked.node }] : [])] };
+    if (locked && locked.version !== EXPRESS_VERSION)
+      return unsupported([manifestEvidence, { path: 'package-lock.json', node: locked.node }]);
+    return {
+      ok: true,
+      evidence: [manifestEvidence, ...(locked ? [{ path: 'package-lock.json', node: locked.node }] : [])],
+    };
   }
   // A range: only the npm lockfile's resolution decides it.
   if (!locked || otherLockfile) return unresolved([manifestEvidence]);
-  if (locked.version !== EXPRESS_VERSION) return unsupported([manifestEvidence, { path: 'package-lock.json', node: locked.node }]);
+  if (locked.version !== EXPRESS_VERSION)
+    return unsupported([manifestEvidence, { path: 'package-lock.json', node: locked.node }]);
   return { ok: true, evidence: [manifestEvidence, { path: 'package-lock.json', node: locked.node }] };
 }

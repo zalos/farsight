@@ -255,10 +255,26 @@ export interface AttemptError {
 export type WorkTransition = 'ready' | 'blocked' | 'disabled-by-policy';
 
 export const LEDGER_EVENT_KINDS = [
-  'epoch-opened', 'run-created', 'run-state', 'work-created', 'attempt-started', 'attempt-ended',
-  'work-published', 'staging-registered', 'staging-aborted', 'report-pinned', 'snapshot-admitted', 'work-state',
-  'plan-admitted', 'run-plan-advanced',
-  'evidence-opened', 'evidence-staged', 'evidence-transferred', 'evidence-aborted', 'evidence-accepted', 'evidence-abandoned',
+  'epoch-opened',
+  'run-created',
+  'run-state',
+  'work-created',
+  'attempt-started',
+  'attempt-ended',
+  'work-published',
+  'staging-registered',
+  'staging-aborted',
+  'report-pinned',
+  'snapshot-admitted',
+  'work-state',
+  'plan-admitted',
+  'run-plan-advanced',
+  'evidence-opened',
+  'evidence-staged',
+  'evidence-transferred',
+  'evidence-aborted',
+  'evidence-accepted',
+  'evidence-abandoned',
 ] as const;
 export type LedgerEventKind = (typeof LEDGER_EVENT_KINDS)[number];
 
@@ -332,8 +348,13 @@ export interface OpenLedgerOptions {
 }
 
 export type LedgerFailpoint =
-  | 'backup:before' | 'backup:after-copy' | 'migrate:after-sql' | 'publish:before-commit' | 'staging:before-commit'
-  | 'snapshot:before-commit' | 'plan:before-commit';
+  | 'backup:before'
+  | 'backup:after-copy'
+  | 'migrate:after-sql'
+  | 'publish:before-commit'
+  | 'staging:before-commit'
+  | 'snapshot:before-commit'
+  | 'plan:before-commit';
 
 export interface MigrationReport {
   from: Count;

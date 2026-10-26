@@ -29,8 +29,11 @@ let loading: Promise<{ Parser: new () => TreeSitterParser; language: unknown }> 
 async function load() {
   loading ??= (async () => {
     const entry = import.meta.resolve('@vscode/tree-sitter-wasm');
-    const mod = await import('@vscode/tree-sitter-wasm') as unknown as { default?: unknown };
-    const api = (mod.default ?? mod) as { Parser: { init(): Promise<void> } & (new () => TreeSitterParser); Language: { load(path: string): Promise<unknown> } };
+    const mod = (await import('@vscode/tree-sitter-wasm')) as unknown as { default?: unknown };
+    const api = (mod.default ?? mod) as {
+      Parser: { init(): Promise<void> } & (new () => TreeSitterParser);
+      Language: { load(path: string): Promise<unknown> };
+    };
     await api.Parser.init();
     const language = await api.Language.load(join(dirname(fileURLToPath(entry)), 'tree-sitter-java.wasm'));
     return { Parser: api.Parser, language };
@@ -60,10 +63,14 @@ export class JavaFile {
   /** The UTF-8 byte span of a node, or undefined when the file is not exact UTF-8. */
   span(node: JavaNode): { startByte: number; endByte: number } | undefined {
     if (!this.exact) return undefined;
-    return { startByte: Buffer.byteLength(this.text.slice(0, node.startIndex), 'utf8'),
-      endByte: Buffer.byteLength(this.text.slice(0, node.endIndex), 'utf8') };
+    return {
+      startByte: Buffer.byteLength(this.text.slice(0, node.startIndex), 'utf8'),
+      endByte: Buffer.byteLength(this.text.slice(0, node.endIndex), 'utf8'),
+    };
   }
-  close(): void { this.dispose(); }
+  close(): void {
+    this.dispose();
+  }
 }
 
 /** Parses captured bytes. Returns null when the grammar cannot produce a tree. */
@@ -73,15 +80,26 @@ export async function parseJava(path: string, content: string, raw: Buffer): Pro
   parser.setLanguage(language);
   const text = raw.toString('utf8');
   let tree: ReturnType<TreeSitterParser['parse']> = null;
-  try { tree = parser.parse(text); } catch { tree = null; }
-  if (!tree) { parser.delete(); return null; }
+  try {
+    tree = parser.parse(text);
+  } catch {
+    tree = null;
+  }
+  if (!tree) {
+    parser.delete();
+    return null;
+  }
   const t = tree;
-  return new JavaFile(path, content, raw, text, t.rootNode, () => { t.delete(); parser.delete(); });
+  return new JavaFile(path, content, raw, text, t.rootNode, () => {
+    t.delete();
+    parser.delete();
+  });
 }
 
 // ---- small syntax helpers ----
 
-export const named = (n: JavaNode | null | undefined): JavaNode[] => (n ? n.namedChildren.filter((c): c is JavaNode => c !== null) : []);
+export const named = (n: JavaNode | null | undefined): JavaNode[] =>
+  n ? n.namedChildren.filter((c): c is JavaNode => c !== null) : [];
 
 export function walk(n: JavaNode, visit: (n: JavaNode) => void): void {
   visit(n);
@@ -107,13 +125,14 @@ export interface Annotation {
 
 /** The annotations in a declaration's modifiers. */
 export function annotationsOf(decl: JavaNode): Annotation[] {
-  const mods = named(decl).find(c => c.type === 'modifiers');
+  const mods = named(decl).find((c) => c.type === 'modifiers');
   const out: Annotation[] = [];
   for (const a of named(mods)) {
     if (a.type !== 'marker_annotation' && a.type !== 'annotation') continue;
-    const nameNode = a.childForFieldName('name') ?? named(a).find(c => c.type === 'identifier' || c.type === 'scoped_identifier');
+    const nameNode =
+      a.childForFieldName('name') ?? named(a).find((c) => c.type === 'identifier' || c.type === 'scoped_identifier');
     const name = (nameNode?.text ?? '').split('.').pop() ?? '';
-    const args = named(a).find(c => c.type === 'annotation_argument_list');
+    const args = named(a).find((c) => c.type === 'annotation_argument_list');
     const positional: JavaNode[] = [];
     const pairs = new Map<string, JavaNode>();
     for (const arg of named(args)) {
@@ -131,17 +150,24 @@ export function annotationsOf(decl: JavaNode): Annotation[] {
 /** Literal strings of an annotation value: one string or an array of strings. Undefined when anything else. */
 export function stringValues(n: JavaNode | undefined): string[] | undefined {
   if (!n) return undefined;
-  if (n.type === 'string_literal') { const v = literalString(n); return v === undefined ? undefined : [v]; }
+  if (n.type === 'string_literal') {
+    const v = literalString(n);
+    return v === undefined ? undefined : [v];
+  }
   if (n.type === 'element_value_array_initializer') {
     const out: string[] = [];
-    for (const c of named(n)) { const v = literalString(c); if (v === undefined) return undefined; out.push(v); }
+    for (const c of named(n)) {
+      const v = literalString(c);
+      if (v === undefined) return undefined;
+      out.push(v);
+    }
     return out;
   }
   return undefined;
 }
 
 export function modifierWords(decl: JavaNode): Set<string> {
-  const mods = named(decl).find(c => c.type === 'modifiers');
+  const mods = named(decl).find((c) => c.type === 'modifiers');
   // Keyword modifiers are anonymous children; read them from the text outside annotations.
   const words = new Set<string>();
   if (!mods) return words;

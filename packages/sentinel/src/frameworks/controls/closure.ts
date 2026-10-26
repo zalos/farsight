@@ -40,7 +40,11 @@ export const CLOSURE_REFUSED = 71;
  * reached through a link), or that a `node_modules` candidate Node would try first holds no folder (`unresolved`, so a
  * nearer package cannot shadow the pinned one).
  */
-export type ClosureEntry = readonly [path: string, kind: 'file' | 'link' | 'absent' | 'dir' | 'resolves' | 'unresolved', value: string];
+export type ClosureEntry = readonly [
+  path: string,
+  kind: 'file' | 'link' | 'absent' | 'dir' | 'resolves' | 'unresolved',
+  value: string,
+];
 
 export interface WorkerClosure {
   readonly entries: readonly ClosureEntry[];
@@ -49,13 +53,17 @@ export interface WorkerClosure {
 }
 
 const sha = (b: Uint8Array | string) => createHash('sha256').update(b).digest('hex');
-const packageName = (spec: string) => (spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]!);
+const packageName = (spec: string) =>
+  spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]!;
 
 /** Literal module loads, including createRequire aliases. Only shipped dependency code is inspected here; computed
  * native loaders in the pinned dependencies are audited separately in ADR 44. This is not an arbitrary JS resolver. */
 function literalLoads(path: string, bytes: Uint8Array): string[] {
   // Loading the native parser is registration work, never a side effect of importing the CLI or service.
-  const parsed = (parser ??= createRequire(import.meta.url)('oxc-parser')).parseSync(path, Buffer.from(bytes).toString('utf8'));
+  const parsed = (parser ??= createRequire(import.meta.url)('oxc-parser')).parseSync(
+    path,
+    Buffer.from(bytes).toString('utf8'),
+  );
   const program = typeof parsed.program === 'string' ? JSON.parse(parsed.program) : parsed.program;
   // An invalid bundled fixture is still byte-pinned; Node cannot execute it as a module.
   if (parsed.errors.length) return [];
@@ -63,38 +71,71 @@ function literalLoads(path: string, bytes: Uint8Array): string[] {
   const walk = (n: any) => {
     if (!n || typeof n !== 'object') return;
     if (typeof n.type === 'string') nodes.push(n);
-    for (const v of Object.values(n)) if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === 'object') walk(v);
+    for (const v of Object.values(n))
+      if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === 'object') walk(v);
   };
   walk(program);
   const factories = new Set(['createRequire']);
   const namespaces = new Set(['module']);
-  for (const n of nodes) if (n.type === 'ImportDeclaration' && ['module', 'node:module'].includes(n.source?.value)) {
-    for (const spec of n.specifiers) {
-      if (spec.imported?.name === 'createRequire') factories.add(spec.local.name);
-      if (['ImportNamespaceSpecifier', 'ImportDefaultSpecifier'].includes(spec.type)) namespaces.add(spec.local.name);
+  for (const n of nodes)
+    if (n.type === 'ImportDeclaration' && ['module', 'node:module'].includes(n.source?.value)) {
+      for (const spec of n.specifiers) {
+        if (spec.imported?.name === 'createRequire') factories.add(spec.local.name);
+        if (['ImportNamespaceSpecifier', 'ImportDefaultSpecifier'].includes(spec.type)) namespaces.add(spec.local.name);
+      }
     }
-  }
-  const isFactory = (n: any) => n?.type === 'Identifier' ? factories.has(n.name)
-    : n?.type === 'MemberExpression' && namespaces.has(n.object?.name) && (n.property?.name ?? n.property?.value) === 'createRequire';
+  const isFactory = (n: any) =>
+    n?.type === 'Identifier'
+      ? factories.has(n.name)
+      : n?.type === 'MemberExpression' &&
+        namespaces.has(n.object?.name) &&
+        (n.property?.name ?? n.property?.value) === 'createRequire';
   const loaders = new Set(['require']);
-  for (const n of nodes) if (n.type === 'VariableDeclarator' && n.id?.type === 'Identifier' && n.init?.type === 'CallExpression' && isFactory(n.init.callee)) loaders.add(n.id.name);
+  for (const n of nodes)
+    if (
+      n.type === 'VariableDeclarator' &&
+      n.id?.type === 'Identifier' &&
+      n.init?.type === 'CallExpression' &&
+      isFactory(n.init.callee)
+    )
+      loaders.add(n.id.name);
   // Simple aliases are conservative name sets, not a claim to resolve arbitrary JavaScript data flow.
   let grew = true;
   while (grew) {
     grew = false;
-    for (const n of nodes) if (n.type === 'VariableDeclarator' && n.id?.type === 'Identifier' && n.init?.type === 'Identifier'
-      && loaders.has(n.init.name) && !loaders.has(n.id.name)) { loaders.add(n.id.name); grew = true; }
+    for (const n of nodes)
+      if (
+        n.type === 'VariableDeclarator' &&
+        n.id?.type === 'Identifier' &&
+        n.init?.type === 'Identifier' &&
+        loaders.has(n.init.name) &&
+        !loaders.has(n.id.name)
+      ) {
+        loaders.add(n.id.name);
+        grew = true;
+      }
   }
-  const isLoader = (n: any): boolean => n?.type === 'Identifier' ? loaders.has(n.name)
-    : n?.type === 'CallExpression' ? isFactory(n.callee)
-    : n?.type === 'MemberExpression' && ((n.object?.name === 'module' && (n.property?.name ?? n.property?.value) === 'require')
-      || (loaders.has(n.object?.name) && (n.property?.name ?? n.property?.value) === 'resolve'));
+  const isLoader = (n: any): boolean =>
+    n?.type === 'Identifier'
+      ? loaders.has(n.name)
+      : n?.type === 'CallExpression'
+        ? isFactory(n.callee)
+        : n?.type === 'MemberExpression' &&
+          ((n.object?.name === 'module' && (n.property?.name ?? n.property?.value) === 'require') ||
+            (loaders.has(n.object?.name) && (n.property?.name ?? n.property?.value) === 'resolve'));
   const literals: string[] = [];
   for (const n of nodes) {
-    const value = ['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration', 'ImportExpression'].includes(n.type) ? n.source
-      : n.type === 'CallExpression' && isLoader(n.callee) ? n.arguments[0] : null;
+    const value = ['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration', 'ImportExpression'].includes(
+      n.type,
+    )
+      ? n.source
+      : n.type === 'CallExpression' && isLoader(n.callee)
+        ? n.arguments[0]
+        : null;
     if (typeof value?.value === 'string') literals.push(value.value);
-    else if (value?.type === 'TemplateLiteral' && value.expressions.length === 0) literals.push(value.quasis[0].value.cooked);
+    else if (value?.type === 'TemplateLiteral' && value.expressions.length === 0)
+      literals.push(value.quasis[0].value.cooked);
   }
   return literals;
 }
@@ -103,7 +144,11 @@ function literalLoads(path: string, bytes: Uint8Array): string[] {
  * The worker's closure as it is on disk now; `extra` modules (the coordinator-side driver) are pinned with theirs.
  * Reads the installed build as data with the pinned parser; nothing from the target is imported or run.
  */
-function collectClosure(entry: string, extra: readonly string[], packed?: ReturnType<typeof builtinWorkerFiles>): WorkerClosure {
+function collectClosure(
+  entry: string,
+  extra: readonly string[],
+  packed?: ReturnType<typeof builtinWorkerFiles>,
+): WorkerClosure {
   const out = new Map<string, ClosureEntry>();
   const portable = new Map<string, string>();
   const modulePackages = new Set<string>();
@@ -113,12 +158,18 @@ function collectClosure(entry: string, extra: readonly string[], packed?: Return
   const readPinned = (path: string) => {
     if (!countedFiles.has(path)) {
       const size = lstatSync(path).size;
-      if (countedFiles.size >= MAX_CLOSURE_FILES || fileBytes + size > MAX_CLOSURE_BYTES) throw new Error('the framework closure exceeds its bounded file inventory');
-      countedFiles.add(path); fileBytes += size;
+      if (countedFiles.size >= MAX_CLOSURE_FILES || fileBytes + size > MAX_CLOSURE_BYTES)
+        throw new Error('the framework closure exceeds its bounded file inventory');
+      countedFiles.add(path);
+      fileBytes += size;
     }
     return readFileSync(path);
   };
-  const add = (path: string, kind: ClosureEntry[1], value: string, name: string) => { if (out.size >= MAX_CLOSURE_ENTRIES) throw new Error('the framework closure exceeds its bounded entry inventory'); out.set(`${path}\u0000${kind}`, [path, kind, value]); portable.set(name, `${kind}:${value}`); };
+  const add = (path: string, kind: ClosureEntry[1], value: string, name: string) => {
+    if (out.size >= MAX_CLOSURE_ENTRIES) throw new Error('the framework closure exceeds its bounded entry inventory');
+    out.set(`${path}\u0000${kind}`, [path, kind, value]);
+    portable.set(name, `${kind}:${value}`);
+  };
   const where = (p: string) => relative(root, p);
   // Node's package lookup from `from`, as it runs it: every `node_modules/<name>` from the importing folder up to the
   // root, the first that is a folder wins and is then used by its real path. Each candidate before it is bound as
@@ -132,8 +183,16 @@ function collectClosure(entry: string, extra: readonly string[], packed?: Return
     for (let d = from; ; d = dirname(d)) {
       const candidate = join(d, 'node_modules', name);
       let isDir = false;
-      try { isDir = statSync(candidate).isDirectory(); } catch { isDir = false; }
-      if (isDir) { found = realpathSync(candidate); add(candidate, 'resolves', found, `resolve:${where(from)}:${name}`); break; }
+      try {
+        isDir = statSync(candidate).isDirectory();
+      } catch {
+        isDir = false;
+      }
+      if (isDir) {
+        found = realpathSync(candidate);
+        add(candidate, 'resolves', found, `resolve:${where(from)}:${name}`);
+        break;
+      }
       add(candidate, 'unresolved', '', `candidate:${where(from)}:${where(candidate)}`);
       if (dirname(d) === d) break;
     }
@@ -143,17 +202,25 @@ function collectClosure(entry: string, extra: readonly string[], packed?: Return
   const listPackage = (dir: string, name: string, pkg: any) => {
     // A workspace's files list does not constrain Node's reads: its runtime may load an unlisted internal helper.
     // Bind the whole resolved folder for both installed and workspace packages, rather than trusting that list.
-    const tops = readdirSync(dir).filter(n => n !== 'node_modules');
+    const tops = readdirSync(dir).filter((n) => n !== 'node_modules');
     const followed = new Set<string>();
     const inside = (path: string) => path === dir || path.startsWith(dir + sep);
     const refuseEscape = (path: string) => {
-      if (!inside(path) || relative(dir, path).split(sep).includes('node_modules')) throw new Error('the worker package loads outside its pinned package root or through an unbound node_modules path');
+      if (!inside(path) || relative(dir, path).split(sep).includes('node_modules'))
+        throw new Error(
+          'the worker package loads outside its pinned package root or through an unbound node_modules path',
+        );
     };
     // A legacy package main can point outside its folder even without an inner link.
     if (typeof pkg.main === 'string') refuseEscape(resolve(dir, pkg.main));
     const walk = (abs: string) => {
       let st;
-      try { st = lstatSync(abs); } catch { add(abs, 'absent', '', `${name}/${relative(dir, abs)}`); return; }
+      try {
+        st = lstatSync(abs);
+      } catch {
+        add(abs, 'absent', '', `${name}/${relative(dir, abs)}`);
+        return;
+      }
       if (st.isSymbolicLink()) {
         // Node loads through a link: bind the link, the real path it resolves to, and the target's own bytes or
         // folder within this package. An escaped target is unsupported: binding one file would not bind its imports.
@@ -163,31 +230,40 @@ function collectClosure(entry: string, extra: readonly string[], packed?: Return
         refuseEscape(resolve(dirname(abs), text));
         add(abs, 'link', text, label);
         let real: string | null = null;
-        try { real = realpathSync(abs); } catch { real = null; }
-        if (real === null) { add(resolve(dirname(abs), text), 'absent', '', `${label}->absent`); return; }
+        try {
+          real = realpathSync(abs);
+        } catch {
+          real = null;
+        }
+        if (real === null) {
+          add(resolve(dirname(abs), text), 'absent', '', `${label}->absent`);
+          return;
+        }
         refuseEscape(real);
         add(abs, 'resolves', real, `${label}->`);
-        if (!followed.has(real)) { followed.add(real); walk(real); }
-      }
-      else if (st.isDirectory()) {
+        if (!followed.has(real)) {
+          followed.add(real);
+          walk(real);
+        }
+      } else if (st.isDirectory()) {
         const names = readdirSync(abs).sort();
         add(abs, 'dir', sha(JSON.stringify(names)), `${name}/${relative(dir, abs)}/`);
         for (const n of names) if (n !== 'node_modules') walk(join(abs, n));
-      }
-      else if (st.isFile()) {
+      } else if (st.isFile()) {
         const bytes = readPinned(abs);
         add(abs, 'file', sha(bytes), `${name}/${relative(dir, abs)}`);
-        if (/\.[cm]?js$/.test(abs)) for (const spec of literalLoads(abs, bytes)) {
-          if (spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('file:')) {
-            refuseEscape(spec.startsWith('file:') ? fileURLToPath(spec) : resolve(dirname(abs), spec));
-          } else if (!isBuiltin(spec) && packageName(spec) !== pkg.name) {
-            if (spec.startsWith('#')) throw new Error('the worker package uses an unsupported package import alias');
-            // Record lookup at the actual module folder, including absent optional loads. Check after the metadata
-            // closure is complete: unused fixture imports may name another package already fully pinned there.
-            const actual = packageDir(packageName(spec), dirname(abs));
-            if (actual !== null) modulePackages.add(actual);
+        if (/\.[cm]?js$/.test(abs))
+          for (const spec of literalLoads(abs, bytes)) {
+            if (spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('file:')) {
+              refuseEscape(spec.startsWith('file:') ? fileURLToPath(spec) : resolve(dirname(abs), spec));
+            } else if (!isBuiltin(spec) && packageName(spec) !== pkg.name) {
+              if (spec.startsWith('#')) throw new Error('the worker package uses an unsupported package import alias');
+              // Record lookup at the actual module folder, including absent optional loads. Check after the metadata
+              // closure is complete: unused fixture imports may name another package already fully pinned there.
+              const actual = packageDir(packageName(spec), dirname(abs));
+              if (actual !== null) modulePackages.add(actual);
+            }
           }
-        }
       }
     };
     add(dir, 'dir', sha(JSON.stringify(readdirSync(dir).sort())), `${name}/`);
@@ -201,16 +277,24 @@ function collectClosure(entry: string, extra: readonly string[], packed?: Return
     packages.add(dir);
     const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
     listPackage(dir, `pkg:${name}@${pkg.version ?? ''}`, pkg);
-    for (const dep of Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies })) visitPackage(dep, dir);
+    for (const dep of Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies }))
+      visitPackage(dep, dir);
   };
   const files = new Set<string>();
   const visitFile = (abs: string) => {
     if (files.has(abs)) return;
     files.add(abs);
-    if (!existsSync(abs)) { add(abs, 'absent', '', relative(root, abs)); return; }
+    if (!existsSync(abs)) {
+      add(abs, 'absent', '', relative(root, abs));
+      return;
+    }
     // Node loads a module by its real path and resolves its imports from there: a path through a link is bound to it.
     const real = realpathSync(abs);
-    if (real !== abs) { add(abs, 'resolves', real, `module:${where(abs)}`); visitFile(real); return; }
+    if (real !== abs) {
+      add(abs, 'resolves', real, `module:${where(abs)}`);
+      visitFile(real);
+      return;
+    }
     const bytes = readPinned(abs);
     add(abs, 'file', sha(bytes), relative(root, abs));
     // Its own path must stay real: Node resolves its relative imports and its package lookups from there.
@@ -218,27 +302,37 @@ function collectClosure(entry: string, extra: readonly string[], packed?: Return
     if (!/\.[cm]?js$/.test(abs)) return;
     for (const spec of literalLoads(abs, bytes)) {
       if (spec.startsWith('node:') || isBuiltin(spec)) continue;
-      if (spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('file:')) visitFile(spec.startsWith('file:') ? fileURLToPath(spec) : resolve(dirname(abs), spec));
+      if (spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('file:'))
+        visitFile(spec.startsWith('file:') ? fileURLToPath(spec) : resolve(dirname(abs), spec));
       else visitPackage(packageName(spec), dirname(abs));
     }
   };
   if (packed) {
     const own = realpathSync(packed.layout.root);
     const dist = join(own, 'dist');
-    if (realpathSync(dist) !== dist || realpathSync(entry) !== join(dist, `${packed.descriptor.asset}.mjs`)
-      || extra.some(p => !realpathSync(p).startsWith(dist + sep))) throw new Error('the framework worker is not in the fixed shipped dist tree');
+    if (
+      realpathSync(dist) !== dist ||
+      realpathSync(entry) !== join(dist, `${packed.descriptor.asset}.mjs`) ||
+      extra.some((p) => !realpathSync(p).startsWith(dist + sep))
+    )
+      throw new Error('the framework worker is not in the fixed shipped dist tree');
     const manifest = join(own, 'package.json');
     add(manifest, 'file', sha(readPinned(manifest)), 'sentinel/package.json');
     const pkg = JSON.parse(readPinned(manifest).toString('utf8'));
-    if (pkg.name !== 'farsight-sentinel' || pkg.sentinel?.assets?.[packed.descriptor.asset]?.path !== `dist/${packed.descriptor.asset}.mjs`
-      || pkg.sentinel.assets[packed.descriptor.asset].sha256 !== sha(readPinned(entry))) throw new Error('the worker differs from its fixed shipped asset');
+    if (
+      pkg.name !== 'farsight-sentinel' ||
+      pkg.sentinel?.assets?.[packed.descriptor.asset]?.path !== `dist/${packed.descriptor.asset}.mjs` ||
+      pkg.sentinel.assets[packed.descriptor.asset].sha256 !== sha(readPinned(entry))
+    )
+      throw new Error('the worker differs from its fixed shipped asset');
     const names = Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies });
     const folders = new Set<string>();
     const walkDist = (path: string) => {
       const st = lstatSync(path);
       if (st.isSymbolicLink()) throw new Error('the shipped dist tree contains a link');
       if (st.isDirectory()) {
-        if (path !== dist && path.endsWith(sep + 'node_modules')) throw new Error('the shipped dist tree contains a dependency shadow');
+        if (path !== dist && path.endsWith(sep + 'node_modules'))
+          throw new Error('the shipped dist tree contains a dependency shadow');
         const children = readdirSync(path).sort();
         add(path, 'dir', sha(JSON.stringify(children)), `sentinel/${relative(own, path)}/`);
         for (const name of children) walkDist(join(path, name));
@@ -255,14 +349,20 @@ function collectClosure(entry: string, extra: readonly string[], packed?: Return
     visitFile(realpathSync(entry));
     for (const e of extra) visitFile(realpathSync(e));
   }
-  for (const dir of modulePackages) if (!packages.has(dir)) throw new Error('the worker package loads an unbound dependency outside its pinned package root');
+  for (const dir of modulePackages)
+    if (!packages.has(dir))
+      throw new Error('the worker package loads an unbound dependency outside its pinned package root');
   const entries = [...out.values()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   const digest = `sha256:${sha(JSON.stringify([...portable].sort((a, b) => (a[0] < b[0] ? -1 : 1))))}`;
   return { entries, digest };
 }
 
 /** The entry module's source: the manifest, the check, then the worker. */
-export function closureEntrySource(closure: WorkerClosure, worker: string, fixedExport: string = 'runFrameworkControlsWorker'): string {
+export function closureEntrySource(
+  closure: WorkerClosure,
+  worker: string,
+  fixedExport: string = 'runFrameworkControlsWorker',
+): string {
   return `// Generated: the framework inspection worker behind its byte closure (closure ${closure.digest}).
 import { createHash } from 'node:crypto';
 import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync } from 'node:fs';
@@ -296,12 +396,16 @@ function publishEntry(dir: string, id: string, closure: WorkerClosure, worker: s
   const bytes = Buffer.from(source);
   if (bytes.length > MAX_ENTRY_BYTES) throw new Error('the generated framework entry exceeds its bound');
   publishOnce(dir, name, bytes);
-  if (!readPublished(dir, name, MAX_ENTRY_BYTES)?.equals(bytes)) throw new Error('the generated framework entry is not its exact published bytes');
+  if (!readPublished(dir, name, MAX_ENTRY_BYTES)?.equals(bytes))
+    throw new Error('the generated framework entry is not its exact published bytes');
   return { module, closureDigest: closure.digest, files: closure.entries.length };
 }
 
 /** The only production entry: a closed identity, its shipped worker and fixed driver, with no custom path/export. */
-export function writeBuiltinClosureEntry(dir: string, id: BuiltinWorkerId): { module: string; closureDigest: string; files: number } {
+export function writeBuiltinClosureEntry(
+  dir: string,
+  id: BuiltinWorkerId,
+): { module: string; closureDigest: string; files: number } {
   builtinWorker(id); // Reject inherited/non-string identities before any filesystem work.
   const files = builtinWorkerFiles(id);
   const closure = collectClosure(files.worker, [files.driver], files.layout.installed ? files : undefined);
@@ -310,7 +414,9 @@ export function writeBuiltinClosureEntry(dir: string, id: BuiltinWorkerId): { mo
 
 // Internal fixture helpers, imported only by tests, absent from the controls index and package exports. They never
 // take the installed whole-dist branch and cannot be selected by registration or any production caller.
-export function workerClosure(entry: string, extra: readonly string[] = []): WorkerClosure { return collectClosure(entry, extra); }
+export function workerClosure(entry: string, extra: readonly string[] = []): WorkerClosure {
+  return collectClosure(entry, extra);
+}
 export function writeClosureEntry(dir: string, worker: string, extra: readonly string[] = []) {
   return publishEntry(dir, 'framework-controls', collectClosure(worker, extra), worker, 'runFrameworkControlsWorker');
 }

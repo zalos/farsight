@@ -29,12 +29,19 @@ export interface CommittedSource {
 }
 
 /** A submodule found at a gitlink whose permitted local clone should be captured as its own source. */
-export interface FoundSubmodule { readonly request: SubmoduleRequest; readonly commit: string }
+export interface FoundSubmodule {
+  readonly request: SubmoduleRequest;
+  readonly commit: string;
+}
 
 const corruptOrMissing = (e: unknown): CaptureReasonCode | undefined =>
-  !(e instanceof GitReadError) ? undefined
-    : e.code === 'corrupt' ? 'sentinel.capture.gitObjectCorrupt'
-    : e.code === 'limit' ? 'sentinel.capture.gitReadLimit' : undefined;
+  !(e instanceof GitReadError)
+    ? undefined
+    : e.code === 'corrupt'
+      ? 'sentinel.capture.gitObjectCorrupt'
+      : e.code === 'limit'
+        ? 'sentinel.capture.gitReadLimit'
+        : undefined;
 
 /** Enumerates one commit's tree. Returns the submodules to capture as separate sources. */
 export function enumerateCommit(inv: Inventory, src: CommittedSource): FoundSubmodule[] {
@@ -46,7 +53,9 @@ export function enumerateCommit(inv: Inventory, src: CommittedSource): FoundSubm
 function walkTree(inv: Inventory, src: CommittedSource, rel: string, treeOid: string, found: FoundSubmodule[]): void {
   src.stillWithin?.();
   let entries;
-  try { entries = src.repo.readTree(treeOid); } catch (e) {
+  try {
+    entries = src.repo.readTree(treeOid);
+  } catch (e) {
     const reason = corruptOrMissing(e);
     if (!reason) throw e;
     if (rel === '') throw e;
@@ -54,14 +63,20 @@ function walkTree(inv: Inventory, src: CommittedSource, rel: string, treeOid: st
     return;
   }
   if (!entries) {
-    if (rel === '') throw new GitReadError('unresolved', 'the commit\'s root tree is not present');
+    if (rel === '') throw new GitReadError('unresolved', "the commit's root tree is not present");
     inv.boundary(src.sourceId, rel, 'unreadable', 'sentinel.capture.gitObjectMissing');
     return;
   }
   const children = entries
-    .map(e => ({ e, check: checkName(e.name, true) }))
+    .map((e) => ({ e, check: checkName(e.name, true) }))
     .sort((a, b) => (a.check.name < b.check.name ? -1 : a.check.name > b.check.name ? 1 : 0));
-  if (rel !== '' && beyondPathBounds(rel, children.map(c => c.check.name))) {
+  if (
+    rel !== '' &&
+    beyondPathBounds(
+      rel,
+      children.map((c) => c.check.name),
+    )
+  ) {
     inv.boundary(src.sourceId, rel, 'refused', 'sentinel.capture.pathLimit');
     return;
   }
@@ -86,27 +101,49 @@ function walkTree(inv: Inventory, src: CommittedSource, rel: string, treeOid: st
     if (isTree) {
       // Committed blobs are never the live store: a tree at the store's path is ordinary committed source.
       const excluded = folderExclusion(inv.policy, src.sourceId, path);
-      if (excluded) { inv.boundary(src.sourceId, path, 'excluded', excluded); continue; }
+      if (excluded) {
+        inv.boundary(src.sourceId, path, 'excluded', excluded);
+        continue;
+      }
       walkTree(inv, src, path, e.oid, found);
       continue;
     }
     if (e.mode === '160000') {
       inv.gitlink(src.sourceId, path, e.oid);
-      const request = src.submodules.find(s => s.path === path);
-      if (!request) { inv.boundary(src.sourceId, path, 'excluded', 'sentinel.capture.submoduleNotCaptured'); continue; }
+      const request = src.submodules.find((s) => s.path === path);
+      if (!request) {
+        inv.boundary(src.sourceId, path, 'excluded', 'sentinel.capture.submoduleNotCaptured');
+        continue;
+      }
       found.push({ request, commit: e.oid });
       inv.boundary(src.sourceId, path, 'excluded', 'sentinel.capture.submoduleCapturedSeparately');
       continue;
     }
     if (e.mode === '120000') {
       let target: string | undefined;
-      try { target = src.repo.readObject(e.oid, 4096)?.data.toString('utf8'); } catch { target = undefined; }
-      if (target === undefined) { inv.symlink(src.sourceId, path, 'refused', 'sentinel.capture.gitObjectMissing'); continue; }
+      try {
+        target = src.repo.readObject(e.oid, 4096)?.data.toString('utf8');
+      } catch {
+        target = undefined;
+      }
+      if (target === undefined) {
+        inv.symlink(src.sourceId, path, 'refused', 'sentinel.capture.gitObjectMissing');
+        continue;
+      }
       const verdict = symlinkVerdict(path, target);
-      inv.symlink(src.sourceId, path, verdict === 'sentinel.capture.symlinkEscapes' ? 'refused' : 'excluded', verdict, target);
+      inv.symlink(
+        src.sourceId,
+        path,
+        verdict === 'sentinel.capture.symlinkEscapes' ? 'refused' : 'excluded',
+        verdict,
+        target,
+      );
       continue;
     }
-    if (!isBlob) { inv.recorded(src.sourceId, path, 'refused', 'sentinel.capture.specialFile'); continue; }
+    if (!isBlob) {
+      inv.recorded(src.sourceId, path, 'refused', 'sentinel.capture.specialFile');
+      continue;
+    }
     if (folderExclusion(inv.policy, src.sourceId, path) === 'sentinel.capture.excludedByPolicy') {
       inv.recorded(src.sourceId, path, 'excluded', 'sentinel.capture.excludedByPolicy');
       continue;
@@ -119,15 +156,23 @@ function addBlob(inv: Inventory, src: CommittedSource, path: string, oid: string
   const git = { mode, oid };
   const executable = mode === '100755';
   let header;
-  try { header = src.repo.objectHeader(oid); } catch (e) {
+  try {
+    header = src.repo.objectHeader(oid);
+  } catch (e) {
     const reason = corruptOrMissing(e);
     if (!reason) throw e;
     inv.recorded(src.sourceId, path, 'unreadable', reason);
     return;
   }
-  if (!header) { inv.recorded(src.sourceId, path, 'unreadable', 'sentinel.capture.gitObjectMissing'); return; }
+  if (!header) {
+    inv.recorded(src.sourceId, path, 'unreadable', 'sentinel.capture.gitObjectMissing');
+    return;
+  }
   const tooBig = inv.sizeRefusal(header.size);
-  if (tooBig) { inv.recorded(src.sourceId, path, 'too-large', tooBig, header.size); return; }
+  if (tooBig) {
+    inv.recorded(src.sourceId, path, 'too-large', tooBig, header.size);
+    return;
+  }
   const read = () => {
     const obj = src.repo.readObject(oid, Math.min(inv.policy.maxFileBytes, MAX_METADATA_OBJECT_BYTES));
     if (!obj || obj.type !== 'blob') throw new CaptureChanged(`${path}'s object is no longer readable`);
@@ -136,8 +181,14 @@ function addBlob(inv: Inventory, src: CommittedSource, path: string, oid: string
   let bytes: Buffer;
   try {
     const obj = src.repo.readObject(oid, Math.min(inv.policy.maxFileBytes, MAX_METADATA_OBJECT_BYTES));
-    if (!obj) { inv.recorded(src.sourceId, path, 'unreadable', 'sentinel.capture.gitObjectMissing'); return; }
-    if (obj.type !== 'blob') { inv.recorded(src.sourceId, path, 'unreadable', 'sentinel.capture.gitObjectCorrupt'); return; }
+    if (!obj) {
+      inv.recorded(src.sourceId, path, 'unreadable', 'sentinel.capture.gitObjectMissing');
+      return;
+    }
+    if (obj.type !== 'blob') {
+      inv.recorded(src.sourceId, path, 'unreadable', 'sentinel.capture.gitObjectCorrupt');
+      return;
+    }
     bytes = obj.data;
   } catch (e) {
     const reason = corruptOrMissing(e);
@@ -148,40 +199,70 @@ function addBlob(inv: Inventory, src: CommittedSource, path: string, oid: string
   const pointer = lfsPointer(bytes);
   if (pointer) {
     const big = inv.sizeRefusal(pointer.size);
-    if (big) { inv.recorded(src.sourceId, path, 'too-large', big, pointer.size); return; }
+    if (big) {
+      inv.recorded(src.sourceId, path, 'too-large', big, pointer.size);
+      return;
+    }
     const lfs = resolveLfs(pointer, src.lfsObjects);
-    if ('reason' in lfs) { inv.recorded(src.sourceId, path, 'unreadable', lfs.reason, pointer.size); return; }
-    inv.included(src.sourceId, path, lfs.bytes, () => {
-      const again = resolveLfs(pointer, src.lfsObjects);
-      if ('reason' in again) throw new CaptureChanged(`${path}'s LFS content changed during capture`);
-      return again.bytes;
-    }, { executable, git, lfs: pointer });
+    if ('reason' in lfs) {
+      inv.recorded(src.sourceId, path, 'unreadable', lfs.reason, pointer.size);
+      return;
+    }
+    inv.included(
+      src.sourceId,
+      path,
+      lfs.bytes,
+      () => {
+        const again = resolveLfs(pointer, src.lfsObjects);
+        if ('reason' in again) throw new CaptureChanged(`${path}'s LFS content changed during capture`);
+        return again.bytes;
+      },
+      { executable, git, lfs: pointer },
+    );
     return;
   }
   inv.included(src.sourceId, path, bytes, read, { executable, git });
 }
 
 /** Git blob ids of every regular file in a commit, or undefined when any object on the way is unavailable. */
-export function trackedBlobs(repo: GitRepository, commit: string, stillWithin?: () => void): Map<string, string> | undefined {
+export function trackedBlobs(
+  repo: GitRepository,
+  commit: string,
+  stillWithin?: () => void,
+): Map<string, string> | undefined {
   let checkpointFailure: { error: unknown } | undefined;
-  const checkpoint = () => { try { stillWithin?.(); } catch (error) { checkpointFailure = { error }; throw error; } };
+  const checkpoint = () => {
+    try {
+      stillWithin?.();
+    } catch (error) {
+      checkpointFailure = { error };
+      throw error;
+    }
+  };
   const out = new Map<string, string>();
   const walk = (rel: string, oid: string): boolean => {
     checkpoint();
     let entries;
-    try { entries = repo.readTree(oid); } catch { return false; }
+    try {
+      entries = repo.readTree(oid);
+    } catch {
+      return false;
+    }
     if (!entries) return false;
     for (const e of entries) {
       checkpoint();
       const c = checkName(e.name, true);
       if (c.refused) return false;
       const path = joinPath(rel, c.name);
-      if (e.mode === '40000' || e.mode === '040000') { if (!walk(path, e.oid)) return false; }
-      else out.set(path, `${e.mode}:${e.oid}`);
+      if (e.mode === '40000' || e.mode === '040000') {
+        if (!walk(path, e.oid)) return false;
+      } else out.set(path, `${e.mode}:${e.oid}`);
     }
     return true;
   };
-  try { return walk('', repo.treeOf(commit)) ? out : undefined; } catch {
+  try {
+    return walk('', repo.treeOf(commit)) ? out : undefined;
+  } catch {
     if (checkpointFailure) throw checkpointFailure.error;
     return undefined;
   }

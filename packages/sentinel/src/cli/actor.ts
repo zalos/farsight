@@ -35,18 +35,25 @@ export function requestedByOf(entry: Entrypoint): RequestedBy {
   if (entry.kind === 'owner-cli') return Object.freeze({ principal: 'human', channel: 'owner-cli' });
   const g = entry.granted as { principal: string; channel: string };
   // The owner channel and human authority are the command line's own; a connection is never granted either.
-  if (g.channel === 'owner-cli' || g.principal !== 'agent') throw new ActorError('sentinel.actor.ownerChannelNotGrantable');
+  if (g.channel === 'owner-cli' || g.principal !== 'agent')
+    throw new ActorError('sentinel.actor.ownerChannelNotGrantable');
   return Object.freeze({ principal: 'agent', channel: g.channel as ServiceChannel });
 }
 
-export type ActorErrorCode = 'sentinel.actor.payloadClaim' | 'sentinel.actor.confirmNotOwner' | 'sentinel.actor.ownerChannelNotGrantable'
+export type ActorErrorCode =
+  | 'sentinel.actor.payloadClaim'
+  | 'sentinel.actor.confirmNotOwner'
+  | 'sentinel.actor.ownerChannelNotGrantable'
   | 'sentinel.actor.payloadTooDeep';
 
 /** Request bodies nest at most this deep; a deeper one is refused, never skipped. */
 export const MAX_BODY_DEPTH = 32;
 
 export class ActorError extends Error {
-  constructor(readonly code: ActorErrorCode, readonly field?: string) {
+  constructor(
+    readonly code: ActorErrorCode,
+    readonly field?: string,
+  ) {
     super(field === undefined ? code : `${code}: ${field}`);
     this.name = 'ActorError';
   }
@@ -54,7 +61,16 @@ export class ActorError extends Error {
 
 /** Fields a request body may never carry: who is asking is the entrypoint's to say. */
 // A receipt's id may travel (the service verifies it against the receipt book); a claim of who confirmed may not.
-const CLAIM_FIELDS = new Set(['actor', 'principal', 'channel', 'who', 'requestedBy', 'requested_by', 'owner', 'confirmedBy']);
+const CLAIM_FIELDS = new Set([
+  'actor',
+  'principal',
+  'channel',
+  'who',
+  'requestedBy',
+  'requested_by',
+  'owner',
+  'confirmedBy',
+]);
 
 /** Refuses a request body (at any depth) that names a requester. Returns the body unchanged otherwise. */
 export function refuseActorClaims<T>(body: T): T {
@@ -64,7 +80,10 @@ export function refuseActorClaims<T>(body: T): T {
     // Refused rather than skipped: a claim nested past the bound must not slip through unseen.
     if (depth > MAX_BODY_DEPTH) throw new ActorError('sentinel.actor.payloadTooDeep');
     seen.add(v);
-    if (Array.isArray(v)) { v.forEach(x => walk(x, depth + 1)); return; }
+    if (Array.isArray(v)) {
+      v.forEach((x) => walk(x, depth + 1));
+      return;
+    }
     for (const [k, x] of Object.entries(v)) {
       if (CLAIM_FIELDS.has(k)) throw new ActorError('sentinel.actor.payloadClaim', k);
       walk(x, depth + 1);

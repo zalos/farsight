@@ -11,12 +11,22 @@ const MAX_SECRET = 8192;
 
 export class Secret {
   readonly #value: string;
-  constructor(value: string) { this.#value = value; }
+  constructor(value: string) {
+    this.#value = value;
+  }
   /** The value, for the one header that carries it. */
-  reveal(): string { return this.#value; }
-  toString(): string { return '[redacted]'; }
-  toJSON(): string { return '[redacted]'; }
-  [Symbol.for('nodejs.util.inspect.custom')](): string { return 'Secret([redacted])'; }
+  reveal(): string {
+    return this.#value;
+  }
+  toString(): string {
+    return '[redacted]';
+  }
+  toJSON(): string {
+    return '[redacted]';
+  }
+  [Symbol.for('nodejs.util.inspect.custom')](): string {
+    return 'Secret([redacted])';
+  }
 }
 
 /** Resolves one approved reference to its value. Must not fall back to environment variables or files. */
@@ -26,8 +36,10 @@ export type CredentialSource = (ref: KeychainRef) => Promise<string>;
 export type KeychainRunner = (command: string, args: string[]) => Promise<string>;
 
 /** The OS keychain, service `farsight`, account from the reference. */
-export function keychainSource(options: { runner?: KeychainRunner; platform?: NodeJS.Platform } = {}): CredentialSource {
-  return async ref => {
+export function keychainSource(
+  options: { runner?: KeychainRunner; platform?: NodeJS.Platform } = {},
+): CredentialSource {
+  return async (ref) => {
     const m = REF.exec(ref);
     if (!m) return fail('sentinel.provider.credentialUnavailable', 'not a keychain:farsight reference');
     return readKeychain({ service: 'farsight', account: m[1]! }, { ...options, timeoutMs: 10_000 });
@@ -39,8 +51,17 @@ export async function resolveCredential(source: CredentialSource, ref: KeychainR
   if (ref === null) return null;
   if (!REF.test(ref)) return fail('sentinel.provider.credentialUnavailable', 'not a keychain:farsight reference');
   let value: string;
-  try { value = await source(ref); } catch { return fail('sentinel.provider.credentialUnavailable', 'the keychain did not return it'); }
-  if (typeof value !== 'string' || value.length === 0 || value.length > MAX_SECRET || /[\u0000-\u001f\u007f]/.test(value)) {
+  try {
+    value = await source(ref);
+  } catch {
+    return fail('sentinel.provider.credentialUnavailable', 'the keychain did not return it');
+  }
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > MAX_SECRET ||
+    /[\u0000-\u001f\u007f]/.test(value)
+  ) {
     fail('sentinel.provider.credentialUnavailable', 'the stored value is empty, too long or holds control characters');
   }
   return new Secret(value);

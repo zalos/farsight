@@ -9,7 +9,13 @@ const [trust, phase, boundary] = process.argv.slice(2) as [string, 'store' | 'se
 const a = emptyLock(new Date('2026-10-22T00:00:00Z'));
 const b = emptyLock(new Date('2026-10-22T00:00:01Z'));
 let current: 'store' | 'select' = 'store';
-const book = new RuleLockBook(trust, { hooks: { at: at => { if (current === phase && at === boundary) process.kill(process.pid, 'SIGKILL'); } } });
+const book = new RuleLockBook(trust, {
+  hooks: {
+    at: (at) => {
+      if (current === phase && at === boundary) process.kill(process.pid, 'SIGKILL');
+    },
+  },
+});
 const db = book.store(b);
 current = 'select';
 book.select(db, lockDigest(a));

@@ -64,56 +64,112 @@ else {
 ledger.close();
 `;
 
-test('installed tarball: owner-bound binding, the in-process operation, SIGKILL recovery and receipt-gated reconciliation through public subpaths', needsStore, async t => {
-  const dir = scratchDir(t, 'sentinel-review-consumer-');
-  run(process.execPath, [join(repo, 'scripts/pack-sentinel.mjs')], repo);
-  const tgz = join(repo, 'build/sentinel', readdirSync(join(repo, 'build/sentinel')).find(f => f.endsWith('.tgz'))!);
-  const app = join(dir, 'consumer');
-  const installed = join(app, 'node_modules/farsight-sentinel');
-  mkdirSync(installed, { recursive: true });
-  run('tar', ['-xzf', tgz, '-C', installed, '--strip-components=1'], dir);
-  const shipped = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'));
-  for (const sub of ['./review', './review/providers', './policy', './contracts']) assert.ok(shipped.exports[sub], sub);
-  assert.ok(readdirSync(join(installed, 'schemas')).includes('sentinel-review-record.draft-1.schema.json'));
-  for (const dep of Object.keys(shipped.dependencies ?? {})) {
-    const target = join(app, 'node_modules', dep);
-    mkdirSync(join(target, '..'), { recursive: true });
-    const from = [join(pkgDir, 'node_modules', dep), join(repo, 'node_modules', dep), join(repo, 'packages/code-parser/node_modules', dep)].find(p => existsSync(p));
-    assert.ok(from, `dependency ${dep} is in the workspace`);
-    symlinkSync(realpathSync(from!), target);
-  }
-  writeFileSync(join(app, 'package.json'), JSON.stringify({ name: 'consumer', private: true, type: 'module' }));
-  writeFileSync(join(app, 'consumer.ts'), CONSUMER);
-  mkdirSync(join(app, 'node_modules/@types'), { recursive: true });
-  if (!existsSync(join(app, 'node_modules/@types/node'))) symlinkSync(realpathSync(join(pkgDir, 'node_modules/@types/node')), join(app, 'node_modules/@types/node'));
-  writeFileSync(join(app, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2023', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, noEmit: true,
-    types: ['node'], skipLibCheck: false }, include: ['consumer.ts'] }));
-  run(process.execPath, [realpathSync(join(repo, 'node_modules/typescript/bin/tsc')), '-p', 'tsconfig.json'], app);
+test(
+  'installed tarball: owner-bound binding, the in-process operation, SIGKILL recovery and receipt-gated reconciliation through public subpaths',
+  needsStore,
+  async (t) => {
+    const dir = scratchDir(t, 'sentinel-review-consumer-');
+    run(process.execPath, [join(repo, 'scripts/pack-sentinel.mjs')], repo);
+    const tgz = join(
+      repo,
+      'build/sentinel',
+      readdirSync(join(repo, 'build/sentinel')).find((f) => f.endsWith('.tgz'))!,
+    );
+    const app = join(dir, 'consumer');
+    const installed = join(app, 'node_modules/farsight-sentinel');
+    mkdirSync(installed, { recursive: true });
+    run('tar', ['-xzf', tgz, '-C', installed, '--strip-components=1'], dir);
+    const shipped = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'));
+    for (const sub of ['./review', './review/providers', './policy', './contracts'])
+      assert.ok(shipped.exports[sub], sub);
+    assert.ok(readdirSync(join(installed, 'schemas')).includes('sentinel-review-record.draft-1.schema.json'));
+    for (const dep of Object.keys(shipped.dependencies ?? {})) {
+      const target = join(app, 'node_modules', dep);
+      mkdirSync(join(target, '..'), { recursive: true });
+      const from = [
+        join(pkgDir, 'node_modules', dep),
+        join(repo, 'node_modules', dep),
+        join(repo, 'packages/code-parser/node_modules', dep),
+      ].find((p) => existsSync(p));
+      assert.ok(from, `dependency ${dep} is in the workspace`);
+      symlinkSync(realpathSync(from!), target);
+    }
+    writeFileSync(join(app, 'package.json'), JSON.stringify({ name: 'consumer', private: true, type: 'module' }));
+    writeFileSync(join(app, 'consumer.ts'), CONSUMER);
+    mkdirSync(join(app, 'node_modules/@types'), { recursive: true });
+    if (!existsSync(join(app, 'node_modules/@types/node')))
+      symlinkSync(realpathSync(join(pkgDir, 'node_modules/@types/node')), join(app, 'node_modules/@types/node'));
+    writeFileSync(
+      join(app, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: {
+          target: 'ES2023',
+          module: 'NodeNext',
+          moduleResolution: 'NodeNext',
+          strict: true,
+          noEmit: true,
+          types: ['node'],
+          skipLibCheck: false,
+        },
+        include: ['consumer.ts'],
+      }),
+    );
+    run(process.execPath, [realpathSync(join(repo, 'node_modules/typescript/bin/tsc')), '-p', 'tsconfig.json'], app);
 
-  let n = 0;
-  const ep = await mockEndpoint(t, (req, res) => {
-    n++;
-    if (n === 2) return; // the second call never answers: the first process is killed waiting for it
-    const msgs = JSON.parse(req.body).messages;
-    const last = JSON.parse(msgs[msgs.length - 1].content);
-    json(res, 200, ollamaReply({ message: { role: 'assistant', content: last.evidence
-      ? JSON.stringify({ action: 'final', verdict: 'finding', inspected: ['src/query.ts'], claims: [{ statement: 'Request text reaches SQL.', citations: [last.evidence[0].id] }] })
-      : JSON.stringify({ action: 'read', path: 'src/query.ts', startLine: 1, endLine: 2 }) } }));
-  });
-  const ledgerPath = join(dir, 'models.db');
-  const args = ['--disable-warning=ExperimentalWarning', '--experimental-strip-types', 'consumer.ts'];
-  const first = spawn(process.execPath, [...args, 'first', ep.origin, ledgerPath, join(dir, 'receipts')], { cwd: app, stdio: ['ignore', 'pipe', 'pipe'] });
-  let err = '';
-  first.stderr.on('data', d => { err += d; });
-  const until = Date.now() + 30_000;
-  while (ep.seen.length < 2) {
-    if (Date.now() > until || first.exitCode !== null) throw new Error(`the first process never reached its second call: ${err}`);
-    await new Promise(r => setTimeout(r, 25));
-  }
-  first.kill('SIGKILL');
-  await new Promise(r => first.once('exit', r));
-  const out = JSON.parse(run(process.execPath, [...args, 'second', ep.origin, ledgerPath, join(dir, 'receipts')], app));
-  assert.deepEqual(out, { recovered: { released: 0, uncertain: 1 }, outcome: 'unfinished', usage: 'unknown', coverage: 0, uncertain: 'uncertain',
-    refused: 'sentinel.provider.receiptRequired', envelopes: 1 });
-  assert.equal(ep.seen.length, 2, 'the uncertain call was never sent again');
-});
+    let n = 0;
+    const ep = await mockEndpoint(t, (req, res) => {
+      n++;
+      if (n === 2) return; // the second call never answers: the first process is killed waiting for it
+      const msgs = JSON.parse(req.body).messages;
+      const last = JSON.parse(msgs[msgs.length - 1].content);
+      json(
+        res,
+        200,
+        ollamaReply({
+          message: {
+            role: 'assistant',
+            content: last.evidence
+              ? JSON.stringify({
+                  action: 'final',
+                  verdict: 'finding',
+                  inspected: ['src/query.ts'],
+                  claims: [{ statement: 'Request text reaches SQL.', citations: [last.evidence[0].id] }],
+                })
+              : JSON.stringify({ action: 'read', path: 'src/query.ts', startLine: 1, endLine: 2 }),
+          },
+        }),
+      );
+    });
+    const ledgerPath = join(dir, 'models.db');
+    const args = ['--disable-warning=ExperimentalWarning', '--experimental-strip-types', 'consumer.ts'];
+    const first = spawn(process.execPath, [...args, 'first', ep.origin, ledgerPath, join(dir, 'receipts')], {
+      cwd: app,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let err = '';
+    first.stderr.on('data', (d) => {
+      err += d;
+    });
+    const until = Date.now() + 30_000;
+    while (ep.seen.length < 2) {
+      if (Date.now() > until || first.exitCode !== null)
+        throw new Error(`the first process never reached its second call: ${err}`);
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    first.kill('SIGKILL');
+    await new Promise((r) => first.once('exit', r));
+    const out = JSON.parse(
+      run(process.execPath, [...args, 'second', ep.origin, ledgerPath, join(dir, 'receipts')], app),
+    );
+    assert.deepEqual(out, {
+      recovered: { released: 0, uncertain: 1 },
+      outcome: 'unfinished',
+      usage: 'unknown',
+      coverage: 0,
+      uncertain: 'uncertain',
+      refused: 'sentinel.provider.receiptRequired',
+      envelopes: 1,
+    });
+    assert.equal(ep.seen.length, 2, 'the uncertain call was never sent again');
+  },
+);

@@ -35,11 +35,28 @@ export type SecretsSnapshot = Pick<SnapshotEnvelope, 'id' | 'entries'>;
 
 /** `ordinal`: the target's place in path order over every target of the job, the basis of its opaque reference. */
 /** Job records are private (the job holds paths); results cite `entry` only. */
-export interface SecretsJobFile { readonly index: number; readonly ordinal: number; readonly entry: number; readonly relativePath: string; readonly artifact: ArtifactId; readonly bytes: number }
-export interface SecretsUnsent { readonly ordinal: number; readonly entry: number; readonly relativePath: string; readonly artifact: ArtifactId; readonly reasonCode: CatalogKey }
+export interface SecretsJobFile {
+  readonly index: number;
+  readonly ordinal: number;
+  readonly entry: number;
+  readonly relativePath: string;
+  readonly artifact: ArtifactId;
+  readonly bytes: number;
+}
+export interface SecretsUnsent {
+  readonly ordinal: number;
+  readonly entry: number;
+  readonly relativePath: string;
+  readonly artifact: ArtifactId;
+  readonly reasonCode: CatalogKey;
+}
 
 /** A name the engine screens: line `line` (1-based) of `scan/paths.txt`. */
-export interface SecretsJobName { readonly line: number; readonly relativePath: string; readonly artifact: ArtifactId }
+export interface SecretsJobName {
+  readonly line: number;
+  readonly relativePath: string;
+  readonly artifact: ArtifactId;
+}
 
 export interface SecretsJob {
   readonly schema: 'sentinel-gitleaks-job/draft-1';
@@ -72,9 +89,16 @@ const CONTROL = /[\u0000-\u0008\u000a-\u001f\u007f]/;
 export const lineSafe = (relativePath: string) => !CONTROL.test(relativePath);
 
 export class SecretsInputError extends Error {
-  constructor(readonly code: CatalogKey, detail: string) { super(`${code}: ${detail}`); }
+  constructor(
+    readonly code: CatalogKey,
+    detail: string,
+  ) {
+    super(`${code}: ${detail}`);
+  }
 }
-const invalid = (detail: string): never => { throw new SecretsInputError('sentinel.secrets.inputInvalid', detail); };
+const invalid = (detail: string): never => {
+  throw new SecretsInputError('sentinel.secrets.inputInvalid', detail);
+};
 
 function measure(path: string): { digest: ArtifactId; bytes: number } {
   const fd = openSync(path, FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0));
@@ -84,9 +108,16 @@ function measure(path: string): { digest: ArtifactId; bytes: number } {
     const hash = createHash('sha256');
     const buf = Buffer.alloc(1 << 20);
     let off = 0;
-    for (;;) { const n = readSync(fd, buf, 0, buf.length, off); if (!n) break; hash.update(buf.subarray(0, n)); off += n; }
+    for (;;) {
+      const n = readSync(fd, buf, 0, buf.length, off);
+      if (!n) break;
+      hash.update(buf.subarray(0, n));
+      off += n;
+    }
     return { digest: `sha256:${hash.digest('hex')}`, bytes: off };
-  } finally { closeSync(fd); }
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /**
@@ -96,20 +127,33 @@ function measure(path: string): { digest: ArtifactId; bytes: number } {
  */
 export function toolAllowlisted(relativePath: string): boolean {
   const parts = relativePath.split('/');
-  const seen = ['scan', 'scan/tree', ...parts.map((_, i) => `${SCANNER_PATH_PREFIX}${parts.slice(0, i + 1).join('/')}`)];
-  return seen.some(path => GITLEAKS_GLOBAL_ALLOWLIST_PATHS.some(re => re.test(path)));
+  const seen = [
+    'scan',
+    'scan/tree',
+    ...parts.map((_, i) => `${SCANNER_PATH_PREFIX}${parts.slice(0, i + 1).join('/')}`),
+  ];
+  return seen.some((path) => GITLEAKS_GLOBAL_ALLOWLIST_PATHS.some((re) => re.test(path)));
 }
 
-export function buildSecretsJob(scope: { snapshot: SecretsSnapshot; sourceId: Id; targets: readonly SecretsTarget[] }, dir: string,
-  adapter: GitleaksAdapterBuild = GITLEAKS_PRODUCTION_BUILD): BuiltSecretsJob {
+export function buildSecretsJob(
+  scope: { snapshot: SecretsSnapshot; sourceId: Id; targets: readonly SecretsTarget[] },
+  dir: string,
+  adapter: GitleaksAdapterBuild = GITLEAKS_PRODUCTION_BUILD,
+): BuiltSecretsJob {
   const snapshotId = scope.snapshot?.id;
-  if (typeof snapshotId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(snapshotId) || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(scope.sourceId)) invalid('snapshot or source id');
+  if (
+    typeof snapshotId !== 'string' ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(snapshotId) ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(scope.sourceId)
+  )
+    invalid('snapshot or source id');
   if (scope.targets.length > MAX_SECRETS_FILES) invalid(`at most ${MAX_SECRETS_FILES} files per attempt`);
   // Each target is an included file of this source in this snapshot; its path and digest come from the entry.
   const entries = new Set<number>();
-  const resolved = scope.targets.map(t => {
+  const resolved = scope.targets.map((t) => {
     const e = Number.isSafeInteger(t.entry) ? scope.snapshot.entries[t.entry] : undefined;
-    if (!e || e.kind !== 'file' || e.disposition !== 'included' || e.sourceId !== scope.sourceId) invalid('a target is not an included file of this source in this snapshot');
+    if (!e || e.kind !== 'file' || e.disposition !== 'included' || e.sourceId !== scope.sourceId)
+      invalid('a target is not an included file of this source in this snapshot');
     if (entries.has(t.entry)) invalid('duplicate target entry');
     entries.add(t.entry);
     const file = e as IncludedFileEntry;
@@ -118,7 +162,9 @@ export function buildSecretsJob(scope: { snapshot: SecretsSnapshot; sourceId: Id
   const seen = new Set<string>();
   const files: SecretsJobFile[] = [];
   const unsent: SecretsUnsent[] = [];
-  const sorted = [...resolved].sort((a, b) => (a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0));
+  const sorted = [...resolved].sort((a, b) =>
+    a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0,
+  );
   for (const [ordinal, t] of sorted.entries()) {
     const entry = { entry: t.entry };
     if (!isSafeRelativePath(t.relativePath)) invalid('unsafe target path');
@@ -126,36 +172,71 @@ export function buildSecretsJob(scope: { snapshot: SecretsSnapshot; sourceId: Id
     seen.add(t.relativePath);
     const { digest, bytes } = measure(t.path);
     if (digest !== t.artifact) invalid('a target does not match its artifact id');
-    const skip = (reasonCode: CatalogKey) => unsent.push({ ordinal, relativePath: t.relativePath, artifact: t.artifact, reasonCode, ...entry });
-    if (CONTROL.test(t.relativePath)) { skip('sentinel.secrets.pathUnsupported'); continue; }
-    if (bytes > GITLEAKS_MAX_FILE_BYTES) { skip('sentinel.secrets.fileTooLarge'); continue; }
-    if (toolAllowlisted(t.relativePath)) { skip('sentinel.secrets.toolAllowlisted'); continue; }
+    const skip = (reasonCode: CatalogKey) =>
+      unsent.push({ ordinal, relativePath: t.relativePath, artifact: t.artifact, reasonCode, ...entry });
+    if (CONTROL.test(t.relativePath)) {
+      skip('sentinel.secrets.pathUnsupported');
+      continue;
+    }
+    if (bytes > GITLEAKS_MAX_FILE_BYTES) {
+      skip('sentinel.secrets.fileTooLarge');
+      continue;
+    }
+    if (toolAllowlisted(t.relativePath)) {
+      skip('sentinel.secrets.toolAllowlisted');
+      continue;
+    }
     files.push({ index: files.length, ordinal, relativePath: t.relativePath, artifact: t.artifact, bytes, ...entry });
   }
   // A file whose path is also a folder of another cannot be rebuilt (the container's tmpfs is case-sensitive, so only
   // exact names collide); the shim would refuse the whole job, so it is refused here first.
   const folders = new Set<string>();
-  for (const f of files) for (let i = f.relativePath.indexOf('/'); i >= 0; i = f.relativePath.indexOf('/', i + 1)) folders.add(f.relativePath.slice(0, i));
-  if (files.some(f => folders.has(f.relativePath))) invalid('a target path is also a folder');
+  for (const f of files)
+    for (let i = f.relativePath.indexOf('/'); i >= 0; i = f.relativePath.indexOf('/', i + 1))
+      folders.add(f.relativePath.slice(0, i));
+  if (files.some((f) => folders.has(f.relativePath))) invalid('a target path is also a folder');
   // Names to screen: every sent file, then every unsent one a line can carry; all of them, or none.
-  const screenable = [...files.map(f => ({ relativePath: f.relativePath, artifact: f.artifact })),
-    ...unsent.filter(u => !CONTROL.test(u.relativePath)).map(u => ({ relativePath: u.relativePath, artifact: u.artifact }))];
+  const screenable = [
+    ...files.map((f) => ({ relativePath: f.relativePath, artifact: f.artifact })),
+    ...unsent
+      .filter((u) => !CONTROL.test(u.relativePath))
+      .map((u) => ({ relativePath: u.relativePath, artifact: u.artifact })),
+  ];
   const nameBytes = screenable.reduce((n, x) => n + Buffer.byteLength(x.relativePath) + 1, 0);
   // A name a line cannot carry is withheld on its own; past the engine's size limit none is screened.
   const namesScreened = nameBytes <= GITLEAKS_MAX_FILE_BYTES;
   const names: SecretsJobName[] = namesScreened ? screenable.map((x, i) => ({ line: i + 1, ...x })) : [];
-  const lines = ['sentinel-gitleaks-job/1', ...files.map(f => `F ${f.index} ${f.artifact.slice(7)} ${f.relativePath}`),
-    ...(namesScreened ? unsent.filter(u => !CONTROL.test(u.relativePath)).map(u => `N ${u.relativePath}`) : [])];
+  const lines = [
+    'sentinel-gitleaks-job/1',
+    ...files.map((f) => `F ${f.index} ${f.artifact.slice(7)} ${f.relativePath}`),
+    ...(namesScreened ? unsent.filter((u) => !CONTROL.test(u.relativePath)).map((u) => `N ${u.relativePath}`) : []),
+  ];
   const text = Buffer.from(`${lines.join('\n')}\n`, 'utf8');
   const jobDigest = sha256(text);
   const job: SecretsJob = Object.freeze({
-    schema: 'sentinel-gitleaks-job/draft-1', snapshotId, sourceId: scope.sourceId, worker: adapter.workerDigest,
-    files: Object.freeze(files.map(f => Object.freeze(f))), unsent: Object.freeze(unsent.map(u => Object.freeze(u))),
-    names: Object.freeze(names.map(n => Object.freeze(n))), namesScreened,
+    schema: 'sentinel-gitleaks-job/draft-1',
+    snapshotId,
+    sourceId: scope.sourceId,
+    worker: adapter.workerDigest,
+    files: Object.freeze(files.map((f) => Object.freeze(f))),
+    unsent: Object.freeze(unsent.map((u) => Object.freeze(u))),
+    names: Object.freeze(names.map((n) => Object.freeze(n))),
+    namesScreened,
   });
-  const write = (name: string, bytes: Uint8Array) => { const p = join(dir, name); writeFileSync(p, bytes, { mode: 0o600, flag: 'wx' }); return p; };
-  const inputs: CapturedInput[] = [{ id: adapter.workerDigest, path: write('worker.sh', adapter.workerBytes) }, { id: jobDigest, path: write('job.txt', text) }];
-  const known = new Set(inputs.map(i => i.id));
-  for (const f of files) if (!known.has(f.artifact)) { known.add(f.artifact); inputs.push({ id: f.artifact, path: sorted.find(x => x.artifact === f.artifact)!.path }); }
+  const write = (name: string, bytes: Uint8Array) => {
+    const p = join(dir, name);
+    writeFileSync(p, bytes, { mode: 0o600, flag: 'wx' });
+    return p;
+  };
+  const inputs: CapturedInput[] = [
+    { id: adapter.workerDigest, path: write('worker.sh', adapter.workerBytes) },
+    { id: jobDigest, path: write('job.txt', text) },
+  ];
+  const known = new Set(inputs.map((i) => i.id));
+  for (const f of files)
+    if (!known.has(f.artifact)) {
+      known.add(f.artifact);
+      inputs.push({ id: f.artifact, path: sorted.find((x) => x.artifact === f.artifact)!.path });
+    }
   return Object.freeze({ job, jobDigest, inputs: Object.freeze(inputs) });
 }

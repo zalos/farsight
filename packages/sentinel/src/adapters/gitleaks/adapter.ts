@@ -20,14 +20,25 @@ export const GITLEAKS_ENGINE = Object.freeze({
 
 /** Platforms of the pinned index. Only a measured one's results are trusted. */
 export const GITLEAKS_IMAGE_PLATFORMS = Object.freeze([
-  Object.freeze({ platform: 'linux/arm64', architecture: 'arm64', state: 'measured' as const,
+  Object.freeze({
+    platform: 'linux/arm64',
+    architecture: 'arm64',
+    state: 'measured' as const,
     manifest: 'sha256:6b2d52241f9d176fc59e6e3b026ea52c98f390070587d9475d6ee2bc64941815',
-    evidence: 'darwin-arm64 host, Docker Desktop with Engine 29.2.1; Gitleaks conformance 2026-10-22' }),
-  Object.freeze({ platform: 'linux/amd64', architecture: 'amd64', state: 'measured' as const,
+    evidence: 'darwin-arm64 host, Docker Desktop with Engine 29.2.1; Gitleaks conformance 2026-10-22',
+  }),
+  Object.freeze({
+    platform: 'linux/amd64',
+    architecture: 'amd64',
+    state: 'measured' as const,
     manifest: 'sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb',
-    evidence: 'native Ubuntu 24.04.5 x64, Node 24.22.0; CI 39801723971 isolation/conformance 93 passed, zero skipped, 2026-10-22' }),
+    evidence:
+      'native Ubuntu 24.04.5 x64, Node 24.22.0; CI 39801723971 isolation/conformance 93 passed, zero skipped, 2026-10-22',
+  }),
 ]);
-export const GITLEAKS_MEASURED_ARCHITECTURES: ReadonlySet<string> = new Set(GITLEAKS_IMAGE_PLATFORMS.filter(p => p.state === 'measured').map(p => p.architecture));
+export const GITLEAKS_MEASURED_ARCHITECTURES: ReadonlySet<string> = new Set(
+  GITLEAKS_IMAGE_PLATFORMS.filter((p) => p.state === 'measured').map((p) => p.architecture),
+);
 
 /** The pinned configuration: the release's built-in rules, nothing added, nothing allowed. A repository's is never read. */
 export const GITLEAKS_CONFIG = 'title = "sentinel-gitleaks-pinned"\n\n[extend]\nuseDefault = true\n';
@@ -55,22 +66,41 @@ const sha = (b: string | Uint8Array) => `sha256:${createHash('sha256').update(b)
  * Builds the adapter around the shim. A test variant (other id, extra engine arguments, template, report bound) gets
  * its own digests, so it can never pass for the production adapter.
  */
-export function buildGitleaksAdapter(options: { id?: string; engineArgs?: readonly string[]; template?: string; maxReportBytes?: number } = {}): GitleaksAdapterBuild {
+export function buildGitleaksAdapter(
+  options: { id?: string; engineArgs?: readonly string[]; template?: string; maxReportBytes?: number } = {},
+): GitleaksAdapterBuild {
   const args = options.engineArgs ?? [];
-  for (const a of args) if (!/^[A-Za-z0-9=.,_-]+$/.test(a)) throw new Error('sentinel.secrets: engine arguments are fixed plain tokens');
+  for (const a of args)
+    if (!/^[A-Za-z0-9=.,_-]+$/.test(a)) throw new Error('sentinel.secrets: engine arguments are fixed plain tokens');
   const template = options.template ?? GITLEAKS_REPORT_TEMPLATE;
-  for (const text of [GITLEAKS_CONFIG, template]) if (text.includes("'")) throw new Error('sentinel.secrets: embedded text cannot hold a quote');
+  for (const text of [GITLEAKS_CONFIG, template])
+    if (text.includes("'")) throw new Error('sentinel.secrets: embedded text cannot hold a quote');
   const maxReport = options.maxReportBytes ?? GITLEAKS_MAX_REPORT_BYTES;
-  const workerBytes = Buffer.from(GITLEAKS_WORKER_SOURCE
-    .replace('[MAX_REPORT]', () => String(maxReport)).replace('[SECS]', () => String(GITLEAKS_ENGINE_TIMEOUT_SECONDS))
-    .replace('[MAX_MB]', () => String(GITLEAKS_MAX_FILE_BYTES / (1024 * 1024) + 1)).replace('[ENGINE_ARGS]', () => args.join(' '))
-    .replace('[CONFIG]', () => GITLEAKS_CONFIG).replace('[TEMPLATE]', () => template), 'utf8');
+  const workerBytes = Buffer.from(
+    GITLEAKS_WORKER_SOURCE.replace('[MAX_REPORT]', () => String(maxReport))
+      .replace('[SECS]', () => String(GITLEAKS_ENGINE_TIMEOUT_SECONDS))
+      .replace('[MAX_MB]', () => String(GITLEAKS_MAX_FILE_BYTES / (1024 * 1024) + 1))
+      .replace('[ENGINE_ARGS]', () => args.join(' '))
+      .replace('[CONFIG]', () => GITLEAKS_CONFIG)
+      .replace('[TEMPLATE]', () => template),
+    'utf8',
+  );
   const workerDigest = sha(workerBytes);
   const definition = Object.freeze({
-    id: options.id ?? 'secrets-gitleaks', version: GITLEAKS_ENGINE.version, kind: 'external', isolation: 'container', image: GITLEAKS_ENGINE.image,
+    id: options.id ?? 'secrets-gitleaks',
+    version: GITLEAKS_ENGINE.version,
+    kind: 'external',
+    isolation: 'container',
+    image: GITLEAKS_ENGINE.image,
     command: Object.freeze(['/bin/sh', `/input/${workerDigest.slice('sha256:'.length)}`]),
   }) as ExternalAdapterDefinition;
-  return Object.freeze({ definition, workerBytes, workerDigest, configDigest: sha(GITLEAKS_CONFIG), templateDigest: sha(template) });
+  return Object.freeze({
+    definition,
+    workerBytes,
+    workerDigest,
+    configDigest: sha(GITLEAKS_CONFIG),
+    templateDigest: sha(template),
+  });
 }
 
 const PRODUCTION = buildGitleaksAdapter();

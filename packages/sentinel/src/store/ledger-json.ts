@@ -10,14 +10,17 @@ export function canonicalJson(value: unknown): string {
     return JSON.stringify(value);
   }
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  const plain = typeof value === 'object'
-    && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
+  const plain =
+    typeof value === 'object' &&
+    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
   if (plain) {
     const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries.map(([k, v]) => {
-      if (v === undefined) throw new TypeError('canonical JSON refuses an undefined member');
-      return `${JSON.stringify(k)}:${canonicalJson(v)}`;
-    }).join(',')}}`;
+    return `{${entries
+      .map(([k, v]) => {
+        if (v === undefined) throw new TypeError('canonical JSON refuses an undefined member');
+        return `${JSON.stringify(k)}:${canonicalJson(v)}`;
+      })
+      .join(',')}}`;
   }
   throw new TypeError(`canonical JSON refuses a ${typeof value}`);
 }

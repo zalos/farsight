@@ -44,8 +44,18 @@ const pair = (host: string, sqlite: string, status: QualificationStatus, evidenc
 export const SQLITE_RELEASE_POLICY: SqliteReleasePolicy = Object.freeze({
   qualified: Object.freeze([
     pair('darwin-arm64', '3.53.3', 'measured', 'PR 01 E4 storage probe and PR 03 store tests, Node 24.19.0'),
-    pair('darwin-arm64', '3.53.4', 'measured', 'PR 03 store tests, official Node 24.22.0 darwin-arm64, checksum and signature verified'),
-    pair('linux-x64', '3.53.4', 'measured', 'PR 03 store tests, Node 24.21.0, ext4: https://github.com/zalos/farsight/actions/runs/39723522049/job/119642215934'),
+    pair(
+      'darwin-arm64',
+      '3.53.4',
+      'measured',
+      'PR 03 store tests, official Node 24.22.0 darwin-arm64, checksum and signature verified',
+    ),
+    pair(
+      'linux-x64',
+      '3.53.4',
+      'measured',
+      'PR 03 store tests, Node 24.21.0, ext4: https://github.com/zalos/farsight/actions/runs/39723522049/job/119642215934',
+    ),
   ]),
 });
 
@@ -53,8 +63,12 @@ export const SQLITE_RELEASE_POLICY: SqliteReleasePolicy = Object.freeze({
 export const currentHost = (): string => `${process.platform}-${process.arch}`;
 
 /** The policy entry for exactly this host and release, if there is one. */
-export function qualificationFor(policy: SqliteReleasePolicy, host: string, sqlite: string): QualifiedRuntime | undefined {
-  return policy.qualified.find(q => q.host === host && q.sqlite === sqlite);
+export function qualificationFor(
+  policy: SqliteReleasePolicy,
+  host: string,
+  sqlite: string,
+): QualifiedRuntime | undefined {
+  return policy.qualified.find((q) => q.host === host && q.sqlite === sqlite);
 }
 
 export interface SqliteRuntime {
@@ -71,8 +85,14 @@ export interface SqliteRuntime {
 }
 
 const BEHAVIOUR_CHECKS = [
-  'api-surface', 'version-agrees', 'error-codes', 'foreign-keys', 'strict-tables', 'deferred-foreign-keys',
-  'transaction-state', 'compile-options',
+  'api-surface',
+  'version-agrees',
+  'error-codes',
+  'foreign-keys',
+  'strict-tables',
+  'deferred-foreign-keys',
+  'transaction-state',
+  'compile-options',
 ] as const;
 
 let defaultGate: Promise<SqliteRuntime> | undefined;
@@ -81,14 +101,20 @@ let defaultGate: Promise<SqliteRuntime> | undefined;
 export function checkSqliteRuntime(policy: SqliteReleasePolicy = SQLITE_RELEASE_POLICY): Promise<SqliteRuntime> {
   if (policy !== SQLITE_RELEASE_POLICY) return runGate(policy);
   // A refused gate is not cached, so a test or caller sees the same error again rather than a stale success.
-  defaultGate ??= runGate(policy).catch(error => { defaultGate = undefined; throw error; });
+  defaultGate ??= runGate(policy).catch((error) => {
+    defaultGate = undefined;
+    throw error;
+  });
   return defaultGate;
 }
 
 async function runGate(policy: SqliteReleasePolicy): Promise<SqliteRuntime> {
   const host = currentHost();
-  if (!policy.qualified.some(q => q.host === host)) {
-    throw new StoreError('sentinel.store.platformUnqualified', { platform: host, qualified: [...new Set(policy.qualified.map(q => q.host))] });
+  if (!policy.qualified.some((q) => q.host === host)) {
+    throw new StoreError('sentinel.store.platformUnqualified', {
+      platform: host,
+      qualified: [...new Set(policy.qualified.map((q) => q.host))],
+    });
   }
   let sqlite: SqliteModule;
   try {
@@ -100,17 +126,32 @@ async function runGate(policy: SqliteReleasePolicy): Promise<SqliteRuntime> {
   const qualification = qualificationFor(policy, host, found);
   if (!qualification) {
     throw new StoreError('sentinel.store.runtimeUnqualified', {
-      found, host, node: process.versions.node, qualified: policy.qualified.filter(q => q.host === host).map(q => q.sqlite),
+      found,
+      host,
+      node: process.versions.node,
+      qualified: policy.qualified.filter((q) => q.host === host).map((q) => q.sqlite),
     });
   }
   const passed: string[] = [];
   let current = 'api-surface';
   const fail = (cause?: unknown): never => {
-    throw new StoreError('sentinel.store.runtimeBehavior', { check: current, sqlite: found, node: process.versions.node }, cause ? { cause } : undefined);
+    throw new StoreError(
+      'sentinel.store.runtimeBehavior',
+      { check: current, sqlite: found, node: process.versions.node },
+      cause ? { cause } : undefined,
+    );
   };
-  const expect = (ok: boolean) => { if (!ok) fail(); passed.push(current); };
+  const expect = (ok: boolean) => {
+    if (!ok) fail();
+    passed.push(current);
+  };
   const rejectsWith = (primary: number, run: () => void): boolean => {
-    try { run(); return false; } catch (error) { return sqlitePrimaryCode(error) === primary; }
+    try {
+      run();
+      return false;
+    } catch (error) {
+      return sqlitePrimaryCode(error) === primary;
+    }
   };
 
   let db: InstanceType<SqliteModule['DatabaseSync']> | undefined;
@@ -118,8 +159,12 @@ async function runGate(policy: SqliteReleasePolicy): Promise<SqliteRuntime> {
     if (typeof sqlite.DatabaseSync !== 'function') fail();
     db = new sqlite.DatabaseSync(':memory:');
     // isOpen and isTransaction are per-connection accessors, not prototype members, on Node 24.
-    expect(typeof sqlite.StatementSync === 'function' && typeof sqlite.backup === 'function'
-      && typeof db.isOpen === 'boolean' && typeof db.isTransaction === 'boolean');
+    expect(
+      typeof sqlite.StatementSync === 'function' &&
+        typeof sqlite.backup === 'function' &&
+        typeof db.isOpen === 'boolean' &&
+        typeof db.isTransaction === 'boolean',
+    );
     current = 'version-agrees';
     expect((db.prepare('SELECT sqlite_version() AS v').get() as { v: string }).v === found);
     // Busy detection and constraint handling read errcode; a release that stopped exposing it fails here.
@@ -127,9 +172,13 @@ async function runGate(policy: SqliteReleasePolicy): Promise<SqliteRuntime> {
     expect(rejectsWith(1, () => db!.exec('SELECT * FROM no_such_table')));
     current = 'foreign-keys';
     db.exec('PRAGMA foreign_keys=ON');
-    db.exec('CREATE TABLE p(id INTEGER PRIMARY KEY) STRICT; CREATE TABLE c(p INTEGER REFERENCES p(id) DEFERRABLE INITIALLY DEFERRED) STRICT;');
-    expect((db.prepare('PRAGMA foreign_keys').get() as { foreign_keys: number }).foreign_keys === 1
-      && rejectsWith(19, () => db!.exec('INSERT INTO c VALUES(42)')));
+    db.exec(
+      'CREATE TABLE p(id INTEGER PRIMARY KEY) STRICT; CREATE TABLE c(p INTEGER REFERENCES p(id) DEFERRABLE INITIALLY DEFERRED) STRICT;',
+    );
+    expect(
+      (db.prepare('PRAGMA foreign_keys').get() as { foreign_keys: number }).foreign_keys === 1 &&
+        rejectsWith(19, () => db!.exec('INSERT INTO c VALUES(42)')),
+    );
     current = 'strict-tables';
     // A rowid alias reports a datatype mismatch differently, so test an ordinary STRICT column.
     db.exec('CREATE TABLE s(v INTEGER NOT NULL) STRICT');
@@ -143,17 +192,28 @@ async function runGate(policy: SqliteReleasePolicy): Promise<SqliteRuntime> {
     db.exec('ROLLBACK');
     expect(inside === true && db.isTransaction === false);
     current = 'compile-options';
-    const options = new Set((db.prepare('PRAGMA compile_options').all() as { compile_options: string }[]).map(r => r.compile_options));
-    expect(!['OMIT_WAL', 'OMIT_FOREIGN_KEY', 'OMIT_AUTOINIT', 'THREADSAFE=0'].some(o => options.has(o)));
+    const options = new Set(
+      (db.prepare('PRAGMA compile_options').all() as { compile_options: string }[]).map((r) => r.compile_options),
+    );
+    expect(!['OMIT_WAL', 'OMIT_FOREIGN_KEY', 'OMIT_AUTOINIT', 'THREADSAFE=0'].some((o) => options.has(o)));
   } catch (error) {
     if (error instanceof StoreError) throw error;
     fail(error);
   } finally {
-    try { db?.close(); } catch { /* an in-memory database holds no file */ }
+    try {
+      db?.close();
+    } catch {
+      /* an in-memory database holds no file */
+    }
   }
   if (passed.length !== BEHAVIOUR_CHECKS.length) fail();
   return Object.freeze({
-    sqlite, sqliteVersion: found, node: process.versions.node, platform: process.platform, arch: process.arch,
-    checks: Object.freeze(passed), qualification,
+    sqlite,
+    sqliteVersion: found,
+    node: process.versions.node,
+    platform: process.platform,
+    arch: process.arch,
+    checks: Object.freeze(passed),
+    qualification,
   });
 }

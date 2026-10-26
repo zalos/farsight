@@ -62,10 +62,17 @@ export class ReceiptReader<R extends ReceiptEnvelope | OwnerUiReceiptEnvelope> {
   readonly #dir: string;
 
   /** `dir` is a private user-state folder outside every checkout, e.g. `join(trustDirectory(), 'receipts')`. */
-  protected constructor(dir: string, private readonly kind: 'receipt' | 'owneruireceipt') { this.#dir = dir; }
+  protected constructor(
+    dir: string,
+    private readonly kind: 'receipt' | 'owneruireceipt',
+  ) {
+    this.#dir = dir;
+  }
   protected validateIssuer(_receipt: R): void {}
 
-  get directory(): string { return this.#dir; }
+  get directory(): string {
+    return this.#dir;
+  }
 
   /**
    * Checks the receipt against exactly this intent, state and policy revision at `now`, then spends it. A receipt
@@ -93,21 +100,35 @@ export class ReceiptReader<R extends ReceiptEnvelope | OwnerUiReceiptEnvelope> {
   #validate(receiptId: string, given: ReceiptBinding, now: Date, repairTemporaryAliases: boolean): R {
     const binding = snapshot(given);
     if (!ID.test(receiptId)) policyFail('sentinel.receipt.unknown', 'not a receipt id');
-    const bytes = readPrivateFile(join(this.#dir, `${receiptId}.json`), MAX_RECEIPT_BYTES, STORE, { repairTemporaryAliases });
+    const bytes = readPrivateFile(join(this.#dir, `${receiptId}.json`), MAX_RECEIPT_BYTES, STORE, {
+      repairTemporaryAliases,
+    });
     if (!bytes) return policyFail('sentinel.receipt.unknown', 'no receipt with this id was issued here');
     let value: unknown;
-    try { value = JSON.parse(bytes.toString('utf8')); } catch { return policyFail('sentinel.receipt.unknown', 'the receipt record is not JSON'); }
+    try {
+      value = JSON.parse(bytes.toString('utf8'));
+    } catch {
+      return policyFail('sentinel.receipt.unknown', 'the receipt record is not JSON');
+    }
     const checked = validateEnvelope(this.kind, value);
-    if (!checked.ok || checked.value.id !== receiptId) return policyFail('sentinel.receipt.unknown', 'the receipt record is not valid');
+    if (!checked.ok || checked.value.id !== receiptId)
+      return policyFail('sentinel.receipt.unknown', 'the receipt record is not valid');
     const receipt = checked.value as R;
     this.validateIssuer(receipt);
-    if (compareTimestamps(receipt.expiresAt, stamp(now)) <= 0) policyFail('sentinel.receipt.expired', 'the receipt has expired; confirm again');
-    if (compareTimestamps(receipt.issuedAt, stamp(now)) > 0) policyFail('sentinel.receipt.mismatch', 'the receipt was issued in the future');
+    if (compareTimestamps(receipt.expiresAt, stamp(now)) <= 0)
+      policyFail('sentinel.receipt.expired', 'the receipt has expired; confirm again');
+    if (compareTimestamps(receipt.issuedAt, stamp(now)) > 0)
+      policyFail('sentinel.receipt.mismatch', 'the receipt was issued in the future');
     if (receipt.action !== binding.intent.action || receipt.intentDigest !== intentDigest(binding.intent)) {
-      policyFail('sentinel.receipt.mismatch', 'the receipt confirms a different action, input, effect, budget or scope');
+      policyFail(
+        'sentinel.receipt.mismatch',
+        'the receipt confirms a different action, input, effect, budget or scope',
+      );
     }
-    if (receipt.stateDigest !== binding.stateDigest) policyFail('sentinel.receipt.mismatch', 'the state changed since the receipt was given');
-    if (receipt.policyRevision !== binding.policyRevision) policyFail('sentinel.receipt.mismatch', 'the policy changed since the receipt was given');
+    if (receipt.stateDigest !== binding.stateDigest)
+      policyFail('sentinel.receipt.mismatch', 'the state changed since the receipt was given');
+    if (receipt.policyRevision !== binding.policyRevision)
+      policyFail('sentinel.receipt.mismatch', 'the policy changed since the receipt was given');
     if (readPrivateFile(join(this.#dir, `${receiptId}.spent`), 128, STORE, { repairTemporaryAliases }) !== undefined) {
       policyFail('sentinel.receipt.alreadyUsed', 'the receipt was already used');
     }
@@ -116,4 +137,8 @@ export class ReceiptReader<R extends ReceiptEnvelope | OwnerUiReceiptEnvelope> {
 }
 
 /** Existing public book: its CLI schema, validation and default behavior remain unchanged. */
-export class ReceiptBook extends ReceiptReader<ReceiptEnvelope> { constructor(dir: string) { super(dir, 'receipt'); } }
+export class ReceiptBook extends ReceiptReader<ReceiptEnvelope> {
+  constructor(dir: string) {
+    super(dir, 'receipt');
+  }
+}

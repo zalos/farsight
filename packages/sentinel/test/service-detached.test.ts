@@ -27,7 +27,9 @@ after(async () => {
 });
 
 const hex = (n: number, c: string) => c.repeat(n);
-const QUALIFIED = qualificationFor(SQLITE_RELEASE_POLICY, `${process.platform}-${process.arch}`, process.versions.sqlite ?? '') !== undefined;
+const QUALIFIED =
+  qualificationFor(SQLITE_RELEASE_POLICY, `${process.platform}-${process.arch}`, process.versions.sqlite ?? '') !==
+  undefined;
 const needsStore = QUALIFIED || process.env.CI ? {} : { skip: 'not a qualified store host' };
 
 /** A workspace with adopted settings and two run ids the service child admits (synthetic, under that policy). */
@@ -41,53 +43,96 @@ function setup(label: string) {
   initWorkspace({ workspace: path });
   adoptWorkspaceSettings(ws, { confirm: true, now: new Date() });
   assert.ok('policy' in adoptedPolicy(ws));
-  const plans = ['1', '2'].map(c => `run-${hex(32, c)}`);
+  const plans = ['1', '2'].map((c) => `run-${hex(32, c)}`);
   return { root, ws, env, plans };
 }
 
 type Setup = ReturnType<typeof setup>;
 
 async function serve(s: Setup, behaviour = 'slow-ok'): Promise<ChildProcess> {
-  const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', '--experimental-strip-types', CHILD, s.ws.path, s.root, behaviour, ...s.plans],
-    { env: s.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(
+    process.execPath,
+    [
+      '--disable-warning=ExperimentalWarning',
+      '--experimental-strip-types',
+      CHILD,
+      s.ws.path,
+      s.root,
+      behaviour,
+      ...s.plans,
+    ],
+    { env: s.env, stdio: ['ignore', 'pipe', 'pipe'] },
+  );
   children.add(child);
   child.once('exit', () => children.delete(child));
   let err = '';
-  child.stderr!.on('data', d => { err += d; });
+  child.stderr!.on('data', (d) => {
+    err += d;
+  });
   await new Promise<void>((resolve, reject) => {
-    child.stdout!.on('data', d => { if (String(d).includes('listening')) resolve(); });
-    child.once('exit', code => reject(new Error(`service exited ${code}: ${err.slice(0, 500)}`)));
+    child.stdout!.on('data', (d) => {
+      if (String(d).includes('listening')) resolve();
+    });
+    child.once('exit', (code) => reject(new Error(`service exited ${code}: ${err.slice(0, 500)}`)));
   });
   return child;
 }
 
-const stopped = (child: ChildProcess, signal: NodeJS.Signals = 'SIGTERM') => new Promise<void>(resolve => {
-  if (child.exitCode !== null || child.signalCode !== null) { resolve(); return; }
-  child.once('exit', () => resolve());
-  child.kill(signal);
-});
+const stopped = (child: ChildProcess, signal: NodeJS.Signals = 'SIGTERM') =>
+  new Promise<void>((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resolve();
+      return;
+    }
+    child.once('exit', () => resolve());
+    child.kill(signal);
+  });
 
 /** The owner's CLI: confirm the run here (a receipt minted in this process), then hand it over on a fresh connection. */
 /** The run's current admitted plan, as the service reports it: what the owner confirms a write against. */
 const describe = (s: Setup, runId: string) => ask(s, 'run.describe', { runId });
 
 async function start(s: Setup, planId: string): Promise<any> {
-  const confirmed = confirmForService(s.ws, { command: 'run', action: 'run.start', plan: await describe(s, planId), planId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
+  const confirmed = confirmForService(s.ws, {
+    command: 'run',
+    action: 'run.start',
+    plan: await describe(s, planId),
+    planId,
+    confirm: true,
+    now: new Date(),
+    storeId: readServiceDescriptor(s.ws)!.storeId,
+  });
   assert.ok('receiptId' in confirmed, JSON.stringify(confirmed));
   const client = (await connectService(s.ws))!;
-  try { return await client.request('run.start', { planId, receiptId: confirmed.receiptId }); } finally { client.close(); }
+  try {
+    return await client.request('run.start', { planId, receiptId: confirmed.receiptId });
+  } finally {
+    client.close();
+  }
 }
 
 /** The owner's pause or cancel: confirmed here, one receipt for exactly that action on that run. */
 async function control(s: Setup, op: 'run.pause' | 'run.cancel', runId: string): Promise<any> {
-  const confirmed = confirmForService(s.ws, { command: op.slice(4), action: op, plan: await describe(s, runId), planId: runId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
+  const confirmed = confirmForService(s.ws, {
+    command: op.slice(4),
+    action: op,
+    plan: await describe(s, runId),
+    planId: runId,
+    confirm: true,
+    now: new Date(),
+    storeId: readServiceDescriptor(s.ws)!.storeId,
+  });
   assert.ok('receiptId' in confirmed, JSON.stringify(confirmed));
   return ask(s, op, { runId, receiptId: confirmed.receiptId });
 }
 
 async function ask(s: Setup, op: string, body: Record<string, unknown>): Promise<any> {
   const client = (await connectService(s.ws))!;
-  try { return await client.request(op, body, { timeoutMs: 60_000 }); } finally { client.close(); }
+  try {
+    return await client.request(op, body, { timeoutMs: 60_000 });
+  } finally {
+    client.close();
+  }
 }
 
 /** Waits for the run to end (the service's own wait, re-asked until it does). */
@@ -101,154 +146,261 @@ async function waitEnd(s: Setup, runId: string): Promise<any> {
 /** All four units of the synthetic plan were accepted, each exactly once. */
 function assertEachOnce(counts: Record<string, number>) {
   assert.equal(Object.keys(counts).length, 4, JSON.stringify(counts));
-  assert.ok(Object.values(counts).every(n => n === 1), JSON.stringify(counts));
+  assert.ok(
+    Object.values(counts).every((n) => n === 1),
+    JSON.stringify(counts),
+  );
 }
 
 async function publishedCounts(s: Setup, runId: string) {
   const store = await openStore(s.ws.storePath);
-  try { return Object.fromEntries(publications(store, runId)); } finally { store.close(); }
+  try {
+    return Object.fromEntries(publications(store, runId));
+  } finally {
+    store.close();
+  }
 }
 
-test('a connection without the owner\'s receipt gets only what the grants give agents; a hello or a claim gives nothing', needsStore, async () => {
-  const s = setup('authority');
-  const child = await serve(s);
-  try {
-    const d = readServiceDescriptor(s.ws)!;
-    for (const kind of ['cli', 'mcp', 'http-bridge'] as const) {
-      const c = await connectOwnerSocket(d.address, { storeId: d.storeId, ownerNonce: d.ownerNonce }, kind);
-      try {
-        const r: any = await c.request('run.start', { planId: s.plans[0] });
-        assert.equal(r.outcome, 'configuration-failure', kind);
-        assert.equal(r.reasonCode, 'sentinel.admission.noGrant', `${kind}: the default grants give agents nothing`);
-        assert.equal(r.verdicts.policy.allowed, false);
-        await assert.rejects(async () => c.request('run.start', { planId: s.plans[0], principal: 'human' }), /payloadClaim/);
-        const forged: any = await c.request('run.start', { planId: s.plans[0], receiptId: 'receipt-forged' });
-        assert.equal(forged.reasonCode, 'sentinel.receipt.unknown');
-        await assert.rejects(c.request('run.start', { planId: s.plans[0], extra: 'x' }), /requestInvalid/);
-        await assert.rejects(c.request('settings.adopt', {}), /unknownOperation/);
-        // Pause and cancel are writes: a connection without the owner's receipt gets only the grants' answer.
-        for (const op of ['run.pause', 'run.cancel']) {
-          const denied: any = await c.request(op, { runId: s.plans[0] });
-          assert.deepEqual([denied.outcome, denied.reasonCode], ['configuration-failure', 'sentinel.admission.noGrant'], `${kind} ${op}`);
+test(
+  "a connection without the owner's receipt gets only what the grants give agents; a hello or a claim gives nothing",
+  needsStore,
+  async () => {
+    const s = setup('authority');
+    const child = await serve(s);
+    try {
+      const d = readServiceDescriptor(s.ws)!;
+      for (const kind of ['cli', 'mcp', 'http-bridge'] as const) {
+        const c = await connectOwnerSocket(d.address, { storeId: d.storeId, ownerNonce: d.ownerNonce }, kind);
+        try {
+          const r: any = await c.request('run.start', { planId: s.plans[0] });
+          assert.equal(r.outcome, 'configuration-failure', kind);
+          assert.equal(r.reasonCode, 'sentinel.admission.noGrant', `${kind}: the default grants give agents nothing`);
+          assert.equal(r.verdicts.policy.allowed, false);
+          await assert.rejects(
+            async () => c.request('run.start', { planId: s.plans[0], principal: 'human' }),
+            /payloadClaim/,
+          );
+          const forged: any = await c.request('run.start', { planId: s.plans[0], receiptId: 'receipt-forged' });
+          assert.equal(forged.reasonCode, 'sentinel.receipt.unknown');
+          await assert.rejects(c.request('run.start', { planId: s.plans[0], extra: 'x' }), /requestInvalid/);
+          await assert.rejects(c.request('settings.adopt', {}), /unknownOperation/);
+          // Pause and cancel are writes: a connection without the owner's receipt gets only the grants' answer.
+          for (const op of ['run.pause', 'run.cancel']) {
+            const denied: any = await c.request(op, { runId: s.plans[0] });
+            assert.deepEqual(
+              [denied.outcome, denied.reasonCode],
+              ['configuration-failure', 'sentinel.admission.noGrant'],
+              `${kind} ${op}`,
+            );
+          }
+        } finally {
+          c.close();
         }
-      } finally { c.close(); }
+      }
+      // A receipt confirms one plan: spent on another it is refused, and the run it names never started.
+      const other = confirmForService(s.ws, {
+        command: 'run',
+        action: 'run.start',
+        plan: await describe(s, s.plans[1]!),
+        planId: s.plans[1]!,
+        confirm: true,
+        now: new Date(),
+        storeId: readServiceDescriptor(s.ws)!.storeId,
+      });
+      assert.ok('receiptId' in other);
+      const mismatch = await ask(s, 'run.start', { planId: s.plans[0], receiptId: other.receiptId });
+      // A receipt for one action is never a receipt for another, even on the same plan.
+      const startReceipt = confirmForService(s.ws, {
+        command: 'run',
+        action: 'run.start',
+        plan: await describe(s, s.plans[0]!),
+        planId: s.plans[0]!,
+        confirm: true,
+        now: new Date(),
+        storeId: readServiceDescriptor(s.ws)!.storeId,
+      });
+      assert.ok('receiptId' in startReceipt);
+      assert.equal(
+        (await ask(s, 'run.cancel', { runId: s.plans[0], receiptId: startReceipt.receiptId })).reasonCode,
+        'sentinel.receipt.mismatch',
+      );
+      assert.equal(mismatch.reasonCode, 'sentinel.receipt.mismatch');
+      const status = await ask(s, 'run.status', { runId: s.plans[0] });
+      assert.equal(status.reasonCode, 'sentinel.service.runUnknown');
+      // Without --confirm the owner's own CLI issues nothing.
+      const unconfirmed = confirmForService(s.ws, {
+        command: 'run',
+        action: 'run.start',
+        plan: await describe(s, s.plans[0]!),
+        planId: s.plans[0]!,
+        confirm: false,
+        now: new Date(),
+      });
+      assert.ok('result' in unconfirmed);
+      assert.equal(unconfirmed.result.outcome, 'awaiting-confirmation');
+      assert.equal(unconfirmed.result.exitCode, 4);
+    } finally {
+      await stopped(child);
     }
-    // A receipt confirms one plan: spent on another it is refused, and the run it names never started.
-    const other = confirmForService(s.ws, { command: 'run', action: 'run.start', plan: await describe(s, s.plans[1]!), planId: s.plans[1]!, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
-    assert.ok('receiptId' in other);
-    const mismatch = await ask(s, 'run.start', { planId: s.plans[0], receiptId: other.receiptId });
-    // A receipt for one action is never a receipt for another, even on the same plan.
-    const startReceipt = confirmForService(s.ws, { command: 'run', action: 'run.start', plan: await describe(s, s.plans[0]!), planId: s.plans[0]!, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
-    assert.ok('receiptId' in startReceipt);
-    assert.equal((await ask(s, 'run.cancel', { runId: s.plans[0], receiptId: startReceipt.receiptId })).reasonCode, 'sentinel.receipt.mismatch');
-    assert.equal(mismatch.reasonCode, 'sentinel.receipt.mismatch');
-    const status = await ask(s, 'run.status', { runId: s.plans[0] });
-    assert.equal(status.reasonCode, 'sentinel.service.runUnknown');
-    // Without --confirm the owner's own CLI issues nothing.
-    const unconfirmed = confirmForService(s.ws, { command: 'run', action: 'run.start', plan: await describe(s, s.plans[0]!), planId: s.plans[0]!, confirm: false, now: new Date() });
-    assert.ok('result' in unconfirmed);
-    assert.equal(unconfirmed.result.outcome, 'awaiting-confirmation');
-    assert.equal(unconfirmed.result.exitCode, 4);
-  } finally { await stopped(child); }
-  assert.equal(readServiceDescriptor(s.ws), undefined, 'a stopped service removes its descriptor');
-});
+    assert.equal(readServiceDescriptor(s.ws), undefined, 'a stopped service removes its descriptor');
+  },
+);
 
-test('duplicate starts join one run, a receipt is spent once, and the run survives its callers disconnecting', needsStore, async () => {
-  const s = setup('duplicate');
-  const child = await serve(s);
+test(
+  'duplicate starts join one run, a receipt is spent once, and the run survives its callers disconnecting',
+  needsStore,
+  async () => {
+    const s = setup('duplicate');
+    const child = await serve(s);
+    try {
+      const planId = s.plans[0]!;
+      const confirmed = confirmForService(s.ws, {
+        command: 'run',
+        action: 'run.start',
+        plan: await describe(s, planId),
+        planId,
+        confirm: true,
+        now: new Date(),
+        storeId: readServiceDescriptor(s.ws)!.storeId,
+      });
+      assert.ok('receiptId' in confirmed);
+      const second = confirmForService(s.ws, {
+        command: 'run',
+        action: 'run.start',
+        plan: await describe(s, planId),
+        planId,
+        confirm: true,
+        now: new Date(),
+        storeId: readServiceDescriptor(s.ws)!.storeId,
+      });
+      assert.ok('receiptId' in second);
+      const [a, b] = await Promise.all(
+        [confirmed.receiptId, second.receiptId].map(async (receiptId) => {
+          const c = (await connectService(s.ws))!;
+          const r = await c.request('run.start', { planId, receiptId });
+          c.close(); // the caller goes away at once
+          return r as any;
+        }),
+      );
+      assert.deepEqual([a.outcome, b.outcome], ['submitted', 'submitted']);
+      assert.deepEqual([a.facts.runId, b.facts.runId], [planId, planId]);
+      assert.deepEqual(
+        [a.facts.joined, b.facts.joined].sort(),
+        [false, true],
+        'one start began the run; the other joined it',
+      );
+      const reused = await ask(s, 'run.start', { planId, receiptId: confirmed.receiptId });
+      assert.equal(reused.reasonCode, 'sentinel.receipt.alreadyUsed');
+      const busy = await start(s, s.plans[1]!);
+      assert.equal(busy.reasonCode, 'sentinel.service.anotherRunActive', 'one run executes at a time');
+      const end = await waitEnd(s, planId);
+      assert.equal(end.facts.state, 'completed');
+      // A start of a finished run prints its result again and executes nothing.
+      const again = await start(s, planId);
+      assert.equal(again.facts.state, 'completed');
+      assert.notEqual(again.outcome, 'submitted');
+    } finally {
+      await stopped(child);
+    }
+    assertEachOnce(await publishedCounts(s, s.plans[0]!));
+  },
+);
+
+test(
+  'pause lets work in flight finish and resume needs the owner again; cancel stops the run',
+  needsStore,
+  async () => {
+    const s = setup('controls');
+    const child = await serve(s);
+    try {
+      const planId = s.plans[0]!;
+      assert.equal((await start(s, planId)).outcome, 'submitted');
+      const paused = await control(s, 'run.pause', planId);
+      assert.equal(paused.outcome, 'requested');
+      const end = await waitEnd(s, planId);
+      assert.equal(end.facts.state, 'paused');
+      assert.equal(end.reasonCode, 'sentinel.service.runNotCompleted');
+      assert.equal((await control(s, 'run.pause', planId)).reasonCode, 'sentinel.service.runNotActive');
+      // Resume is a start: the owner confirms again, and the run continues from the ledger.
+      assert.equal((await start(s, planId)).outcome, 'submitted');
+      assert.equal((await waitEnd(s, planId)).facts.state, 'completed');
+      assert.deepEqual(
+        await (async () => {
+          const r = await ask(s, 'run.status', { runId: planId, limit: 50 });
+          return r.facts.state;
+        })(),
+        'completed',
+      );
+
+      const other = s.plans[1]!;
+      assert.equal((await start(s, other)).outcome, 'submitted');
+      assert.equal((await control(s, 'run.cancel', other)).outcome, 'requested');
+      const canceled = await waitEnd(s, other);
+      assert.equal(canceled.facts.state, 'canceled');
+      assert.equal(canceled.reasonCode, 'sentinel.service.runNotCompleted');
+      assert.equal((await control(s, 'run.cancel', other)).reasonCode, 'sentinel.service.runNotActive');
+    } finally {
+      await stopped(child);
+    }
+    assertEachOnce(await publishedCounts(s, s.plans[0]!));
+  },
+);
+
+const psWorks = (() => {
   try {
-    const planId = s.plans[0]!;
-    const confirmed = confirmForService(s.ws, { command: 'run', action: 'run.start', plan: await describe(s, planId), planId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
-    assert.ok('receiptId' in confirmed);
-    const second = confirmForService(s.ws, { command: 'run', action: 'run.start', plan: await describe(s, planId), planId, confirm: true, now: new Date(), storeId: readServiceDescriptor(s.ws)!.storeId });
-    assert.ok('receiptId' in second);
-    const [a, b] = await Promise.all([confirmed.receiptId, second.receiptId].map(async receiptId => {
-      const c = (await connectService(s.ws))!;
-      const r = await c.request('run.start', { planId, receiptId });
-      c.close(); // the caller goes away at once
-      return r as any;
-    }));
-    assert.deepEqual([a.outcome, b.outcome], ['submitted', 'submitted']);
-    assert.deepEqual([a.facts.runId, b.facts.runId], [planId, planId]);
-    assert.deepEqual([a.facts.joined, b.facts.joined].sort(), [false, true], 'one start began the run; the other joined it');
-    const reused = await ask(s, 'run.start', { planId, receiptId: confirmed.receiptId });
-    assert.equal(reused.reasonCode, 'sentinel.receipt.alreadyUsed');
-    const busy = await start(s, s.plans[1]!);
-    assert.equal(busy.reasonCode, 'sentinel.service.anotherRunActive', 'one run executes at a time');
-    const end = await waitEnd(s, planId);
-    assert.equal(end.facts.state, 'completed');
-    // A start of a finished run prints its result again and executes nothing.
-    const again = await start(s, planId);
-    assert.equal(again.facts.state, 'completed');
-    assert.notEqual(again.outcome, 'submitted');
-  } finally { await stopped(child); }
-  assertEachOnce(await publishedCounts(s, s.plans[0]!));
-});
-
-test('pause lets work in flight finish and resume needs the owner again; cancel stops the run', needsStore, async () => {
-  const s = setup('controls');
-  const child = await serve(s);
-  try {
-    const planId = s.plans[0]!;
-    assert.equal((await start(s, planId)).outcome, 'submitted');
-    const paused = await control(s, 'run.pause', planId);
-    assert.equal(paused.outcome, 'requested');
-    const end = await waitEnd(s, planId);
-    assert.equal(end.facts.state, 'paused');
-    assert.equal(end.reasonCode, 'sentinel.service.runNotCompleted');
-    assert.equal((await control(s, 'run.pause', planId)).reasonCode, 'sentinel.service.runNotActive');
-    // Resume is a start: the owner confirms again, and the run continues from the ledger.
-    assert.equal((await start(s, planId)).outcome, 'submitted');
-    assert.equal((await waitEnd(s, planId)).facts.state, 'completed');
-    assert.deepEqual(await (async () => {
-      const r = await ask(s, 'run.status', { runId: planId, limit: 50 });
-      return r.facts.state;
-    })(), 'completed');
-
-    const other = s.plans[1]!;
-    assert.equal((await start(s, other)).outcome, 'submitted');
-    assert.equal((await control(s, 'run.cancel', other)).outcome, 'requested');
-    const canceled = await waitEnd(s, other);
-    assert.equal(canceled.facts.state, 'canceled');
-    assert.equal(canceled.reasonCode, 'sentinel.service.runNotCompleted');
-    assert.equal((await control(s, 'run.cancel', other)).reasonCode, 'sentinel.service.runNotActive');
-  } finally { await stopped(child); }
-  assertEachOnce(await publishedCounts(s, s.plans[0]!));
-});
-
-const psWorks = (() => { try { return Array.isArray(argumentsOf(process.pid)); } catch { return false; } })();
-
-test('a service killed mid-run: its run reads as interrupted, and resumes with each output accepted once', { skip: (!psWorks && 'recovery verifies workers by their arguments, which this host does not report') || needsStore.skip }, async () => {
-  const s = setup('restart');
-  const planId = s.plans[0]!;
-  let child = await serve(s);
-  assert.equal((await start(s, planId)).outcome, 'submitted');
-  // Kill it while an attempt is in flight: no pause, no cleanup, its descriptor and socket left behind.
-  for (let i = 0; ; i++) {
-    const r = await ask(s, 'run.status', { runId: planId, limit: 50 });
-    if (r.facts.events.some((e: { kind: string }) => e.kind === 'attempt-started')) break;
-    assert.ok(i < 200, 'an attempt started');
-    await new Promise(res => setTimeout(res, 25));
+    return Array.isArray(argumentsOf(process.pid));
+  } catch {
+    return false;
   }
-  await stopped(child, 'SIGKILL');
-  assert.equal(await connectService(s.ws), undefined, 'a dead service is not reached through its stale descriptor');
+})();
 
-  child = await serve(s);
-  try {
-    const interrupted = await ask(s, 'run.wait', { runId: planId, timeoutMs: 0 });
-    assert.equal(interrupted.reasonCode, 'sentinel.service.runInterrupted', 'nothing executes it, so it is not reported as running');
+test(
+  'a service killed mid-run: its run reads as interrupted, and resumes with each output accepted once',
+  {
+    skip:
+      (!psWorks && 'recovery verifies workers by their arguments, which this host does not report') || needsStore.skip,
+  },
+  async () => {
+    const s = setup('restart');
+    const planId = s.plans[0]!;
+    let child = await serve(s);
     assert.equal((await start(s, planId)).outcome, 'submitted');
-    assert.equal((await waitEnd(s, planId)).facts.state, 'completed');
-  } finally { await stopped(child); }
-  assertEachOnce(await publishedCounts(s, planId));
-});
+    // Kill it while an attempt is in flight: no pause, no cleanup, its descriptor and socket left behind.
+    for (let i = 0; ; i++) {
+      const r = await ask(s, 'run.status', { runId: planId, limit: 50 });
+      if (r.facts.events.some((e: { kind: string }) => e.kind === 'attempt-started')) break;
+      assert.ok(i < 200, 'an attempt started');
+      await new Promise((res) => setTimeout(res, 25));
+    }
+    await stopped(child, 'SIGKILL');
+    assert.equal(await connectService(s.ws), undefined, 'a dead service is not reached through its stale descriptor');
+
+    child = await serve(s);
+    try {
+      const interrupted = await ask(s, 'run.wait', { runId: planId, timeoutMs: 0 });
+      assert.equal(
+        interrupted.reasonCode,
+        'sentinel.service.runInterrupted',
+        'nothing executes it, so it is not reported as running',
+      );
+      assert.equal((await start(s, planId)).outcome, 'submitted');
+      assert.equal((await waitEnd(s, planId)).facts.state, 'completed');
+    } finally {
+      await stopped(child);
+    }
+    assertEachOnce(await publishedCounts(s, planId));
+  },
+);
 
 test('an unsafe service record is refused with its own error, never followed', needsStore, async () => {
   const s = setup('record');
   const { symlinkSync, writeFileSync: write, chmodSync: chmod } = await import('node:fs');
   const dir = join(s.ws.trustDir, 'services');
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const name = join(dir, `${(await import('node:crypto')).createHash('sha256').update(s.ws.storePath).digest('hex').slice(0, 32)}.json`);
+  const name = join(
+    dir,
+    `${(await import('node:crypto')).createHash('sha256').update(s.ws.storePath).digest('hex').slice(0, 32)}.json`,
+  );
   const elsewhere = join(s.root, 'elsewhere.json');
   write(elsewhere, '{}');
   symlinkSync(elsewhere, name);
@@ -256,20 +408,38 @@ test('an unsafe service record is refused with its own error, never followed', n
   (await import('node:fs')).unlinkSync(name);
   write(name, '{}', { mode: 0o644 });
   chmod(name, 0o644);
-  await assert.rejects(connectService(s.ws), (e: any) => e.code === 'sentinel.service.recordUnsafe', 'open to other accounts');
+  await assert.rejects(
+    connectService(s.ws),
+    (e: any) => e.code === 'sentinel.service.recordUnsafe',
+    'open to other accounts',
+  );
 });
 
 test('the launcher captures its own invocation and stops exactly the process it started', needsStore, async () => {
   const s = setup('launch');
   const { launchService, SERVICE_ENV } = await import('../dist/service/launch.js');
-  const launched = launchService(s.ws.path, 0, { ...s.env, SENTINEL_ADAPTER_ID: 'sentinel.preview.detector', NPM_TOKEN: 'not-passed' });
+  const launched = launchService(s.ws.path, 0, {
+    ...s.env,
+    SENTINEL_ADAPTER_ID: 'sentinel.preview.detector',
+    NPM_TOKEN: 'not-passed',
+  });
   assert.ok(typeof launched.pid === 'number');
-  assert.ok(!SERVICE_ENV.some(n => n.startsWith('SENTINEL_') || /TOKEN/.test(n)), 'no worker identity or token is passed on');
-  for (let i = 0; i < 150 && !readServiceDescriptor(s.ws); i++) await new Promise(r => setTimeout(r, 100));
+  assert.ok(
+    !SERVICE_ENV.some((n) => n.startsWith('SENTINEL_') || /TOKEN/.test(n)),
+    'no worker identity or token is passed on',
+  );
+  for (let i = 0; i < 150 && !readServiceDescriptor(s.ws); i++) await new Promise((r) => setTimeout(r, 100));
   const d = readServiceDescriptor(s.ws)!;
   assert.equal(d.pid, launched.pid, 'the service is the process launched, not a detector or another child');
   launched.stop();
-  for (let i = 0; i < 100; i++) { try { process.kill(launched.pid!, 0); } catch { break; } await new Promise(r => setTimeout(r, 50)); }
+  for (let i = 0; i < 100; i++) {
+    try {
+      process.kill(launched.pid!, 0);
+    } catch {
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
   assert.throws(() => process.kill(launched.pid!, 0), 'stopped by its own handle');
   assert.equal(readServiceDescriptor(s.ws), undefined, 'a stopped service removes its own record');
   launched.stop(); // a second stop signals nothing

@@ -13,18 +13,49 @@ export interface Declared {
   readonly kind: 'class' | 'interface' | 'annotation';
 }
 
-export type Resolved = { readonly kind: 'captured'; readonly decl: Declared } | { readonly kind: 'external'; readonly fqn: string }
+export type Resolved =
+  | { readonly kind: 'captured'; readonly decl: Declared }
+  | { readonly kind: 'external'; readonly fqn: string }
   /** Several wildcard imports could supply the name, none of them captured: it is one of these. */
-  | { readonly kind: 'one-of'; readonly fqns: readonly string[] } | { readonly kind: 'unknown' };
+  | { readonly kind: 'one-of'; readonly fqns: readonly string[] }
+  | { readonly kind: 'unknown' };
 
-interface Imports { readonly single: Map<string, string>; readonly wildcards: string[]; readonly staticSingle: Set<string>; readonly staticWildcards: string[] }
+interface Imports {
+  readonly single: Map<string, string>;
+  readonly wildcards: string[];
+  readonly staticSingle: Set<string>;
+  readonly staticWildcards: string[];
+}
 
-const JAVA_LANG = new Set(['Object', 'String', 'Override', 'Deprecated', 'SuppressWarnings', 'FunctionalInterface', 'SafeVarargs', 'Exception', 'Integer', 'Long', 'Boolean']);
-const DECL_KINDS: Record<string, Declared['kind']> = { class_declaration: 'class', interface_declaration: 'interface', annotation_type_declaration: 'annotation', record_declaration: 'class', enum_declaration: 'class' };
+const JAVA_LANG = new Set([
+  'Object',
+  'String',
+  'Override',
+  'Deprecated',
+  'SuppressWarnings',
+  'FunctionalInterface',
+  'SafeVarargs',
+  'Exception',
+  'Integer',
+  'Long',
+  'Boolean',
+]);
+const DECL_KINDS: Record<string, Declared['kind']> = {
+  class_declaration: 'class',
+  interface_declaration: 'interface',
+  annotation_type_declaration: 'annotation',
+  record_declaration: 'class',
+  enum_declaration: 'class',
+};
 
 export function packageOf(file: JavaFile): string {
-  const decl = named(file.root).find(n => n.type === 'package_declaration');
-  return decl ? decl.text.replace(/^package\s+/, '').replace(/;\s*$/, '').replace(/\s+/g, '') : '';
+  const decl = named(file.root).find((n) => n.type === 'package_declaration');
+  return decl
+    ? decl.text
+        .replace(/^package\s+/, '')
+        .replace(/;\s*$/, '')
+        .replace(/\s+/g, '')
+    : '';
 }
 
 /** Erase each balanced argument group without erasing member-name segments between groups. Comments and quoted
@@ -46,7 +77,10 @@ function eraseTypeArguments(written: string): string | undefined {
       let closed = false;
       while (++i < written.length) {
         if (written[i] === '\\') i++;
-        else if (written[i] === c) { closed = true; break; }
+        else if (written[i] === c) {
+          closed = true;
+          break;
+        }
       }
       if (!closed) return undefined;
     } else if (c === '<') depth++;
@@ -67,7 +101,7 @@ export class TypeIndex {
   constructor(files: readonly JavaFile[]) {
     for (const file of files) {
       const pkg = packageOf(file);
-      walk(file.root, n => {
+      walk(file.root, (n) => {
         const kind = DECL_KINDS[n.type];
         if (!kind) return;
         const name = n.childForFieldName('name')?.text;
@@ -75,20 +109,31 @@ export class TypeIndex {
         // Nested types are named Outer.Inner from the package.
         const outer: string[] = [];
         let p = n.parent;
-        while (p) { if (DECL_KINDS[p.type]) outer.unshift(p.childForFieldName('name')?.text ?? '?'); p = p.parent; }
+        while (p) {
+          if (DECL_KINDS[p.type]) outer.unshift(p.childForFieldName('name')?.text ?? '?');
+          p = p.parent;
+        }
         const fqn = [pkg, ...outer, name].filter(Boolean).join('.');
         const d: Declared = { name, pkg, fqn, file, node: n, kind };
-        for (const [map, key] of [[this.byFqn, fqn], [this.bySimple, name]] as const) {
+        for (const [map, key] of [
+          [this.byFqn, fqn],
+          [this.bySimple, name],
+        ] as const) {
           const list = map.get(key);
-          if (list) list.push(d); else map.set(key, [d]);
+          if (list) list.push(d);
+          else map.set(key, [d]);
         }
       });
       const single = new Map<string, string>();
       const wildcards: string[] = [];
       const staticSingle = new Set<string>();
       const staticWildcards: string[] = [];
-      for (const imp of named(file.root).filter(n => n.type === 'import_declaration')) {
-        const text = imp.text.replace(/^import\s+/, '').replace(/;\s*$/, '').replace(/\s+/g, ' ').trim();
+      for (const imp of named(file.root).filter((n) => n.type === 'import_declaration')) {
+        const text = imp.text
+          .replace(/^import\s+/, '')
+          .replace(/;\s*$/, '')
+          .replace(/\s+/g, ' ')
+          .trim();
         const isStatic = text.startsWith('static ');
         const path = (isStatic ? text.slice(7) : text).replace(/\s+/g, '');
         if (path.endsWith('.*')) (isStatic ? staticWildcards : wildcards).push(path.slice(0, -2));
@@ -103,15 +148,23 @@ export class TypeIndex {
   resolve(file: JavaFile, written: string): Resolved {
     const erased = eraseTypeArguments(written);
     if (erased === undefined) return { kind: 'unknown' };
-    const text = erased.replace(/\[\s*\]/g, '').replace(/^@/, '').replace(/\s+/g, '');
+    const text = erased
+      .replace(/\[\s*\]/g, '')
+      .replace(/^@/, '')
+      .replace(/\s+/g, '');
     const one = (list: Declared[] | undefined): Resolved | undefined =>
-      list?.length === 1 ? { kind: 'captured', decl: list[0]! } : list && list.length > 1 ? { kind: 'unknown' } : undefined;
+      list?.length === 1
+        ? { kind: 'captured', decl: list[0]! }
+        : list && list.length > 1
+          ? { kind: 'unknown' }
+          : undefined;
     if (text.includes('.')) {
       const [head, ...rest] = text.split('.');
       // Outer.Inner where Outer is itself resolvable.
       if (/^[A-Z]/.test(head!)) {
         const outer = this.resolve(file, head!);
-        if (outer.kind === 'captured') return one(this.byFqn.get(`${outer.decl.fqn}.${rest.join('.')}`)) ?? { kind: 'unknown' };
+        if (outer.kind === 'captured')
+          return one(this.byFqn.get(`${outer.decl.fqn}.${rest.join('.')}`)) ?? { kind: 'unknown' };
         if (outer.kind === 'external') return { kind: 'external', fqn: `${outer.fqn}.${rest.join('.')}` };
         return { kind: 'unknown' };
       }
@@ -124,19 +177,24 @@ export class TypeIndex {
     // declaration resolves only when nothing else could supply the name; otherwise the name is ambiguous.
     const shadows = this.shadowsIn(file, text);
     if (shadows.length) {
-      const top = shadows.length === 1 && shadows[0]!.file === file && shadows[0]!.fqn === [packageOf(file), text].filter(Boolean).join('.');
+      const top =
+        shadows.length === 1 &&
+        shadows[0]!.file === file &&
+        shadows[0]!.fqn === [packageOf(file), text].filter(Boolean).join('.');
       const nothingElse = !single && !imp?.wildcards.length && !JAVA_LANG.has(text);
-      return (top && !single) || (shadows.length === 1 && nothingElse) ? { kind: 'captured', decl: shadows[0]! } : { kind: 'unknown' };
+      return (top && !single) || (shadows.length === 1 && nothingElse)
+        ? { kind: 'captured', decl: shadows[0]! }
+        : { kind: 'unknown' };
     }
     if (single) return one(this.byFqn.get(single)) ?? { kind: 'external', fqn: single };
     const local = one(this.byFqn.get([packageOf(file), text].filter(Boolean).join('.')));
     if (local) return local;
     if (imp?.wildcards.length) {
-      const candidates = imp.wildcards.flatMap(w => this.byFqn.get(`${w}.${text}`) ?? []);
+      const candidates = imp.wildcards.flatMap((w) => this.byFqn.get(`${w}.${text}`) ?? []);
       if (candidates.length === 1) return { kind: 'captured', decl: candidates[0]! };
       if (candidates.length > 1) return { kind: 'unknown' };
       // Not captured: Java requires the name to come from one of the wildcard packages (or java.lang).
-      const external = imp.wildcards.filter(w => !this.capturedPackage(w)).map(w => `${w}.${text}`);
+      const external = imp.wildcards.filter((w) => !this.capturedPackage(w)).map((w) => `${w}.${text}`);
       if (JAVA_LANG.has(text)) external.push(`java.lang.${text}`);
       if (external.length === 1) return { kind: 'external', fqn: external[0]! };
       return external.length ? { kind: 'one-of', fqns: external } : { kind: 'unknown' };
@@ -152,7 +210,7 @@ export class TypeIndex {
   private shadowsIn(file: JavaFile, name: string): Declared[] {
     const key = `${name}`;
     let perFile = this.shadowCache.get(file);
-    if (!perFile) this.shadowCache.set(file, perFile = new Map());
+    if (!perFile) this.shadowCache.set(file, (perFile = new Map()));
     const hit = perFile.get(key);
     if (hit) return hit;
     const result = this.computeShadows(file, name);
@@ -161,13 +219,15 @@ export class TypeIndex {
   }
 
   private computeShadows(file: JavaFile, name: string): Declared[] {
-    const out = new Set<Declared>((this.bySimple.get(name) ?? []).filter(d => d.file === file));
+    const out = new Set<Declared>((this.bySimple.get(name) ?? []).filter((d) => d.file === file));
     const seen = new Set<JavaNode>();
     const visitSupers = (f: JavaFile, node: JavaNode) => {
       const supers: string[] = [];
       const sc = node.childForFieldName('superclass');
       if (sc) supers.push(named(sc)[0]?.text ?? sc.text.replace(/^extends\s+/, ''));
-      const ifaces = node.childForFieldName('interfaces') ?? named(node).find(n => n.type === 'extends_interfaces' || n.type === 'super_interfaces');
+      const ifaces =
+        node.childForFieldName('interfaces') ??
+        named(node).find((n) => n.type === 'extends_interfaces' || n.type === 'super_interfaces');
       for (const list of named(ifaces)) for (const t of named(list)) supers.push(t.text);
       for (const t of supers) {
         // Every captured declaration the supertype name could denote: an over-approximation, so a member type that
@@ -179,13 +239,21 @@ export class TypeIndex {
           // Tree nodes are not identity-stable: a member type is one whose enclosing body belongs to `d`.
           for (const m of this.bySimple.get(name) ?? []) {
             const owner = m.node.parent?.parent;
-            if (m.file === d.file && owner && owner.startIndex === d.node.startIndex && owner.endIndex === d.node.endIndex) out.add(m);
+            if (
+              m.file === d.file &&
+              owner &&
+              owner.startIndex === d.node.startIndex &&
+              owner.endIndex === d.node.endIndex
+            )
+              out.add(m);
           }
           visitSupers(d.file, d.node);
         }
       }
     };
-    walk(file.root, n => { if (DECL_KINDS[n.type]) visitSupers(file, n); });
+    walk(file.root, (n) => {
+      if (DECL_KINDS[n.type]) visitSupers(file, n);
+    });
     return [...out];
   }
 
@@ -206,21 +274,25 @@ export class TypeIndex {
       const imp = this.imports.get(file);
       const out = new Set<Declared>();
       const single = imp?.single.get(name);
-      for (const q of [single, [packageOf(file), name].filter(Boolean).join('.'), ...(imp?.wildcards ?? []).map(w => `${w}.${name}`)]) {
-        for (const d of q ? this.byFqn.get(q) ?? [] : []) out.add(d);
+      for (const q of [
+        single,
+        [packageOf(file), name].filter(Boolean).join('.'),
+        ...(imp?.wildcards ?? []).map((w) => `${w}.${name}`),
+      ]) {
+        for (const d of q ? (this.byFqn.get(q) ?? []) : []) out.add(d);
       }
       for (const d of this.bySimple.get(name) ?? []) if (d.file === file) out.add(d);
       if (!out.size && !single) for (const d of this.bySimple.get(name) ?? []) out.add(d);
       return [...out];
     };
     let current = simple(parts[0]!);
-    for (const seg of parts.slice(1)) current = current.flatMap(h => this.byFqn.get(`${h.fqn}.${seg}`) ?? []);
+    for (const seg of parts.slice(1)) current = current.flatMap((h) => this.byFqn.get(`${h.fqn}.${seg}`) ?? []);
     // A package-qualified name.
-    return [...new Set([...current, ...this.byFqn.get(text) ?? []])];
+    return [...new Set([...current, ...(this.byFqn.get(text) ?? [])])];
   }
 
   private capturedPackage(pkg: string): boolean {
-    for (const d of this.byFqn.values()) if (d.some(x => x.pkg === pkg)) return true;
+    for (const d of this.byFqn.values()) if (d.some((x) => x.pkg === pkg)) return true;
     return false;
   }
 
@@ -230,20 +302,30 @@ export class TypeIndex {
     const owner = member.slice(0, member.lastIndexOf('.'));
     if (!imp || !(imp.staticSingle.has(member) || imp.staticWildcards.includes(owner))) return false;
     let shadowed = false;
-    walk(file.root, n => { if (n.type === 'method_declaration' && n.childForFieldName('name')?.text === name) shadowed = true; });
+    walk(file.root, (n) => {
+      if (n.type === 'method_declaration' && n.childForFieldName('name')?.text === name) shadowed = true;
+    });
     return !shadowed;
   }
 
-  annotationsOf(node: JavaNode): Annotation[] { return annotationsOf(node); }
+  annotationsOf(node: JavaNode): Annotation[] {
+    return annotationsOf(node);
+  }
 }
 
 /** Spring annotations that make a class a component (each is, or is meta-annotated with, @Component). */
 const STEREOTYPE_FQNS = new Set([
-  'org.springframework.stereotype.Component', 'org.springframework.stereotype.Service', 'org.springframework.stereotype.Repository',
-  'org.springframework.stereotype.Controller', 'org.springframework.web.bind.annotation.RestController',
-  'org.springframework.web.bind.annotation.ControllerAdvice', 'org.springframework.web.bind.annotation.RestControllerAdvice',
-  'org.springframework.context.annotation.Configuration', 'org.springframework.boot.SpringBootConfiguration',
-  'org.springframework.boot.autoconfigure.SpringBootApplication', 'org.springframework.boot.test.context.TestConfiguration',
+  'org.springframework.stereotype.Component',
+  'org.springframework.stereotype.Service',
+  'org.springframework.stereotype.Repository',
+  'org.springframework.stereotype.Controller',
+  'org.springframework.web.bind.annotation.RestController',
+  'org.springframework.web.bind.annotation.ControllerAdvice',
+  'org.springframework.web.bind.annotation.RestControllerAdvice',
+  'org.springframework.context.annotation.Configuration',
+  'org.springframework.boot.SpringBootConfiguration',
+  'org.springframework.boot.autoconfigure.SpringBootApplication',
+  'org.springframework.boot.test.context.TestConfiguration',
 ]);
 /** Annotation packages whose other annotations do not make a class a component. */
 const NON_COMPONENT_PREFIXES = ['org.springframework.', 'java.', 'javax.', 'jakarta.', 'lombok.'];
@@ -257,10 +339,14 @@ export function componentStatus(index: TypeIndex, file: JavaFile, node: JavaNode
     const r = index.resolve(file, a.node.childForFieldName('name')?.text ?? a.name);
     if (r.kind === 'external' || r.kind === 'one-of') {
       const fqns = r.kind === 'external' ? [r.fqn] : r.fqns;
-      if (fqns.every(f => STEREOTYPE_FQNS.has(f))) return 'yes';
-      if (fqns.some(f => STEREOTYPE_FQNS.has(f) || !NON_COMPONENT_PREFIXES.some(p => f.startsWith(p)))) unknown = true;
+      if (fqns.every((f) => STEREOTYPE_FQNS.has(f))) return 'yes';
+      if (fqns.some((f) => STEREOTYPE_FQNS.has(f) || !NON_COMPONENT_PREFIXES.some((p) => f.startsWith(p))))
+        unknown = true;
     } else if (r.kind === 'captured') {
-      if (r.decl.kind !== 'annotation' || seen.has(r.decl.node)) { unknown = r.decl.kind !== 'annotation' || unknown; continue; }
+      if (r.decl.kind !== 'annotation' || seen.has(r.decl.node)) {
+        unknown = r.decl.kind !== 'annotation' || unknown;
+        continue;
+      }
       seen.add(r.decl.node);
       const meta = componentStatus(index, r.decl.file, r.decl.node, seen);
       if (meta === 'yes') return 'yes';
@@ -271,16 +357,21 @@ export function componentStatus(index: TypeIndex, file: JavaFile, node: JavaNode
 }
 
 /** Whether `node` carries an annotation that resolves to `fqn`, directly or through captured meta-annotations. */
-export function hasAnnotation(index: TypeIndex, file: JavaFile, node: JavaNode, fqn: string, seen = new Set<JavaNode>()): Tri {
+export function hasAnnotation(
+  index: TypeIndex,
+  file: JavaFile,
+  node: JavaNode,
+  fqn: string,
+  seen = new Set<JavaNode>(),
+): Tri {
   let unknown = false;
   for (const a of annotationsOf(node)) {
     const r = index.resolve(file, a.node.childForFieldName('name')?.text ?? a.name);
     if (r.kind === 'external' || r.kind === 'one-of') {
       const fqns = r.kind === 'external' ? [r.fqn] : r.fqns;
-      if (fqns.every(f => f === fqn)) return 'yes';
-      if (fqns.some(f => f === fqn || !NON_COMPONENT_PREFIXES.some(p => f.startsWith(p)))) unknown = true;
-    }
-    else if (r.kind === 'captured' && r.decl.kind === 'annotation' && !seen.has(r.decl.node)) {
+      if (fqns.every((f) => f === fqn)) return 'yes';
+      if (fqns.some((f) => f === fqn || !NON_COMPONENT_PREFIXES.some((p) => f.startsWith(p)))) unknown = true;
+    } else if (r.kind === 'captured' && r.decl.kind === 'annotation' && !seen.has(r.decl.node)) {
       seen.add(r.decl.node);
       const meta = hasAnnotation(index, r.decl.file, r.decl.node, fqn, seen);
       if (meta === 'yes') return 'yes';
@@ -322,15 +413,22 @@ export function annotationFacts(index: TypeIndex, file: JavaFile, node: JavaNode
       const simple = a.name.split('.').pop()!;
       if (r.kind === 'external' || r.kind === 'one-of') {
         const fqns = r.kind === 'external' ? [r.fqn] : r.fqns;
-        if (fqns.every(q => q.startsWith('org.springframework.'))) into.push({ ann: a, file: f, spring: simple });
-        else if (fqns.every(q => STANDARD_PREFIXES.some(p => q.startsWith(p)))) into.push({ ann: a, file: f, spring: null });
-        else { into.push({ ann: a, file: f, spring: null }); opaque ??= { file: f, node: a.node }; }
+        if (fqns.every((q) => q.startsWith('org.springframework.'))) into.push({ ann: a, file: f, spring: simple });
+        else if (fqns.every((q) => STANDARD_PREFIXES.some((p) => q.startsWith(p))))
+          into.push({ ann: a, file: f, spring: null });
+        else {
+          into.push({ ann: a, file: f, spring: null });
+          opaque ??= { file: f, node: a.node };
+        }
       } else if (r.kind === 'captured' && r.decl.kind === 'annotation') {
         into.push({ ann: a, file: f, spring: null });
         if (seen.has(r.decl.node)) continue;
         seen.add(r.decl.node);
         visit(r.decl.file, r.decl.node, meta);
-      } else { into.push({ ann: a, file: f, spring: null }); opaque ??= { file: f, node: a.node }; }
+      } else {
+        into.push({ ann: a, file: f, spring: null });
+        opaque ??= { file: f, node: a.node };
+      }
     }
   };
   visit(file, node, direct);
