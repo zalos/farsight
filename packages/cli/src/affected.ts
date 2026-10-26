@@ -11,11 +11,27 @@
 import { existsSync } from 'node:fs';
 import { resolve, relative, isAbsolute } from 'node:path';
 import {
-  GraphStore, buildIndex, setFreshnessMeta, journeyTree, affectedRange, countedText, readinessCsvRows, buildLine, t,
+  GraphStore,
+  buildIndex,
+  setFreshnessMeta,
+  journeyTree,
+  affectedRange,
+  countedText,
+  readinessCsvRows,
+  buildLine,
+  t,
   unknownStorylineText,
 } from '@farsight/core';
 import type { AffectedV1, TestsMatrixIdentity, Readiness } from '@farsight/core';
-import { loadCodeHostSources, openGitHub, decidePost, readChange, originRepo, type CodeHostSource, type ReadChange } from '@farsight/work';
+import {
+  loadCodeHostSources,
+  openGitHub,
+  decidePost,
+  readChange,
+  originRepo,
+  type CodeHostSource,
+  type ReadChange,
+} from '@farsight/work';
 import { readinessOf } from '@farsight/server';
 import { affectedLines, readinessLines } from '@farsight/core';
 
@@ -41,7 +57,10 @@ function loadGraph(a: CliArgs) {
   setFreshnessMeta(index, store.meta);
   const trees = new Map<string, ReturnType<typeof journeyTree>>();
   // one tree per source: two sources may declare a storyline of one id (journeyTree keeps the first workspace-wide)
-  const treeOf = (repo: string) => { if (!trees.has(repo)) trees.set(repo, journeyTree(index, store.meta.journeys, new Set([repo]))); return trees.get(repo)!; };
+  const treeOf = (repo: string) => {
+    if (!trees.has(repo)) trees.set(repo, journeyTree(index, store.meta.journeys, new Set([repo])));
+    return trees.get(repo)!;
+  };
   return { store, index, tree: journeyTree(index, store.meta.journeys), treeOf };
 }
 
@@ -61,13 +80,19 @@ export function checkOf(doc: AffectedV1): { state: 'success' | 'failure'; descri
   const v = doc.verdict;
   return {
     state: v.failed > 0 ? 'failure' : 'success',
-    description: say('affected.check.desc', { tests: doc.tests.length, passed: v.passed, skipped: v.skipped, failed: v.failed }),
+    description: say('affected.check.desc', {
+      tests: doc.tests.length,
+      passed: v.passed,
+      skipped: v.skipped,
+      failed: v.failed,
+    }),
   };
 }
 
 // ── the picture ────────────────────────────────────────────────────────────
 
-const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+const esc = (s: unknown) =>
+  String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 /** A self-contained HUD card of the document: the picture `--png` stamps (no server, no network). */
 export function cardHtml(doc: AffectedV1): string {
@@ -87,10 +112,16 @@ async function writePng(doc: AffectedV1, path: string): Promise<string> {
   try {
     const name = '@playwright/test';
     chromium = (await import(name)).chromium;
-  } catch { /* not installed with this build */ }
+  } catch {
+    /* not installed with this build */
+  }
   if (!chromium) return say('affected.png.none');
   let browser;
-  try { browser = await chromium.launch(); } catch { return say('affected.png.none'); }
+  try {
+    browser = await chromium.launch();
+  } catch {
+    return say('affected.png.none');
+  }
   try {
     const page = await browser.newPage({ deviceScaleFactor: 2 });
     await page.setContent(cardHtml(doc));
@@ -107,7 +138,10 @@ export async function runAffected(a: CliArgs): Promise<void> {
   const prArg = a.flag('pr');
   const from = a.flag('from');
   const to = a.flag('to');
-  if (!prArg && !(from && to)) a.fail('usage: farsight affected --pr <n> | --from <sha> --to <sha> [--repo name] [--json] [--png <path>] [--post [--confirm] [--via gh]]');
+  if (!prArg && !(from && to))
+    a.fail(
+      'usage: farsight affected --pr <n> | --from <sha> --to <sha> [--repo name] [--json] [--png <path>] [--post [--confirm] [--via gh]]',
+    );
   const { store, index, treeOf } = loadGraph(a);
   const repos = [...new Set([...Object.keys(store.roots), ...Object.keys(store.meta.repos ?? {})])];
   const hosts = loadCodeHostSources(a.workspace);
@@ -116,7 +150,10 @@ export async function runAffected(a: CliArgs): Promise<void> {
   const hostArg = a.flag('host-repo');
   const pickRepo = (): string => {
     const named = a.flag('repo');
-    if (named) { if (!repos.includes(named)) a.fail(`no source "${named}" in the graph (there are: ${repos.join(', ')})`); return named; }
+    if (named) {
+      if (!repos.includes(named)) a.fail(`no source "${named}" in the graph (there are: ${repos.join(', ')})`);
+      return named;
+    }
     const viaHost = hosts.find((h) => !hostArg || h.repo === hostArg);
     const guess = viaHost?.source ?? (hostArg ?? viaHost?.repo)?.split('/').pop();
     if (guess && repos.includes(guess)) return guess;
@@ -126,16 +163,30 @@ export async function runAffected(a: CliArgs): Promise<void> {
   const repo = pickRepo();
   // the checkout git reads (prefix, history, a commit range): the graph's root for the source, or --checkout
   const root = resolve(a.flag('checkout') ?? store.roots[repo] ?? process.cwd());
-  const host: CodeHostSource | undefined = hosts.find((h) => (hostArg ? h.repo === hostArg : (h.source ?? h.repo.split('/').pop()) === repo)) ?? (hosts.length === 1 ? hosts[0] : undefined);
+  const host: CodeHostSource | undefined =
+    hosts.find((h) => (hostArg ? h.repo === hostArg : (h.source ?? h.repo.split('/').pop()) === repo)) ??
+    (hosts.length === 1 ? hosts[0] : undefined);
   const viaGh = a.flag('via') === 'gh';
-  if (prArg && (!Number.isInteger(Number(prArg)) || Number(prArg) < 1)) a.fail(`--pr takes a pull request number (got "${prArg}")`);
+  if (prArg && (!Number.isInteger(Number(prArg)) || Number(prArg) < 1))
+    a.fail(`--pr takes a pull request number (got "${prArg}")`);
   let change: ReadChange;
   try {
     // sources nested under this one in the same repository (an example app inside the repo) take their own files
     const home = store.roots[repo];
-    const sources = home ? repos.filter((r) => store.roots[r]).map((r) => ({ name: r, rel: relative(home, store.roots[r]!) }))
-      .filter((x) => !x.rel.startsWith('..') && !isAbsolute(x.rel)) : [];
-    change = await readChange({ root, ask: prArg ? { pr: Number(prArg) } : { from: from!, to: to! }, ...(host ? { host } : {}), ...(hostArg ? { hostRepo: hostArg } : {}), viaGh, ...(sources.length ? { sources } : {}) });
+    const sources = home
+      ? repos
+          .filter((r) => store.roots[r])
+          .map((r) => ({ name: r, rel: relative(home, store.roots[r]!) }))
+          .filter((x) => !x.rel.startsWith('..') && !isAbsolute(x.rel))
+      : [];
+    change = await readChange({
+      root,
+      ask: prArg ? { pr: Number(prArg) } : { from: from!, to: to! },
+      ...(host ? { host } : {}),
+      ...(hostArg ? { hostRepo: hostArg } : {}),
+      viaGh,
+      ...(sources.length ? { sources } : {}),
+    });
   } catch (err) {
     return a.fail((err as Error).message);
   }
@@ -146,11 +197,22 @@ export async function runAffected(a: CliArgs): Promise<void> {
   const identity: TestsMatrixIdentity = {
     ...(store.meta.sync != null ? { sync: store.meta.sync } : {}),
     ...(store.meta.commit ? { source_commit: store.meta.commit } : {}),
-    source_digest: Object.fromEntries(repos.map((r) => [r, store.repoMeta(r)?.sourceDigest]).filter((x): x is [string, string] => !!x[1])),
+    source_digest: Object.fromEntries(
+      repos.map((r) => [r, store.repoMeta(r)?.sourceDigest]).filter((x): x is [string, string] => !!x[1]),
+    ),
     farsight: buildLine(),
     generated_at: new Date().toISOString(),
   };
-  const doc = affectedRange(index, { repo, range, commits, files, ...(history ? { history } : {}), hops, tree: treeOf, identity });
+  const doc = affectedRange(index, {
+    repo,
+    range,
+    commits,
+    files,
+    ...(history ? { history } : {}),
+    hops,
+    tree: treeOf,
+    identity,
+  });
 
   if (a.has('json')) console.log(JSON.stringify(doc, null, 2));
   else console.log(affectedLines(doc).join('\n'));
@@ -161,12 +223,21 @@ export async function runAffected(a: CliArgs): Promise<void> {
   if (!pr) a.fail('--post needs --pr <n>: a commit range has no pull request to post on');
   const cmd = `farsight affected --pr ${pr.number} --json`;
   const d = await decidePost(host, 'human', open, async () => pr!);
-  const verdictLine = (k: string, v: { allowed: boolean; reason: string }) => console.error(`  ${t(k, R)}: ${t(v.allowed ? 'work.verdict.yes' : 'work.verdict.no', R)} — ${v.reason}`);
+  const verdictLine = (k: string, v: { allowed: boolean; reason: string }) =>
+    console.error(`  ${t(k, R)}: ${t(v.allowed ? 'work.verdict.yes' : 'work.verdict.no', R)} — ${v.reason}`);
   verdictLine('affected.verdict.policy', d.verdicts.policy);
   verdictLine('affected.verdict.host', d.verdicts.tracker);
   verdictLine('affected.verdict.credential', d.verdicts.credential);
-  if (!d.allowed) { console.error(say('affected.post.denied')); process.exitCode = 1; return; }
-  if (d.requiresConfirmation && !a.has('confirm')) { console.error(say('affected.post.waiting')); process.exitCode = 2; return; }
+  if (!d.allowed) {
+    console.error(say('affected.post.denied'));
+    process.exitCode = 1;
+    return;
+  }
+  if (d.requiresConfirmation && !a.has('confirm')) {
+    console.error(say('affected.post.waiting'));
+    process.exitCode = 2;
+    return;
+  }
   const gh = d.host!;
   const posted = await gh.upsertComment(pr.number, COMMENT_MARKER, commentBody(doc, cmd));
   const check = checkOf(doc);
@@ -180,10 +251,16 @@ export function runReadiness(a: CliArgs): void {
   const id = a.flag('storyline');
   const { index, tree: all, treeOf } = loadGraph(a);
   const tree = a.flag('repo') ? treeOf(a.flag('repo')!) : all;
-  if (!id) a.fail(`usage: farsight readiness --storyline <id> [--json|--csv] — storylines: ${tree.storylines.map((s) => s.id).join(', ') || 'none declared'}`);
+  if (!id)
+    a.fail(
+      `usage: farsight readiness --storyline <id> [--json|--csv] — storylines: ${tree.storylines.map((s) => s.id).join(', ') || 'none declared'}`,
+    );
   const { brief } = readinessOf(index, tree, id!, a.workspace, a.flag('repo'));
   if (!brief) a.fail(unknownStorylineText(tree, id!));
-  if (a.has('json')) { console.log(JSON.stringify(brief, null, 2)); return; }
+  if (a.has('json')) {
+    console.log(JSON.stringify(brief, null, 2));
+    return;
+  }
   if (a.has('csv')) {
     const { header, rows } = readinessCsvRows(brief!, (k) => t(k, R));
     const q = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
@@ -192,4 +269,3 @@ export function runReadiness(a: CliArgs): void {
   }
   console.log(readinessLines(brief!).join('\n'));
 }
-

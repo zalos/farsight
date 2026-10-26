@@ -16,11 +16,15 @@ async function mapOn(page: Page, lens = 'hybrid') {
   await gotoReady(page, '#/portfolio?lens=' + lens);
   await page.evaluate(() => {
     const S = (window as any).S;
-    S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+    S.SETTINGS = Object.assign({}, S.SETTINGS, {
+      flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+    });
   });
 }
 async function go(page: Page, hash: string) {
-  await page.evaluate((h) => { location.hash = h; }, hash);
+  await page.evaluate((h) => {
+    location.hash = h;
+  }, hash);
 }
 
 /**
@@ -28,7 +32,9 @@ async function go(page: Page, hash: string) {
  * @covers packages/server/public/app/lib/route-url.js::screenRowAt
  * @covers packages/server/public/app/shell.js::applyRoute
  */
-test('an old link to a step is the same screen on the Map — one replace, no history entry, no door back to a second page', async ({ page }) => {
+test('an old link to a step is the same screen on the Map — one replace, no history entry, no door back to a second page', async ({
+  page,
+}) => {
   await mapOn(page);
   const before = await page.evaluate(() => history.length);
   await go(page, '#/journeys/' + enc(FLOW) + '?step=2');
@@ -47,7 +53,9 @@ test('an old link to a step is the same screen on the Map — one replace, no hi
  * @covers packages/server/public/app/lib/route-url.js::partOrder
  * @covers packages/server/public/app/surfaces/map-stops.js::openActionAt
  */
-test('an old link to a step and a node opens the action that holds the part, its code in the dock it named', async ({ page }) => {
+test('an old link to a step and a node opens the action that holds the part, its code in the dock it named', async ({
+  page,
+}) => {
   await gotoReady(page, '#/journeys/' + enc(FLOW) + '?step=2&node=' + enc(ROUTE) + '&dock=right&lens=hybrid');
   await expect(page.locator('.map-act')).toBeVisible();
   await expect(page).toHaveURL(/#\/map\/invoice-app%3A%3Aflow%3A%3Abilling-cycle\?(.*&)?screen=2&(.*&)?action=1(&|$)/);
@@ -66,16 +74,27 @@ test('a route call links to the APIs surface at its operation, its spec line and
   await expect(card).toBeVisible();
   const doors = card.locator('.acts a.dd-door');
   await expect(doors.first()).toHaveText('read the contract');
-  await expect(doors.first()).toHaveAttribute('href', '#/apis/' + enc('invoice-app::api::openapi.yaml') + '?op=' + enc(ROUTE));
-  await expect(card.locator('a.dd-door', { hasText: 'read the spec file' })).toHaveAttribute('href', /\?view=spec&line=\d+$/);
-  await expect(card.locator('a.dd-door', { hasText: 'open the handler in the editor' })).toHaveAttribute('href', /^vscode:\/\/file\//);
+  await expect(doors.first()).toHaveAttribute(
+    'href',
+    '#/apis/' + enc('invoice-app::api::openapi.yaml') + '?op=' + enc(ROUTE),
+  );
+  await expect(card.locator('a.dd-door', { hasText: 'read the spec file' })).toHaveAttribute(
+    'href',
+    /\?view=spec&line=\d+$/,
+  );
+  await expect(card.locator('a.dd-door', { hasText: 'open the handler in the editor' })).toHaveAttribute(
+    'href',
+    /^vscode:\/\/file\//,
+  );
   // where the journey stands in its storyline (the fixture's invoice storyline ends with Billing cycle)
   await expect(card.locator('.dd-story')).toHaveText('in storyline: An invoice, end to end · step 2 of 2');
   // one stop down is on this surface: the call's action, never a second page
   await expect(card.locator('.tojrn a')).toHaveCount(0);
   await expect(card.locator('[data-act="beats"]')).toBeVisible();
   await doors.first().click();
-  await expect(page).toHaveURL(/#\/apis\/invoice-app%3A%3Aapi%3A%3Aopenapi\.yaml\?op=invoice-app%3A%3Aroute%3A%3AGET%20%2Finvoices/);
+  await expect(page).toHaveURL(
+    /#\/apis\/invoice-app%3A%3Aapi%3A%3Aopenapi\.yaml\?op=invoice-app%3A%3Aroute%3A%3AGET%20%2Finvoices/,
+  );
 });
 
 /** @covers packages/server/public/app/lib/detail-doors.js::doorKeydown */
@@ -104,7 +123,8 @@ test('the board marks stale quietly and not built in amber, each with its own wo
     const res = await r.fetch();
     const j = await res.json();
     const cov = j && j.summary && j.summary.coverage && j.summary.coverage.journey;
-    if (cov && /billing-cycle/.test(r.request().url())) cov.evidenceWord = Object.assign({}, cov.evidenceWord, { cls: 'stale' });
+    if (cov && /billing-cycle/.test(r.request().url()))
+      cov.evidenceWord = Object.assign({}, cov.evidenceWord, { cls: 'stale' });
     await r.fulfill({ response: res, json: j });
   });
   await mapOn(page);
@@ -130,17 +150,30 @@ test('past the reading floor the board says so, and no card word draws under it'
   const N = 90;
   await page.route(/\/api\/design\?/, async (r) => {
     let d: any;
-    try { d = await (await r.fetch()).json(); } catch { return; }
+    try {
+      d = await (await r.fetch()).json();
+    } catch {
+      return;
+    }
     const src = d.designs[0];
     const base = src.flows.find((f: any) => f.id === 'billing-cycle');
-    src.flows = Array.from({ length: N }, (_, i) => ({ ...base, nodeId: 'invoice-app::flow::many-' + i, id: 'many-' + i, name: 'Journey number ' + (i + 1) }));
+    src.flows = Array.from({ length: N }, (_, i) => ({
+      ...base,
+      nodeId: 'invoice-app::flow::many-' + i,
+      id: 'many-' + i,
+      name: 'Journey number ' + (i + 1),
+    }));
     await r.fulfill({ contentType: 'application/json', body: JSON.stringify(d) });
   });
   await page.route(/\/api\/journey\?entry=/, async (r) => {
     const url = r.request().url();
     if (!/many-\d+/.test(decodeURIComponent(url))) return r.continue();
     let d: any;
-    try { d = await (await r.fetch({ url: url.replace(/entry=[^&]*/, 'entry=' + encodeURIComponent(FLOW)) })).json(); } catch { return; }
+    try {
+      d = await (await r.fetch({ url: url.replace(/entry=[^&]*/, 'entry=' + encodeURIComponent(FLOW)) })).json();
+    } catch {
+      return;
+    }
     d.summary.links = { requires: [], leadsTo: [], partOf: [] };
     await r.fulfill({ contentType: 'application/json', body: JSON.stringify(d) });
   });
@@ -153,17 +186,27 @@ test('past the reading floor the board says so, and no card word draws under it'
   await expect(page.locator('.map-world')).toHaveClass(/\bfloor\b/);
   // no word on a card draws under 8 px on screen: the font size times the scale the card is drawn at — polled, since
   // the floor class lands a frame before the fit that applies it (a one-shot read failed under load)
-  await expect.poll(() => page.locator('.map-dcover .map-chip').first().evaluate((el) => {
-    const h = (el as HTMLElement).offsetHeight;
-    return parseFloat(getComputedStyle(el).fontSize) * (h ? el.getBoundingClientRect().height / h : 1);
-  })).toBeGreaterThanOrEqual(7.9);
+  await expect
+    .poll(() =>
+      page
+        .locator('.map-dcover .map-chip')
+        .first()
+        .evaluate((el) => {
+          const h = (el as HTMLElement).offsetHeight;
+          return parseFloat(getComputedStyle(el).fontSize) * (h ? el.getBoundingClientRect().height / h : 1);
+        }),
+    )
+    .toBeGreaterThanOrEqual(7.9);
 });
 
 /** @covers packages/server/public/app/surfaces/journeys.js::openJourney */
 test('a storyline opens its journeys on the Map, the first one by its own door', async ({ page }) => {
   await gotoReady(page, '#/journeys?lens=hybrid');
   const card = page.locator('.jrn-story[data-storyline="invoice"]');
-  await expect(card.locator('.jrn-story-step').first()).toHaveAttribute('href', '#/map/invoice-app%3A%3Aflow%3A%3Anew-invoice');
+  await expect(card.locator('.jrn-story-step').first()).toHaveAttribute(
+    'href',
+    '#/map/invoice-app%3A%3Aflow%3A%3Anew-invoice',
+  );
   await expect(card.locator('.jrn-story-map')).toHaveAttribute('href', '#/map?storyline=invoice');
   await card.getByRole('button', { name: 'open the first journey' }).click();
   await expect(page).toHaveURL(/#\/map\/invoice-app%3A%3Aflow%3A%3Anew-invoice/);

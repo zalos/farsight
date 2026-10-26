@@ -21,10 +21,12 @@ const ROUTE_RE = /^([A-Z]+)\s+(\/\S*)$/;
 
 /** `/invoices/${id}` · `/invoices/:id` · `/invoices/{id}` · `/invoices/[id]` → one key. */
 export function routeKey(path: string): string {
-  return normalizePath(path.split('?')[0]!.split('#')[0]!)
-    .replace(/\$\{[^}]*\}/g, ':param')
-    .replace(/\[[^\]/]+\]/g, ':param')
-    .replace(/\/+$/, '') || '/';
+  return (
+    normalizePath(path.split('?')[0]!.split('#')[0]!)
+      .replace(/\$\{[^}]*\}/g, ':param')
+      .replace(/\[[^\]/]+\]/g, ':param')
+      .replace(/\/+$/, '') || '/'
+  );
 }
 
 /** Where a `@covers` value can land, and a name index for the last-resort lookup. */
@@ -37,7 +39,10 @@ export class CoverTargets {
   private pages = new Map<string, string>();
   private byName = new Map<string, string[]>();
 
-  constructor(nodes: GraphNode[], private repo: string) {
+  constructor(
+    nodes: GraphNode[],
+    private repo: string,
+  ) {
     for (const n of nodes) {
       this.byId.set(n.id, n);
       if (n.kind === 'test') continue;
@@ -61,8 +66,12 @@ export class CoverTargets {
     }
   }
 
-  has(id: string): boolean { return this.byId.has(id); }
-  node(id: string): GraphNode | undefined { return this.byId.get(id); }
+  has(id: string): boolean {
+    return this.byId.has(id);
+  }
+  node(id: string): GraphNode | undefined {
+    return this.byId.get(id);
+  }
 
   /**
    * An import `{ name }` from a repo file → the node that defines it. Exact when
@@ -85,7 +94,9 @@ export class CoverTargets {
   }
 
   /** A `page.goto('/x')` literal → the page node at that route. */
-  page(path: string): string | undefined { return this.pages.get(routeKey(path)); }
+  page(path: string): string | undefined {
+    return this.pages.get(routeKey(path));
+  }
 
   /** A `request.post('/x')` literal → the route node for that method + path. */
   route(method: string, path: string): string | undefined {
@@ -203,15 +214,22 @@ export function fileSignals(
       for (const spec of (n.specifiers as AstNode[]) ?? []) {
         const local = (spec.local as AstNode | undefined)?.name;
         const imported = (spec.imported as AstNode | undefined)?.name;
-        if (typeof local === 'string') imports.set(local, { file: target, name: typeof imported === 'string' ? imported : local });
+        if (typeof local === 'string')
+          imports.set(local, { file: target, name: typeof imported === 'string' ? imported : local });
       }
       return false;
     }
     if (n.type === 'JSXElement') {
       const opening = n.openingElement as AstNode | undefined;
       const nameNode = opening?.name as AstNode | undefined;
-      const tag = nameNode && (nameNode.type === 'JSXIdentifier' || nameNode.type === 'Identifier') ? String(nameNode.name) : null;
-      if (tag && /^[A-Z]/.test(tag)) { noteUse(tag, line(n.start ?? 0)); signals.push({ kind: 'render', value: tag, line: line(n.start ?? 0), used: true }); }
+      const tag =
+        nameNode && (nameNode.type === 'JSXIdentifier' || nameNode.type === 'Identifier')
+          ? String(nameNode.name)
+          : null;
+      if (tag && /^[A-Z]/.test(tag)) {
+        noteUse(tag, line(n.start ?? 0));
+        signals.push({ kind: 'render', value: tag, line: line(n.start ?? 0), used: true });
+      }
       return;
     }
     if (n.type !== 'CallExpression') return;
@@ -221,7 +239,10 @@ export function fileSignals(
       noteUse(chain[0]!, line(n.start ?? 0));
       if (RENDERERS.has(chain[0]!)) {
         const first = args[0];
-        if (isNode(first) && first.type === 'Identifier') { noteUse(String(first.name), line(n.start ?? 0)); signals.push({ kind: 'render', value: String(first.name), line: line(n.start ?? 0), used: true }); }
+        if (isNode(first) && first.type === 'Identifier') {
+          noteUse(String(first.name), line(n.start ?? 0));
+          signals.push({ kind: 'render', value: String(first.name), line: line(n.start ?? 0), used: true });
+        }
       }
       return;
     }
@@ -238,7 +259,12 @@ export function fileSignals(
     if (HTTP_VERBS.has(tail) && (REQUEST_HOLDERS.has(head) || chain.length >= 2)) {
       const url = stringValue(args[0]);
       if (url && url.startsWith('/')) {
-        signals.push({ kind: 'request', value: `${tail === 'fetch' ? 'GET' : tail.toUpperCase()} ${url}`, line: line(n.start ?? 0), used: true });
+        signals.push({
+          kind: 'request',
+          value: `${tail === 'fetch' ? 'GET' : tail.toUpperCase()} ${url}`,
+          line: line(n.start ?? 0),
+          used: true,
+        });
       }
       return;
     }
@@ -249,7 +275,8 @@ export function fileSignals(
   // line-0 signal for an import nothing in the file calls
   for (const [local, target] of imports) {
     const uses = calledAt.get(local) ?? [];
-    if (uses.length) for (const at of uses) signals.push({ kind: 'symbol', value: local, target, line: at, used: true });
+    if (uses.length)
+      for (const at of uses) signals.push({ kind: 'symbol', value: local, target, line: at, used: true });
     else signals.push({ kind: 'symbol', value: local, target, line: 0 });
   }
   return { imports, signals, called, calledAt };
@@ -257,8 +284,12 @@ export function fileSignals(
 
 /** The confidence tiers of §3.1, as one table so no consumer invents its own. */
 export function staticResolution(signal: StaticSignal, exact: boolean): EdgeResolution {
-  const tier = (c: ConfidenceTier, technique: EdgeResolution['technique'], note?: string): EdgeResolution =>
-    ({ status: c === 'LOW' ? 'heuristic' : 'resolved', technique, confidence: c, ...(note ? { note } : {}) });
+  const tier = (c: ConfidenceTier, technique: EdgeResolution['technique'], note?: string): EdgeResolution => ({
+    status: c === 'LOW' ? 'heuristic' : 'resolved',
+    technique,
+    confidence: c,
+    ...(note ? { note } : {}),
+  });
   if (signal.kind === 'symbol') {
     return signal.used
       ? tier('HIGH', 'import-resolution', 'imported and called by the test')

@@ -14,8 +14,23 @@ const SB_URL = `http://127.0.0.1:${SB_PORT}`;
 const FORM = 'invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm';
 const FORM_HASH = '#/codemap?node=' + encodeURIComponent(FORM);
 
-const entry = (id: string, name: string, type: 'story' | 'docs' = 'story', componentPath: string | undefined = './src/ui/CreateInvoiceForm.tsx', title = 'Invoices/CreateInvoiceForm') =>
-  [id, { id, name, title, type, importPath: './src/ui/CreateInvoiceForm.stories.tsx', ...(componentPath ? { componentPath } : {}) }];
+const entry = (
+  id: string,
+  name: string,
+  type: 'story' | 'docs' = 'story',
+  componentPath: string | undefined = './src/ui/CreateInvoiceForm.tsx',
+  title = 'Invoices/CreateInvoiceForm',
+) => [
+  id,
+  {
+    id,
+    name,
+    title,
+    type,
+    importPath: './src/ui/CreateInvoiceForm.stories.tsx',
+    ...(componentPath ? { componentPath } : {}),
+  },
+];
 const INDEX = {
   v: 5,
   entries: Object.fromEntries([
@@ -32,19 +47,31 @@ let sb: Server | null = null;
 function startFakeStorybook(): Promise<void> {
   sb = createServer((req, res) => {
     const u = new URL(req.url ?? '/', SB_URL);
-    if (u.pathname === '/index.json') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(INDEX)); return; }
-    if (u.pathname === '/iframe.html') {
-      res.writeHead(200, { 'content-type': 'text/html' });
-      res.end(`<!doctype html><html><body><h1 id="story">Story ${u.searchParams.get('id')} (${u.searchParams.get('viewMode')})</h1></body></html>`);
+    if (u.pathname === '/index.json') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(INDEX));
       return;
     }
-    res.writeHead(204); res.end();
+    if (u.pathname === '/iframe.html') {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(
+        `<!doctype html><html><body><h1 id="story">Story ${u.searchParams.get('id')} (${u.searchParams.get('viewMode')})</h1></body></html>`,
+      );
+      return;
+    }
+    res.writeHead(204);
+    res.end();
   });
-  return new Promise((ok, fail) => { sb!.once('error', fail); sb!.listen(SB_PORT, '127.0.0.1', () => ok()); });
+  return new Promise((ok, fail) => {
+    sb!.once('error', fail);
+    sb!.listen(SB_PORT, '127.0.0.1', () => ok());
+  });
 }
 
 test.describe.configure({ mode: 'serial' });
-test.afterAll(async () => { await new Promise<void>((ok) => (sb ? sb.close(() => ok()) : ok())); });
+test.afterAll(async () => {
+  await new Promise<void>((ok) => (sb ? sb.close(() => ok()) : ok()));
+});
 
 /**
  * @covers packages/server/public/app/stories.js::storiesSecHtml
@@ -73,8 +100,13 @@ test('Storybook started: "Check again" frames the story, a tab switches it, and 
   const retry = sec.getByRole('button', { name: 'Check again' });
   if (await retry.count()) await retry.click();
   const frame = sec.locator('iframe.sb-frame');
-  await expect(frame).toHaveAttribute('src', `${SB_URL}/iframe.html?id=invoices-createinvoiceform--empty&viewMode=story`);
-  await expect(page.frameLocator('#insp-stories iframe.sb-frame').locator('#story')).toHaveText('Story invoices-createinvoiceform--empty (story)');
+  await expect(frame).toHaveAttribute(
+    'src',
+    `${SB_URL}/iframe.html?id=invoices-createinvoiceform--empty&viewMode=story`,
+  );
+  await expect(page.frameLocator('#insp-stories iframe.sb-frame').locator('#story')).toHaveText(
+    'Story invoices-createinvoiceform--empty (story)',
+  );
   await sec.getByRole('tab', { name: 'With line items' }).click();
   await expect(sec.getByRole('tab', { name: 'With line items' })).toHaveAttribute('aria-selected', 'true');
   await expect(frame).toHaveAttribute('src', /id=invoices-createinvoiceform--with-line-items/);
@@ -84,7 +116,10 @@ test('Storybook started: "Check again" frames the story, a tab switches it, and 
   await sec.getByRole('button', { name: 'Open large' }).first().click();
   const large = page.getByRole('dialog', { name: /Stories · Create invoice form/ });
   await expect(large).toBeVisible();
-  await expect(large.locator('iframe.sb-lb-frame')).toHaveAttribute('src', /id=invoices-createinvoiceform--with-line-items/);
+  await expect(large.locator('iframe.sb-lb-frame')).toHaveAttribute(
+    'src',
+    /id=invoices-createinvoiceform--with-line-items/,
+  );
   const box = await large.locator('iframe.sb-lb-frame').boundingBox();
   expect(box!.width).toBeGreaterThan(900); // images big: the large view is most of the window
   await page.keyboard.press('Escape');
@@ -106,18 +141,41 @@ test('the business register names the stories and hides the file line', async ({
 /**
  * @covers GET /api/stories
  */
-test('/api/stories maps the index — by story id, the docs page by its title, the ghost named — and the page may frame only that origin', async ({ page, request }) => {
+test('/api/stories maps the index — by story id, the docs page by its title, the ghost named — and the page may frame only that origin', async ({
+  page,
+  request,
+}) => {
   const res = await request.get('/api/stories?refresh=1');
   const body = await res.json();
   const book = body.storybooks[0];
   expect(book.reachable).toBe(true);
-  expect(book.counts).toEqual({ stories: 4, docs: 1, resolved: 4, unresolved: 1, via: { 'story-id': 3, 'docs-title': 1 } });
-  expect(book.unresolved).toEqual([{ id: 'invoices-ghost--default', title: 'Invoices/Ghost', name: 'Default', type: 'story', path: 'src/ui/Ghost.tsx', reason: 'no-node-at-path' }]);
+  expect(book.counts).toEqual({
+    stories: 4,
+    docs: 1,
+    resolved: 4,
+    unresolved: 1,
+    via: { 'story-id': 3, 'docs-title': 1 },
+  });
+  expect(book.unresolved).toEqual([
+    {
+      id: 'invoices-ghost--default',
+      title: 'Invoices/Ghost',
+      name: 'Default',
+      type: 'story',
+      path: 'src/ui/Ghost.tsx',
+      reason: 'no-node-at-path',
+    },
+  ]);
   expect(body.byNode[FORM].map((s: { id: string }) => s.id)).toEqual([
-    'invoices-createinvoiceform--empty', 'invoices-createinvoiceform--with-line-items', 'invoices-createinvoiceform--invalid', 'invoices-createinvoiceform--docs',
+    'invoices-createinvoiceform--empty',
+    'invoices-createinvoiceform--with-line-items',
+    'invoices-createinvoiceform--invalid',
+    'invoices-createinvoiceform--docs',
   ]);
   const page0 = await request.get('/');
-  expect(page0.headers()['content-security-policy']).toBe(`object-src 'none'; base-uri 'self'; frame-src 'self' ${SB_URL}`);
+  expect(page0.headers()['content-security-policy']).toBe(
+    `object-src 'none'; base-uri 'self'; frame-src 'self' ${SB_URL}`,
+  );
   void page;
 });
 
@@ -125,7 +183,9 @@ test('/api/stories maps the index — by story id, the docs page by its title, t
  * @covers packages/server/public/app/stories.js::storiesCatalogueHtml
  * @covers packages/server/public/app/stories.js::storyChipsHtml
  */
-test('the front door lists what can be seen on its own, and a journey screen carries a story chip', async ({ page }) => {
+test('the front door lists what can be seen on its own, and a journey screen carries a story chip', async ({
+  page,
+}) => {
   await gotoReady(page, '#/portfolio');
   const cat = page.locator('#sb-cat');
   await expect(cat).toContainText('Invoice app UI');
@@ -136,7 +196,14 @@ test('the front door lists what can be seen on its own, and a journey screen car
   await expect(page.getByRole('dialog', { name: /Stories · Create invoice form/ })).toBeVisible();
   await page.keyboard.press('Escape');
   // a journey's screen is read on the Map: its stop carries the chip
-  await gotoReady(page, '#/map/' + encodeURIComponent('invoice-app::flow::billing-cycle') + '?node=' + encodeURIComponent('invoice-app::page::/invoices/new') + '&lens=business');
+  await gotoReady(
+    page,
+    '#/map/' +
+      encodeURIComponent('invoice-app::flow::billing-cycle') +
+      '?node=' +
+      encodeURIComponent('invoice-app::page::/invoices/new') +
+      '&lens=business',
+  );
   const chip = page.locator('.mp .sb-chip').first();
   await expect(chip).toContainText('Create invoice form · 3 stories');
   await chip.click();

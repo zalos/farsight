@@ -42,7 +42,10 @@ test.describe('front door', () => {
    * @covers packages/server/public/app/surfaces/journeys.js::designDriftRows
    * @covers GET /api/design
    */
-  test('the Designs card\'s drift explains itself: what it counts, over what, and by kind — the kinds add up to it', async ({ page, request }) => {
+  test("the Designs card's drift explains itself: what it counts, over what, and by kind — the kinds add up to it", async ({
+    page,
+    request,
+  }) => {
     // story swarm 2026-09-25: "18 DRIFT is the one number that won't explain itself" — it had a title, no tip
     const design = (await (await request.get('/api/design?scope=all')).json()).designs[0];
     const n = design.counts.drift as number;
@@ -71,7 +74,10 @@ test.describe('front door', () => {
    * @covers packages/server/public/app/shell.js::restartNeeded
    * @covers packages/server/public/app/shell.js::syncChipTip
    */
-  test('RESTART is decided build to build by the server, and the tip names the running and the installed build', async ({ page, request }) => {
+  test('RESTART is decided build to build by the server, and the tip names the running and the installed build', async ({
+    page,
+    request,
+  }) => {
     // the server compares identities, not file dates: this build is the one on disk
     const v = await (await request.get('/api/version')).json();
     expect(v.install.basis).toBe('build');
@@ -81,7 +87,12 @@ test.describe('front door', () => {
     await page.route('**/api/version', async (route) => {
       const res = await route.fetch();
       const j = await res.json();
-      j.install = { ...j.install, basis: 'build', newerInstalled: true, installed: { built: '2099-01-01T00:00:00.000Z', commit: 'fedcba9', codeCommit: 'fedcba9', dirty: false } };
+      j.install = {
+        ...j.install,
+        basis: 'build',
+        newerInstalled: true,
+        installed: { built: '2099-01-01T00:00:00.000Z', commit: 'fedcba9', codeCommit: 'fedcba9', dirty: false },
+      };
       await route.fulfill({ response: res, json: j });
     });
     await gotoReady(page, '#/journeys');
@@ -99,6 +110,8 @@ test.describe('front door', () => {
   test('/graph serves the fixture graph the viewer draws', async ({ request }) => {
     const graph = await (await request.get('/graph')).json();
     expect(graph.nodes.length).toBe(130); // 87 parts + 3 preconditions read from the code + 8 packages + 12 module nodes + 2 cited documents + 1 party, + 17 for the payments shape (lane moves: a screen, its flow, page and component, two routes, eight functions, two preconditions, a module)
-    expect(graph.nodes.some((n: { id: string }) => n.id === 'invoice-app::src/server/taxEngine.ts::computeTax')).toBe(true);
+    expect(graph.nodes.some((n: { id: string }) => n.id === 'invoice-app::src/server/taxEngine.ts::computeTax')).toBe(
+      true,
+    );
   });
 });

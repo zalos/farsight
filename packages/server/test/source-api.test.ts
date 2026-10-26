@@ -52,7 +52,9 @@ async function waitReady(): Promise<void> {
       await r.arrayBuffer();
       if (r.ok) return;
       last = `HTTP ${r.status}`;
-    } catch (err) { last = (err as Error).message; }
+    } catch (err) {
+      last = (err as Error).message;
+    }
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error(`the server never answered on port ${port} (${last}):\n${childLog}`);
@@ -68,8 +70,9 @@ before(async () => {
   stitchHttp(store);
   store.save(graphPath);
   port = await freePort();
-  const boot = `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n`
-    + `serveGraph(${JSON.stringify(graphPath)}, ${port}, ${JSON.stringify(work)});\n`;
+  const boot =
+    `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n` +
+    `serveGraph(${JSON.stringify(graphPath)}, ${port}, ${JSON.stringify(work)});\n`;
   child = spawn(process.execPath, ['--input-type=module', '-e', boot], {
     cwd: work,
     env: { ...process.env, MODELHUB_DIR: join(work, 'modelhub'), FIGMA_TOKEN: '' },
@@ -77,8 +80,12 @@ before(async () => {
   }) as ChildProcessWithoutNullStreams;
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (d: string) => { childLog += d; });
-  child.stderr.on('data', (d: string) => { childLog += d; });
+  child.stdout.on('data', (d: string) => {
+    childLog += d;
+  });
+  child.stderr.on('data', (d: string) => {
+    childLog += d;
+  });
   await waitReady();
 });
 
@@ -89,7 +96,11 @@ after(async () => {
     await Promise.race([gone, new Promise((r) => setTimeout(r, 2000))]);
     if (child.exitCode == null) child.kill('SIGKILL');
   }
-  try { rmSync(work, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ }
+  try {
+    rmSync(work, { recursive: true, force: true });
+  } catch {
+    /* a temp dir that outlives the run is not a failure */
+  }
 });
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -99,7 +110,9 @@ async function get(path: string): Promise<{ status: number; body: any }> {
 }
 
 test('a rule with a span answers its own lines, numbered from its line', async () => {
-  const { status, body } = await get('/api/source?node=' + encodeURIComponent('invoice-app::src/server/schemas.ts::draftInvoiceSchema'));
+  const { status, body } = await get(
+    '/api/source?node=' + encodeURIComponent('invoice-app::src/server/schemas.ts::draftInvoiceSchema'),
+  );
   assert.equal(status, 200);
   assert.equal(body.path, 'src/server/schemas.ts');
   assert.equal(typeof body.line, 'number');
@@ -109,7 +122,9 @@ test('a rule with a span answers its own lines, numbered from its line', async (
 });
 
 test('a guard named at a line with no span reads a short window from that line', async () => {
-  const { status, body } = await get('/api/source?node=' + encodeURIComponent('invoice-app::guard::requireScope(billing:read)'));
+  const { status, body } = await get(
+    '/api/source?node=' + encodeURIComponent('invoice-app::guard::requireScope(billing:read)'),
+  );
   assert.equal(status, 200);
   assert.ok(body.code && body.code.split('\n').length <= 12 && body.code.split('\n').length > 1);
 });

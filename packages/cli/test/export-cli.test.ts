@@ -16,15 +16,21 @@ test('CLI exports a saved merged graph for independent consumers without changin
       mkdirSync(join(cwd, name));
       writeFileSync(join(cwd, name, 'main.ts'), 'export function save() {} export function run() { save(); save(); }');
     }
-    const ingest = run(['ingest', 'alpha', 'beta']); assert.equal(ingest.status, 0, ingest.stderr);
+    const ingest = run(['ingest', 'alpha', 'beta']);
+    assert.equal(ingest.status, 0, ingest.stderr);
     const saved = readFileSync(join(cwd, 'graph.json'), 'utf8');
     assert.ok(JSON.parse(saved).edges.every((edge: any) => !edge.occurrences));
-    const db = join(cwd, '.farsight/farsight.db'), before = statSync(db);
-    const exported = run(['export', '--source-id', 'both']); assert.equal(exported.status, 0, exported.stderr);
+    const db = join(cwd, '.farsight/farsight.db'),
+      before = statSync(db);
+    const exported = run(['export', '--source-id', 'both']);
+    assert.equal(exported.status, 0, exported.stderr);
     const document = deserializeGraph(exported.stdout);
     assert.equal(document.graph.repo, 'both');
     assert.equal(validateGraph(document).valid, true);
-    assert.deepEqual(document.sources?.map(source => source.repo), ['alpha', 'beta']);
+    assert.deepEqual(
+      document.sources?.map((source) => source.repo),
+      ['alpha', 'beta'],
+    );
     assert.equal(document.graph.nodes.length, JSON.parse(saved).nodes.length);
     assert.equal(document.graph.edges.length, JSON.parse(saved).edges.length);
     assert.ok(!exported.stdout.includes(cwd));
@@ -36,5 +42,7 @@ test('CLI exports a saved merged graph for independent consumers without changin
     assert.equal(readFileSync(join(cwd, 'graph.json'), 'utf8'), saved);
     assert.equal(statSync(db).mtimeMs, before.mtimeMs);
     assert.equal(statSync(db).size, before.size);
-  } finally { rmSync(cwd, { recursive: true, force: true }); }
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
 });

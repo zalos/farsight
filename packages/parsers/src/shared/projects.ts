@@ -26,7 +26,15 @@
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
-import type { GraphFragment, GraphNode, ProjectDecl, ProjectImports, ProjectsMeta, ProjectType, ProjectsConfig } from '@farsight/core';
+import type {
+  GraphFragment,
+  GraphNode,
+  ProjectDecl,
+  ProjectImports,
+  ProjectsMeta,
+  ProjectType,
+  ProjectsConfig,
+} from '@farsight/core';
 import { globToRegExp, mergeTagDimensions } from '@farsight/core';
 import type { IngestOptions } from '../types.js';
 import { collectFiles } from './files.js';
@@ -41,16 +49,23 @@ const SOURCE_EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts
 
 function readJson(abs: string): { value?: Record<string, unknown>; error?: string } {
   let text: string;
-  try { text = readFileSync(abs, 'utf8'); } catch { return {}; }
+  try {
+    text = readFileSync(abs, 'utf8');
+  } catch {
+    return {};
+  }
   try {
     const v = JSON.parse(text) as unknown;
-    return v && typeof v === 'object' && !Array.isArray(v) ? { value: v as Record<string, unknown> } : { error: 'not an object' };
+    return v && typeof v === 'object' && !Array.isArray(v)
+      ? { value: v as Record<string, unknown> }
+      : { error: 'not an object' };
   } catch (err) {
     return { error: (err as Error).message };
   }
 }
 
-const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && !!x.trim()).map((x) => x.trim()) : []);
+const strings = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && !!x.trim()).map((x) => x.trim()) : [];
 
 /** Root `package.json` `workspaces` (array or `{ packages }`) plus `pnpm-workspace.yaml` packages — the globs, exclusions left out. */
 export function workspaceGlobs(repoRoot: string): string[] {
@@ -62,7 +77,9 @@ export function workspaceGlobs(repoRoot: string): string[] {
   try {
     const yaml = readFileSync(join(repoRoot, 'pnpm-workspace.yaml'), 'utf8');
     for (const m of yaml.matchAll(/^\s*-\s*['"]?([^'"\n#]+?)['"]?\s*$/gm)) out.push(m[1]!.trim());
-  } catch { /* no pnpm workspace file */ }
+  } catch {
+    /* no pnpm workspace file */
+  }
   return [...new Set(out.filter((g) => !g.startsWith('!')).map((g) => g.replace(/^\.\//, '').replace(/\/$/, '')))];
 }
 
@@ -79,7 +96,13 @@ function layoutOf(nx: Record<string, unknown> | undefined): { apps: string; libs
  * The project type: what the settings say; else the NX layout folder it sits in (`apps/` · `libs/`).
  * An application whose name ends in `-e2e`, or that carries a `type:e2e` tag, is an end-to-end project.
  */
-function typeOf(declared: unknown, root: string, name: string, tags: string[], layout: { apps: string; libs: string } | null): ProjectType | undefined {
+function typeOf(
+  declared: unknown,
+  root: string,
+  name: string,
+  tags: string[],
+  layout: { apps: string; libs: string } | null,
+): ProjectType | undefined {
   let t: ProjectType | undefined = declared === 'application' || declared === 'library' ? declared : undefined;
   if (!t && layout) {
     if (root === layout.apps || root.startsWith(`${layout.apps}/`)) t = 'application';
@@ -90,20 +113,28 @@ function typeOf(declared: unknown, root: string, name: string, tags: string[], l
 }
 
 /** Read a source's projects. Pure over the files on disk; never throws. */
-export function discoverProjects(repoRoot: string, repo: string, options: IngestOptions = {}): { tool: ProjectsMeta['tool']; projects: ProjectDecl[]; notes: string[] } {
+export function discoverProjects(
+  repoRoot: string,
+  repo: string,
+  options: IngestOptions = {},
+): { tool: ProjectsMeta['tool']; projects: ProjectDecl[]; notes: string[] } {
   const notes: string[] = [];
   const nxFile = readJson(join(repoRoot, 'nx.json'));
   const isNx = !!nxFile.value || !!nxFile.error;
-  if (nxFile.error) notes.push(`nx.json could not be read as JSON (${nxFile.error}); the workspace is still read as NX.`);
+  if (nxFile.error)
+    notes.push(`nx.json could not be read as JSON (${nxFile.error}); the workspace is still read as NX.`);
   const globs = workspaceGlobs(repoRoot);
   const globRes = globs.map((g) => globToRegExp(g));
   // a workspaces glob matches a directory, never what is below it (`packages/*` is not `packages/a/b`)
-  const inWorkspaces = (dir: string) => dir !== '' && globs.some((g, i) => {
-    if (g.includes('**')) return globRes[i]!.test(dir);
-    const depth = g.split('/').length;
-    return dir.split('/').length === depth && globRes[i]!.test(dir);
-  });
-  if (!isNx && !globs.length) return { tool: 'none', projects: [{ name: repo, root: '.', tags: [], via: 'source' }], notes };
+  const inWorkspaces = (dir: string) =>
+    dir !== '' &&
+    globs.some((g, i) => {
+      if (g.includes('**')) return globRes[i]!.test(dir);
+      const depth = g.split('/').length;
+      return dir.split('/').length === depth && globRes[i]!.test(dir);
+    });
+  if (!isNx && !globs.length)
+    return { tool: 'none', projects: [{ name: repo, root: '.', tags: [], via: 'source' }], notes };
 
   const files = collectFiles(repoRoot, [...MANIFESTS], options, (base) => !MANIFESTS.has(base)).sort();
   const byDir = new Map<string, { project?: Record<string, unknown>; pkg?: Record<string, unknown> }>();
@@ -111,10 +142,14 @@ export function discoverProjects(repoRoot: string, repo: string, options: Ingest
     const rel = relative(repoRoot, abs);
     const dir = dirname(rel) === '.' ? '' : dirname(rel);
     const { value, error } = readJson(abs);
-    if (error) { notes.push(`${rel} could not be read as JSON (${error}), so it names no project.`); continue; }
+    if (error) {
+      notes.push(`${rel} could not be read as JSON (${error}), so it names no project.`);
+      continue;
+    }
     if (!value) continue;
     const slot = byDir.get(dir) ?? {};
-    if (rel.endsWith('project.json')) slot.project = value; else slot.pkg = value;
+    if (rel.endsWith('project.json')) slot.project = value;
+    else slot.pkg = value;
     byDir.set(dir, slot);
   }
   const layout = isNx ? layoutOf(nxFile.value) : null;
@@ -125,12 +160,20 @@ export function discoverProjects(repoRoot: string, repo: string, options: Ingest
     const pkgName = typeof pkg?.name === 'string' && pkg.name.trim() ? pkg.name.trim() : undefined;
     const dirName = dir ? dir.split('/').pop()! : repo;
     if (isNx && project) {
-      const name = typeof project.name === 'string' && project.name.trim() ? project.name.trim() : (pkgNx && typeof pkgNx.name === 'string' ? pkgNx.name : undefined) ?? pkgName ?? dirName;
+      const name =
+        typeof project.name === 'string' && project.name.trim()
+          ? project.name.trim()
+          : ((pkgNx && typeof pkgNx.name === 'string' ? pkgNx.name : undefined) ?? pkgName ?? dirName);
       const tags = [...new Set([...strings(project.tags), ...strings(pkgNx?.tags)])];
-      const implicit = [...new Set([...strings(project.implicitDependencies), ...strings(pkgNx?.implicitDependencies)])].filter((d) => !d.startsWith('!'));
+      const implicit = [
+        ...new Set([...strings(project.implicitDependencies), ...strings(pkgNx?.implicitDependencies)]),
+      ].filter((d) => !d.startsWith('!'));
       const type = typeOf(project.projectType ?? pkgNx?.projectType, root, name, tags, layout);
       projects.push({
-        name, root, ...(type ? { type } : {}), tags,
+        name,
+        root,
+        ...(type ? { type } : {}),
+        tags,
         ...(implicit.length ? { implicitDependencies: implicit } : {}),
         ...(typeof project.sourceRoot === 'string' ? { sourceRoot: project.sourceRoot } : {}),
         via: 'project.json',
@@ -147,7 +190,10 @@ export function discoverProjects(repoRoot: string, repo: string, options: Ingest
     const implicit = isNx ? strings(pkgNx?.implicitDependencies).filter((d) => !d.startsWith('!')) : [];
     const type = typeOf(pkgNx?.projectType, root, name, tags, layout);
     projects.push({
-      name, root, ...(type ? { type } : {}), tags,
+      name,
+      root,
+      ...(type ? { type } : {}),
+      tags,
       ...(implicit.length ? { implicitDependencies: implicit } : {}),
       ...(pkgNx && typeof pkgNx.sourceRoot === 'string' ? { sourceRoot: pkgNx.sourceRoot } : {}),
       via: 'package.json',
@@ -158,7 +204,10 @@ export function discoverProjects(repoRoot: string, repo: string, options: Ingest
   const kept: ProjectDecl[] = [];
   for (const p of projects) {
     const prior = seen.get(p.name);
-    if (prior) { notes.push(`Two projects are named ${p.name} (${prior} and ${p.root}); the one at ${prior} is kept.`); continue; }
+    if (prior) {
+      notes.push(`Two projects are named ${p.name} (${prior} and ${p.root}); the one at ${prior} is kept.`);
+      continue;
+    }
     seen.set(p.name, p.root);
     kept.push(p);
   }
@@ -179,13 +228,18 @@ export function projectOfPath(path: string, projects: readonly ProjectDecl[]): P
 /** Every module specifier one file imports, re-exports, `import()`s or `require()`s. A text scan: comments can add a stray one. */
 export function importSpecifiers(source: string): string[] {
   const out: string[] = [];
-  const re = /\b(?:import|export)\s+(?:type\s+)?[^'"`;]*?\bfrom\s*['"]([^'"\n]+)['"]|\bimport\s*['"]([^'"\n]+)['"]|\b(?:import|require)\s*\(\s*['"]([^'"\n]+)['"]\s*\)/g;
+  const re =
+    /\b(?:import|export)\s+(?:type\s+)?[^'"`;]*?\bfrom\s*['"]([^'"\n]+)['"]|\bimport\s*['"]([^'"\n]+)['"]|\b(?:import|require)\s*\(\s*['"]([^'"\n]+)['"]\s*\)/g;
   for (const m of source.matchAll(re)) out.push((m[1] ?? m[2] ?? m[3])!);
   return out;
 }
 
 /** Imports from one project's files into another's, resolved like the TS/JS adapter resolves them. */
-export function projectImports(repoRoot: string, projects: readonly ProjectDecl[], options: IngestOptions = {}): ProjectImports[] {
+export function projectImports(
+  repoRoot: string,
+  projects: readonly ProjectDecl[],
+  options: IngestOptions = {},
+): ProjectImports[] {
   if (projects.length < 2) return [];
   const resolveAlias = createAliasResolver(repoRoot);
   const files = collectFiles(repoRoot, SOURCE_EXTS, options, (name) => name.endsWith('.d.ts')).sort();
@@ -195,7 +249,11 @@ export function projectImports(repoRoot: string, projects: readonly ProjectDecl[
     const from = projectOfPath(rel, projects);
     if (!from) continue;
     let source: string;
-    try { source = readFileSync(abs, 'utf8'); } catch { continue; }
+    try {
+      source = readFileSync(abs, 'utf8');
+    } catch {
+      continue;
+    }
     for (const spec of importSpecifiers(source)) {
       let target: string | null;
       if (spec.startsWith('.')) {
@@ -218,8 +276,14 @@ export function projectImports(repoRoot: string, projects: readonly ProjectDecl[
   return [...pairs.values()]
     .sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to))
     .map((p) => ({
-      from: p.from, to: p.to, imports: p.imports, files: p.byFile.size,
-      top: [...p.byFile].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([path, imports]) => ({ path, imports })),
+      from: p.from,
+      to: p.to,
+      imports: p.imports,
+      files: p.byFile.size,
+      top: [...p.byFile]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .slice(0, 5)
+        .map(([path, imports]) => ({ path, imports })),
     }));
 }
 
@@ -227,7 +291,12 @@ export function projectImports(repoRoot: string, projects: readonly ProjectDecl[
  * Discover the source's projects, stamp `project` on every node under a project root, and return
  * what `fragment.meta.projects` records. Never throws.
  */
-export function applyProjects(fragment: GraphFragment, repoRoot: string, options: IngestOptions, config: ProjectsConfig | undefined): ProjectsMeta {
+export function applyProjects(
+  fragment: GraphFragment,
+  repoRoot: string,
+  options: IngestOptions,
+  config: ProjectsConfig | undefined,
+): ProjectsMeta {
   const repo = fragment.repo;
   const { tool, projects, notes } = discoverProjects(repoRoot, repo, options);
   // NX's own project graph, when NX wrote one: dependencies it knows, and the type of a project no manifest typed
@@ -243,16 +312,25 @@ export function applyProjects(fragment: GraphFragment, repoRoot: string, options
     if (!path || (n.loc!.repo && n.loc!.repo !== repo)) continue;
     const p = projectOfPath(path, projects);
     if (!p) continue;
-    n.project = { name: p.name, root: p.root, ...(p.type ? { type: p.type } : {}), ...(p.tags.length ? { tags: [...p.tags] } : {}) };
+    n.project = {
+      name: p.name,
+      root: p.root,
+      ...(p.type ? { type: p.type } : {}),
+      ...(p.tags.length ? { tags: [...p.tags] } : {}),
+    };
   }
   // a record, queue, flag, rule or gate the adapter placed without a file (`db.invoices` read through a
   // client object) belongs to a project only when everything joined to it is in that one project
   const byId = new Map(fragment.nodes.map((n) => [n.id, n]));
   const neighbours = new Map<string, Set<string>>();
   for (const e of fragment.edges) {
-    for (const [a, b] of [[e.from, e.to], [e.to, e.from]] as const) {
+    for (const [a, b] of [
+      [e.from, e.to],
+      [e.to, e.from],
+    ] as const) {
       const set = neighbours.get(a);
-      if (set) set.add(b); else neighbours.set(a, new Set([b]));
+      if (set) set.add(b);
+      else neighbours.set(a, new Set([b]));
     }
   }
   for (const n of fragment.nodes) {
@@ -261,7 +339,10 @@ export function applyProjects(fragment: GraphFragment, repoRoot: string, options
     let first: GraphNode['project'];
     for (const id of neighbours.get(n.id) ?? []) {
       const p = byId.get(id)?.project;
-      if (!p) { names.add('\u0000none'); continue; }
+      if (!p) {
+        names.add('\u0000none');
+        continue;
+      }
       names.add(p.name);
       first ??= p;
     }
@@ -269,7 +350,8 @@ export function applyProjects(fragment: GraphFragment, repoRoot: string, options
   }
   const imports = projectImports(repoRoot, projects, options);
   return {
-    tool, projects,
+    tool,
+    projects,
     tagDimensions: mergeTagDimensions(config?.tagDimensions),
     ...(config?.tagValues ? { tagValues: config.tagValues } : {}),
     ...(imports.length ? { imports } : {}),

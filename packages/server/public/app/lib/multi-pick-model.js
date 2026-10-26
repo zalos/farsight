@@ -5,7 +5,10 @@
 
 /** Lower case, accents dropped: what a query and a word are compared as. */
 export function fold(s) {
-  return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return String(s == null ? '' : s)
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
 }
 
 /**
@@ -32,9 +35,9 @@ export function matchScore(option, query) {
 export function shownOptions(options, groups, query) {
   const order = new Map((groups || []).map((g, i) => [g.key, i]));
   const rank = (o) => (order.has(o.group) ? order.get(o.group) : order.size);
-  return options.map((o, i) => ({ o, i, s: matchScore(o, query) }))
+  return options
+    .map((o, i) => ({ o, i, s: matchScore(o, query) }))
     .filter((x) => x.s >= 0)
     .sort((a, b) => rank(a.o) - rank(b.o) || b.s - a.s || a.i - b.i)
     .map((x) => x.o);
 }
-

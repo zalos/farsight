@@ -1,11 +1,27 @@
 import { offPlatformSteps, type OffPlatformStep } from './decisions.js';
-import type { GraphNode, GraphEdge, BranchPoint, ExternalKind, ResolutionTechnique, ConfidenceTier, StoreKind, PersonaFrom } from './graph.js';
+import type {
+  GraphNode,
+  GraphEdge,
+  BranchPoint,
+  ExternalKind,
+  ResolutionTechnique,
+  ConfidenceTier,
+  StoreKind,
+  PersonaFrom,
+} from './graph.js';
 import { withJourneyCoverage, type JourneyCoverage } from './coverage.js';
 import { isConfigCheck } from './config-check.js';
 import { refoldRuns } from './test-runs.js';
 import { withJourneyPreconditions, type ActionPreconditions } from './gates.js';
 import { gateTierOf, isActionGate, type GateClass, type GateTier, type TierFrom } from './gate-class.js';
-import { withJourneyCounted, type JourneyCounted, type SegmentCounted, type SegmentAbsence, type AbsenceKind, type AbsenceWord } from './journey-counted.js';
+import {
+  withJourneyCounted,
+  type JourneyCounted,
+  type SegmentCounted,
+  type SegmentAbsence,
+  type AbsenceKind,
+  type AbsenceWord,
+} from './journey-counted.js';
 
 /**
  * Graph queries shared by every consumer — GUI lenses, the CLI, and the MCP
@@ -69,7 +85,8 @@ export function search(index: GraphIndex, query: string, options: SearchOptions 
     let score = 0;
     const name = node.name.toLowerCase();
     const label = node.facets?.business?.label?.toLowerCase();
-    const hay = `${name} ${label ?? ''} ${node.tags.join(' ')} ${node.docs ?? ''} ${node.loc?.path ?? ''}`.toLowerCase();
+    const hay =
+      `${name} ${label ?? ''} ${node.tags.join(' ')} ${node.docs ?? ''} ${node.loc?.path ?? ''}`.toLowerCase();
     // the whole query is this node's name or business label: a person typed exactly what they see
     if (name === q || label === q) score += 20;
     for (const term of terms) {
@@ -92,7 +109,11 @@ const RUNNABLE = new Set<string>(['function', 'component', 'route', 'page', 'flo
  * component, route, page), else the best hit of any kind. Shared by the HUD's
  * /api/journey and the MCP `journey` tool so both accept names, not just ids.
  */
-export function resolveEntry(index: GraphIndex, query: string, options: Pick<SearchOptions, 'repo' | 'group'> = {}): GraphNode | undefined {
+export function resolveEntry(
+  index: GraphIndex,
+  query: string,
+  options: Pick<SearchOptions, 'repo' | 'group'> = {},
+): GraphNode | undefined {
   const direct = index.byId.get(query);
   if (direct) return direct;
   const hits = search(index, query, { ...options, limit: 10 });
@@ -115,7 +136,13 @@ export interface TraversalOptions {
  * Bounded reachability from seed nodes — the slice behind "show me the
  * invoice process" and behind an agent's trace() call.
  */
-export function trace(index: GraphIndex, seedIds: string[], direction: Direction = 'both', depth = 3, opts: TraversalOptions = {}): Subgraph {
+export function trace(
+  index: GraphIndex,
+  seedIds: string[],
+  direction: Direction = 'both',
+  depth = 3,
+  opts: TraversalOptions = {},
+): Subgraph {
   const nodeIds = new Set<string>(seedIds.filter((id) => index.byId.has(id)));
   const edgeSet = new Set<GraphEdge>();
   let frontier = [...nodeIds];
@@ -123,8 +150,8 @@ export function trace(index: GraphIndex, seedIds: string[], direction: Direction
     const next: string[] = [];
     for (const id of frontier) {
       const around: GraphEdge[] = [
-        ...(direction !== 'upstream' ? index.out.get(id) ?? [] : []),
-        ...(direction !== 'downstream' ? index.in.get(id) ?? [] : []),
+        ...(direction !== 'upstream' ? (index.out.get(id) ?? []) : []),
+        ...(direction !== 'downstream' ? (index.in.get(id) ?? []) : []),
       ];
       for (const e of around) {
         if (opts.skip?.(e)) continue;
@@ -152,7 +179,12 @@ export function trace(index: GraphIndex, seedIds: string[], direction: Direction
  * The third argument is the depth, or the options when the caller only wants
  * to skip edges (`impact(index, id, { skip })`).
  */
-export function impact(index: GraphIndex, id: string, depth: number | TraversalOptions = 10, opts: TraversalOptions = {}): Subgraph {
+export function impact(
+  index: GraphIndex,
+  id: string,
+  depth: number | TraversalOptions = 10,
+  opts: TraversalOptions = {},
+): Subgraph {
   const d = typeof depth === 'number' ? depth : 10;
   const o = typeof depth === 'number' ? opts : depth;
   return trace(index, [id], 'upstream', d, o);
@@ -204,8 +236,11 @@ export type GateTierFacts = Pick<JourneyGate, 'tier' | 'class' | 'tierFrom' | 'r
 export function tierFactsOf(g: GateTierFacts | undefined): GateTierFacts {
   if (!g) return {};
   return {
-    ...(g.tier ? { tier: g.tier } : {}), ...(g.class ? { class: g.class } : {}), ...(g.tierFrom ? { tierFrom: g.tierFrom } : {}),
-    ...(g.requires ? { requires: g.requires } : {}), ...(g.words ? { words: g.words } : {}),
+    ...(g.tier ? { tier: g.tier } : {}),
+    ...(g.class ? { class: g.class } : {}),
+    ...(g.tierFrom ? { tierFrom: g.tierFrom } : {}),
+    ...(g.requires ? { requires: g.requires } : {}),
+    ...(g.words ? { words: g.words } : {}),
   };
 }
 
@@ -219,7 +254,15 @@ export interface GateOccurrence {
  * every role any action on the screen handed it, and `at` = each meeting with its own roles — what places the gate
  * under every action it guards (`gatesInRange`).
  */
-export type SegmentGate = { id: string; kind: 'guard' | 'rule'; name: string; planned?: true; count: number; stepOrder: number; at?: GateOccurrence[] } & GateTierFacts;
+export type SegmentGate = {
+  id: string;
+  kind: 'guard' | 'rule';
+  name: string;
+  planned?: true;
+  count: number;
+  stepOrder: number;
+  at?: GateOccurrence[];
+} & GateTierFacts;
 
 /**
  * The gates one action meets — a screen's gates placed on a step range (a moment's `from`..`to`): each gate
@@ -231,12 +274,19 @@ export type SegmentGate = { id: string; kind: 'guard' | 'rule'; name: string; pl
 export function gatesInRange(seg: { gates: SegmentGate[] }, from: number, to: number): SegmentGate[] {
   const out: SegmentGate[] = [];
   for (const g of seg.gates) {
-    const at = (g.at && g.at.length ? g.at : [{ stepOrder: g.stepOrder, ...(g.requires ? { requires: g.requires } : {}) }])
-      .filter((o) => o.stepOrder >= from && o.stepOrder <= to);
+    const at = (
+      g.at && g.at.length ? g.at : [{ stepOrder: g.stepOrder, ...(g.requires ? { requires: g.requires } : {}) }]
+    ).filter((o) => o.stepOrder >= from && o.stepOrder <= to);
     if (!at.length) continue;
     const roles = [...new Set(at.flatMap((o) => (o.requires ? o.requires.split(', ') : [])))];
     const { requires: _all, ...rest } = g;
-    out.push({ ...rest, stepOrder: Math.min(...at.map((o) => o.stepOrder)), count: at.length, at, ...(roles.length ? { requires: roles.join(', ') } : {}) });
+    out.push({
+      ...rest,
+      stepOrder: Math.min(...at.map((o) => o.stepOrder)),
+      count: at.length,
+      at,
+      ...(roles.length ? { requires: roles.join(', ') } : {}),
+    });
   }
   return out;
 }
@@ -244,13 +294,13 @@ export function gatesInRange(seg: { gates: SegmentGate[] }, from: number, to: nu
 /** A fork in a caller that gates one hop of a journey. */
 export interface PathCondition {
   nodeId: string;
-  name: string;              // the caller whose fork gates this hop
+  name: string; // the caller whose fork gates this hop
   path: string;
-  line: number;              // fork location (caller's file)
+  line: number; // fork location (caller's file)
   kind: BranchPoint['kind'];
-  arm: string;               // arm label the call site sits in
-  requires: string;          // condition that must hold to reach the call
-  business?: string;         // plain-language label for the arm/fork (arm.business ?? branchPoint.business)
+  arm: string; // arm label the call site sits in
+  requires: string; // condition that must hold to reach the call
+  business?: string; // plain-language label for the arm/fork (arm.business ?? branchPoint.business)
   /** what this condition means to a reader — see DecisionClass */
   class: DecisionClass;
   /** the raw fork category behind `class` (categorizeBranch), so untranslated ones can be counted by kind */
@@ -266,27 +316,27 @@ export interface PathCondition {
 export interface PlannedStep {
   /** calls = the design says this (unbuilt) screen uses this operation — the step's node is the real route */
   kind: 'calls' | 'receives' | 'step' | 'returns';
-  label: string;            // "SubmissionCreate" · "Submit an invoice." · "Submission"
-  detail?: string;          // "required" · "201" · …
+  label: string; // "SubmissionCreate" · "Submit an invoice." · "Submission"
+  detail?: string; // "required" · "201" · …
 }
 
 /** One node in the ordered execution walk. */
 export interface JourneyStep {
-  order: number;            // 0..n position in the timeline
-  depth: number;            // call-nesting level (indent)
+  order: number; // 0..n position in the timeline
+  depth: number; // call-nesting level (indent)
   via: 'entry' | 'calls' | 'http' | 'renders' | 'publishes' | 'consumes' | 'reads' | 'writes' | 'planned';
   edgeId?: string;
-  callSite?: { path: string; line: number };  // where the parent invoked this
+  callSite?: { path: string; line: number }; // where the parent invoked this
   /** the node this step runs — for a planned step, the declared route whose contract produced it */
   nodeId: string;
-  crossRepo: boolean;       // repo changed vs parent step
+  crossRepo: boolean; // repo changed vs parent step
   /**
    * guards/validates on this node; `planned` = the spec's security requirement on a declared route, not an enforced gate;
    * `config` = a config check (core gates.ts `isConfigCheck`): it checks how the app was started, not this request
    */
   gates: JourneyGate[];
-  repeat: boolean;          // node already appeared earlier in this journey
-  cycle: boolean;           // back-reference; traversal did not recurse
+  repeat: boolean; // node already appeared earlier in this journey
+  cycle: boolean; // back-reference; traversal did not recurse
   conditions?: PathCondition[]; // forks enclosing THIS hop's call site (this hop only)
   /** present only on via:'planned' steps — what the contract says will happen here */
   planned?: PlannedStep;
@@ -313,12 +363,20 @@ export interface JourneyStep {
 }
 
 /** The constant that switches a call off: its name, its literal value, and `path:line` of its declaration. */
-export interface SwitchedOff { flag: string; value: boolean; at: string }
+export interface SwitchedOff {
+  flag: string;
+  value: boolean;
+  at: string;
+}
 
 /** The switch on an edge, when the code fixes it off (`meta.inactive`). */
 export function switchedOffOf(e: GraphEdge | undefined): SwitchedOff | undefined {
   if (!e?.meta?.inactive || typeof e.meta.whenFlag !== 'string') return undefined;
-  return { flag: e.meta.whenFlag, value: e.meta.whenValue === true, at: typeof e.meta.whenAt === 'string' ? e.meta.whenAt : '' };
+  return {
+    flag: e.meta.whenFlag,
+    value: e.meta.whenValue === true,
+    at: typeof e.meta.whenAt === 'string' ? e.meta.whenAt : '',
+  };
 }
 
 /**
@@ -342,10 +400,10 @@ export interface JourneyCutPoint {
 export interface Journey {
   entryId: string;
   steps: JourneyStep[];
-  edges: GraphEdge[];       // deduped flow edges among visited nodes
+  edges: GraphEdge[]; // deduped flow edges among visited nodes
   /** the walk ended early: `maxSteps` reached (global). Depth and repeat exhaustion are LOCAL — see `cutPoints` */
   truncated: boolean;
-  forkCount: number;        // Σ branches.length over unique step nodes
+  forkCount: number; // Σ branches.length over unique step nodes
   /** steps synthesized from contracts (declared, not built) — counted apart so "9 steps" never claims code that is not there */
   plannedCount: number;
   /** subtrees the walk did not follow, each named where it happened (never a reason to stop the whole walk) */
@@ -362,7 +420,12 @@ export function plannedStepsOf(node: GraphNode): PlannedStep[] {
   const c = node.contract;
   if (!c) return [];
   const out: PlannedStep[] = [];
-  if (c.requestBody?.schema) out.push({ kind: 'receives', label: c.requestBody.schema, ...(c.requestBody.required ? { detail: 'required' } : {}) });
+  if (c.requestBody?.schema)
+    out.push({
+      kind: 'receives',
+      label: c.requestBody.schema,
+      ...(c.requestBody.required ? { detail: 'required' } : {}),
+    });
   out.push({ kind: 'step', label: c.summary?.trim() || c.spec?.operationId || node.name });
   const seen = new Set<string>();
   for (const r of c.responses ?? []) {
@@ -375,11 +438,15 @@ export function plannedStepsOf(node: GraphNode): PlannedStep[] {
 
 /** Declared, not built: a route whose only evidence is a contract. */
 export function isDeclaredOnly(node: GraphNode): boolean {
-  return node.kind === 'route' && !node.loc && (node.contract?.status === 'spec-only' || node.contract?.status === 'declared');
+  return (
+    node.kind === 'route' &&
+    !node.loc &&
+    (node.contract?.status === 'spec-only' || node.contract?.status === 'declared')
+  );
 }
 
 export interface JourneyOptions {
-  maxDepth?: number;    // default 20 — the reference app's ten flows exhaust between 15 and 20 hops once setup and deferred edges are skipped (2026-09-22)
+  maxDepth?: number; // default 20 — the reference app's ten flows exhaust between 15 and 20 hops once setup and deferred edges are skipped (2026-09-22)
   /**
    * default 1200 — the global stop, and the only one that sets `truncated`. Raised from 300, then 600, when
    * re-visits past the repeat budget became visible steps instead of vanishing: the reference app
@@ -388,7 +455,7 @@ export interface JourneyOptions {
    */
   maxSteps?: number;
   renderDepth?: number; // default 2 — how deep to inline `renders` for page/component entries
-  maxRepeats?: number;  // default 1 — extra re-visits of an already-walked node
+  maxRepeats?: number; // default 1 — extra re-visits of an already-walked node
 }
 
 const JOURNEY_FOLLOW = new Set<string>(['calls', 'http', 'renders', 'publishes', 'reads', 'writes']);
@@ -411,7 +478,10 @@ function makeRouteForOperation(index: GraphIndex): (op: string) => GraphNode | u
     let opIndex = OP_INDEX.get(index);
     if (!opIndex) {
       opIndex = new Map();
-      for (const n of index.byId.values()) { const id = n.contract?.spec?.operationId; if (n.kind === 'route' && id && !opIndex.has(id)) opIndex.set(id, n); }
+      for (const n of index.byId.values()) {
+        const id = n.contract?.spec?.operationId;
+        if (n.kind === 'route' && id && !opIndex.has(id)) opIndex.set(id, n);
+      }
       OP_INDEX.set(index, opIndex);
     }
     return opIndex.get(op);
@@ -449,7 +519,7 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
   const renderDepth = opts.renderDepth ?? (entry.kind === 'flow' ? 3 : 2);
 
   const steps: JourneyStep[] = [];
-  const stack = new Set<string>();      // nodeIds on the current DFS path (cycle guard)
+  const stack = new Set<string>(); // nodeIds on the current DFS path (cycle guard)
   const visits = new Map<string, number>(); // total prior appearances (repeat budget)
   let order = 0;
   let truncated = false;
@@ -482,9 +552,15 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
         const t = gateTierOf(src);
         const requires = typeof e.meta?.requires === 'string' ? e.meta.requires : undefined;
         gates.push({
-          id: src.id, kind: src.kind, name: src.name, ...(isConfigCheck(src) ? { config: true as const } : {}),
-          tier: t.tier, class: t.class, tierFrom: t.tierFrom,
-          ...(requires ? { requires } : {}), ...(src.precondition ? { words: src.precondition.words } : {}),
+          id: src.id,
+          kind: src.kind,
+          name: src.name,
+          ...(isConfigCheck(src) ? { config: true as const } : {}),
+          tier: t.tier,
+          class: t.class,
+          tierFrom: t.tierFrom,
+          ...(requires ? { requires } : {}),
+          ...(src.precondition ? { words: src.precondition.words } : {}),
         });
       }
     }
@@ -494,7 +570,15 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
     if (node && isDeclaredOnly(node)) {
       for (const sec of node.contract?.security ?? []) {
         if (gates.some((g) => g.name === sec)) continue;
-        gates.push({ id: `${id}#security:${sec}`, kind: 'guard', name: sec, planned: true, tier: 'business', class: 'authorisation', tierFrom: 'class' });
+        gates.push({
+          id: `${id}#security:${sec}`,
+          kind: 'guard',
+          name: sec,
+          planned: true,
+          tier: 'business',
+          class: 'authorisation',
+          tierFrom: 'class',
+        });
       }
     }
     return gates;
@@ -503,8 +587,21 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
   // the planned continuation of a declared route: emitted in place of the children it has none of
   const pushPlanned = (node: GraphNode, depth: number, parentStep: number): void => {
     for (const p of plannedStepsOf(node)) {
-      if (steps.length >= maxSteps) { cutAtCap(parentStep, node.id, depth); return; }
-      steps.push({ order: order++, depth, via: 'planned', nodeId: node.id, crossRepo: false, gates: [], repeat: false, cycle: false, planned: p });
+      if (steps.length >= maxSteps) {
+        cutAtCap(parentStep, node.id, depth);
+        return;
+      }
+      steps.push({
+        order: order++,
+        depth,
+        via: 'planned',
+        nodeId: node.id,
+        crossRepo: false,
+        gates: [],
+        repeat: false,
+        cycle: false,
+        planned: p,
+      });
       plannedCount++;
     }
   };
@@ -535,12 +632,22 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
         const business = arm.business ?? bp.business;
         // authored language makes it a business decision; an access/refusal check is a guard;
         // everything else is technical and is counted, never drawn as a diamond
-        const cls: DecisionClass = business ? 'business' : category === 'access' || category === 'guard' ? 'guard' : 'technical';
+        const cls: DecisionClass = business
+          ? 'business'
+          : category === 'access' || category === 'guard'
+            ? 'guard'
+            : 'technical';
         out.push({
-          nodeId: parent.id, name: parent.name, path: cs.path, line: bp.line,
-          kind: bp.kind, arm: arm.label, requires: arm.requires,
+          nodeId: parent.id,
+          name: parent.name,
+          path: cs.path,
+          line: bp.line,
+          kind: bp.kind,
+          arm: arm.label,
+          requires: arm.requires,
           ...(business ? { business } : {}),
-          class: cls, category,
+          class: cls,
+          category,
         });
       }
     }
@@ -568,15 +675,24 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
     const child = index.byId.get(c.childId);
     if (!child) return;
     steps.push({
-      order: order++, depth, via: c.via, edgeId: c.edge.id,
+      order: order++,
+      depth,
+      via: c.via,
+      edgeId: c.edge.id,
       ...(callSite ? { callSite } : {}),
       nodeId: c.childId,
       crossRepo: !!parent.loc?.repo && !!child.loc?.repo && child.loc.repo !== parent.loc.repo,
       // a switched-off call carries no gates: none of them stands in front of anything that runs
-      gates: flag === 'switchedOff' ? [] : gatesOf(c.childId), repeat: false, cycle: false,
+      gates: flag === 'switchedOff' ? [] : gatesOf(c.childId),
+      repeat: false,
+      cycle: false,
       ...(conditions?.length ? { conditions } : {}),
       ...(c.edge.meta?.tx ? { tx: true as const } : {}),
-      ...(flag === 'setup' ? { setup: true as const } : flag === 'deferred' ? { deferred: true as const } : { switchedOff: switchedOffOf(c.edge)! }),
+      ...(flag === 'setup'
+        ? { setup: true as const }
+        : flag === 'deferred'
+          ? { deferred: true as const }
+          : { switchedOff: switchedOffOf(c.edge)! }),
     });
   };
 
@@ -597,9 +713,16 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
     const selfOrder = order; // the order this step will take (push is called at most once per walk)
     const push = (cycle: boolean, repeat: boolean): void => {
       steps.push({
-        order: order++, depth, via, ...(edge ? { edgeId: edge.id } : {}),
-        ...(callSite ? { callSite } : {}), nodeId, crossRepo,
-        gates: gatesOf(nodeId), repeat, cycle,
+        order: order++,
+        depth,
+        via,
+        ...(edge ? { edgeId: edge.id } : {}),
+        ...(callSite ? { callSite } : {}),
+        nodeId,
+        crossRepo,
+        gates: gatesOf(nodeId),
+        repeat,
+        cycle,
         ...(conditions?.length ? { conditions } : {}),
         ...(planned ? { planned } : {}),
         ...(edge?.meta?.tx ? { tx: true as const } : {}),
@@ -607,9 +730,15 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
       if (planned) plannedCount++;
     };
 
-    if (steps.length >= maxSteps) { cutAtCap(-1, nodeId, depth, edge); return; }
+    if (steps.length >= maxSteps) {
+      cutAtCap(-1, nodeId, depth, edge);
+      return;
+    }
     // a node already on the current path is a back-reference: emit once, don't recurse
-    if (stack.has(nodeId)) { push(true, false); return; }
+    if (stack.has(nodeId)) {
+      push(true, false);
+      return;
+    }
 
     const appearances = visits.get(nodeId) ?? 0;
     // leaf data steps (tables) never recurse — always emit; a read and a later
@@ -657,15 +786,30 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
     if (!children.length && isDeclaredOnly(node) && depth + 1 <= maxDepth) pushPlanned(node, depth + 1, selfOrder);
     // a designed, unbuilt screen: the operations its design names are planned calls into the real routes,
     // which then continue as built steps or as their own planned steps
-    const plannedCalls = !children.length && node.design?.status === 'design-only'
-      ? (node.design.operations ?? []).map((op) => ({ op, route: routeForOperation(op) })).filter((x): x is { op: string; route: GraphNode } => !!x.route)
-      : [];
+    const plannedCalls =
+      !children.length && node.design?.status === 'design-only'
+        ? (node.design.operations ?? [])
+            .map((op) => ({ op, route: routeForOperation(op) }))
+            .filter((x): x is { op: string; route: GraphNode } => !!x.route)
+        : [];
 
     stack.add(nodeId);
     for (const c of children) {
-      if (truncated || steps.length >= maxSteps) { cutAtCap(selfOrder, c.childId, depth + 1, c.edge); break; }
+      if (truncated || steps.length >= maxSteps) {
+        cutAtCap(selfOrder, c.childId, depth + 1, c.edge);
+        break;
+      }
       // depth is a local cut: this child is not walked, the next sibling still is
-      if (depth + 1 > maxDepth) { cutPoints.push({ reason: 'depth', parentStep: selfOrder, nodeId: c.childId, edgeId: c.edge.id, depth: depth + 1 }); continue; }
+      if (depth + 1 > maxDepth) {
+        cutPoints.push({
+          reason: 'depth',
+          parentStep: selfOrder,
+          nodeId: c.childId,
+          edgeId: c.edge.id,
+          depth: depth + 1,
+        });
+        continue;
+      }
       const l = typeof c.edge.meta?.line === 'number' ? c.edge.meta.line : undefined;
       const cs = l != null && node.loc?.path ? { path: node.loc.path, line: l } : undefined;
       // the boot and the work that runs later are named where they were reached and left
@@ -674,7 +818,14 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
       // re-visit of it (01 §2.3.3).
       // a call the code switches off with a constant is named where it is written and not walked: nothing under
       // it runs, so nothing under it is this journey's work (lane moves, 2026-10-13)
-      const origin = c.edge.meta?.origin === 'setup' ? 'setup' : c.edge.meta?.deferred ? 'deferred' : switchedOffOf(c.edge) ? 'switchedOff' : undefined;
+      const origin =
+        c.edge.meta?.origin === 'setup'
+          ? 'setup'
+          : c.edge.meta?.deferred
+            ? 'deferred'
+            : switchedOffOf(c.edge)
+              ? 'switchedOff'
+              : undefined;
       if (origin) {
         if (origin === 'setup') {
           if (setupSeen.has(c.childId)) continue;
@@ -686,9 +837,18 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
       walk(c.childId, depth + 1, c.via, c.edge, cs, node.loc?.repo, cs ? conditionsAt(node, cs) : undefined);
     }
     for (const pc of plannedCalls) {
-      if (truncated || steps.length >= maxSteps) { cutAtCap(selfOrder, pc.route.id, depth + 1); break; }
-      if (depth + 1 > maxDepth) { cutPoints.push({ reason: 'depth', parentStep: selfOrder, nodeId: pc.route.id, depth: depth + 1 }); continue; }
-      walk(pc.route.id, depth + 1, 'planned', undefined, undefined, node.loc?.repo, undefined, { kind: 'calls', label: pc.op });
+      if (truncated || steps.length >= maxSteps) {
+        cutAtCap(selfOrder, pc.route.id, depth + 1);
+        break;
+      }
+      if (depth + 1 > maxDepth) {
+        cutPoints.push({ reason: 'depth', parentStep: selfOrder, nodeId: pc.route.id, depth: depth + 1 });
+        continue;
+      }
+      walk(pc.route.id, depth + 1, 'planned', undefined, undefined, node.loc?.repo, undefined, {
+        kind: 'calls',
+        label: pc.op,
+      });
     }
     stack.delete(nodeId);
   };
@@ -706,7 +866,8 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
     const direct = new Set<string>();
     for (const e of index.in.get(step.nodeId) ?? []) {
       if (e.kind !== 'guards' && e.kind !== 'validates') continue;
-      if (e.meta?.via === 'handler' && typeof e.meta.handler === 'string' && visited.has(e.meta.handler)) mirrored.add(e.from);
+      if (e.meta?.via === 'handler' && typeof e.meta.handler === 'string' && visited.has(e.meta.handler))
+        mirrored.add(e.from);
       else direct.add(e.from);
     }
     // a gate that also reaches this node directly (middleware, say) is its own — keep it
@@ -788,7 +949,10 @@ export function rulesFor(index: GraphIndex, subgraph: Subgraph): { rule: GraphNo
     for (const e of index.in.get(node.id) ?? []) {
       const source = index.byId.get(e.from);
       if (!source) continue;
-      if ((e.kind === 'guards' || e.kind === 'validates') && (source.kind === 'guard' || source.kind === 'rule' || source.kind === 'flag')) {
+      if (
+        (e.kind === 'guards' || e.kind === 'validates') &&
+        (source.kind === 'guard' || source.kind === 'rule' || source.kind === 'flag')
+      ) {
         results.push({ rule: source, appliesTo: node });
       }
     }
@@ -803,7 +967,18 @@ export function rulesFor(index: GraphIndex, subgraph: Subgraph): { rule: GraphNo
 export interface TimelineItem {
   order: number;
   depth: number;
-  kind: 'screen' | 'step' | 'call' | 'gate' | 'decision' | 'record' | 'message' | 'external' | 'planned' | 'setup' | 'deferred';
+  kind:
+    | 'screen'
+    | 'step'
+    | 'call'
+    | 'gate'
+    | 'decision'
+    | 'record'
+    | 'message'
+    | 'external'
+    | 'planned'
+    | 'setup'
+    | 'deferred';
   nodeId: string;
   name: string;
   via: JourneyStep['via'];
@@ -919,9 +1094,15 @@ export function journeyChoices(index: GraphIndex, j: Journey): Map<number, Journ
   const parentOf = new Map<number, number>();
   {
     const chain: number[] = [];
-    for (const s of j.steps) { chain[s.depth] = s.order; parentOf.set(s.order, s.depth > 0 ? (chain[s.depth - 1] ?? -1) : -1); }
+    for (const s of j.steps) {
+      chain[s.depth] = s.order;
+      parentOf.set(s.order, s.depth > 0 ? (chain[s.depth - 1] ?? -1) : -1);
+    }
   }
-  const memberOf = (name: string): string => { const i = name.lastIndexOf('.'); return i > 0 ? name.slice(i + 1) : name; };
+  const memberOf = (name: string): string => {
+    const i = name.lastIndexOf('.');
+    return i > 0 ? name.slice(i + 1) : name;
+  };
   type Row = { step: JourneyStep; node: GraphNode; edge: GraphEdge };
   const groups = new Map<string, Row[]>();
   for (const s of j.steps) {
@@ -946,7 +1127,7 @@ export function journeyChoices(index: GraphIndex, j: Journey): Map<number, Journ
     else groups.set(key, [{ step: s, node, edge }]);
   }
   for (const [key, rows] of groups) {
-    if (rows.length < 2) continue;                 // one implementation is not a choice
+    if (rows.length < 2) continue; // one implementation is not a choice
     const first = rows[0]!;
     const p = parentOf.get(first.step.order) ?? -1;
     const parentNode = p >= 0 ? index.byId.get(stepById.get(p)!.nodeId) : undefined;
@@ -970,14 +1151,18 @@ export function journeyChoices(index: GraphIndex, j: Journey): Map<number, Journ
       member,
       label: iface ? `${iface}.${member}` : member,
       words: iface ? `${humanizeName(iface)} · ${humanizeName(member)}` : humanizeName(member),
-      ...(parentNode?.loc ? { at: { nodeId: parentNode.id, name: parentNode.name, path: parentNode.loc.path, line } } : {}),
+      ...(parentNode?.loc
+        ? { at: { nodeId: parentNode.id, name: parentNode.name, path: parentNode.loc.path, line } }
+        : {}),
       candidates: rows.map((r) => {
         const title = r.node.facets?.business?.label ?? businessSummary(r.node);
         const dot = r.node.name.lastIndexOf('.');
         return {
-          nodeId: r.node.id, name: r.node.name,
+          nodeId: r.node.id,
+          name: r.node.name,
           words: humanizeName(dot > 0 ? r.node.name.slice(0, dot) : r.node.name),
-          stepOrder: r.step.order, ...(title ? { title } : {}),
+          stepOrder: r.step.order,
+          ...(title ? { title } : {}),
         };
       }),
       setAside,
@@ -1030,13 +1215,19 @@ export function journeyTransactions(index: GraphIndex, j: Journey): { known: boo
   const sideOf = new Map<number, TxSide>();
   let known = false;
   for (const edges of index.out.values()) {
-    if (edges.some((e) => e.meta?.tx)) { known = true; break; }
+    if (edges.some((e) => e.meta?.tx)) {
+      known = true;
+      break;
+    }
   }
   if (!known) return { known, sideOf };
   const parentOf = new Map<number, number>();
   {
     const chain: number[] = [];
-    for (const s of j.steps) { chain[s.depth] = s.order; parentOf.set(s.order, s.depth > 0 ? (chain[s.depth - 1] ?? -1) : -1); }
+    for (const s of j.steps) {
+      chain[s.depth] = s.order;
+      parentOf.set(s.order, s.depth > 0 ? (chain[s.depth - 1] ?? -1) : -1);
+    }
   }
   // the hops one caller makes, in the order the code makes them
   const kids = new Map<number, JourneyStep[]>();
@@ -1048,13 +1239,16 @@ export function journeyTransactions(index: GraphIndex, j: Journey): { known: boo
     const p = parentOf.get(s.order) ?? -1;
     if (p < 0) continue;
     const list = kids.get(p);
-    if (list) list.push(s); else kids.set(p, [s]);
+    if (list) list.push(s);
+    else kids.set(p, [s]);
   }
   for (const list of kids.values()) {
     let opened = false;
     for (const s of list) {
-      if (s.tx) { sideOf.set(s.order, 'inside'); opened = true; }
-      else if (opened) sideOf.set(s.order, 'after');
+      if (s.tx) {
+        sideOf.set(s.order, 'inside');
+        opened = true;
+      } else if (opened) sideOf.set(s.order, 'after');
     }
   }
   return { known, sideOf };
@@ -1068,7 +1262,7 @@ export interface SegmentMarker {
   name: string;
   kind: 'step' | 'call' | 'record' | 'message' | 'external' | 'setup' | 'deferred';
   via: JourneyStep['via'];
-  system: string;           // SystemRow.key
+  system: string; // SystemRow.key
   /** index into the owning segment's `moments[]` — one client-side action and everything it caused */
   moment: number;
   planned?: boolean;
@@ -1156,7 +1350,8 @@ export interface JourneyMoment {
   /** the longer sentence behind the headline, when the code carries one */
   business?: string;
   /** inclusive step-order range inside the segment */
-  from: number; to: number;
+  from: number;
+  to: number;
   /** the browser-side function that starts the moment (the screen's step when nothing calls out) */
   actionStep: number;
   /** the `http`/planned step that crosses the seam, when there is one */
@@ -1198,7 +1393,8 @@ export interface JourneySegment {
   index: number;
   screen: JourneySummary['user'][number] | null;
   /** inclusive step-order range on the journey */
-  from: number; to: number;
+  from: number;
+  to: number;
   markers: SegmentMarker[];
   /** the segment's sub-columns: one per client-side action, in execution order */
   moments: JourneyMoment[];
@@ -1229,7 +1425,21 @@ export interface JourneySegment {
    * `gates` = distinct checkpoints, `checks` = how many times the walk met one
    * (Σ gate counts); `setup`/`deferred` = the boot and the later work named here.
    */
-  counts: { markers: number; calls: number; planned: number; gates: number; checks: number; decisions: number; records: number; messages: number; cutPoints: number; repeats: number; setup: number; deferred: number; configChecks: number };
+  counts: {
+    markers: number;
+    calls: number;
+    planned: number;
+    gates: number;
+    checks: number;
+    decisions: number;
+    records: number;
+    messages: number;
+    cutPoints: number;
+    repeats: number;
+    setup: number;
+    deferred: number;
+    configChecks: number;
+  };
   /** this screen's numbers as typed counts, scoped `on this screen` (core/journey-counted.ts, docs/COUNTS.md) */
   counted?: SegmentCounted;
   /**
@@ -1258,9 +1468,20 @@ export interface JourneySummary {
   coverage?: JourneyCoverage;
   /** band 1 — screens in order (the entry when it is a screen; a flow's screens; else the pages upstream) */
   user: {
-    id: string; name: string; kind: GraphNode['kind']; business?: string; designId?: string; designStatus?: string; hasImage: boolean; links: NonNullable<GraphNode['links']>; components: string[]; loc?: GraphNode['loc'];
+    id: string;
+    name: string;
+    kind: GraphNode['kind'];
+    business?: string;
+    designId?: string;
+    designStatus?: string;
+    hasImage: boolean;
+    links: NonNullable<GraphNode['links']>;
+    components: string[];
+    loc?: GraphNode['loc'];
     /** who uses this screen (a persona id), its name and what placed it — set by core journeys.ts `withScreenPersonas` where the journey is served */
-    persona?: string; personaName?: string; personaFrom?: PersonaFrom;
+    persona?: string;
+    personaName?: string;
+    personaFrom?: PersonaFrom;
   }[];
   /** band 2 — the plain-language story: description, documents, the rules and gates in force, the decisions along the way */
   business: {
@@ -1279,7 +1500,9 @@ export interface JourneySummary {
      * here so the HUD and MCP print one number.
      */
     untranslated: {
-      count: number; byCategory: Partial<Record<BranchCategory, number>>; guardsUnlabelled: number;
+      count: number;
+      byCategory: Partial<Record<BranchCategory, number>>;
+      guardsUnlabelled: number;
       /**
        * The technical conditions themselves, one each, in walk order — the list the
        * "not in plain language" sentence promises is behind it. `name` is the caller
@@ -1353,7 +1576,26 @@ export interface JourneySummary {
    * and a consumer must say so rather than guess a side.
    */
   txKnown: boolean;
-  counts: { screens: number; steps: number; planned: number; gates: number; checks: number; decisions: number; records: number; messages: number; segments: number; cutPoints: number; repeats: number; setup: number; deferred: number; called: number; again: number; declaredNotCalled: number; choices: number; configChecks: number };
+  counts: {
+    screens: number;
+    steps: number;
+    planned: number;
+    gates: number;
+    checks: number;
+    decisions: number;
+    records: number;
+    messages: number;
+    segments: number;
+    cutPoints: number;
+    repeats: number;
+    setup: number;
+    deferred: number;
+    called: number;
+    again: number;
+    declaredNotCalled: number;
+    choices: number;
+    configChecks: number;
+  };
   /**
    * Every number the header, the lane's tabs and the drill print, as typed
    * counts: the number, its words in each lens, the scope it counts over and
@@ -1379,7 +1621,11 @@ function runIndex(hay: string[], needle: string[]): number {
   if (!needle.length || needle.length > hay.length) return -1;
   for (let i = 0; i + needle.length <= hay.length; i++) {
     let ok = true;
-    for (let k = 0; k < needle.length; k++) if (hay[i + k] !== needle[k]) { ok = false; break; }
+    for (let k = 0; k < needle.length; k++)
+      if (hay[i + k] !== needle[k]) {
+        ok = false;
+        break;
+      }
     if (ok) return i;
   }
   return -1;
@@ -1388,7 +1634,14 @@ function runIndex(hay: string[], needle: string[]): number {
 function linkRef(index: GraphIndex, flow: GraphNode, how: JourneyLinkRef['how']): JourneyLinkRef {
   const ids = flowScreenIds(index, flow.id);
   const built = ids.filter((id) => !!index.byId.get(id)?.loc).length;
-  return { id: flow.id, name: flow.facets?.business?.label ?? flow.name, ...(flow.design?.id ? { designId: flow.design.id } : {}), screens: ids.length, built, how };
+  return {
+    id: flow.id,
+    name: flow.facets?.business?.label ?? flow.name,
+    ...(flow.design?.id ? { designId: flow.design.id } : {}),
+    screens: ids.length,
+    built,
+    how,
+  };
 }
 
 /**
@@ -1410,9 +1663,20 @@ export function journeyLinks(index: GraphIndex, entryId: string): JourneySummary
     if (!list.some((l) => l.id === flow.id)) list.push(linkRef(index, flow, how));
   };
   const byDesignId = new Map(flows.map((f) => [f.design?.id?.toLowerCase() ?? '', f] as const));
-  for (const id of entry.design?.requires ?? []) { const f = byDesignId.get(id.toLowerCase()); if (f) add(out.requires, f, 'declared'); }
-  for (const id of entry.design?.leadsTo ?? []) { const f = byDesignId.get(id.toLowerCase()); if (f) add(out.leadsTo, f, 'declared'); }
-  const mine = entry.kind === 'flow' ? flowScreenIds(index, entryId) : (entry.kind === 'page' || entry.kind === 'component') ? [entryId] : [];
+  for (const id of entry.design?.requires ?? []) {
+    const f = byDesignId.get(id.toLowerCase());
+    if (f) add(out.requires, f, 'declared');
+  }
+  for (const id of entry.design?.leadsTo ?? []) {
+    const f = byDesignId.get(id.toLowerCase());
+    if (f) add(out.leadsTo, f, 'declared');
+  }
+  const mine =
+    entry.kind === 'flow'
+      ? flowScreenIds(index, entryId)
+      : entry.kind === 'page' || entry.kind === 'component'
+        ? [entryId]
+        : [];
   if (!mine.length) return out;
   const screensOf = new Map(flows.map((f) => [f.id, flowScreenIds(index, f.id)] as const));
   for (const container of flows) {
@@ -1420,7 +1684,8 @@ export function journeyLinks(index: GraphIndex, entryId: string): JourneySummary
     const at = runIndex(cs, mine);
     if (at < 0 || cs.length === mine.length) continue; // not inside, or the same journey under another name
     add(out.partOf, container, 'derived');
-    const before = at > 0 ? cs[at - 1] : undefined, after = cs[at + mine.length];
+    const before = at > 0 ? cs[at - 1] : undefined,
+      after = cs[at + mine.length];
     for (const other of flows) {
       if (other.id === container.id) continue;
       const os = screensOf.get(other.id)!;
@@ -1445,7 +1710,12 @@ function routeMethodPath(name: string): { method: string; path: string } | undef
  * ambiguous once the row says which side. Every route lands on an API row,
  * spec-backed or implied, so every call gets a seam card.
  */
-function systemOf(index: GraphIndex, n: GraphNode, kind: TimelineItem['kind'], side: 'ux' | 'server'): Omit<SystemRow, 'planned'> {
+function systemOf(
+  index: GraphIndex,
+  n: GraphNode,
+  kind: TimelineItem['kind'],
+  side: 'ux' | 'server',
+): Omit<SystemRow, 'planned'> {
   if (kind === 'record') return { key: 'records', kind: 'records', label: 'records' };
   if (kind === 'message') return { key: 'messages', kind: 'messages', label: 'messages' };
   if (kind === 'external') {
@@ -1454,10 +1724,19 @@ function systemOf(index: GraphIndex, n: GraphNode, kind: TimelineItem['kind'], s
     const ext = n.external?.kind;
     if (ext === 'email' || ext === 'queue') return { key: 'messages', kind: 'messages', label: 'messages' };
     const store = markerStoreOf(n);
-    return { key: `external:${n.name}`, kind: 'external', label: n.name, ...(ext ? { externalKind: ext } : {}), ...(store ? { store } : {}) };
+    return {
+      key: `external:${n.name}`,
+      kind: 'external',
+      label: n.name,
+      ...(ext ? { externalKind: ext } : {}),
+      ...(store ? { store } : {}),
+    };
   }
   // the boot belongs to the process that runs it, never to the browser that waited for it
-  if (kind === 'setup') { const repo = repoOf(n); return { key: `repo:${repo}:server`, kind: 'repo', side: 'server', label: repo }; }
+  if (kind === 'setup') {
+    const repo = repoOf(n);
+    return { key: `repo:${repo}:server`, kind: 'repo', side: 'server', label: repo };
+  }
   if (kind === 'deferred') return { key: 'afterwards', kind: 'afterwards', label: 'afterwards' };
   if (n.kind === 'route') {
     if (n.contract?.apiId) {
@@ -1500,7 +1779,15 @@ function withRecordsStore(rows: SystemRow[], segments: JourneySegment[]): System
 }
 
 /** The request path read downward: what the screen asks → the contract → what the service does → what it touched. */
-const SYSTEM_RANK: Record<string, number> = { ux: 0, api: 1, server: 2, records: 3, messages: 4, external: 5, afterwards: 6 };
+const SYSTEM_RANK: Record<string, number> = {
+  ux: 0,
+  api: 1,
+  server: 2,
+  records: 3,
+  messages: 4,
+  external: 5,
+  afterwards: 6,
+};
 
 /** Where a system row sits on the request path (see SYSTEM_RANK). */
 function systemRank(r: SystemRow): number {
@@ -1513,13 +1800,26 @@ function systemRank(r: SystemRow): number {
  * here so a moment label reads the same in the HUD, the CLI and MCP.
  */
 export function humanizeName(name: string): string {
-  const VERBS: Record<string, string> = { GET: 'View ', POST: 'Submit ', PATCH: 'Update ', PUT: 'Replace ', DELETE: 'Remove ' };
+  const VERBS: Record<string, string> = {
+    GET: 'View ',
+    POST: 'Submit ',
+    PATCH: 'Update ',
+    PUT: 'Replace ',
+    DELETE: 'Remove ',
+  };
   return String(name || '')
     .replace(/^(GET|POST|PATCH|PUT|DELETE) /, (m) => VERBS[m.trim()] ?? m)
-    .replace(/\/:param/g, '').replace(/^\//, '').replace(/\//g, ' ')
-    .replace(/\.[tj]sx?$/, '').replace(/.*\bsrc /, '')
-    .replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim()
-    .toLowerCase().replace(/^./, (c) => c.toUpperCase());
+    .replace(/\/:param/g, '')
+    .replace(/^\//, '')
+    .replace(/\//g, ' ')
+    .replace(/\.[tj]sx?$/, '')
+    .replace(/.*\bsrc /, '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[-_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .replace(/^./, (c) => c.toUpperCase());
 }
 
 /**
@@ -1529,7 +1829,10 @@ export function humanizeName(name: string): string {
  * (screensFor); everything else is derived from the steps.
  */
 /** The parties the journey's steps done outside the code name, each once, after the externals the walk reached. */
-function partiesNamed(segments: JourneySegment[], reached: Map<string, unknown>): JourneySummary['system']['externals'] {
+function partiesNamed(
+  segments: JourneySegment[],
+  reached: Map<string, unknown>,
+): JourneySummary['system']['externals'] {
   const out = new Map<string, JourneySummary['system']['externals'][number]>();
   for (const sg of segments) {
     for (const st of sg.offPlatform ?? []) {
@@ -1541,7 +1844,11 @@ function partiesNamed(segments: JourneySegment[], reached: Map<string, unknown>)
 }
 
 export function journeySummary(index: GraphIndex, j: Journey, screens: GraphNode[]): JourneySummary {
-  return withJourneyPreconditions(index, j, withJourneyCoverage(index, j, withJourneyCounted(j, buildJourneySummary(index, j, screens))));
+  return withJourneyPreconditions(
+    index,
+    j,
+    withJourneyCoverage(index, j, withJourneyCounted(j, buildJourneySummary(index, j, screens))),
+  );
 }
 
 function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]): JourneySummary {
@@ -1574,7 +1881,10 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
   const parentOf = new Map<number, number>();
   {
     const chain: number[] = [];
-    for (const s of j.steps) { chain[s.depth] = s.order; parentOf.set(s.order, s.depth > 0 ? (chain[s.depth - 1] ?? -1) : -1); }
+    for (const s of j.steps) {
+      chain[s.depth] = s.order;
+      parentOf.set(s.order, s.depth > 0 ? (chain[s.depth - 1] ?? -1) : -1);
+    }
   }
   // a step is server-side when it (or anything above it) crossed an http/consumes edge or is a
   // route; a journey that does not start on a screen is server-side end to end (no browser row).
@@ -1625,25 +1935,54 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
   {
     const own = j.steps.map((s) => {
       const n = index.byId.get(s.nodeId);
-      return !!n && (s.via === 'http' || n.kind === 'route' || n.kind === 'table' || n.kind === 'queue' || n.kind === 'external' || n.kind === 'unknown');
+      return (
+        !!n &&
+        (s.via === 'http' ||
+          n.kind === 'route' ||
+          n.kind === 'table' ||
+          n.kind === 'queue' ||
+          n.kind === 'external' ||
+          n.kind === 'unknown')
+      );
     });
     for (let i = 0; i < j.steps.length; i++) {
       for (let k = i + 1; k < j.steps.length && j.steps[k]!.depth > j.steps[i]!.depth; k++) {
-        if (own[k]) { reachesOut.add(j.steps[i]!.nodeId); break; }
+        if (own[k]) {
+          reachesOut.add(j.steps[i]!.nodeId);
+          break;
+        }
       }
     }
   }
 
   /** the calls a constant switches off: named on the action that holds them, never a marker */
-  const switchedOffSteps: { stepOrder: number; nodeId: string; name: string; flag: string; value: boolean; at: string }[] = [];
+  const switchedOffSteps: {
+    stepOrder: number;
+    nodeId: string;
+    name: string;
+    flag: string;
+    value: boolean;
+    at: string;
+  }[] = [];
   for (const s of j.steps) {
     const n = index.byId.get(s.nodeId);
     if (!n) continue;
-    if (s.switchedOff) { switchedOffSteps.push({ stepOrder: s.order, nodeId: n.id, name: nameOf(n), ...s.switchedOff }); continue; }
+    if (s.switchedOff) {
+      switchedOffSteps.push({ stepOrder: s.order, nodeId: n.id, name: nameOf(n), ...s.switchedOff });
+      continue;
+    }
     const repo = repoOf(n);
     if (n.loc) repos.add(repo);
     const business = businessSummary(n);
-    const base = { order: s.order, depth: s.depth, nodeId: n.id, via: s.via, stepOrder: s.order, ...(business ? { business } : {}), repo };
+    const base = {
+      order: s.order,
+      depth: s.depth,
+      nodeId: n.id,
+      via: s.via,
+      stepOrder: s.order,
+      ...(business ? { business } : {}),
+      repo,
+    };
     if (s.planned && s.planned.kind !== 'calls') {
       timeline.push({ ...base, kind: 'planned', name: s.planned.label, planned: s.planned });
       continue;
@@ -1656,51 +1995,93 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       // a condition nobody translated is counted, never drawn: `env.DATABASE_URL` is not a business rule.
       // (`class` is absent only on a journey produced by an older build — read that as technical.)
       const cls: DecisionClass = c.class ?? 'technical';
-      if (cls === 'technical') { untranslated.push({ stepOrder: s.order, category: c.category ?? 'branch', nodeId: c.nodeId, name: c.name, line: c.line, requires: c.requires }); continue; }
+      if (cls === 'technical') {
+        untranslated.push({
+          stepOrder: s.order,
+          category: c.category ?? 'branch',
+          nodeId: c.nodeId,
+          name: c.name,
+          line: c.line,
+          requires: c.requires,
+        });
+        continue;
+      }
       const label = c.business ?? c.requires;
       decisions.push({ nodeId: c.nodeId, line: c.line, label, arm: c.arm, class: cls, stepOrder: s.order });
-      timeline.push({ order: s.order, depth: s.depth, kind: 'decision', nodeId: c.nodeId, name: label, via: s.via, stepOrder: s.order, ...(c.business ? { business: c.business } : {}) });
+      timeline.push({
+        order: s.order,
+        depth: s.depth,
+        kind: 'decision',
+        nodeId: c.nodeId,
+        name: label,
+        via: s.via,
+        stepOrder: s.order,
+        ...(c.business ? { business: c.business } : {}),
+      });
     }
     for (const g of s.gates) {
       if (g.config) configChecks.set(g.id, { id: g.id, name: g.name, appliesTo: n.id });
-      else if (g.kind === 'guard') gates.set(g.id, { id: g.id, name: g.name, ...(g.planned ? { planned: true as const } : {}), appliesTo: n.id, ...tierFactsOf(g) });
+      else if (g.kind === 'guard')
+        gates.set(g.id, {
+          id: g.id,
+          name: g.name,
+          ...(g.planned ? { planned: true as const } : {}),
+          appliesTo: n.id,
+          ...tierFactsOf(g),
+        });
       else rules.set(g.id, { id: g.id, name: g.name, appliesTo: n.id, ...tierFactsOf(g) });
-      timeline.push({ order: s.order, depth: s.depth, kind: 'gate', nodeId: g.id, name: g.name, via: s.via, stepOrder: s.order, ...(g.planned ? { planned: true as const } : {}) });
+      timeline.push({
+        order: s.order,
+        depth: s.depth,
+        kind: 'gate',
+        nodeId: g.id,
+        name: g.name,
+        via: s.via,
+        stepOrder: s.order,
+        ...(g.planned ? { planned: true as const } : {}),
+      });
     }
     let kind: TimelineItem['kind'] = 'step';
     // the boot and the work that runs afterwards are named as themselves: neither is a
     // record this request wrote, nor a message it sent (01 §2.3.7)
     if (s.setup) kind = 'setup';
-    else if (s.deferred) { kind = 'deferred'; afterwards.set(n.id, { id: n.id, name: nameOf(n) }); }
-    else if (n.kind === 'page' || n.kind === 'component' || n.kind === 'flow') kind = 'screen';
+    else if (s.deferred) {
+      kind = 'deferred';
+      afterwards.set(n.id, { id: n.id, name: nameOf(n) });
+    } else if (n.kind === 'page' || n.kind === 'component' || n.kind === 'flow') kind = 'screen';
     else if (n.kind === 'table') {
       kind = 'record';
       const store = markerStoreOf(n);
       const r = records.get(n.id) ?? { id: n.id, name: nameOf(n), ops: [], ...(store ? { store } : {}) };
       if ((s.via === 'reads' || s.via === 'writes') && !r.ops.includes(s.via)) r.ops.push(s.via);
       records.set(n.id, r);
-    }
-    else if (n.kind === 'queue') { kind = 'message'; messages.set(n.id, { id: n.id, name: nameOf(n) }); }
-    else if (n.kind === 'external' || n.kind === 'unknown') {
+    } else if (n.kind === 'queue') {
+      kind = 'message';
+      messages.set(n.id, { id: n.id, name: nameOf(n) });
+    } else if (n.kind === 'external' || n.kind === 'unknown') {
       kind = 'external';
       const store = markerStoreOf(n);
       const x = externals.get(n.id) ?? { id: n.id, name: nameOf(n), ops: [], ...(store ? { store } : {}) };
       const op = s.via === 'http' ? opOfMethod(edgeOfStep(s, n)?.meta?.method) : undefined;
       if (op && !x.ops.includes(op)) x.ops.push(op);
       externals.set(n.id, x);
-    }
-    else if (s.via === 'http' || n.kind === 'route') kind = 'call';
+    } else if (s.via === 'http' || n.kind === 'route') kind = 'call';
     timeline.push({ ...base, kind, name: nameOf(n), ...(s.planned ? { planned: s.planned } : {}) });
   }
 
   const user = screens.map((n) => ({
-    id: n.id, name: nameOf(n), kind: n.kind,
+    id: n.id,
+    name: nameOf(n),
+    kind: n.kind,
     ...(businessSummary(n) ? { business: businessSummary(n)! } : {}),
     ...(n.design?.id ? { designId: n.design.id } : {}),
     ...(n.design ? { designStatus: n.design.status } : {}),
     hasImage: !!n.design?.image,
     links: n.links ?? [],
-    components: (index.out.get(n.id) ?? []).filter((e) => e.kind === 'renders').map((e) => e.to).filter((id) => index.byId.get(id)?.kind === 'component'),
+    components: (index.out.get(n.id) ?? [])
+      .filter((e) => e.kind === 'renders')
+      .map((e) => e.to)
+      .filter((id) => index.byId.get(id)?.kind === 'component'),
     ...(n.loc ? { loc: n.loc } : {}),
   }));
 
@@ -1708,8 +2089,36 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
   const userById = new Map(user.map((u) => [u.id, u] as const));
   const systemRows = new Map<string, SystemRow>();
   const segments: JourneySegment[] = [];
-  const newSegment = (screen: JourneySummary['user'][number] | null, from: number): JourneySegment =>
-    ({ index: segments.length, screen, from, to: from, markers: [], moments: [], gates: [], configChecks: [], decisions: [], untranslated: 0, systems: [], declaredOnly: [], cutPoints: [], counts: { markers: 0, calls: 0, planned: 0, gates: 0, checks: 0, decisions: 0, records: 0, messages: 0, cutPoints: 0, repeats: 0, setup: 0, deferred: 0, configChecks: 0 } });
+  const newSegment = (screen: JourneySummary['user'][number] | null, from: number): JourneySegment => ({
+    index: segments.length,
+    screen,
+    from,
+    to: from,
+    markers: [],
+    moments: [],
+    gates: [],
+    configChecks: [],
+    decisions: [],
+    untranslated: 0,
+    systems: [],
+    declaredOnly: [],
+    cutPoints: [],
+    counts: {
+      markers: 0,
+      calls: 0,
+      planned: 0,
+      gates: 0,
+      checks: 0,
+      decisions: 0,
+      records: 0,
+      messages: 0,
+      cutPoints: 0,
+      repeats: 0,
+      setup: 0,
+      deferred: 0,
+      configChecks: 0,
+    },
+  });
   let seg: JourneySegment | null = null;
   for (const row of timeline) {
     const n = index.byId.get(row.nodeId);
@@ -1718,7 +2127,21 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     // repo row, not a new segment. The flow entry row is the journey itself, not a screen.
     if (row.kind === 'screen' && n && n.kind !== 'flow' && userById.has(row.nodeId)) {
       if (seg) segments.push(seg);
-      seg = newSegment(userById.get(row.nodeId) ?? { id: row.nodeId, name: row.name, kind: n.kind, hasImage: !!n.design?.image, links: n.links ?? [], components: [], ...(row.business ? { business: row.business } : {}), ...(n.design?.id ? { designId: n.design.id } : {}), ...(n.design ? { designStatus: n.design.status } : {}), ...(n.loc ? { loc: n.loc } : {}) }, row.stepOrder);
+      seg = newSegment(
+        userById.get(row.nodeId) ?? {
+          id: row.nodeId,
+          name: row.name,
+          kind: n.kind,
+          hasImage: !!n.design?.image,
+          links: n.links ?? [],
+          components: [],
+          ...(row.business ? { business: row.business } : {}),
+          ...(n.design?.id ? { designId: n.design.id } : {}),
+          ...(n.design ? { designStatus: n.design.status } : {}),
+          ...(n.loc ? { loc: n.loc } : {}),
+        },
+        row.stepOrder,
+      );
       continue;
     }
     if (row.kind === 'screen' && n && n.kind === 'flow') continue; // the flow entry row
@@ -1742,15 +2165,27 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
         have.count++;
         have.at = [...(have.at ?? []), occ];
         // the screen's own list: every role any action on this screen handed it, an action's own column reads `at`
-        if (g?.requires && have.requires) have.requires = [...new Set([...have.requires.split(', '), ...g.requires.split(', ')])].join(', ');
+        if (g?.requires && have.requires)
+          have.requires = [...new Set([...have.requires.split(', '), ...g.requires.split(', ')])].join(', ');
         else if (g?.requires && !have.requires) have.requires = g.requires;
-      }
-      else seg.gates.push({ id: row.nodeId, kind, name: row.name, ...(row.planned ? { planned: true as const } : {}), count: 1, stepOrder: row.stepOrder, ...tierFactsOf(g), at: [occ] });
+      } else
+        seg.gates.push({
+          id: row.nodeId,
+          kind,
+          name: row.name,
+          ...(row.planned ? { planned: true as const } : {}),
+          count: 1,
+          stepOrder: row.stepOrder,
+          ...tierFactsOf(g),
+          at: [occ],
+        });
       continue;
     }
     if (row.kind === 'decision') {
       const d = decisions.find((x) => x.nodeId === row.nodeId && x.label === row.name);
-      seg.decisions.push(d ?? { nodeId: row.nodeId, line: 0, label: row.name, arm: '', class: 'business', stepOrder: row.stepOrder });
+      seg.decisions.push(
+        d ?? { nodeId: row.nodeId, line: 0, label: row.name, arm: '', class: 'business', stepOrder: row.stepOrder },
+      );
       continue;
     }
     if (row.kind === 'planned') continue; // receives / does / returns hang off their call in the drawer
@@ -1758,8 +2193,20 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     // a candidate of a run-time choice that is not the one carrying the fold: no marker
     // of its own, so no surface can draw one call site as a row of steps
     if (absorbed.has(row.stepOrder)) continue;
-    const kind: SegmentMarker['kind'] = row.kind === 'call' ? 'call' : row.kind === 'record' ? 'record' : row.kind === 'message' ? 'message'
-      : row.kind === 'external' ? 'external' : row.kind === 'setup' ? 'setup' : row.kind === 'deferred' ? 'deferred' : 'step';
+    const kind: SegmentMarker['kind'] =
+      row.kind === 'call'
+        ? 'call'
+        : row.kind === 'record'
+          ? 'record'
+          : row.kind === 'message'
+            ? 'message'
+            : row.kind === 'external'
+              ? 'external'
+              : row.kind === 'setup'
+                ? 'setup'
+                : row.kind === 'deferred'
+                  ? 'deferred'
+                  : 'step';
     const side = sideOf(row.stepOrder);
     const sys = systemOf(index, n, row.kind, side);
     const planned = !!row.planned;
@@ -1782,32 +2229,58 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     // the words a non-code register prints: what a person authored, else the spec summary a
     // verb-named handler borrows from its route, else the first sentence of its docs (R7c)
     const parentNode = parent >= 0 ? nodeAt(parent) : undefined;
-    const routeWords = ROUTE_VERBS.has(n.name) && parentNode?.kind === 'route'
-      ? (parentNode.contract?.summary?.trim() || parentNode.name) : undefined;
+    const routeWords =
+      ROUTE_VERBS.has(n.name) && parentNode?.kind === 'route'
+        ? parentNode.contract?.summary?.trim() || parentNode.name
+        : undefined;
     // a controller method that only hands its body to a handler (the `calls` edge the adapter stamps
     // `via: 'delegate'`) has no words of its own by design — the team writes them on the handler; it
     // borrows them the way a verb-named handler borrows its route's, with the handler's provenance
     const ownWords = n.facets?.business?.label ?? routeWords ?? businessSummary(n);
-    const delegate = ownWords === undefined && n.kind === 'function'
-      ? (index.out.get(n.id) ?? []).filter((e) => e.kind === 'calls' && e.meta?.via === 'delegate').map((e) => index.byId.get(e.to)).find((d): d is GraphNode => d?.kind === 'function')
-      : undefined;
+    const delegate =
+      ownWords === undefined && n.kind === 'function'
+        ? (index.out.get(n.id) ?? [])
+            .filter((e) => e.kind === 'calls' && e.meta?.via === 'delegate')
+            .map((e) => index.byId.get(e.to))
+            .find((d): d is GraphNode => d?.kind === 'function')
+        : undefined;
     const delegateWords = delegate ? (delegate.facets?.business?.label ?? businessSummary(delegate)) : undefined;
     const title = ownWords ?? delegateWords;
     // which of the three it is — a short authored name, the route's words standing
     // in for a meaningless identifier, or a sentence out of the docs
-    const titleFrom: SegmentMarker['titleFrom'] | undefined = title === undefined ? undefined
-      : n.facets?.business?.label !== undefined ? 'label' : routeWords !== undefined ? 'route'
-      : ownWords !== undefined ? 'docs' : delegate?.facets?.business?.label !== undefined ? 'label' : 'docs';
+    const titleFrom: SegmentMarker['titleFrom'] | undefined =
+      title === undefined
+        ? undefined
+        : n.facets?.business?.label !== undefined
+          ? 'label'
+          : routeWords !== undefined
+            ? 'route'
+            : ownWords !== undefined
+              ? 'docs'
+              : delegate?.facets?.business?.label !== undefined
+                ? 'label'
+                : 'docs';
     const choice = choiceAt.get(row.stepOrder);
     // a choice is drawn as the call the source writes, never as one implementation's
     // name; the authored words survive only where every candidate says the same thing
     // — one implementation's sentence must not speak for the others
-    const choiceTitle = choice && choice.candidates.every((c) => c.title && c.title === choice.candidates[0]!.title)
-      ? choice.candidates[0]!.title : undefined;
+    const choiceTitle =
+      choice && choice.candidates.every((c) => c.title && c.title === choice.candidates[0]!.title)
+        ? choice.candidates[0]!.title
+        : undefined;
     const m: SegmentMarker = {
-      stepOrder: row.stepOrder, depth: row.depth, nodeId: n.id, name: choice ? choice.label : row.name, kind, via: row.via, system: sys.key, moment: 0,
+      stepOrder: row.stepOrder,
+      depth: row.depth,
+      nodeId: n.id,
+      name: choice ? choice.label : row.name,
+      kind,
+      via: row.via,
+      system: sys.key,
+      moment: 0,
       ...(choice ? { choice } : {}),
-      ...((choice ? choiceTitle : title) ? { title: (choice ? choiceTitle : title)!, ...(choice ? {} : { titleFrom: titleFrom! }) } : {}),
+      ...((choice ? choiceTitle : title)
+        ? { title: (choice ? choiceTitle : title)!, ...(choice ? {} : { titleFrom: titleFrom! }) }
+        : {}),
       ...(planned ? { planned: true } : {}),
       ...(st?.repeat ? { repeat: true } : {}),
       // `helper` / `under` need the moments to exist (the ux action is a moment's actionStep) — set below
@@ -1820,9 +2293,12 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       ...(st && (st.via === 'reads' || st.via === 'writes') ? { op: st.via } : {}),
       // an external's direction is the HTTP method on the edge that reached it — unknown stays unsaid
       ...(kind === 'external' && st?.via === 'http' && opOfMethod(edgeOfStep(st, n)?.meta?.method)
-        ? { op: opOfMethod(edgeOfStep(st, n)?.meta?.method)! } : {}),
+        ? { op: opOfMethod(edgeOfStep(st, n)?.meta?.method)! }
+        : {}),
       ...((kind === 'record' || kind === 'external') && markerStoreOf(n) ? { store: markerStoreOf(n)! } : {}),
-      ...(kind === 'call' && st?.via === 'http' && edgeOfStep(st, n)?.meta?.methodAssumed === 'GET' ? { methodAssumed: 'GET' as const } : {}),
+      ...(kind === 'call' && st?.via === 'http' && edgeOfStep(st, n)?.meta?.methodAssumed === 'GET'
+        ? { methodAssumed: 'GET' as const }
+        : {}),
     };
     seg.markers.push(m);
     seg.counts.markers++;
@@ -1844,7 +2320,10 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
   // a cut under an absorbed candidate belongs to the call site that carries the fold —
   // otherwise it would be counted on a marker no surface draws, and silently vanish
   const cutParent = (order: number): number => headOf.get(order) ?? order;
-  for (const c of cuts) { const at = cutParent(c.parentStep); cutsAt.set(at, (cutsAt.get(at) ?? 0) + 1); }
+  for (const c of cuts) {
+    const at = cutParent(c.parentStep);
+    cutsAt.set(at, (cutsAt.get(at) ?? 0) + 1);
+  }
   const inSeg = (c: JourneyCutPoint, sg: JourneySegment) => c.parentStep >= sg.from && c.parentStep <= sg.to;
   for (const sg of segments) {
     sg.counts.gates = sg.gates.length;
@@ -1855,7 +2334,10 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     sg.untranslated = untranslated.filter((u) => u.stepOrder >= sg.from && u.stepOrder <= sg.to).length;
     sg.counts.cutPoints = cuts.filter((c) => inSeg(c, sg)).length;
     sg.counts.repeats = repeats.filter((c) => inSeg(c, sg)).length;
-    for (const mk of sg.markers) { const n = cutsAt.get(mk.stepOrder); if (n) mk.cut = n; }
+    for (const mk of sg.markers) {
+      const n = cutsAt.get(mk.stepOrder);
+      if (n) mk.cut = n;
+    }
   }
 
   // ── moments: the sub-columns of a segment ────────────────────────────────
@@ -1867,7 +2349,10 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
   // contract summary a route's authors wrote, else the name in words. The full doc sentence
   // travels beside it as `business`.
   /** a string only when a person actually wrote one — an empty or blank field is an absence */
-  const nonEmpty = (x: string | undefined): string | undefined => { const v = x?.trim(); return v || undefined; };
+  const nonEmpty = (x: string | undefined): string | undefined => {
+    const v = x?.trim();
+    return v || undefined;
+  };
   const shortLabel = (n: GraphNode | undefined): string =>
     n ? (n.facets?.business?.label ?? n.contract?.summary?.trim() ?? humanizeName(n.name)) : '';
   for (const sg of segments) {
@@ -1882,11 +2367,20 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       // the seam into this repo's API opens a moment
       if (mk.kind === 'external') continue;
       const chain: number[] = [];
-      for (let p = parentOf.get(mk.stepOrder) ?? -1; p >= sg.from && !serverSide.get(p) && !claimed.has(p); p = parentOf.get(p) ?? -1) {
+      for (
+        let p = parentOf.get(mk.stepOrder) ?? -1;
+        p >= sg.from && !serverSide.get(p) && !claimed.has(p);
+        p = parentOf.get(p) ?? -1
+      ) {
         const pn = nodeAt(p);
         if (!pn) break;
-        if (pn.kind === 'function') { chain.push(p); continue; }
-        if (pn.kind === 'component') { chain.push(p); }
+        if (pn.kind === 'function') {
+          chain.push(p);
+          continue;
+        }
+        if (pn.kind === 'component') {
+          chain.push(p);
+        }
         break;
       }
       const fns = chain.filter((o) => nodeAt(o)?.kind === 'function');
@@ -1901,58 +2395,94 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     // the operations the screen's own manifest says it uses: they rank the actions, and the
     // ones no action made are the segment's dotted stops (R6)
     const listedOps = (sg.screen ? index.byId.get(sg.screen.id)?.design?.operations : undefined) ?? [];
-    const opOf = (order?: number): string | undefined => (order == null ? undefined : nodeAt(order)?.contract?.spec?.operationId);
+    const opOf = (order?: number): string | undefined =>
+      order == null ? undefined : nodeAt(order)?.contract?.spec?.operationId;
     const moments: JourneyMoment[] = opens.map((o, i) => {
-      const an = nodeAt(o.actionStep), cn = nodeAt(o.callStep);
+      const an = nodeAt(o.actionStep),
+        cn = nodeAt(o.callStep);
       const opId = opOf(o.callStep);
       const at = opId ? listedOps.indexOf(opId) : -1;
       let component: JourneyMoment['component'];
       for (let p = parentOf.get(o.actionStep) ?? -1; p >= 0; p = parentOf.get(p) ?? -1) {
         const pn = nodeAt(p);
         if (!pn || pn.kind === 'page' || pn.kind === 'flow') break;
-        if (pn.kind === 'component') { component = { id: pn.id, name: pn.name, label: shortLabel(pn), stepOrder: p }; break; }
+        if (pn.kind === 'component') {
+          component = { id: pn.id, name: pn.name, label: shortLabel(pn), stepOrder: p };
+          break;
+        }
       }
       // the headline a person wrote wins; then the summary the API's authors wrote for this
       // operation — a spec sentence beats a humanized client identifier (R6)
-      const label = nonEmpty(an?.facets?.business?.label)
-        ?? nonEmpty(cn?.contract?.summary)
-        ?? nonEmpty(cn?.facets?.business?.label)
-        ?? (an ? humanizeName(an.name) : shortLabel(cn));
+      const label =
+        nonEmpty(an?.facets?.business?.label) ??
+        nonEmpty(cn?.contract?.summary) ??
+        nonEmpty(cn?.facets?.business?.label) ??
+        (an ? humanizeName(an.name) : shortLabel(cn));
       const prose = (an && businessSummary(an)) || (cn && businessSummary(cn)) || undefined;
       return {
-        index: i, label,
-        from: o.from, to: o.from, actionStep: o.actionStep, callStep: o.callStep,
+        index: i,
+        label,
+        from: o.from,
+        to: o.from,
+        actionStep: o.actionStep,
+        callStep: o.callStep,
         ...(component ? { component } : {}),
         ...(prose && prose !== label ? { business: prose } : {}),
         repeat: !!stepById.get(o.callStep)?.repeat,
-        rank: at >= 0 ? at : listedOps.length + i, declared: at >= 0, afterwards: [], counts: zero(),
+        rank: at >= 0 ? at : listedOps.length + i,
+        declared: at >= 0,
+        afterwards: [],
+        counts: zero(),
       };
     });
     if (!moments.length) {
-      moments.push({ index: 0, label: sg.screen?.name ?? (entry ? nameOf(entry) : ''), from: sg.from, to: sg.to, actionStep: sg.from, repeat: false, rank: 0, declared: false, afterwards: [], counts: zero() });
+      moments.push({
+        index: 0,
+        label: sg.screen?.name ?? (entry ? nameOf(entry) : ''),
+        from: sg.from,
+        to: sg.to,
+        actionStep: sg.from,
+        repeat: false,
+        rank: 0,
+        declared: false,
+        afterwards: [],
+        counts: zero(),
+      });
     } else {
-      moments.forEach((mo, i) => { mo.to = i + 1 < moments.length ? moments[i + 1]!.from - 1 : sg.to; });
+      moments.forEach((mo, i) => {
+        mo.to = i + 1 < moments.length ? moments[i + 1]!.from - 1 : sg.to;
+      });
       moments[0]!.from = Math.min(moments[0]!.from, sg.from);
     }
     sg.moments = moments;
     // an operation the manifest lists that no action made: declared, not reached here
     const made = new Set(moments.map((mo) => opOf(mo.callStep)).filter((x): x is string => !!x));
-    sg.declaredOnly = listedOps.filter((op) => !made.has(op)).map((op) => {
-      const rt = routeFor(op);
-      return { op, ...(rt ? { routeId: rt.id } : {}), label: nonEmpty(rt?.contract?.summary) ?? op };
-    });
+    sg.declaredOnly = listedOps
+      .filter((op) => !made.has(op))
+      .map((op) => {
+        const rt = routeFor(op);
+        return { op, ...(rt ? { routeId: rt.id } : {}), label: nonEmpty(rt?.contract?.summary) ?? op };
+      });
     // what the design says somebody does on this screen outside the code — a build state of its own, never a stop
     const off = offPlatformSteps(index, sg.screen ? index.byId.get(sg.screen.id) : undefined);
     if (off.length) sg.offPlatform = off;
     for (const so of switchedOffSteps) {
       if (so.stepOrder < sg.from || so.stepOrder > sg.to) continue;
       let at = 0;
-      for (let k = moments.length - 1; k >= 0; k--) if (so.stepOrder >= moments[k]!.from) { at = k; break; }
+      for (let k = moments.length - 1; k >= 0; k--)
+        if (so.stepOrder >= moments[k]!.from) {
+          at = k;
+          break;
+        }
       (moments[at]!.switchedOff ??= []).push(so);
     }
     for (const mk of sg.markers) {
       let at = 0;
-      for (let k = moments.length - 1; k >= 0; k--) if (mk.stepOrder >= moments[k]!.from) { at = k; break; }
+      for (let k = moments.length - 1; k >= 0; k--)
+        if (mk.stepOrder >= moments[k]!.from) {
+          at = k;
+          break;
+        }
       mk.moment = at;
       const c = moments[at]!.counts;
       c.markers++;
@@ -1963,19 +2493,24 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       // deferred work is listed against the action that registered it, with the step that did
       if (mk.kind === 'deferred') {
         moments[at]!.afterwards.push({
-          stepOrder: mk.stepOrder, nodeId: mk.nodeId, name: mk.name,
+          stepOrder: mk.stepOrder,
+          nodeId: mk.nodeId,
+          name: mk.name,
           ...(mk.title ? { title: mk.title } : {}),
           hostStep: parentOf.get(mk.stepOrder) ?? -1,
         });
       }
     }
     // the same cuts the chip counts, as a list a reader can open (R24)
-    sg.cutPoints = cuts.filter((c) => inSeg(c, sg)).map((c) => ({
-      parentStep: cutParent(c.parentStep), nodeId: c.nodeId,
-      name: index.byId.get(c.nodeId) ? nameOf(index.byId.get(c.nodeId)!) : c.nodeId,
-      reason: c.reason,
-      moment: sg.markers.find((mk) => mk.stepOrder === cutParent(c.parentStep))?.moment ?? 0,
-    }));
+    sg.cutPoints = cuts
+      .filter((c) => inSeg(c, sg))
+      .map((c) => ({
+        parentStep: cutParent(c.parentStep),
+        nodeId: c.nodeId,
+        name: index.byId.get(c.nodeId) ? nameOf(index.byId.get(c.nodeId)!) : c.nodeId,
+        reason: c.reason,
+        moment: sg.markers.find((mk) => mk.stepOrder === cutParent(c.parentStep))?.moment ?? 0,
+      }));
 
     // ── the helper fold: plumbing folds under the thing that used it ──────
     // A step marker is plumbing when another function on the same side of the seam called it,
@@ -2005,7 +2540,11 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       // a choice marker stands for every candidate: it is plumbing only when all of them
       // are, it is authored when any of them is, and it reaches out when any of them does
       const own = mk.choice ? mk.choice.candidates.map((c) => index.byId.get(c.nodeId)) : [nodeAt(mk.stepOrder)];
-      if (own.every((x) => x?.tags?.includes('plumbing'))) { mk.helper = true; moments[mk.moment]!.counts.helpers++; continue; }
+      if (own.every((x) => x?.tags?.includes('plumbing'))) {
+        mk.helper = true;
+        moments[mk.moment]!.counts.helpers++;
+        continue;
+      }
       if (own.some((x) => x?.facets?.business?.label || x?.facets?.business?.description)) continue; // a person named or described it: not plumbing
       if (own.some((x) => x && reachesOut.has(x.id))) continue; // it reaches a call, a table, a queue, a third party
       mk.helper = true;
@@ -2023,7 +2562,7 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     for (const mk of sg.markers) {
       for (let p = parentOf.get(mk.stepOrder) ?? -1; p >= sg.from; p = parentOf.get(p) ?? -1) {
         const anc = markerAt.get(p);
-        if (!anc || anc.helper) continue;             // skip steps with no marker, and helpers themselves
+        if (!anc || anc.helper) continue; // skip steps with no marker, and helpers themselves
         mk.under = anc.stepOrder;
         break;
       }
@@ -2033,26 +2572,45 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       const have = tierOf.get(mk.stepOrder);
       if (have != null) return have;
       const up = mk.under != null ? markerAt.get(mk.under) : undefined;
-      const root = !up || up.system !== mk.system || up.moment !== mk.moment || moments[mk.moment]?.component?.stepOrder === up.stepOrder;
+      const root =
+        !up ||
+        up.system !== mk.system ||
+        up.moment !== mk.moment ||
+        moments[mk.moment]?.component?.stepOrder === up.stepOrder;
       const t = root ? 0 : tierFor(up) + 1;
       tierOf.set(mk.stepOrder, t);
       return t;
     };
     for (const mk of sg.markers) mk.tier = tierFor(mk);
   }
-  const distinctGates = new Set([...gates.values()].map((g) => `guard:${g.name}`).concat([...rules.values()].map((r) => `rule:${r.name}`)));
+  const distinctGates = new Set(
+    [...gates.values()].map((g) => `guard:${g.name}`).concat([...rules.values()].map((r) => `rule:${r.name}`)),
+  );
 
   const entryBusiness = entry ? businessSummary(entry) : undefined;
   return {
-    entry: { id: j.entryId, kind: entry?.kind ?? 'unknown', name: entry ? nameOf(entry) : j.entryId, ...(entryBusiness ? { business: entryBusiness } : {}) },
+    entry: {
+      id: j.entryId,
+      kind: entry?.kind ?? 'unknown',
+      name: entry ? nameOf(entry) : j.entryId,
+      ...(entryBusiness ? { business: entryBusiness } : {}),
+    },
     user,
     business: {
       ...(entryBusiness ? { description: entryBusiness } : {}),
-      docs: [...(entry?.links ?? []), ...screens.flatMap((s) => s.links ?? [])].filter((l, i, arr) => arr.findIndex((x) => (x.url ?? x.ref) === (l.url ?? l.ref)) === i),
-      gates: [...gates.values()], rules: [...rules.values()], configChecks: [...configChecks.values()], decisions,
+      docs: [...(entry?.links ?? []), ...screens.flatMap((s) => s.links ?? [])].filter(
+        (l, i, arr) => arr.findIndex((x) => (x.url ?? x.ref) === (l.url ?? l.ref)) === i,
+      ),
+      gates: [...gates.values()],
+      rules: [...rules.values()],
+      configChecks: [...configChecks.values()],
+      decisions,
       untranslated: {
         count: untranslated.length,
-        byCategory: untranslated.reduce<Partial<Record<BranchCategory, number>>>((acc, u) => { acc[u.category] = (acc[u.category] ?? 0) + 1; return acc; }, {}),
+        byCategory: untranslated.reduce<Partial<Record<BranchCategory, number>>>((acc, u) => {
+          acc[u.category] = (acc[u.category] ?? 0) + 1;
+          return acc;
+        }, {}),
         // a guard-class decision is drawn only where its predicate is the point (code, hybrid);
         // the business register folds it into the "not translated" sentence, from this number
         guardsUnlabelled: decisions.filter((d) => d.class === 'guard').length,
@@ -2060,10 +2618,14 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       },
     },
     system: {
-      timeline, records: [...records.values()], messages: [...messages.values()],
+      timeline,
+      records: [...records.values()],
+      messages: [...messages.values()],
       // the parties a step done outside the code names come after the systems the code reaches: declared, no code reaches them
       externals: [...externals.values(), ...partiesNamed(segments, externals)],
-      stores: storesOf(records, externals), afterwards: [...afterwards.values()], repos: [...repos],
+      stores: storesOf(records, externals),
+      afterwards: [...afterwards.values()],
+      repos: [...repos],
     },
     segments,
     // rank first (the request path read downward), first-seen inside a rank
@@ -2071,17 +2633,26 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     links: journeyLinks(index, j.entryId),
     txKnown: tx.known,
     counts: {
-      screens: user.length, steps: j.steps.length - j.plannedCount, planned: j.plannedCount,
-      gates: distinctGates.size, checks: segments.reduce((a, sg) => a + sg.counts.checks, 0), configChecks: configChecks.size,
-      decisions: decisions.length, records: records.size, messages: messages.size, segments: segments.length,
-      cutPoints: cuts.length, repeats: repeats.length,
+      screens: user.length,
+      steps: j.steps.length - j.plannedCount,
+      planned: j.plannedCount,
+      gates: distinctGates.size,
+      checks: segments.reduce((a, sg) => a + sg.counts.checks, 0),
+      configChecks: configChecks.size,
+      decisions: decisions.length,
+      records: records.size,
+      messages: messages.size,
+      segments: segments.length,
+      cutPoints: cuts.length,
+      repeats: repeats.length,
       // Count call SITES, not markers. `choiceAt` is keyed by step order, so one call
       // site the walk reaches twice yielded two objects and the header said "4 places"
       // where the source has 2 — the same fault (counting the wrong thing and giving it
       // a confident noun) that this phase fixed on the front door, inside the chunk that
       // fixed the fan-out. `JourneyChoice.id` is the call site's own identity.
       choices: new Set([...choiceAt.values()].map((c) => c.id)).size,
-      setup: j.steps.filter((st) => st.setup).length, deferred: j.steps.filter((st) => st.deferred).length,
+      setup: j.steps.filter((st) => st.setup).length,
+      deferred: j.steps.filter((st) => st.deferred).length,
       ...operationCounts(j, segments),
     },
   };
@@ -2108,7 +2679,10 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
  * `declaredNotCalled` deduplicates across screens for the same reason — two
  * screens declaring one operation declare one operation.
  */
-function operationCounts(j: Journey, segments: JourneySegment[]): { called: number; again: number; declaredNotCalled: number } {
+function operationCounts(
+  j: Journey,
+  segments: JourneySegment[],
+): { called: number; again: number; declaredNotCalled: number } {
   const stepAt = new Map(j.steps.map((st) => [st.order, st] as const));
   const withCall = segments.flatMap((sg) => sg.moments).filter((mo) => mo.callStep != null);
   const real = withCall.filter((mo) => stepAt.get(mo.callStep!)?.via !== 'planned');
@@ -2116,10 +2690,12 @@ function operationCounts(j: Journey, segments: JourneySegment[]): { called: numb
   // a planned continuation performs nothing, and a manifest operation no action made
   // is the same claim from the other side: both are declared. Identity is the route
   // node where the spec resolved one, the operationId where it did not.
-  const notCalled = new Set([
-    ...withCall.filter((mo) => !real.includes(mo)).map((mo) => stepAt.get(mo.callStep!)!.nodeId),
-    ...segments.flatMap((sg) => sg.declaredOnly.map((d) => d.routeId ?? d.op)),
-  ].filter((id) => !called.has(id)));
+  const notCalled = new Set(
+    [
+      ...withCall.filter((mo) => !real.includes(mo)).map((mo) => stepAt.get(mo.callStep!)!.nodeId),
+      ...segments.flatMap((sg) => sg.declaredOnly.map((d) => d.routeId ?? d.op)),
+    ].filter((id) => !called.has(id)),
+  );
   return {
     called: called.size,
     again: real.filter((mo) => mo.repeat).length,

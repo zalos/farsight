@@ -16,10 +16,25 @@
  * Nothing below the third rung may wear the word *verified*, and no surface
  * may invent a fourth rung.
  */
-import type { ConfidenceTier, GraphEdge, GraphNode, ResolutionTechnique, TestRef, TestRunProject, Loc } from './graph.js';
+import type {
+  ConfidenceTier,
+  GraphEdge,
+  GraphNode,
+  ResolutionTechnique,
+  TestRef,
+  TestRunProject,
+  Loc,
+} from './graph.js';
 import type { GraphIndex, Journey, JourneySummary } from './query.js';
 import { flowScreenIds, isDeclaredOnly, journey } from './query.js';
-import { computeMetric, testsCovering, EVIDENCE_RANK, type MetricValue, type MetricScope, type CoveringTest } from './metrics.js';
+import {
+  computeMetric,
+  testsCovering,
+  EVIDENCE_RANK,
+  type MetricValue,
+  type MetricScope,
+  type CoveringTest,
+} from './metrics.js';
 import { counted, scopeWord, type Counted, type CountScope } from './counts.js';
 import { t, type Register } from './strings.js';
 import { freshnessFact, codeAtOfIndex, type CodeAt, type FreshnessFact } from './freshness.js';
@@ -126,14 +141,27 @@ export interface CoverageFacts {
   metric: MetricValue;
   counts: {
     /** node counts, from the metric */
-    nodes: number; covered: number; unit: number; integration: number; e2e: number; declared: number; observed: number;
+    nodes: number;
+    covered: number;
+    unit: number;
+    integration: number;
+    e2e: number;
+    declared: number;
+    observed: number;
     /** distinct test **cases** with an observed edge here (run-level nodes apart) */
     observedTests: number;
     /**
      * distinct test cases per level — the foot's line. A run-level node is a report, counted apart.
      * `observed` includes `declaredPassed`: the cases observed by their own declaration.
      */
-    tests: { unit: number; integration: number; e2e: number; observed: number; runLevel: number; declaredPassed: number };
+    tests: {
+      unit: number;
+      integration: number;
+      e2e: number;
+      observed: number;
+      runLevel: number;
+      declaredPassed: number;
+    };
   };
   /**
    * The strongest end-to-end evidence on this scope (README, "the `e2e ✓` body
@@ -144,10 +172,14 @@ export interface CoverageFacts {
   e2e: 'none' | 'declared' | 'reached' | 'observed';
   /** the node and test that lifted the word, and the other journeys whose scope holds that node */
   e2eVia?: {
-    nodeId: string; name: string; testId: string; testName: string;
+    nodeId: string;
+    name: string;
+    testId: string;
+    testName: string;
     /** the lifting test's own spec file — carried, never parsed back out of the id by a consumer */
     file?: string;
-    line?: number; sharedWith: { id: string; name: string }[];
+    line?: number;
+    sharedWith: { id: string; name: string }[];
     /** `declaration`: the lifting case is observed because it passed, for what it declares */
     via?: 'declaration';
   };
@@ -234,10 +266,22 @@ export interface CoverageFacts {
    * earned. Surfaces print `verdict` (the word and its own run) and
    * `verdict.runs` (every case by its run, a breakdown that sums).
    */
-  run?: { status: NonNullable<TestRef['run']>['status']; at: string; freshness: NonNullable<TestRef['run']>['freshness']; changedBy?: NonNullable<TestRef['run']>['changedBy']; projects: string[] };
+  run?: {
+    status: NonNullable<TestRef['run']>['status'];
+    at: string;
+    freshness: NonNullable<TestRef['run']>['freshness'];
+    changedBy?: NonNullable<TestRef['run']>['changedBy'];
+    projects: string[];
+  };
   tests: CoverageTestRef[];
   /** the most recent run behind any covering test */
-  lastRun?: { at: string; status: NonNullable<TestRef['run']>['status']; freshness: NonNullable<TestRef['run']>['freshness']; stale: boolean; changedBy?: NonNullable<TestRef['run']>['changedBy'] };
+  lastRun?: {
+    at: string;
+    status: NonNullable<TestRef['run']>['status'];
+    freshness: NonNullable<TestRef['run']>['freshness'];
+    stale: boolean;
+    changedBy?: NonNullable<TestRef['run']>['changedBy'];
+  };
   /** the sentence a surface shows verbatim — including "No test reaches this step" */
   note: string;
 }
@@ -276,11 +320,17 @@ export interface EvidenceWord {
  * with no build qualifier. Read by MCP, the CLI and the readiness CSV so a
  * journey's word reads the same everywhere it is printed.
  */
-export function builtOnlyWords(word: EvidenceWord | undefined, register: Register = 'professional'): { before: string; after: string } | undefined {
+export function builtOnlyWords(
+  word: EvidenceWord | undefined,
+  register: Register = 'professional',
+): { before: string; after: string } | undefined {
   const b = word?.builtOnly;
   if (!b) return undefined;
   const fill = (k: string) => t(k, register).replace('{n}', String(b.built)).replace('{m}', String(b.of));
-  return { before: fill('tests.builtOnly.before'), after: fill(b.built === 1 ? 'tests.builtOnly.afterOne' : 'tests.builtOnly.after') };
+  return {
+    before: fill('tests.builtOnly.before'),
+    after: fill(b.built === 1 ? 'tests.builtOnly.afterOne' : 'tests.builtOnly.after'),
+  };
 }
 
 /**
@@ -340,7 +390,13 @@ export interface OwnCaseHold {
   /** in the brief's order: a failed case first */
   reasons: ('failed' | 'skipped')[];
   /** each case no project passed, with its projects and their written reasons when more than one ran it */
-  cases: { id: string; name: string; status: 'failed' | 'skipped'; projects?: TestRunProject[]; where?: { text: string; biz: string; short: string; shortBiz: string; reasons: string[] } }[];
+  cases: {
+    id: string;
+    name: string;
+    status: 'failed' | 'skipped';
+    projects?: TestRunProject[];
+    where?: { text: string; biz: string; short: string; shortBiz: string; reasons: string[] };
+  }[];
   /** the brief's one line (`heldWords`), made here so every printer says the same: code and hybrid, and business; `full` names every case (a tip) */
   words?: { text: string; biz: string; full: string; fullBiz: string };
 }
@@ -351,30 +407,61 @@ export interface OwnCaseHold {
  * case that passed on one project and was skipped on another by its own condition **passed** (`foldRuns`), and is
  * never a hold. The one rule `readiness()` and `CoverageFacts.held` read.
  */
-export function ownCaseHold(index: GraphIndex, flowIds: string[], refs: CoverageTestRef[]): { own: CoverageTestRef[]; hold?: OwnCaseHold } {
+export function ownCaseHold(
+  index: GraphIndex,
+  flowIds: string[],
+  refs: CoverageTestRef[],
+): { own: CoverageTestRef[]; hold?: OwnCaseHold } {
   const ids = new Set(flowIds.filter(Boolean));
   const own = refs.filter((t) => {
     if (t.level !== 'e2e' || t.runLevel) return false;
     const d = index.byId.get(t.id)?.test?.declares ?? [];
     return d.some((x) => ids.has(x));
   });
-  const cases = own.filter((t) => t.status === 'failed' || t.status === 'skipped')
+  const cases = own
+    .filter((t) => t.status === 'failed' || t.status === 'skipped')
     .map((t) => {
       // more than one project: each with its reason; one project that skipped it: that project and its reason
-      const ran = t.projects ?? (t.status === 'skipped' && (t.project || t.reason) ? [{ project: t.project ?? '', status: t.status, ...(t.reason ? { reason: t.reason } : {}) }] : undefined);
+      const ran =
+        t.projects ??
+        (t.status === 'skipped' && (t.project || t.reason)
+          ? [{ project: t.project ?? '', status: t.status, ...(t.reason ? { reason: t.reason } : {}) }]
+          : undefined);
       const where = projectSkipWords(ran);
       return {
-        id: t.id, name: t.name, status: t.status as 'failed' | 'skipped',
+        id: t.id,
+        name: t.name,
+        status: t.status as 'failed' | 'skipped',
         ...(t.projects ? { projects: t.projects } : {}),
         // `short` names the projects alone, for a page that carries the quoted reasons in a tip
-        ...(where ? { where: { text: where, biz: projectSkipWords(ran, true), short: projectSkipWords(ran?.map(({ reason: _r, ...p }) => p)), shortBiz: projectSkipWords(ran?.map(({ reason: _r, ...p }) => p), true), reasons: [...new Set((ran ?? []).filter((p) => p.status === 'skipped' && p.reason).map((p) => p.reason!))] } } : {}),
+        ...(where
+          ? {
+              where: {
+                text: where,
+                biz: projectSkipWords(ran, true),
+                short: projectSkipWords(ran?.map(({ reason: _r, ...p }) => p)),
+                shortBiz: projectSkipWords(
+                  ran?.map(({ reason: _r, ...p }) => p),
+                  true,
+                ),
+                reasons: [
+                  ...new Set((ran ?? []).filter((p) => p.status === 'skipped' && p.reason).map((p) => p.reason!)),
+                ],
+              },
+            }
+          : {}),
       };
     })
     .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'failed' ? -1 : 1));
   if (!cases.length) return { own };
   const reasons = (['failed', 'skipped'] as const).filter((r) => cases.some((c) => c.status === r));
   const hold: OwnCaseHold = { reasons, cases };
-  hold.words = { text: heldWords(hold), biz: heldWords(hold, true), full: heldWords(hold, false, 'professional', { full: true }), fullBiz: heldWords(hold, true, 'professional', { full: true }) };
+  hold.words = {
+    text: heldWords(hold),
+    biz: heldWords(hold, true),
+    full: heldWords(hold, false, 'professional', { full: true }),
+    fullBiz: heldWords(hold, true, 'professional', { full: true }),
+  };
   return { own, hold };
 }
 
@@ -383,7 +470,12 @@ export function ownCaseHold(index: GraphIndex, flowIds: string[], refs: Coverage
  * skipped — <case> (skipped on desktop-1440 (live only), mobile-390 (…))*. The reason words are the brief's own
  * (`readiness.hold.*`).
  */
-export function heldWords(held: OwnCaseHold, business = false, register: Register = 'professional', opts: { full?: boolean } = {}): string {
+export function heldWords(
+  held: OwnCaseHold,
+  business = false,
+  register: Register = 'professional',
+  opts: { full?: boolean } = {},
+): string {
   const reason = held.reasons.map((r) => t(`readiness.hold.${r}`, register)).join(' · ');
   const named = (c: OwnCaseHold['cases'][number]) => {
     const where = projectSkipWords(c.projects, business, register);
@@ -391,7 +483,9 @@ export function heldWords(held: OwnCaseHold, business = false, register: Registe
   };
   // one line beside a chip is the brief's reason alone; `full` (the tip, the brief) names every case and where it skipped
   const cases = held.cases.map(named).join('; ');
-  return fill(t(business ? 'readiness.biz.held.line' : 'readiness.held.line', register), { reason: opts.full ? `${reason} — ${cases}` : reason });
+  return fill(t(business ? 'readiness.biz.held.line' : 'readiness.held.line', register), {
+    reason: opts.full ? `${reason} — ${cases}` : reason,
+  });
 }
 
 /** The cases a project skipped while another passed them — `TestVerdict.projectSplit`. */
@@ -496,7 +590,12 @@ export function twinOf(index: GraphIndex, nodeId: string): { note: string; nodeI
 export function toCoverageRef(index: GraphIndex, t: CoveringTest, node: GraphNode | undefined): CoverageTestRef {
   const twin = node ? twinOf(index, node.id) : undefined;
   return {
-    id: t.id, name: t.name, level: t.level, runner: t.runner, evidence: t.evidence, runLevel: t.runLevel,
+    id: t.id,
+    name: t.name,
+    level: t.level,
+    runner: t.runner,
+    evidence: t.evidence,
+    runLevel: t.runLevel,
     ...(t.observedVia ? { observedVia: t.observedVia } : {}),
     ...(t.inactive ? { inactive: true } : {}),
     ...(t.project ? { project: t.project } : {}),
@@ -511,8 +610,22 @@ export function toCoverageRef(index: GraphIndex, t: CoveringTest, node: GraphNod
     ...(t.confidence ? { confidence: t.confidence } : {}),
     ...(t.note ? { note: t.note } : {}),
     ...(t.loc ? { loc: t.loc } : {}),
-    ...(t.run ? { status: t.run.status, at: t.run.at, freshness: t.run.freshness, stale: t.run.stale, ...(t.run.changedBy ? { changedBy: t.run.changedBy } : {}), ...(t.run.commit ? { commit: t.run.commit } : {}) } : {}),
-    word: caseWordOf({ evidence: t.evidence, runLevel: t.runLevel, ...(t.observedVia ? { observedVia: t.observedVia } : {}), ...(t.run ? { freshness: t.run.freshness } : {}) }),
+    ...(t.run
+      ? {
+          status: t.run.status,
+          at: t.run.at,
+          freshness: t.run.freshness,
+          stale: t.run.stale,
+          ...(t.run.changedBy ? { changedBy: t.run.changedBy } : {}),
+          ...(t.run.commit ? { commit: t.run.commit } : {}),
+        }
+      : {}),
+    word: caseWordOf({
+      evidence: t.evidence,
+      runLevel: t.runLevel,
+      ...(t.observedVia ? { observedVia: t.observedVia } : {}),
+      ...(t.run ? { freshness: t.run.freshness } : {}),
+    }),
   };
 }
 
@@ -521,10 +634,25 @@ export function toCoverageRef(index: GraphIndex, t: CoveringTest, node: GraphNod
  * would decide for the case alone as the scope (`caseWord` — pinned equal by
  * the core tests), cheap enough to stamp on every ref.
  */
-function caseWordOf(r: Pick<CoverageTestRef, 'evidence' | 'runLevel' | 'observedVia' | 'freshness'>): { cls: EvidenceWord['cls']; key: string } {
+function caseWordOf(r: Pick<CoverageTestRef, 'evidence' | 'runLevel' | 'observedVia' | 'freshness'>): {
+  cls: EvidenceWord['cls'];
+  key: string;
+} {
   const observed = r.evidence === 'observed';
-  const chip: CoverageFacts['chip'] = observed ? (r.freshness === 'changed' ? 'observed-stale' : 'observed') : r.evidence === 'static' ? 'reached' : 'declared';
-  const by: CoverageFacts['observedBy'] = observed ? (r.runLevel ? 'runs' : r.observedVia === 'declaration' ? 'declaration' : 'tests') : undefined;
+  const chip: CoverageFacts['chip'] = observed
+    ? r.freshness === 'changed'
+      ? 'observed-stale'
+      : 'observed'
+    : r.evidence === 'static'
+      ? 'reached'
+      : 'declared';
+  const by: CoverageFacts['observedBy'] = observed
+    ? r.runLevel
+      ? 'runs'
+      : r.observedVia === 'declaration'
+        ? 'declaration'
+        : 'tests'
+    : undefined;
   const w = evidenceWord(chip, by);
   return { cls: w.cls, key: w.key };
 }
@@ -535,7 +663,9 @@ function caseWordOf(r: Pick<CoverageTestRef, 'evidence' | 'runLevel' | 'observed
  * the whole fold a commit change. Undefined when nothing is `changed` or git
  * could not say.
  */
-export function changedByOfRefs(refs: Pick<CoverageTestRef, 'freshness' | 'changedBy'>[]): CoverageTestRef['changedBy'] {
+export function changedByOfRefs(
+  refs: Pick<CoverageTestRef, 'freshness' | 'changedBy'>[],
+): CoverageTestRef['changedBy'] {
   const changed = refs.filter((t) => t.freshness === 'changed');
   if (!changed.length) return undefined;
   if (changed.some((t) => t.changedBy === 'commit')) return 'commit';
@@ -552,7 +682,8 @@ function noteFor(tests: CoverageTestRef[], covered: number, nodes: number, what:
   if (classes.has('static')) parts.push('inferred from what the test imports or opens');
   const observedRefs = tests.filter((t) => t.evidence === 'observed');
   if (observedRefs.some((t) => t.observedVia !== 'declaration')) parts.push('reached by an observed run');
-  if (observedRefs.some((t) => t.observedVia === 'declaration')) parts.push('passed in a results report, by its own declaration');
+  if (observedRefs.some((t) => t.observedVia === 'declaration'))
+    parts.push('passed in a results report, by its own declaration');
   const stale = observedRefs.some((t) => t.stale);
   const unknown = observedRefs.some((t) => t.freshness === 'unknown');
   const freshness = stale
@@ -570,14 +701,17 @@ function noteFor(tests: CoverageTestRef[], covered: number, nodes: number, what:
   // `counts.tests`, so the sentence and the count line cannot diverge.
   const cases = tests.filter((t) => !t.runLevel);
   const clauses: string[] = [];
-  const clause = (n: number, one: string): void => { if (n) clauses.push(`${n} ${one}${n === 1 ? '' : 's'}`); };
+  const clause = (n: number, one: string): void => {
+    if (n) clauses.push(`${n} ${one}${n === 1 ? '' : 's'}`);
+  };
   clause(cases.filter((t) => t.level === 'e2e').length, 'end-to-end test');
   clause(cases.filter((t) => t.level === 'unit').length, 'unit test');
   clause(cases.filter((t) => t.level === 'integration').length, 'integration test');
   clause(tests.length - cases.length, 'run-level coverage report');
-  const by = clauses.length > 1
-    ? `${clauses.slice(0, -1).join(', ')} and ${clauses[clauses.length - 1]}`
-    : clauses[0] ?? 'nothing';
+  const by =
+    clauses.length > 1
+      ? `${clauses.slice(0, -1).join(', ')} and ${clauses[clauses.length - 1]}`
+      : (clauses[0] ?? 'nothing');
   return `${reach} by ${by} — ${parts.join(', ')}.${freshness}`;
 }
 
@@ -609,7 +743,11 @@ function flowScopes(index: GraphIndex): { id: string; name: string; ids: Set<str
     cached = [];
     for (const n of index.byId.values()) {
       if (n.kind !== 'flow') continue;
-      cached.push({ id: n.id, name: n.name, ids: new Set(journeyScope(index, journey(index, n.id), flowScreenIds(index, n.id))) });
+      cached.push({
+        id: n.id,
+        name: n.name,
+        ids: new Set(journeyScope(index, journey(index, n.id), flowScreenIds(index, n.id))),
+      });
     }
     FLOW_SCOPES.set(index, cached);
   }
@@ -620,8 +758,18 @@ function flowScopes(index: GraphIndex): { id: string; name: string; ids: Set<str
 const BODY_KINDS = new Set<GraphNode['kind']>(['route', 'page', 'component', 'function']);
 
 /** worst first: a case is as good as its weakest project, never a majority (03 §3.2). */
-const WEAKEST: Record<NonNullable<TestRef['run']>['status'], number> = { failed: 5, flaky: 4, skipped: 3, unknown: 2, passed: 1 };
-const WEAKEST_FRESHNESS: Record<NonNullable<TestRef['run']>['freshness'], number> = { changed: 3, unknown: 2, unchanged: 1 };
+const WEAKEST: Record<NonNullable<TestRef['run']>['status'], number> = {
+  failed: 5,
+  flaky: 4,
+  skipped: 3,
+  unknown: 2,
+  passed: 1,
+};
+const WEAKEST_FRESHNESS: Record<NonNullable<TestRef['run']>['freshness'], number> = {
+  changed: 3,
+  unknown: 2,
+  unchanged: 1,
+};
 
 /**
  * The coverage facts for a set of node ids. One entry point for every scope:
@@ -629,16 +777,25 @@ const WEAKEST_FRESHNESS: Record<NonNullable<TestRef['run']>['freshness'], number
  */
 /** The count scope a metric scope reads as. A moment passes its own (`count.scope.action`). */
 const COUNT_SCOPE_OF: Record<MetricScope['kind'], CountScope> = {
-  workspace: 'count.scope.workspace', source: 'count.scope.source', collection: 'count.scope.workspace',
-  flow: 'journey.scopeAll', segment: 'journey.scopeHere', node: 'count.scope.node',
+  workspace: 'count.scope.workspace',
+  source: 'count.scope.source',
+  collection: 'count.scope.workspace',
+  flow: 'journey.scopeAll',
+  segment: 'journey.scopeHere',
+  node: 'count.scope.node',
 };
 
 /** The chip over a scope's active refs — the strongest class, stale only when every run behind the word is `changed`. */
 function chipOf(active: CoverageTestRef[], earning: CoverageTestRef[]): CoverageFacts['chip'] {
   return earning.length
-    ? (earning.every((t) => t.freshness === 'changed') ? 'observed-stale' : 'observed')
-    : active.some((t) => t.evidence === 'static') ? 'reached'
-      : active.length ? 'declared' : 'none';
+    ? earning.every((t) => t.freshness === 'changed')
+      ? 'observed-stale'
+      : 'observed'
+    : active.some((t) => t.evidence === 'static')
+      ? 'reached'
+      : active.length
+        ? 'declared'
+        : 'none';
 }
 
 /**
@@ -648,9 +805,19 @@ function chipOf(active: CoverageTestRef[], earning: CoverageTestRef[]): Coverage
  * the per-action fold all read this, so the three can never say different
  * things about the same refs.
  */
-export function evidenceFacts(tests: CoverageTestRef[], countScope: CountScope, source: string, code?: (repo?: string) => CodeAt | undefined): {
-  chip: CoverageFacts['chip']; observedBy?: CoverageFacts['observedBy']; evidenceWord: EvidenceWord; verdict: TestVerdict;
-  counted: CoverageCounted; observation?: CoverageObservation; testCounts: CoverageFacts['counts']['tests'];
+export function evidenceFacts(
+  tests: CoverageTestRef[],
+  countScope: CountScope,
+  source: string,
+  code?: (repo?: string) => CodeAt | undefined,
+): {
+  chip: CoverageFacts['chip'];
+  observedBy?: CoverageFacts['observedBy'];
+  evidenceWord: EvidenceWord;
+  verdict: TestVerdict;
+  counted: CoverageCounted;
+  observation?: CoverageObservation;
+  testCounts: CoverageFacts['counts']['tests'];
   freshness: FreshnessFact;
 } {
   const active = tests.filter((t) => !t.inactive);
@@ -670,10 +837,14 @@ export function evidenceFacts(tests: CoverageTestRef[], countScope: CountScope, 
   };
   // who observed: the strongest attribution among the active observing refs
   const activeObserving = active.filter((t) => t.evidence === 'observed');
-  const observedBy: CoverageFacts['observedBy'] = chip === 'observed' || chip === 'observed-stale'
-    ? (activeObserving.some((t) => !t.runLevel && !isDeclaredPass(t)) ? 'tests'
-      : activeObserving.some(isDeclaredPass) ? 'declaration' : 'runs')
-    : undefined;
+  const observedBy: CoverageFacts['observedBy'] =
+    chip === 'observed' || chip === 'observed-stale'
+      ? activeObserving.some((t) => !t.runLevel && !isDeclaredPass(t))
+        ? 'tests'
+        : activeObserving.some(isDeclaredPass)
+          ? 'declaration'
+          : 'runs'
+      : undefined;
   // the three evidence classes, as a partition of one level's cases — the
   // observed class in its two parts, so a pass by declaration is never printed
   // as a run that was seen reaching the code (and never hidden inside one)
@@ -684,7 +855,10 @@ export function evidenceFacts(tests: CoverageTestRef[], countScope: CountScope, 
     ...(list.some(isDeclaredPass) ? [{ key: 'count.part.declaredPassed', n: list.filter(isDeclaredPass).length }] : []),
   ];
   const level = (l: TestRef['level'], unit: string, bizUnit?: string): Counted =>
-    counted(byLevel(l).length, unit, countScope, `${source}.counts.tests.${l}`, { ...(bizUnit ? { bizUnit } : {}), breakdown: byClass(byLevel(l)) });
+    counted(byLevel(l).length, unit, countScope, `${source}.counts.tests.${l}`, {
+      ...(bizUnit ? { bizUnit } : {}),
+      breakdown: byClass(byLevel(l)),
+    });
   const countedTests: CoverageCounted = {
     tests: counted(cases.length, 'count.unit.cases', countScope, `${source}.counts.tests (unit + integration + e2e)`, {
       bizUnit: 'journey.biz.countTests',
@@ -697,12 +871,20 @@ export function evidenceFacts(tests: CoverageTestRef[], countScope: CountScope, 
     e2e: level('e2e', 'journey.testsE2e', 'journey.biz.countE2e'),
     unit: level('unit', 'journey.testsUnit'),
     integration: level('integration', 'journey.testsIntegration'),
-    observed: counted(testCounts.observed, 'journey.testsObserved', countScope, `${source}.counts.tests.observed`, testCounts.declaredPassed ? {
-      breakdown: [
-        { key: 'count.part.observed', n: testCounts.observed - testCounts.declaredPassed },
-        { key: 'count.part.declaredPassed', n: testCounts.declaredPassed },
-      ],
-    } : {}),
+    observed: counted(
+      testCounts.observed,
+      'journey.testsObserved',
+      countScope,
+      `${source}.counts.tests.observed`,
+      testCounts.declaredPassed
+        ? {
+            breakdown: [
+              { key: 'count.part.observed', n: testCounts.observed - testCounts.declaredPassed },
+              { key: 'count.part.declaredPassed', n: testCounts.declaredPassed },
+            ],
+          }
+        : {},
+    ),
     runReports: counted(testCounts.runLevel, 'count.unit.runReports', countScope, `${source}.counts.tests.runLevel`),
   };
   // the run that earned the observed class, and only that run: the refs behind
@@ -716,9 +898,20 @@ export function evidenceFacts(tests: CoverageTestRef[], countScope: CountScope, 
     const timed = observing.filter((t) => t.at);
     observation = {
       by: observedBy,
-      at: timed.map((t) => t.at!).sort().at(-1) ?? '',
-      status: observing.reduce((worst, t) => (WEAKEST[t.status ?? 'unknown']! > WEAKEST[worst]! ? (t.status ?? 'unknown') : worst), 'passed' as NonNullable<TestRef['run']>['status']),
-      freshness: observing.reduce((worst, t) => (WEAKEST_FRESHNESS[t.freshness ?? 'unknown']! > WEAKEST_FRESHNESS[worst]! ? (t.freshness ?? 'unknown') : worst), 'unchanged' as NonNullable<TestRef['run']>['freshness']),
+      at:
+        timed
+          .map((t) => t.at!)
+          .sort()
+          .at(-1) ?? '',
+      status: observing.reduce(
+        (worst, t) => (WEAKEST[t.status ?? 'unknown']! > WEAKEST[worst]! ? (t.status ?? 'unknown') : worst),
+        'passed' as NonNullable<TestRef['run']>['status'],
+      ),
+      freshness: observing.reduce(
+        (worst, t) =>
+          WEAKEST_FRESHNESS[t.freshness ?? 'unknown']! > WEAKEST_FRESHNESS[worst]! ? (t.freshness ?? 'unknown') : worst,
+        'unchanged' as NonNullable<TestRef['run']>['freshness'],
+      ),
       ...(changedByOfRefs(observing) ? { changedBy: changedByOfRefs(observing) } : {}),
       cases: observing.filter((t) => !t.runLevel).length,
       reports: observing.filter((t) => t.runLevel).length,
@@ -727,9 +920,24 @@ export function evidenceFacts(tests: CoverageTestRef[], countScope: CountScope, 
   }
   const word = evidenceWord(chip, observedBy);
   // a coverage report records no verdict: the word it earns (*seen by a coverage run*) has no run status beside it
-  const verdict = testVerdict(tests, word, observation && observation.by !== 'runs' ? observation.status : undefined, countScope, source);
+  const verdict = testVerdict(
+    tests,
+    word,
+    observation && observation.by !== 'runs' ? observation.status : undefined,
+    countScope,
+    source,
+  );
   const freshness = scopeFreshness(active, code);
-  return { chip, ...(observedBy ? { observedBy } : {}), evidenceWord: word, verdict, counted: countedTests, ...(observation ? { observation } : {}), testCounts, freshness };
+  return {
+    chip,
+    ...(observedBy ? { observedBy } : {}),
+    evidenceWord: word,
+    verdict,
+    counted: countedTests,
+    ...(observation ? { observation } : {}),
+    testCounts,
+    freshness,
+  };
 }
 
 /**
@@ -740,10 +948,16 @@ export function evidenceFacts(tests: CoverageTestRef[], countScope: CountScope, 
 export function scopeFreshness(active: CoverageTestRef[], code?: (repo?: string) => CodeAt | undefined): FreshnessFact {
   const observing = active.filter((t) => t.evidence === 'observed' && t.freshness);
   const list = observing.length ? observing : active.filter((t) => t.at && t.freshness);
-  return freshnessFact(list.map((t) => ({
-    freshness: t.freshness!, ...(t.changedBy ? { changedBy: t.changedBy } : {}), ...(t.at ? { at: t.at } : {}),
-    ...(t.commit ? { commit: t.commit } : {}), repo: t.id.split('::')[0]!,
-  })), code);
+  return freshnessFact(
+    list.map((t) => ({
+      freshness: t.freshness!,
+      ...(t.changedBy ? { changedBy: t.changedBy } : {}),
+      ...(t.at ? { at: t.at } : {}),
+      ...(t.commit ? { commit: t.commit } : {}),
+      repo: t.id.split('::')[0]!,
+    })),
+    code,
+  );
 }
 
 /** The run parts of a verdict's `runs`, in print order — the source cards' parts (`testsSurface().sources[].counted.cases`). */
@@ -756,21 +970,38 @@ const RUN_PARTS = ['passed', 'failed', 'skipped', 'flaky'] as const;
  * step — so no printer derives a verdict for itself.
  */
 export function testVerdict(
-  tests: CoverageTestRef[], word: EvidenceWord, status: CoverageObservation['status'] | undefined,
-  countScope: CountScope, source: string,
+  tests: CoverageTestRef[],
+  word: EvidenceWord,
+  status: CoverageObservation['status'] | undefined,
+  countScope: CountScope,
+  source: string,
 ): TestVerdict {
   const cases = tests.filter((t) => !t.runLevel);
   const n = (s: string) => cases.filter((t) => t.status === s).length;
   // a verdict nobody recorded and no run at all read as one absence, as on the source cards
   const noRun = cases.filter((t) => !t.status || !(RUN_PARTS as readonly string[]).includes(t.status)).length;
-  const runs = counted(cases.length, 'count.unit.cases', countScope, `${source}.verdict.runs (each case's own last run)`, {
-    bizUnit: 'journey.biz.countTests',
-    breakdown: [...RUN_PARTS.map((s) => ({ key: `count.part.${s}`, n: n(s) })), { key: 'count.part.noRun', n: noRun }],
-  });
+  const runs = counted(
+    cases.length,
+    'count.unit.cases',
+    countScope,
+    `${source}.verdict.runs (each case's own last run)`,
+    {
+      bizUnit: 'journey.biz.countTests',
+      breakdown: [
+        ...RUN_PARTS.map((s) => ({ key: `count.part.${s}`, n: n(s) })),
+        { key: 'count.part.noRun', n: noRun },
+      ],
+    },
+  );
   const projectSplit = projectSplitOf(cases);
   return {
-    word, ...(status && word.cls !== 'none' && word.cls !== 'declared' && word.cls !== 'reached' ? { status } : {}), runs,
-    scopeWord: scopeWord(countScope), failed: n('failed'), skipped: n('skipped'), flaky: n('flaky'),
+    word,
+    ...(status && word.cls !== 'none' && word.cls !== 'declared' && word.cls !== 'reached' ? { status } : {}),
+    runs,
+    scopeWord: scopeWord(countScope),
+    failed: n('failed'),
+    skipped: n('skipped'),
+    flaky: n('flaky'),
     ...(projectSplit ? { projectSplit } : {}),
   };
 }
@@ -794,12 +1025,17 @@ function projectSplitOf(cases: Pick<CoverageTestRef, 'status' | 'projects'>[]): 
   }
   if (!n) return undefined;
   const split: ProjectSplit = {
-    n, passedOn: [...passedOn].sort(),
-    skippedOn: [...skippedOn].sort(([a], [b]) => a.localeCompare(b)).map(([project, r]) => ({ project, reasons: [...r].sort() })),
+    n,
+    passedOn: [...passedOn].sort(),
+    skippedOn: [...skippedOn]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([project, r]) => ({ project, reasons: [...r].sort() })),
   };
   split.words = {
-    text: projectSplitWords(split), biz: projectSplitWords(split, true),
-    short: projectSplitWords(split, false, 'professional', { reasons: false }), shortBiz: projectSplitWords(split, true, 'professional', { reasons: false }),
+    text: projectSplitWords(split),
+    biz: projectSplitWords(split, true),
+    short: projectSplitWords(split, false, 'professional', { reasons: false }),
+    shortBiz: projectSplitWords(split, true, 'professional', { reasons: false }),
     skipped: projectSkippedList(split),
   };
   return split;
@@ -810,26 +1046,52 @@ function projectSplitOf(cases: Pick<CoverageTestRef, 'status' | 'projects'>[]): 
  * on mobile-390 (the ops console is designed for desktop)*; *n of them …* for more than one case; the business twin
  * says *not run on … by its own condition*. A project with several written reasons says how many.
  */
-export function projectSplitWords(split: ProjectSplit, business = false, register: Register = 'professional', opts: { reasons?: boolean } = {}): string {
-  const skipped = opts.reasons === false ? split.skippedOn.map((s) => s.project).join(', ') : projectSkippedList(split, register);
+export function projectSplitWords(
+  split: ProjectSplit,
+  business = false,
+  register: Register = 'professional',
+  opts: { reasons?: boolean } = {},
+): string {
+  const skipped =
+    opts.reasons === false ? split.skippedOn.map((s) => s.project).join(', ') : projectSkippedList(split, register);
   const key = `tests.${business ? 'biz.' : ''}${split.n === 1 ? 'projectSplit' : 'projectSplitMany'}`;
   return fill(t(key, register), { n: String(split.n), passed: split.passedOn.join(', '), skipped });
 }
 
 /** The skipped projects of a split, each with its quoted reason (or how many it wrote): *mobile-390 (…)*. */
 function projectSkippedList(split: ProjectSplit, register: Register = 'professional'): string {
-  return split.skippedOn.map((s) => (
-    s.reasons.length === 1 ? fill(t('tests.projectSkipped', register), { project: s.project, reason: s.reasons[0]! })
-      : s.reasons.length > 1 ? fill(t('tests.projectSkipped', register), { project: s.project, reason: fill(t('tests.projectReasons', register), { n: String(s.reasons.length) }) })
-        : s.project)).join(', ');
+  return split.skippedOn
+    .map((s) =>
+      s.reasons.length === 1
+        ? fill(t('tests.projectSkipped', register), { project: s.project, reason: s.reasons[0]! })
+        : s.reasons.length > 1
+          ? fill(t('tests.projectSkipped', register), {
+              project: s.project,
+              reason: fill(t('tests.projectReasons', register), { n: String(s.reasons.length) }),
+            })
+          : s.project,
+    )
+    .join(', ');
 }
 
 /** A case no project passed, by its projects: *skipped on desktop-1440 (live only), mobile-390 (…)* — '' for one project. */
-export function projectSkipWords(projects: TestRunProject[] | undefined, business = false, register: Register = 'professional'): string {
+export function projectSkipWords(
+  projects: TestRunProject[] | undefined,
+  business = false,
+  register: Register = 'professional',
+): string {
   if (!projects?.length) return '';
-  const skipped = projects.filter((p) => p.status === 'skipped')
-    .map((p) => (!p.project ? p.reason ?? '' : p.reason ? fill(t('tests.projectSkipped', register), { project: p.project, reason: p.reason }) : p.project))
-    .filter(Boolean).join(', ');
+  const skipped = projects
+    .filter((p) => p.status === 'skipped')
+    .map((p) =>
+      !p.project
+        ? (p.reason ?? '')
+        : p.reason
+          ? fill(t('tests.projectSkipped', register), { project: p.project, reason: p.reason })
+          : p.project,
+    )
+    .filter(Boolean)
+    .join(', ');
   return skipped ? fill(t(business ? 'tests.biz.skippedOn' : 'tests.skippedOn', register), { skipped }) : '';
 }
 
@@ -861,7 +1123,13 @@ function earningRefs(active: CoverageTestRef[]): CoverageTestRef[] {
  * evidence at every level (swarm round 2, finding 1.8). The metric is the
  * scope's own and is not filtered; its part for the level is `metric.parts`.
  */
-export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricScope, countScope?: CountScope, opts: { level?: TestRef['level'] } = {}): CoverageFacts {
+export function coverageFor(
+  index: GraphIndex,
+  nodeIds: string[],
+  scope: MetricScope,
+  countScope?: CountScope,
+  opts: { level?: TestRef['level'] } = {},
+): CoverageFacts {
   const ids = [...new Set(nodeIds)].filter((id) => {
     const n = index.byId.get(id);
     // a declared-but-unbuilt route cannot be "uncovered": there is nothing to test yet
@@ -892,8 +1160,10 @@ export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricS
   const active = tests.filter((t) => !t.inactive);
   const e2eRefs = active.filter((t) => t.level === 'e2e');
   const lifts = (t: CoverageTestRef): 'observed' | 'reached' | 'declared' =>
-    t.evidence === 'observed' ? 'observed'
-      : t.evidence === 'static' && BODY_KINDS.has(t.reaches.kind) ? 'reached'
+    t.evidence === 'observed'
+      ? 'observed'
+      : t.evidence === 'static' && BODY_KINDS.has(t.reaches.kind)
+        ? 'reached'
         : 'declared';
   const WORD_RANK = { declared: 1, reached: 2, observed: 3 } as const;
   let e2e: CoverageFacts['e2e'] = 'none';
@@ -908,18 +1178,29 @@ export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricS
   }
   const e2eVia = via
     ? {
-        nodeId: via.reaches.nodeId, name: via.reaches.name, testId: via.id, testName: via.name,
+        nodeId: via.reaches.nodeId,
+        name: via.reaches.name,
+        testId: via.id,
+        testName: via.name,
         ...(via.loc?.path ? { file: via.loc.path } : {}),
         ...(via.loc?.line != null ? { line: via.loc.line } : {}),
         ...(via.observedVia ? { via: via.observedVia } : {}),
-        sharedWith: scope.kind === 'flow'
-          ? flowScopes(index).filter((f) => f.id !== scope.flowId && f.ids.has(via!.reaches.nodeId)).map((f) => ({ id: f.id, name: f.name }))
-          : [],
+        sharedWith:
+          scope.kind === 'flow'
+            ? flowScopes(index)
+                .filter((f) => f.id !== scope.flowId && f.ids.has(via!.reaches.nodeId))
+                .map((f) => ({ id: f.id, name: f.name }))
+            : [],
       }
     : undefined;
 
   // ── the chip, the word, the typed counts and the observing run: one helper for every scope ──
-  const facts = evidenceFacts(tests, countScope ?? COUNT_SCOPE_OF[scope.kind], `coverageFor(${scope.kind})`, codeAtOfIndex(index));
+  const facts = evidenceFacts(
+    tests,
+    countScope ?? COUNT_SCOPE_OF[scope.kind],
+    `coverageFor(${scope.kind})`,
+    codeAtOfIndex(index),
+  );
   const chip = facts.chip;
 
   // ── whose evidence is it? A flow whose design declares screens and has built
@@ -940,9 +1221,10 @@ export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricS
     facts.verdict = { ...facts.verdict, word: facts.evidenceWord };
   }
   // the release brief's rule over this journey's own declared cases, carried so a word beside it is never alone
-  const held = scope.kind === 'flow' && scope.flowId
-    ? ownCaseHold(index, [scope.flowId, index.byId.get(scope.flowId)?.design?.id ?? ''], tests).hold
-    : undefined;
+  const held =
+    scope.kind === 'flow' && scope.flowId
+      ? ownCaseHold(index, [scope.flowId, index.byId.get(scope.flowId)?.design?.id ?? ''], tests).hold
+      : undefined;
   if (held?.words && (facts.evidenceWord.cls === 'observed' || facts.evidenceWord.cls === 'stale')) {
     facts.evidenceWord = { ...facts.evidenceWord, held: held.words };
     facts.verdict = { ...facts.verdict, word: facts.evidenceWord };
@@ -952,12 +1234,24 @@ export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricS
   const withRuns = active.filter((t) => t.at);
   let run: CoverageFacts['run'];
   if (withRuns.length) {
-    const status = withRuns.reduce((worst, t) => (WEAKEST[t.status ?? 'unknown']! > WEAKEST[worst]! ? (t.status ?? 'unknown') : worst), 'passed' as NonNullable<TestRef['run']>['status']);
-    const freshness = withRuns.reduce((worst, t) => (WEAKEST_FRESHNESS[t.freshness ?? 'unknown']! > WEAKEST_FRESHNESS[worst]! ? (t.freshness ?? 'unknown') : worst), 'unchanged' as NonNullable<TestRef['run']>['freshness']);
+    const status = withRuns.reduce(
+      (worst, t) => (WEAKEST[t.status ?? 'unknown']! > WEAKEST[worst]! ? (t.status ?? 'unknown') : worst),
+      'passed' as NonNullable<TestRef['run']>['status'],
+    );
+    const freshness = withRuns.reduce(
+      (worst, t) =>
+        WEAKEST_FRESHNESS[t.freshness ?? 'unknown']! > WEAKEST_FRESHNESS[worst]! ? (t.freshness ?? 'unknown') : worst,
+      'unchanged' as NonNullable<TestRef['run']>['freshness'],
+    );
     const changedBy = freshness === 'changed' ? changedByOfRefs(withRuns) : undefined;
     run = {
-      status, freshness, ...(changedBy ? { changedBy } : {}),
-      at: withRuns.map((t) => t.at!).sort().at(-1)!,
+      status,
+      freshness,
+      ...(changedBy ? { changedBy } : {}),
+      at: withRuns
+        .map((t) => t.at!)
+        .sort()
+        .at(-1)!,
       projects: [...new Set(withRuns.map((t) => t.project).filter((p): p is string => !!p))].sort(),
     };
   }
@@ -966,16 +1260,19 @@ export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricS
   const testCounts = facts.testCounts;
 
   // a segment's numbers overlap its neighbours' — said once, in the sentence
-  const segmentCaveat = scope.kind === 'segment' ? ' Segments overlap the journey and each other: they do not add up.' : '';
+  const segmentCaveat =
+    scope.kind === 'segment' ? ' Segments overlap the journey and each other: they do not add up.' : '';
   const observedBy = facts.observedBy;
   return {
     metric,
     counts: {
-      nodes: metric.denominator, covered: metric.numerator,
+      nodes: metric.denominator,
+      covered: metric.numerator,
       unit: metric.parts?.['unit']?.numerator ?? 0,
       integration: metric.parts?.['integration']?.numerator ?? 0,
       e2e: metric.parts?.['e2e']?.numerator ?? 0,
-      declared, observed,
+      declared,
+      observed,
       observedTests: testCounts.observed,
       tests: testCounts,
     },
@@ -993,7 +1290,17 @@ export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricS
     ...(held ? { held } : {}),
     ...(run ? { run } : {}),
     tests,
-    ...(last?.at ? { lastRun: { at: last.at, status: last.status ?? 'unknown', freshness: last.freshness ?? 'unknown', stale: !!last.stale, ...(last.changedBy ? { changedBy: last.changedBy } : {}) } } : {}),
+    ...(last?.at
+      ? {
+          lastRun: {
+            at: last.at,
+            status: last.status ?? 'unknown',
+            freshness: last.freshness ?? 'unknown',
+            stale: !!last.stale,
+            ...(last.changedBy ? { changedBy: last.changedBy } : {}),
+          },
+        }
+      : {}),
     note: noteFor(tests, metric.numerator, metric.denominator, what) + segmentCaveat,
   };
 }
@@ -1015,22 +1322,26 @@ export function evidenceWord(chip: CoverageFacts['chip'], observedBy?: CoverageF
   const runs = observedBy === 'runs';
   // a results report says the case passed; the case says what it covers. Worded
   // as exactly that, never as a run seen reaching the code (docs/COUNTS.md §2 #13)
-  if (observedBy === 'declaration' && (chip === 'observed' || chip === 'observed-stale')) return chip === 'observed-stale'
-    ? { cls: 'stale', key: 'tests.evidence.declaredPassedStale', biz: 'journey.biz.testsRun.declaredPassedStale' }
-    : { cls: 'observed', key: 'tests.evidence.declaredPassed', biz: 'journey.biz.testsRun.declaredPassed' };
+  if (observedBy === 'declaration' && (chip === 'observed' || chip === 'observed-stale'))
+    return chip === 'observed-stale'
+      ? { cls: 'stale', key: 'tests.evidence.declaredPassedStale', biz: 'journey.biz.testsRun.declaredPassedStale' }
+      : { cls: 'observed', key: 'tests.evidence.declaredPassed', biz: 'journey.biz.testsRun.declaredPassed' };
   // *verified* means a results report named a case that ran over this code —
   // stale or not. A coverage report alone says *seen by a coverage run*: until
   // 2026-09-25 a stale one said *verified · stale* on every reference-app screen whose
   // only run was a coverage report, above `0 observed` (pass swarm, staff
   // engineer's blocker). The class stays `stale`; only the attribution moves.
-  if (chip === 'observed-stale') return runs
-    ? { cls: 'stale', key: 'tests.evidence.runSeenStale', biz: 'journey.biz.testsRun.runOnlyStale' }
-    : { cls: 'stale', key: 'journey.evidence.stale', biz: 'journey.biz.testsRun.stale' };
-  if (chip === 'observed') return runs
-    ? { cls: 'observed', key: 'tests.evidence.runSeen', biz: 'journey.biz.testsRun.runOnly' }
-    : { cls: 'observed', key: 'journey.evidence.observed', biz: 'journey.biz.testsRun.observed' };
+  if (chip === 'observed-stale')
+    return runs
+      ? { cls: 'stale', key: 'tests.evidence.runSeenStale', biz: 'journey.biz.testsRun.runOnlyStale' }
+      : { cls: 'stale', key: 'journey.evidence.stale', biz: 'journey.biz.testsRun.stale' };
+  if (chip === 'observed')
+    return runs
+      ? { cls: 'observed', key: 'tests.evidence.runSeen', biz: 'journey.biz.testsRun.runOnly' }
+      : { cls: 'observed', key: 'journey.evidence.observed', biz: 'journey.biz.testsRun.observed' };
   if (chip === 'reached') return { cls: 'reached', key: 'journey.evidence.reached', biz: 'journey.biz.testsRun.none' };
-  if (chip === 'declared') return { cls: 'declared', key: 'journey.evidence.declared', biz: 'journey.biz.testsRun.none' };
+  if (chip === 'declared')
+    return { cls: 'declared', key: 'journey.evidence.declared', biz: 'journey.biz.testsRun.none' };
   return { cls: 'none', key: 'journey.absent.noneIndexed' };
 }
 
@@ -1043,7 +1354,8 @@ export function evidenceWord(chip: CoverageFacts['chip'], observedBy?: CoverageF
 export function sameLocTwins(index: GraphIndex, node: GraphNode): string[] {
   const at = node.loc;
   if (!at?.path || at.line == null) return [];
-  const same = (n: GraphNode | undefined): boolean => !!n?.loc && n.loc.path === at.path && n.loc.line === at.line && (n.loc.repo ?? '') === (at.repo ?? '');
+  const same = (n: GraphNode | undefined): boolean =>
+    !!n?.loc && n.loc.path === at.path && n.loc.line === at.line && (n.loc.repo ?? '') === (at.repo ?? '');
   const out: string[] = [];
   if (node.kind === 'route') {
     for (const e of index.out.get(node.id) ?? []) {
@@ -1051,7 +1363,8 @@ export function sameLocTwins(index: GraphIndex, node: GraphNode): string[] {
     }
   } else if (node.kind === 'function') {
     for (const e of index.in.get(node.id) ?? []) {
-      if (e.kind === 'calls' && index.byId.get(e.from)?.kind === 'route' && same(index.byId.get(e.from))) out.push(e.from);
+      if (e.kind === 'calls' && index.byId.get(e.from)?.kind === 'route' && same(index.byId.get(e.from)))
+        out.push(e.from);
     }
   }
   return [...new Set(out)];
@@ -1071,7 +1384,8 @@ export function cellTwins(index: GraphIndex, node: GraphNode): { sameLoc: string
   const isDelegate = (e: GraphEdge) => e.kind === 'calls' && e.meta?.via === 'delegate';
   const delegates = new Set<string>();
   for (const id of [node.id, ...sameLoc]) {
-    for (const e of index.out.get(id) ?? []) if (isDelegate(e) && index.byId.get(e.to)?.kind === 'function') delegates.add(e.to);
+    for (const e of index.out.get(id) ?? [])
+      if (isDelegate(e) && index.byId.get(e.to)?.kind === 'function') delegates.add(e.to);
   }
   if (node.kind === 'function') {
     for (const e of index.in.get(node.id) ?? []) {
@@ -1106,15 +1420,28 @@ export function stepCoverage(index: GraphIndex, nodeId: string): StepCoverage | 
   const tests = [...byTest.values()];
   const facts = evidenceFacts(tests, 'count.scope.node', 'stepCoverage()', codeAtOfIndex(index));
   const typed = {
-    chip: facts.chip, ...(facts.observedBy ? { observedBy: facts.observedBy } : {}),
-    evidenceWord: facts.evidenceWord, verdict: facts.verdict, counted: facts.counted,
+    chip: facts.chip,
+    ...(facts.observedBy ? { observedBy: facts.observedBy } : {}),
+    evidenceWord: facts.evidenceWord,
+    verdict: facts.verdict,
+    counted: facts.counted,
     ...(facts.observation ? { observation: facts.observation } : {}),
     ...(facts.freshness.state !== 'none' ? { freshness: facts.freshness } : {}),
     ...(twins.length ? { sameLoc: twins } : {}),
     ...(delegates.length ? { delegates } : {}),
   };
   // nothing reaches it: the chip and the word say so, and six zero counts would only weigh the payload
-  if (!tests.length) return { unit: 0, e2e: 0, tests: [], observed: false, note: 'No test reaches this step.', chip: facts.chip, evidenceWord: facts.evidenceWord, verdict: facts.verdict };
+  if (!tests.length)
+    return {
+      unit: 0,
+      e2e: 0,
+      tests: [],
+      observed: false,
+      note: 'No test reaches this step.',
+      chip: facts.chip,
+      evidenceWord: facts.evidenceWord,
+      verdict: facts.verdict,
+    };
   const e2e = tests.filter((t) => t.level === 'e2e').length;
   return {
     unit: tests.length - e2e,
@@ -1156,7 +1483,9 @@ export function segmentNotBuilt(segment: JourneySummary['segments'][number]): bo
 /** The routes a not-built screen will call: its call markers and the operations its design declares that a route serves. */
 function plannedRouteIds(segment: JourneySummary['segments'][number]): string[] {
   return [
-    ...segment.markers.filter((m) => m.kind === 'call').flatMap((m) => (m.choice ? m.choice.candidates.map((c) => c.nodeId) : [m.nodeId])),
+    ...segment.markers
+      .filter((m) => m.kind === 'call')
+      .flatMap((m) => (m.choice ? m.choice.candidates.map((c) => c.nodeId) : [m.nodeId])),
     ...segment.declaredOnly.map((d) => d.routeId).filter((id): id is string => !!id),
   ];
 }
@@ -1169,7 +1498,11 @@ function plannedRouteIds(segment: JourneySummary['segments'][number]): string[] 
  * *not built* and `notBuilt` set — never *passed* on a screen with no code
  * (swarm round 2, 2026-10-06: *Tracking — paid* read *passed · 111 test cases*).
  */
-export function segmentCoverage(index: GraphIndex, segment: JourneySummary['segments'][number], label: string): CoverageFacts {
+export function segmentCoverage(
+  index: GraphIndex,
+  segment: JourneySummary['segments'][number],
+  label: string,
+): CoverageFacts {
   if (!segmentNotBuilt(segment)) return coverageFor(index, segmentNodeIds(segment), { kind: 'segment', label });
   const reach = coverageFor(index, plannedRouteIds(segment), { kind: 'segment', label }, 'count.scope.route');
   const { observedBy: _by, observation: _obs, e2eVia: _via, ...rest } = reach;
@@ -1222,16 +1555,31 @@ function momentCoverage(index: GraphIndex, stepNode: Map<number, string>, from: 
   const tests = [...byTest.values()];
   const facts = evidenceFacts(tests, 'count.scope.action', 'journeySummary().coverage.moments', codeAtOfIndex(index));
   const withRuns = tests.filter((t) => !t.inactive && t.at);
-  const run: CoverageFacts['run'] | undefined = withRuns.length ? {
-    status: withRuns.reduce((w, t) => (WEAKEST[t.status ?? 'unknown']! > WEAKEST[w]! ? (t.status ?? 'unknown') : w), 'passed' as NonNullable<TestRef['run']>['status']),
-    freshness: withRuns.reduce((w, t) => (WEAKEST_FRESHNESS[t.freshness ?? 'unknown']! > WEAKEST_FRESHNESS[w]! ? (t.freshness ?? 'unknown') : w), 'unchanged' as NonNullable<TestRef['run']>['freshness']),
-    ...(changedByOfRefs(withRuns) ? { changedBy: changedByOfRefs(withRuns) } : {}),
-    at: withRuns.map((t) => t.at!).sort().at(-1)!,
-    projects: [...new Set(withRuns.map((t) => t.project).filter((p): p is string => !!p))].sort(),
-  } : undefined;
+  const run: CoverageFacts['run'] | undefined = withRuns.length
+    ? {
+        status: withRuns.reduce(
+          (w, t) => (WEAKEST[t.status ?? 'unknown']! > WEAKEST[w]! ? (t.status ?? 'unknown') : w),
+          'passed' as NonNullable<TestRef['run']>['status'],
+        ),
+        freshness: withRuns.reduce(
+          (w, t) =>
+            WEAKEST_FRESHNESS[t.freshness ?? 'unknown']! > WEAKEST_FRESHNESS[w]! ? (t.freshness ?? 'unknown') : w,
+          'unchanged' as NonNullable<TestRef['run']>['freshness'],
+        ),
+        ...(changedByOfRefs(withRuns) ? { changedBy: changedByOfRefs(withRuns) } : {}),
+        at: withRuns
+          .map((t) => t.at!)
+          .sort()
+          .at(-1)!,
+        projects: [...new Set(withRuns.map((t) => t.project).filter((p): p is string => !!p))].sort(),
+      }
+    : undefined;
   return {
-    chip: facts.chip, ...(facts.observedBy ? { observedBy: facts.observedBy } : {}),
-    evidenceWord: facts.evidenceWord, verdict: facts.verdict, counted: facts.counted,
+    chip: facts.chip,
+    ...(facts.observedBy ? { observedBy: facts.observedBy } : {}),
+    evidenceWord: facts.evidenceWord,
+    verdict: facts.verdict,
+    counted: facts.counted,
     ...(facts.observation ? { observation: facts.observation } : {}),
     ...(run ? { run } : {}),
     ...(facts.freshness.state !== 'none' ? { freshness: facts.freshness } : {}),
@@ -1247,7 +1595,13 @@ function momentCoverage(index: GraphIndex, stepNode: Map<number, string>, from: 
  * moment entries, so the page's verdict is the cell's verdict. Undefined when
  * the summary has no such segment or action.
  */
-export function cellCoverage(index: GraphIndex, j: Journey, summary: JourneySummary, seg: number, action?: number): { label: string; facts: CoverageFacts } | undefined {
+export function cellCoverage(
+  index: GraphIndex,
+  j: Journey,
+  summary: JourneySummary,
+  seg: number,
+  action?: number,
+): { label: string; facts: CoverageFacts } | undefined {
   const sg = summary.segments[seg];
   if (!sg) return undefined;
   const label = sg.screen?.name ?? `step ${sg.index + 1} of ${summary.entry.name}`;
@@ -1256,12 +1610,26 @@ export function cellCoverage(index: GraphIndex, j: Journey, summary: JourneySumm
   if (!mo) return undefined;
   const stepNode = new Map(j.steps.map((st) => [st.order, st.nodeId] as const));
   const ids: string[] = [];
-  for (let o = mo.from; o <= mo.to; o++) { const id = stepNode.get(o); if (id) ids.push(id); }
+  for (let o = mo.from; o <= mo.to; o++) {
+    const id = stepNode.get(o);
+    if (id) ids.push(id);
+  }
   const here = `${label} · ${mo.label}`;
   const facts = coverageFor(index, ids, { kind: 'segment', label: here }, 'count.scope.action');
   if (!segmentNotBuilt(sg)) return { label: here, facts };
   const { observedBy: _by, observation: _obs, e2eVia: _via, ...rest } = facts;
-  return { label: here, facts: { ...rest, e2e: 'none', verifiedEndToEnd: false, chip: 'none', evidenceWord: NOT_BUILT_WORD, verdict: notBuiltVerdict(facts.verdict), notBuilt: true } };
+  return {
+    label: here,
+    facts: {
+      ...rest,
+      e2e: 'none',
+      verifiedEndToEnd: false,
+      chip: 'none',
+      evidenceWord: NOT_BUILT_WORD,
+      verdict: notBuiltVerdict(facts.verdict),
+      notBuilt: true,
+    },
+  };
 }
 
 /**
@@ -1271,7 +1639,13 @@ export function cellCoverage(index: GraphIndex, j: Journey, summary: JourneySumm
  */
 export function viaRuns(refs: CoverageTestRef[]): Counted {
   const once = [...new Map(refs.map((r) => [r.id, r] as const)).values()];
-  return testVerdict(once, { cls: 'none', key: 'journey.absent.noneIndexed' }, undefined, 'count.scope.node', 'verifiedThrough()').runs;
+  return testVerdict(
+    once,
+    { cls: 'none', key: 'journey.absent.noneIndexed' },
+    undefined,
+    'count.scope.node',
+    'verifiedThrough()',
+  ).runs;
 }
 
 /**
@@ -1291,7 +1665,12 @@ export function caseWord(ref: CoverageTestRef): EvidenceWord {
  */
 export function journeyCoverage(index: GraphIndex, j: Journey, summary: JourneySummary): JourneyCoverage | undefined {
   let hasTests = false;
-  for (const n of index.byId.values()) { if (n.kind === 'test') { hasTests = true; break; } }
+  for (const n of index.byId.values()) {
+    if (n.kind === 'test') {
+      hasTests = true;
+      break;
+    }
+  }
   if (!hasTests) return undefined;
   const label = summary.entry.name;
   // One scope, one denominator (R9): the flow's **full** screen list, not the
@@ -1302,11 +1681,15 @@ export function journeyCoverage(index: GraphIndex, j: Journey, summary: JourneyS
   const stepNode = new Map(j.steps.map((st) => [st.order, st.nodeId] as const));
   return {
     journey: coverageFor(index, journeyIds, { kind: 'flow', label, flowId: j.entryId }),
-    segments: summary.segments.map((sg) => segmentCoverage(index, sg, sg.screen?.name ?? `step ${sg.index + 1} of ${label}`)),
-    moments: summary.segments.map((sg) => sg.moments.map((mo) => {
-      const m = momentCoverage(index, stepNode, mo.from, mo.to);
-      return segmentNotBuilt(sg) ? notBuiltMoment(m) : m;
-    })),
+    segments: summary.segments.map((sg) =>
+      segmentCoverage(index, sg, sg.screen?.name ?? `step ${sg.index + 1} of ${label}`),
+    ),
+    moments: summary.segments.map((sg) =>
+      sg.moments.map((mo) => {
+        const m = momentCoverage(index, stepNode, mo.from, mo.to);
+        return segmentNotBuilt(sg) ? notBuiltMoment(m) : m;
+      }),
+    ),
   };
 }
 

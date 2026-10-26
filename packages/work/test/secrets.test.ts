@@ -9,38 +9,75 @@ test('env: resolves in process', async () => {
 });
 
 test('env: missing names the ref, not a value', async () => {
-  await assert.rejects(resolveSecret('env:WORK_MISSING', { env: {} }), (e: Error) =>
-    e instanceof SecretUnavailable && e.message.includes('env:WORK_MISSING'));
+  await assert.rejects(
+    resolveSecret('env:WORK_MISSING', { env: {} }),
+    (e: Error) => e instanceof SecretUnavailable && e.message.includes('env:WORK_MISSING'),
+  );
 });
 
 test('keychain: parses service/account on the last slash', () => {
-  assert.deepEqual(parseKeychainRef('keychain:farsight/jira-example'), { service: 'farsight', account: 'jira-example' });
+  assert.deepEqual(parseKeychainRef('keychain:farsight/jira-example'), {
+    service: 'farsight',
+    account: 'jira-example',
+  });
   assert.equal(parseKeychainRef('keychain:nothing'), null);
 });
 
 test('keychain: macOS and Linux call the right tool; the value is returned, never in an error', async () => {
   const calls: string[][] = [];
-  const runner = async (cmd: string, args: string[]) => { calls.push([cmd, ...args]); return SENTINEL; };
+  const runner = async (cmd: string, args: string[]) => {
+    calls.push([cmd, ...args]);
+    return SENTINEL;
+  };
   assert.equal(await resolveSecret('keychain:farsight/x', { platform: 'darwin', runner }), SENTINEL);
   assert.equal(await resolveSecret('keychain:farsight/x', { platform: 'linux', runner }), SENTINEL);
   assert.deepEqual(calls[0], ['security', 'find-generic-password', '-s', 'farsight', '-a', 'x', '-w']);
   assert.deepEqual(calls[1], ['secret-tool', 'lookup', 'service', 'farsight', 'account', 'x']);
-  const failing = async () => { throw Object.assign(new Error(`boom ${SENTINEL}`), { code: 44 }); };
-  await assert.rejects(resolveSecret('keychain:farsight/x', { platform: 'darwin', runner: failing }), (e: Error) =>
-    e.message.includes('keychain:farsight/x') && !e.message.includes(SENTINEL));
+  const failing = async () => {
+    throw Object.assign(new Error(`boom ${SENTINEL}`), { code: 44 });
+  };
+  await assert.rejects(
+    resolveSecret('keychain:farsight/x', { platform: 'darwin', runner: failing }),
+    (e: Error) => e.message.includes('keychain:farsight/x') && !e.message.includes(SENTINEL),
+  );
 });
 
 test('keychain: Windows is a typed not-built error', async () => {
-  await assert.rejects(resolveSecret('keychain:farsight/x', { platform: 'win32' }), (e: Error) =>
-    e instanceof SecretUnavailable && /DPAPI/.test(e.message));
+  await assert.rejects(
+    resolveSecret('keychain:farsight/x', { platform: 'win32' }),
+    (e: Error) => e instanceof SecretUnavailable && /DPAPI/.test(e.message),
+  );
 });
 
 test('shared transport preserves Work diagnostics and its less restrictive value policy', async () => {
-  assert.deepEqual(parseKeychainRef('keychain:farsight/provider/account'), { service: 'farsight/provider', account: 'account' });
-  assert.equal(await resolveSecret('keychain:farsight/x', { platform: 'darwin', runner: async () => 'line one\nline two' }), 'line one\nline two');
-  await assert.rejects(resolveSecret('keychain:farsight/x', { platform: 'linux', runner: async () => { throw Object.assign(new Error(SENTINEL), { code: 'ENOENT' }); } }), (error: Error) => error instanceof SecretUnavailable && error.why === 'secret-tool is not installed' && !error.message.includes(SENTINEL));
-  await assert.rejects(resolveSecret('keychain:farsight/x', { platform: 'darwin', runner: async () => '' }), (error: Error) => error instanceof SecretUnavailable && error.why === 'the keychain entry is empty');
-  await assert.rejects(resolveSecret('keychain:farsight/x', { platform: 'aix' }), (error: Error) => error instanceof SecretUnavailable && error.why === 'no keychain support on aix');
+  assert.deepEqual(parseKeychainRef('keychain:farsight/provider/account'), {
+    service: 'farsight/provider',
+    account: 'account',
+  });
+  assert.equal(
+    await resolveSecret('keychain:farsight/x', { platform: 'darwin', runner: async () => 'line one\nline two' }),
+    'line one\nline two',
+  );
+  await assert.rejects(
+    resolveSecret('keychain:farsight/x', {
+      platform: 'linux',
+      runner: async () => {
+        throw Object.assign(new Error(SENTINEL), { code: 'ENOENT' });
+      },
+    }),
+    (error: Error) =>
+      error instanceof SecretUnavailable &&
+      error.why === 'secret-tool is not installed' &&
+      !error.message.includes(SENTINEL),
+  );
+  await assert.rejects(
+    resolveSecret('keychain:farsight/x', { platform: 'darwin', runner: async () => '' }),
+    (error: Error) => error instanceof SecretUnavailable && error.why === 'the keychain entry is empty',
+  );
+  await assert.rejects(
+    resolveSecret('keychain:farsight/x', { platform: 'aix' }),
+    (error: Error) => error instanceof SecretUnavailable && error.why === 'no keychain support on aix',
+  );
 });
 
 test('a literal is not a reference', async () => {

@@ -27,7 +27,6 @@ import { createAliasResolver, resolveFileish } from '../aliases.js';
 import type { IngestOptions } from '../types.js';
 import { loadWorkspaceConfig, type WorkspaceConfig } from '../shared/config-files.js';
 
-
 const EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts'];
 
 /** A CSF file by name: `button.stories.tsx`, `x.story.js`. */
@@ -47,7 +46,16 @@ function parse(abs: string, source: string): AstNode | null {
 /** `x satisfies Meta<…>`, `x as Meta`, `(x)` → x. */
 function unwrap(n: unknown): AstNode | null {
   let cur = isNode(n) ? n : null;
-  while (cur && ['TSSatisfiesExpression', 'TSAsExpression', 'ParenthesizedExpression', 'TSNonNullExpression', 'TSTypeAssertion'].includes(cur.type)) {
+  while (
+    cur &&
+    [
+      'TSSatisfiesExpression',
+      'TSAsExpression',
+      'ParenthesizedExpression',
+      'TSNonNullExpression',
+      'TSTypeAssertion',
+    ].includes(cur.type)
+  ) {
     cur = isNode(cur.expression) ? cur.expression : null;
   }
   return cur;
@@ -59,7 +67,8 @@ function propsOf(obj: AstNode | null): Map<string, AstNode> {
   for (const p of (obj.properties as AstNode[]) ?? []) {
     if (p.type !== 'Property' && p.type !== 'ObjectProperty') continue;
     const key = p.key as AstNode | undefined;
-    const name = key && (key.type === 'Identifier' || key.type === 'IdentifierName') ? String(key.name) : stringValue(key);
+    const name =
+      key && (key.type === 'Identifier' || key.type === 'IdentifierName') ? String(key.name) : stringValue(key);
     if (name && isNode(p.value)) out.set(name, p.value as AstNode);
   }
   return out;
@@ -135,7 +144,12 @@ export function parseStoryFile(program: AstNode, source: string): ParsedStoryFil
     // docs often quote markup — "renders a real `<a>`" — which the code-doc harvest would strip)
     const raw = docCommentAbove(source, at.start ?? 0, /^\s*$/);
     const docs = raw ? raw.split(/^@\w+/m)[0]!.replace(/\s+/g, ' ').trim() : '';
-    out.stories.push({ exportName, line: line(at.start ?? 0), ...(named ? { name: named } : {}), ...(docs ? { docs } : {}) });
+    out.stories.push({
+      exportName,
+      line: line(at.start ?? 0),
+      ...(named ? { name: named } : {}),
+      ...(docs ? { docs } : {}),
+    });
   };
   for (const st of body) {
     if (st.type !== 'ExportNamedDeclaration') continue;
@@ -169,13 +183,21 @@ export function findStorybookDirs(repoRoot: string, options: IngestOptions = {})
   const visit = (dir: string, depth: number) => {
     if (depth > 10) return;
     let entries: string[];
-    try { entries = readdirSync(dir); } catch { return; }
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
     for (const entry of entries) {
       const abs = join(dir, entry);
       const rel = relative(repoRoot, abs);
       if (excludes.some((re) => re.test(rel))) continue;
       let st;
-      try { st = statSync(abs); } catch { continue; }
+      try {
+        st = statSync(abs);
+      } catch {
+        continue;
+      }
       if (!st.isDirectory()) continue;
       if (entry === '.storybook') {
         if (readdirSync(abs).some((f) => /^main\.[cm]?[jt]s$/.test(f))) out.push(rel);
@@ -215,7 +237,11 @@ export function globBase(glob: string): string {
 }
 
 function readJson(abs: string): Record<string, unknown> | null {
-  try { return JSON.parse(readFileSync(abs, 'utf8')) as Record<string, unknown>; } catch { return null; }
+  try {
+    return JSON.parse(readFileSync(abs, 'utf8')) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 const PORT_RE = /(?:--port[= ]|-p\s+|"port"\s*:\s*)(\d{2,5})/;
@@ -232,24 +258,40 @@ function startInfo(repoRoot: string, projectRoot: string): { port?: number; port
   const nxStory = (nx?.targets as Record<string, unknown> | undefined)?.storybook;
   const nxText = nxStory ? JSON.stringify(nxStory) : '';
   const pm = nxText.match(PORT_RE);
-  if (pm) { out.port = Number(pm[1]); out.portFrom = 'script'; }
-  const scriptsOf = (pkg: Record<string, unknown> | null) => Object.entries((pkg?.scripts as Record<string, string> | undefined) ?? {});
+  if (pm) {
+    out.port = Number(pm[1]);
+    out.portFrom = 'script';
+  }
+  const scriptsOf = (pkg: Record<string, unknown> | null) =>
+    Object.entries((pkg?.scripts as Record<string, string> | undefined) ?? {});
   const projectName = typeof nx?.name === 'string' ? nx.name : undefined;
   // the root's scripts first: that is where a person types `npm run …`
-  const rootScripts = scriptsOf(readJson(join(repoRoot, 'package.json')))
-    .filter(([name, cmd]) => /storybook/.test(cmd) && !/build-storybook|storybook build|:build-storybook/.test(cmd) && !/^build/.test(name));
-  const mine = rootScripts.find(([, cmd]) => (projectName && cmd.includes(projectName)) || cmd.includes(projectRoot)) ?? (rootScripts.length === 1 ? rootScripts[0] : undefined);
+  const rootScripts = scriptsOf(readJson(join(repoRoot, 'package.json'))).filter(
+    ([name, cmd]) =>
+      /storybook/.test(cmd) && !/build-storybook|storybook build|:build-storybook/.test(cmd) && !/^build/.test(name),
+  );
+  const mine =
+    rootScripts.find(([, cmd]) => (projectName && cmd.includes(projectName)) || cmd.includes(projectRoot)) ??
+    (rootScripts.length === 1 ? rootScripts[0] : undefined);
   if (mine) {
     out.command = `npm run ${mine[0]}`;
     const p = mine[1].match(PORT_RE);
-    if (p && !out.port) { out.port = Number(p[1]); out.portFrom = 'script'; }
+    if (p && !out.port) {
+      out.port = Number(p[1]);
+      out.portFrom = 'script';
+    }
   }
   if (projectRoot && projectRoot !== '.') {
-    const local = scriptsOf(readJson(join(projAbs, 'package.json'))).find(([, cmd]) => /storybook (dev|start)|start-storybook/.test(cmd));
+    const local = scriptsOf(readJson(join(projAbs, 'package.json'))).find(([, cmd]) =>
+      /storybook (dev|start)|start-storybook/.test(cmd),
+    );
     if (local) {
       if (!out.command) out.command = `npm --prefix ${projectRoot} run ${local[0]}`;
       const p = local[1].match(PORT_RE);
-      if (p && !out.port) { out.port = Number(p[1]); out.portFrom = 'script'; }
+      if (p && !out.port) {
+        out.port = Number(p[1]);
+        out.portFrom = 'script';
+      }
     }
   }
   if (!out.command && nxStory && projectName) out.command = `npx nx storybook ${projectName}`;
@@ -267,7 +309,11 @@ function configList(block: StorybookConfig | StorybookConfig[] | undefined): Sto
  * config entry naming a dir that was not found is kept — the config is a
  * declaration, and its URL is still where a reader is told to look.
  */
-export function storybooksOf(repoRoot: string, configBlock: StorybookConfig | StorybookConfig[] | undefined, options: IngestOptions = {}): StorybookRef[] {
+export function storybooksOf(
+  repoRoot: string,
+  configBlock: StorybookConfig | StorybookConfig[] | undefined,
+  options: IngestOptions = {},
+): StorybookRef[] {
   const found = findStorybookDirs(repoRoot, options);
   const declared = configList(configBlock);
   const refs: StorybookRef[] = [];
@@ -275,15 +321,25 @@ export function storybooksOf(repoRoot: string, configBlock: StorybookConfig | St
   for (const dir of found) {
     let globs: string[] = [];
     const main = readdirSync(resolve(repoRoot, dir)).find((f) => /^main\.[cm]?[jt]s$/.test(f));
-    if (main) { try { globs = storiesGlobsOf(readFileSync(resolve(repoRoot, dir, main), 'utf8')); } catch { /* none read */ } }
-    const cfg = declared.find((c) => c.configDir && norm(c.configDir) === dir) ?? (declared.length === 1 && found.length === 1 && !declared[0]!.configDir ? declared[0] : undefined);
+    if (main) {
+      try {
+        globs = storiesGlobsOf(readFileSync(resolve(repoRoot, dir, main), 'utf8'));
+      } catch {
+        /* none read */
+      }
+    }
+    const cfg =
+      declared.find((c) => c.configDir && norm(c.configDir) === dir) ??
+      (declared.length === 1 && found.length === 1 && !declared[0]!.configDir ? declared[0] : undefined);
     const root = cfg?.root ? norm(cfg.root) : norm(dirname(dir)) || '.';
     const start = startInfo(repoRoot, root === '.' ? '' : root);
     const url = cfg?.url ?? `http://localhost:${start.port ?? 6006}`;
     refs.push({
-      configDir: dir, root: root === '' ? '.' : root, url,
+      configDir: dir,
+      root: root === '' ? '.' : root,
+      url,
       urlFrom: cfg?.url ? 'config' : start.port ? 'script' : 'default',
-      ...(cfg?.command ?? start.command ? { command: cfg?.command ?? start.command } : {}),
+      ...((cfg?.command ?? start.command) ? { command: cfg?.command ?? start.command } : {}),
       ...(cfg?.name ? { name: cfg.name } : {}),
       source: cfg ? 'config' : 'discovered',
       ...(globs.length ? { globs } : {}),
@@ -294,9 +350,11 @@ export function storybooksOf(repoRoot: string, configBlock: StorybookConfig | St
     if (!c.configDir && found.length === 1) continue;
     const dir = norm(c.configDir);
     refs.push({
-      configDir: dir, root: c.root ? norm(c.root) : norm(dirname(dir)) || '.',
+      configDir: dir,
+      root: c.root ? norm(c.root) : norm(dirname(dir)) || '.',
       ...(c.url ? { url: c.url, urlFrom: 'config' as const } : {}),
-      ...(c.command ? { command: c.command } : {}), ...(c.name ? { name: c.name } : {}),
+      ...(c.command ? { command: c.command } : {}),
+      ...(c.name ? { name: c.name } : {}),
       source: 'config',
     });
   }
@@ -305,26 +363,48 @@ export function storybooksOf(repoRoot: string, configBlock: StorybookConfig | St
 
 // ── component resolution: the import `component:` names, followed through barrels ──
 
-function exportsFrom(abs: string, name: string, repoRoot: string, resolveAlias: (a: string, s: string) => string | null, depth = 0): { file: string; name: string }[] {
+function exportsFrom(
+  abs: string,
+  name: string,
+  repoRoot: string,
+  resolveAlias: (a: string, s: string) => string | null,
+  depth = 0,
+): { file: string; name: string }[] {
   if (depth > 4) return [];
   let src: string;
-  try { src = readFileSync(abs, 'utf8'); } catch { return []; }
+  try {
+    src = readFileSync(abs, 'utf8');
+  } catch {
+    return [];
+  }
   const out: { file: string; name: string }[] = [];
   const target = (spec: string): string | null => {
-    if (spec.startsWith('.')) { const hit = resolveFileish(resolve(dirname(abs), spec)); return hit ? relative(repoRoot, hit) : null; }
+    if (spec.startsWith('.')) {
+      const hit = resolveFileish(resolve(dirname(abs), spec));
+      return hit ? relative(repoRoot, hit) : null;
+    }
     return resolveAlias(abs, spec);
   };
   for (const m of src.matchAll(/export\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g)) {
     for (const part of m[1]!.split(',')) {
-      const [orig, alias] = part.trim().replace(/^type\s+/, '').split(/\s+as\s+/).map((s) => s.trim());
+      const [orig, alias] = part
+        .trim()
+        .replace(/^type\s+/, '')
+        .split(/\s+as\s+/)
+        .map((s) => s.trim());
       if (!orig || (alias ?? orig) !== name) continue;
       const file = target(m[2]!);
-      if (file) out.push({ file, name: orig }, ...exportsFrom(resolve(repoRoot, file), orig, repoRoot, resolveAlias, depth + 1));
+      if (file)
+        out.push(
+          { file, name: orig },
+          ...exportsFrom(resolve(repoRoot, file), orig, repoRoot, resolveAlias, depth + 1),
+        );
     }
   }
   for (const m of src.matchAll(/export\s*\*\s*from\s*['"]([^'"]+)['"]/g)) {
     const file = target(m[1]!);
-    if (file) out.push({ file, name }, ...exportsFrom(resolve(repoRoot, file), name, repoRoot, resolveAlias, depth + 1));
+    if (file)
+      out.push({ file, name }, ...exportsFrom(resolve(repoRoot, file), name, repoRoot, resolveAlias, depth + 1));
   }
   return out;
 }
@@ -333,7 +413,12 @@ function exportsFrom(abs: string, name: string, repoRoot: string, resolveAlias: 
  * Read the repo's story files into the fragment (in place): a `StoryRef` per
  * story on the component node, and `meta.stories`. Never throws.
  */
-export function applyStories(fragment: GraphFragment, repoRoot: string, options: IngestOptions = {}, workspace?: WorkspaceConfig): { errors: string[]; meta: StoriesMeta } {
+export function applyStories(
+  fragment: GraphFragment,
+  repoRoot: string,
+  options: IngestOptions = {},
+  workspace?: WorkspaceConfig,
+): { errors: string[]; meta: StoriesMeta } {
   const repo = fragment.repo;
   const config = (workspace ?? loadWorkspaceConfig(repoRoot, options)).merged;
   const storybooks = storybooksOf(repoRoot, config.storybook, options);
@@ -344,10 +429,14 @@ export function applyStories(fragment: GraphFragment, repoRoot: string, options:
   // clear what an earlier pass over the same fragment put there (idempotent re-apply)
   for (const n of fragment.nodes) if (n.stories) delete n.stories;
 
-  const bases = storybooks.flatMap((sb) => (sb.globs ?? []).map((g) => {
-    const raw = g.replace(/^\.\//, '');
-    return { sb, base: joinRepoPath(sb.configDir, globBase(raw)) };
-  })).sort((a, b) => b.base.length - a.base.length);
+  const bases = storybooks
+    .flatMap((sb) =>
+      (sb.globs ?? []).map((g) => {
+        const raw = g.replace(/^\.\//, '');
+        return { sb, base: joinRepoPath(sb.configDir, globBase(raw)) };
+      }),
+    )
+    .sort((a, b) => b.base.length - a.base.length);
   const bookOf = (file: string) => {
     const hit = bases.find((b) => file === b.base || file.startsWith(`${b.base}/`));
     if (hit) return { sb: hit.sb, base: hit.base };
@@ -356,22 +445,38 @@ export function applyStories(fragment: GraphFragment, repoRoot: string, options:
     return bare.length === 1 && storybooks.length === 1 ? { sb: bare[0]!, base: bare[0]!.root } : undefined;
   };
 
-  const files = collectFiles(repoRoot, EXTS, options, (name) => name.endsWith('.d.ts')).filter((abs) => isStoryFile(abs)).sort();
+  const files = collectFiles(repoRoot, EXTS, options, (name) => name.endsWith('.d.ts'))
+    .filter((abs) => isStoryFile(abs))
+    .sort();
   const touched = new Set<string>();
   for (const abs of files) {
     const file = relative(repoRoot, abs).replace(/\\/g, '/');
     meta.files++;
     let source: string;
-    try { source = readFileSync(abs, 'utf8'); } catch { continue; }
+    try {
+      source = readFileSync(abs, 'utf8');
+    } catch {
+      continue;
+    }
     const program = parse(abs, source);
-    if (!program) { meta.unresolved.push({ file, reason: 'unparsed', stories: 0 }); errors.push(`stories ${file}: could not be parsed`); continue; }
+    if (!program) {
+      meta.unresolved.push({ file, reason: 'unparsed', stories: 0 });
+      errors.push(`stories ${file}: could not be parsed`);
+      continue;
+    }
     const parsed = parseStoryFile(program, source);
     if (!parsed.stories.length) continue;
     const book = bookOf(file);
     let title = parsed.title;
     let titleFrom: StoryRef['titleFrom'] = 'meta';
-    if (!title && book) { title = autoTitleOf(file.slice(book.base.length).replace(/^\/+/, '')); titleFrom = 'auto'; }
-    if (!parsed.component) { meta.unresolved.push({ file, reason: 'no-component', stories: parsed.stories.length }); continue; }
+    if (!title && book) {
+      title = autoTitleOf(file.slice(book.base.length).replace(/^\/+/, ''));
+      titleFrom = 'auto';
+    }
+    if (!parsed.component) {
+      meta.unresolved.push({ file, reason: 'no-component', stories: parsed.stories.length });
+      continue;
+    }
 
     // the import that binds the identifier `component:` names
     let target: GraphNode | undefined = byId.get(`${repo}::${file}::${parsed.component}`);
@@ -384,30 +489,56 @@ export function applyStories(fragment: GraphFragment, repoRoot: string, options:
         for (const sp of (n.specifiers as AstNode[]) ?? []) {
           const local = (sp.local as AstNode | undefined)?.name;
           if (local !== parsed.component) continue;
-          const imported = sp.type === 'ImportDefaultSpecifier' ? 'default' : String((sp.imported as AstNode | undefined)?.name ?? local);
-          const hitAbs = spec.startsWith('.') ? resolveFileish(resolve(dirname(abs), spec)) : (() => { const r = resolveAlias(abs, spec); return r ? resolve(repoRoot, r) : null; })();
+          const imported =
+            sp.type === 'ImportDefaultSpecifier'
+              ? 'default'
+              : String((sp.imported as AstNode | undefined)?.name ?? local);
+          const hitAbs = spec.startsWith('.')
+            ? resolveFileish(resolve(dirname(abs), spec))
+            : (() => {
+                const r = resolveAlias(abs, spec);
+                return r ? resolve(repoRoot, r) : null;
+              })();
           if (!hitAbs) continue;
           const hitFile = relative(repoRoot, hitAbs).replace(/\\/g, '/');
           const tries = [{ file: hitFile, name: imported }, ...exportsFrom(hitAbs, imported, repoRoot, resolveAlias)];
           for (const t of tries) {
             if (t.name === 'default') {
-              const comps = fragment.nodes.filter((x) => x.loc?.path === t.file && (x.kind === 'component' || x.kind === 'page'));
-              if (comps.length === 1) { target = comps[0]; break; }
+              const comps = fragment.nodes.filter(
+                (x) => x.loc?.path === t.file && (x.kind === 'component' || x.kind === 'page'),
+              );
+              if (comps.length === 1) {
+                target = comps[0];
+                break;
+              }
               continue;
             }
             const n2 = byId.get(`${repo}::${t.file}::${t.name}`);
-            if (n2) { target = n2; break; }
+            if (n2) {
+              target = n2;
+              break;
+            }
           }
         }
       }
     }
-    if (!target) { meta.unresolved.push({ file, reason: 'component-unresolved', component: parsed.component, stories: parsed.stories.length }); continue; }
+    if (!target) {
+      meta.unresolved.push({
+        file,
+        reason: 'component-unresolved',
+        component: parsed.component,
+        stories: parsed.stories.length,
+      });
+      continue;
+    }
     const idBase = parsed.metaId ?? title;
     const refs: StoryRef[] = parsed.stories.map((s) => ({
       id: idBase ? storyIdOf(idBase, s.exportName) : `${file}#${s.exportName}`,
       name: s.name ?? storyNameFromExport(s.exportName),
       ...(title ? { title, titleFrom } : {}),
-      exportName: s.exportName, file, line: s.line,
+      exportName: s.exportName,
+      file,
+      line: s.line,
       ...(s.docs ? { docs: s.docs } : {}),
       ...(book ? { storybook: book.sb.configDir } : {}),
     }));

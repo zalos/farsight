@@ -29,13 +29,22 @@ before(() => {
   const repo = join(work, 'invoice-app');
   graph = join(work, 'graph.json');
   cpSync(join(repoRoot, 'examples/invoice-app'), repo, { recursive: true });
-  const ingest = spawnSync(process.execPath, [cli, 'ingest', repo, '--repo', 'invoice-app', '--out', graph], { cwd: work, encoding: 'utf8' });
+  const ingest = spawnSync(process.execPath, [cli, 'ingest', repo, '--repo', 'invoice-app', '--out', graph], {
+    cwd: work,
+    encoding: 'utf8',
+  });
   assert.equal(ingest.status, 0, ingest.stderr);
   const data = JSON.parse(readFileSync(graph, 'utf8')) as { nodes: GraphNode[]; edges: GraphEdge[] };
   index = buildIndex(data.nodes, data.edges);
 });
 
-after(() => { try { rmSync(work, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ } });
+after(() => {
+  try {
+    rmSync(work, { recursive: true, force: true });
+  } catch {
+    /* a temp dir that outlives the run is not a failure */
+  }
+});
 
 test('deps list: the packages count with its split, one line per package with the fold’s numbers', () => {
   const r = run(['deps', 'list']);
@@ -69,7 +78,8 @@ test('deps where: every importing file with its line and specifier, and the code
   const fold = importersOf(index, 'invoice-app::package::react')!;
   assert.match(r.out, /^react · third-party · \^18\.3\.1 · invoice-app/);
   assert.match(r.out, new RegExp(`${fold.importers.n} files import it for this package · 3 journeys reach it — `));
-  for (const i of fold.groups.flatMap((g) => g.importers)) assert.ok(r.out.includes(`${i.path}:${i.line}  react`), i.path);
+  for (const i of fold.groups.flatMap((g) => g.importers))
+    assert.ok(r.out.includes(`${i.path}:${i.line}  react`), i.path);
   assert.match(r.out, /used by CreateInvoiceForm \(component\) at line 11/);
   const json = JSON.parse(run(['deps', 'where', 'date-fns', '--json']).out);
   assert.equal(json.format, 'farsight-deps');

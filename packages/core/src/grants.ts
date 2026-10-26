@@ -16,10 +16,17 @@ export type GrantConfirm = 'always' | 'agent' | 'never';
 export type AgentWritesPolicy = 'confirm' | 'allow';
 
 /** One verdict: whether it is allowed, and why in one plain sentence. */
-export interface GrantVerdict { allowed: boolean; reason: string }
+export interface GrantVerdict {
+  allowed: boolean;
+  reason: string;
+}
 
 /** A policy verdict over any grant shape. */
-export interface GrantDecision<G> { verdict: GrantVerdict; grant?: G; requiresConfirmation: boolean }
+export interface GrantDecision<G> {
+  verdict: GrantVerdict;
+  grant?: G;
+  requiresConfirmation: boolean;
+}
 
 /** The fields of a grant the shared policy reads — a tracker's `Grant`, a code host's, any later consumer's. */
 export interface GrantLike<A extends string = string> {
@@ -42,18 +49,29 @@ export function decideGrants<A extends string, G extends GrantLike<A>>(
   opts: { agentWrites?: AgentWritesPolicy; miss?: (g: G) => string | null } = {},
 ): GrantDecision<G> {
   const allowing = (grants ?? []).filter((g) => g.actions.includes(action));
-  if (!allowing.length) return { verdict: { allowed: false, reason: `no grant allows ${action}` }, requiresConfirmation: false };
+  if (!allowing.length)
+    return { verdict: { allowed: false, reason: `no grant allows ${action}` }, requiresConfirmation: false };
   let closest: string | null = null;
   let best: GrantDecision<G> | null = null;
   for (const g of allowing) {
     const principals = g.principals ?? ['human'];
-    if (!principals.includes(who)) { closest ??= `no grant allows ${action} for ${who === 'agent' ? 'an agent' : 'a person'}`; continue; }
+    if (!principals.includes(who)) {
+      closest ??= `no grant allows ${action} for ${who === 'agent' ? 'an agent' : 'a person'}`;
+      continue;
+    }
     const miss = opts.miss ? opts.miss(g) : null;
-    if (miss) { closest = miss; continue; }
+    if (miss) {
+      closest = miss;
+      continue;
+    }
     const confirm = g.confirm;
     const agentConfirm = who === 'agent' && (opts.agentWrites ?? 'confirm') === 'confirm' && confirm !== 'never';
     const requiresConfirmation = confirm === 'always' || (confirm === 'agent' && who === 'agent') || agentConfirm;
-    const d = { verdict: { allowed: true, reason: `granted: ${g.actions.join(', ')} for ${principals.join(' and ')}` }, grant: g, requiresConfirmation };
+    const d = {
+      verdict: { allowed: true, reason: `granted: ${g.actions.join(', ')} for ${principals.join(' and ')}` },
+      grant: g,
+      requiresConfirmation,
+    };
     if (!requiresConfirmation) return d;
     best ??= d;
   }

@@ -31,8 +31,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
-  GraphStore, buildIndex, stitchHttp, impactOf, IMPACT_MAX_HOPS, affectedReach, countedProblems, COUNT_SCOPES,
-  type GraphIndex, type GraphMeta, type GraphNode, type GraphEdge, type ImpactOptions,
+  GraphStore,
+  buildIndex,
+  stitchHttp,
+  impactOf,
+  IMPACT_MAX_HOPS,
+  affectedReach,
+  countedProblems,
+  COUNT_SCOPES,
+  type GraphIndex,
+  type GraphMeta,
+  type GraphNode,
+  type GraphEdge,
+  type ImpactOptions,
 } from '@farsight/core';
 import { ingestRepo } from '@farsight/parsers';
 
@@ -77,7 +88,9 @@ async function waitReady(): Promise<void> {
       await r.arrayBuffer();
       if (r.ok) return;
       last = `HTTP ${r.status}`;
-    } catch (err) { last = (err as Error).message; }
+    } catch (err) {
+      last = (err as Error).message;
+    }
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error(`the server never answered on port ${port} (${last}):\n${childLog}`);
@@ -95,13 +108,18 @@ before(async () => {
   stitchHttp(store);
   store.save(graphPath);
 
-  const data = JSON.parse(readFileSync(graphPath, 'utf8')) as { nodes: GraphNode[]; edges: GraphEdge[]; meta: GraphMeta };
+  const data = JSON.parse(readFileSync(graphPath, 'utf8')) as {
+    nodes: GraphNode[];
+    edges: GraphEdge[];
+    meta: GraphMeta;
+  };
   index = buildIndex(data.nodes, data.edges);
   meta = data.meta;
 
   port = await freePort();
-  const boot = `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n`
-    + `serveGraph(${JSON.stringify(graphPath)}, ${port}, ${JSON.stringify(work)});\n`;
+  const boot =
+    `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n` +
+    `serveGraph(${JSON.stringify(graphPath)}, ${port}, ${JSON.stringify(work)});\n`;
   child = spawn(process.execPath, ['--input-type=module', '-e', boot], {
     cwd: work,
     env: { ...process.env, MODELHUB_DIR: join(work, 'modelhub'), FIGMA_TOKEN: '' },
@@ -109,8 +127,12 @@ before(async () => {
   }) as ChildProcessWithoutNullStreams;
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (d: string) => { childLog += d; });
-  child.stderr.on('data', (d: string) => { childLog += d; });
+  child.stdout.on('data', (d: string) => {
+    childLog += d;
+  });
+  child.stderr.on('data', (d: string) => {
+    childLog += d;
+  });
   await waitReady();
 });
 
@@ -121,7 +143,11 @@ after(async () => {
     await Promise.race([gone, new Promise((r) => setTimeout(r, 2000))]);
     if (child.exitCode == null) child.kill('SIGKILL');
   }
-  try { rmSync(work, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ }
+  try {
+    rmSync(work, { recursive: true, force: true });
+  } catch {
+    /* a temp dir that outlives the run is not a failure */
+  }
 });
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -148,7 +174,9 @@ describe('GET /api/impact — the endpoint is the fold', () => {
       want.hops.map((h) => [h.hop, h.found, h.nodes.length]),
     );
     assert.deepEqual(
-      doc.cutPoints.map((c: { reason: string; behind: number; direct: number }) => [c.reason, c.behind, c.direct]).sort(),
+      doc.cutPoints
+        .map((c: { reason: string; behind: number; direct: number }) => [c.reason, c.behind, c.direct])
+        .sort(),
       want.cutPoints.map((c) => [c.reason, c.behind, c.direct]).sort(),
     );
     assert.equal(doc.bound, want.bound);
@@ -174,15 +202,27 @@ describe('GET /api/impact — the endpoint is the fold', () => {
       assert.equal(typeof c.behind, 'number');
       assert.ok(c.behind >= c.direct, 'the closure is never smaller than its first ring');
     }
-    assert.ok(shared.some((c: { behind: number; direct: number }) => c.behind !== c.direct), 'the two must be distinguishable in the fixture');
+    assert.ok(
+      shared.some((c: { behind: number; direct: number }) => c.behind !== c.direct),
+      'the two must be distinguishable in the fixture',
+    );
   });
 
   test('the boot and deferred work ride apart from the hops', async () => {
     const doc = await api(`/api/impact?node=${encodeURIComponent(TABLE)}&hops=3`);
     const want = fold(TABLE, { hops: 3 });
-    assert.deepEqual(doc.excluded.setup.map((n: { name: string }) => n.name), want.excluded.setup.map((n) => n.name));
-    assert.deepEqual(doc.excluded.deferred.map((n: { name: string }) => n.name), want.excluded.deferred.map((n) => n.name));
-    assert.ok(want.excluded.setup.length && want.excluded.deferred.length, 'the fixture must carry both kinds of aside');
+    assert.deepEqual(
+      doc.excluded.setup.map((n: { name: string }) => n.name),
+      want.excluded.setup.map((n) => n.name),
+    );
+    assert.deepEqual(
+      doc.excluded.deferred.map((n: { name: string }) => n.name),
+      want.excluded.deferred.map((n) => n.name),
+    );
+    assert.ok(
+      want.excluded.setup.length && want.excluded.deferred.length,
+      'the fixture must carry both kinds of aside',
+    );
     const listed = new Set(doc.hops.flatMap((h: { nodes: { nodeId: string }[] }) => h.nodes.map((n) => n.nodeId)));
     for (const n of [...doc.excluded.setup, ...doc.excluded.deferred]) assert.equal(listed.has(n.nodeId), false);
   });
@@ -207,18 +247,26 @@ describe('GET /api/impact — options', () => {
     const plain = await api(`/api/impact?node=${encodeURIComponent(TABLE)}&hops=1`);
     assert.ok(plain.hops[0].nodes.every((n: { tests?: unknown }) => n.tests === undefined));
     const withTests = await api(`/api/impact?node=${encodeURIComponent(TABLE)}&hops=1&tests=1`);
-    assert.ok(withTests.hops[0].nodes.some((n: { tests?: unknown[] }) => (n.tests?.length ?? 0) > 0), 'the fixture has covering tests');
+    assert.ok(
+      withTests.hops[0].nodes.some((n: { tests?: unknown[] }) => (n.tests?.length ?? 0) > 0),
+      'the fixture has covering tests',
+    );
   });
 
   test('flows cost a journey walk per flow, so nothing gets them by accident', async () => {
     const plain = await api(`/api/impact?node=${encodeURIComponent(TABLE)}&hops=1`);
     assert.ok(plain.hops[0].nodes.every((n: { flows?: unknown }) => n.flows === undefined));
     const withFlows = await api(`/api/impact?node=${encodeURIComponent(TABLE)}&hops=1&flows=1`);
-    assert.ok(withFlows.hops[0].nodes.some((n: { flows?: unknown[] }) => (n.flows?.length ?? 0) > 0), 'the fixture has flows reaching these nodes');
+    assert.ok(
+      withFlows.hops[0].nodes.some((n: { flows?: unknown[] }) => (n.flows?.length ?? 0) > 0),
+      'the fixture has flows reaching these nodes',
+    );
   });
 
   test('downstream answers the other question, and says which it answered', async () => {
-    const doc = await api(`/api/impact?node=${encodeURIComponent('invoice-app::route::POST /invoices')}&hops=1&direction=downstream`);
+    const doc = await api(
+      `/api/impact?node=${encodeURIComponent('invoice-app::route::POST /invoices')}&hops=1&direction=downstream`,
+    );
     assert.equal(doc.direction, 'downstream');
     assert.deepEqual(
       doc.hops.map((h: { found: number }) => h.found),
@@ -260,7 +308,7 @@ describe('GET /api/impact — refusals', () => {
   });
 });
 
-describe('?reach=1 — the impact answer placed on the journeys (the Map\'s Affected mode)', () => {
+describe("?reach=1 — the impact answer placed on the journeys (the Map's Affected mode)", () => {
   const ROUTE = 'invoice-app::route::POST /invoices';
   const ZOD = 'invoice-app::package::zod';
   const reachOf = (id: string, hops = 2) => affectedReach(index, impactOf(index, id, { hops, tests: true }));
@@ -276,10 +324,18 @@ describe('?reach=1 — the impact answer placed on the journeys (the Map\'s Affe
 
   test('a route: the screens whose own path calls it meet it themselves (hop 0); a screen that does not is not reached', () => {
     const r = reachOf(ROUTE);
-    const billing = r.screens.filter((s) => s.flowId === 'invoice-app::flow::billing-cycle').map((s) => [s.name, s.hop]);
-    assert.deepEqual(billing, [['New invoice', 0], ['Invoice list', 0]]);
+    const billing = r.screens
+      .filter((s) => s.flowId === 'invoice-app::flow::billing-cycle')
+      .map((s) => [s.name, s.hop]);
+    assert.deepEqual(billing, [
+      ['New invoice', 0],
+      ['Invoice list', 0],
+    ]);
     assert.ok(!r.screens.some((s) => s.name === 'Discard draft'), 'the discard screen never calls it');
-    assert.deepEqual(r.calls.map((c) => [c.nodeId, c.hop]), [[ROUTE, 0]]);
+    assert.deepEqual(
+      r.calls.map((c) => [c.nodeId, c.hop]),
+      [[ROUTE, 0]],
+    );
     assert.ok(r.journeys.every((j) => j.hop === 0 && j.by === ROUTE));
   });
 
@@ -305,7 +361,11 @@ describe('?reach=1 — the impact answer placed on the journeys (the Map\'s Affe
       for (const [k, c] of Object.entries(r.counted)) {
         assert.deepEqual(countedProblems(c, k), [], `${id} ${k}`);
         assert.equal(c.scope, 'count.scope.affected');
-        assert.equal((c.breakdown ?? []).reduce((a, p) => a + p.n, 0), c.n, `${id} ${k} parts add up`);
+        assert.equal(
+          (c.breakdown ?? []).reduce((a, p) => a + p.n, 0),
+          c.n,
+          `${id} ${k} parts add up`,
+        );
       }
       // the tests are the impact panel's union for hops 1..budget, never a sum of per-hop counts
       const report = impactOf(index, id, { hops: 3, tests: true });

@@ -12,7 +12,9 @@ import { GraphStore, SnapshotDb, digestOf, sqliteAvailable } from '../dist/index
 import type { GraphNode, GraphEdge } from '../dist/index.js';
 
 const available = sqliteAvailable();
-const opts = { skip: available ? false : 'node:sqlite unavailable on this runtime — degraded mode has no history to test' };
+const opts = {
+  skip: available ? false : 'node:sqlite unavailable on this runtime — degraded mode has no history to test',
+};
 
 function tempDb(): string {
   const dir = mkdtempSync(join(tmpdir(), 'farsight-snap-'));
@@ -22,8 +24,7 @@ function tempDb(): string {
 
 const node = (id: string, extra: Partial<GraphNode> = {}): GraphNode =>
   ({ id, kind: 'function', name: id.split('::').pop()!, tags: [], ...extra }) as GraphNode;
-const edge = (kind: GraphEdge['kind'], from: string, to: string): GraphEdge =>
-  ({ id: '', kind, from, to });
+const edge = (kind: GraphEdge['kind'], from: string, to: string): GraphEdge => ({ id: '', kind, from, to });
 const mkStore = (nodes: GraphNode[], edges: GraphEdge[] = []): GraphStore => {
   const s = new GraphStore();
   s.addFragment({ repo: 'r', nodes, edges });
@@ -68,28 +69,58 @@ test('SCD2 intervals: unchanged rows stay open, changes close at N-1', opts, asy
   const { DatabaseSync } = await import('node:sqlite');
   const raw = new DatabaseSync(path);
   // spread: node:sqlite hands back null-prototype rows, which deepEqual rejects
-  const rows = raw.prepare('SELECT id, first_sync, last_sync FROM node ORDER BY id, first_sync').all().map((r) => ({ ...r })) as {
-    id: string; first_sync: number; last_sync: number | null;
+  const rows = raw
+    .prepare('SELECT id, first_sync, last_sync FROM node ORDER BY id, first_sync')
+    .all()
+    .map((r) => ({ ...r })) as {
+    id: string;
+    first_sync: number;
+    last_sync: number | null;
   }[];
   raw.close();
   assert.deepEqual(rows, [
     { id: 'r::appear', first_sync: 2, last_sync: null },
-    { id: 'r::keep', first_sync: 1, last_sync: null },       // written once, still open
-    { id: 'r::mutate', first_sync: 1, last_sync: 1 },        // closed when it changed
-    { id: 'r::mutate', first_sync: 2, last_sync: null },     // new version open
-    { id: 'r::vanish', first_sync: 1, last_sync: 1 },        // closed when it disappeared
+    { id: 'r::keep', first_sync: 1, last_sync: null }, // written once, still open
+    { id: 'r::mutate', first_sync: 1, last_sync: 1 }, // closed when it changed
+    { id: 'r::mutate', first_sync: 2, last_sync: null }, // new version open
+    { id: 'r::vanish', first_sync: 1, last_sync: 1 }, // closed when it disappeared
   ]);
 
   // and the interval reads agree
-  assert.deepEqual(db.read(1).store.toJSON().nodes.map((n) => n.id).sort(), ['r::keep', 'r::mutate', 'r::vanish']);
-  assert.deepEqual(db.read(2).store.toJSON().nodes.map((n) => n.id).sort(), ['r::appear', 'r::keep', 'r::mutate']);
-  assert.equal(db.read(2).store.toJSON().nodes.find((n) => n.id === 'r::mutate')!.docs, 'now documented');
+  assert.deepEqual(
+    db
+      .read(1)
+      .store.toJSON()
+      .nodes.map((n) => n.id)
+      .sort(),
+    ['r::keep', 'r::mutate', 'r::vanish'],
+  );
+  assert.deepEqual(
+    db
+      .read(2)
+      .store.toJSON()
+      .nodes.map((n) => n.id)
+      .sort(),
+    ['r::appear', 'r::keep', 'r::mutate'],
+  );
+  assert.equal(
+    db
+      .read(2)
+      .store.toJSON()
+      .nodes.find((n) => n.id === 'r::mutate')!.docs,
+    'now documented',
+  );
 });
 
 test('changedBetween reports added/removed/changed with row JSON on both sides', opts, () => {
   const db = new SnapshotDb(tempDb());
   db.write(mkStore([node('r::keep'), node('r::mutate'), node('r::vanish')], [edge('calls', 'r::keep', 'r::vanish')]));
-  db.write(mkStore([node('r::keep'), node('r::mutate', { docs: 'changed' }), node('r::appear')], [edge('calls', 'r::keep', 'r::appear')]));
+  db.write(
+    mkStore(
+      [node('r::keep'), node('r::mutate', { docs: 'changed' }), node('r::appear')],
+      [edge('calls', 'r::keep', 'r::appear')],
+    ),
+  );
 
   const delta = db.changedBetween(1, 2);
   assert.deepEqual(
@@ -114,17 +145,35 @@ test('list is newest-first with counts; pin survives prune; pruned reads explain
   db.write(mkStore([node('r::v3')]));
   db.pin(1);
 
-  assert.deepEqual(db.list().map((s) => s.sync), [3, 2, 1]);
+  assert.deepEqual(
+    db.list().map((s) => s.sync),
+    [3, 2, 1],
+  );
   assert.equal(db.list()[0]!.nodes, 1);
   assert.equal(db.list()[2]!.pinned, true);
 
   const pruned = db.prune({ keep: 1, keepPinned: true });
   assert.equal(pruned, 1); // only sync:2 goes — 3 is newest, 1 is pinned
-  assert.deepEqual(db.list().map((s) => s.sync), [3, 1]);
+  assert.deepEqual(
+    db.list().map((s) => s.sync),
+    [3, 1],
+  );
 
   // pinned history still fully readable
-  assert.deepEqual(db.read(1).store.toJSON().nodes.map((n) => n.id), ['r::v1']);
-  assert.deepEqual(db.read(3).store.toJSON().nodes.map((n) => n.id), ['r::v3']);
+  assert.deepEqual(
+    db
+      .read(1)
+      .store.toJSON()
+      .nodes.map((n) => n.id),
+    ['r::v1'],
+  );
+  assert.deepEqual(
+    db
+      .read(3)
+      .store.toJSON()
+      .nodes.map((n) => n.id),
+    ['r::v3'],
+  );
   // a pruned sync answers with an explanation, never a silent miss
   assert.throws(() => db.read(2), /pruned by the retention policy/);
   assert.throws(() => db.changedBetween(2, 3), /pruned by the retention policy/);
@@ -140,16 +189,29 @@ test('prune keeps interval rows any surviving snapshot still needs', opts, () =>
   db.pin(1);
   db.prune({ keep: 1, keepPinned: true });
   // r::v1only's closed row [1,1] must survive because pinned sync:1 reads it
-  assert.deepEqual(db.read(1).store.toJSON().nodes.map((n) => n.id).sort(), ['r::stable', 'r::v1only']);
+  assert.deepEqual(
+    db
+      .read(1)
+      .store.toJSON()
+      .nodes.map((n) => n.id)
+      .sort(),
+    ['r::stable', 'r::v1only'],
+  );
 });
 
 test('digestOf: order-independent, content-sensitive, resolution-tier-sensitive', opts, () => {
   const a = mkStore([node('r::x'), node('r::y')], [edge('calls', 'r::x', 'r::y')]);
   const b = mkStore([node('r::y'), node('r::x')], [edge('calls', 'r::x', 'r::y')]);
   assert.equal(digestOf(a), digestOf(b)); // node order does not matter
-  const c = mkStore([node('r::x'), node('r::y')], [
-    { ...edge('calls', 'r::x', 'r::y'), resolution: { status: 'resolved', technique: 'static-import', confidence: 'HIGH' } },
-  ]);
+  const c = mkStore(
+    [node('r::x'), node('r::y')],
+    [
+      {
+        ...edge('calls', 'r::x', 'r::y'),
+        resolution: { status: 'resolved', technique: 'static-import', confidence: 'HIGH' },
+      },
+    ],
+  );
   assert.notEqual(digestOf(a), digestOf(c)); // a confidence tier alone changes the digest
 });
 
@@ -158,34 +220,76 @@ test('degraded mode is reported, not crashed', () => {
   if (available) {
     assert.doesNotThrow(() => new SnapshotDb(tempDb()));
   } else {
-    assert.throws(() => new SnapshotDb(tempDb()), (err: Error) => {
-      assert.equal(err.name, 'SnapshotUnavailable');
-      assert.match(err.message, /graph\.json still works/);
-      return true;
-    });
+    assert.throws(
+      () => new SnapshotDb(tempDb()),
+      (err: Error) => {
+        assert.equal(err.name, 'SnapshotUnavailable');
+        assert.match(err.message, /graph\.json still works/);
+        return true;
+      },
+    );
   }
 });
 
-test("commitsTouching: a part's commits by its file and, where resolved, by its lines — newest first, each once", opts, () => {
-  const db = new SnapshotDb(tempDb());
-  db.writeCommits('r', [
-    { sha: 'c1', at: '2026-09-01T00:00:00.000Z', author: 'A', email: 'a@example.com', subject: 'feat: the page', parents: [],
-      files: [{ path: 'app/src/ui/Page.tsx', status: 'added' }, { path: 'app/src/api/client.ts', status: 'added' }] },
-    { sha: 'c2', at: '2026-09-02T00:00:00.000Z', author: 'B', email: 'b@example.com', subject: 'fix: the client', parents: ['c1'],
-      files: [{ path: 'app/src/api/client.ts', status: 'modified' }] },
-    { sha: 'c3', at: '2026-09-03T00:00:00.000Z', author: 'B', email: 'b@example.com', subject: 'docs: elsewhere', parents: ['c2'],
-      files: [{ path: 'app/src/other_ui/Page.tsx', status: 'modified' }, { path: 'xsrc/ui/Page.tsx', status: 'modified' }] },
-  ] as never);
-  db.writeCommitNodes('r', 'c2', 'g', [{ node: 'r::src/api/client.ts::list', path: 'app/src/api/client.ts', fileOnly: false }]);
-  const got = db.commitsTouching('r', [
-    { node: 'r::src/ui/Page.tsx::Page', path: 'src/ui/Page.tsx' },
-    { node: 'r::src/api/client.ts::list', path: 'src/api/client.ts' },
-  ]);
-  // c3 changed a file whose path only ends in the same letters (other_ui, xsrc): not this part
-  assert.deepEqual(got.map((c) => c.sha), ['c2', 'c1']);
-  assert.deepEqual(got[0]!.parts, [{ node: 'r::src/api/client.ts::list', how: 'lines' }]);
-  assert.deepEqual(got[1]!.parts.map((p) => p.how), ['file', 'file']);
-  assert.equal(got[1]!.subject, 'feat: the page');
-  assert.deepEqual(db.commitsTouching('r', [{ node: 'r::nowhere' }]), []);
-  db.close();
-});
+test(
+  "commitsTouching: a part's commits by its file and, where resolved, by its lines — newest first, each once",
+  opts,
+  () => {
+    const db = new SnapshotDb(tempDb());
+    db.writeCommits('r', [
+      {
+        sha: 'c1',
+        at: '2026-09-01T00:00:00.000Z',
+        author: 'A',
+        email: 'a@example.com',
+        subject: 'feat: the page',
+        parents: [],
+        files: [
+          { path: 'app/src/ui/Page.tsx', status: 'added' },
+          { path: 'app/src/api/client.ts', status: 'added' },
+        ],
+      },
+      {
+        sha: 'c2',
+        at: '2026-09-02T00:00:00.000Z',
+        author: 'B',
+        email: 'b@example.com',
+        subject: 'fix: the client',
+        parents: ['c1'],
+        files: [{ path: 'app/src/api/client.ts', status: 'modified' }],
+      },
+      {
+        sha: 'c3',
+        at: '2026-09-03T00:00:00.000Z',
+        author: 'B',
+        email: 'b@example.com',
+        subject: 'docs: elsewhere',
+        parents: ['c2'],
+        files: [
+          { path: 'app/src/other_ui/Page.tsx', status: 'modified' },
+          { path: 'xsrc/ui/Page.tsx', status: 'modified' },
+        ],
+      },
+    ] as never);
+    db.writeCommitNodes('r', 'c2', 'g', [
+      { node: 'r::src/api/client.ts::list', path: 'app/src/api/client.ts', fileOnly: false },
+    ]);
+    const got = db.commitsTouching('r', [
+      { node: 'r::src/ui/Page.tsx::Page', path: 'src/ui/Page.tsx' },
+      { node: 'r::src/api/client.ts::list', path: 'src/api/client.ts' },
+    ]);
+    // c3 changed a file whose path only ends in the same letters (other_ui, xsrc): not this part
+    assert.deepEqual(
+      got.map((c) => c.sha),
+      ['c2', 'c1'],
+    );
+    assert.deepEqual(got[0]!.parts, [{ node: 'r::src/api/client.ts::list', how: 'lines' }]);
+    assert.deepEqual(
+      got[1]!.parts.map((p) => p.how),
+      ['file', 'file'],
+    );
+    assert.equal(got[1]!.subject, 'feat: the page');
+    assert.deepEqual(db.commitsTouching('r', [{ node: 'r::nowhere' }]), []);
+    db.close();
+  },
+);

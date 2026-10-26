@@ -7,11 +7,21 @@
 import type { Page } from '@playwright/test';
 import { test, expect, gotoReady } from './support';
 
-const AT = (screen: number, action: number) => '#/map/' + encodeURIComponent('invoice-app::flow::billing-cycle') + '?screen=' + screen + '&action=' + action + '&layout=ladder&lens=hybrid';
+const AT = (screen: number, action: number) =>
+  '#/map/' +
+  encodeURIComponent('invoice-app::flow::billing-cycle') +
+  '?screen=' +
+  screen +
+  '&action=' +
+  action +
+  '&layout=ladder&lens=hybrid';
 
 async function headWidths(page: Page, seg: number) {
-  return page.locator(`.jrn-laddercell[data-seg="${seg}"] .jrn-lhead > .lc`).evaluateAll((els) =>
-    els.map((e) => ({ cls: e.className, w: e.getBoundingClientRect().width, text: (e.textContent || '').trim() })));
+  return page
+    .locator(`.jrn-laddercell[data-seg="${seg}"] .jrn-lhead > .lc`)
+    .evaluateAll((els) =>
+      els.map((e) => ({ cls: e.className, w: e.getBoundingClientRect().width, text: (e.textContent || '').trim() })),
+    );
 }
 
 test.describe('journey ladder', () => {
@@ -57,8 +67,11 @@ test.describe('journey ladder', () => {
     await expect(page.locator('.jrn-laddercell[data-seg="1"] .jrn-lhead > .lc').first()).toBeVisible();
     const heads = await headWidths(page, 1);
     expect(heads.map((h) => h.text)).toEqual([
-      expect.stringMatching(/screen asks/i), expect.stringMatching(/^API/), expect.stringMatching(/service does/i),
-      expect.stringMatching(/records/i), expect.stringMatching(/messages/i),
+      expect.stringMatching(/screen asks/i),
+      expect.stringMatching(/^API/),
+      expect.stringMatching(/service does/i),
+      expect.stringMatching(/records/i),
+      expect.stringMatching(/messages/i),
     ]);
     expect(heads.some((h) => /\b(skip|lend)\b/.test(h.cls))).toBe(false);
     for (const h of heads) expect(Math.abs(h.w - heads[0].w)).toBeLessThan(2);

@@ -11,10 +11,23 @@
 
 /** The kinds a caller may name, folded onto the tool that answers each. */
 const KIND = {
-  gate: 'gate', guard: 'gate', rule: 'gate',
-  call: 'node', route: 'node', function: 'node',
-  record: 'node', table: 'node', store: 'node', message: 'node', queue: 'node', external: 'node',
-  journey: 'journey', flow: 'journey', screen: 'journey', page: 'journey', component: 'journey',
+  gate: 'gate',
+  guard: 'gate',
+  rule: 'gate',
+  call: 'node',
+  route: 'node',
+  function: 'node',
+  record: 'node',
+  table: 'node',
+  store: 'node',
+  message: 'node',
+  queue: 'node',
+  external: 'node',
+  journey: 'journey',
+  flow: 'journey',
+  screen: 'journey',
+  page: 'journey',
+  component: 'journey',
   test: 'test',
   package: 'package',
   count: 'count',
@@ -43,7 +56,7 @@ function packageName(node) {
   if (node.package && node.package.name) return node.package.name;
   const id = String(node.id || '');
   const at = id.indexOf('::package::');
-  return at >= 0 ? id.slice(at + '::package::'.length) : (node.name || id);
+  return at >= 0 ? id.slice(at + '::package::'.length) : node.name || id;
 }
 
 /**
@@ -59,11 +72,12 @@ export function copyDoors(kind, node, ctx = {}) {
   if (!node) return [];
   const row = KIND[kind] || 'node';
   const origin = ctx.origin;
-  const out = (m, c, l) => [
-    { via: 'mcp', word: 'door.copy.mcp', text: m },
-    { via: 'curl', word: 'door.copy.curl', text: c },
-    { via: 'cli', word: 'door.copy.cli', text: l },
-  ].filter((d) => d.text);
+  const out = (m, c, l) =>
+    [
+      { via: 'mcp', word: 'door.copy.mcp', text: m },
+      { via: 'curl', word: 'door.copy.curl', text: c },
+      { via: 'cli', word: 'door.copy.cli', text: l },
+    ].filter((d) => d.text);
   if (row === 'count') {
     const r = node.recheck;
     if (!r || !r.cli) return [];
@@ -75,18 +89,47 @@ export function copyDoors(kind, node, ctx = {}) {
   const repoArg = node.repo ? { repo: node.repo } : {};
   const repoQ = node.repo ? '&repo=' + encodeURIComponent(node.repo) : '';
   const repoF = node.repo ? ' --repo ' + shellQuote(node.repo) : '';
-  if (row === 'tour') return out(mcp('tour', { target: id, ...repoArg }), curl(origin, '/api/tour?' + (node.storyline ? 'storyline=' : 'flow=') + enc + repoQ), 'farsight tour ' + shellQuote(id) + repoF);
-  if (row === 'ask') return out(mcp('ask', { question: id, ...repoArg }), curl(origin, '/api/ask?q=' + enc + repoQ), 'farsight ask ' + shellQuote(id) + repoF);
-  if (row === 'gate') return out(mcp('gate', { node_id: id }), curl(origin, '/api/gate?node=' + enc), 'farsight impact ' + shellQuote(id) + ' --tests');
+  if (row === 'tour')
+    return out(
+      mcp('tour', { target: id, ...repoArg }),
+      curl(origin, '/api/tour?' + (node.storyline ? 'storyline=' : 'flow=') + enc + repoQ),
+      'farsight tour ' + shellQuote(id) + repoF,
+    );
+  if (row === 'ask')
+    return out(
+      mcp('ask', { question: id, ...repoArg }),
+      curl(origin, '/api/ask?q=' + enc + repoQ),
+      'farsight ask ' + shellQuote(id) + repoF,
+    );
+  if (row === 'gate')
+    return out(
+      mcp('gate', { node_id: id }),
+      curl(origin, '/api/gate?node=' + enc),
+      'farsight impact ' + shellQuote(id) + ' --tests',
+    );
   if (row === 'journey') {
     // a journey walks from its flow; a screen or a page is an entry the journey tool takes too
-    return out(mcp('journey', { entry: id }), curl(origin, '/api/journey?entry=' + enc),
-      node.kind === 'flow' || kind === 'flow' || kind === 'journey' ? 'farsight journeys' : 'farsight impact ' + shellQuote(id) + ' --flows');
+    return out(
+      mcp('journey', { entry: id }),
+      curl(origin, '/api/journey?entry=' + enc),
+      node.kind === 'flow' || kind === 'flow' || kind === 'journey'
+        ? 'farsight journeys'
+        : 'farsight impact ' + shellQuote(id) + ' --flows',
+    );
   }
-  if (row === 'test') return out(mcp('test_coverage', { test: id }), curl(origin, '/api/tests?node=' + enc), 'farsight tests list'); // str:ok a command line, not prose
+  if (row === 'test')
+    return out(mcp('test_coverage', { test: id }), curl(origin, '/api/tests?node=' + enc), 'farsight tests list'); // str:ok a command line, not prose
   if (row === 'package') {
     const name = packageName(node);
-    return out(mcp('describe_node', { node_id: id }), curl(origin, '/api/deps/where?package=' + encodeURIComponent(name)), 'farsight deps where ' + shellQuote(name)); // str:ok a command line, not prose
+    return out(
+      mcp('describe_node', { node_id: id }),
+      curl(origin, '/api/deps/where?package=' + encodeURIComponent(name)),
+      'farsight deps where ' + shellQuote(name),
+    ); // str:ok a command line, not prose
   }
-  return out(mcp('describe_node', { node_id: id }), curl(origin, '/api/impact?node=' + enc), 'farsight impact ' + shellQuote(id) + ' --tests');
+  return out(
+    mcp('describe_node', { node_id: id }),
+    curl(origin, '/api/impact?node=' + enc),
+    'farsight impact ' + shellQuote(id) + ' --tests',
+  );
 }

@@ -8,17 +8,20 @@ import { test, expect, gotoReady, openJourneyAt } from './support';
 const tip = (page: Page) => page.locator('#fs-tip');
 
 /** Identifier-shaped tokens: camelCase, PascalCase compounds, snake_case, paths, HTTP verbs, spec files, document ids. */
-const IDENTIFIER = new RegExp([
-  String.raw`\b[a-z]+[A-Z][A-Za-z0-9]*\b`,
-  String.raw`\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b`,
-  String.raw`\b[a-z0-9]+_[a-z0-9_]+\b`,
-  String.raw`\b[A-Z0-9]+_[A-Z0-9_]+\b`,
-  String.raw`(?:^|[\s(])\/[\w.:{}\-]+`,
-  String.raw`\b(?:GET|POST|PUT|PATCH|DELETE)\b`,
-  String.raw`\b[\w-]+\.(?:spec|test|pw)\b`,
-  String.raw`\.(?:tsx?|jsx?|mjs|json)\b`,
-  String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+`,
-].join('|'), 'g');
+const IDENTIFIER = new RegExp(
+  [
+    String.raw`\b[a-z]+[A-Z][A-Za-z0-9]*\b`,
+    String.raw`\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b`,
+    String.raw`\b[a-z0-9]+_[a-z0-9_]+\b`,
+    String.raw`\b[A-Z0-9]+_[A-Z0-9_]+\b`,
+    String.raw`(?:^|[\s(])\/[\w.:{}\-]+`,
+    String.raw`\b(?:GET|POST|PUT|PATCH|DELETE)\b`,
+    String.raw`\b[\w-]+\.(?:spec|test|pw)\b`,
+    String.raw`\.(?:tsx?|jsx?|mjs|json)\b`,
+    String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+`,
+  ].join('|'),
+  'g',
+);
 
 const FLOW = encodeURIComponent('invoice-app::flow::billing-cycle');
 
@@ -50,7 +53,9 @@ test.describe('journey numbers', () => {
    * @covers packages/server/public/app/lib/journey-draw.js::jrnCountedHtml
    * @covers GET /api/journey
    */
-  test('every number on the table\'s head carries a tip that says what it counts, and a breakdown that adds up to it', async ({ page }) => {
+  test("every number on the table's head carries a tip that says what it counts, and a breakdown that adds up to it", async ({
+    page,
+  }) => {
     // two registers × every tip on the head, each hovered and closed: the runs sentence and the build state added triggers
     test.setTimeout(75_000);
     for (const lens of ['hybrid', 'business'] as const) {
@@ -68,12 +73,16 @@ test.describe('journey numbers', () => {
         await el.hover();
         await expect(tip(page)).toBeVisible();
         await expect(tip(page)).toContainText(/Counts|What it counts|seen|declared|reached|verified/i);
-        const hasSplit = (await tip(page).locator('.tip-cap').first().count()) > 0
-          && /split/i.test(await tip(page).locator('.tip-cap').first().innerText());
+        const hasSplit =
+          (await tip(page).locator('.tip-cap').first().count()) > 0 &&
+          /split/i.test(await tip(page).locator('.tip-cap').first().innerText());
         if (hasSplit) {
           const parts = (await tip(page).locator('.tip-tbl').first().locator('td.n').allTextContents()).map(Number);
           const total = Number((/\d+/.exec(text) || ['NaN'])[0]);
-          expect(parts.reduce((a, b) => a + b, 0), `the breakdown of "${text}" adds up to it`).toBe(total);
+          expect(
+            parts.reduce((a, b) => a + b, 0),
+            `the breakdown of "${text}" adds up to it`,
+          ).toBe(total);
           split++;
         }
         if (lens === 'business') await expect(tip(page)).not.toContainText('/api/');
@@ -94,7 +103,9 @@ test.describe('journey numbers', () => {
    * @covers packages/server/public/app/lib/journey-draw.js::jrnMarkerText
    * @covers packages/server/public/app/surfaces/journey-drill.js::jrnDrillBoxHtml
    */
-  test('the business register prints no identifier on the street, at any screen, on the table or at any action', async ({ page }) => {
+  test('the business register prints no identifier on the street, at any screen, on the table or at any action', async ({
+    page,
+  }) => {
     const found: Record<string, string[]> = {};
     const check = async (where: string, root: string) => {
       const hits = [...new Set((await visibleWords(page, root)).match(IDENTIFIER) || [])];
@@ -106,7 +117,18 @@ test.describe('journey numbers', () => {
     // every screen stop
     const screens = await page.locator('.map-scr[data-flow="invoice-app::flow::billing-cycle"]').count();
     for (let i = 1; i <= screens; i++) {
-      await gotoReady(page, '#/map/' + FLOW + '?node=' + encodeURIComponent(await page.locator('.map-scr[data-flow="invoice-app::flow::billing-cycle"][data-index="' + (i - 1) + '"]').getAttribute('data-node') || '') + '&lens=business');
+      await gotoReady(
+        page,
+        '#/map/' +
+          FLOW +
+          '?node=' +
+          encodeURIComponent(
+            (await page
+              .locator('.map-scr[data-flow="invoice-app::flow::billing-cycle"][data-index="' + (i - 1) + '"]')
+              .getAttribute('data-node')) || '',
+          ) +
+          '&lens=business',
+      );
       await expect(page.locator('.mp')).toBeVisible();
       await check('screen ' + i, '.map-prop-host');
       if (i < screens) await openJourneyAt(page, 'screens', 'business');
@@ -119,7 +141,10 @@ test.describe('journey numbers', () => {
     await gotoReady(page, '#/map/' + FLOW + '?screen=1&action=1&lens=business');
     await expect(page.locator('.map-act')).toBeVisible();
     for (let k = 0; k < cols.length; k++) {
-      if (k) { await page.keyboard.press(']'); await expect.poll(() => page.evaluate(() => (window as any).S.jrnAction)).toBe(k); }
+      if (k) {
+        await page.keyboard.press(']');
+        await expect.poll(() => page.evaluate(() => (window as any).S.jrnAction)).toBe(k);
+      }
       await expect(page.locator('.map-act #jrn-dlanes .jrn-bx, .map-act #jrn-dlanes .jrn-seam').first()).toBeVisible();
       await check('action ' + (k + 1), '.map-act');
     }
@@ -133,7 +158,9 @@ test.describe('one word per position', () => {
    * @covers packages/server/public/app/lib/journey-draw.js::jrnStopText
    * @covers packages/server/public/app/lib/journey-draw.js::jrnSheetHtml
    */
-  test('the table counts its columns as stops, and the dock names the stop a part sits in — never a walk index', async ({ page }) => {
+  test('the table counts its columns as stops, and the dock names the stop a part sits in — never a walk index', async ({
+    page,
+  }) => {
     // swarm 2026-10-05 (six roles): *5 actions* above six columns; the drawer's *STEP 232*
     await openJourneyAt(page, 'table', 'hybrid');
     const cols = await page.locator('.map-table .jrn-sbh').count();
@@ -161,7 +188,9 @@ test.describe('the table from the keyboard', () => {
    * @covers packages/server/public/app/keymap.js::onKeydown
    * @covers packages/server/public/app/surfaces/map.js::mapEscape
    */
-  test('Esc with the scope menu open closes the menu, not the table — then up a stop to the board, no hidden filter', async ({ page }) => {
+  test('Esc with the scope menu open closes the menu, not the table — then up a stop to the board, no hidden filter', async ({
+    page,
+  }) => {
     await openJourneyAt(page, 'table');
     const table = page.locator('.map-table .jrn-sheet');
     await page.getByRole('button', { name: 'Source scope' }).click();
@@ -205,7 +234,10 @@ async function absentCells(page: Page): Promise<Cells> {
       const el = cell as HTMLElement;
       const mk = el.querySelector('.jrn-mk.none[data-absent]') as HTMLElement | null;
       if (!mk) return;
-      out[el.dataset.seg + ':' + el.dataset.mo + ':' + el.dataset.sys] = { w: mk.dataset.absent!, text: mk.textContent!.trim() };
+      out[el.dataset.seg + ':' + el.dataset.mo + ':' + el.dataset.sys] = {
+        w: mk.dataset.absent!,
+        text: mk.textContent!.trim(),
+      };
     });
     return out;
   });
@@ -218,7 +250,7 @@ test.describe('journey absence words', () => {
    * @covers packages/server/public/app/lib/journey-draw.js::jrnSheetCellHtml
    * @covers GET /api/journey
    */
-  test('the table prints the core\'s absence word for every empty cell, in both registers', async ({ page }) => {
+  test("the table prints the core's absence word for every empty cell, in both registers", async ({ page }) => {
     const words: Record<string, Cells> = {};
     for (const lens of ['hybrid', 'business'] as const) {
       await openJourneyAt(page, 'table', lens);
@@ -243,7 +275,9 @@ test.describe('journey absence words', () => {
    * @covers packages/server/public/app/surfaces/journey-drill.js::jrnInspHeadHtml
    * @covers GET /api/journey
    */
-  test('a step no test reaches names its own scope and the action\'s number beside it — never a bare contradiction', async ({ page }) => {
+  test("a step no test reaches names its own scope and the action's number beside it — never a bare contradiction", async ({
+    page,
+  }) => {
     await openJourneyAt(page, 'table', 'hybrid');
     // the Verified-by cell names the scope it counts over, on the chip itself (round 2026-10-10)
     const verified = page.locator('.jrn-scell.test').first();
@@ -258,8 +292,14 @@ test.describe('journey absence words', () => {
           const mo = sg.moments[k];
           const n = cov.moments[sg.index][k].counted.tests.n;
           if (!n) continue;
-          const mk = sg.markers.find((m: any) => m.moment === mo.index && (m.tier ?? 0) <= 1 && m.kind === 'step'
-            && !((J.steps[m.stepOrder].coverage || {}).tests || []).length && !(J.steps[m.stepOrder].coverageVia || []).length);
+          const mk = sg.markers.find(
+            (m: any) =>
+              m.moment === mo.index &&
+              (m.tier ?? 0) <= 1 &&
+              m.kind === 'step' &&
+              !((J.steps[m.stepOrder].coverage || {}).tests || []).length &&
+              !(J.steps[m.stepOrder].coverageVia || []).length,
+          );
           if (mk) return { order: mk.stepOrder, n, node: mk.nodeId, screen: sg.index + 1 };
         }
       }
@@ -267,7 +307,16 @@ test.describe('journey absence words', () => {
     });
     expect(pick, 'the fixture has a step no test reaches inside an action tests reach').not.toBeNull();
     // the action that holds it, at its beats, the code open: the inspector's foot names both scopes
-    await gotoReady(page, '#/map/' + FLOW + '?screen=' + pick!.screen + '&part=' + encodeURIComponent(pick!.node) + '&layout=beats&dock=right&lens=hybrid');
+    await gotoReady(
+      page,
+      '#/map/' +
+        FLOW +
+        '?screen=' +
+        pick!.screen +
+        '&part=' +
+        encodeURIComponent(pick!.node) +
+        '&layout=beats&dock=right&lens=hybrid',
+    );
     await expect(page.locator('.map-act')).toBeVisible();
     await page.evaluate((o) => (window as any).jrnSelect(o), pick!.order);
     const head = page.locator('.jrn-tfoot').filter({ hasText: 'no test is known to reach this part' }).first();

@@ -25,7 +25,9 @@ import { jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-
 import { exportToolHtml, registerExport, tableRows } from '../lib/export.js';
 
 /** A catalog word's tip, or nothing when it has no define. */
-function tipOf(key) { return key && def(key) ? defAttrs(key) : ''; }
+function tipOf(key) {
+  return key && def(key) ? defAttrs(key) : '';
+}
 
 /** The flow rows, keyed by node id, as the endpoints fill them in. */
 let ROWS = new Map();
@@ -54,11 +56,22 @@ export function mountPortfolio(route, el) {
 /** The page around the table. Its heading and standfirst are catalog words too,
  * so a register flip has to redraw them — not only the rows. */
 function shellHtml() {
-  return '<div class="set-wrap pf-wrap"><div class="pf-headrow"><h1>' + esc(t('nav.portfolio')) + '</h1>' + mapSwitchHtml() + exportToolHtml('portfolio', 'jrn-viewbtn pf-export') + '</div>'
-    + '<p class="sub">' + esc(t('portfolio.sub')) + '</p>'
-    + '<div id="pf-body"><p class="set-note">' + esc(t('portfolio.loading')) + '</p></div>'
+  return (
+    '<div class="set-wrap pf-wrap"><div class="pf-headrow"><h1>' +
+    esc(t('nav.portfolio')) +
+    '</h1>' +
+    mapSwitchHtml() +
+    exportToolHtml('portfolio', 'jrn-viewbtn pf-export') +
+    '</div>' +
+    '<p class="sub">' +
+    esc(t('portfolio.sub')) +
+    '</p>' +
+    '<div id="pf-body"><p class="set-note">' +
+    esc(t('portfolio.loading')) +
+    '</p></div>' +
     // the components the product can show on their own, from the story files (ADR 9)
-    + '<div id="pf-stories" data-export-skip></div></div>';
+    '<div id="pf-stories" data-export-skip></div></div>'
+  );
 }
 
 /**
@@ -68,10 +81,24 @@ function shellHtml() {
  * @group Portfolio
  */
 function mapSwitchHtml() {
-  return '<span class="hud-label" id="pf-viewsw-label"' + tipOf('map.portfolio.view') + '>' + esc(t('map.portfolio.view')) + '</span>'
-    + '<span class="jrn-viewsw pf-viewsw" role="group" aria-labelledby="pf-viewsw-label">'
-    + '<button type="button" class="jrn-viewbtn on" aria-pressed="true"' + tipOf('map.portfolio.table') + '>' + esc(t('map.portfolio.table')) + '</button>'
-    + '<button type="button" class="jrn-viewbtn" aria-pressed="false" data-go="map" onclick="location.hash=\'#/map\'"' + tipOf('map.portfolio.board') + '>' + esc(t('map.portfolio.board')) + '</button></span>';
+  return (
+    '<span class="hud-label" id="pf-viewsw-label"' +
+    tipOf('map.portfolio.view') +
+    '>' +
+    esc(t('map.portfolio.view')) +
+    '</span>' +
+    '<span class="jrn-viewsw pf-viewsw" role="group" aria-labelledby="pf-viewsw-label">' +
+    '<button type="button" class="jrn-viewbtn on" aria-pressed="true"' +
+    tipOf('map.portfolio.table') +
+    '>' +
+    esc(t('map.portfolio.table')) +
+    '</button>' +
+    '<button type="button" class="jrn-viewbtn" aria-pressed="false" data-go="map" onclick="location.hash=\'#/map\'"' +
+    tipOf('map.portfolio.board') +
+    '>' +
+    esc(t('map.portfolio.board')) +
+    '</button></span>'
+  );
 }
 
 /**
@@ -92,9 +119,14 @@ export function portfolioRefresh(reason) {
   // true. The whole page is rewritten, not just the table — the heading and the
   // standfirst are catalog words that live outside `#pf-body`, and redrawing
   // only the rows left one register's heading over the other's table.
-  if (reason === 'lens' || reason === 'register') { el.innerHTML = shellHtml(); render(); fillStories(); return; }
+  if (reason === 'lens' || reason === 'register') {
+    el.innerHTML = shellHtml();
+    render();
+    fillStories();
+    return;
+  }
   body.innerHTML = '<p class="set-note">' + esc(t('portfolio.loading')) + '</p>';
-  start();                                  // the walk loop in flight stops at its next await
+  start(); // the walk loop in flight stops at its next await
 }
 
 /** The stories catalogue under the table — its own container, so a flow row filling in does not redraw it. */
@@ -122,11 +154,16 @@ async function load(gen) {
   for (const d of Array.isArray(sources) ? sources : []) for (const s of d.surfaces || []) surfaces.push(s);
   // the tables follow the organised tree: persona → group → journeys, the order the manifests declare
   let tree = null;
-  try { tree = (await loadJourneyTree(sources)).tree; } catch { tree = treeFrom(sources); }
+  try {
+    tree = (await loadJourneyTree(sources)).tree;
+  } catch {
+    tree = treeFrom(sources);
+  }
   if (gen !== GEN) return;
   const flows = journeysInOrder(tree).map((x) => x.row);
   ROWS = new Map(flows.map((f) => [f.nodeId, { flow: f }]));
-  TREE = tree; PRODUCT_SURFACES = surfaces;
+  TREE = tree;
+  PRODUCT_SURFACES = surfaces;
   render();
   // the expensive per-flow facts, one flow at a time so the table fills in order
   for (const f of flows) {
@@ -148,8 +185,12 @@ async function fill(f, gen) {
   const [tests, journey, work] = await Promise.all([
     // the flow's coverage alone, and the walk's summary without its steps: the row prints neither the
     // catalogue nor the code (on a thousand-project workspace each full answer was hundreds of megabytes)
-    fetch('/api/tests?flow=' + encodeURIComponent(f.nodeId) + '&lean=1').then((r) => r.json()).catch(() => null),
-    fetch('/api/journey?entry=' + encodeURIComponent(f.nodeId) + '&steps=0').then((r) => r.json()).catch(() => null),
+    fetch('/api/tests?flow=' + encodeURIComponent(f.nodeId) + '&lean=1')
+      .then((r) => r.json())
+      .catch(() => null),
+    fetch('/api/journey?entry=' + encodeURIComponent(f.nodeId) + '&steps=0')
+      .then((r) => r.json())
+      .catch(() => null),
     // the trackers' items linked to this flow — asked only when a work source is configured
     flowWork(f.nodeId),
   ]);
@@ -172,7 +213,7 @@ async function fill(f, gen) {
   row.declaredNotCalled = cnt.declaredNotCalled;
   // the same numbers typed (docs/COUNTS.md): their words, scope and source travel with them
   row.counted = (journey && journey.summary && journey.summary.counted) || null;
-  if (gen !== GEN) return;                  // a walk that outlived its table writes nothing
+  if (gen !== GEN) return; // a walk that outlived its table writes nothing
   ROWS.set(f.nodeId, row);
 }
 
@@ -184,27 +225,61 @@ function render() {
   let html = '';
   if (tree.derived) html += '<p class="set-note">' + esc(t('portfolio.personaDerived')) + '</p>';
   // one table per persona → group, in the tree's order with its pin — the front door's order
-  const head = '<table class="src-table pf-table"><thead><tr>'
+  const head =
+    '<table class="src-table pf-table"><thead><tr>' +
     // every column header carries its own define, on this page: the operations
     // column's definition used to exist only on the grammar page, three clicks
     // away, and it is the one a reader puts in a deck (visual swarm 2026-09-24)
-    + ['flow', 'screens', 'api', 'tested', 'erp', 'owner'].map((c) => '<th' + tipOf('portfolio.col.' + c) + '>' + esc(t('portfolio.col.' + c)) + '</th>').join('')
-    + '</tr></thead><tbody>';
+    ['flow', 'screens', 'api', 'tested', 'erp', 'owner']
+      .map((c) => '<th' + tipOf('portfolio.col.' + c) + '>' + esc(t('portfolio.col.' + c)) + '</th>')
+      .join('') +
+    '</tr></thead><tbody>';
   for (const p of tree.personas) {
-    html += '<div class="set-sec pf-persona" data-persona="' + esc(p.id) + '"><h2>' + esc(jrnPersonaName(p))
-      + ' <span class="pf-count">' + jrnOrgCountsHtml(p.counts) + '</span></h2>';
+    html +=
+      '<div class="set-sec pf-persona" data-persona="' +
+      esc(p.id) +
+      '"><h2>' +
+      esc(jrnPersonaName(p)) +
+      ' <span class="pf-count">' +
+      jrnOrgCountsHtml(p.counts) +
+      '</span></h2>';
     const heads = p.groups.length > 1;
     for (const g of p.groups) {
-      if (heads) html += '<h3 class="pf-group hud-label" data-group="' + esc(g.id) + '">' + esc(jrnGroupName(g)) + ' <span class="pf-count">' + jrnOrgCountsHtml(g.counts) + '</span></h3>';
-      html += head + g.journeys.map((f) => rowHtml(ROWS.has(f.nodeId) ? ROWS.get(f.nodeId).flow : f, !!f.pinned)).join('') + '</tbody></table>';
+      if (heads)
+        html +=
+          '<h3 class="pf-group hud-label" data-group="' +
+          esc(g.id) +
+          '">' +
+          esc(jrnGroupName(g)) +
+          ' <span class="pf-count">' +
+          jrnOrgCountsHtml(g.counts) +
+          '</span></h3>';
+      html +=
+        head +
+        g.journeys.map((f) => rowHtml(ROWS.has(f.nodeId) ? ROWS.get(f.nodeId).flow : f, !!f.pinned)).join('') +
+        '</tbody></table>';
     }
     html += '</div>';
   }
   if (surfaces.length) {
-    html += '<div class="set-sec"><h2>' + esc(t('portfolio.surfaces')) + '</h2><table class="src-table pf-table"><tbody>'
-      + surfaces.map((s) => '<tr><td>' + esc(s.name || s.id) + '</td><td>' + esc(statusWord(s.status)) + '</td>'
-        + '<td>' + esc(currentLens() === 'business' ? unCode(s.description || '') : (s.description || '')) + '</td></tr>').join('')
-      + '</tbody></table></div>';
+    html +=
+      '<div class="set-sec"><h2>' +
+      esc(t('portfolio.surfaces')) +
+      '</h2><table class="src-table pf-table"><tbody>' +
+      surfaces
+        .map(
+          (s) =>
+            '<tr><td>' +
+            esc(s.name || s.id) +
+            '</td><td>' +
+            esc(statusWord(s.status)) +
+            '</td>' +
+            '<td>' +
+            esc(currentLens() === 'business' ? unCode(s.description || '') : s.description || '') +
+            '</td></tr>',
+        )
+        .join('') +
+      '</tbody></table></div>';
   }
   body.innerHTML = html;
 }
@@ -226,18 +301,42 @@ function rowHtml(f, pinned) {
   const row = ROWS.get(f.nodeId) || {};
   const built = f.built != null ? f.built : 0;
   const total = f.total != null ? f.total : (f.screens || []).length;
-  const key = total > 0 && built >= total ? 'journey.status.built'
-    : built > 0 ? 'journey.status.partly' : 'journey.status.designedNotBuilt';
+  const key =
+    total > 0 && built >= total
+      ? 'journey.status.built'
+      : built > 0
+        ? 'journey.status.partly'
+        : 'journey.status.designedNotBuilt';
   const status = t(key).replace('{n}', built).replace('{m}', total);
-  return '<tr' + (pinned ? ' class="pinned"' : '') + '>'
-    + '<td><a href="#/map/' + encodeURIComponent(f.nodeId) + '">' + esc(f.name) + '</a>'
-    + (pinned ? ' <span class="pf-pin">' + esc(t('portfolio.pinned')) + '</span>' : '') + flowChipHtml(row.work) + '</td>'
-    + '<td>' + builtHtml(row, status, built, total) + '</td>'
-    + '<td>' + opsCell(row) + '</td>'
-    + '<td>' + testedCell(row) + '</td>'
-    + '<td>' + erpCell(row) + '</td>'
-    + '<td class="dim">' + esc(f.owner || t('portfolio.notDeclared')) + '</td>'
-    + '</tr>';
+  return (
+    '<tr' +
+    (pinned ? ' class="pinned"' : '') +
+    '>' +
+    '<td><a href="#/map/' +
+    encodeURIComponent(f.nodeId) +
+    '">' +
+    esc(f.name) +
+    '</a>' +
+    (pinned ? ' <span class="pf-pin">' + esc(t('portfolio.pinned')) + '</span>' : '') +
+    flowChipHtml(row.work) +
+    '</td>' +
+    '<td>' +
+    builtHtml(row, status, built, total) +
+    '</td>' +
+    '<td>' +
+    opsCell(row) +
+    '</td>' +
+    '<td>' +
+    testedCell(row) +
+    '</td>' +
+    '<td>' +
+    erpCell(row) +
+    '</td>' +
+    '<td class="dim">' +
+    esc(f.owner || t('portfolio.notDeclared')) +
+    '</td>' +
+    '</tr>'
+  );
 }
 
 /**
@@ -247,8 +346,15 @@ function rowHtml(f, pinned) {
  */
 function builtHtml(row, status, built, total) {
   const c = row.counted && row.counted.built;
-  const attrs = c ? countedHtml(c, '/api/journey', { words: status })
-    : '<span' + plainTip(built, 'journey.biz.countBuilt', 'journey.scopeAll', '/api/design', null, 'journey.status.partly', { m: total }) + '>' + esc(status) + '</span>';
+  const attrs = c
+    ? countedHtml(c, '/api/journey', { words: status })
+    : '<span' +
+      plainTip(built, 'journey.biz.countBuilt', 'journey.scopeAll', '/api/design', null, 'journey.status.partly', {
+        m: total,
+      }) +
+      '>' +
+      esc(status) +
+      '</span>';
   return attrs;
 }
 
@@ -272,16 +378,30 @@ function opsCell(row) {
   // words for one fact (the retired `portfolio.opsDeclaredOnly` was the second)
   // the typed counts carry the words the journey header prints for the same numbers
   const k = row.counted || {};
-  const sub = only ? '<span class="pf-sub">' + (k.declaredNotCalled ? countedHtml(k.declaredNotCalled, '/api/journey')
-    : '<span' + plainTip(only, 'journey.countDeclaredOnly', 'journey.scopeAll', '/api/journey') + '>'
-      + esc(t('journey.countDeclaredOnly').replace('{n}', String(only))) + '</span>') + '</span>' : '';
+  const sub = only
+    ? '<span class="pf-sub">' +
+      (k.declaredNotCalled
+        ? countedHtml(k.declaredNotCalled, '/api/journey')
+        : '<span' +
+          plainTip(only, 'journey.countDeclaredOnly', 'journey.scopeAll', '/api/journey') +
+          '>' +
+          esc(t('journey.countDeclaredOnly').replace('{n}', String(only))) +
+          '</span>') +
+      '</span>'
+    : '';
   if (!row.called) {
     const word = only ? 'journey.absent.notBuilt' : 'journey.absent.noneIndexed';
     return '<span class="dim"' + tipOf(word) + '>' + esc(t(word)) + '</span>' + sub;
   }
-  return (k.actions ? countedHtml(k.actions, '/api/journey')
-    : '<span' + plainTip(row.called, 'portfolio.opsCalled', 'journey.scopeAll', '/api/journey') + '>'
-      + esc(t('portfolio.opsCalled').replace('{n}', String(row.called))) + '</span>') + sub;
+  return (
+    (k.actions
+      ? countedHtml(k.actions, '/api/journey')
+      : '<span' +
+        plainTip(row.called, 'portfolio.opsCalled', 'journey.scopeAll', '/api/journey') +
+        '>' +
+        esc(t('portfolio.opsCalled').replace('{n}', String(row.called))) +
+        '</span>') + sub
+  );
 }
 
 // the chip's class per evidence class; its tip is the word's define (tipOf)
@@ -309,11 +429,24 @@ function testedCell(row) {
   const counts = c.counts && c.counts.tests ? c.counts.tests : null;
   const levels = testCountsHtml(c, counts);
   const chip = c.chip && c.chip !== 'none' ? c.chip : null;
-  if (!chip) return '<span class="dim"' + tipOf('journey.absent.noneIndexed') + '>' + esc(t('journey.absent.noneIndexed')) + '</span>';
+  if (!chip)
+    return (
+      '<span class="dim"' + tipOf('journey.absent.noneIndexed') + '>' + esc(t('journey.absent.noneIndexed')) + '</span>'
+    );
   if (c.sharedEvidence) {
-    return '<span class="dim"' + tipOf('journey.absent.notBuilt') + '>' + esc(t('journey.absent.notBuilt')) + '</span>'
-      + '<span class="pf-sub"' + tipOf('journey.evidenceShared') + '>' + esc(t('journey.evidenceShared')) + '</span>'
-      + levels;
+    return (
+      '<span class="dim"' +
+      tipOf('journey.absent.notBuilt') +
+      '>' +
+      esc(t('journey.absent.notBuilt')) +
+      '</span>' +
+      '<span class="pf-sub"' +
+      tipOf('journey.evidenceShared') +
+      '>' +
+      esc(t('journey.evidenceShared')) +
+      '</span>' +
+      levels
+    );
   }
   // the word comes from the fold, not from this cell: an observed class carried
   // only by coverage reports says *seen by a coverage run*, which is what the
@@ -324,9 +457,20 @@ function testedCell(row) {
   // the row's tip is the journey chip's: the word, the run behind it, and — where the word
   // says *stale* or the run is current — the freshness sentence naming both sides (finding 2)
   const pb = builtOnlyHtml(ev);
-  return pb.before + '<span class="' + EV_CLS[cls] + pb.cls + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: c.observation || null, fresh: c.freshness || null } }) + '>'
-    + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : '') + esc(t(ev.key)) + '</span>' + pb.after
-    + levels;
+  return (
+    pb.before +
+    '<span class="' +
+    EV_CLS[cls] +
+    pb.cls +
+    '"' +
+    tipAttrs({ id: 'jrnEvidence', args: { ev, obs: c.observation || null, fresh: c.freshness || null } }) +
+    '>' +
+    (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : '') +
+    esc(t(ev.key)) +
+    '</span>' +
+    pb.after +
+    levels
+  );
 }
 
 /**
@@ -341,23 +485,43 @@ function testCountsHtml(c, counts) {
   const api = '/api/tests';
   if (k && k.e2e) {
     const biz = currentLens() === 'business';
-    const parts = (biz ? [k.tests, k.e2e] : [k.e2e, k.unit, k.integration]).filter(Boolean).map((x) => countedHtml(x, api)).filter(Boolean);
+    const parts = (biz ? [k.tests, k.e2e] : [k.e2e, k.unit, k.integration])
+      .filter(Boolean)
+      .map((x) => countedHtml(x, api))
+      .filter(Boolean);
     const rows = (k.e2e.breakdown || []).map((p) => [countWords(p.key, p.n).replace(String(p.n), '').trim(), p.n]);
     const seen = k.e2e.breakdown && k.e2e.breakdown.find((p) => p.key === 'count.part.observed');
     // an end-to-end case the report says passed, which declares something on this
     // journey: observed by its own declaration, said as that — `0 seen in a run`
     // alone read as a contradiction of the Tests card's `89 passed` (story swarm 2026-09-25)
     const decl = k.e2e.breakdown && k.e2e.breakdown.find((p) => p.key === 'count.part.declaredPassed');
-    const declHtml = decl && decl.n ? '<span class="pf-sub"' + plainTip(decl.n, 'surf.e2ePassedDeclared', 'journey.scopeAll', api, rows, 'count.part.declaredPassed') + '>'
-      + esc(countWords('surf.e2ePassedDeclared', decl.n)) + '</span>' : '';
-    const seenHtml = seen && (seen.n || !declHtml) ? '<span class="pf-sub"' + plainTip(seen.n, 'surf.e2eSeen', 'journey.scopeAll', api,
-      rows, 'count.part.observed') + '>'
-      + esc(countWords('surf.e2eSeen', seen.n)) + '</span>' : '';
+    const declHtml =
+      decl && decl.n
+        ? '<span class="pf-sub"' +
+          plainTip(decl.n, 'surf.e2ePassedDeclared', 'journey.scopeAll', api, rows, 'count.part.declaredPassed') +
+          '>' +
+          esc(countWords('surf.e2ePassedDeclared', decl.n)) +
+          '</span>'
+        : '';
+    const seenHtml =
+      seen && (seen.n || !declHtml)
+        ? '<span class="pf-sub"' +
+          plainTip(seen.n, 'surf.e2eSeen', 'journey.scopeAll', api, rows, 'count.part.observed') +
+          '>' +
+          esc(countWords('surf.e2eSeen', seen.n)) +
+          '</span>'
+        : '';
     return '<span class="pf-sub">' + parts.join(' · ') + '</span>' + declHtml + seenHtml;
   }
-  return counts ? '<span class="pf-sub">' + esc(t('journey.testsE2e').replace('{n}', counts.e2e || 0)) + ' · '
-    + esc(t('journey.testsUnit').replace('{n}', counts.unit || 0)) + ' · '
-    + esc(t('journey.testsIntegration').replace('{n}', counts.integration || 0)) + '</span>' : '';
+  return counts
+    ? '<span class="pf-sub">' +
+        esc(t('journey.testsE2e').replace('{n}', counts.e2e || 0)) +
+        ' · ' +
+        esc(t('journey.testsUnit').replace('{n}', counts.unit || 0)) +
+        ' · ' +
+        esc(t('journey.testsIntegration').replace('{n}', counts.integration || 0)) +
+        '</span>'
+    : '';
 }
 
 function erpCell(row) {
@@ -365,11 +529,14 @@ function erpCell(row) {
   if (row.erp) return esc(t('portfolio.erpYes').replace('{via}', row.erp.label));
   // nothing is built, so the walk reaches nothing: that is "not built", not a
   // statement that the design has no hand-off
-  if (row.flow && !(row.flow.built || 0)) return '<span class="dim"' + tipOf('journey.status.notBuilt') + '>' + esc(t('journey.status.notBuilt')) + '</span>';
+  if (row.flow && !(row.flow.built || 0))
+    return '<span class="dim"' + tipOf('journey.status.notBuilt') + '>' + esc(t('journey.status.notBuilt')) + '</span>';
   // the spec declares an approval the code has not built: that is the hand-off, unbuilt
   const approval = (row.declaredOnly || []).find((d) => /approve|post|sync/i.test(d.op || ''));
   if (approval) return '<span class="warn">' + esc(t('portfolio.erpDeclared')) + '</span>';
-  return '<span class="dim"' + tipOf('journey.absent.notInvolved') + '>' + esc(t('journey.absent.notInvolved')) + '</span>';
+  return (
+    '<span class="dim"' + tipOf('journey.absent.notInvolved') + '>' + esc(t('journey.absent.notInvolved')) + '</span>'
+  );
 }
 
 /**
@@ -383,10 +550,14 @@ function portfolioPicture() {
   return el ? { el, title: t('export.board.all') } : null;
 }
 registerExport('portfolio', portfolioPicture, {
-  csv: () => tableRows(document.querySelector('.pf-wrap') || document.body, {
-    table: '.pf-persona table.pf-table',
-    sections: [{ label: t('export.col.persona'), around: '.pf-persona', head: 'h2' }, { label: t('export.col.group'), before: '.pf-group' }],
-  }),
+  csv: () =>
+    tableRows(document.querySelector('.pf-wrap') || document.body, {
+      table: '.pf-persona table.pf-table',
+      sections: [
+        { label: t('export.col.persona'), around: '.pf-persona', head: 'h2' },
+        { label: t('export.col.group'), before: '.pf-group' },
+      ],
+    }),
 });
 
 expose({ mountPortfolio });

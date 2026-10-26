@@ -449,7 +449,15 @@ export interface TestsMeta {
    * older graph has only `blindSpots`.
    */
   gaps?: {
-    kind: 'missing-artefact' | 'unreadable' | 'empty' | 'unresolved-claim' | 'unjoined-each' | 'no-digest' | 'digest-changed' | 'no-config';
+    kind:
+      | 'missing-artefact'
+      | 'unreadable'
+      | 'empty'
+      | 'unresolved-claim'
+      | 'unjoined-each'
+      | 'no-digest'
+      | 'digest-changed'
+      | 'no-config';
     level?: string;
     reportKind?: 'results' | 'coverage';
     glob?: string;
@@ -587,7 +595,12 @@ export interface StoriesMeta {
   /** components that carry at least one story */
   components: number;
   /** story files whose stories reached no node — kept, never dropped, so a reader can fix the name */
-  unresolved: { file: string; reason: 'no-component' | 'component-unresolved' | 'unparsed'; component?: string; stories: number }[];
+  unresolved: {
+    file: string;
+    reason: 'no-component' | 'component-unresolved' | 'unparsed';
+    component?: string;
+    stories: number;
+  }[];
 }
 
 /** What the store pass read, per repo (parsers/src/stores.ts) — the evidence behind each table's `store`, and what named nothing. */
@@ -761,17 +774,31 @@ export interface ProjectsMeta {
  * (by name, the part before `: `, or node id) that sign this persona in, so an identity guard a screen's code meets
  * names its persona.
  */
-export interface JourneyPersonaDecl { id: string; name: string; description?: string; routes?: string[]; signsInWith?: string[] }
+export interface JourneyPersonaDecl {
+  id: string;
+  name: string;
+  description?: string;
+  routes?: string[];
+  signsInWith?: string[];
+}
 /** Where a screen's persona came from, strongest first: its own manifest row, a persona's `routes`, the identity guard its code meets, its journey. */
 export type PersonaFrom = 'screen' | 'routes' | 'guard' | 'journey';
 /** A group of journeys under a persona; with `persona` it exists under that persona only. */
-export interface JourneyGroupDecl { id: string; name: string; description?: string; persona?: string }
+export interface JourneyGroupDecl {
+  id: string;
+  name: string;
+  description?: string;
+  persona?: string;
+}
 /**
  * A storyline — a named chain of journeys across features and personas (round-2026-10-05 §2): the whole life of
  * one business thing, an invoice from upload to payment. `journeys` are flow ids of the same source, in order.
  */
 export interface JourneyStorylineDecl {
-  id: string; name: string; description?: string; journeys: (string | JourneyStorylineEntryDecl)[];
+  id: string;
+  name: string;
+  description?: string;
+  journeys: (string | JourneyStorylineEntryDecl)[];
   /** the lanes the swimlane layout names or overrides (round 2026-10-10 §2) — derived lanes draw without them */
   lanes?: JourneyStorylineLaneDecl[];
   /** hand-offs the swimlane layout draws when the graph finds both ends (round 2026-10-10 §2) */
@@ -783,25 +810,52 @@ export interface JourneyStorylineDecl {
  * `name` replaces the lane's word, `surface` is a second line (where that person works). Lanes are derived from the
  * graph; an entry only names, orders or overrides one — an entry the graph cannot find is a note, never a lane.
  */
-export interface JourneyStorylineLaneDecl { id: string; persona?: string; store?: string; surface?: string; name?: string }
+export interface JourneyStorylineLaneDecl {
+  id: string;
+  persona?: string;
+  store?: string;
+  surface?: string;
+  name?: string;
+}
 /**
  * A hand-off the swimlane layout draws (round 2026-10-10 §2): `from` / `to` are a lane id or a screen of a journey of
  * the storyline written `<journey id>#<n>` (its n-th screen, 1-based). `moves` — the screen moves the record into
  * `status` in a store lane; `seen` — a screen in another lane reads the record in `status`. Drawn only when the graph
  * finds both ends; otherwise a note.
  */
-export interface JourneyStorylineHandoffDecl { from: string; to: string; kind: 'moves' | 'seen'; status?: string; when?: string }
+export interface JourneyStorylineHandoffDecl {
+  from: string;
+  to: string;
+  kind: 'moves' | 'seen';
+  status?: string;
+  when?: string;
+}
 /**
  * One entry of a storyline's `journeys` list written as an object (swarm-fixes 2026-10-05 §6): `{ id }` alone is a
  * step like a bare id; with `branchOf` it is a **branch** — a journey that leaves the chain at that step only when
  * `when` holds (a correction, a rejection, a hold), and comes back at `rejoins` when it gives one. A branch is a fact
  * the design declares, never guessed from the code.
  */
-export interface JourneyStorylineEntryDecl { id: string; branchOf?: string; when?: string; rejoins?: string }
+export interface JourneyStorylineEntryDecl {
+  id: string;
+  branchOf?: string;
+  when?: string;
+  rejoins?: string;
+}
 /** A declared branch of a storyline, its ids resolved to flow ids the source declares. */
-export interface JourneyStorylineBranch { id: string; branchOf: string; when: string; rejoins?: string }
+export interface JourneyStorylineBranch {
+  id: string;
+  branchOf: string;
+  when: string;
+  rejoins?: string;
+}
 /** A config entry that places a flow a manifest declared: only the fields it gives override the manifest's. */
-export interface JourneyFlowPlacement { id: string; persona?: string | string[]; group?: string; order?: number }
+export interface JourneyFlowPlacement {
+  id: string;
+  persona?: string | string[];
+  group?: string;
+  order?: number;
+}
 
 /**
  * How one source's journeys are organised — `GraphFragment.meta.journeys`, folded at ingest from every
@@ -810,7 +864,15 @@ export interface JourneyFlowPlacement { id: string; persona?: string | string[];
  */
 export interface JourneysMeta {
   /** declared personas in the order they are shown; `from` = the manifest or config path that declared it (the config when it named it) */
-  personas: { id: string; name: string; description?: string; declared: boolean; from: string; routes?: string[]; signsInWith?: string[] }[];
+  personas: {
+    id: string;
+    name: string;
+    description?: string;
+    declared: boolean;
+    from: string;
+    routes?: string[];
+    signsInWith?: string[];
+  }[];
   groups: { id: string; name: string; description?: string; persona?: string; declared: boolean; from: string }[];
   /** the config's placements, by flow id — only flows a manifest declared */
   flows: Record<string, { persona?: string | string[]; group?: string; order?: number; from: string; index: number }>;
@@ -820,13 +882,18 @@ export interface JourneysMeta {
    * graph ingested before storylines existed.
    */
   storylines?: {
-    id: string; name: string; description?: string; journeys: string[];
+    id: string;
+    name: string;
+    description?: string;
+    journeys: string[];
     /** the branches it declares, in the order written: each leaves the chain at a step of `journeys` (absent: none) */
     branches?: JourneyStorylineBranch[];
     /** the lanes and hand-offs the swimlane layout names (absent: none — every lane is derived) */
     lanes?: JourneyStorylineLaneDecl[];
     handoffs?: JourneyStorylineHandoffDecl[];
-    declared: true; from: string; notes?: string[];
+    declared: true;
+    from: string;
+    notes?: string[];
   }[];
   /** one sentence per thing set aside (a config flow id no manifest declares) */
   notes: string[];
@@ -914,10 +981,16 @@ export interface LifecycleSource {
  * record's status — the action itself, never a gate on itself.
  */
 export type GateClass =
-  | 'identity' | 'authorisation' | 'record-state' | 'completeness'
-  | 'integrity' | 'data-protection'
-  | 'input' | 'platform'
-  | 'configuration' | 'action-gate';
+  | 'identity'
+  | 'authorisation'
+  | 'record-state'
+  | 'completeness'
+  | 'integrity'
+  | 'data-protection'
+  | 'input'
+  | 'platform'
+  | 'configuration'
+  | 'action-gate';
 /** Who a gate matters to: `business` + `policy` are what the business register lists, `technical` folds. */
 export type GateTier = 'business' | 'policy' | 'technical';
 
@@ -1107,7 +1180,12 @@ export interface ConfigMeta {
   /** root first, then by folder depth, then by path; `fields` = the keys the file gave, `ignored` = the ones not applied */
   files: { path: string; dir: string; root: boolean; fields: string[]; ignored: string[] }[];
   /** two files said different things about one key; `kept` is the file whose word stands */
-  conflicts: { kind: 'glossary' | 'guard' | 'external' | 'store' | 'tag' | 'lifecycle'; key: string; files: string[]; kept: string }[];
+  conflicts: {
+    kind: 'glossary' | 'guard' | 'external' | 'store' | 'tag' | 'lifecycle';
+    key: string;
+    files: string[];
+    kept: string;
+  }[];
   /** unreadable files, ignored root-only fields, paths that left the source */
   notes: string[];
   /**
@@ -1128,7 +1206,20 @@ export interface GraphFragment {
    * (`sourceHash`), and a hash over their contents (`sourceDigest`) — the digest is what a
    * reporter must stamp for "unchanged since the run" to be provable (files.ts contentDigest).
    */
-  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta; packages?: PackagesMeta; projects?: ProjectsMeta; config?: ConfigMeta; journeys?: JourneysMeta; decisions?: DecisionsMeta; routes?: RoutesMeta };
+  meta?: {
+    files: number;
+    sourceHash: string;
+    sourceDigest?: string;
+    tests?: TestsMeta;
+    stories?: StoriesMeta;
+    stores?: StoresMeta;
+    packages?: PackagesMeta;
+    projects?: ProjectsMeta;
+    config?: ConfigMeta;
+    journeys?: JourneysMeta;
+    decisions?: DecisionsMeta;
+    routes?: RoutesMeta;
+  };
   /** OpenAPI documents that were found but could not be read — reported, never fatal. */
   specErrors?: string[];
   /** true when a farsight.config.json (at the root or nested) was applied by ingestRepo */

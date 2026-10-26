@@ -206,10 +206,7 @@ export async function readModelHubState(dir = resolveModelHubDir()): Promise<Mod
   const registry = readRegistry(dir);
   const events = tailEvents(dir);
 
-  const [installed, loaded] = await Promise.all([
-    pollOllamaNames('/api/tags'),
-    pollOllamaNames('/api/ps'),
-  ]);
+  const [installed, loaded] = await Promise.all([pollOllamaNames('/api/tags'), pollOllamaNames('/api/ps')]);
 
   // per-tool and per-model start/end tracking from the event stream
   const tools: Record<string, Activity> = {};

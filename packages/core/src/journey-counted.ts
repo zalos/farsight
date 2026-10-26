@@ -88,20 +88,33 @@ type TieredGate = { name: string; kind?: 'guard' | 'rule'; tier?: GateTier; clas
  * policy are what matter to the business, the rest are technical. A gate from an older build carries
  * no tier and counts as business — shown, never folded away unseen.
  */
-function tierSplit(list: TieredGate[], scope: CountScope, src: string): { gatesBusiness: Counted; gatesTechnical: Counted } {
+function tierSplit(
+  list: TieredGate[],
+  scope: CountScope,
+  src: string,
+): { gatesBusiness: Counted; gatesTechnical: Counted } {
   const byKey = new Map<string, TieredGate>();
-  for (const g of list) { const k = `${g.kind ?? 'guard'}:${g.name}`; if (!byKey.has(k)) byKey.set(k, g); }
+  for (const g of list) {
+    const k = `${g.kind ?? 'guard'}:${g.name}`;
+    if (!byKey.has(k)) byKey.set(k, g);
+  }
   const all = [...byKey.values()];
   const n = (pred: (g: TieredGate) => boolean) => all.filter(pred).length;
   const technical = (g: TieredGate) => g.tier === 'technical';
   return {
-    gatesBusiness: counted(n((g) => !technical(g)), 'count.unit.gatesBusiness', scope, `${src} — tier business + policy (gateTier)`, {
-      bizUnit: 'count.unit.gatesBusiness',
-      breakdown: [
-        { key: 'count.part.tierBusiness', n: n((g) => !g.tier || g.tier === 'business') },
-        { key: 'count.part.tierPolicy', n: n((g) => g.tier === 'policy') },
-      ],
-    }),
+    gatesBusiness: counted(
+      n((g) => !technical(g)),
+      'count.unit.gatesBusiness',
+      scope,
+      `${src} — tier business + policy (gateTier)`,
+      {
+        bizUnit: 'count.unit.gatesBusiness',
+        breakdown: [
+          { key: 'count.part.tierBusiness', n: n((g) => !g.tier || g.tier === 'business') },
+          { key: 'count.part.tierPolicy', n: n((g) => g.tier === 'policy') },
+        ],
+      },
+    ),
     gatesTechnical: counted(n(technical), 'count.unit.gatesTechnical', scope, `${src} — tier technical (gateTier)`, {
       bizUnit: 'count.unit.gatesTechnical',
       breakdown: [
@@ -113,14 +126,25 @@ function tierSplit(list: TieredGate[], scope: CountScope, src: string): { gatesB
 }
 
 /** How the stops of a list of moments split: calls made, calls only declared, screens with nothing to call. */
-function stopSplit(j: Journey, moments: JourneySegment['moments']): { called: number; declared: number; noCall: number; ops: Set<string> } {
+function stopSplit(
+  j: Journey,
+  moments: JourneySegment['moments'],
+): { called: number; declared: number; noCall: number; ops: Set<string> } {
   const stepAt = new Map(j.steps.map((st) => [st.order, st] as const));
-  let called = 0, declared = 0, noCall = 0;
+  let called = 0,
+    declared = 0,
+    noCall = 0;
   const ops = new Set<string>();
   for (const mo of moments) {
-    if (mo.callStep == null) { noCall++; continue; }
+    if (mo.callStep == null) {
+      noCall++;
+      continue;
+    }
     const st = stepAt.get(mo.callStep);
-    if (st?.via === 'planned') { declared++; continue; }
+    if (st?.via === 'planned') {
+      declared++;
+      continue;
+    }
     called++;
     if (st) ops.add(st.nodeId);
   }
@@ -128,14 +152,21 @@ function stopSplit(j: Journey, moments: JourneySegment['moments']): { called: nu
 }
 
 /** The lines the *In words* view draws for one segment: its sentence (authored or the name) and its decisions in words. */
-function wordLines(sg: JourneySegment, entryBusiness: string | undefined): { sentences: number; names: number; decisions: number } {
+function wordLines(
+  sg: JourneySegment,
+  entryBusiness: string | undefined,
+): { sentences: number; names: number; decisions: number } {
   const scr = sg.screen;
-  const sentences = scr ? (scr.business ? 1 : 0) : (entryBusiness ? 1 : 0);
+  const sentences = scr ? (scr.business ? 1 : 0) : entryBusiness ? 1 : 0;
   const names = scr && !scr.business && scr.name ? 1 : 0;
   return { sentences, names, decisions: sg.decisions.filter((d) => d.class === 'business').length };
 }
 
-function inWordsCounted(lines: { sentences: number; names: number; decisions: number }, scope: 'journey.scopeAll' | 'journey.scopeHere', source: string): Counted {
+function inWordsCounted(
+  lines: { sentences: number; names: number; decisions: number },
+  scope: 'journey.scopeAll' | 'journey.scopeHere',
+  source: string,
+): Counted {
   return counted(lines.sentences + lines.names + lines.decisions, 'count.unit.inWords', scope, source, {
     bizUnit: 'count.unit.inWords',
     breakdown: [
@@ -161,14 +192,23 @@ function segmentCounted(j: Journey, sg: JourneySegment, entryBusiness: string | 
         { key: 'count.part.stopsNoCall', n: split.noCall },
       ],
     }),
-    actions: counted(split.ops.size, 'journey.countActions', here, `${s}.moments — distinct operations code calls`, { bizUnit: 'journey.biz.countActions' }),
+    actions: counted(split.ops.size, 'journey.countActions', here, `${s}.moments — distinct operations code calls`, {
+      bizUnit: 'journey.biz.countActions',
+    }),
     gates: counted(sg.counts.gates, 'journey.countGates', here, `${s}.counts.gates`, {
       bizUnit: 'journey.countGates',
-      breakdown: [{ key: 'count.part.guards', n: guards }, { key: 'count.part.rules', n: sg.gates.length - guards }],
+      breakdown: [
+        { key: 'count.part.guards', n: guards },
+        { key: 'count.part.rules', n: sg.gates.length - guards },
+      ],
     }),
     ...tierSplit(sg.gates, here, `${s}.gates`),
-    checks: counted(sg.counts.checks, 'journey.countChecks', here, `${s}.counts.checks`, { bizUnit: 'journey.countChecks' }),
-    configChecks: counted(sg.configChecks?.length ?? 0, 'count.unit.configChecks', here, `${s}.configChecks.length`, { bizUnit: 'count.unit.configChecks' }),
+    checks: counted(sg.counts.checks, 'journey.countChecks', here, `${s}.counts.checks`, {
+      bizUnit: 'journey.countChecks',
+    }),
+    configChecks: counted(sg.configChecks?.length ?? 0, 'count.unit.configChecks', here, `${s}.configChecks.length`, {
+      bizUnit: 'count.unit.configChecks',
+    }),
     decisions: counted(sg.counts.decisions, 'journey.countDecisions', here, `${s}.counts.decisions`, {
       bizUnit: 'journey.countDecisions',
       breakdown: [
@@ -176,13 +216,19 @@ function segmentCounted(j: Journey, sg: JourneySegment, entryBusiness: string | 
         { key: 'count.part.gateConditions', n: guardDecisions },
       ],
     }),
-    notInWords: counted(sg.untranslated + guardDecisions, 'count.unit.notInWords', here, `${s}.untranslated + guard-class decisions`, {
-      bizUnit: 'journey.biz.untranslated',
-      breakdown: [
-        { key: 'journey.untranslated', n: sg.untranslated },
-        { key: 'count.part.gateConditions', n: guardDecisions },
-      ],
-    }),
+    notInWords: counted(
+      sg.untranslated + guardDecisions,
+      'count.unit.notInWords',
+      here,
+      `${s}.untranslated + guard-class decisions`,
+      {
+        bizUnit: 'journey.biz.untranslated',
+        breakdown: [
+          { key: 'journey.untranslated', n: sg.untranslated },
+          { key: 'count.part.gateConditions', n: guardDecisions },
+        ],
+      },
+    ),
     inWords: inWordsCounted(wordLines(sg, entryBusiness), here, `${s}.screen + decisions`),
   };
 }
@@ -218,15 +264,24 @@ export function journeyCounted(j: Journey, summary: JourneySummary): JourneyCoun
   const built = summary.user.filter((u) => (u.designStatus ? u.designStatus === 'both' : !!u.loc)).length;
   // a named screen is reached when a segment opens on it; a screen met twice is one screen
   const named = new Set(summary.user.map((u) => u.id));
-  const reached = new Set(summary.segments.map((sg) => sg.screen?.id).filter((id): id is string => !!id && named.has(id))).size;
+  const reached = new Set(
+    summary.segments.map((sg) => sg.screen?.id).filter((id): id is string => !!id && named.has(id)),
+  ).size;
   const guardNames = new Set(summary.business.gates.map((g) => g.name)).size;
   const ruleNames = new Set(summary.business.rules.map((r) => r.name)).size;
   const guardDecisions = summary.business.untranslated.guardsUnlabelled;
   const technical = summary.business.untranslated.count;
-  const lines = summary.segments.reduce((acc, sg) => {
-    const w = wordLines(sg, summary.business.description);
-    return { sentences: acc.sentences + w.sentences, names: acc.names + w.names, decisions: acc.decisions + w.decisions };
-  }, { sentences: 0, names: 0, decisions: 0 });
+  const lines = summary.segments.reduce(
+    (acc, sg) => {
+      const w = wordLines(sg, summary.business.description);
+      return {
+        sentences: acc.sentences + w.sentences,
+        names: acc.names + w.names,
+        decisions: acc.decisions + w.decisions,
+      };
+    },
+    { sentences: 0, names: 0, decisions: 0 },
+  );
   return {
     screens: counted(k.screens, 'journey.countScreens', all, c('screens'), {
       bizUnit: 'journey.biz.countScreens',
@@ -235,20 +290,40 @@ export function journeyCounted(j: Journey, summary: JourneySummary): JourneyCoun
         { key: 'count.part.screensNotReached', n: k.screens - reached },
       ],
     }),
-    screensReached: counted(reached, 'count.unit.screensReached', all, `${SRC}.segments[].screen — distinct named screens a segment opens on`, {
-      bizUnit: 'count.unit.screensReached',
+    screensReached: counted(
+      reached,
+      'count.unit.screensReached',
+      all,
+      `${SRC}.segments[].screen — distinct named screens a segment opens on`,
+      {
+        bizUnit: 'count.unit.screensReached',
+      },
+    ),
+    built: counted(built, 'journey.countBuilt', all, `${SRC}.user — designStatus 'both', else a source location`, {
+      of: summary.user.length,
+      bizUnit: 'journey.biz.countBuilt',
     }),
-    built: counted(built, 'journey.countBuilt', all, `${SRC}.user — designStatus 'both', else a source location`, { of: summary.user.length, bizUnit: 'journey.biz.countBuilt' }),
     steps: counted(k.steps, 'journey.countSteps', all, c('steps')),
     planned: counted(k.planned, 'journey.plannedCount', all, c('planned')),
     gates: counted(k.gates, 'journey.countGates', all, c('gates'), {
       bizUnit: 'journey.countGates',
-      breakdown: [{ key: 'count.part.guards', n: guardNames }, { key: 'count.part.rules', n: ruleNames }],
+      breakdown: [
+        { key: 'count.part.guards', n: guardNames },
+        { key: 'count.part.rules', n: ruleNames },
+      ],
     }),
-    ...tierSplit([...summary.business.gates.map((g) => ({ ...g, kind: 'guard' as const })), ...summary.business.rules.map((r) => ({ ...r, kind: 'rule' as const }))],
-      all, `${SRC}.business.gates + .rules`),
+    ...tierSplit(
+      [
+        ...summary.business.gates.map((g) => ({ ...g, kind: 'guard' as const })),
+        ...summary.business.rules.map((r) => ({ ...r, kind: 'rule' as const })),
+      ],
+      all,
+      `${SRC}.business.gates + .rules`,
+    ),
     checks: counted(k.checks, 'journey.countChecks', all, c('checks'), { bizUnit: 'journey.countChecks' }),
-    configChecks: counted(k.configChecks ?? 0, 'count.unit.configChecks', all, c('configChecks'), { bizUnit: 'count.unit.configChecks' }),
+    configChecks: counted(k.configChecks ?? 0, 'count.unit.configChecks', all, c('configChecks'), {
+      bizUnit: 'count.unit.configChecks',
+    }),
     decisions: counted(k.decisions, 'journey.countDecisions', all, c('decisions'), {
       bizUnit: 'journey.countDecisions',
       breakdown: [
@@ -256,17 +331,25 @@ export function journeyCounted(j: Journey, summary: JourneySummary): JourneyCoun
         { key: 'count.part.gateConditions', n: guardDecisions },
       ],
     }),
-    notInWords: counted(technical + guardDecisions, 'count.unit.notInWords', all, `${SRC}.business.untranslated.count + .guardsUnlabelled`, {
-      bizUnit: 'journey.biz.untranslated',
-      breakdown: [
-        { key: 'journey.untranslated', n: technical },
-        { key: 'count.part.gateConditions', n: guardDecisions },
-      ],
-    }),
+    notInWords: counted(
+      technical + guardDecisions,
+      'count.unit.notInWords',
+      all,
+      `${SRC}.business.untranslated.count + .guardsUnlabelled`,
+      {
+        bizUnit: 'journey.biz.untranslated',
+        breakdown: [
+          { key: 'journey.untranslated', n: technical },
+          { key: 'count.part.gateConditions', n: guardDecisions },
+        ],
+      },
+    ),
     inWords: inWordsCounted(lines, all, `${SRC}.segments[].screen + business.decisions (class business)`),
     actions: counted(k.called, 'journey.countActions', all, c('called'), { bizUnit: 'journey.biz.countActions' }),
     again: counted(k.again, 'journey.countAgain', all, c('again'), { bizUnit: 'journey.countAgain' }),
-    declaredNotCalled: counted(k.declaredNotCalled, 'journey.countDeclaredOnly', all, c('declaredNotCalled'), { bizUnit: 'journey.countDeclaredOnly' }),
+    declaredNotCalled: counted(k.declaredNotCalled, 'journey.countDeclaredOnly', all, c('declaredNotCalled'), {
+      bizUnit: 'journey.countDeclaredOnly',
+    }),
     actionStops: counted(moments.length, 'count.unit.actionStops', all, `${SRC}.segments[].moments.length`, {
       bizUnit: 'count.unit.actionStops',
       breakdown: [
@@ -278,7 +361,9 @@ export function journeyCounted(j: Journey, summary: JourneySummary): JourneyCoun
     systems: counted(summary.systems.length, 'journey.countSystems', all, `${SRC}.systems.length`),
     stores: storesCounted(summary.system.stores ?? []),
     setup: counted(k.setup, 'journey.countSetup', all, c('setup')),
-    deferred: counted(k.deferred, 'journey.countAfterwards', all, c('deferred'), { bizUnit: 'journey.countAfterwards' }),
+    deferred: counted(k.deferred, 'journey.countAfterwards', all, c('deferred'), {
+      bizUnit: 'journey.countAfterwards',
+    }),
     repeats: counted(k.repeats, 'journey.countRepeats', all, c('repeats')),
     cutPoints: counted(k.cutPoints, 'journey.cutPoints', all, c('cutPoints')),
     choices: counted(k.choices, 'journey.countChoices', all, c('choices'), { bizUnit: 'journey.countChoices' }),
@@ -294,12 +379,19 @@ export function journeyCounted(j: Journey, summary: JourneySummary): JourneyCoun
 // fold says (the viewer reads `segment.absent`, never its own rule).
 
 /** The six absence words: a closed set. Each is the tail of a `journey.absent.*` key; adding a seventh is the failure mode. */
-export const ABSENCE_WORDS = ['noneIndexed', 'notBuilt', 'notInvolved', 'notReached', 'notIndexed', 'notTranslated'] as const;
-export type AbsenceWord = typeof ABSENCE_WORDS[number];
+export const ABSENCE_WORDS = [
+  'noneIndexed',
+  'notBuilt',
+  'notInvolved',
+  'notReached',
+  'notIndexed',
+  'notTranslated',
+] as const;
+export type AbsenceWord = (typeof ABSENCE_WORDS)[number];
 
 /** The layers every surface keeps in view even when the walk reached none — the drill's always-present rows, the storyboard's ledger. */
 export const ABSENCE_KINDS = ['records', 'messages', 'external', 'afterwards'] as const;
-export type AbsenceKind = typeof ABSENCE_KINDS[number];
+export type AbsenceKind = (typeof ABSENCE_KINDS)[number];
 
 /**
  * The absence word for one empty (action, layer) cell — the whole rule.
@@ -334,7 +426,10 @@ export interface SegmentAbsence {
 }
 
 /** Every empty cell's word, on every segment, plus the kinds the whole journey has none of. */
-export function journeyAbsence(summary: JourneySummary): { segments: SegmentAbsence[]; kinds: Partial<Record<AbsenceKind, AbsenceWord>> } {
+export function journeyAbsence(summary: JourneySummary): {
+  segments: SegmentAbsence[];
+  kinds: Partial<Record<AbsenceKind, AbsenceWord>>;
+} {
   const rank = new Map(summary.systems.map((r, i) => [r.key, i] as const));
   const kindOf = new Map(summary.systems.map((r) => [r.key, r.kind] as const));
   const has = new Set(summary.systems.map((r) => r.kind));
@@ -367,7 +462,10 @@ export function journeyAbsence(summary: JourneySummary): { segments: SegmentAbse
       moments[mo.index] = cell;
       const kc: Partial<Record<AbsenceKind, AbsenceWord>> = {};
       for (const k of ABSENCE_KINDS) {
-        if (journeyKinds[k]) { kc[k] = journeyKinds[k]; continue; }
+        if (journeyKinds[k]) {
+          kc[k] = journeyKinds[k];
+          continue;
+        }
         if ([...used].some((key) => kindOf.get(key) === k)) continue;
         const first = Math.min(...summary.systems.filter((r) => r.kind === k).map((r) => rank.get(r.key) ?? 0));
         kc[k] = absenceWord({ inJourney: true, cutBefore: cut < first });
@@ -391,12 +489,21 @@ export function withJourneyCounted(j: Journey, summary: JourneySummary): Journey
   // done outside the code: each declared step once over the journey (a screen met twice is one screen), and per screen
   const seen = new Map<string, NonNullable<JourneySegment['offPlatform']>[number]>();
   for (const sg of summary.segments) {
-    for (const st of sg.offPlatform ?? []) if (!seen.has(`${st.screen}|${st.id}`)) seen.set(`${st.screen}|${st.id}`, st);
-    if (sg.offPlatform?.length && sg.counted) sg.counted.offPlatform = offPlatformCounted(sg.offPlatform, 'journey.scopeHere', `${SRC}.segments[].offPlatform`);
+    for (const st of sg.offPlatform ?? [])
+      if (!seen.has(`${st.screen}|${st.id}`)) seen.set(`${st.screen}|${st.id}`, st);
+    if (sg.offPlatform?.length && sg.counted)
+      sg.counted.offPlatform = offPlatformCounted(sg.offPlatform, 'journey.scopeHere', `${SRC}.segments[].offPlatform`);
   }
-  if (seen.size) summary.counted.offPlatform = offPlatformCounted([...seen.values()], 'journey.scopeAll', `${SRC}.segments[].offPlatform — each declared once`);
+  if (seen.size)
+    summary.counted.offPlatform = offPlatformCounted(
+      [...seen.values()],
+      'journey.scopeAll',
+      `${SRC}.segments[].offPlatform — each declared once`,
+    );
   const absent = journeyAbsence(summary);
   summary.absentKinds = absent.kinds;
-  summary.segments.forEach((sg, i) => { sg.absent = absent.segments[i]; });
+  summary.segments.forEach((sg, i) => {
+    sg.absent = absent.segments[i];
+  });
   return summary;
 }

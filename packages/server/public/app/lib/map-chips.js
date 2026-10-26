@@ -34,15 +34,39 @@ export function mapCountChip(c, cls) {
 export function mapEvidenceChip(facts) {
   if (!facts) return '';
   if (facts.sharedEvidence) {
-    return '<span class="map-chip k-ev k-absent"' + defAttrs('journey.absent.notBuilt') + '>' + esc(t('journey.absent.notBuilt')) + '</span>';
+    return (
+      '<span class="map-chip k-ev k-absent"' +
+      defAttrs('journey.absent.notBuilt') +
+      '>' +
+      esc(t('journey.absent.notBuilt')) +
+      '</span>'
+    );
   }
   const ev = evidenceWord(facts);
   const cls = ev.cls;
   if (!cls || cls === 'none') return '';
   const pb = builtOnlyHtml(ev);
-  return pb.before + '<span class="map-chip k-ev ev-' + esc(cls) + pb.cls + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
-    + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '')
-    + esc(t(ev.key)) + '</span>' + pb.after;
+  return (
+    pb.before +
+    '<span class="map-chip k-ev ev-' +
+    esc(cls) +
+    pb.cls +
+    '"' +
+    tipAttrs({
+      id: 'jrnEvidence',
+      args: {
+        ev,
+        obs: facts.observation || null,
+        verdict: facts.verdict ? { status: facts.verdict.status } : null,
+        fresh: facts.freshness || null,
+      },
+    }) +
+    '>' +
+    (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '') +
+    esc(t(ev.key)) +
+    '</span>' +
+    pb.after
+  );
 }
 
 /**
@@ -55,10 +79,22 @@ export function mapTestsChips(tests, facts, opts = {}) {
   if (opts.hideZero && !tests.n && !(facts && facts.notBuilt)) return '';
   // one chip with the count, the scope it counts over, the word and the skips (lib/test-chip.js, round 2026-10-10)
   if (facts && facts.counted && facts.counted.tests) {
-    if (facts.sharedEvidence) return testChipHtml(facts, { cls: 'map-chip k-test', api: API, word: false, zero: true, basis: false }) + mapEvidenceChip(facts);
+    if (facts.sharedEvidence)
+      return (
+        testChipHtml(facts, { cls: 'map-chip k-test', api: API, word: false, zero: true, basis: false }) +
+        mapEvidenceChip(facts)
+      );
     // `builtShown`: the caller printed *n of m screens built* beside it, so the word keeps only its scope after it;
     // `runs: false`: a one-row head prints only the parts that are not *passed* (the full sentence is the count's tip)
-    return testChipHtml(facts, { cls: 'map-chip k-test', api: API, zero: true, evCls: 'map-chip k-ev', basis: false, builtShown: !!opts.builtShown, ...(opts.runs === false ? { runs: false } : {}) });
+    return testChipHtml(facts, {
+      cls: 'map-chip k-test',
+      api: API,
+      zero: true,
+      evCls: 'map-chip k-ev',
+      basis: false,
+      builtShown: !!opts.builtShown,
+      ...(opts.runs === false ? { runs: false } : {}),
+    });
   }
   const n = mapCountChip(tests, 'k-test');
   if (!n) return '';
@@ -84,16 +120,40 @@ export function erpDeclared(summary) {
 /** The owner chip: the name the manifest gives, the Portfolio's Owner column. '' when it names nobody. */
 export function mapOwnerChip(owner) {
   if (!owner) return '';
-  return '<span class="map-chip k-owner"' + defAttrs('map.cover.owner', undefined, { owner }) + '>' + esc(t('map.cover.owner').split('{owner}').join(owner)) + '</span>';
+  return (
+    '<span class="map-chip k-owner"' +
+    defAttrs('map.cover.owner', undefined, { owner }) +
+    '>' +
+    esc(t('map.cover.owner').split('{owner}').join(owner)) +
+    '</span>'
+  );
 }
 
 /** The ERP chip: reached (with the system's name), declared and not built, or nothing. */
 export function mapErpChip(summary, built) {
   const erp = erpReached(summary);
-  if (erp) return '<span class="map-chip k-erp"' + defAttrs('map.cover.erp') + '>' + esc(t('map.cover.erp').split('{via}').join(erp.label || erp.key || '')) + '</span>';
+  if (erp)
+    return (
+      '<span class="map-chip k-erp"' +
+      defAttrs('map.cover.erp') +
+      '>' +
+      esc(
+        t('map.cover.erp')
+          .split('{via}')
+          .join(erp.label || erp.key || ''),
+      ) +
+      '</span>'
+    );
   // nothing built reaches nothing: the Portfolio prints *not built* there, and the cover's built chip already says it
   if (built === 0) return '';
-  if (erpDeclared(summary)) return '<span class="map-chip k-erp k-warn"' + defAttrs('map.cover.erpDeclared') + '>' + esc(t('map.cover.erpDeclared')) + '</span>';
+  if (erpDeclared(summary))
+    return (
+      '<span class="map-chip k-erp k-warn"' +
+      defAttrs('map.cover.erpDeclared') +
+      '>' +
+      esc(t('map.cover.erpDeclared')) +
+      '</span>'
+    );
   return '';
 }
 
@@ -144,16 +204,32 @@ const endsIn = (card) => (row) => offsetIn(row, card) + row.offsetHeight <= bott
  */
 export function foldMapChips(scope) {
   if (!scope) return;
-  scope.querySelectorAll('.map-dcover .agg').forEach((agg) => foldRow(agg, {
-    maxRows: 2, keep: KEEP, moreCls: 'map-chip map-more', moreKey: 'map.cover.more', of: 'map.cover.moreOf', scope: 'map.fold.scopeJourney',
-  }));
+  scope.querySelectorAll('.map-dcover .agg').forEach((agg) =>
+    foldRow(agg, {
+      maxRows: 2,
+      keep: KEEP,
+      moreCls: 'map-chip map-more',
+      moreKey: 'map.cover.more',
+      of: 'map.cover.moreOf',
+      scope: 'map.fold.scopeJourney',
+    }),
+  );
   scope.querySelectorAll('.map-scr .map-chips, .ln-stage .ln-chips').forEach((row) => {
     const card = row.closest('.map-scr, .ln-stage');
-    const fold = () => foldRow(row, { maxRows: (lineH) => rowsLeft(row, card, lineH), keep: KEEP, moreCls: 'map-chip map-more', fits: endsIn(card) });
+    const fold = () =>
+      foldRow(row, {
+        maxRows: (lineH) => rowsLeft(row, card, lineH),
+        keep: KEEP,
+        moreCls: 'map-chip map-more',
+        fits: endsIn(card),
+      });
     // a stage card's sub-line gives its room to the verdict when the verdict has none (the name's tip says it)
     const sub = card.classList.contains('ln-stage') ? card.querySelector(':scope > .sub') : null;
     if (sub) sub.hidden = false;
     fold();
-    if (sub && !endsIn(card)(row)) { sub.hidden = true; fold(); }
+    if (sub && !endsIn(card)(row)) {
+      sub.hidden = true;
+      fold();
+    }
   });
 }

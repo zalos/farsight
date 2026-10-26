@@ -32,9 +32,13 @@ test.describe('on the invoice-app fixture', () => {
     await expect(page.locator('.node.nk-package')).toHaveCount(0);
   });
 
-  test('the GROUP control offers only what the graph has: no domain or type on an untagged source', async ({ page }) => {
+  test('the GROUP control offers only what the graph has: no domain or type on an untagged source', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/codemap');
-    const opts = await page.locator('#cm-group option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
+    const opts = await page
+      .locator('#cm-group option')
+      .evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
     expect(opts).toEqual(['none', 'project']);
   });
 
@@ -75,7 +79,11 @@ async function freePort(): Promise<number> {
   return new Promise((res, rej) => {
     const s = createServer();
     s.once('error', rej);
-    s.listen(0, '127.0.0.1', () => { const a = s.address(); const p = typeof a === 'object' && a ? a.port : 0; s.close(() => res(p)); });
+    s.listen(0, '127.0.0.1', () => {
+      const a = s.address();
+      const p = typeof a === 'object' && a ? a.port : 0;
+      s.close(() => res(p));
+    });
   });
 }
 
@@ -85,10 +93,17 @@ test.describe('on invoice-app and the NX example together', () => {
     const ws = makeProjectsWorkspace();
     cleanup = ws.cleanup;
     const port = await freePort();
-    server = spawn(process.execPath, [CLI, 'serve', ws.graph, '--port', String(port)], { cwd: ws.dir, stdio: 'ignore' });
+    server = spawn(process.execPath, [CLI, 'serve', ws.graph, '--port', String(port)], {
+      cwd: ws.dir,
+      stdio: 'ignore',
+    });
     base = `http://localhost:${port}/`;
     for (let i = 0; i < 100; i++) {
-      try { if ((await fetch(base + 'api/version')).ok) return; } catch { /* not yet */ }
+      try {
+        if ((await fetch(base + 'api/version')).ok) return;
+      } catch {
+        /* not yet */
+      }
       await new Promise((r) => setTimeout(r, 100));
     }
     throw new Error('the projects workspace server never answered');
@@ -106,11 +121,20 @@ test.describe('on invoice-app and the NX example together', () => {
 
   test('group by project, by domain, by type — one box per value, the catch-alls last', async ({ page }) => {
     await go(page, '#/codemap?group=project&lens=hybrid');
-    expect(await page.locator('#cm-group option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).toEqual(['none', 'project', 'domain', 'type']);
+    expect(
+      await page.locator('#cm-group option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value)),
+    ).toEqual(['none', 'project', 'domain', 'type']);
     expect(await titles(page)).toContain('billing-web');
     await page.locator('#cm-group').selectOption('domain');
     await expect(page).toHaveURL(/group=domain/);
-    expect(await titles(page)).toEqual(['Billing', 'Operations', 'Shared', 'no tag', 'no project', 'third-party packages']);
+    expect(await titles(page)).toEqual([
+      'Billing',
+      'Operations',
+      'Shared',
+      'no tag',
+      'no project',
+      'third-party packages',
+    ]);
     await page.locator('#cm-group').selectOption('type');
     expect((await titles(page)).slice(0, 5)).toEqual(['Application', 'Data access', 'Feature', 'UI', 'Utility']);
     // a box's count is its cards, split by kind
@@ -125,7 +149,14 @@ test.describe('on invoice-app and the NX example together', () => {
     await expect(page).toHaveURL(/view=app&project=billing-web/);
     await expect(page.locator('.cm-elabel').first()).toBeVisible();
     const boxes = (await titles(page)).filter((x) => x !== 'third-party packages').sort();
-    expect(boxes).toEqual(['@nxw/shared-ui', 'billing-data-access', 'billing-feature-invoices', 'billing-ui', 'billing-web', 'shared-util']);
+    expect(boxes).toEqual([
+      '@nxw/shared-ui',
+      'billing-data-access',
+      'billing-feature-invoices',
+      'billing-ui',
+      'billing-web',
+      'shared-util',
+    ]);
     expect(await page.locator('.cm-elabel').allTextContents()).toContain('1 import statement');
     // the inspector is the application's project, with what it depends on
     await expect(page.locator('#inspector h2')).toHaveText('billing-web');
@@ -155,7 +186,9 @@ test.describe('on invoice-app and the NX example together', () => {
    * @covers packages/server/public/app/surfaces/map.js::entryTarget
    * @covers packages/server/public/app/surfaces/map.js::resolveEntryName
    */
-  test('a Map journey address cold-loads at the journey stop, by id or by name, from either source', async ({ page }) => {
+  test('a Map journey address cold-loads at the journey stop, by id or by name, from either source', async ({
+    page,
+  }) => {
     const atTable = async (re: RegExp) => {
       await expect(page).toHaveURL(re);
       await expect(page).toHaveURL(/layout=table/);
@@ -179,7 +212,9 @@ test.describe('on invoice-app and the NX example together', () => {
     await expect(page.locator('.map-crumbs')).toContainText(/screen 2 of \d+/);
     // and every other parameter rides through the rewrite (a stop below, its dock, the register)
     await go(page, '#/map/billing-cycle?screen=2&action=1&dock=right&lens=code');
-    await expect(page).toHaveURL(/#\/map\/invoice-app%3A%3Aflow%3A%3Abilling-cycle\?(.*&)?screen=2&action=1(&.*)?&dock=right/);
+    await expect(page).toHaveURL(
+      /#\/map\/invoice-app%3A%3Aflow%3A%3Abilling-cycle\?(.*&)?screen=2&action=1(&.*)?&dock=right/,
+    );
     await expect(page.locator('.map-act.code')).toBeVisible();
     await expect(page.locator('body')).toHaveClass(/lens-code/);
     // a journey of the second source, by its name alone

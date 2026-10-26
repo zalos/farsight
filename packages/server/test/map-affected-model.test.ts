@@ -11,8 +11,16 @@ const appDir = join(here, '..', 'public', 'app');
 const M = await import(join(appDir, 'lib', 'map-affected-model.js'));
 
 test('a seed reads from the link: a node id, a package, a work item, a commit', () => {
-  assert.deepEqual(M.parseSeedSpec('app::route::POST /x'), { type: 'node', id: 'app::route::POST /x', spec: 'app::route::POST /x' });
-  assert.deepEqual(M.parseSeedSpec('package:app::package::zod'), { type: 'package', id: 'app::package::zod', spec: 'package:app::package::zod' });
+  assert.deepEqual(M.parseSeedSpec('app::route::POST /x'), {
+    type: 'node',
+    id: 'app::route::POST /x',
+    spec: 'app::route::POST /x',
+  });
+  assert.deepEqual(M.parseSeedSpec('package:app::package::zod'), {
+    type: 'package',
+    id: 'app::package::zod',
+    spec: 'package:app::package::zod',
+  });
   assert.deepEqual(M.parseSeedSpec('work:KAN-3'), { type: 'work', id: 'KAN-3', spec: 'work:KAN-3' });
   assert.equal(M.parseSeedSpec('commit:a1c9e02').type, 'commit');
   assert.equal(M.parseSeedSpec('commit:nope'), null, 'a commit is hex');
@@ -24,12 +32,29 @@ test('a seed reads from the link: a node id, a package, a work item, a commit', 
 });
 
 test('several seeds lay over one board: the nearest distance shows, every seed keeps its own', () => {
-  const reach = (seed: string, screens: [string, number][]) => ({ seed, reach: {
-    journeys: [{ flowId: 'f', hop: Math.min(...screens.map((s) => s[1])) }],
-    screens: screens.map(([id, hop]) => ({ flowId: 'f', screenId: id, hop })), calls: [{ nodeId: 'r', hop: 2 }], data: [],
-  } });
-  const c = M.combineReaches([reach('a', [['p1', 0]]), reach('b', [['p1', 2], ['p2', 1]])]);
-  assert.deepEqual(c.screens.get('f|p1'), { hop: 0, by: [{ seed: 'a', hop: 0 }, { seed: 'b', hop: 2 }] });
+  const reach = (seed: string, screens: [string, number][]) => ({
+    seed,
+    reach: {
+      journeys: [{ flowId: 'f', hop: Math.min(...screens.map((s) => s[1])) }],
+      screens: screens.map(([id, hop]) => ({ flowId: 'f', screenId: id, hop })),
+      calls: [{ nodeId: 'r', hop: 2 }],
+      data: [],
+    },
+  });
+  const c = M.combineReaches([
+    reach('a', [['p1', 0]]),
+    reach('b', [
+      ['p1', 2],
+      ['p2', 1],
+    ]),
+  ]);
+  assert.deepEqual(c.screens.get('f|p1'), {
+    hop: 0,
+    by: [
+      { seed: 'a', hop: 0 },
+      { seed: 'b', hop: 2 },
+    ],
+  });
   assert.deepEqual(c.screens.get('f|p2'), { hop: 1, by: [{ seed: 'b', hop: 1 }] });
   assert.equal(c.nodes.get('r').by.length, 2, 'two seeds, two entries — not a count');
 });
@@ -49,21 +74,38 @@ test('one answer per distance, each test once at the nearest distance it reaches
       { hop: 1, nodes: [{ nodeId: 'x', tests: [t('t1')] }] },
       { hop: 2, nodes: [{ nodeId: 'y', tests: [t('t1'), t('t2')] }] },
     ],
-    reach: { journeys: [{ flowId: 'f', hop: 0 }], screens: [{ flowId: 'f', screenId: 's', hop: 1 }], calls: [{ nodeId: 'r', hop: 2 }] },
+    reach: {
+      journeys: [{ flowId: 'f', hop: 0 }],
+      screens: [{ flowId: 'f', screenId: 's', hop: 1 }],
+      calls: [{ nodeId: 'r', hop: 2 }],
+    },
   };
   const g = M.hopGroups(report);
-  assert.deepEqual(g.map((x: any) => [x.hop, x.journeys.length, x.screens.length, x.calls.length, x.tests.map((y: any) => y.id)]),
-    [[0, 1, 0, 0, []], [1, 0, 1, 0, ['t1']], [2, 0, 0, 1, ['t2']]]);
+  assert.deepEqual(
+    g.map((x: any) => [x.hop, x.journeys.length, x.screens.length, x.calls.length, x.tests.map((y: any) => y.id)]),
+    [
+      [0, 1, 0, 0, []],
+      [1, 0, 1, 0, ['t1']],
+      [2, 0, 0, 1, ['t2']],
+    ],
+  );
 });
 
 test('a test says its evidence class the way the Tests page does', () => {
   assert.equal(M.testEvidenceKey({ evidence: 'static' }), 'journey.evidence.reached');
   assert.equal(M.testEvidenceKey({ evidence: 'observed', runLevel: true }), 'tests.evidence.runSeen');
-  assert.equal(M.testEvidenceKey({ evidence: 'observed', observedVia: 'declaration' }), 'tests.evidence.declaredPassed');
+  assert.equal(
+    M.testEvidenceKey({ evidence: 'observed', observedVia: 'declaration' }),
+    'tests.evidence.declaredPassed',
+  );
 });
 
 test('a change asks about screens and calls first and names the rest as not asked', () => {
-  const nodes = Array.from({ length: 10 }, (_, i) => ({ id: 'n' + i, name: 'n' + i, kind: i === 9 ? 'page' : 'function' }));
+  const nodes = Array.from({ length: 10 }, (_, i) => ({
+    id: 'n' + i,
+    name: 'n' + i,
+    kind: i === 9 ? 'page' : 'function',
+  }));
   const p = M.pickSeeds(nodes, 8);
   assert.equal(p.seeds[0].id, 'n9');
   assert.equal(p.more, 2);
@@ -75,15 +117,41 @@ test('a screen several journeys share is one screen, listed with its journeys', 
     { flowId: 'b', screenId: 'p1', name: 'Sign in', hop: 0 },
     { flowId: 'b', screenId: 'p2', name: 'Pay', hop: 2 },
   ]);
-  assert.deepEqual(g.map((x) => [x.screenId, x.hop, x.flows]), [['p1', 0, ['a', 'b']], ['p2', 2, ['b']]]);
+  assert.deepEqual(
+    g.map((x) => [x.screenId, x.hop, x.flows]),
+    [
+      ['p1', 0, ['a', 'b']],
+      ['p2', 2, ['b']],
+    ],
+  );
 });
 
 test('the list rows: journeys with owners, screens once, owners, tests — the same rows as CSV and as JSON v0', () => {
-  const report = { hops: [{ hop: 1, nodes: [{ nodeId: 'x', tests: [{ id: 't1', name: 'pays, "fast"' }] }] }, { hop: 2, nodes: [] }],
-    reach: { journeys: [{ flowId: 'a', name: 'A', hop: 1 }, { flowId: 'b', name: 'B', hop: 1 }],
-      screens: [{ flowId: 'a', screenId: 'p1', name: 'Sign in', hop: 1 }, { flowId: 'b', screenId: 'p1', name: 'Sign in', hop: 1 }], calls: [] } };
-  const rows = M.affectedRows([{ seed: 's', report }], { owner: (f: string) => (f === 'a' ? 'Ops' : ''), evidence: () => 'declared' });
-  assert.deepEqual(rows.map((r: any) => r.kind), ['journey', 'journey', 'screen', 'owner', 'test']);
+  const report = {
+    hops: [
+      { hop: 1, nodes: [{ nodeId: 'x', tests: [{ id: 't1', name: 'pays, "fast"' }] }] },
+      { hop: 2, nodes: [] },
+    ],
+    reach: {
+      journeys: [
+        { flowId: 'a', name: 'A', hop: 1 },
+        { flowId: 'b', name: 'B', hop: 1 },
+      ],
+      screens: [
+        { flowId: 'a', screenId: 'p1', name: 'Sign in', hop: 1 },
+        { flowId: 'b', screenId: 'p1', name: 'Sign in', hop: 1 },
+      ],
+      calls: [],
+    },
+  };
+  const rows = M.affectedRows([{ seed: 's', report }], {
+    owner: (f: string) => (f === 'a' ? 'Ops' : ''),
+    evidence: () => 'declared',
+  });
+  assert.deepEqual(
+    rows.map((r: any) => r.kind),
+    ['journey', 'journey', 'screen', 'owner', 'test'],
+  );
   assert.equal(rows[2].journeys, 'a; b');
   assert.equal(M.furthestHop([{ report }]), 1, 'nothing further out than 1');
   const csv = M.affectedCsv(rows);
@@ -97,15 +165,43 @@ test('the list rows: journeys with owners, screens once, owners, tests — the s
 });
 
 test('the tests to run: each test once at its nearest distance, with its spec file, line and its own last run', () => {
-  const t1 = { id: 't1', name: 'pays', level: 'e2e', loc: { path: 'e2e/pay.spec.ts', line: 12 }, status: 'skipped', at: '2026-10-08T00:00:00Z' };
+  const t1 = {
+    id: 't1',
+    name: 'pays',
+    level: 'e2e',
+    loc: { path: 'e2e/pay.spec.ts', line: 12 },
+    status: 'skipped',
+    at: '2026-10-08T00:00:00Z',
+  };
   const run = { id: 'r1', name: 'unit run', level: 'unit', runLevel: true, status: 'unknown' };
-  const report = { hops: [{ hop: 1, nodes: [{ nodeId: 'x', tests: [run] }] }, { hop: 2, nodes: [{ nodeId: 'y', tests: [t1] }] }], reach: { journeys: [], screens: [], calls: [] } };
-  const near = { hops: [{ hop: 1, nodes: [{ nodeId: 'z', tests: [t1] }] }], reach: { journeys: [], screens: [], calls: [] } };
-  const rows = M.affectedRows([{ seed: 'a', report }, { seed: 'b', report: near }]);
+  const report = {
+    hops: [
+      { hop: 1, nodes: [{ nodeId: 'x', tests: [run] }] },
+      { hop: 2, nodes: [{ nodeId: 'y', tests: [t1] }] },
+    ],
+    reach: { journeys: [], screens: [], calls: [] },
+  };
+  const near = {
+    hops: [{ hop: 1, nodes: [{ nodeId: 'z', tests: [t1] }] }],
+    reach: { journeys: [], screens: [], calls: [] },
+  };
+  const rows = M.affectedRows([
+    { seed: 'a', report },
+    { seed: 'b', report: near },
+  ]);
   const tests = M.affectedTests(rows);
-  assert.deepEqual(tests.map((r: any) => [r.id, r.distance]), [['r1', 1], ['t1', 1]]);
+  assert.deepEqual(
+    tests.map((r: any) => [r.id, r.distance]),
+    [
+      ['r1', 1],
+      ['t1', 1],
+    ],
+  );
   const t = tests.find((r: any) => r.id === 't1');
-  assert.deepEqual([t.spec, t.line, t.lastRun, t.level, t.at], ['e2e/pay.spec.ts', 12, 'skipped', 'e2e', '2026-10-08T00:00:00Z']);
+  assert.deepEqual(
+    [t.spec, t.line, t.lastRun, t.level, t.at],
+    ['e2e/pay.spec.ts', 12, 'skipped', 'e2e', '2026-10-08T00:00:00Z'],
+  );
   // a run reached as a whole has no line and no case of its own to report a run for
   const r = tests.find((x: any) => x.id === 'r1');
   assert.deepEqual([r.spec, r.line, r.lastRun], ['', '', '']);

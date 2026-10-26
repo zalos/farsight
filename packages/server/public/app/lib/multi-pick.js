@@ -44,22 +44,62 @@ export function pickerHtml(id, spec) {
   PICKERS.set(id, p);
   const multi = !!spec.multi;
   const listId = 'mpk-' + cssId(id) + '-list';
-  return '<div class="mpk' + (multi ? ' mpk-multi' : ' mpk-single') + '" data-mp="' + esc(id) + '" role="group" aria-label="' + esc(spec.label || '') + '">'
-    + '<div class="mpk-chips">' + chipsHtml(p) + '</div>'
-    + '<div class="mpk-bar"><input class="mpk-q" type="text" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="' + listId + '"'
-    + ' aria-label="' + esc(spec.label || '') + '" placeholder="' + esc(spec.placeholder || '') + '" value="' + esc(state.query) + '" autocomplete="off" spellcheck="false"/>'
-    + '<span class="mpk-count" aria-live="polite"' + (spec.countKey ? tipAttrs({ key: spec.countKey, noFocus: true }) + ' tabindex="-1"' : '') + '>' + esc(countText(p)) + '</span></div>'
-    + (multi ? '<div class="mpk-acts"><button type="button" class="mpk-act" data-mp-act="all">' + esc(t('codemap.pick.selectAll')) + '</button>'
-      + '<button type="button" class="mpk-act" data-mp-act="clear">' + esc(t('codemap.pick.clear')) + '</button></div>' : '')
-    + '<div class="mpk-list" id="' + listId + '" role="listbox"' + (multi ? ' aria-multiselectable="true"' : '') + ' aria-label="' + esc(spec.label || '') + '">' + listHtml(p) + '</div>'
-    + '</div>';
+  return (
+    '<div class="mpk' +
+    (multi ? ' mpk-multi' : ' mpk-single') +
+    '" data-mp="' +
+    esc(id) +
+    '" role="group" aria-label="' +
+    esc(spec.label || '') +
+    '">' +
+    '<div class="mpk-chips">' +
+    chipsHtml(p) +
+    '</div>' +
+    '<div class="mpk-bar"><input class="mpk-q" type="text" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="' +
+    listId +
+    '"' +
+    ' aria-label="' +
+    esc(spec.label || '') +
+    '" placeholder="' +
+    esc(spec.placeholder || '') +
+    '" value="' +
+    esc(state.query) +
+    '" autocomplete="off" spellcheck="false"/>' +
+    '<span class="mpk-count" aria-live="polite"' +
+    (spec.countKey ? tipAttrs({ key: spec.countKey, noFocus: true }) + ' tabindex="-1"' : '') +
+    '>' +
+    esc(countText(p)) +
+    '</span></div>' +
+    (multi
+      ? '<div class="mpk-acts"><button type="button" class="mpk-act" data-mp-act="all">' +
+        esc(t('codemap.pick.selectAll')) +
+        '</button>' +
+        '<button type="button" class="mpk-act" data-mp-act="clear">' +
+        esc(t('codemap.pick.clear')) +
+        '</button></div>'
+      : '') +
+    '<div class="mpk-list" id="' +
+    listId +
+    '" role="listbox"' +
+    (multi ? ' aria-multiselectable="true"' : '') +
+    ' aria-label="' +
+    esc(spec.label || '') +
+    '">' +
+    listHtml(p) +
+    '</div>' +
+    '</div>'
+  );
 }
 
-function shown(p) { return shownOptions(p.spec.options || [], p.spec.groups || [], p.state.query); }
+function shown(p) {
+  return shownOptions(p.spec.options || [], p.spec.groups || [], p.state.query);
+}
 
 function countText(p) {
   if (!p.spec.countKey) return '';
-  return t(p.spec.countKey).replace('{n}', String(shown(p).length)).replace('{m}', String((p.spec.options || []).length));
+  return t(p.spec.countKey)
+    .replace('{n}', String(shown(p).length))
+    .replace('{m}', String((p.spec.options || []).length));
 }
 
 function chipsHtml(p) {
@@ -69,13 +109,34 @@ function chipsHtml(p) {
   const byId = new Map((p.spec.options || []).map((o) => [o.id, o]));
   const fold = sel.length > FOLD_AT && !p.state.unfold;
   const list = fold ? sel.slice(0, FOLD_AT) : sel;
-  return list.map((id) => {
-    const word = byId.has(id) ? byId.get(id).word : String(id).split('::').pop();
-    return '<button type="button" class="mpk-chip" data-mp-rm="' + esc(id) + '" aria-label="' + esc(t('codemap.pick.remove').replace('{name}', word)) + '">'
-      + '<span>' + esc(word) + '</span><span class="mpk-x" aria-hidden="true">✕</span></button>';
-  }).join('')
-    + (fold ? '<button type="button" class="mpk-chip mpk-more" data-mp-act="unfold"' + tipAttrs({ key: 'codemap.pick.more', noFocus: true }) + '>' + esc(t('codemap.pick.more').replace('{n}', String(sel.length - FOLD_AT))) + '</button>'
-      : sel.length > FOLD_AT ? '<button type="button" class="mpk-chip mpk-more" data-mp-act="fold">' + esc(t('codemap.pick.fewer')) + '</button>' : '');
+  return (
+    list
+      .map((id) => {
+        const word = byId.has(id) ? byId.get(id).word : String(id).split('::').pop();
+        return (
+          '<button type="button" class="mpk-chip" data-mp-rm="' +
+          esc(id) +
+          '" aria-label="' +
+          esc(t('codemap.pick.remove').replace('{name}', word)) +
+          '">' +
+          '<span>' +
+          esc(word) +
+          '</span><span class="mpk-x" aria-hidden="true">✕</span></button>'
+        );
+      })
+      .join('') +
+    (fold
+      ? '<button type="button" class="mpk-chip mpk-more" data-mp-act="unfold"' +
+        tipAttrs({ key: 'codemap.pick.more', noFocus: true }) +
+        '>' +
+        esc(t('codemap.pick.more').replace('{n}', String(sel.length - FOLD_AT))) +
+        '</button>'
+      : sel.length > FOLD_AT
+        ? '<button type="button" class="mpk-chip mpk-more" data-mp-act="fold">' +
+          esc(t('codemap.pick.fewer')) +
+          '</button>'
+        : '')
+  );
 }
 
 function listHtml(p) {
@@ -83,36 +144,66 @@ function listHtml(p) {
   if (!opts.length) return '<div class="mpk-none">' + esc(t('codemap.pick.none')) + '</div>';
   if (!opts.some((o) => o.id === p.state.active)) p.state.active = opts[0].id;
   const words = new Map((p.spec.groups || []).map((g) => [g.key, g.word]));
-  let html = '', group = null, gi = 0;
+  let html = '',
+    group = null,
+    gi = 0;
   for (const o of opts) {
     if (o.group !== group) {
       if (group !== null) html += '</div>';
       group = o.group;
-      const hid = 'mpk-' + cssId(p.id) + '-g' + (gi++);
-      html += '<div role="group" class="mpk-group" aria-labelledby="' + hid + '"><div class="mpk-gh hud-label" id="' + hid + '" role="presentation">' + esc(words.get(o.group) || o.group || '') + '</div>';
+      const hid = 'mpk-' + cssId(p.id) + '-g' + gi++;
+      html +=
+        '<div role="group" class="mpk-group" aria-labelledby="' +
+        hid +
+        '"><div class="mpk-gh hud-label" id="' +
+        hid +
+        '" role="presentation">' +
+        esc(words.get(o.group) || o.group || '') +
+        '</div>';
     }
     const on = p.spec.selected.has(o.id);
-    html += '<div role="option" class="mpk-opt' + (on ? ' on' : '') + (o.id === p.state.active ? ' hot' : '') + '" id="' + optId(p.id, o.id) + '" data-mp-opt="' + esc(o.id) + '" aria-selected="' + (on ? 'true' : 'false') + '">'
-      + (p.spec.multi ? '<span class="mpk-box" aria-hidden="true">' + (on ? '✓' : '') + '</span>' : '')
-      + '<span class="mpk-w"><span class="mpk-word">' + esc(o.word) + '</span>' + (o.sub ? '<span class="mpk-sub">' + esc(o.sub) + '</span>' : '') + '</span>'
-      + (o.countHtml ? '<span class="mpk-n">' + o.countHtml + '</span>' : '')
-      + '</div>';
+    html +=
+      '<div role="option" class="mpk-opt' +
+      (on ? ' on' : '') +
+      (o.id === p.state.active ? ' hot' : '') +
+      '" id="' +
+      optId(p.id, o.id) +
+      '" data-mp-opt="' +
+      esc(o.id) +
+      '" aria-selected="' +
+      (on ? 'true' : 'false') +
+      '">' +
+      (p.spec.multi ? '<span class="mpk-box" aria-hidden="true">' + (on ? '✓' : '') + '</span>' : '') +
+      '<span class="mpk-w"><span class="mpk-word">' +
+      esc(o.word) +
+      '</span>' +
+      (o.sub ? '<span class="mpk-sub">' + esc(o.sub) + '</span>' : '') +
+      '</span>' +
+      (o.countHtml ? '<span class="mpk-n">' + o.countHtml + '</span>' : '') +
+      '</div>';
   }
   return html + '</div>';
 }
 
 /** Redraw what moves in a picker on screen (chips, count, list), the field untouched. */
 function refresh(root, p) {
-  const chips = root.querySelector('.mpk-chips'), count = root.querySelector('.mpk-count'), list = root.querySelector('.mpk-list');
+  const chips = root.querySelector('.mpk-chips'),
+    count = root.querySelector('.mpk-count'),
+    list = root.querySelector('.mpk-list');
   if (chips) chips.innerHTML = chipsHtml(p);
   if (count) count.textContent = countText(p);
   if (list) list.innerHTML = listHtml(p);
   const q = root.querySelector('.mpk-q');
-  if (q) q.setAttribute('aria-activedescendant', p.state.active && shown(p).some((o) => o.id === p.state.active) ? optId(p.id, p.state.active) : '');
+  if (q)
+    q.setAttribute(
+      'aria-activedescendant',
+      p.state.active && shown(p).some((o) => o.id === p.state.active) ? optId(p.id, p.state.active) : '',
+    );
   const hot = list && list.querySelector('.mpk-opt.hot');
   // the active option kept in view inside the list only: the menu around the picker stays where it is
   if (hot && list) {
-    const top = hot.offsetTop - list.offsetTop, bottom = top + hot.offsetHeight;
+    const top = hot.offsetTop - list.offsetTop,
+      bottom = top + hot.offsetHeight;
     const head = 22;
     if (top - head < list.scrollTop) list.scrollTop = Math.max(0, top - head);
     else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
@@ -121,7 +212,8 @@ function refresh(root, p) {
 
 /** Change the selection and tell the host; give the field its focus back if the host redrew the picker. */
 function commit(p, ids, id, on) {
-  const hadFocus = document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-mp]');
+  const hadFocus =
+    document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-mp]');
   p.spec.selected = new Set(ids);
   if (p.spec.onChange) p.spec.onChange([...ids], id, on);
   const root = rootOf(p.id);
@@ -130,14 +222,20 @@ function commit(p, ids, id, on) {
   refresh(root, live);
   if (hadFocus) {
     const q = root.querySelector('.mpk-q');
-    if (q && document.activeElement !== q) { q.focus({ preventScroll: true }); q.setSelectionRange(q.value.length, q.value.length); }
+    if (q && document.activeElement !== q) {
+      q.focus({ preventScroll: true });
+      q.setSelectionRange(q.value.length, q.value.length);
+    }
   }
 }
 function rootOf(id) {
   return [...document.querySelectorAll('[data-mp]')].find((n) => n.dataset.mp === id) || null;
 }
 function toggle(p, id) {
-  if (!p.spec.multi) { commit(p, [id], id, true); return; }
+  if (!p.spec.multi) {
+    commit(p, [id], id, true);
+    return;
+  }
   const s = new Set(p.spec.selected);
   const on = !s.has(id);
   on ? s.add(id) : s.delete(id);
@@ -165,13 +263,18 @@ function onKey(e) {
   const { p, root } = at;
   const opts = shown(p);
   const i = opts.findIndex((o) => o.id === p.state.active);
-  const stop = () => { e.preventDefault(); e.stopPropagation(); };
+  const stop = () => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     stop();
     if (!opts.length) return;
     // the first arrow lands on the option the field already points at (the first match), the next ones move
-    const next = !p.state.nav && i >= 0 ? i : e.key === 'ArrowDown' ? Math.min(opts.length - 1, i + 1) : Math.max(0, i - 1);
-    p.state.active = opts[next].id; p.state.nav = true;
+    const next =
+      !p.state.nav && i >= 0 ? i : e.key === 'ArrowDown' ? Math.min(opts.length - 1, i + 1) : Math.max(0, i - 1);
+    p.state.active = opts[next].id;
+    p.state.nav = true;
     refresh(root, p);
   } else if (e.key === 'Home' || e.key === 'End') {
     if (!p.state.nav || !opts.length) return;
@@ -186,8 +289,18 @@ function onKey(e) {
     stop();
     commit(p, [...new Set([...p.spec.selected, ...opts.map((o) => o.id)])], null, true);
   } else if (e.key === 'Escape') {
-    if (p.state.query) { stop(); p.state.query = ''; e.target.value = ''; p.state.active = null; refresh(root, p); return; }
-    if (p.spec.onClose) { stop(); p.spec.onClose(); }
+    if (p.state.query) {
+      stop();
+      p.state.query = '';
+      e.target.value = '';
+      p.state.active = null;
+      refresh(root, p);
+      return;
+    }
+    if (p.spec.onClose) {
+      stop();
+      p.spec.onClose();
+    }
   }
 }
 
@@ -196,14 +309,23 @@ function onClick(e) {
   if (!at || !at.p) return;
   const { p, root } = at;
   const rm = e.target.closest('[data-mp-rm]');
-  if (rm) { e.preventDefault(); const s = new Set(p.spec.selected); s.delete(rm.dataset.mpRm); commit(p, [...s], rm.dataset.mpRm, false); return; }
+  if (rm) {
+    e.preventDefault();
+    const s = new Set(p.spec.selected);
+    s.delete(rm.dataset.mpRm);
+    commit(p, [...s], rm.dataset.mpRm, false);
+    return;
+  }
   const act = e.target.closest('[data-mp-act]');
   if (act) {
     e.preventDefault();
     const a = act.dataset.mpAct;
     if (a === 'all') commit(p, [...new Set([...p.spec.selected, ...shown(p).map((o) => o.id)])], null, true);
     else if (a === 'clear') commit(p, [], null, false);
-    else { p.state.unfold = a === 'unfold'; refresh(root, p); }
+    else {
+      p.state.unfold = a === 'unfold';
+      refresh(root, p);
+    }
     return;
   }
   // a number's tip is its own click target: it opens the tip, it does not tick the option

@@ -20,11 +20,14 @@ const { esc, jsArg } = await import(join(here, '..', 'public', 'app', 'store.js'
 const decodeAttr = (html: string) => {
   const m = /onclick="([^"]*)"/.exec(html);
   assert.ok(m, `one double-quoted onclick in ${html}`);
-  return m![1]!.replace(/&(quot|#39|lt|gt|amp);/g, (_, e) => ({ quot: '"', '#39': "'", lt: '<', gt: '>', amp: '&' } as Record<string, string>)[e]!);
+  return m![1]!.replace(
+    /&(quot|#39|lt|gt|amp);/g,
+    (_, e) => (({ quot: '"', '#39': "'", lt: '<', gt: '>', amp: '&' }) as Record<string, string>)[e]!,
+  );
 };
 
 const HOSTILE = [
-  "repo::src/a.ts::plain",
+  'repo::src/a.ts::plain',
   "x');alert(1);('",
   'x");alert(1);("',
   "a\\');alert(1);//",
@@ -44,6 +47,9 @@ test('jsArg: the handler receives exactly the value, whatever it holds', () => {
 test('esc alone in a JS string does not hold — the reason jsArg exists', () => {
   const js = decodeAttr('<button onclick="f(\'' + esc("x');g('pwned") + '\')">x</button>');
   const calls: string[] = [];
-  new Function('f', 'g', js)(() => calls.push('f'), () => calls.push('g'));
+  new Function('f', 'g', js)(
+    () => calls.push('f'),
+    () => calls.push('g'),
+  );
   assert.deepEqual(calls, ['f', 'g'], 'the decoded quote ends the string and a second call runs');
 });

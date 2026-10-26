@@ -6,16 +6,25 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const { normaliseWheel, wheelFactor, nextStop, settle, atStop, clampPan, LINE_PX, NOTCH_STEP, ZOOM_RATE } = await import(join(here, '..', 'public', 'app', 'lib', 'map-canvas.js'));
+const { normaliseWheel, wheelFactor, nextStop, settle, atStop, clampPan, LINE_PX, NOTCH_STEP, ZOOM_RATE } =
+  await import(join(here, '..', 'public', 'app', 'lib', 'map-canvas.js'));
 
-const STOPS = [{ id: 'board', s: 0.13 }, { id: 'journey', s: 0.52 }, { id: 'calls', s: 0.92 }, { id: 'enter', s: 2.2 }];
+const STOPS = [
+  { id: 'board', s: 0.13 },
+  { id: 'journey', s: 0.52 },
+  { id: 'calls', s: 0.92 },
+  { id: 'enter', s: 2.2 },
+];
 
 test('wheel deltas become px: lines are LINE_PX, pages the stage height; shift + wheel pans sideways', () => {
   assert.deepEqual(normaliseWheel({ deltaX: 0, deltaY: 3, deltaMode: 1 }), { dx: 0, dy: 3 * LINE_PX });
   assert.deepEqual(normaliseWheel({ deltaX: 0, deltaY: 1, deltaMode: 2 }, 700), { dx: 0, dy: 700 });
   assert.deepEqual(normaliseWheel({ deltaX: 0, deltaY: 40, deltaMode: 0, shiftKey: true }), { dx: 40, dy: 0 });
   // shift with ⌘/Ctrl is still a zoom
-  assert.deepEqual(normaliseWheel({ deltaX: 0, deltaY: 40, deltaMode: 0, shiftKey: true, ctrlKey: true }), { dx: 0, dy: 40 });
+  assert.deepEqual(normaliseWheel({ deltaX: 0, deltaY: 40, deltaMode: 0, shiftKey: true, ctrlKey: true }), {
+    dx: 0,
+    dy: 40,
+  });
 });
 
 test('one wheel event zooms at most one notch: a mouse notch and three lines are both 1.25×; a trackpad step keeps its rate', () => {

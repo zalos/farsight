@@ -27,7 +27,11 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const STATES = ['open', 'decided'] as const;
 
 /** One config file's `decisions[]` and where it came from (root first, nearest last). */
-export interface DecisionsBlock { from: string; dir: string; decisions: DecisionConfigEntry[] }
+export interface DecisionsBlock {
+  from: string;
+  dir: string;
+  decisions: DecisionConfigEntry[];
+}
 
 export interface DecisionsInput {
   manifests: { manifest: { decisions?: unknown }; path: string }[];
@@ -50,7 +54,10 @@ function readDecl(raw: unknown, partial: boolean): (Partial<DecisionDecl> & { id
   if ((STATES as readonly unknown[]).includes(r.state)) out.state = r.state as DecisionDecl['state'];
   const decided = str(r.decided);
   if (decided && DATE.test(decided)) out.decided = decided;
-  for (const k of ['owner', 'summary', 'doc'] as const) { const v = str(r[k]); if (v) out[k] = v; }
+  for (const k of ['owner', 'summary', 'doc'] as const) {
+    const v = str(r[k]);
+    if (v) out[k] = v;
+  }
   if (Array.isArray(r.affects)) {
     const list = r.affects.map(str).filter((x): x is string => !!x);
     if (list.length) out.affects = list;
@@ -76,13 +83,17 @@ export function decisionsMetaOf(input: DecisionsInput): DecisionsMeta {
       const d = readDecl(raw, false);
       if (!d) {
         const id = raw && typeof raw === 'object' ? str((raw as Record<string, unknown>).id) : undefined;
-        notes.push(`decision ${id ? `"${id}" ` : ''}in ${path} needs an id, a title and a state (open or decided); it was left out`);
+        notes.push(
+          `decision ${id ? `"${id}" ` : ''}in ${path} needs an id, a title and a state (open or decided); it was left out`,
+        );
         continue;
       }
       const had = rows.get(d.id);
       if (had) {
         if ((had.title ?? '').toLowerCase() !== (d.title ?? '').toLowerCase()) {
-          notes.push(`decision "${d.id}" is declared by ${firstFrom.get(d.id)} as "${had.title}" and by ${path} as "${d.title}" — one id for two decisions; "${had.title}" from ${firstFrom.get(d.id)} is kept`);
+          notes.push(
+            `decision "${d.id}" is declared by ${firstFrom.get(d.id)} as "${had.title}" and by ${path} as "${d.title}" — one id for two decisions; "${had.title}" from ${firstFrom.get(d.id)} is kept`,
+          );
         }
         continue;
       }
@@ -97,7 +108,9 @@ export function decisionsMetaOf(input: DecisionsInput): DecisionsMeta {
       const had = rows.get(d.id);
       if (!had) {
         if (!d.title || !d.state) {
-          notes.push(`decision "${d.id}" is named by ${b.from} but no manifest declares it, and the entry gives no title and state of its own`);
+          notes.push(
+            `decision "${d.id}" is named by ${b.from} but no manifest declares it, and the entry gives no title and state of its own`,
+          );
           continue;
         }
         rows.set(d.id, { ...d, declared: true, from: b.from, sites: [], nodes: [] } as DecisionRow);
@@ -121,22 +134,35 @@ export function decisionsMetaOf(input: DecisionsInput): DecisionsMeta {
   }
   for (const r of rows.values()) {
     if (!r.declared) {
-      const at = r.sites.slice(0, 3).map((s) => `${s.path}:${s.line}`).join(', ');
-      notes.push(`decision "${r.id}" is named in code (${at}${r.sites.length > 3 ? `, +${r.sites.length - 3}` : ''}) but no manifest or config declares it — its title, state and owner are unknown to Farsight`);
+      const at = r.sites
+        .slice(0, 3)
+        .map((s) => `${s.path}:${s.line}`)
+        .join(', ');
+      notes.push(
+        `decision "${r.id}" is named in code (${at}${r.sites.length > 3 ? `, +${r.sites.length - 3}` : ''}) but no manifest or config declares it — its title, state and owner are unknown to Farsight`,
+      );
     }
     for (const ref of r.affects ?? []) {
       const nodeId = input.resolveAffect?.(ref);
-      if (!nodeId) { notes.push(`decision "${r.id}" affects "${ref}", which names no node or screen in this source`); continue; }
+      if (!nodeId) {
+        notes.push(`decision "${r.id}" affects "${ref}", which names no node or screen in this source`);
+        continue;
+      }
       if (!r.nodes.includes(nodeId)) r.nodes.push(nodeId);
     }
     r.sites.sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
   }
-  const decisions = [...rows.values()].sort((a, b) => Number(b.declared) - Number(a.declared) || a.id.localeCompare(b.id, undefined, { numeric: true }));
+  const decisions = [...rows.values()].sort(
+    (a, b) => Number(b.declared) - Number(a.declared) || a.id.localeCompare(b.id, undefined, { numeric: true }),
+  );
   return { decisions, notes };
 }
 
 /** The decision rows of every source (or one), each with the source it belongs to. */
-export function decisionRows(metas: Record<string, DecisionsMeta> | undefined, repo?: string): (DecisionRow & { repo: string })[] {
+export function decisionRows(
+  metas: Record<string, DecisionsMeta> | undefined,
+  repo?: string,
+): (DecisionRow & { repo: string })[] {
   const out: (DecisionRow & { repo: string })[] = [];
   for (const [r, m] of Object.entries(metas ?? {})) {
     if (repo && r !== repo) continue;
@@ -150,7 +176,11 @@ export function decisionRows(metas: Record<string, DecisionsMeta> | undefined, r
  * entry), and a decision whose comment sits on a module-level flag constant when an edge leaving the node is gated on
  * that constant (`meta.when` names it — the call runs only when the flag is set).
  */
-export function decisionsFor(index: GraphIndex, metas: Record<string, DecisionsMeta> | undefined, nodeId: string): (DecisionRow & { repo: string })[] {
+export function decisionsFor(
+  index: GraphIndex,
+  metas: Record<string, DecisionsMeta> | undefined,
+  nodeId: string,
+): (DecisionRow & { repo: string })[] {
   const node = index.byId.get(nodeId);
   if (!node) return [];
   const repo = node.loc?.repo ?? nodeId.split('::')[0]!;
@@ -162,7 +192,8 @@ export function decisionsFor(index: GraphIndex, metas: Record<string, DecisionsM
       const when = e.meta?.when;
       if (when == null) continue;
       const text = typeof when === 'string' ? when : JSON.stringify(when);
-      for (const r of flagRows) if (r.sites.some((s) => s.symbol && new RegExp(`\\b${s.symbol}\\b`).test(text))) ids.add(r.id);
+      for (const r of flagRows)
+        if (r.sites.some((s) => s.symbol && new RegExp(`\\b${s.symbol}\\b`).test(text))) ids.add(r.id);
     }
   }
   return rows.filter((r) => ids.has(r.id));
@@ -197,21 +228,33 @@ export interface DecisionsAnswer {
  * its `affects`', and the callers whose calls are gated on a flag constant it sits above — and the names of those
  * nodes, the counts over the sources in scope and the notes.
  */
-export function decisionsAnswer(index: GraphIndex, metas: Record<string, DecisionsMeta> | undefined, opts: { repo?: string; id?: string; node?: string } = {}): DecisionsAnswer {
+export function decisionsAnswer(
+  index: GraphIndex,
+  metas: Record<string, DecisionsMeta> | undefined,
+  opts: { repo?: string; id?: string; node?: string } = {},
+): DecisionsAnswer {
   let rows = opts.node ? decisionsFor(index, metas, opts.node) : decisionRows(metas, opts.repo);
   if (opts.id) rows = rows.filter((r) => r.id === opts.id);
   const decisions = rows.map((r) => {
     const nodes = [...new Set([...r.nodes, ...flagGated(index, r)])];
     const names: Record<string, string> = {};
-    for (const id of nodes) { const n = index.byId.get(id); if (n) names[id] = n.design?.name ?? n.name; }
+    for (const id of nodes) {
+      const n = index.byId.get(id);
+      if (n) names[id] = n.design?.name ?? n.name;
+    }
     return { ...r, nodes, names };
   });
-  const notes = Object.entries(metas ?? {}).filter(([r]) => !opts.repo || r === opts.repo).flatMap(([, m]) => m.notes ?? []);
+  const notes = Object.entries(metas ?? {})
+    .filter(([r]) => !opts.repo || r === opts.repo)
+    .flatMap(([, m]) => m.notes ?? []);
   return { counted: decisionsCounted(metas, opts.repo), decisions, notes };
 }
 
 /** One row as the chip prints it: `pending decision D7 · who verifies a bank-detail change`, or `decided D5 · …`. */
-export function decisionChipWords(d: Pick<DecisionRow, 'id' | 'title' | 'state'>): { key: string; vars: Record<string, string> } {
+export function decisionChipWords(d: Pick<DecisionRow, 'id' | 'title' | 'state'>): {
+  key: string;
+  vars: Record<string, string>;
+} {
   const key = !d.state ? 'decision.chip.unknown' : d.state === 'open' ? 'decision.chip.open' : 'decision.chip.decided';
   return { key, vars: { id: d.id, title: d.title ?? '' } };
 }
@@ -221,7 +264,10 @@ export function decisionChipWords(d: Pick<DecisionRow, 'id' | 'title' | 'state'>
  * code with no declaration — and the same set by whether the code names it — cited in code · uncited. Two partitions
  * of one number, each a `Counted` over the sources in scope.
  */
-export function decisionsCounted(metas: Record<string, DecisionsMeta> | undefined, repo?: string): { decisions: Counted; cited: Counted } {
+export function decisionsCounted(
+  metas: Record<string, DecisionsMeta> | undefined,
+  repo?: string,
+): { decisions: Counted; cited: Counted } {
   const rows = decisionRows(metas, repo);
   const open = rows.filter((r) => r.declared && r.state === 'open').length;
   const decided = rows.filter((r) => r.declared && r.state === 'decided').length;
@@ -232,12 +278,19 @@ export function decisionsCounted(metas: Record<string, DecisionsMeta> | undefine
   return {
     decisions: counted(rows.length, 'count.unit.decisions', 'count.scope.workspace', src, {
       bizUnit: 'count.unit.decisions',
-      breakdown: [{ key: 'count.part.decisionsOpen', n: open }, { key: 'count.part.decisionsDecided', n: decided }, { key: 'count.part.decisionsCodeOnly', n: codeOnly }],
+      breakdown: [
+        { key: 'count.part.decisionsOpen', n: open },
+        { key: 'count.part.decisionsDecided', n: decided },
+        { key: 'count.part.decisionsCodeOnly', n: codeOnly },
+      ],
       recheck,
     }),
     cited: counted(rows.length, 'count.unit.decisions', 'count.scope.workspace', `${src} → sites`, {
       bizUnit: 'count.unit.decisions',
-      breakdown: [{ key: 'count.part.decisionsCited', n: cited }, { key: 'count.part.decisionsUncited', n: rows.length - cited }],
+      breakdown: [
+        { key: 'count.part.decisionsCited', n: cited },
+        { key: 'count.part.decisionsUncited', n: rows.length - cited },
+      ],
       recheck,
     }),
   };
@@ -268,30 +321,52 @@ export function decisionsText(
     out.push(`${countedText(c.decisions)}: ${breakdownText(c.decisions)} · ${breakdownText(c.cited)}`);
   }
   if (!rows.length) {
-    out.push(opts.node ? `no decision names ${opts.node}: no DECISION(<id>) comment sits on it or in it, and no declared decision lists it under affects`
-      : opts.id ? `no decision "${opts.id}" is declared or named in code` + (opts.repo ? ` in ${opts.repo}` : '')
-        : 'no decisions: no manifest or config declares one (decisions[]) and no DECISION(<id>) comment names one');
+    out.push(
+      opts.node
+        ? `no decision names ${opts.node}: no DECISION(<id>) comment sits on it or in it, and no declared decision lists it under affects`
+        : opts.id
+          ? `no decision "${opts.id}" is declared or named in code` + (opts.repo ? ` in ${opts.repo}` : '')
+          : 'no decisions: no manifest or config declares one (decisions[]) and no DECISION(<id>) comment names one',
+    );
     return out;
   }
-  const name = (id: string) => { const n = opts.index?.byId.get(id); return n ? (n.design?.name ?? n.name) : id; };
+  const name = (id: string) => {
+    const n = opts.index?.byId.get(id);
+    return n ? (n.design?.name ?? n.name) : id;
+  };
   for (const r of rows) {
     out.push('');
-    const state = !r.declared ? 'named in code, not declared' : r.state === 'decided' ? `decided${r.decided ? ` ${r.decided}` : ''}` : 'open — not decided yet';
+    const state = !r.declared
+      ? 'named in code, not declared'
+      : r.state === 'decided'
+        ? `decided${r.decided ? ` ${r.decided}` : ''}`
+        : 'open — not decided yet';
     out.push(`## ${r.id}${r.title ? ` · "${r.title}"` : ''} — ${state}${r.repo ? ` (${r.repo})` : ''}`);
     if (r.owner) out.push(`owner: ${r.owner}`);
     if (r.summary) out.push(`the team's words: "${r.summary}"`);
     if (r.docRef) {
-      out.push(`document: ${r.docRef.path}${r.docRef.anchor ? `#${r.docRef.anchor}` : ''}${r.docRef.title ? ` · "${r.docRef.title}"` : ''}`);
+      out.push(
+        `document: ${r.docRef.path}${r.docRef.anchor ? `#${r.docRef.anchor}` : ''}${r.docRef.title ? ` · "${r.docRef.title}"` : ''}`,
+      );
       if (r.docRef.quote) out.push(`  quoted: "${r.docRef.quote}${r.docRef.cut ? ' …' : ''}"`);
     } else if (r.doc) out.push(`document: ${r.doc} (not found inside the source)`);
-    for (const s of r.sites) out.push(`named in code: ${s.path}:${s.line}${s.nodeId ? ` · on ${name(s.nodeId)}` : s.symbol ? ` · above ${s.symbol}` : ''}${s.text ? ` · "${s.text}"` : ''}`);
+    for (const s of r.sites)
+      out.push(
+        `named in code: ${s.path}:${s.line}${s.nodeId ? ` · on ${name(s.nodeId)}` : s.symbol ? ` · above ${s.symbol}` : ''}${s.text ? ` · "${s.text}"` : ''}`,
+      );
     if (!r.sites.length && r.declared) out.push('named in code: nowhere — no DECISION(<id>) comment names it');
     const affects = r.nodes.filter((n) => !r.sites.some((s) => s.nodeId === n));
     if (affects.length) out.push(`affects: ${affects.map(name).join(' · ')}`);
     if (r.from) out.push(`declared in: ${r.from}`);
   }
-  const notes = Object.entries(metas ?? {}).filter(([r]) => !opts.repo || r === opts.repo).flatMap(([, m]) => m.notes ?? []);
-  if (notes.length && !opts.id && !opts.node) { out.push(''); out.push('notes:'); for (const n of notes) out.push(`- ${n}`); }
+  const notes = Object.entries(metas ?? {})
+    .filter(([r]) => !opts.repo || r === opts.repo)
+    .flatMap(([, m]) => m.notes ?? []);
+  if (notes.length && !opts.id && !opts.node) {
+    out.push('');
+    out.push('notes:');
+    for (const n of notes) out.push(`- ${n}`);
+  }
   return out;
 }
 
@@ -341,9 +416,15 @@ export function offPlatformSteps(index: GraphIndex, screen: GraphNode | undefine
     if (!s.by || !(BY as readonly string[]).includes(s.by)) continue;
     const party = partyNamed(index, repo, s.who);
     out.push({
-      id: s.id, name: s.name, by: s.by, screen: screen.id,
-      ...(s.who ? { who: s.who } : {}), ...(s.where ? { where: s.where } : {}),
-      ...(party ? { party: { id: party.id, name: party.name, ...(party.external?.role ? { role: party.external.role } : {}) } } : {}),
+      id: s.id,
+      name: s.name,
+      by: s.by,
+      screen: screen.id,
+      ...(s.who ? { who: s.who } : {}),
+      ...(s.where ? { where: s.where } : {}),
+      ...(party
+        ? { party: { id: party.id, name: party.name, ...(party.external?.role ? { role: party.external.role } : {}) } }
+        : {}),
     });
   }
   return out;
@@ -353,7 +434,11 @@ export function offPlatformSteps(index: GraphIndex, screen: GraphNode | undefine
  * How many designed steps are done outside the code, over the scope given (a screen, a journey, a storyline): each
  * once, split by who does them — a person, a partner, another system. Never a gate and never a verdict.
  */
-export function offPlatformCounted(steps: Pick<OffPlatformStep, 'by'>[], scope: 'journey.scopeHere' | 'journey.scopeAll' | 'count.scope.storyline', source: string): Counted {
+export function offPlatformCounted(
+  steps: Pick<OffPlatformStep, 'by'>[],
+  scope: 'journey.scopeHere' | 'journey.scopeAll' | 'count.scope.storyline',
+  source: string,
+): Counted {
   const by = (k: OffPlatformStep['by']) => steps.filter((s) => s.by === k).length;
   return counted(steps.length, 'count.unit.offPlatform', scope, source, {
     bizUnit: 'count.unit.offPlatform',

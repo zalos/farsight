@@ -17,7 +17,8 @@ const API = '/api/decisions';
 /** The answer for the graph on screen: `{ key, rows, byNode: Map<nodeId, row[]>, byId: Map<id, row> }`. */
 const D = { key: '', rows: [], byNode: new Map(), byId: new Map(), pending: null };
 
-const fill = (key, vars) => Object.entries(vars || {}).reduce((s, [k, v]) => s.split('{' + k + '}').join(String(v)), t(key));
+const fill = (key, vars) =>
+  Object.entries(vars || {}).reduce((s, [k, v]) => s.split('{' + k + '}').join(String(v)), t(key));
 const biz = () => currentLens() === 'business';
 const graphKey = () => String((S.GRAPH && S.GRAPH.meta && (S.GRAPH.meta.sync || S.GRAPH.meta.generatedAt)) || '');
 
@@ -41,13 +42,17 @@ export function loadDecisions() {
   if (D.key === key && (D.rows.length || !D.pending)) return Promise.resolve(D.rows);
   if (D.pending && D.key === key) return D.pending;
   D.key = key;
-  D.pending = fetch(API).then((r) => (r.ok ? r.json() : { decisions: [] })).catch(() => ({ decisions: [] })).then((a) => {
-    D.rows = a.decisions || [];
-    const ix = indexDecisions(D.rows);
-    D.byNode = ix.byNode; D.byId = ix.byId;
-    D.pending = null;
-    return D.rows;
-  });
+  D.pending = fetch(API)
+    .then((r) => (r.ok ? r.json() : { decisions: [] }))
+    .catch(() => ({ decisions: [] }))
+    .then((a) => {
+      D.rows = a.decisions || [];
+      const ix = indexDecisions(D.rows);
+      D.byNode = ix.byNode;
+      D.byId = ix.byId;
+      D.pending = null;
+      return D.rows;
+    });
   return D.pending;
 }
 
@@ -55,12 +60,21 @@ export function loadDecisions() {
 export function decisionsOn(ids) {
   const out = [];
   for (const id of [].concat(ids || [])) for (const r of D.byNode.get(id) || []) if (!out.includes(r)) out.push(r);
-  return out.sort((a, b) => Number(b.state === 'open') - Number(a.state === 'open') || String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
+  return out.sort(
+    (a, b) =>
+      Number(b.state === 'open') - Number(a.state === 'open') ||
+      String(a.id).localeCompare(String(b.id), undefined, { numeric: true }),
+  );
 }
 
 /** The chip's words: the catalog's pattern with the team's id and title. Pure. */
 export function decisionChipText(r) {
-  const key = !r.declared || !r.state ? 'decision.chip.unknown' : r.state === 'open' ? 'decision.chip.open' : 'decision.chip.decided';
+  const key =
+    !r.declared || !r.state
+      ? 'decision.chip.unknown'
+      : r.state === 'open'
+        ? 'decision.chip.open'
+        : 'decision.chip.decided';
   return { key, text: fill(key, { id: r.id, title: r.title || '' }).replace(/\s·\s$/, '') };
 }
 
@@ -69,19 +83,49 @@ export function decisionChipHtml(r, opts = {}) {
   const w = decisionChipText(r);
   const state = !r.declared ? 'unknown' : r.state || 'unknown';
   // inside a card that already shows the decision's card: the chip is its heading, not a second door to it
-  if (opts.static) return '<span class="dec-chip map-chip s-' + esc(state) + '"' + tipAttrs({ key: w.key, noFocus: true }) + '>' + sym('decision') + '<span class="w">' + esc(w.text) + '</span></span>';
+  if (opts.static)
+    return (
+      '<span class="dec-chip map-chip s-' +
+      esc(state) +
+      '"' +
+      tipAttrs({ key: w.key, noFocus: true }) +
+      '>' +
+      sym('decision') +
+      '<span class="w">' +
+      esc(w.text) +
+      '</span></span>'
+    );
   // a tip trigger, not a button: the tip primitive opens its card on a click, Enter or `?`, pinned (a button's own tip
   // opens on hover only — its click is the button's)
-  return '<span class="dec-chip map-chip s-' + esc(state) + (opts.cls ? ' ' + esc(opts.cls) : '') + '" data-decision="' + esc(r.repo + '|' + r.id) + '"'
-    + tipAttrs({ id: 'decision', args: { key: r.repo + '|' + r.id } }) + ' aria-label="' + esc(w.text) + '">'
-    + sym('decision') + '<span class="w">' + esc(w.text) + '</span></span>';
+  return (
+    '<span class="dec-chip map-chip s-' +
+    esc(state) +
+    (opts.cls ? ' ' + esc(opts.cls) : '') +
+    '" data-decision="' +
+    esc(r.repo + '|' + r.id) +
+    '"' +
+    tipAttrs({ id: 'decision', args: { key: r.repo + '|' + r.id } }) +
+    ' aria-label="' +
+    esc(w.text) +
+    '">' +
+    sym('decision') +
+    '<span class="w">' +
+    esc(w.text) +
+    '</span></span>'
+  );
 }
 
 /** Every chip for these nodes, in one row; '' when none bears on them. */
 export function decisionChipsHtml(ids, opts = {}) {
   const rows = decisionsOn(ids);
   if (!rows.length) return '';
-  return '<span class="dec-chips' + (opts.cls ? ' ' + esc(opts.cls) : '') + '">' + rows.map((r) => decisionChipHtml(r)).join('') + '</span>';
+  return (
+    '<span class="dec-chips' +
+    (opts.cls ? ' ' + esc(opts.cls) : '') +
+    '">' +
+    rows.map((r) => decisionChipHtml(r)).join('') +
+    '</span>'
+  );
 }
 
 function stateWords(r) {
@@ -96,41 +140,147 @@ export function decisionCardHtml(r, opts = {}) {
   if (!r) return '';
   const roots = S.ROOTS || {};
   const b = biz();
-  const state = '<span class="dec-state s-' + esc(r.declared ? r.state || 'unknown' : 'unknown') + '"' + defAttrs(!r.declared ? 'decision.state.codeOnly' : r.state === 'open' ? 'decision.state.open' : 'decision.state.decidedNoDate') + '>' + esc(stateWords(r)) + '</span>';
-  const owner = r.declared ? '<span class="dec-owner"' + defAttrs(r.owner ? 'decision.owner' : 'decision.ownerNone') + '>' + esc(r.owner ? fill('decision.owner', { owner: r.owner }) : t('decision.ownerNone')) + '</span>' : '';
-  const said = r.summary ? '<section class="dec-sec"><span class="hud-label"' + defAttrs('decision.said') + '>' + esc(t('decision.said')) + '</span><blockquote class="dec-q">' + esc(r.summary) + '</blockquote></section>' : '';
+  const state =
+    '<span class="dec-state s-' +
+    esc(r.declared ? r.state || 'unknown' : 'unknown') +
+    '"' +
+    defAttrs(
+      !r.declared
+        ? 'decision.state.codeOnly'
+        : r.state === 'open'
+          ? 'decision.state.open'
+          : 'decision.state.decidedNoDate',
+    ) +
+    '>' +
+    esc(stateWords(r)) +
+    '</span>';
+  const owner = r.declared
+    ? '<span class="dec-owner"' +
+      defAttrs(r.owner ? 'decision.owner' : 'decision.ownerNone') +
+      '>' +
+      esc(r.owner ? fill('decision.owner', { owner: r.owner }) : t('decision.ownerNone')) +
+      '</span>'
+    : '';
+  const said = r.summary
+    ? '<section class="dec-sec"><span class="hud-label"' +
+      defAttrs('decision.said') +
+      '>' +
+      esc(t('decision.said')) +
+      '</span><blockquote class="dec-q">' +
+      esc(r.summary) +
+      '</blockquote></section>'
+    : '';
   let doc = '';
   if (r.docRef) {
     const href = editorHref(roots, r.repo, r.docRef.path, null);
-    doc = '<section class="dec-sec">'
-      + (r.docRef.title ? '<b class="dec-doc-t">' + esc(r.docRef.title) + '</b>' : '')
-      + (r.docRef.quote ? '<blockquote class="dec-q">' + esc(r.docRef.quote) + (r.docRef.cut ? ' <span class="dec-cut"' + defAttrs('doc.cut') + '>' + esc(t('doc.cut')) + '</span>' : '') + '</blockquote>' : '')
-      + '<span class="dec-from"' + defAttrs('decision.quoted') + '>' + esc(fill('decision.quoted', { path: r.docRef.path + (r.docRef.anchor ? '#' + r.docRef.anchor : '') })) + '</span>'
-      + (href ? ' <a class="dd-door" href="' + esc(href) + '"' + defAttrs('decision.openDoc') + '>' + esc(t('decision.openDoc')) + '</a>' : '')
-      + '</section>';
+    doc =
+      '<section class="dec-sec">' +
+      (r.docRef.title ? '<b class="dec-doc-t">' + esc(r.docRef.title) + '</b>' : '') +
+      (r.docRef.quote
+        ? '<blockquote class="dec-q">' +
+          esc(r.docRef.quote) +
+          (r.docRef.cut ? ' <span class="dec-cut"' + defAttrs('doc.cut') + '>' + esc(t('doc.cut')) + '</span>' : '') +
+          '</blockquote>'
+        : '') +
+      '<span class="dec-from"' +
+      defAttrs('decision.quoted') +
+      '>' +
+      esc(fill('decision.quoted', { path: r.docRef.path + (r.docRef.anchor ? '#' + r.docRef.anchor : '') })) +
+      '</span>' +
+      (href
+        ? ' <a class="dd-door" href="' +
+          esc(href) +
+          '"' +
+          defAttrs('decision.openDoc') +
+          '>' +
+          esc(t('decision.openDoc')) +
+          '</a>'
+        : '') +
+      '</section>';
   }
   // the code lines that name it: doors into code, so never in the business register
-  const sites = !b && (r.sites || []).length
-    ? '<section class="dec-sec"><span class="hud-label"' + defAttrs('decision.code') + '>' + esc(t('decision.code')) + '</span>'
-      + r.sites.map((s) => {
-        const href = editorHref(roots, r.repo, s.path, s.line);
-        const on = s.nodeId ? ((r.names && r.names[s.nodeId]) || s.nodeId.split('::').pop()) : s.symbol ? fill('decision.above', { symbol: s.symbol }) : '';
-        return '<div class="dec-site"><span class="map-code">' + esc(s.path + ':' + s.line) + '</span>' + (on ? ' · ' + esc(on) : '')
-          + (s.text ? '<div class="dec-said">' + esc(s.text) + '</div>' : '')
-          + (href ? ' <a class="dd-door" href="' + esc(href) + '"' + defAttrs('decision.openCode') + '>' + esc(t('decision.openCode')) + '</a>' : '') + '</div>';
-      }).join('') + '</section>'
-    : '';
+  const sites =
+    !b && (r.sites || []).length
+      ? '<section class="dec-sec"><span class="hud-label"' +
+        defAttrs('decision.code') +
+        '>' +
+        esc(t('decision.code')) +
+        '</span>' +
+        r.sites
+          .map((s) => {
+            const href = editorHref(roots, r.repo, s.path, s.line);
+            const on = s.nodeId
+              ? (r.names && r.names[s.nodeId]) || s.nodeId.split('::').pop()
+              : s.symbol
+                ? fill('decision.above', { symbol: s.symbol })
+                : '';
+            return (
+              '<div class="dec-site"><span class="map-code">' +
+              esc(s.path + ':' + s.line) +
+              '</span>' +
+              (on ? ' · ' + esc(on) : '') +
+              (s.text ? '<div class="dec-said">' + esc(s.text) + '</div>' : '') +
+              (href
+                ? ' <a class="dd-door" href="' +
+                  esc(href) +
+                  '"' +
+                  defAttrs('decision.openCode') +
+                  '>' +
+                  esc(t('decision.openCode')) +
+                  '</a>'
+                : '') +
+              '</div>'
+            );
+          })
+          .join('') +
+        '</section>'
+      : '';
   const bears = (r.nodes || []).filter((id) => !(r.sites || []).some((s) => s.nodeId === id));
   const affects = bears.length
-    ? '<section class="dec-sec"><span class="hud-label"' + defAttrs('decision.affects') + '>' + esc(t('decision.affects')) + '</span> '
-      + bears.map((id) => '<span class="dec-aff">' + esc((r.names && r.names[id]) || id.split('::').pop()) + '</span>').join(' · ') + '</section>'
+    ? '<section class="dec-sec"><span class="hud-label"' +
+      defAttrs('decision.affects') +
+      '>' +
+      esc(t('decision.affects')) +
+      '</span> ' +
+      bears
+        .map((id) => '<span class="dec-aff">' + esc((r.names && r.names[id]) || id.split('::').pop()) + '</span>')
+        .join(' · ') +
+      '</section>'
     : '';
-  const from = r.from ? '<p class="dec-from"' + defAttrs('decision.declaredIn') + '>' + esc(fill('decision.declaredIn', { path: r.from })) + '</p>' : '';
-  return '<div class="dec-card" data-dec="' + esc(r.repo + '|' + r.id) + '">'
-    + (opts.noHead ? '' : '<div class="dec-head">' + sym('decision') + '<span class="hud-label"' + defAttrs('decision.card.title') + '>' + esc(t('decision.card.title')) + ' ' + esc(r.id) + '</span></div>')
-    + (r.title ? '<b class="tip-h dec-title">' + esc(r.title) + '</b>' : '')
-    + '<div class="dec-meta">' + state + owner + '</div>'
-    + said + doc + sites + affects + from + '</div>';
+  const from = r.from
+    ? '<p class="dec-from"' +
+      defAttrs('decision.declaredIn') +
+      '>' +
+      esc(fill('decision.declaredIn', { path: r.from })) +
+      '</p>'
+    : '';
+  return (
+    '<div class="dec-card" data-dec="' +
+    esc(r.repo + '|' + r.id) +
+    '">' +
+    (opts.noHead
+      ? ''
+      : '<div class="dec-head">' +
+        sym('decision') +
+        '<span class="hud-label"' +
+        defAttrs('decision.card.title') +
+        '>' +
+        esc(t('decision.card.title')) +
+        ' ' +
+        esc(r.id) +
+        '</span></div>') +
+    (r.title ? '<b class="tip-h dec-title">' + esc(r.title) + '</b>' : '') +
+    '<div class="dec-meta">' +
+    state +
+    owner +
+    '</div>' +
+    said +
+    doc +
+    sites +
+    affects +
+    from +
+    '</div>'
+  );
 }
 
 registerTip('decision', (el, args) => decisionCardHtml(D.byId.get((args && args.key) || '')));
@@ -142,13 +292,30 @@ registerTip('decision', (el, args) => decisionCardHtml(D.byId.get((args && args.
  */
 let openOn = null;
 if (typeof document !== 'undefined' && document.addEventListener) {
-  document.addEventListener('pointerdown', (e) => { const el = e.target && e.target.closest ? e.target.closest('[data-decision]') : null; openOn = el && tipOpen() && tipAnchor() === el ? el : null; }, true);
+  document.addEventListener(
+    'pointerdown',
+    (e) => {
+      const el = e.target && e.target.closest ? e.target.closest('[data-decision]') : null;
+      openOn = el && tipOpen() && tipAnchor() === el ? el : null;
+    },
+    true,
+  );
   document.addEventListener('click', (e) => {
     const el = e.target && e.target.closest ? e.target.closest('[data-decision]') : null;
     if (!el || (el.closest && el.closest('.fs-tip'))) return;
-    if (openOn === el) { hideTip(); openOn = null; return; }
+    if (openOn === el) {
+      hideTip();
+      openOn = null;
+      return;
+    }
     const r = D.byId.get(el.getAttribute('data-decision'));
-    if (r) showTip(el, decisionCardHtml(r), { rich: true, pinned: true, via: 'click', label: t('decision.card.title') + ' ' + r.id });
+    if (r)
+      showTip(el, decisionCardHtml(r), {
+        rich: true,
+        pinned: true,
+        via: 'click',
+        label: t('decision.card.title') + ' ' + r.id,
+      });
   });
 }
 

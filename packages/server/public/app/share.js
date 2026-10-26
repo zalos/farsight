@@ -22,7 +22,8 @@ import { pinnedHash, pinMismatch, dayOf, fill } from './lib/export-model.js';
 export function shareLink() {
   const hash = location.hash || '';
   // the Map writes its picture into the address as it moves (zoom, place, the open card); the link adds the words it was read in
-  if (/^#\/map(?:[/?@]|$)/.test(hash)) return location.origin + location.pathname + withParams(hash, { lens: currentLens() });
+  if (/^#\/map(?:[/?@]|$)/.test(hash))
+    return location.origin + location.pathname + withParams(hash, { lens: currentLens() });
   return location.href;
 }
 
@@ -32,9 +33,16 @@ export function shareLink() {
  * @group Share
  */
 export function copyLiveLink() {
-  try { navigator.clipboard.writeText(shareLink()); } catch (err) {}
+  try {
+    navigator.clipboard.writeText(shareLink());
+  } catch (err) {}
   const note = document.getElementById('share-note');
-  if (note) { note.textContent = t('share.copied'); setTimeout(() => { note.textContent = ''; }, 1500); }
+  if (note) {
+    note.textContent = t('share.copied');
+    setTimeout(() => {
+      note.textContent = '';
+    }, 1500);
+  }
 }
 
 /** The sync this graph was drawn from, and its day — what a pinned link names. */
@@ -57,7 +65,7 @@ export function pinnedLink() {
   if (n == null) return null;
   const live = shareLink();
   const at = live.indexOf('#');
-  if (at < 0) return live.replace(/#.*$/, '') + pinnedHash('#/' + (S.route && S.route.surface || ''), n, day);
+  if (at < 0) return live.replace(/#.*$/, '') + pinnedHash('#/' + ((S.route && S.route.surface) || ''), n, day);
   return live.slice(0, at) + pinnedHash(live.slice(at), n, day);
 }
 
@@ -68,9 +76,16 @@ export function pinnedLink() {
 export function copyPinnedLink() {
   const link = pinnedLink();
   if (!link) return;
-  try { navigator.clipboard.writeText(link); } catch (err) {}
+  try {
+    navigator.clipboard.writeText(link);
+  } catch (err) {}
   const note = document.getElementById('share-note');
-  if (note) { note.textContent = t('share.copied'); setTimeout(() => { note.textContent = ''; }, 1500); }
+  if (note) {
+    note.textContent = t('share.copied');
+    setTimeout(() => {
+      note.textContent = '';
+    }, 1500);
+  }
 }
 
 /**
@@ -82,18 +97,45 @@ export function toggleShare(ev) {
   if (ev) ev.stopPropagation();
   const menu = document.getElementById('sharemenu');
   if (!menu) return;
-  if (menu.classList.contains('open')) { menu.classList.remove('open'); return; }
+  if (menu.classList.contains('open')) {
+    menu.classList.remove('open');
+    return;
+  }
   const { n, day } = servedSync();
-  const pinned = n != null
-    ? '<button class="share-row" onclick="copyPinnedLink()"' + tipAttrs({ key: 'share.pinnedLink', noFocus: true }) + '>' + sym('open') + ' ' + esc(t('share.pinnedLink'))
-      + '<span class="share-sub">' + esc(fill(t('share.pinnedLinkSub'), { n, date: day })) + '</span></button>'
-    : '<p class="set-note"' + tipAttrs({ key: 'share.pinnedNone', noFocus: true }) + '>' + esc(t('share.pinnedNone')) + '</p>';
-  menu.innerHTML = '<button class="share-row" onclick="copyLiveLink()">' + sym('open') + ' ' + esc(t('share.liveLink'))
-    + '<span class="share-sub">' + esc(t('share.liveLinkSub')) + '</span></button>'
-    + pinned
-    + '<span class="set-note" id="share-note"></span>'
-    + '<div class="share-soon"><span class="hud-label">' + sym('save') + ' ' + esc(t('share.saveHere')) + '</span>'
-    + '<p>' + esc(def('share.saveHere')) + '</p></div>';
+  const pinned =
+    n != null
+      ? '<button class="share-row" onclick="copyPinnedLink()"' +
+        tipAttrs({ key: 'share.pinnedLink', noFocus: true }) +
+        '>' +
+        sym('open') +
+        ' ' +
+        esc(t('share.pinnedLink')) +
+        '<span class="share-sub">' +
+        esc(fill(t('share.pinnedLinkSub'), { n, date: day })) +
+        '</span></button>'
+      : '<p class="set-note"' +
+        tipAttrs({ key: 'share.pinnedNone', noFocus: true }) +
+        '>' +
+        esc(t('share.pinnedNone')) +
+        '</p>';
+  menu.innerHTML =
+    '<button class="share-row" onclick="copyLiveLink()">' +
+    sym('open') +
+    ' ' +
+    esc(t('share.liveLink')) +
+    '<span class="share-sub">' +
+    esc(t('share.liveLinkSub')) +
+    '</span></button>' +
+    pinned +
+    '<span class="set-note" id="share-note"></span>' +
+    '<div class="share-soon"><span class="hud-label">' +
+    sym('save') +
+    ' ' +
+    esc(t('share.saveHere')) +
+    '</span>' +
+    '<p>' +
+    esc(def('share.saveHere')) +
+    '</p></div>';
   menu.classList.add('open');
 }
 
@@ -119,7 +161,10 @@ export function drawPinNote() {
   if (!chip || !chip.parentNode) return;
   let el = document.getElementById('pinnote');
   const diff = pinMismatch(pinOfHash(location.hash), servedSync().n);
-  if (!diff) { if (el) el.remove(); return; }
+  if (!diff) {
+    if (el) el.remove();
+    return;
+  }
   if (!el) {
     el = document.createElement('span');
     el.id = 'pinnote';
@@ -132,7 +177,8 @@ export function drawPinNote() {
     el.dataset.words = words;
     el.dataset.pinned = String(diff.pinned);
     el.dataset.served = String(diff.served);
-    el.innerHTML = sym('warning') + '<span' + tipAttrs({ key: 'pin.note', noFocus: true }) + '>' + esc(words) + '</span>';
+    el.innerHTML =
+      sym('warning') + '<span' + tipAttrs({ key: 'pin.note', noFocus: true }) + '>' + esc(words) + '</span>';
   }
 }
 // the chip is redrawn by the shell whenever the chrome is (a load, a sync, a register flip): the note follows it
@@ -140,7 +186,10 @@ if (typeof window.addEventListener === 'function') window.addEventListener('hash
 (function watchChip() {
   if (typeof document.getElementById !== 'function' || typeof MutationObserver === 'undefined') return;
   const chip = document.getElementById('syncchipwrap');
-  if (!chip) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchChip, { once: true }); return; }
+  if (!chip) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchChip, { once: true });
+    return;
+  }
   new MutationObserver(drawPinNote).observe(chip, { childList: true, subtree: true, characterData: true });
   drawPinNote();
 })();

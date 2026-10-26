@@ -7,7 +7,11 @@ import { echoInstallationWord } from '@farsight/core/dist/strings-echo-installat
 import { forgetFileTrust, recordFileTrust, requireFileTrust } from './trust.js';
 
 export type InstallScope = 'workspace' | 'global';
-export interface WorkspaceConnection { version: 1; configPath: string; profileId: string }
+export interface WorkspaceConnection {
+  version: 1;
+  configPath: string;
+  profileId: string;
+}
 export interface Installation {
   configPath: string;
   profileId?: string;
@@ -26,22 +30,44 @@ export interface InstallationOptions {
 }
 
 const MAX_CONNECTION_BYTES = 16_384;
-function fail(key = 'echo.installation.connection'): never { throw new Error(echoInstallationWord(key)); }
+function fail(key = 'echo.installation.connection'): never {
+  throw new Error(echoInstallationWord(key));
+}
 function stat(path: string): ReturnType<typeof lstatSync> | undefined {
-  try { return lstatSync(path); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined; throw error; }
+  try {
+    return lstatSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
 }
 function pathValue(value: unknown): string {
-  if (typeof value !== 'string' || !value || value !== value.trim() || value.length > 4096 || /[\x00-\x1f\x7f]/.test(value)) fail();
+  if (
+    typeof value !== 'string' ||
+    !value ||
+    value !== value.trim() ||
+    value.length > 4096 ||
+    /[\x00-\x1f\x7f]/.test(value)
+  )
+    fail();
   return value;
 }
 function profile(value: unknown): string {
-  if (typeof value !== 'string' || !/^[a-z][a-z0-9-]{0,47}$/.test(value) || ['constructor', 'prototype', '__proto__'].includes(value)) fail('echo.installation.profile');
+  if (
+    typeof value !== 'string' ||
+    !/^[a-z][a-z0-9-]{0,47}$/.test(value) ||
+    ['constructor', 'prototype', '__proto__'].includes(value)
+  )
+    fail('echo.installation.profile');
   return value;
 }
 function canonical(path: string): string {
   const absolute = resolve(pathValue(path));
-  try { return realpathSync(absolute); } catch { return absolute; }
+  try {
+    return realpathSync(absolute);
+  } catch {
+    return absolute;
+  }
 }
 
 /** Global selection is explicit; a relative XDG setting does not redirect it into the current workspace. */
@@ -70,17 +96,23 @@ function localDirectory(workspace: string, name?: string): string {
 /** Validate a flat, unambiguous binding, including JSON keys spelled with escapes. */
 function parseConnection(text: string): WorkspaceConnection {
   let value: unknown;
-  try { value = JSON.parse(text); } catch { fail(); }
+  try {
+    value = JSON.parse(text);
+  } catch {
+    fail();
+  }
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail();
   const object = value as Record<string, unknown>;
   const keys: string[] = [];
   // Parsing has already established valid JSON. Walk complete string tokens so
   // punctuation inside a path cannot be mistaken for another property.
-  let depth = 0, expectingKey = true;
+  let depth = 0,
+    expectingKey = true;
   for (let index = 0; index < text.length; index++) {
     const char = text[index]!;
-    if (char === '{') { if (++depth > 1) fail(); }
-    else if (char === '}') depth--;
+    if (char === '{') {
+      if (++depth > 1) fail();
+    } else if (char === '}') depth--;
     else if (char === '[') fail();
     else if (char === ',') expectingKey = true;
     else if (char === '"') {
@@ -89,10 +121,19 @@ function parseConnection(text: string): WorkspaceConnection {
         if (text[index] === '\\') index++;
         else if (text[index] === '"') break;
       }
-      if (expectingKey) { keys.push(JSON.parse(text.slice(start, index + 1)) as string); expectingKey = false; }
+      if (expectingKey) {
+        keys.push(JSON.parse(text.slice(start, index + 1)) as string);
+        expectingKey = false;
+      }
     }
   }
-  if (keys.length !== 3 || new Set(keys).size !== 3 || keys.some(key => !['version', 'configPath', 'profileId'].includes(key)) || object.version !== 1) fail();
+  if (
+    keys.length !== 3 ||
+    new Set(keys).size !== 3 ||
+    keys.some((key) => !['version', 'configPath', 'profileId'].includes(key)) ||
+    object.version !== 1
+  )
+    fail();
   const configPath = pathValue(object.configPath);
   if (!isAbsolute(configPath)) fail();
   return { version: 1, configPath: resolve(configPath), profileId: profile(object.profileId) };
@@ -109,7 +150,13 @@ function connectionContents(workspace: string): string | undefined {
   try {
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const opened = fstatSync(fd);
-    if (!opened.isFile() || opened.ino !== before.ino || opened.dev !== before.dev || opened.size > MAX_CONNECTION_BYTES) fail();
+    if (
+      !opened.isFile() ||
+      opened.ino !== before.ino ||
+      opened.dev !== before.dev ||
+      opened.size > MAX_CONNECTION_BYTES
+    )
+      fail();
     const bytes = Buffer.alloc(MAX_CONNECTION_BYTES + 1);
     let count = 0;
     while (count < bytes.length) {
@@ -119,8 +166,11 @@ function connectionContents(workspace: string): string | undefined {
     }
     if (count > MAX_CONNECTION_BYTES) fail();
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, count));
-  } catch { fail(); }
-  finally { if (fd !== undefined) closeSync(fd); }
+  } catch {
+    fail();
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
 }
 
 export function readConnection(workspace: string): WorkspaceConnection | undefined {
@@ -130,7 +180,9 @@ export function readConnection(workspace: string): WorkspaceConnection | undefin
     text = connectionContents(workspace);
     if (text === undefined) return undefined;
     binding = parseConnection(text);
-  } catch { fail(); }
+  } catch {
+    fail();
+  }
   requireFileTrust('connections', connectionPath(workspace), text);
   return binding;
 }
@@ -144,7 +196,10 @@ export async function removeConnection(workspace: string): Promise<void> {
 }
 
 /** No settings are loaded here: the caller must validate the exact selected file and profile. */
-export function describeInstallation(configPath: string, globalPath = globalConfigPath()): Pick<Installation, 'scope' | 'configPath' | 'workspaceRoot'> {
+export function describeInstallation(
+  configPath: string,
+  globalPath = globalConfigPath(),
+): Pick<Installation, 'scope' | 'configPath' | 'workspaceRoot'> {
   const path = canonical(configPath);
   if (path === canonical(globalPath)) return { scope: 'global', configPath: path };
   if (basename(path) === 'settings.json' && basename(dirname(path)) === '.echo') {
@@ -162,8 +217,9 @@ function discoverWorkspace(cwd: string): string {
   for (;;) {
     const directory = join(current, '.echo');
     const echo = stat(directory);
-    if (echo?.isSymbolicLink() || echo && !echo.isDirectory()) fail('echo.installation.workspace');
-    if (stat(connectionPath(current)) || stat(join(directory, 'settings.json')) || stat(join(current, '.git'))) return current;
+    if (echo?.isSymbolicLink() || (echo && !echo.isDirectory())) fail('echo.installation.workspace');
+    if (stat(connectionPath(current)) || stat(join(directory, 'settings.json')) || stat(join(current, '.git')))
+      return current;
     const parent = dirname(current);
     if (parent === current) return starting;
     current = parent;
@@ -171,29 +227,51 @@ function discoverWorkspace(cwd: string): string {
 }
 
 export function resolveInstallation(options: InstallationOptions = {}): Installation {
-  if (options.scope !== undefined && options.configPath !== undefined || options.scope !== undefined && !['workspace', 'global'].includes(options.scope)) fail('echo.installation.selection');
+  if (
+    (options.scope !== undefined && options.configPath !== undefined) ||
+    (options.scope !== undefined && !['workspace', 'global'].includes(options.scope))
+  )
+    fail('echo.installation.selection');
   const selectedProfile = options.profileId === undefined ? undefined : profile(options.profileId);
   const cwd = resolve(options.cwd ?? process.cwd());
   const globalPath = options.globalPath ?? globalConfigPath();
   if (options.configPath !== undefined) {
-    return { ...describeInstallation(resolve(cwd, pathValue(options.configPath)), globalPath), ...(selectedProfile ? { profileId: selectedProfile } : {}) };
+    return {
+      ...describeInstallation(resolve(cwd, pathValue(options.configPath)), globalPath),
+      ...(selectedProfile ? { profileId: selectedProfile } : {}),
+    };
   }
   if (options.scope === 'global') {
-    return { scope: 'global', configPath: canonical(globalPath), ...(selectedProfile ? { profileId: selectedProfile } : {}) };
+    return {
+      scope: 'global',
+      configPath: canonical(globalPath),
+      ...(selectedProfile ? { profileId: selectedProfile } : {}),
+    };
   }
   const workspaceRoot = discoverWorkspace(cwd);
   if (options.scope !== 'workspace' && !options.ignoreConnection) {
     const binding = readConnection(workspaceRoot);
-    if (binding) return {
-      ...describeInstallation(binding.configPath, globalPath), profileId: selectedProfile ?? binding.profileId,
-      connectionPath: connectionPath(workspaceRoot), workspaceRoot,
-    };
+    if (binding)
+      return {
+        ...describeInstallation(binding.configPath, globalPath),
+        profileId: selectedProfile ?? binding.profileId,
+        connectionPath: connectionPath(workspaceRoot),
+        workspaceRoot,
+      };
   }
-  return { scope: 'workspace', configPath: join(workspaceRoot, '.echo', 'settings.json'), workspaceRoot, ...(selectedProfile ? { profileId: selectedProfile } : {}) };
+  return {
+    scope: 'workspace',
+    configPath: join(workspaceRoot, '.echo', 'settings.json'),
+    workspaceRoot,
+    ...(selectedProfile ? { profileId: selectedProfile } : {}),
+  };
 }
 
 /** Read-only preflight for callers that must validate the connection before changing host settings. */
-export function preflightConnection(workspace: string, binding: Pick<WorkspaceConnection, 'configPath' | 'profileId'>): void {
+export function preflightConnection(
+  workspace: string,
+  binding: Pick<WorkspaceConnection, 'configPath' | 'profileId'>,
+): void {
   const selected = parseConnection(JSON.stringify({ version: 1, ...binding }));
   const directory = localDirectory(workspace);
   const before = connectionContents(workspace);
@@ -208,12 +286,15 @@ export function preflightConnection(workspace: string, binding: Pick<WorkspaceCo
   }
   try {
     for (const path of writable) accessSync(path, constants.W_OK | constants.X_OK);
-  } catch { fail('echo.installation.readOnly'); }
+  } catch {
+    fail('echo.installation.readOnly');
+  }
 }
 
 /** Persist a pointer only: no settings, memory or credential material is copied into a workspace. */
 export async function writeConnection(
-  workspace: string, binding: Pick<WorkspaceConnection, 'configPath' | 'profileId'>,
+  workspace: string,
+  binding: Pick<WorkspaceConnection, 'configPath' | 'profileId'>,
 ): Promise<{ path: string; changed: boolean; backupPath?: string }> {
   preflightConnection(workspace, binding);
   const selected = parseConnection(JSON.stringify({ version: 1, ...binding }));
@@ -230,12 +311,16 @@ export async function writeConnection(
   const temporary = join(directory, `.echo-connection-${randomUUID()}.tmp`);
   let backupPath: string | undefined;
   try {
-    await mkdir(directory, { recursive: false, mode: 0o700 }).catch(error => { if (error.code !== 'EEXIST') throw error; });
+    await mkdir(directory, { recursive: false, mode: 0o700 }).catch((error) => {
+      if (error.code !== 'EEXIST') throw error;
+    });
     localDirectory(workspace);
     await chmod(directory, 0o700);
     if (before !== undefined) {
       const backups = localDirectory(workspace, 'backups');
-      await mkdir(backups, { recursive: false, mode: 0o700 }).catch(error => { if (error.code !== 'EEXIST') throw error; });
+      await mkdir(backups, { recursive: false, mode: 0o700 }).catch((error) => {
+        if (error.code !== 'EEXIST') throw error;
+      });
       localDirectory(workspace, 'backups');
       await chmod(backups, 0o700);
       backupPath = join(backups, `connection-${Date.now()}-${randomUUID()}.json`);
@@ -243,8 +328,12 @@ export async function writeConnection(
     }
     const file = await open(temporary, 'wx', 0o600);
     const contents = `${JSON.stringify(selected, null, 2)}\n`;
-    try { await file.writeFile(contents); await file.sync(); }
-    finally { await file.close(); }
+    try {
+      await file.writeFile(contents);
+      await file.sync();
+    } finally {
+      await file.close();
+    }
     if (connectionContents(workspace) !== before) fail('echo.installation.changed');
     if (before === undefined) await link(temporary, path);
     else await rename(temporary, path);
@@ -253,5 +342,7 @@ export async function writeConnection(
   } catch (error) {
     if (error instanceof Error && error.message === echoInstallationWord('echo.installation.changed')) throw error;
     fail('echo.installation.write');
-  } finally { await unlink(temporary).catch(() => {}); }
+  } finally {
+    await unlink(temporary).catch(() => {});
+  }
 }

@@ -24,14 +24,24 @@ import type { IngestOptions } from './types.js';
 const CODE_EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.java', '.kt', '.py', '.cs', '.go', '.sql'];
 const SITE_RE = /DECISION\(\s*([A-Za-z0-9][\w.:-]{0,40})\s*\)\s*[:—–-]?\s*(.*)$/;
 const COMMENT_LINE = /^\s*(\/\/|\/\*|\*|#|--)/;
-const CONST_RE = /^\s*(?:export\s+)?(?:const|let|var|final|static|public|private|protected|\s)*\s*(?:[\w<>[\],]+\s+)?([A-Za-z_$][\w$]*)\s*(?::\s*[^=]+)?=/;
+const CONST_RE =
+  /^\s*(?:export\s+)?(?:const|let|var|final|static|public|private|protected|\s)*\s*(?:[\w<>[\],]+\s+)?([A-Za-z_$][\w$]*)\s*(?::\s*[^=]+)?=/;
 const MAX_BYTES = 1024 * 1024;
 
 /** Every `DECISION(<id>)` comment in the source's code files, each placed on its node (see the module comment). */
-export function decisionSites(repoRoot: string, options: IngestOptions, nodes: GraphNode[], repo: string): (DecisionSite & { id: string })[] {
+export function decisionSites(
+  repoRoot: string,
+  options: IngestOptions,
+  nodes: GraphNode[],
+  repo: string,
+): (DecisionSite & { id: string })[] {
   const out: (DecisionSite & { id: string })[] = [];
   let files: string[] = [];
-  try { files = collectFiles(repoRoot, CODE_EXTS, options, (b) => b.endsWith('.d.ts')); } catch { return out; }
+  try {
+    files = collectFiles(repoRoot, CODE_EXTS, options, (b) => b.endsWith('.d.ts'));
+  } catch {
+    return out;
+  }
   // the nodes of each file, by path
   const byPath = new Map<string, GraphNode[]>();
   for (const n of nodes) {
@@ -43,7 +53,11 @@ export function decisionSites(repoRoot: string, options: IngestOptions, nodes: G
   }
   for (const abs of files) {
     let text: string;
-    try { text = readFileSync(abs, 'utf8'); } catch { continue; }
+    try {
+      text = readFileSync(abs, 'utf8');
+    } catch {
+      continue;
+    }
     if (text.length > MAX_BYTES || !text.includes('DECISION(')) continue;
     const path = relative(repoRoot, abs).replace(/\\/g, '/');
     const lines = text.split(/\r?\n/);
@@ -57,7 +71,12 @@ export function decisionSites(repoRoot: string, options: IngestOptions, nodes: G
       if (!/(\/\/|\/\*|^\s*\*|#|--)/.test(before)) return;
       const lineNo = i + 1;
       const said = m[2]!.replace(/\*\/\s*$/, '').trim();
-      const site: DecisionSite & { id: string } = { id: m[1]!, path, line: lineNo, ...(said ? { text: said.slice(0, 200) } : {}) };
+      const site: DecisionSite & { id: string } = {
+        id: m[1]!,
+        path,
+        line: lineNo,
+        ...(said ? { text: said.slice(0, 200) } : {}),
+      };
       // the declaration under a comment on its own line: skip blank and comment lines
       let below: number | undefined;
       if (COMMENT_LINE.test(line) || /^\s*$/.test(before)) {
@@ -72,7 +91,9 @@ export function decisionSites(repoRoot: string, options: IngestOptions, nodes: G
       if (startsAt.length) {
         site.nodeId = startsAt.sort((a, b) => spanOf(b) - spanOf(a))[0]!.id;
       } else {
-        const holding = here.filter((n) => n.loc!.line <= lineNo && (n.loc!.endLine ?? n.loc!.line) >= lineNo).sort((a, b) => spanOf(a) - spanOf(b));
+        const holding = here
+          .filter((n) => n.loc!.line <= lineNo && (n.loc!.endLine ?? n.loc!.line) >= lineNo)
+          .sort((a, b) => spanOf(a) - spanOf(b));
         if (holding.length) site.nodeId = holding[0]!.id;
         else if (below != null) {
           const c = CONST_RE.exec(lines[below - 1]!);
@@ -91,7 +112,13 @@ const spanOf = (n: GraphNode) => (n.loc!.endLine ?? n.loc!.line) - n.loc!.line;
  * Fold the source's decisions into `fragment.meta.decisions` and put each decision's id on the nodes it names, in
  * place. `manifests` are the design manifests the design pass read. Returns nothing; never throws.
  */
-export function applyDecisions(fragment: GraphFragment, repoRoot: string, options: IngestOptions, ws: WorkspaceConfig, manifests: { manifest: DesignManifest; path: string }[]): void {
+export function applyDecisions(
+  fragment: GraphFragment,
+  repoRoot: string,
+  options: IngestOptions,
+  ws: WorkspaceConfig,
+  manifests: { manifest: DesignManifest; path: string }[],
+): void {
   const repo = fragment.repo;
   const sites = decisionSites(repoRoot, options, fragment.nodes, repo);
   const blocks: DecisionsBlock[] = [];
@@ -105,27 +132,55 @@ export function applyDecisions(fragment: GraphFragment, repoRoot: string, option
     });
     blocks.push({ from: f.path, dir: f.dir, decisions });
   }
-  const declares = manifests.some((m) => Array.isArray(m.manifest.decisions) && m.manifest.decisions.length) || blocks.some((b) => b.decisions.length);
+  const declares =
+    manifests.some((m) => Array.isArray(m.manifest.decisions) && m.manifest.decisions.length) ||
+    blocks.some((b) => b.decisions.length);
   // no decision anywhere: the documents the flows and sentences cite are still read
-  if (!sites.length && !declares) { applyCitedDocs(fragment, repoRoot, options); return; }
+  if (!sites.length && !declares) {
+    applyCitedDocs(fragment, repoRoot, options);
+    return;
+  }
   const byId = new Map(fragment.nodes.map((n) => [n.id, n]));
   const screenOrFlow = new Map<string, string>();
   for (const n of fragment.nodes) {
-    if ((n.kind === 'page' || n.kind === 'component' || n.kind === 'flow') && n.design?.origin === 'manifest' && n.design.id && !screenOrFlow.has(n.design.id)) screenOrFlow.set(n.design.id, n.id);
+    if (
+      (n.kind === 'page' || n.kind === 'component' || n.kind === 'flow') &&
+      n.design?.origin === 'manifest' &&
+      n.design.id &&
+      !screenOrFlow.has(n.design.id)
+    )
+      screenOrFlow.set(n.design.id, n.id);
   }
   const meta = decisionsMetaOf({
-    manifests, blocks, sites,
-    resolveAffect: (ref) => (byId.has(ref) ? ref : byId.has(`${repo}::${ref}`) ? `${repo}::${ref}` : screenOrFlow.get(ref)),
+    manifests,
+    blocks,
+    sites,
+    resolveAffect: (ref) =>
+      byId.has(ref) ? ref : byId.has(`${repo}::${ref}`) ? `${repo}::${ref}` : screenOrFlow.get(ref),
   });
   // each decision's document, quoted
-  const wanted = meta.decisions.filter((d) => d.doc && !/^[a-z]+:\/\//i.test(d.doc)).map((d) => { const [path, anchor] = d.doc!.split('#'); return { path: path!, ...(anchor ? { anchor } : {}) }; });
+  const wanted = meta.decisions
+    .filter((d) => d.doc && !/^[a-z]+:\/\//i.test(d.doc))
+    .map((d) => {
+      const [path, anchor] = d.doc!.split('#');
+      return { path: path!, ...(anchor ? { anchor } : {}) };
+    });
   const docs = applyCitedDocs(fragment, repoRoot, options, wanted);
   for (const d of meta.decisions) {
     if (d.doc) {
       const [path, anchor] = d.doc.split('#');
       const ref = docs.get(d.doc);
-      if (ref) d.docRef = { nodeId: `${repo}::doc::${ref.path}`, path: ref.path, ...(anchor ? { anchor } : {}), ...(ref.title ? { title: ref.title } : {}), ...(ref.quote ? { quote: ref.quote } : {}), ...(ref.cut ? { cut: true as const } : {}) };
-      else if (path) meta.notes.push(`decision "${d.id}" names ${d.doc}, which is not a readable document inside the source`);
+      if (ref)
+        d.docRef = {
+          nodeId: `${repo}::doc::${ref.path}`,
+          path: ref.path,
+          ...(anchor ? { anchor } : {}),
+          ...(ref.title ? { title: ref.title } : {}),
+          ...(ref.quote ? { quote: ref.quote } : {}),
+          ...(ref.cut ? { cut: true as const } : {}),
+        };
+      else if (path)
+        meta.notes.push(`decision "${d.id}" names ${d.doc}, which is not a readable document inside the source`);
     }
     for (const id of d.nodes) {
       const n = byId.get(id);
@@ -133,7 +188,12 @@ export function applyDecisions(fragment: GraphFragment, repoRoot: string, option
       n.decisions = [...new Set([...(n.decisions ?? []), d.id])];
     }
   }
-  fragment.meta = { files: fragment.meta?.files ?? 0, sourceHash: fragment.meta?.sourceHash ?? '', ...fragment.meta, decisions: meta };
+  fragment.meta = {
+    files: fragment.meta?.files ?? 0,
+    sourceHash: fragment.meta?.sourceHash ?? '',
+    ...fragment.meta,
+    decisions: meta,
+  };
 }
 
 /**
@@ -150,8 +210,16 @@ export function applyParties(fragment: GraphFragment, externals: ExternalDecl[] 
     if (have.has(id)) continue;
     have.add(id);
     fragment.nodes.push({
-      id, kind: 'external', name, tags: ['external', 'party'],
-      external: { kind: 'party', source: 'config', ...(e.role ? { role: e.role } : {}), ...(e.persona ? { persona: e.persona } : {}) },
+      id,
+      kind: 'external',
+      name,
+      tags: ['external', 'party'],
+      external: {
+        kind: 'party',
+        source: 'config',
+        ...(e.role ? { role: e.role } : {}),
+        ...(e.persona ? { persona: e.persona } : {}),
+      },
     });
     out.push(e);
   }

@@ -40,9 +40,16 @@ export interface DetectOptions {
 export const KEY_STOP_LIST = ['SHA', 'UTF', 'ISO', 'RFC', 'ES', 'TLS', 'HTTP'] as const;
 const STOP = new Set<string>(KEY_STOP_LIST);
 
-const hostOf = (h: string) => h.toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+const hostOf = (h: string) =>
+  h
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '');
 const orgOf = (o: string) => {
-  const s = o.toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  const s = o
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/+$/, '');
   const dev = /^dev\.azure\.com\/([^/]+)/.exec(s);
   if (dev) return dev[1]!;
   const vs = /^([^.]+)\.visualstudio\.com/.exec(s);
@@ -51,7 +58,10 @@ const orgOf = (o: string) => {
 
 // a key's project part: uppercase letter, then ≥ 1 of [A-Z0-9_]
 const KEY = '[A-Z][A-Z0-9_]+-\\d+';
-const RULES: { re: RegExp; kind: 'jira-url' | 'ado-url' | 'ado-vs-url' | 'ab' | 'jira-hash' | 'jira-bracket' | 'jira' | 'ado-hash' }[] = [
+const RULES: {
+  re: RegExp;
+  kind: 'jira-url' | 'ado-url' | 'ado-vs-url' | 'ab' | 'jira-hash' | 'jira-bracket' | 'jira' | 'ado-hash';
+}[] = [
   { re: /https?:\/\/([^\s/]+)(?:\/[^\s]*?)?\/browse\/([A-Z][A-Z0-9_]+-\d+)(?![A-Za-z0-9_])/g, kind: 'jira-url' },
   { re: /https?:\/\/dev\.azure\.com\/([^\s/]+)\/[^\s/]+(?:\/[^\s/]+)?\/_workitems\/edit\/(\d+)/g, kind: 'ado-url' },
   { re: /https?:\/\/([^\s./]+)\.visualstudio\.com\/(?:[^\s/]+\/){1,2}_workitems\/edit\/(\d+)/g, kind: 'ado-vs-url' },
@@ -100,7 +110,12 @@ export function detectWorkKeys(text: string, opts: DetectOptions = {}): Detected
         case 'jira': {
           const key = m[1]!;
           if (STOP.has(key.slice(0, key.lastIndexOf('-')))) continue;
-          hit = { key, provider: 'jira', via: kind === 'jira-bracket' ? 'bracket' : kind === 'jira-hash' ? 'hash' : 'key', index: start };
+          hit = {
+            key,
+            provider: 'jira',
+            via: kind === 'jira-bracket' ? 'bracket' : kind === 'jira-hash' ? 'hash' : 'key',
+            index: start,
+          };
           break;
         }
       }

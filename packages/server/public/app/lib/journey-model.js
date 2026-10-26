@@ -21,8 +21,9 @@ const id = (k) => k;
 export function jrnGatesIn(sg, from, to) {
   const out = [];
   for (const g of (sg && sg.gates) || []) {
-    const at = ((g.at && g.at.length) ? g.at : [{ stepOrder: g.stepOrder, requires: g.requires }])
-      .filter((o) => o.stepOrder >= from && o.stepOrder <= to);
+    const at = (g.at && g.at.length ? g.at : [{ stepOrder: g.stepOrder, requires: g.requires }]).filter(
+      (o) => o.stepOrder >= from && o.stepOrder <= to,
+    );
     if (!at.length) continue;
     const roles = [...new Set(at.flatMap((o) => (o.requires ? String(o.requires).split(', ') : [])))];
     const placed = { ...g, stepOrder: Math.min(...at.map((o) => o.stepOrder)), count: at.length, at };
@@ -56,11 +57,17 @@ export function momOrdinal(sg, mo) {
  */
 export function buildTree(steps) {
   const list = steps || [];
-  const parent = list.map(() => -1), children = list.map(() => []), roots = [], stack = [];
+  const parent = list.map(() => -1),
+    children = list.map(() => []),
+    roots = [],
+    stack = [];
   list.forEach((s, i) => {
     const d = s.depth || 0;
     while (stack.length && (list[stack[stack.length - 1]].depth || 0) >= d) stack.pop();
-    if (stack.length) { parent[i] = stack[stack.length - 1]; children[parent[i]].push(i); } else roots.push(i);
+    if (stack.length) {
+      parent[i] = stack[stack.length - 1];
+      children[parent[i]].push(i);
+    } else roots.push(i);
     stack.push(i);
   });
   return { parent, children, roots };
@@ -83,11 +90,19 @@ export function cellTree(ms, helper) {
     if (!kids.has(m.under)) kids.set(m.under, []);
     kids.get(m.under).push(m);
   });
-  const all = list.filter((m) => m.under == null || !here.has(m.under) || (!isHelper(m) && (m.tier == null || m.tier <= 1)));
-  const firstOf = new Map(), agains = new Map(), top = [];
+  const all = list.filter(
+    (m) => m.under == null || !here.has(m.under) || (!isHelper(m) && (m.tier == null || m.tier <= 1)),
+  );
+  const firstOf = new Map(),
+    agains = new Map(),
+    top = [];
   all.forEach((m) => {
     const seen = firstOf.get(m.nodeId);
-    if (seen == null) { firstOf.set(m.nodeId, m.stepOrder); top.push(m); return; }
+    if (seen == null) {
+      firstOf.set(m.nodeId, m.stepOrder);
+      top.push(m);
+      return;
+    }
     if (!agains.has(seen)) agains.set(seen, []);
     agains.get(seen).push(m);
   });
@@ -107,23 +122,61 @@ export function sheetModel(sum, w = {}) {
   const t = w.t || id;
   const rowLabel = w.rowLabel || ((r) => ({ label: r.label || r.key, sub: '' }));
   const sysLayer = (r) => {
-    if (r.kind === 'api') return { key: r.key, kind: 'api', row: r, label: t('journey.layer.api'), sub: r.planned ? t('journey.rowPlanned') : r.label, cls: 'api' };
+    if (r.kind === 'api')
+      return {
+        key: r.key,
+        kind: 'api',
+        row: r,
+        label: t('journey.layer.api'),
+        sub: r.planned ? t('journey.rowPlanned') : r.label,
+        cls: 'api',
+      };
     if (r.kind === 'repo') {
       const ux = r.side === 'ux';
-      return { key: r.key, kind: 'repo', side: r.side, row: r, label: t(ux ? 'journey.layer.app' : 'journey.layer.server'),
-        sub: r.label + ' · ' + t('journey.rowSub.' + (ux ? 'ux' : 'server')), cls: ux ? 'app' : 'srv' };
+      return {
+        key: r.key,
+        kind: 'repo',
+        side: r.side,
+        row: r,
+        label: t(ux ? 'journey.layer.app' : 'journey.layer.server'),
+        sub: r.label + ' · ' + t('journey.rowSub.' + (ux ? 'ux' : 'server')),
+        cls: ux ? 'app' : 'srv',
+      };
     }
     const lb = rowLabel(r);
-    return { key: r.key, kind: r.kind, row: r, label: lb.label, sub: lb.sub, cls: r.kind === 'records' ? 'db' : r.kind === 'messages' ? 'msg' : 'ext' };
+    return {
+      key: r.key,
+      kind: r.kind,
+      row: r,
+      label: lb.label,
+      sub: lb.sub,
+      cls: r.kind === 'records' ? 'db' : r.kind === 'messages' ? 'msg' : 'ext',
+    };
   };
   const cols = [];
-  ((sum && sum.segments) || []).forEach((sg) => rankOrder(sg).forEach((mo, i) => cols.push({ index: cols.length, sg, mo, first: i === 0 })));
+  ((sum && sum.segments) || []).forEach((sg) =>
+    rankOrder(sg).forEach((mo, i) => cols.push({ index: cols.length, sg, mo, first: i === 0 })),
+  );
   const rows = (sum && sum.systems) || [];
-  const layers = [{ key: 'user', kind: 'user', label: t('journey.layer.user'), sub: t('journey.layerSub.user'), cls: 'ui' }];
+  const layers = [
+    { key: 'user', kind: 'user', label: t('journey.layer.user'), sub: t('journey.layerSub.user'), cls: 'ui' },
+  ];
   rows.filter((r) => r.kind === 'repo' || r.kind === 'api').forEach((r) => layers.push(sysLayer(r)));
-  layers.push({ key: 'gates', kind: 'gates', label: t('journey.layer.gates'), sub: t('journey.layerSub.gates'), cls: 'gate' });
+  layers.push({
+    key: 'gates',
+    kind: 'gates',
+    label: t('journey.layer.gates'),
+    sub: t('journey.layerSub.gates'),
+    cls: 'gate',
+  });
   rows.filter((r) => r.kind !== 'repo' && r.kind !== 'api').forEach((r) => layers.push(sysLayer(r)));
-  layers.push({ key: 'verified', kind: 'verified', label: t('journey.layer.verified'), sub: t('journey.layerSub.verified'), cls: 'test' });
+  layers.push({
+    key: 'verified',
+    kind: 'verified',
+    label: t('journey.layer.verified'),
+    sub: t('journey.layerSub.verified'),
+    cls: 'test',
+  });
   return { cols, layers };
 }
 
@@ -134,9 +187,19 @@ export function sheetModel(sum, w = {}) {
  */
 export function stopOf(sum, order, parent) {
   if (!sum || order == null || order < 0) return null;
-  const find = (o) => { for (const sg of sum.segments || []) { const m = (sg.markers || []).find((x) => x.stepOrder === o); if (m) return { sg, m }; } return null; };
-  let cur = order, hit = find(cur);
-  for (let guard = 0; !hit && parent && cur != null && cur >= 0 && guard < 64; guard++) { cur = parent[cur]; hit = cur != null && cur >= 0 ? find(cur) : null; }
+  const find = (o) => {
+    for (const sg of sum.segments || []) {
+      const m = (sg.markers || []).find((x) => x.stepOrder === o);
+      if (m) return { sg, m };
+    }
+    return null;
+  };
+  let cur = order,
+    hit = find(cur);
+  for (let guard = 0; !hit && parent && cur != null && cur >= 0 && guard < 64; guard++) {
+    cur = parent[cur];
+    hit = cur != null && cur >= 0 ? find(cur) : null;
+  }
   if (!hit || hit.m.moment == null) return null;
   const cols = sheetModel(sum).cols;
   const at = cols.findIndex((c) => c.sg === hit.sg && c.mo.index === hit.m.moment);
@@ -207,10 +270,22 @@ export function drillLayers(sum, w = {}) {
   const absentText = w.absentText || id;
   const layers = sheetModel(sum, w).layers.filter((l) => l.kind !== 'verified');
   const have = new Set(layers.map((l) => l.kind));
-  [['records', 'db'], ['messages', 'msg'], ['external', 'ext']].forEach(([kind, cls]) => {
+  [
+    ['records', 'db'],
+    ['messages', 'msg'],
+    ['external', 'ext'],
+  ].forEach(([kind, cls]) => {
     if (have.has(kind)) return;
     const word = (sum && sum.absentKinds && sum.absentKinds[kind]) || 'noneIndexed';
-    layers.push({ key: 'absent:' + kind, kind, label: t('journey.row.' + kind), sub: absentText(word) + ' · ' + t('journey.rowSub.' + kind), cls, absent: true, word });
+    layers.push({
+      key: 'absent:' + kind,
+      kind,
+      label: t('journey.row.' + kind),
+      sub: absentText(word) + ' · ' + t('journey.rowSub.' + kind),
+      cls,
+      absent: true,
+      word,
+    });
   });
   return layers;
 }
@@ -219,7 +294,7 @@ export function drillLayers(sum, w = {}) {
 export function drillLayerOf(m, byKey, steps) {
   const n = ((steps || [])[m.stepOrder] || {}).node || {};
   if (m.kind === 'step' && (n.kind === 'component' || n.kind === 'page') && byKey.user != null) return byKey.user;
-  return byKey[m.system] != null ? byKey[m.system] : (byKey.user || 0);
+  return byKey[m.system] != null ? byKey[m.system] : byKey.user || 0;
 }
 
 /**
@@ -241,7 +316,9 @@ export function drillBeats(col, layers, ctx = {}) {
   const steps = ctx.steps || [];
   const parent = ctx.parent || null;
   const byKey = {};
-  layers.forEach((l, li) => { byKey[l.key] = li; });
+  layers.forEach((l, li) => {
+    byKey[l.key] = li;
+  });
   const ms = (sg.markers || []).filter((m) => m.moment === mo.index);
   const tree = cellTree(ms, ctx.helper);
   const here = new Map(ms.map((m) => [m.stepOrder, m]));
@@ -250,11 +327,21 @@ export function drillBeats(col, layers, ctx = {}) {
     if (m.kind !== 'record' && m.kind !== 'message' && m.kind !== 'external') return;
     for (let u = m.under; u != null && here.has(u); u = here.get(u).under) reach.add(u);
   });
-  const beats = [], colOf = {}, cells = {};
-  const owns = (o, bi) => { colOf[o] = bi; tree.again(o).forEach((r) => { colOf[r.stepOrder] = bi; }); };
-  const put = (li, bi, box) => { (cells[li + ':' + bi] = cells[li + ':' + bi] || []).push(box); };
+  const beats = [],
+    colOf = {},
+    cells = {};
+  const owns = (o, bi) => {
+    colOf[o] = bi;
+    tree.again(o).forEach((r) => {
+      colOf[r.stepOrder] = bi;
+    });
+  };
+  const put = (li, bi, box) => {
+    (cells[li + ':' + bi] = cells[li + ':' + bi] || []).push(box);
+  };
   const layerOf = (m) => drillLayerOf(m, byKey, steps);
-  const isUx = (li) => layers[li] && (layers[li].kind === 'user' || (layers[li].kind === 'repo' && layers[li].side === 'ux'));
+  const isUx = (li) =>
+    layers[li] && (layers[li].kind === 'user' || (layers[li].kind === 'repo' && layers[li].side === 'ux'));
   const isServer = (li) => layers[li] && layers[li].kind === 'repo' && layers[li].side === 'server';
   const isMinor = (m) => {
     if (m.kind !== 'step' || m.business || m.tier == null || m.tier < 1) return false;
@@ -265,19 +352,31 @@ export function drillBeats(col, layers, ctx = {}) {
     for (let cur = o, n = 0; cur != null && cur >= 0 && n < 64; n++) {
       if (colOf[cur] != null) return colOf[cur];
       const m = here.get(cur);
-      cur = m && m.under != null ? m.under : (parent ? parent[cur] : -1);
+      cur = m && m.under != null ? m.under : parent ? parent[cur] : -1;
     }
     return null;
   };
   if (mo.component && mo.component.stepOrder < mo.from && byKey.user != null) {
-    beats.push({ kind: 'screen', order: mo.component.stepOrder, layer: byKey.user, open: true, comp: mo.component, also: [] });
+    beats.push({
+      kind: 'screen',
+      order: mo.component.stepOrder,
+      layer: byKey.user,
+      open: true,
+      comp: mo.component,
+      also: [],
+    });
     colOf[mo.component.stepOrder] = 0;
   }
   const calls = ms.filter((m) => m.kind === 'call');
   const call = (mo.callStep != null && calls.find((m) => m.stepOrder === mo.callStep)) || calls[0] || null;
-  const callNode = call ? ((steps[call.stepOrder] || {}).node || {}) : {};
-  const answer = call && callNode.contract && (callNode.contract.responses || []).length ? { call, contract: callNode.contract } : null;
-  let last = -1, lastServer = -1, answerAt = -1;
+  const callNode = call ? (steps[call.stepOrder] || {}).node || {} : {};
+  const answer =
+    call && callNode.contract && (callNode.contract.responses || []).length
+      ? { call, contract: callNode.contract }
+      : null;
+  let last = -1,
+    lastServer = -1,
+    answerAt = -1;
   const pushAnswer = () => {
     beats.push({ kind: 'answer', layer: byKey[call.system] != null ? byKey[call.system] : 0, answer, also: [] });
     answerAt = beats.length - 1;
@@ -286,20 +385,31 @@ export function drillBeats(col, layers, ctx = {}) {
     if (m.kind === 'record' || m.kind === 'message' || m.kind === 'external') {
       let bi = colOfStep(m.stepOrder);
       if (bi == null) bi = last >= 0 ? last : 0;
-      if (!beats.length) { beats.push({ kind: 'data', layer: layerOf(m), m, also: [] }); bi = 0; }
+      if (!beats.length) {
+        beats.push({ kind: 'data', layer: layerOf(m), m, also: [] });
+        bi = 0;
+      }
       owns(m.stepOrder, bi);
       put(layerOf(m), bi, { type: 'data', m, layer: layerOf(m) });
       return;
     }
     const li = layerOf(m);
-    if (isMinor(m) && last >= 0 && m.under != null && colOf[m.under] === last && beats[last].m
-      && (beats[last].m.tx || null) === (m.tx || null)) {
-      beats[last].also.push(m); owns(m.stepOrder, last);
+    if (
+      isMinor(m) &&
+      last >= 0 &&
+      m.under != null &&
+      colOf[m.under] === last &&
+      beats[last].m &&
+      (beats[last].m.tx || null) === (m.tx || null)
+    ) {
+      beats[last].also.push(m);
+      owns(m.stepOrder, last);
       return;
     }
     if (answer && answerAt < 0 && lastServer >= 0 && isUx(li)) pushAnswer();
     beats.push({ kind: m.kind === 'call' ? 'seam' : 'part', layer: li, m, also: [] });
-    last = beats.length - 1; owns(m.stepOrder, last);
+    last = beats.length - 1;
+    owns(m.stepOrder, last);
     if (isServer(li)) lastServer = last;
   });
   if (answer && answerAt < 0 && (lastServer >= 0 || colOf[call.stepOrder] != null)) pushAnswer();
@@ -308,10 +418,17 @@ export function drillBeats(col, layers, ctx = {}) {
     else if (b.kind === 'answer') put(b.layer, bi, { type: 'answer', answer: b.answer });
     else if (b.kind !== 'data') put(b.layer, bi, { type: 'part', m: b.m, layer: b.layer, also: b.also });
   });
-  const gates = ctx.gates || [], decs = ctx.decs || [];
+  const gates = ctx.gates || [],
+    decs = ctx.decs || [];
   if (byKey.gates != null) {
-    gates.forEach((g, k) => { const bi = colOfStep(g.stepOrder); if (bi != null) put(byKey.gates, bi, { type: 'gate', g, bi, k }); });
-    decs.forEach((d, k) => { const bi = colOfStep(d.order); if (bi != null) put(byKey.gates, bi, { type: 'dec', d, bi, k }); });
+    gates.forEach((g, k) => {
+      const bi = colOfStep(g.stepOrder);
+      if (bi != null) put(byKey.gates, bi, { type: 'gate', g, bi, k });
+    });
+    decs.forEach((d, k) => {
+      const bi = colOfStep(d.order);
+      if (bi != null) put(byKey.gates, bi, { type: 'dec', d, bi, k });
+    });
   }
   const txCols = beats.map(() => null);
   ms.forEach((m) => {
@@ -321,20 +438,30 @@ export function drillBeats(col, layers, ctx = {}) {
     txCols[bi] = txCols[bi] == null || txCols[bi] === m.tx ? m.tx : 'straddles';
   });
   const wires = [];
-  const boxId = (b) => (b.kind === 'answer' ? 'jrn-ans' : b.kind === 'screen' ? 'jrn-bx-' + b.order : 'jrn-bx-' + b.m.stepOrder);
+  const boxId = (b) =>
+    b.kind === 'answer' ? 'jrn-ans' : b.kind === 'screen' ? 'jrn-bx-' + b.order : 'jrn-bx-' + b.m.stepOrder;
   beats.forEach((b, bi) => {
     if (!bi) return;
     const prev = beats[bi - 1];
-    if (b.kind === 'answer') wires.push({ a: boxId(lastServer >= 0 ? beats[lastServer] : prev), b: 'jrn-ans', cls: 'dash' });
-    else wires.push({ a: boxId(prev), b: boxId(b), cls: (prev.kind === 'answer' || (b.m && b.m.planned)) ? 'dash' : '' });
+    if (b.kind === 'answer')
+      wires.push({ a: boxId(lastServer >= 0 ? beats[lastServer] : prev), b: 'jrn-ans', cls: 'dash' });
+    else wires.push({ a: boxId(prev), b: boxId(b), cls: prev.kind === 'answer' || (b.m && b.m.planned) ? 'dash' : '' });
   });
   ms.forEach((m) => {
     if (m.kind !== 'record' && m.kind !== 'message' && m.kind !== 'external') return;
     const bi = colOf[m.stepOrder];
     if (bi == null || !beats[bi] || beats[bi].kind === 'data') return;
-    wires.push({ a: boxId(beats[bi]), b: 'jrn-bx-' + m.stepOrder, cls: m.kind === 'record' ? 'violet' : m.kind === 'message' ? 'q' : 'grey' });
+    wires.push({
+      a: boxId(beats[bi]),
+      b: 'jrn-bx-' + m.stepOrder,
+      cls: m.kind === 'record' ? 'violet' : m.kind === 'message' ? 'q' : 'grey',
+    });
   });
-  gates.forEach((g, k) => { const bi = colOfStep(g.stepOrder); if (bi != null && beats[bi] && beats[bi].kind !== 'data') wires.push({ a: boxId(beats[bi]), b: 'jrn-bg-' + bi + '-' + k, cls: 'gate' }); });
+  gates.forEach((g, k) => {
+    const bi = colOfStep(g.stepOrder);
+    if (bi != null && beats[bi] && beats[bi].kind !== 'data')
+      wires.push({ a: boxId(beats[bi]), b: 'jrn-bg-' + bi + '-' + k, cls: 'gate' });
+  });
   return { beats, colOf, cells, wires, call, txCols, tree, ms };
 }
 
@@ -366,9 +493,14 @@ export function ladderModel(sum, sg, ctx = {}) {
   const uxKey = (systems.find((r) => r.kind === 'repo' && r.side === 'ux') || {}).key;
   const svKey = (systems.find((r) => r.kind === 'repo' && r.side === 'server') || {}).key;
   const momStart = new Map();
-  (sg.moments || []).forEach((mo) => { const first = sg.markers.find((m) => m.moment === mo.index); if (first) momStart.set(first.stepOrder, mo); });
+  (sg.moments || []).forEach((mo) => {
+    const first = sg.markers.find((m) => m.moment === mo.index);
+    if (first) momStart.set(first.stepOrder, mo);
+  });
   const want = {};
-  const need = (key, px) => { want[key] = Math.max(want[key] || 0, px); };
+  const need = (key, px) => {
+    want[key] = Math.max(want[key] || 0, px);
+  };
   const MONO = 6.3;
   const lines = (sg.markers || []).map((m) => {
     const mo = momStart.get(m.stepOrder);
@@ -383,11 +515,14 @@ export function ladderModel(sum, sg, ctx = {}) {
       cells[m.system] = { type: 'seam', m };
       need(m.system, 70 + text(m).length * MONO);
     } else if (m.kind === 'record' || m.kind === 'message' || m.kind === 'external') {
-      if (svKey) { cells[svKey] = { type: 'out' }; need(svKey, 40); }
+      if (svKey) {
+        cells[svKey] = { type: 'out' };
+        need(svKey, 40);
+      }
       cells[m.system] = { type: 'marker', m };
       need(m.system, 44 + text(m).length * MONO);
     } else {
-      const tier = m.tier != null ? m.tier : (m.helper ? 1 : 0);
+      const tier = m.tier != null ? m.tier : m.helper ? 1 : 0;
       const node = m.nodeId && steps[m.stepOrder] && steps[m.stepOrder].node;
       const loc = node && node.loc ? node.loc.path + ':' + node.loc.line : '';
       cells[m.system] = { type: 'part', m, tier, loc };
@@ -398,16 +533,22 @@ export function ladderModel(sum, sg, ctx = {}) {
   const used = new Set();
   lines.forEach((l) => Object.keys(l.cells).forEach((k) => used.add(k)));
   let last = -1;
-  systems.forEach((r, i) => { if (used.has(r.key)) last = i; });
+  systems.forEach((r, i) => {
+    if (used.has(r.key)) last = i;
+  });
   const cols = systems.slice(0, last + 1).map((r) => ({ r, state: used.has(r.key) ? 'used' : 'skip' }));
   const end = systems.slice(last + 1);
   const full = !end.length && cols.every((c) => c.state === 'used');
   const L = LADDER;
-  const widths = cols.map((c) => (c.state === 'skip' ? L.SKIP : Math.round(Math.max(L.USED, Math.min(L.MAX, want[c.r.key] || 0)))));
+  const widths = cols.map((c) =>
+    c.state === 'skip' ? L.SKIP : Math.round(Math.max(L.USED, Math.min(L.MAX, want[c.r.key] || 0))),
+  );
   const oldW = L.TIME + systems.length * L.COL;
-  const nUsed = cols.filter((c) => c.state === 'used').length, nSkip = cols.length - nUsed;
+  const nUsed = cols.filter((c) => c.state === 'used').length,
+    nSkip = cols.length - nUsed;
   const rest = L.PAD + L.TIME + nSkip * L.SKIP + (end.length ? L.END : 0);
-  const width = full ? oldW
+  const width = full
+    ? oldW
     : Math.min(Math.max(oldW, rest + nUsed * L.COL), rest + widths.reduce((a, b) => a + b, 0) - nSkip * L.SKIP);
   const word = ctx.word || (() => 'notInvolved');
   return { lines, cols, end, full, widths, width, word };
@@ -419,6 +560,9 @@ export function ladderModel(sum, sg, ctx = {}) {
  */
 export function actionLadderModel(sum, col, ctx = {}) {
   const sg = col.sg;
-  const only = Object.assign({}, sg, { markers: (sg.markers || []).filter((m) => m.moment === col.mo.index), moments: [col.mo] });
+  const only = Object.assign({}, sg, {
+    markers: (sg.markers || []).filter((m) => m.moment === col.mo.index),
+    moments: [col.mo],
+  });
   return ladderModel(sum, only, ctx);
 }

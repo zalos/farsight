@@ -25,8 +25,11 @@ export function readOnlyWhy() {
 function greyOne(el, ro) {
   if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'option') {
     el.classList.toggle('ro-off', ro);
-    if (ro) { el.setAttribute('aria-disabled', 'true'); setTip(el, { text: t('sys.readonly.control') }); }
-    else if (el.classList.contains('ro-off') || el.getAttribute('aria-disabled') === 'true') el.removeAttribute('aria-disabled');
+    if (ro) {
+      el.setAttribute('aria-disabled', 'true');
+      setTip(el, { text: t('sys.readonly.control') });
+    } else if (el.classList.contains('ro-off') || el.getAttribute('aria-disabled') === 'true')
+      el.removeAttribute('aria-disabled');
   } else if ('disabled' in el) {
     el.disabled = ro;
   }
@@ -39,7 +42,10 @@ export function applyReadOnly(root = document) {
   els.forEach((el) => greyOne(el, ro));
   if (root.matches && root.matches('[data-write]')) greyOne(root, ro);
   const banner = document.getElementById('set-ro');
-  if (banner) { banner.hidden = !ro; banner.textContent = ro ? t('sys.readonly.banner') : ''; }
+  if (banner) {
+    banner.hidden = !ro;
+    banner.textContent = ro ? t('sys.readonly.banner') : '';
+  }
   if (ro) installReadOnly();
 }
 

@@ -11,10 +11,15 @@ async function mapOn(page: Page) {
   await gotoReady(page, '#/portfolio');
   await page.evaluate(() => {
     const S = (window as any).S;
-    S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+    S.SETTINGS = Object.assign({}, S.SETTINGS, {
+      flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+    });
   });
 }
-const go = (page: Page, hash: string) => page.evaluate((h) => { location.hash = h; }, hash);
+const go = (page: Page, hash: string) =>
+  page.evaluate((h) => {
+    location.hash = h;
+  }, hash);
 
 /**
  * @covers packages/server/public/app/lib/test-chip.js::builtOnlyHtml
@@ -58,7 +63,9 @@ test('Ask answers a plain question with did you mean, and a click asks it', asyn
   const box = page.locator('.jrn-ask .ask-wrap').first();
   await expect(box.locator('.ask-q')).toBeVisible();
   // the example is this graph's own
-  await expect.poll(() => box.locator('.ask-q').getAttribute('placeholder')).toMatch(/^where is .+ set to .+, and what must be true first\?$/);
+  await expect
+    .poll(() => box.locator('.ask-q').getAttribute('placeholder'))
+    .toMatch(/^where is .+ set to .+, and what must be true first\?$/);
   await box.locator('.ask-q').fill('opening invoices quickly');
   await box.locator('.ask-go').click();
   const sugg = box.locator('.ask-suggest .ask-sugg').first();
@@ -68,7 +75,9 @@ test('Ask answers a plain question with did you mean, and a click asks it', asyn
 });
 
 /** @covers packages/server/public/app/lib/ask.js::askCardHtml */
-test('Ask reads a question in other words as its nearest shape, and prints the reading first (outsider round, F7)', async ({ page }) => {
+test('Ask reads a question in other words as its nearest shape, and prints the reading first (outsider round, F7)', async ({
+  page,
+}) => {
   await gotoReady(page, '#/journeys');
   const box = page.locator('.jrn-ask .ask-wrap').first();
   await box.locator('.ask-q').fill('Who is allowed to approve an invoice?');

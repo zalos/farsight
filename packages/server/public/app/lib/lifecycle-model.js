@@ -16,7 +16,11 @@ export function lifecycleStripModel(lc) {
     field: life.field,
     statuses: life.statuses.map((s) => ({ s, written: to.has(s) })),
     moves: life.transitions.map((x, i) => ({
-      from: x.from, to: x.to, by: x.by, via: x.via, line: x.line,
+      from: x.from,
+      to: x.to,
+      by: x.by,
+      via: x.via,
+      line: x.line,
       byName: (lc.writers && lc.writers[x.by]) || String(x.by).split('::').pop(),
       here: !!(lc.onJourney && lc.onJourney[i]),
     })),
@@ -30,13 +34,14 @@ export function lifecyclesFor(all, ids) {
   return (all || []).filter((lc) => keep.has(lc.nodeId));
 }
 
-
 /**
  * The records a journey header shows: those whose moves this journey makes (a record the walk only
  * reads says nothing about this journey), the most moves first, at most `cap`; the rest counted.
  */
 export function headerLifecycles(all, cap = 2) {
-  const mine = (all || []).map((lc, i) => ({ lc, i, here: (lc.onJourney || []).filter(Boolean).length })).filter((x) => x.here > 0);
+  const mine = (all || [])
+    .map((lc, i) => ({ lc, i, here: (lc.onJourney || []).filter(Boolean).length }))
+    .filter((x) => x.here > 0);
   mine.sort((a, b) => b.here - a.here || a.i - b.i);
   return { shown: mine.slice(0, cap).map((x) => x.lc), more: Math.max(0, mine.length - cap) };
 }
@@ -48,7 +53,9 @@ export function headerLifecycles(all, cap = 2) {
 export function screenLifecycles(all, recordIds, stepIds) {
   const recs = new Set(recordIds || []);
   const steps = new Set(stepIds || []);
-  return (all || []).filter((lc) => recs.has(lc.nodeId) || ((lc.lifecycle && lc.lifecycle.transitions) || []).some((x) => steps.has(x.by)));
+  return (all || []).filter(
+    (lc) => recs.has(lc.nodeId) || ((lc.lifecycle && lc.lifecycle.transitions) || []).some((x) => steps.has(x.by)),
+  );
 }
 
 // ── one state machine, two views of it (round 2026-10-10 §3) ────────────────
@@ -77,10 +84,20 @@ export function stripItems(view, lens) {
     const prev = i > 0 ? rows[i - 1] : null;
     // an arrow from the status before when a move leaves it — the status the writer checks, or one of those its table of
     // moves lets it leave (swarm round 3: *pending client approval → approved* was drawn with a dot)
-    const arrow = !!prev && r.written && (r.movers || []).some((m) => m.from === prev.status || (m.fromAny || []).includes(prev.status)
-      || (m.from == null && !(m.fromAny || []).length && (prev.written || i === 1)));
+    const arrow =
+      !!prev &&
+      r.written &&
+      (r.movers || []).some(
+        (m) =>
+          m.from === prev.status ||
+          (m.fromAny || []).includes(prev.status) ||
+          (m.from == null && !(m.fromAny || []).length && (prev.written || i === 1)),
+      );
     return {
-      status: r.status, word: r.word, declared: !!r.declared, written: !!r.written,
+      status: r.status,
+      word: r.word,
+      declared: !!r.declared,
+      written: !!r.written,
       sep: i === 0 ? '' : arrow ? '→' : '·',
       main: lens === 'code' ? r.status : r.word,
       constant: lens === 'hybrid' && r.word !== r.status ? r.status : '',
@@ -92,7 +109,9 @@ export function stripItems(view, lens) {
 export function stripCounts(lc, view, lens) {
   const c = (lc && lc.counts) || {};
   const v = (view && view.counts) || {};
-  return lens === 'business' ? [v.statuses || c.statuses, v.moved, v.unmoved] : [c.statuses, c.transitions, c.unwritten];
+  return lens === 'business'
+    ? [v.statuses || c.statuses, v.moved, v.unmoved]
+    : [c.statuses, c.transitions, c.unwritten];
 }
 
 /**
@@ -105,12 +124,40 @@ export function tableRows(view, doorOf) {
   if (!view) return [];
   // every live place the writer runs is folded behind the one that calls it most directly; a place a constant switches
   // off is listed apart, never as the mover (lane moves, 2026-10-13)
-  const mv = (m) => ({ by: m.by, name: m.name, words: m.words, at: m.at || null, door: m.at ? doorOf(m) : null,
-    from: m.from != null ? [m.from] : (m.fromAny || []), also: (m.also || []).length, when: m.when || null,
-    switchedOff: (m.switchedOff || []).map((o) => ({ action: o.action || o.screenName, flag: o.flag, value: o.value, at: o.at })) });
+  const mv = (m) => ({
+    by: m.by,
+    name: m.name,
+    words: m.words,
+    at: m.at || null,
+    door: m.at ? doorOf(m) : null,
+    from: m.from != null ? [m.from] : m.fromAny || [],
+    also: (m.also || []).length,
+    when: m.when || null,
+    switchedOff: (m.switchedOff || []).map((o) => ({
+      action: o.action || o.screenName,
+      flag: o.flag,
+      value: o.value,
+      at: o.at,
+    })),
+  });
   return [
-    ...(view.rows || []).map((r) => ({ kind: 'status', word: r.word, declared: !!r.declared, code: r.status, written: !!r.written, movers: (r.movers || []).map(mv) })),
-    ...(view.overlays || []).map((o) => ({ kind: 'overlay', word: o.name, declared: true, code: o.tableName, when: o.when, written: (o.movers || []).length > 0, movers: (o.movers || []).map(mv) })),
+    ...(view.rows || []).map((r) => ({
+      kind: 'status',
+      word: r.word,
+      declared: !!r.declared,
+      code: r.status,
+      written: !!r.written,
+      movers: (r.movers || []).map(mv),
+    })),
+    ...(view.overlays || []).map((o) => ({
+      kind: 'overlay',
+      word: o.name,
+      declared: true,
+      code: o.tableName,
+      when: o.when,
+      written: (o.movers || []).length > 0,
+      movers: (o.movers || []).map(mv),
+    })),
   ];
 }
 

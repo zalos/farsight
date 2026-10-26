@@ -35,11 +35,19 @@ function scopeMiss(g: Grant, item: WorkItem): string | null {
     const p = projectOf(item);
     if (!p || !s.projects.includes(p)) return `${item.key} is outside the granted projects`;
   }
-  if (s.types?.length && !s.types.includes(item.type.category)) return `the grant does not cover a ${item.type.category}`;
-  if (s.areas?.length && !(item.area && s.areas.some((a) => item.area === a || item.area!.startsWith(a + '\\') || item.area!.startsWith(a + '/')))) {
+  if (s.types?.length && !s.types.includes(item.type.category))
+    return `the grant does not cover a ${item.type.category}`;
+  if (
+    s.areas?.length &&
+    !(
+      item.area &&
+      s.areas.some((a) => item.area === a || item.area!.startsWith(a + '\\') || item.area!.startsWith(a + '/'))
+    )
+  ) {
     return `${item.key} is outside the granted areas`;
   }
-  if (s.states?.length && !s.states.includes(item.state.category)) return `the grant does not cover an item that is ${item.state.category}`;
+  if (s.states?.length && !s.states.includes(item.state.category))
+    return `the grant does not cover an item that is ${item.state.category}`;
   return null;
 }
 
@@ -49,7 +57,8 @@ function actionMiss(g: Grant, intent: Intent): string | null {
     if (outside.length) return `the grant does not let edit touch ${outside.join(', ')}`;
   }
   if (intent.action === 'transition' && g.to) {
-    if (!intent.payload.to || !g.to.includes(intent.payload.to)) return `the grant does not allow moving to ${intent.payload.to ?? 'an unnamed state'}`;
+    if (!intent.payload.to || !g.to.includes(intent.payload.to))
+      return `the grant does not allow moving to ${intent.payload.to ?? 'an unnamed state'}`;
   }
   return null;
 }
@@ -87,7 +96,10 @@ export function credentialVerdict(session: Session): Verdict {
   if (!c) return { allowed: false, reason: 'the credential’s write scope is unknown' };
   return c.write
     ? { allowed: true, reason: c.detail ? `the credential can write (${c.detail})` : 'the credential can write' }
-    : { allowed: false, reason: c.detail ? `the credential is read-only (${c.detail})` : 'the credential is read-only' };
+    : {
+        allowed: false,
+        reason: c.detail ? `the credential is read-only (${c.detail})` : 'the credential is read-only',
+      };
 }
 
 /** A session, or a way to open one only when a call must leave the process. */
@@ -97,7 +109,10 @@ const opened = new WeakMap<() => Promise<Session>, Promise<Session>>();
 function sessionOf(ref: SessionRef): Promise<Session> {
   if (typeof ref !== 'function') return Promise.resolve(ref);
   let p = opened.get(ref);
-  if (!p) { p = ref(); opened.set(ref, p); }
+  if (!p) {
+    p = ref();
+    opened.set(ref, p);
+  }
   return p;
 }
 
@@ -128,7 +143,11 @@ export async function decide(
     tracker = miss ? { allowed: false, reason: miss } : await ctx.provider.can(session, ctx.item, intent.action);
   }
   const allowed = policy.verdict.allowed && tracker.allowed && credential.allowed;
-  return { verdicts: { policy: policy.verdict, tracker, credential }, allowed, requiresConfirmation: allowed && policy.requiresConfirmation };
+  return {
+    verdicts: { policy: policy.verdict, tracker, credential },
+    allowed,
+    requiresConfirmation: allowed && policy.requiresConfirmation,
+  };
 }
 
 export interface ApplyOutcome {
@@ -158,7 +177,8 @@ export interface ApplyContext {
 
 /** The agent attribution prefix (§7.4), unless the policy says `attribution: none`. */
 export function attributed(intent: Intent, permissions: Permissions | undefined): Intent {
-  if (intent.action !== 'comment' || intent.requestedBy.kind !== 'agent' || permissions?.attribution === 'none') return intent;
+  if (intent.action !== 'comment' || intent.requestedBy.kind !== 'agent' || permissions?.attribution === 'none')
+    return intent;
   const body = intent.payload.body ?? '';
   if (body.startsWith('via Farsight (agent)')) return intent;
   return { ...intent, payload: { ...intent.payload, body: `via Farsight (agent): ${body}` } };
@@ -169,7 +189,13 @@ export async function applyIntent(intent: Intent, ctx: ApplyContext): Promise<Ap
   const now = ctx.now ?? (() => new Date());
   const { cache, cfg, provider } = ctx;
   const stamp = () => now().toISOString();
-  const base = { source: cfg.id, intent: intent.id, item: intent.item, action: intent.action, requestedBy: intent.requestedBy };
+  const base = {
+    source: cfg.id,
+    intent: intent.id,
+    item: intent.item,
+    action: intent.action,
+    requestedBy: intent.requestedBy,
+  };
 
   const cached = cache.getItem(intent.item);
   if (!cached) {
@@ -181,7 +207,13 @@ export async function applyIntent(intent: Intent, ctx: ApplyContext): Promise<Ap
   // a request is applied at most once: only a queued one (new, or waiting for a person) goes on. A second
   // confirm of an applied comment, or a confirm after a person dropped it, must not write again
   if (row && row.state !== 'queued') {
-    return { intent: row.intent, state: row.state, pending: false, ...(row.verdicts ? { verdicts: row.verdicts } : {}), reason: `this request is already ${row.state}` };
+    return {
+      intent: row.intent,
+      state: row.state,
+      pending: false,
+      ...(row.verdicts ? { verdicts: row.verdicts } : {}),
+      reason: `this request is already ${row.state}`,
+    };
   }
   if (!row) cache.enqueueIntent(cfg.id, withBase, stamp());
 
@@ -194,7 +226,13 @@ export async function applyIntent(intent: Intent, ctx: ApplyContext): Promise<Ap
   if (d.requiresConfirmation && !ctx.confirmed) {
     cache.updateIntent(intent.id, { state: 'queued', verdicts: d.verdicts, at: stamp() });
     cache.audit({ ...base, at: stamp(), verdicts: d.verdicts, outcome: 'confirm-pending' });
-    return { intent: withBase, state: 'queued', pending: true, verdicts: d.verdicts, reason: 'waiting for a person to confirm' };
+    return {
+      intent: withBase,
+      state: 'queued',
+      pending: true,
+      verdicts: d.verdicts,
+      reason: 'waiting for a person to confirm',
+    };
   }
 
   const session = await sessionOf(ctx.session);
@@ -202,14 +240,39 @@ export async function applyIntent(intent: Intent, ctx: ApplyContext): Promise<Ap
   const [fresh] = await provider.hydrate(session, [intent.item]);
   if (!fresh) {
     cache.updateIntent(intent.id, { state: 'failed', verdicts: d.verdicts, at: stamp() });
-    cache.audit({ ...base, at: stamp(), verdicts: d.verdicts, outcome: 'failed', detail: 'the tracker no longer has the item' });
-    return { intent: withBase, state: 'failed', pending: false, verdicts: d.verdicts, reason: 'the tracker no longer has the item' };
+    cache.audit({
+      ...base,
+      at: stamp(),
+      verdicts: d.verdicts,
+      outcome: 'failed',
+      detail: 'the tracker no longer has the item',
+    });
+    return {
+      intent: withBase,
+      state: 'failed',
+      pending: false,
+      verdicts: d.verdicts,
+      reason: 'the tracker no longer has the item',
+    };
   }
   if (fresh.revision !== withBase.baseRevision) {
     cache.replaceItem(cfg.id, fresh, cache.writeSync(cfg.id, stamp()));
     cache.updateIntent(intent.id, { state: 'conflict', verdicts: d.verdicts, at: stamp() });
-    cache.audit({ ...base, at: stamp(), verdicts: d.verdicts, outcome: 'conflict', detail: { cached: withBase.baseRevision, tracker: fresh.revision } });
-    return { intent: withBase, state: 'conflict', pending: false, verdicts: d.verdicts, item: fresh, reason: 'the item changed on the tracker since it was read' };
+    cache.audit({
+      ...base,
+      at: stamp(),
+      verdicts: d.verdicts,
+      outcome: 'conflict',
+      detail: { cached: withBase.baseRevision, tracker: fresh.revision },
+    });
+    return {
+      intent: withBase,
+      state: 'conflict',
+      pending: false,
+      verdicts: d.verdicts,
+      item: fresh,
+      reason: 'the item changed on the tracker since it was read',
+    };
   }
 
   const sent = attributed(withBase, cfg.permissions);
@@ -218,12 +281,27 @@ export async function applyIntent(intent: Intent, ctx: ApplyContext): Promise<Ap
   let preview: PreviewFact | undefined;
   if (provider.preview && provider.capabilities.dryRun) {
     const p = await provider.preview(session, sent);
-    preview = { ok: p.ok, reason: p.ok ? 'ok' : p.error ?? 'the tracker would refuse it' };
+    preview = { ok: p.ok, reason: p.ok ? 'ok' : (p.error ?? 'the tracker would refuse it') };
     if (!p.ok) {
       const state: IntentState = p.conflict ? 'conflict' : 'denied';
       cache.updateIntent(intent.id, { state, verdicts: d.verdicts, result: p, at: stamp() });
-      cache.audit({ ...base, at: stamp(), verdicts: d.verdicts, preview, outcome: p.conflict ? 'conflict' : 'dry-run-refused', detail: p.error });
-      return { intent: withBase, state, pending: false, verdicts: d.verdicts, preview, result: p, reason: preview.reason };
+      cache.audit({
+        ...base,
+        at: stamp(),
+        verdicts: d.verdicts,
+        preview,
+        outcome: p.conflict ? 'conflict' : 'dry-run-refused',
+        detail: p.error,
+      });
+      return {
+        intent: withBase,
+        state,
+        pending: false,
+        verdicts: d.verdicts,
+        preview,
+        result: p,
+        reason: preview.reason,
+      };
     }
   }
 
@@ -232,8 +310,23 @@ export async function applyIntent(intent: Intent, ctx: ApplyContext): Promise<Ap
   if (!result.ok) {
     const state: IntentState = result.conflict ? 'conflict' : 'failed';
     cache.updateIntent(intent.id, { state, result, at: stamp() });
-    cache.audit({ ...base, at: stamp(), verdicts: d.verdicts, ...(preview ? { preview } : {}), outcome: state, detail: result.error });
-    return { intent: withBase, state, pending: false, verdicts: d.verdicts, result, reason: result.error, ...(preview ? { preview } : {}) };
+    cache.audit({
+      ...base,
+      at: stamp(),
+      verdicts: d.verdicts,
+      ...(preview ? { preview } : {}),
+      outcome: state,
+      detail: result.error,
+    });
+    return {
+      intent: withBase,
+      state,
+      pending: false,
+      verdicts: d.verdicts,
+      result,
+      reason: result.error,
+      ...(preview ? { preview } : {}),
+    };
   }
 
   // the full record after the write: hydrate carries comments and history, which a provider's own
@@ -244,6 +337,21 @@ export async function applyIntent(intent: Intent, ctx: ApplyContext): Promise<Ap
   // the outbox keeps the result without the item (the cache holds that)
   const { item: _item, ...kept } = result;
   cache.updateIntent(intent.id, { state: 'confirmed', result: kept, at: stamp() });
-  cache.audit({ ...base, at: stamp(), verdicts: d.verdicts, ...(preview ? { preview } : {}), outcome: 'confirmed', detail: { revision: result.revision } });
-  return { intent: withBase, state: 'confirmed', pending: false, verdicts: d.verdicts, result, ...(after ? { item: after } : {}), ...(preview ? { preview } : {}) };
+  cache.audit({
+    ...base,
+    at: stamp(),
+    verdicts: d.verdicts,
+    ...(preview ? { preview } : {}),
+    outcome: 'confirmed',
+    detail: { revision: result.revision },
+  });
+  return {
+    intent: withBase,
+    state: 'confirmed',
+    pending: false,
+    verdicts: d.verdicts,
+    result,
+    ...(after ? { item: after } : {}),
+    ...(preview ? { preview } : {}),
+  };
 }

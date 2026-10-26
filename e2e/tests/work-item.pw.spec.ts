@@ -24,7 +24,12 @@ test.describe('work item pane', () => {
     await page.getByRole('button', { name: 'post comment' }).click();
     await expect(page.locator('.wk-ans[data-status="applied"]')).toBeVisible();
     const post = stub.posts.find((p) => p.path === '/api/work/intent');
-    expect(post?.body).toMatchObject({ item: 'work::invoice-jira::INV-3', action: 'comment', payload: { body: 'Sorted **newest** first in the service.' }, requestedBy: { kind: 'human' } });
+    expect(post?.body).toMatchObject({
+      item: 'work::invoice-jira::INV-3',
+      action: 'comment',
+      payload: { body: 'Sorted **newest** first in the service.' },
+      requestedBy: { kind: 'human' },
+    });
     expect(post?.body.baseRevision).toBeTruthy();
     // the markdown is rendered, never printed as asterisks
     await expect(page.locator('.wk-comment').last().locator('.wk-md b')).toHaveText('newest');
@@ -41,7 +46,10 @@ test.describe('work item pane', () => {
     const pending = page.locator('#wk-answers .wk-ans[data-status="pending"]').first();
     await expect(pending).toContainText('waiting for your confirmation');
     await expect(pending).toContainText('Ben Lindqvist');
-    expect(stub.posts.at(-1)?.body).toMatchObject({ action: 'assign', payload: { assignee: '5b10ac8d82e05b22cc7d4ef5' } });
+    expect(stub.posts.at(-1)?.body).toMatchObject({
+      action: 'assign',
+      payload: { assignee: '5b10ac8d82e05b22cc7d4ef5' },
+    });
     await pending.getByRole('button', { name: 'confirm' }).click();
     await expect(page.locator('#wk-answers .wk-ans[data-status="applied"]')).toBeVisible();
     expect(stub.posts.at(-1)?.path).toMatch(/\/api\/work\/intent\/int-\d+\/confirm$/);
@@ -57,7 +65,9 @@ test.describe('work item pane', () => {
     await expect(denied).toContainText('not allowed: nothing was written');
     await expect(denied.locator('[data-verdict]')).toHaveCount(3);
     await expect(denied.locator('[data-verdict="work.hud.ans.policy"]')).toContainText('your policy says');
-    await expect(denied.locator('[data-verdict="work.hud.ans.tracker"]')).toContainText('Jira says: the workflow has no transition out of Done');
+    await expect(denied.locator('[data-verdict="work.hud.ans.tracker"]')).toContainText(
+      'Jira says: the workflow has no transition out of Done',
+    );
     await expect(denied.locator('[data-verdict="work.hud.ans.tracker"] .yn')).toHaveText('no');
     await expect(denied.locator('[data-verdict="work.hud.ans.credential"]')).toContainText('the credential can');
     expect(stub.posts.at(-1)?.body).toMatchObject({ action: 'transition', payload: { to: 'In Progress' } });
@@ -66,7 +76,9 @@ test.describe('work item pane', () => {
   });
 
   /** @covers packages/server/public/app/surfaces/work.js::answerHtml */
-  test('an edit over a changed item is a conflict: the tracker’s version beside the ask, then re-base', async ({ page }) => {
+  test('an edit over a changed item is a conflict: the tracker’s version beside the ask, then re-base', async ({
+    page,
+  }) => {
     await page.goto(itemHash('INV-9'));
     await page.locator('button[data-action="edit"]').first().click();
     await page.locator('#wk-title-in').fill('Email the customer a copy when an invoice is sent');
@@ -75,7 +87,10 @@ test.describe('work item pane', () => {
     await expect(conflict).toContainText('the tracker changed since your copy');
     await expect(conflict.locator('[data-side="theirs"]')).toContainText('(edited in Jira)');
     await expect(conflict.locator('[data-side="yours"]')).toContainText('Email the customer a copy');
-    expect(stub.posts.at(-1)?.body).toMatchObject({ action: 'edit', payload: { title: 'Email the customer a copy when an invoice is sent' } });
+    expect(stub.posts.at(-1)?.body).toMatchObject({
+      action: 'edit',
+      payload: { title: 'Email the customer a copy when an invoice is sent' },
+    });
     await conflict.getByRole('button', { name: 're-base' }).click();
     await expect(page.locator('.wk-ans[data-status="applied"]')).toBeVisible();
     await expect(page.locator('#wk-title')).toHaveText('Email the customer a copy when an invoice is sent');

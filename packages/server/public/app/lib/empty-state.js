@@ -10,5 +10,19 @@ import { defAttrs } from './counted.js';
 /** The empty state of one surface: work · tests · changes · apis · map · mapStorylines · lessons. */
 export function emptyHtml(surface, tag = 'p') {
   const key = 'empty.' + surface;
-  return '<' + tag + ' class="set-note fs-empty" data-empty="' + esc(surface) + '"><span' + defAttrs(key) + '>' + sym('absent') + ' ' + esc(t(key)) + '</span></' + tag + '>';
+  return (
+    '<' +
+    tag +
+    ' class="set-note fs-empty" data-empty="' +
+    esc(surface) +
+    '"><span' +
+    defAttrs(key) +
+    '>' +
+    sym('absent') +
+    ' ' +
+    esc(t(key)) +
+    '</span></' +
+    tag +
+    '>'
+  );
 }

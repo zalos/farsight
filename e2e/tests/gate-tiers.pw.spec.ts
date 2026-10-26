@@ -15,7 +15,9 @@ const enc = encodeURIComponent;
  * @covers packages/server/public/app/surfaces/journeys.js::jrnGateTiers
  * @covers packages/core/src/journey-counted.ts::journeyCounted
  */
-test('the business register: two numbers in the header, the checks by tier, the technical ones folded', async ({ page }) => {
+test('the business register: two numbers in the header, the checks by tier, the technical ones folded', async ({
+  page,
+}) => {
   await gotoReady(page, '#/journeys/' + enc(FLOW) + '?view=sheet&biz=gates&lens=business');
   await expect(page.locator('.jrn-num.jrn-gates-biz').first()).toHaveText(/^\d+ that matters? to the business$/);
   await expect(page.locator('.jrn-num.jrn-gates-tech').first()).toHaveText(/^\d+ technical checks?$/);
@@ -23,10 +25,14 @@ test('the business register: two numbers in the header, the checks by tier, the 
   await expect(list).toBeVisible();
   await expect(page.locator('.jrn-gatelist.tiers .jrn-gl-grp.who').first()).toBeVisible();
   // the precondition sits under *the record must be*, in the team's own words
-  const rec = page.locator('.jrn-gatelist.tiers .jrn-gl-grp.record', { has: page.locator('[data-gate-card="' + PRE + '"]') }).first();
+  const rec = page
+    .locator('.jrn-gatelist.tiers .jrn-gl-grp.record', { has: page.locator('[data-gate-card="' + PRE + '"]') })
+    .first();
   await expect(rec.locator('.hud-label')).toHaveText(/the record must be/i);
   // the words, then the check's own tier on its row in every register (swarm round 3: the groups are by what a check is about)
-  await expect(rec.locator('[data-gate-card="' + PRE + '"] .jrn-gl-w')).toHaveText(/^Reject edits once the invoice has left draft/);
+  await expect(rec.locator('[data-gate-card="' + PRE + '"] .jrn-gl-w')).toHaveText(
+    /^Reject edits once the invoice has left draft/,
+  );
   await expect(rec.locator('[data-gate-card="' + PRE + '"] .gate-tier')).toHaveText('business');
   // the technical checks are folded: counted on the summary, listed only when opened
   const fold = page.locator('details.jrn-gl-tech').first();
@@ -56,7 +62,9 @@ test('a precondition opens the gate card with its tier and why, and what happens
   await expect(tier).toContainText('a record must be in a state');
   await expect(tier).toContainText('invoices.status = draft');
   await expect(tier).toContainText('tier from the kind of check');
-  await expect(c.locator('.gc-sec').filter({ hasText: /what it allows/i })).toContainText('Otherwise: refused (409 conflict)');
+  await expect(c.locator('.gc-sec').filter({ hasText: /what it allows/i })).toContainText(
+    'Otherwise: refused (409 conflict)',
+  );
   await page.keyboard.press('Escape');
   await expect(c).toHaveCount(0);
 });
@@ -66,9 +74,16 @@ test('the Map property’s Gates tab reads by tier in the business register', as
   await gotoReady(page, '#/portfolio?lens=business');
   await page.evaluate(() => {
     const S = (window as any).S;
-    S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+    S.SETTINGS = Object.assign({}, S.SETTINGS, {
+      flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+    });
   });
-  await page.evaluate(([flow, n]) => { location.hash = '#/map/' + encodeURIComponent(flow) + '?node=' + encodeURIComponent(n); }, [FLOW, 'invoice-app::page::/invoices']);
+  await page.evaluate(
+    ([flow, n]) => {
+      location.hash = '#/map/' + encodeURIComponent(flow) + '?node=' + encodeURIComponent(n);
+    },
+    [FLOW, 'invoice-app::page::/invoices'],
+  );
   await expect(page.locator('.mp')).toBeVisible();
   await page.locator('#mp-tab-gates').click();
   const heads = page.locator('.mp-body .mp-tier-h');

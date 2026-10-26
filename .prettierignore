@@ -45,19 +45,6 @@
 *.css
 
 # Not formatted yet: each style PR deletes its line; delete the block when it is empty
-/.claude/
-/packages/core/
-/packages/server/
-/packages/parsers/
+# PR #121 edits code-parser and MCP; format these after it lands.
 /packages/code-parser/
 /packages/mcp/
-/packages/cli/
-/packages/echo/
-/packages/graph/
-/packages/work/
-/packages/work-azdo/
-/packages/work-jira/
-/packages/work-fixture/
-/packages/app/
-/e2e/
-/tools/

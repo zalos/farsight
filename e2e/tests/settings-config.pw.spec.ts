@@ -59,7 +59,11 @@ async function freePort(): Promise<number> {
   return new Promise((res, rej) => {
     const s = createServer();
     s.once('error', rej);
-    s.listen(0, '127.0.0.1', () => { const a = s.address(); const p = typeof a === 'object' && a ? a.port : 0; s.close(() => res(p)); });
+    s.listen(0, '127.0.0.1', () => {
+      const a = s.address();
+      const p = typeof a === 'object' && a ? a.port : 0;
+      s.close(() => res(p));
+    });
   });
 }
 
@@ -69,12 +73,19 @@ test.describe('on the NX example', () => {
     dir = mkdtempSync(join(tmpdir(), 'farsight-e2e-config-'));
     cpSync(join(REPO_ROOT, 'examples', 'nx-workspace'), join(dir, 'nx-workspace'), { recursive: true });
     const graph = join(dir, 'graph.json');
-    execFileSync(process.execPath, [CLI, 'ingest', 'nx-workspace', '--out', graph], { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] });
+    execFileSync(process.execPath, [CLI, 'ingest', 'nx-workspace', '--out', graph], {
+      cwd: dir,
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
     const port = await freePort();
     server = spawn(process.execPath, [CLI, 'serve', graph, '--port', String(port)], { cwd: dir, stdio: 'ignore' });
     base = `http://localhost:${port}/`;
     for (let i = 0; i < 100; i++) {
-      try { if ((await fetch(base + 'api/version')).ok) return; } catch { /* not yet */ }
+      try {
+        if ((await fetch(base + 'api/version')).ok) return;
+      } catch {
+        /* not yet */
+      }
       await new Promise((r) => setTimeout(r, 100));
     }
     throw new Error('the NX example server never answered');
@@ -88,7 +99,9 @@ test.describe('on the NX example', () => {
    * @covers packages/server/public/app/surfaces/settings-config.js::configFilesHtml
    * @covers GET /api/config
    */
-  test('four files: the root and three scoped to a folder, the ignored setting, the conflict and the note', async ({ page }) => {
+  test('four files: the root and three scoped to a folder, the ignored setting, the conflict and the note', async ({
+    page,
+  }) => {
     await page.goto(base + '#/journeys?lens=hybrid');
     await expect(page.locator('#stats')).not.toHaveText('loading…');
     await openSettings(page);
@@ -96,9 +109,15 @@ test.describe('on the NX example', () => {
     await expect(src.locator('.cfg-row')).toHaveCount(4);
     await expect(src.locator('.cfg-n-files')).toHaveText('4 config files');
     await expect(src.locator('.cfg-n-conflicts')).toHaveText('1 conflict');
-    await expect(src.locator('.cfg-row[data-path="libs/billing/data-access/farsight.config.json"]')).toContainText('scoped to libs/billing/data-access/');
-    await expect(src.locator('.cfg-row[data-path="libs/billing/data-access/farsight.config.json"] .cfg-gives')).toContainText('stores');
-    await expect(src.locator('.cfg-row[data-path="apps/ops-admin/farsight.config.json"] .cfg-ign')).toContainText('tooling');
+    await expect(src.locator('.cfg-row[data-path="libs/billing/data-access/farsight.config.json"]')).toContainText(
+      'scoped to libs/billing/data-access/',
+    );
+    await expect(
+      src.locator('.cfg-row[data-path="libs/billing/data-access/farsight.config.json"] .cfg-gives'),
+    ).toContainText('stores');
+    await expect(src.locator('.cfg-row[data-path="apps/ops-admin/farsight.config.json"] .cfg-ign')).toContainText(
+      'tooling',
+    );
     await expect(src.locator('.cfg-conflict[data-kind="glossary"]')).toContainText('Two words for InvoicesPage');
     await expect(src.locator('.cfg-note')).toContainText(['tooling is root-only']);
     // the count's tip splits it: one for the whole source, three for one folder

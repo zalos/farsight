@@ -1,10 +1,29 @@
-import { graphDocument, mergeOccurrences, retargetOccurrences, type GraphDocument, type GraphSource } from '@farsight/graph';
+import {
+  graphDocument,
+  mergeOccurrences,
+  retargetOccurrences,
+  type GraphDocument,
+  type GraphSource,
+} from '@farsight/graph';
 import { buildInfo } from './version.js';
 import type { BuildInfo } from './version.js';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, basename, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
-import type { GraphFragment, GraphNode, GraphEdge, TestsMeta, StoriesMeta, StoresMeta, PackagesMeta, ProjectsMeta, ConfigMeta, JourneysMeta, DecisionsMeta, RoutesMeta } from './graph.js';
+import type {
+  GraphFragment,
+  GraphNode,
+  GraphEdge,
+  TestsMeta,
+  StoriesMeta,
+  StoresMeta,
+  PackagesMeta,
+  ProjectsMeta,
+  ConfigMeta,
+  JourneysMeta,
+  DecisionsMeta,
+  RoutesMeta,
+} from './graph.js';
 
 /** Freshness signals persisted with the snapshot — lets consumers (MCP agents
  * especially) detect a stale graph instead of getting confidently old answers. */
@@ -104,8 +123,9 @@ export class GraphStore {
       // the digest computed against them still holds (`farsight tests import` re-adds a
       // loaded graph as one meta-thin fragment and would otherwise drop it).
       const prior = this.repoMeta(fragment.repo);
-      const digest = fragment.meta.sourceDigest
-        ?? (prior?.sourceHash === fragment.meta.sourceHash ? prior?.sourceDigest : undefined);
+      const digest =
+        fragment.meta.sourceDigest ??
+        (prior?.sourceHash === fragment.meta.sourceHash ? prior?.sourceDigest : undefined);
       this.perRepoMeta.set(fragment.repo, {
         files: fragment.meta.files,
         hash: fragment.meta.sourceHash,
@@ -113,20 +133,38 @@ export class GraphStore {
       });
       const entries = [...this.perRepoMeta].sort((a, b) => a[0].localeCompare(b[0]));
       this.meta.files = entries.reduce((sum, [, m]) => sum + m.files, 0);
-      this.meta.sourceHash = entries.length === 1
-        ? entries[0]![1].hash
-        : createHash('sha1').update(entries.map(([r, m]) => `${r}:${m.hash}`).join('\n')).digest('hex').slice(0, 12);
+      this.meta.sourceHash =
+        entries.length === 1
+          ? entries[0]![1].hash
+          : createHash('sha1')
+              .update(entries.map(([r, m]) => `${r}:${m.hash}`).join('\n'))
+              .digest('hex')
+              .slice(0, 12);
       // the same fold for the content digest; no repo carrying one means the graph has
       // none to state, and the key goes away rather than standing for a checkout nothing
       // was measured against
       const digests = entries.filter(([, m]) => m.digest);
       if (!digests.length) delete this.meta.sourceDigest;
       else if (entries.length === 1) this.meta.sourceDigest = digests[0]![1].digest;
-      else this.meta.sourceDigest = createHash('sha1').update(digests.map(([r, m]) => `${r}:${m.digest}`).join('\n')).digest('hex').slice(0, 12);
+      else
+        this.meta.sourceDigest = createHash('sha1')
+          .update(digests.map(([r, m]) => `${r}:${m.digest}`).join('\n'))
+          .digest('hex')
+          .slice(0, 12);
       // merged, never replaced: a store that re-adds one repo keeps the other repos' rows
-      this.meta.repos = { ...this.meta.repos, ...Object.fromEntries(entries.map(([r, m]) => [r, {
-        files: m.files, sourceHash: m.hash, ...(m.digest ? { sourceDigest: m.digest } : {}),
-      }])) };
+      this.meta.repos = {
+        ...this.meta.repos,
+        ...Object.fromEntries(
+          entries.map(([r, m]) => [
+            r,
+            {
+              files: m.files,
+              sourceHash: m.hash,
+              ...(m.digest ? { sourceDigest: m.digest } : {}),
+            },
+          ]),
+        ),
+      };
     }
   }
 
@@ -142,10 +180,18 @@ export class GraphStore {
   }
 
   /** Live views for merge-time passes (core/stitch.ts). Mutations go through the methods below. */
-  nodeById(id: string): GraphNode | undefined { return this.nodes.get(id); }
-  allNodes(): GraphNode[] { return [...this.nodes.values()]; }
-  allEdges(): GraphEdge[] { return [...this.edges.values()]; }
-  removeNode(id: string): void { this.nodes.delete(id); }
+  nodeById(id: string): GraphNode | undefined {
+    return this.nodes.get(id);
+  }
+  allNodes(): GraphNode[] {
+    return [...this.nodes.values()];
+  }
+  allEdges(): GraphEdge[] {
+    return [...this.edges.values()];
+  }
+  removeNode(id: string): void {
+    this.nodes.delete(id);
+  }
   /** Replace an edge (keyed by kind|from|to) with a re-targeted one; the old key is dropped. */
   replaceEdge(oldKey: string, edge: GraphEdge): void {
     this.edges.delete(oldKey);
@@ -167,24 +213,51 @@ export class GraphStore {
   /** Export the merged graph without local paths, build stamps or snapshot bookkeeping. */
   toDocument(sourceId = 'workspace'): GraphDocument {
     const nodes = this.allNodes();
-    const repos = new Set([...Object.keys(this.roots), ...Object.keys(this.meta.repos ?? {}),
-      ...nodes.map(node => node.loc?.repo ?? (node.id.includes('::') ? node.id.split('::')[0]! : '')).filter(Boolean)]);
-    const fields = ['tests', 'stories', 'stores', 'packages', 'projects', 'config', 'journeys', 'decisions', 'routes'] as const;
+    const repos = new Set([
+      ...Object.keys(this.roots),
+      ...Object.keys(this.meta.repos ?? {}),
+      ...nodes.map((node) => node.loc?.repo ?? (node.id.includes('::') ? node.id.split('::')[0]! : '')).filter(Boolean),
+    ]);
+    const fields = [
+      'tests',
+      'stories',
+      'stores',
+      'packages',
+      'projects',
+      'config',
+      'journeys',
+      'decisions',
+      'routes',
+    ] as const;
     for (const field of fields) for (const repo of Object.keys(this.meta[field] ?? {})) repos.add(repo);
-    const sources: GraphSource[] = [...repos].map(repo => {
+    const sources: GraphSource[] = [...repos].map((repo) => {
       const freshness = this.repoMeta(repo);
-      const meta: NonNullable<GraphSource['meta']> = { ...(freshness?.files != null ? { files: freshness.files } : {}),
-        ...(freshness?.sourceDigest ? { sourceDigest: freshness.sourceDigest } : {}) };
+      const meta: NonNullable<GraphSource['meta']> = {
+        ...(freshness?.files != null ? { files: freshness.files } : {}),
+        ...(freshness?.sourceDigest ? { sourceDigest: freshness.sourceDigest } : {}),
+      };
       for (const field of fields) {
         const value = this.meta[field]?.[repo];
         if (value) Object.assign(meta, { [field]: value });
       }
       return { repo, meta };
     });
-    return graphDocument({ repo: sourceId, nodes, edges: this.allEdges(), ...(this.meta.files != null ? { meta: {
-      files: this.meta.files,
-      ...(this.meta.sourceDigest ? { sourceDigest: this.meta.sourceDigest } : {}),
-    } } : {}) }, sources);
+    return graphDocument(
+      {
+        repo: sourceId,
+        nodes,
+        edges: this.allEdges(),
+        ...(this.meta.files != null
+          ? {
+              meta: {
+                files: this.meta.files,
+                ...(this.meta.sourceDigest ? { sourceDigest: this.meta.sourceDigest } : {}),
+              },
+            }
+          : {}),
+      },
+      sources,
+    );
   }
 
   save(path: string): void {
@@ -204,7 +277,11 @@ export class GraphStore {
     // addFragment above had no per-repo meta (the saved graph is one flat node list),
     // so rehydrate it from what save() stamped — older graphs simply have none.
     for (const [repo, m] of Object.entries(store.meta.repos ?? {})) {
-      store.perRepoMeta.set(repo, { files: m.files, hash: m.sourceHash, ...(m.sourceDigest ? { digest: m.sourceDigest } : {}) });
+      store.perRepoMeta.set(repo, {
+        files: m.files,
+        hash: m.sourceHash,
+        ...(m.sourceDigest ? { digest: m.sourceDigest } : {}),
+      });
     }
     return store;
   }

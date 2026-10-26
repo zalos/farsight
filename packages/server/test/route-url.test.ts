@@ -10,7 +10,8 @@ import { readFileSync } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, '..', 'public', 'app');
-const { withParams, isOverlayAddress, overlayToMap, mapScreenHash, screenOrdinal, screenRowAt, partOrder } = await import(join(appDir, 'lib', 'route-url.js'));
+const { withParams, isOverlayAddress, overlayToMap, mapScreenHash, screenOrdinal, screenRowAt, partOrder } =
+  await import(join(appDir, 'lib', 'route-url.js'));
 
 const FLOW = '#/journeys/example-app%3A%3Aflow%3A%3Ainvoice-submission';
 const MAPF = '#/map/example-app%3A%3Aflow%3A%3Ainvoice-submission';
@@ -19,17 +20,34 @@ test('an old journey link is the same place on the Map: step → screen, node �
   assert.equal(overlayToMap(FLOW + '?view=sheet&step=2&node=a%3A%3Ab'), MAPF + '?screen=2&part=a%3A%3Ab&layout=table');
   assert.equal(overlayToMap(FLOW + '?view=storyboard'), MAPF + '?layout=screens');
   assert.equal(overlayToMap(FLOW + '?view=timeline&step=3'), MAPF + '?screen=3&layout=table');
-  assert.equal(overlayToMap(FLOW + '?view=drill&step=1'), MAPF + '?screen=1&layout=drill', 'the old drill opens the drill: its rail over the beats');
-  assert.equal(overlayToMap(FLOW + '?view=drill&band=ladder'), MAPF + '?layout=ladder', 'the ladder band on the drill is the action\'s ladder');
-  assert.equal(overlayToMap(FLOW + '?view=timeline&band=ladder'), MAPF + '?layout=table', 'a band alone does not move the stop');
+  assert.equal(
+    overlayToMap(FLOW + '?view=drill&step=1'),
+    MAPF + '?screen=1&layout=drill',
+    'the old drill opens the drill: its rail over the beats',
+  );
+  assert.equal(
+    overlayToMap(FLOW + '?view=drill&band=ladder'),
+    MAPF + '?layout=ladder',
+    "the ladder band on the drill is the action's ladder",
+  );
+  assert.equal(
+    overlayToMap(FLOW + '?view=timeline&band=ladder'),
+    MAPF + '?layout=table',
+    'a band alone does not move the stop',
+  );
   assert.equal(overlayToMap(FLOW), MAPF, 'a link that named no view names no layout: the register decides');
 });
 
 test('the dock rides with a part only; biz is dropped; every other parameter keeps its order', () => {
-  assert.equal(overlayToMap(FLOW + '?view=sheet&step=2&node=x&dock=right'), MAPF + '?screen=2&part=x&layout=table&dock=right');
+  assert.equal(
+    overlayToMap(FLOW + '?view=sheet&step=2&node=x&dock=right'),
+    MAPF + '?screen=2&part=x&layout=table&dock=right',
+  );
   assert.equal(overlayToMap(FLOW + '?view=sheet&dock=right&biz=gates'), MAPF + '?layout=table');
-  assert.equal(overlayToMap(FLOW + '?lens=business&view=timeline&impact=example-app%3A%3Atable%3A%3Ainvoices&hops=2'),
-    MAPF + '?lens=business&impact=example-app%3A%3Atable%3A%3Ainvoices&hops=2&layout=table');
+  assert.equal(
+    overlayToMap(FLOW + '?lens=business&view=timeline&impact=example-app%3A%3Atable%3A%3Ainvoices&hops=2'),
+    MAPF + '?lens=business&impact=example-app%3A%3Atable%3A%3Ainvoices&hops=2&layout=table',
+  );
 });
 
 test('the @sync pin survives the conversion — it sits before the query and must not be swallowed', () => {
@@ -39,7 +57,14 @@ test('the @sync pin survives the conversion — it sits before the query and mus
 });
 
 test('a hash that is not an old journey link is handed back untouched — the front door stays', () => {
-  for (const h of ['#/journeys', '#/journeys?storyline=invoice', '#/codemap?node=x', '#/map/x?screen=2', '', 'https://example.test/x']) {
+  for (const h of [
+    '#/journeys',
+    '#/journeys?storyline=invoice',
+    '#/codemap?node=x',
+    '#/map/x?screen=2',
+    '',
+    'https://example.test/x',
+  ]) {
     assert.equal(overlayToMap(h), h);
     assert.equal(isOverlayAddress(h), false);
   }
@@ -49,7 +74,10 @@ test('a hash that is not an old journey link is handed back untouched — the fr
 
 test('the shell rewrites an old link with one replace before it routes, so Back leaves the way the reader came', () => {
   const src = readFileSync(join(appDir, 'shell.js'), 'utf8');
-  assert.match(src, /if \(isOverlayAddress\(location\.hash\)\) history\.replaceState\(null, '', overlayToMap\(location\.hash\)\);/);
+  assert.match(
+    src,
+    /if \(isOverlayAddress\(location\.hash\)\) history\.replaceState\(null, '', overlayToMap\(location\.hash\)\);/,
+  );
 });
 
 test('a null value removes a parameter; an empty query leaves no dangling ?', () => {
@@ -69,8 +97,14 @@ const FID = 'example-app::flow::billing-cycle';
 
 test('mapScreenHash frames a screen on the street, and a node opens its card with plumbing on', () => {
   assert.equal(mapScreenHash(FID, 2), '#/map/example-app%3A%3Aflow%3A%3Abilling-cycle?screen=2');
-  assert.equal(mapScreenHash(FID, '1', { node: 'r::GET /a' }), '#/map/example-app%3A%3Aflow%3A%3Abilling-cycle?screen=1&plumb=1&card=call%3Ar%3A%3AGET%20%2Fa');
-  assert.equal(mapScreenHash(FID, 1, { node: 't::invoices', kind: 'record' }), '#/map/example-app%3A%3Aflow%3A%3Abilling-cycle?screen=1&plumb=1&card=record%3At%3A%3Ainvoices');
+  assert.equal(
+    mapScreenHash(FID, '1', { node: 'r::GET /a' }),
+    '#/map/example-app%3A%3Aflow%3A%3Abilling-cycle?screen=1&plumb=1&card=call%3Ar%3A%3AGET%20%2Fa',
+  );
+  assert.equal(
+    mapScreenHash(FID, 1, { node: 't::invoices', kind: 'record' }),
+    '#/map/example-app%3A%3Aflow%3A%3Abilling-cycle?screen=1&plumb=1&card=record%3At%3A%3Ainvoices',
+  );
 });
 
 test('a screen is a 1-based ordinal; anything else names none', () => {
@@ -94,7 +128,14 @@ test('screenRowAt finds the street row of a screen; a segment folded into the ne
 test('partOrder finds the part a link names on its screen first, else anywhere, gates included', () => {
   const segs = [
     { index: 0, markers: [{ nodeId: 'a', stepOrder: 2 }] },
-    { index: 1, markers: [{ nodeId: 'b', stepOrder: 5 }, { nodeId: 'a', stepOrder: 7 }], gates: [{ id: 'g', stepOrder: 6 }] },
+    {
+      index: 1,
+      markers: [
+        { nodeId: 'b', stepOrder: 5 },
+        { nodeId: 'a', stepOrder: 7 },
+      ],
+      gates: [{ id: 'g', stepOrder: 6 }],
+    },
   ];
   assert.equal(partOrder(segs, 2, 'a'), 7, 'the screen named first');
   assert.equal(partOrder(segs, 1, 'a'), 2);
@@ -112,15 +153,31 @@ const F = 'invoice-app::flow::billing-cycle';
 test('a stop below the screen is an address: screen, action, beat, layout and dock, the dock only at the code', () => {
   const h = stops.mapStopHash(F, { screen: 2, action: 6, beat: 4, dock: 'right' });
   assert.equal(h, '#/map/invoice-app%3A%3Aflow%3A%3Abilling-cycle?screen=2&action=6&beat=4&dock=right');
-  assert.deepEqual(stops.mapStopOf(h), { stop: 'code', screen: 2, action: 6, beat: 4, layout: null, dock: 'right', part: null });
+  assert.deepEqual(stops.mapStopOf(h), {
+    stop: 'code',
+    screen: 2,
+    action: 6,
+    beat: 4,
+    layout: null,
+    dock: 'right',
+    part: null,
+  });
   assert.equal(stops.mapStopOf(stops.mapStopHash(F, { screen: 2, action: 1 })).stop, 'action');
   assert.equal(stops.mapStopOf(stops.mapStopHash(F, { screen: 2, action: 1, layout: 'ladder' })).layout, 'ladder');
   // an action needs its screen; a dock needs its action; a beat needs its action
-  assert.equal(stops.mapStopHash(F, { action: 3, dock: 'right', beat: 2 }), '#/map/invoice-app%3A%3Aflow%3A%3Abilling-cycle');
+  assert.equal(
+    stops.mapStopHash(F, { action: 3, dock: 'right', beat: 2 }),
+    '#/map/invoice-app%3A%3Aflow%3A%3Abilling-cycle',
+  );
 });
 
 test('the address round-trips, and the existing grammar reads as it did', () => {
-  for (const o of [{ screen: 1 }, { screen: 3, action: 2 }, { screen: 2, action: 6, beat: 5, layout: 'ladder', dock: 'bottom' }, { layout: 'table' }]) {
+  for (const o of [
+    { screen: 1 },
+    { screen: 3, action: 2 },
+    { screen: 2, action: 6, beat: 5, layout: 'ladder', dock: 'bottom' },
+    { layout: 'table' },
+  ]) {
     const back = stops.mapStopOf(stops.mapStopHash(F, o));
     assert.equal(back.screen, o.screen ?? null);
     assert.equal(back.action, (o as any).action ?? null);
@@ -129,19 +186,43 @@ test('the address round-trips, and the existing grammar reads as it did', () => 
   assert.equal(stops.mapStopOf('#/map').stop, 'board');
   assert.equal(stops.mapStopOf('#/map/' + encodeURIComponent(F) + '?z=0.8&x=1&y=2').stop, 'journey');
   assert.equal(stops.mapStopOf('#/map/' + encodeURIComponent(F) + '?node=x').stop, 'screen');
-  assert.equal(stops.mapStopOf(stops.mapScreenHash(F, 2)).stop, 'journey', 'a screen framed on the street is the journey stop');
+  assert.equal(
+    stops.mapStopOf(stops.mapScreenHash(F, 2)).stop,
+    'journey',
+    'a screen framed on the street is the journey stop',
+  );
   // what a link cannot mean is dropped, never guessed
   const odd = stops.mapStopOf('#/map/x?screen=0&action=2&layout=spiral&dock=left');
   assert.deepEqual([odd.screen, odd.action, odd.layout, odd.dock], [null, null, null, null]);
-  assert.equal(stops.mapStopOf('?screen=2&action=1').stop, 'action', 'a bare query reads too (route.raw is the whole hash)');
+  assert.equal(
+    stops.mapStopOf('?screen=2&action=1').stop,
+    'action',
+    'a bare query reads too (route.raw is the whole hash)',
+  );
 });
 
 test('a part is an address too: the table with that part selected, or the action that holds it', () => {
   const h = stops.mapStopHash(F, { screen: 2, part: 'a::b', layout: 'table', dock: 'right' });
   assert.equal(h, '#/map/invoice-app%3A%3Aflow%3A%3Abilling-cycle?screen=2&part=a%3A%3Ab&layout=table&dock=right');
-  assert.deepEqual(stops.mapStopOf(h), { stop: 'journey', screen: 2, action: null, beat: null, layout: 'table', dock: 'right', part: 'a::b' });
-  assert.equal(stops.mapStopOf('#/map/x?screen=2&part=p&layout=beats').stop, 'action', 'at an action\'s layout a part names the action');
-  assert.equal(stops.mapStopHash(F, { screen: 2, action: 1, part: 'p' }), '#/map/invoice-app%3A%3Aflow%3A%3Abilling-cycle?screen=2&action=1', 'an action names its own place');
+  assert.deepEqual(stops.mapStopOf(h), {
+    stop: 'journey',
+    screen: 2,
+    action: null,
+    beat: null,
+    layout: 'table',
+    dock: 'right',
+    part: 'a::b',
+  });
+  assert.equal(
+    stops.mapStopOf('#/map/x?screen=2&part=p&layout=beats').stop,
+    'action',
+    "at an action's layout a part names the action",
+  );
+  assert.equal(
+    stops.mapStopHash(F, { screen: 2, action: 1, part: 'p' }),
+    '#/map/invoice-app%3A%3Aflow%3A%3Abilling-cycle?screen=2&action=1',
+    'an action names its own place',
+  );
 });
 
 test('an old step= reads as screen= — step is the storyline position only', () => {

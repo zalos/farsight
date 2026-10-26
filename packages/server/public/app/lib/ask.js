@@ -24,7 +24,20 @@ const API = '/api/ask';
 const biz = () => currentLens() === 'business';
 /** The kinds a chip frames on the Map's street as an explore card (the Map's `card=<kind>:<id>` grammar). */
 const CARD_KIND = { route: 'call', table: 'record', external: 'external', queue: 'message', topic: 'message' };
-const GLYPH = { need: 'gate', decision: 'decision', check: 'warning', verdict: 'live', technical: 'gear', data: 'step', move: 'record', who: 'human', words: 'step', refer: 'step', actions: 'bolt', needs: 'gate' };
+const GLYPH = {
+  need: 'gate',
+  decision: 'decision',
+  check: 'warning',
+  verdict: 'live',
+  technical: 'gear',
+  data: 'step',
+  move: 'record',
+  who: 'human',
+  words: 'step',
+  refer: 'step',
+  actions: 'bolt',
+  needs: 'gate',
+};
 
 /**
  * Where a cited part is read best: a gate's card (null — the chip carries the gate card's attributes instead), a
@@ -51,14 +64,39 @@ export function citeChipHtml(id, ref, place) {
   const tip = r.name + (r.loc ? ' · ' + r.loc : '') + ' · ' + t('tour.cite');
   const cls = 'tw-chip k-' + esc(r.kind);
   const href = citeHref(id, r, place);
-  if (href == null) return '<span class="' + cls + '"' + gateAttrs(id) + ' data-cite="' + esc(id) + '">' + sym('gate') + esc(label) + '</span>';
-  return '<a class="' + cls + '" href="' + esc(href) + '" data-cite="' + esc(id) + '"' + tipAttrs({ text: tip, noFocus: true }) + '>' + esc(label) + '</a>';
+  if (href == null)
+    return (
+      '<span class="' +
+      cls +
+      '"' +
+      gateAttrs(id) +
+      ' data-cite="' +
+      esc(id) +
+      '">' +
+      sym('gate') +
+      esc(label) +
+      '</span>'
+    );
+  return (
+    '<a class="' +
+    cls +
+    '" href="' +
+    esc(href) +
+    '" data-cite="' +
+    esc(id) +
+    '"' +
+    tipAttrs({ text: tip, noFocus: true }) +
+    '>' +
+    esc(label) +
+    '</a>'
+  );
 }
 
 /** A precondition's evidence: the one verdict's chip, or *no test is known to reach it* when nothing does. */
 function needEvidenceHtml(v) {
   if (!v) return '';
-  if (v.word && v.word.cls === 'none' && !(v.runs && v.runs.n)) return '<span class="ev none"' + defAttrs('tour.noneKnown') + '>' + esc(t('tour.noneKnown')) + '</span>';
+  if (v.word && v.word.cls === 'none' && !(v.runs && v.runs.n))
+    return '<span class="ev none"' + defAttrs('tour.noneKnown') + '>' + esc(t('tour.noneKnown')) + '</span>';
   return testEvidenceHtml({ verdict: v, evidenceWord: v.word });
 }
 
@@ -69,17 +107,21 @@ function needEvidenceHtml(v) {
  */
 export function clauseHtml(c, o = {}) {
   const b = biz();
-  const key = b ? (c.bizKey || c.key) : c.key;
+  const key = b ? c.bizKey || c.key : c.key;
   const vars = (b ? c.bizVars : c.vars) || c.vars || {};
   const api = o.api || API;
   const parts = String(t(key)).split(/(\{\w+\})/);
   let html = '';
   for (const p of parts) {
     const m = /^\{(\w+)\}$/.exec(p);
-    if (!m) { html += esc(p); continue; }
+    if (!m) {
+      html += esc(p);
+      continue;
+    }
     const name = m[1];
     if (name === 'count' && c.counted) html += countedHtml(c.counted, api, { words: vars.count });
-    else if (name === 'word' && c.evidence) html += testEvidenceHtml({ verdict: c.evidence, evidenceWord: c.evidence.word }) || esc(vars.word || '');
+    else if (name === 'word' && c.evidence)
+      html += testEvidenceHtml({ verdict: c.evidence, evidenceWord: c.evidence.word }) || esc(vars.word || '');
     else html += esc(vars[name] != null ? vars[name] : '');
   }
   if (c.role === 'need' && c.evidence) html += ' ' + needEvidenceHtml(c.evidence);
@@ -87,9 +129,35 @@ export function clauseHtml(c, o = {}) {
     const nodes = o.nodes || {};
     const shown = (c.cites || []).filter((id) => (nodes[id] || {}).kind !== 'test');
     const cases = (c.cites || []).length - shown.length;
-    const chips = shown.slice(0, 3).map((id) => citeChipHtml(id, nodes[id], o.place)).join('');
-    const more = shown.length > 3 ? '<span class="tw-more"' + tipAttrs({ text: shown.slice(3).map((id) => (nodes[id] || {}).name || id).join(' · '), noFocus: true }) + '>+' + (shown.length - 3) + '</span>' : '';
-    const caseDoor = cases && c.cites.length ? '<a class="tw-chip k-test" href="' + esc('#/tests?node=' + encodeURIComponent(shown[0] || c.cites[0])) + '"' + defAttrs('ask.door.cases') + '>' + sym('live') + esc(t('ask.door.cases')) + '</a>' : '';
+    const chips = shown
+      .slice(0, 3)
+      .map((id) => citeChipHtml(id, nodes[id], o.place))
+      .join('');
+    const more =
+      shown.length > 3
+        ? '<span class="tw-more"' +
+          tipAttrs({
+            text: shown
+              .slice(3)
+              .map((id) => (nodes[id] || {}).name || id)
+              .join(' · '),
+            noFocus: true,
+          }) +
+          '>+' +
+          (shown.length - 3) +
+          '</span>'
+        : '';
+    const caseDoor =
+      cases && c.cites.length
+        ? '<a class="tw-chip k-test" href="' +
+          esc('#/tests?node=' + encodeURIComponent(shown[0] || c.cites[0])) +
+          '"' +
+          defAttrs('ask.door.cases') +
+          '>' +
+          sym('live') +
+          esc(t('ask.door.cases')) +
+          '</a>'
+        : '';
     if (chips || caseDoor) html += ' <span class="tw-cites">' + chips + more + caseDoor + '</span>';
   }
   return html;
@@ -108,23 +176,49 @@ let EXAMPLE_ASKED = false;
 function askExampleNow() {
   if (EXAMPLE_ASKED || typeof fetch === 'undefined') return;
   EXAMPLE_ASKED = true;
-  fetch(API + '?example=1').then((r) => (r.ok ? r.json() : null)).then((b) => {
-    if (!b || !b.example) return;
-    EXAMPLE = b.example;
-    for (const q of document.querySelectorAll('.ask-q')) q.setAttribute('placeholder', EXAMPLE);
-  }).catch(() => {});
+  fetch(API + '?example=1')
+    .then((r) => (r.ok ? r.json() : null))
+    .then((b) => {
+      if (!b || !b.example) return;
+      EXAMPLE = b.example;
+      for (const q of document.querySelectorAll('.ask-q')) q.setAttribute('placeholder', EXAMPLE);
+    })
+    .catch(() => {});
 }
 
 export function askBoxHtml(o = {}) {
   askExampleNow();
-  return '<div class="ask-wrap" data-ask="' + esc(o.id || 'ask') + '"' + (o.repo ? ' data-repo="' + esc(o.repo) + '"' : '') + '>'
-    + '<div class="ask-title"><span class="hud-label"' + defAttrs('ask.title') + '>' + esc(t('ask.title')) + '</span>'
-    + '<span class="ask-sub"' + defAttrs('ask.sub') + '>' + esc(t('ask.sub')) + '</span></div>'
-    + '<form class="ask-box" role="search" onsubmit="return fsAsk(this, event)">'
-    + '<input type="text" class="ask-q" name="q" autocomplete="off" spellcheck="false" aria-label="' + esc(t('ask.title')) + '" placeholder="' + esc(EXAMPLE || t('ask.placeholder')) + '"'
-    + (o.q ? ' value="' + esc(o.q) + '"' : '') + '>'
-    + '<button type="submit" class="map-tb ask-go"' + defAttrs('ask.go') + '>' + esc(t('ask.go')) + '</button></form>'
-    + '<div class="ask-out" aria-live="polite"></div></div>';
+  return (
+    '<div class="ask-wrap" data-ask="' +
+    esc(o.id || 'ask') +
+    '"' +
+    (o.repo ? ' data-repo="' + esc(o.repo) + '"' : '') +
+    '>' +
+    '<div class="ask-title"><span class="hud-label"' +
+    defAttrs('ask.title') +
+    '>' +
+    esc(t('ask.title')) +
+    '</span>' +
+    '<span class="ask-sub"' +
+    defAttrs('ask.sub') +
+    '>' +
+    esc(t('ask.sub')) +
+    '</span></div>' +
+    '<form class="ask-box" role="search" onsubmit="return fsAsk(this, event)">' +
+    '<input type="text" class="ask-q" name="q" autocomplete="off" spellcheck="false" aria-label="' +
+    esc(t('ask.title')) +
+    '" placeholder="' +
+    esc(EXAMPLE || t('ask.placeholder')) +
+    '"' +
+    (o.q ? ' value="' + esc(o.q) + '"' : '') +
+    '>' +
+    '<button type="submit" class="map-tb ask-go"' +
+    defAttrs('ask.go') +
+    '>' +
+    esc(t('ask.go')) +
+    '</button></form>' +
+    '<div class="ask-out" aria-live="polite"></div></div>'
+  );
 }
 
 /** The answers on screen, by box id: the question and the answer, so a lens change redraws without asking again. */
@@ -137,32 +231,112 @@ export function askCardHtml(a, o = {}) {
   const mapDoor = (a.doors || []).find((d) => d.kind === 'map');
   const place = mapDoor ? { flowId: mapDoor.flowId, screen: mapDoor.screen } : null;
   const line = (c) => clauseHtml(c, { nodes, place, api: API });
-  let html = '<div class="ask-card" data-shape="' + esc(a.shape) + '">'
-    + '<div class="ask-chips"><span class="ask-derived"' + defAttrs('ask.derived') + '>' + esc(t('ask.derived')) + '</span>'
-    + (a.phrased ? '<span class="ask-phrased"' + defAttrs('ask.phrased') + '>' + esc(t('ask.phrased')) + '</span>' : '') + '</div>';
+  let html =
+    '<div class="ask-card" data-shape="' +
+    esc(a.shape) +
+    '">' +
+    '<div class="ask-chips"><span class="ask-derived"' +
+    defAttrs('ask.derived') +
+    '>' +
+    esc(t('ask.derived')) +
+    '</span>' +
+    (a.phrased ? '<span class="ask-phrased"' + defAttrs('ask.phrased') + '>' + esc(t('ask.phrased')) + '</span>' : '') +
+    '</div>';
   // the reading comes first, set apart (outsider round, F7): the question Ask answered when yours was not one of its shapes
   for (const c of a.lead || []) {
     const read = /^ask\.reworded/.test(c.key);
-    html += '<p class="ask-lead r-' + esc(c.role) + (c.warn ? ' warn' : '') + (read ? ' ask-read' : '') + '"' + (read ? defAttrs(c.key) : '') + '>' + line(c) + '</p>';
+    html +=
+      '<p class="ask-lead r-' +
+      esc(c.role) +
+      (c.warn ? ' warn' : '') +
+      (read ? ' ask-read' : '') +
+      '"' +
+      (read ? defAttrs(c.key) : '') +
+      '>' +
+      line(c) +
+      '</p>';
   }
   // did you mean: the nearest shapes filled with the question's own nouns — a click asks it (swarm round 3)
   if (a.suggest && a.suggest.length) {
-    html += '<div class="ask-suggest"><span class="hud-label"' + defAttrs('ask.didYouMean') + '>' + esc(t('ask.didYouMean')) + '</span>'
-      + a.suggest.map((q) => '<button type="button" class="ask-sugg" data-q="' + esc(q) + '" onclick="fsAskSuggest(this)">' + esc(q) + '</button>').join('') + '</div>';
+    html +=
+      '<div class="ask-suggest"><span class="hud-label"' +
+      defAttrs('ask.didYouMean') +
+      '>' +
+      esc(t('ask.didYouMean')) +
+      '</span>' +
+      a.suggest
+        .map(
+          (q) =>
+            '<button type="button" class="ask-sugg" data-q="' +
+            esc(q) +
+            '" onclick="fsAskSuggest(this)">' +
+            esc(q) +
+            '</button>',
+        )
+        .join('') +
+      '</div>';
   }
-  if (a.shapes) html += '<ul class="ask-shapes">' + a.shapes.map((k) => '<li' + defAttrs(k) + '>' + esc(t(k)) + '</li>').join('') + '</ul>';
+  if (a.shapes)
+    html +=
+      '<ul class="ask-shapes">' +
+      a.shapes.map((k) => '<li' + defAttrs(k) + '>' + esc(t(k)) + '</li>').join('') +
+      '</ul>';
   for (const s of a.sections || []) {
-    html += '<div class="ask-sec"><span class="hud-label"' + defAttrs(s.key) + '>' + esc(t(s.key)) + '</span><ul>'
-      + s.rows.map((c) => '<li class="ask-row r-' + esc(c.role) + (c.warn ? ' warn' : '') + (c.tier ? ' t-' + esc(c.tier) : '') + '">'
-        + sym(GLYPH[c.role] || 'step') + '<span>' + line(c) + '</span></li>').join('')
-      + '</ul></div>';
+    html +=
+      '<div class="ask-sec"><span class="hud-label"' +
+      defAttrs(s.key) +
+      '>' +
+      esc(t(s.key)) +
+      '</span><ul>' +
+      s.rows
+        .map(
+          (c) =>
+            '<li class="ask-row r-' +
+            esc(c.role) +
+            (c.warn ? ' warn' : '') +
+            (c.tier ? ' t-' + esc(c.tier) : '') +
+            '">' +
+            sym(GLYPH[c.role] || 'step') +
+            '<span>' +
+            line(c) +
+            '</span></li>',
+        )
+        .join('') +
+      '</ul></div>';
   }
-  if (a.phrased) html += '<p class="ask-phrase"><span class="hud-label"' + defAttrs('ask.phrased') + '>' + esc(t('ask.phrased')) + '</span> ' + esc(a.phrased.text) + '</p>';
+  if (a.phrased)
+    html +=
+      '<p class="ask-phrase"><span class="hud-label"' +
+      defAttrs('ask.phrased') +
+      '>' +
+      esc(t('ask.phrased')) +
+      '</span> ' +
+      esc(a.phrased.text) +
+      '</p>';
   const doors = [];
   for (const d of a.doors || []) {
-    if (d.kind === 'gate' && d.node) doors.push('<span class="dd-door"' + gateAttrs(d.node) + '>' + esc(t('ask.door.gate')) + '</span>');
-    if (d.kind === 'map' && d.flowId) doors.push('<a class="dd-door" href="' + esc(mapStopHash(d.flowId, { screen: d.screen, action: d.action })) + '"' + defAttrs('ask.door.map') + '>' + esc(t('ask.door.map')) + '</a>');
-    if (d.kind === 'cases' && d.node) doors.push('<a class="dd-door" href="' + esc('#/tests?node=' + encodeURIComponent(d.node)) + '"' + defAttrs('ask.door.cases') + '>' + esc(t('ask.door.cases')) + '</a>');
+    if (d.kind === 'gate' && d.node)
+      doors.push('<span class="dd-door"' + gateAttrs(d.node) + '>' + esc(t('ask.door.gate')) + '</span>');
+    if (d.kind === 'map' && d.flowId)
+      doors.push(
+        '<a class="dd-door" href="' +
+          esc(mapStopHash(d.flowId, { screen: d.screen, action: d.action })) +
+          '"' +
+          defAttrs('ask.door.map') +
+          '>' +
+          esc(t('ask.door.map')) +
+          '</a>',
+      );
+    if (d.kind === 'cases' && d.node)
+      doors.push(
+        '<a class="dd-door" href="' +
+          esc('#/tests?node=' + encodeURIComponent(d.node)) +
+          '"' +
+          defAttrs('ask.door.cases') +
+          '>' +
+          esc(t('ask.door.cases')) +
+          '</a>',
+      );
   }
   const copy = copyDoorsHtml('ask', { id: a.question, ...(o.repo ? { repo: o.repo } : {}) }, { compact: true });
   if (doors.length || copy) html += '<div class="ask-doors">' + doors.join('') + copy + '</div>';
@@ -175,7 +349,9 @@ export function redrawAsk(root) {
     const last = LAST.get(w.dataset.ask);
     const out = w.querySelector('.ask-out');
     if (!out || !last) continue;
-    out.innerHTML = last.error ? '<p class="ask-err">' + esc(t('ask.failed').replace('{error}', last.error)) + '</p>' : askCardHtml(last.answer, { repo: w.dataset.repo });
+    out.innerHTML = last.error
+      ? '<p class="ask-err">' + esc(t('ask.failed').replace('{error}', last.error)) + '</p>'
+      : askCardHtml(last.answer, { repo: w.dataset.repo });
     const q = w.querySelector('.ask-q');
     if (q && !q.value) q.value = last.q;
   }
@@ -192,12 +368,20 @@ export function askNow(wrap, q) {
   return fetch(API + '?q=' + encodeURIComponent(question) + (repo ? '&repo=' + encodeURIComponent(repo) : ''))
     .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
     .then(({ ok, body }) => {
-      if (!ok || !body || !body.answer) { LAST.set(id, { q: question, error: (body && body.error) || '?' }); redrawAsk(wrap.parentNode); return null; }
+      if (!ok || !body || !body.answer) {
+        LAST.set(id, { q: question, error: (body && body.error) || '?' });
+        redrawAsk(wrap.parentNode);
+        return null;
+      }
       LAST.set(id, { q: question, answer: body.answer });
       redrawAsk(wrap.parentNode);
       return body.answer;
     })
-    .catch((err) => { LAST.set(id, { q: question, error: String(err && err.message || err) }); redrawAsk(wrap.parentNode); return null; });
+    .catch((err) => {
+      LAST.set(id, { q: question, error: String((err && err.message) || err) });
+      redrawAsk(wrap.parentNode);
+      return null;
+    });
 }
 
 /** The box's submit. */

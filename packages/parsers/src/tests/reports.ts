@@ -23,13 +23,24 @@ export function findReports(repoRoot: string, glob: string): string[] {
   const visit = (dir: string, depth: number) => {
     if (depth > 8) return;
     let entries: string[];
-    try { entries = readdirSync(dir); } catch { return; }
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
     for (const entry of entries) {
       if (SKIP.has(entry)) continue;
       const abs = join(dir, entry);
       let st;
-      try { st = statSync(abs); } catch { continue; }
-      if (st.isDirectory()) { if (!entry.startsWith('.') || entry === '.coverage') visit(abs, depth + 1); continue; }
+      try {
+        st = statSync(abs);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory()) {
+        if (!entry.startsWith('.') || entry === '.coverage') visit(abs, depth + 1);
+        continue;
+      }
       if (re.test(relative(repoRoot, abs))) out.push(abs);
     }
   };
@@ -121,9 +132,19 @@ function recordedCommit(doc: Record<string, unknown>): string | undefined {
 }
 
 const STATUS: Record<string, TestRun['status']> = {
-  passed: 'passed', pass: 'passed', ok: 'passed', expected: 'passed',
-  failed: 'failed', fail: 'failed', unexpected: 'failed', timedOut: 'failed', interrupted: 'failed',
-  skipped: 'skipped', pending: 'skipped', todo: 'skipped', disabled: 'skipped',
+  passed: 'passed',
+  pass: 'passed',
+  ok: 'passed',
+  expected: 'passed',
+  failed: 'failed',
+  fail: 'failed',
+  unexpected: 'failed',
+  timedOut: 'failed',
+  interrupted: 'failed',
+  skipped: 'skipped',
+  pending: 'skipped',
+  todo: 'skipped',
+  disabled: 'skipped',
   // a retried case that ended green is `flaky`, never `passed` — it prints as its own word (03 §3.2)
   flaky: 'flaky',
 };
@@ -173,14 +194,21 @@ function vitestProject(...from: (Record<string, unknown> | undefined)[]): string
 }
 
 /** Vitest/Jest `json` reporter — per-case status, duration, project, and the run timestamp. */
-function readVitestJson(doc: Record<string, unknown>, repoRoot: string): { cases: ObservedCase[]; at?: string; reportedSkipped?: number } {
+function readVitestJson(
+  doc: Record<string, unknown>,
+  repoRoot: string,
+): { cases: ObservedCase[]; at?: string; reportedSkipped?: number } {
   const cases: ObservedCase[] = [];
   const files = (doc['testResults'] as Record<string, unknown>[]) ?? [];
   for (const f of files) {
-    const namedFile = typeof f['name'] === 'string' ? f['name'] as string : undefined;
+    const namedFile = typeof f['name'] === 'string' ? (f['name'] as string) : undefined;
     // A reporter-relative path is already relative to its project's root. Resolving
     // it against Farsight's cwd invents a prefix and breaks nested source projects.
-    const file = namedFile ? (isAbsolute(namedFile) ? relative(repoRoot, namedFile) : namedFile.replace(/^\.\//, '')) : undefined;
+    const file = namedFile
+      ? isAbsolute(namedFile)
+        ? relative(repoRoot, namedFile)
+        : namedFile.replace(/^\.\//, '')
+      : undefined;
     for (const a of (f['assertionResults'] as Record<string, unknown>[]) ?? []) {
       const suite = ((a['ancestorTitles'] as string[]) ?? []).filter((x) => typeof x === 'string');
       const title = String(a['title'] ?? '');
@@ -188,8 +216,11 @@ function readVitestJson(doc: Record<string, unknown>, repoRoot: string): { cases
       // a skipped/todo row is kept: the case ran nowhere, which is a fact about it
       cases.push({
         ...(file ? { file } : {}),
-        ...(typeof (a['location'] as Record<string, unknown> | undefined)?.['line'] === 'number' ? { line: (a['location'] as { line: number }).line } : {}),
-        suite, title,
+        ...(typeof (a['location'] as Record<string, unknown> | undefined)?.['line'] === 'number'
+          ? { line: (a['location'] as { line: number }).line }
+          : {}),
+        suite,
+        title,
         fullName: typeof a['fullName'] === 'string' ? (a['fullName'] as string) : [...suite, title].join(' '),
         status: statusOf(a['status']),
         ...(typeof a['duration'] === 'number' ? { durationMs: a['duration'] as number } : {}),
@@ -216,7 +247,11 @@ function skipReasonOf(...lists: unknown[]): string | undefined {
   for (const list of lists) {
     if (!Array.isArray(list)) continue;
     for (const a of list as Record<string, unknown>[]) {
-      if ((a?.['type'] === 'skip' || a?.['type'] === 'fixme') && typeof a['description'] === 'string' && a['description'].trim()) {
+      if (
+        (a?.['type'] === 'skip' || a?.['type'] === 'fixme') &&
+        typeof a['description'] === 'string' &&
+        a['description'].trim()
+      ) {
         return (a['description'] as string).trim();
       }
     }
@@ -241,13 +276,16 @@ function readPlaywrightJson(doc: Record<string, unknown>): { cases: ObservedCase
         const results = (t['results'] as Record<string, unknown>[]) ?? [];
         const last = results[results.length - 1];
         const retries = results.length - 1;
-        const project = [t['projectName'], t['projectId']].find((v) => typeof v === 'string' && v) as string | undefined;
+        const project = [t['projectName'], t['projectId']].find((v) => typeof v === 'string' && v) as
+          string | undefined;
         const status = statusOf(t['status'] ?? last?.['status']);
-        const reason = status === 'skipped' ? skipReasonOf(t['annotations'], last?.['annotations'], spec['annotations']) : undefined;
+        const reason =
+          status === 'skipped' ? skipReasonOf(t['annotations'], last?.['annotations'], spec['annotations']) : undefined;
         cases.push({
           ...(file || spec['file'] ? { file: String(spec['file'] ?? file) } : {}),
           ...(typeof spec['line'] === 'number' ? { line: spec['line'] as number } : {}),
-          suite: here, title,
+          suite: here,
+          title,
           fullName: [...here, title].join(' '),
           status,
           ...(typeof last?.['duration'] === 'number' ? { durationMs: last['duration'] as number } : {}),
@@ -283,7 +321,9 @@ function readJunitXml(text: string): { cases: ObservedCase[]; at?: string } {
     const status = /<failure|<error/.test(body) ? 'failed' : /<skipped/.test(body) ? 'skipped' : 'passed';
     const reason = status === 'skipped' ? body.match(/<skipped\b[^>]*?\smessage="([^"]+)"/)?.[1]?.trim() : undefined;
     cases.push({
-      suite, title, fullName: [...suite, title].join(' '),
+      suite,
+      title,
+      fullName: [...suite, title].join(' '),
       status,
       ...(Number.isFinite(time) ? { durationMs: Math.round(time * 1000) } : {}),
       ...(reason ? { reason } : {}),
@@ -358,13 +398,24 @@ export function readReport(repoRoot: string, abs: string): ReadReport | null {
     return { ...base, kind: 'results', cases, ...(at ? { at } : {}) };
   }
   let doc: Record<string, unknown>;
-  try { doc = JSON.parse(text) as Record<string, unknown>; } catch { return null; }
+  try {
+    doc = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
   const sourceDigest = recordedDigest(doc);
   const sourceCommit = sourceDigest ? recordedCommit(doc) : undefined;
   const digestField = sourceDigest ? { sourceDigest, ...(sourceCommit ? { sourceCommit } : {}) } : {};
   if (doc['testResults']) {
     const { cases, at, reportedSkipped } = readVitestJson(doc, repoRoot);
-    return { ...base, kind: 'results', cases, ...digestField, ...(at ? { at } : {}), ...(reportedSkipped != null ? { reportedSkipped } : {}) };
+    return {
+      ...base,
+      kind: 'results',
+      cases,
+      ...digestField,
+      ...(at ? { at } : {}),
+      ...(reportedSkipped != null ? { reportedSkipped } : {}),
+    };
   }
   if (doc['suites'] && doc['config']) {
     const { cases, at } = readPlaywrightJson(doc);

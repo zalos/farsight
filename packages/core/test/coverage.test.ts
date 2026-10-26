@@ -8,11 +8,33 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  GraphStore, buildIndex, journey, journeySummary, screensFor, diffGraphs,
-  computeMetric, formatMetric, testsCovering, coverageFor, stepCoverage, testsSurface, testDetail, verifiedBy, METRICS,
-  isCoverable, isPresentational, journeyScope, flowScreenIds,
-  testsMatrixRows, testsMatrixV1, testsMatrixCsv, testsIdentity, verifiedThrough, TESTS_MATRIX_COLUMNS,
-  evidenceWord, STRINGS,
+  GraphStore,
+  buildIndex,
+  journey,
+  journeySummary,
+  screensFor,
+  diffGraphs,
+  computeMetric,
+  formatMetric,
+  testsCovering,
+  coverageFor,
+  stepCoverage,
+  testsSurface,
+  testDetail,
+  verifiedBy,
+  METRICS,
+  isCoverable,
+  isPresentational,
+  journeyScope,
+  flowScreenIds,
+  testsMatrixRows,
+  testsMatrixV1,
+  testsMatrixCsv,
+  testsIdentity,
+  verifiedThrough,
+  TESTS_MATRIX_COLUMNS,
+  evidenceWord,
+  STRINGS,
 } from '../dist/index.js';
 import type { GraphNode, GraphEdge, GraphDiff } from '../dist/index.js';
 import { validate } from './validate.ts';
@@ -21,50 +43,113 @@ const R = 'shop';
 const here = dirname(fileURLToPath(import.meta.url));
 
 const fn = (name: string, path: string, line: number): GraphNode =>
-  ({ id: `${R}::${path}::${name}`, kind: 'function', name, tags: [], loc: { repo: R, path, line, endLine: line + 4 } }) as GraphNode;
-const edge = (kind: GraphEdge['kind'], from: string, to: string, meta?: GraphEdge['meta'], resolution?: GraphEdge['resolution']): GraphEdge =>
-  ({ id: `${kind}|${from}|${to}`, kind, from, to, ...(meta ? { meta } : {}), ...(resolution ? { resolution } : {}) });
+  ({
+    id: `${R}::${path}::${name}`,
+    kind: 'function',
+    name,
+    tags: [],
+    loc: { repo: R, path, line, endLine: line + 4 },
+  }) as GraphNode;
+const edge = (
+  kind: GraphEdge['kind'],
+  from: string,
+  to: string,
+  meta?: GraphEdge['meta'],
+  resolution?: GraphEdge['resolution'],
+): GraphEdge => ({
+  id: `${kind}|${from}|${to}`,
+  kind,
+  from,
+  to,
+  ...(meta ? { meta } : {}),
+  ...(resolution ? { resolution } : {}),
+});
 
 const SVC = 'src/orders.ts';
 const UI = 'src/ui/OrderPage.tsx';
 
 /** A tiny shop: one flow → one page → one route → two service functions, plus three tests. */
-function shop(opts: {
-  withObserved?: boolean; freshness?: 'unchanged' | 'changed' | 'unknown'; dropE2E?: boolean;
-  /** the e2e test's body also reaches the route (an `import-resolution`/`route-literal` static edge) */
-  e2eBody?: boolean;
-  /** the e2e case is `.skip`/`.todo` — it is listed and lifts nothing */
-  e2eInactive?: boolean;
-  /** the files the coverage report contained; defaults to the two files the members live in */
-  runFiles?: string[];
-  /** an e2e run-level report that observed the route */
-  e2eObserved?: boolean;
-  /** a records layer: the `orders` table, written by placeOrder and read by refundOrder */
-  withTable?: boolean;
-} = {}) {
+function shop(
+  opts: {
+    withObserved?: boolean;
+    freshness?: 'unchanged' | 'changed' | 'unknown';
+    dropE2E?: boolean;
+    /** the e2e test's body also reaches the route (an `import-resolution`/`route-literal` static edge) */
+    e2eBody?: boolean;
+    /** the e2e case is `.skip`/`.todo` — it is listed and lifts nothing */
+    e2eInactive?: boolean;
+    /** the files the coverage report contained; defaults to the two files the members live in */
+    runFiles?: string[];
+    /** an e2e run-level report that observed the route */
+    e2eObserved?: boolean;
+    /** a records layer: the `orders` table, written by placeOrder and read by refundOrder */
+    withTable?: boolean;
+  } = {},
+) {
   const freshness = opts.freshness ?? 'unknown';
   const nodes: GraphNode[] = [
-    { id: `${R}::flow::place-order`, kind: 'flow', name: 'Place an order', tags: [], design: { status: 'both', origin: 'manifest', id: 'ORD-01' } } as GraphNode,
-    { id: `${R}::page::/orders`, kind: 'page', name: '/orders', tags: [], loc: { repo: R, path: UI, line: 3 }, design: { status: 'both', origin: 'manifest', id: 'ORD-01' } } as GraphNode,
-    { id: `${R}::route::POST /orders`, kind: 'route', name: 'POST /orders', tags: [], loc: { repo: R, path: SVC, line: 2 } } as GraphNode,
+    {
+      id: `${R}::flow::place-order`,
+      kind: 'flow',
+      name: 'Place an order',
+      tags: [],
+      design: { status: 'both', origin: 'manifest', id: 'ORD-01' },
+    } as GraphNode,
+    {
+      id: `${R}::page::/orders`,
+      kind: 'page',
+      name: '/orders',
+      tags: [],
+      loc: { repo: R, path: UI, line: 3 },
+      design: { status: 'both', origin: 'manifest', id: 'ORD-01' },
+    } as GraphNode,
+    {
+      id: `${R}::route::POST /orders`,
+      kind: 'route',
+      name: 'POST /orders',
+      tags: [],
+      loc: { repo: R, path: SVC, line: 2 },
+    } as GraphNode,
     fn('placeOrder', SVC, 10),
     fn('refundOrder', SVC, 20),
     // ── the tests ──
     {
-      id: `${R}::test::e2e/order.pw.spec.ts::places an order`, kind: 'test', name: 'places an order', tags: ['test', 'test:e2e'],
-      loc: { repo: R, path: 'e2e/order.pw.spec.ts', line: 8, endLine: 14 }, group: 'e2e/order.pw.spec.ts',
+      id: `${R}::test::e2e/order.pw.spec.ts::places an order`,
+      kind: 'test',
+      name: 'places an order',
+      tags: ['test', 'test:e2e'],
+      loc: { repo: R, path: 'e2e/order.pw.spec.ts', line: 8, endLine: 14 },
+      group: 'e2e/order.pw.spec.ts',
       test: {
-        level: 'e2e', runner: 'playwright', suite: ['orders'], file: 'e2e/order.pw.spec.ts',
-        declares: ['place-order', 'ORD-99'], unresolved: ['ORD-99'],
+        level: 'e2e',
+        runner: 'playwright',
+        suite: ['orders'],
+        file: 'e2e/order.pw.spec.ts',
+        declares: ['place-order', 'ORD-99'],
+        unresolved: ['ORD-99'],
         ...(opts.e2eInactive ? { inactive: true } : {}),
       },
     } as GraphNode,
     {
-      id: `${R}::test::src/orders.spec.ts::placeOrder totals the lines`, kind: 'test', name: 'placeOrder totals the lines', tags: ['test', 'test:unit'],
-      loc: { repo: R, path: 'src/orders.spec.ts', line: 4, endLine: 7 }, group: 'src/orders.spec.ts',
+      id: `${R}::test::src/orders.spec.ts::placeOrder totals the lines`,
+      kind: 'test',
+      name: 'placeOrder totals the lines',
+      tags: ['test', 'test:unit'],
+      loc: { repo: R, path: 'src/orders.spec.ts', line: 4, endLine: 7 },
+      group: 'src/orders.spec.ts',
       test: {
-        level: 'unit', runner: 'vitest', suite: [], file: 'src/orders.spec.ts',
-        run: { id: 'r1', at: '2026-09-10T09:00:00.000Z', status: 'passed', durationMs: 7, freshness, stale: freshness === 'changed' },
+        level: 'unit',
+        runner: 'vitest',
+        suite: [],
+        file: 'src/orders.spec.ts',
+        run: {
+          id: 'r1',
+          at: '2026-09-10T09:00:00.000Z',
+          status: 'passed',
+          durationMs: 7,
+          freshness,
+          stale: freshness === 'changed',
+        },
       },
     } as GraphNode,
   ];
@@ -72,53 +157,122 @@ function shop(opts: {
     edge('renders', `${R}::flow::place-order`, `${R}::page::/orders`, { line: 1 }),
     edge('http', `${R}::page::/orders`, `${R}::route::POST /orders`, { line: 12 }),
     edge('calls', `${R}::route::POST /orders`, `${R}::${SVC}::placeOrder`, { line: 3 }),
-    edge('covers', `${R}::test::src/orders.spec.ts::placeOrder totals the lines`, `${R}::${SVC}::placeOrder`,
-      { evidence: 'static' }, { status: 'resolved', technique: 'import-resolution', confidence: 'HIGH' }),
+    edge(
+      'covers',
+      `${R}::test::src/orders.spec.ts::placeOrder totals the lines`,
+      `${R}::${SVC}::placeOrder`,
+      { evidence: 'static' },
+      { status: 'resolved', technique: 'import-resolution', confidence: 'HIGH' },
+    ),
   ];
   if (!opts.dropE2E) {
-    edges.push(edge('covers', `${R}::test::e2e/order.pw.spec.ts::places an order`, `${R}::flow::place-order`,
-      { evidence: 'declared', declared: 'place-order' }, { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' }));
-    edges.push(edge('covers', `${R}::test::e2e/order.pw.spec.ts::places an order`, `${R}::page::/orders`,
-      { evidence: 'declared', declared: 'ORD-01' }, { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' }));
+    edges.push(
+      edge(
+        'covers',
+        `${R}::test::e2e/order.pw.spec.ts::places an order`,
+        `${R}::flow::place-order`,
+        { evidence: 'declared', declared: 'place-order' },
+        { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' },
+      ),
+    );
+    edges.push(
+      edge(
+        'covers',
+        `${R}::test::e2e/order.pw.spec.ts::places an order`,
+        `${R}::page::/orders`,
+        { evidence: 'declared', declared: 'ORD-01' },
+        { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' },
+      ),
+    );
     if (opts.e2eBody) {
       // the body itself opens the route: a static edge onto a node in scope
-      edges.push(edge('covers', `${R}::test::e2e/order.pw.spec.ts::places an order`, `${R}::route::POST /orders`,
-        { evidence: 'static', ...(opts.e2eInactive ? { inactive: true } : {}) },
-        { status: 'resolved', technique: 'route-literal', confidence: 'MEDIUM' }));
+      edges.push(
+        edge(
+          'covers',
+          `${R}::test::e2e/order.pw.spec.ts::places an order`,
+          `${R}::route::POST /orders`,
+          { evidence: 'static', ...(opts.e2eInactive ? { inactive: true } : {}) },
+          { status: 'resolved', technique: 'route-literal', confidence: 'MEDIUM' },
+        ),
+      );
     }
   }
   if (opts.withObserved) {
     nodes.push({
-      id: `${R}::test::run:unit:shop`, kind: 'test', name: 'unit run · 2026-09-10', tags: ['test', 'test:unit', 'test:run-level'],
+      id: `${R}::test::run:unit:shop`,
+      kind: 'test',
+      name: 'unit run · 2026-09-10',
+      tags: ['test', 'test:unit', 'test:run-level'],
       test: {
-        level: 'unit', runner: 'vitest', suite: ['unit run', 'shop'], file: 'coverage/coverage-final.json', runLevel: true,
+        level: 'unit',
+        runner: 'vitest',
+        suite: ['unit run', 'shop'],
+        file: 'coverage/coverage-final.json',
+        runLevel: true,
         // what the report measured, hit or not — the whole-scope exactness rule reads it
         files: opts.runFiles ?? [SVC, UI],
-        run: { id: 'r2', at: '2026-09-10T09:00:00.000Z', status: 'unknown', freshness, stale: freshness === 'changed', ...(freshness !== 'unknown' ? { sourceDigest: 'abc123' } : {}) },
+        run: {
+          id: 'r2',
+          at: '2026-09-10T09:00:00.000Z',
+          status: 'unknown',
+          freshness,
+          stale: freshness === 'changed',
+          ...(freshness !== 'unknown' ? { sourceDigest: 'abc123' } : {}),
+        },
       },
     } as GraphNode);
     for (const target of [`${R}::${SVC}::placeOrder`, `${R}::route::POST /orders`]) {
-      edges.push(edge('covers', `${R}::test::run:unit:shop`, target, { evidence: 'observed', runId: 'r2', lines: 4 },
-        { status: 'resolved', technique: 'coverage-report', confidence: freshness === 'unchanged' ? 'HIGH' : 'MEDIUM' }));
+      edges.push(
+        edge(
+          'covers',
+          `${R}::test::run:unit:shop`,
+          target,
+          { evidence: 'observed', runId: 'r2', lines: 4 },
+          {
+            status: 'resolved',
+            technique: 'coverage-report',
+            confidence: freshness === 'unchanged' ? 'HIGH' : 'MEDIUM',
+          },
+        ),
+      );
     }
   }
   if (opts.withTable) {
-    nodes.push({ id: `${R}::table::orders`, kind: 'table', name: 'orders', tags: [],
-      loc: { repo: R, path: 'db/schema.sql', line: 1 } } as GraphNode);
+    nodes.push({
+      id: `${R}::table::orders`,
+      kind: 'table',
+      name: 'orders',
+      tags: [],
+      loc: { repo: R, path: 'db/schema.sql', line: 1 },
+    } as GraphNode);
     edges.push(edge('writes', `${R}::${SVC}::placeOrder`, `${R}::table::orders`, { line: 14, op: 'insert' }));
     edges.push(edge('reads', `${R}::${SVC}::refundOrder`, `${R}::table::orders`, { line: 24, op: 'select' }));
   }
   if (opts.e2eObserved) {
     nodes.push({
-      id: `${R}::test::run:e2e:shop`, kind: 'test', name: 'e2e run · 2026-09-11', tags: ['test', 'test:e2e', 'test:run-level'],
+      id: `${R}::test::run:e2e:shop`,
+      kind: 'test',
+      name: 'e2e run · 2026-09-11',
+      tags: ['test', 'test:e2e', 'test:run-level'],
       test: {
-        level: 'e2e', runner: 'playwright', suite: ['e2e run', 'shop'], file: 'e2e/coverage-final.json', runLevel: true,
+        level: 'e2e',
+        runner: 'playwright',
+        suite: ['e2e run', 'shop'],
+        file: 'e2e/coverage-final.json',
+        runLevel: true,
         files: opts.runFiles ?? [SVC, UI],
         run: { id: 'r3', at: '2026-09-11T09:00:00.000Z', status: 'unknown', freshness, stale: freshness === 'changed' },
       },
     } as GraphNode);
-    edges.push(edge('covers', `${R}::test::run:e2e:shop`, `${R}::route::POST /orders`, { evidence: 'observed', runId: 'r3', lines: 2 },
-      { status: 'resolved', technique: 'coverage-report', confidence: 'MEDIUM' }));
+    edges.push(
+      edge(
+        'covers',
+        `${R}::test::run:e2e:shop`,
+        `${R}::route::POST /orders`,
+        { evidence: 'observed', runId: 'r3', lines: 2 },
+        { status: 'resolved', technique: 'coverage-report', confidence: 'MEDIUM' },
+      ),
+    );
   }
   return { nodes, edges };
 }
@@ -127,8 +281,13 @@ function shop(opts: {
 function wideShop() {
   const g = shop();
   for (let i = 1; i <= 8; i++) {
-    g.nodes.push({ id: `${R}::page::/step${i}`, kind: 'page', name: `/step${i}`, tags: [],
-      loc: { repo: R, path: `src/ui/Step${i}.tsx`, line: 1 } } as GraphNode);
+    g.nodes.push({
+      id: `${R}::page::/step${i}`,
+      kind: 'page',
+      name: `/step${i}`,
+      tags: [],
+      loc: { repo: R, path: `src/ui/Step${i}.tsx`, line: 1 },
+    } as GraphNode);
     g.edges.push(edge('renders', `${R}::flow::place-order`, `${R}::page::/step${i}`, { line: 10 + i }));
   }
   return g;
@@ -148,7 +307,13 @@ const CLIENT = 'src/api/client.ts';
 const SHELL = `${R}::src/ui/RootShell.tsx::RootShell`;
 
 const comp = (name: string, path: string, line: number): GraphNode =>
-  ({ id: `${R}::${path}::${name}`, kind: 'component', name, tags: [], loc: { repo: R, path, line, endLine: line + 4 } }) as GraphNode;
+  ({
+    id: `${R}::${path}::${name}`,
+    kind: 'component',
+    name,
+    tags: [],
+    loc: { repo: R, path, line, endLine: line + 4 },
+  }) as GraphNode;
 
 /**
  * The shop with a UI layer, for the one coverable predicate: a page the manifest
@@ -159,8 +324,13 @@ function shopUi(opts: Parameters<typeof shop>[0] = {}) {
   const g = shop(opts);
   g.nodes.push(
     // (a) manifest-only: designed, not built — no `loc`, so nothing can test it
-    { id: `${R}::page::/orders/legacy`, kind: 'page', name: '/orders/legacy', tags: [],
-      design: { status: 'design-only', origin: 'manifest', id: 'ORD-09' } } as GraphNode,
+    {
+      id: `${R}::page::/orders/legacy`,
+      kind: 'page',
+      name: '/orders/legacy',
+      tags: [],
+      design: { status: 'design-only', origin: 'manifest', id: 'ORD-09' },
+    } as GraphNode,
     // (b) plumbing by config
     { ...fn('cx', BTN, 30), tags: ['plumbing'] } as GraphNode,
     // (c) leaf primitives
@@ -175,7 +345,7 @@ function shopUi(opts: Parameters<typeof shop>[0] = {}) {
     edge('renders', `${R}::page::/orders`, `${R}::${BTN}::Button`, { line: 20 }),
     edge('renders', `${R}::page::/orders`, `${R}::${FORM}::OrderForm`, { line: 21 }),
     edge('renders', `${R}::${BTN}::Button`, `${R}::${BTN}::Spinner`, { line: 6 }),
-    edge('calls', `${R}::${BTN}::Button`, `${R}::${BTN}::cx`, { line: 5 }),      // same file: still a primitive
+    edge('calls', `${R}::${BTN}::Button`, `${R}::${BTN}::cx`, { line: 5 }), // same file: still a primitive
     edge('calls', `${R}::${FORM}::OrderForm`, `${R}::${CLIENT}::apiPost`, { line: 9 }), // leaves the file: real work
   );
   return g;
@@ -203,7 +373,10 @@ test('computeMetric: a percentage never travels without its scope, and unknown f
   assert.deepEqual(m.range, [0.75, 1]);
   assert.match(m.uncertainty!.note, /cannot be proven to match this source/);
   // the gap is named, never omitted (F11)
-  assert.deepEqual(m.gaps.map((g) => g.nodeId), [`${R}::${SVC}::refundOrder`]);
+  assert.deepEqual(
+    m.gaps.map((g) => g.nodeId),
+    [`${R}::${SVC}::refundOrder`],
+  );
   assert.equal(m.gaps[0]!.note, 'no test reaches this');
   assert.ok(m.evidence.length === 3 && m.evidence.every((e) => e.note));
   assert.equal(m.parts!['unit']!.numerator, 2);
@@ -230,7 +403,10 @@ test('computeMetric: a digest-verified run is exact; declared/static evidence al
 test('testsCovering + verifiedBy: strongest evidence first, and a run-level edge says so', () => {
   const index = indexOf(shop({ withObserved: true }));
   const covers = testsCovering(index, `${R}::${SVC}::placeOrder`);
-  assert.deepEqual(covers.map((c) => c.evidence), ['observed', 'static']);
+  assert.deepEqual(
+    covers.map((c) => c.evidence),
+    ['observed', 'static'],
+  );
   assert.equal(covers[0]!.runLevel, true);
   assert.equal(covers[1]!.runLevel, false);
   assert.deepEqual(verifiedBy(index, `${R}::${SVC}::refundOrder`), []);
@@ -274,16 +450,36 @@ test('journeySummary carries the coverage fold: whole journey + one entry per se
 
 test('coverageFor never counts a declared-but-unbuilt route as uncovered', () => {
   const g = shop();
-  g.nodes.push({ id: `${R}::route::DELETE /orders/{id}`, kind: 'route', name: 'DELETE /orders/{id}', tags: [], contract: { status: 'spec-only', apiId: `${R}::api::x` } } as GraphNode);
+  g.nodes.push({
+    id: `${R}::route::DELETE /orders/{id}`,
+    kind: 'route',
+    name: 'DELETE /orders/{id}',
+    tags: [],
+    contract: { status: 'spec-only', apiId: `${R}::api::x` },
+  } as GraphNode);
   const index = indexOf(g);
-  const facts = coverageFor(index, g.nodes.map((n) => n.id), { kind: 'workspace', label: 'the shop' });
-  assert.equal(facts.metric.gaps.some((x) => x.nodeId.includes('DELETE')), false);
+  const facts = coverageFor(
+    index,
+    g.nodes.map((n) => n.id),
+    { kind: 'workspace', label: 'the shop' },
+  );
+  assert.equal(
+    facts.metric.gaps.some((x) => x.nodeId.includes('DELETE')),
+    false,
+  );
 });
 
 test('testsSurface: suites, the journeys × tests matrix, orphans and the blind-spot sentences', () => {
   const index = indexOf(shop({ withObserved: true }));
   const s = testsSurface(index, null, {
-    [R]: { files: 2, cases: 2, edges: { declared: 2, static: 1, observed: 2 }, runs: 1, reports: [], blindSpots: ['`e2e/order.pw.spec.ts` declares `ORD-99`, which nothing in the graph matches'] },
+    [R]: {
+      files: 2,
+      cases: 2,
+      edges: { declared: 2, static: 1, observed: 2 },
+      runs: 1,
+      reports: [],
+      blindSpots: ['`e2e/order.pw.spec.ts` declares `ORD-99`, which nothing in the graph matches'],
+    },
   });
   assert.equal(s.counts.cases, 2);
   assert.equal(s.counts.files, 2);
@@ -304,7 +500,10 @@ test('testsSurface: suites, the journeys × tests matrix, orphans and the blind-
   const detail = testDetail(index, `${R}::test::e2e/order.pw.spec.ts::places an order`)!;
   assert.equal(detail.covers.length, 2);
   assert.ok(detail.covers.every((c) => c.evidence === 'declared' && c.technique === 'annotation-scan'));
-  assert.deepEqual(detail.journeys.map((x) => x.id), [`${R}::flow::place-order`]);
+  assert.deepEqual(
+    detail.journeys.map((x) => x.id),
+    [`${R}::flow::place-order`],
+  );
   assert.equal(testDetail(index, 'nope::test::x'), undefined);
 });
 
@@ -314,9 +513,17 @@ test('a scoped catalogue counts only the covers edges of the tests in scope, nev
   g.nodes.push(fn('ping', 'other/src/ping.ts', 1));
   g.nodes[g.nodes.length - 1]!.id = 'other::other/src/ping.ts::ping';
   g.nodes[g.nodes.length - 1]!.loc = { repo: 'other', path: 'other/src/ping.ts', line: 1 };
-  g.nodes.push({ id: 'other::test::t/ping.test.ts::pings', kind: 'test', name: 'pings', tags: ['test:unit'], loc: { repo: 'other', path: 't/ping.test.ts', line: 1 },
-    test: { level: 'unit', runner: 'vitest', suite: [], file: 't/ping.test.ts' } } as GraphNode);
-  g.edges.push(edge('covers', 'other::test::t/ping.test.ts::pings', 'other::other/src/ping.ts::ping', { evidence: 'static' }));
+  g.nodes.push({
+    id: 'other::test::t/ping.test.ts::pings',
+    kind: 'test',
+    name: 'pings',
+    tags: ['test:unit'],
+    loc: { repo: 'other', path: 't/ping.test.ts', line: 1 },
+    test: { level: 'unit', runner: 'vitest', suite: [], file: 't/ping.test.ts' },
+  } as GraphNode);
+  g.edges.push(
+    edge('covers', 'other::test::t/ping.test.ts::pings', 'other::other/src/ping.ts::ping', { evidence: 'static' }),
+  );
   const index = indexOf(g);
   const all = testsSurface(index, null);
   const shopOnly = testsSurface(index, new Set([R]));
@@ -355,7 +562,10 @@ test('farsight-diff v1: the four additive kinds, and the schema still validates'
   // the flow and the page each lost their last test; the route keeps its observed edge
   assert.equal(diff.counts.coverage_lost, 2);
   assert.deepEqual(
-    diff.changes.filter((c) => c.kind === 'coverage_lost').map((c) => c.subject.id).sort(),
+    diff.changes
+      .filter((c) => c.kind === 'coverage_lost')
+      .map((c) => c.subject.id)
+      .sort(),
     [`${R}::flow::place-order`, `${R}::page::/orders`],
   );
   assert.equal(diff.counts.uncovered_change, 1);
@@ -364,7 +574,9 @@ test('farsight-diff v1: the four additive kinds, and the schema still validates'
   assert.equal(diff.changes.find((c) => c.kind === 'coverage_lost')!.severity, 'notable');
   assert.equal(diff.changes.find((c) => c.kind === 'uncovered_change')!.severity, 'info');
 
-  const schema = JSON.parse(readFileSync(join(here, '..', '..', '..', 'schemas', 'farsight-diff-v1.schema.json'), 'utf8'));
+  const schema = JSON.parse(
+    readFileSync(join(here, '..', '..', '..', 'schemas', 'farsight-diff-v1.schema.json'), 'utf8'),
+  );
   assert.deepEqual(validate(diff as GraphDiff, schema), []);
 });
 
@@ -406,7 +618,9 @@ test('isPresentational: a leaf another view draws is a primitive; one that calls
   // a component only its flow renders is a screen, not a primitive
   const screen = shopUi();
   screen.nodes.push(comp('LandingScreen', 'src/ui/LandingScreen.tsx', 1));
-  screen.edges.push(edge('renders', `${R}::flow::place-order`, `${R}::src/ui/LandingScreen.tsx::LandingScreen`, { line: 2 }));
+  screen.edges.push(
+    edge('renders', `${R}::flow::place-order`, `${R}::src/ui/LandingScreen.tsx::LandingScreen`, { line: 2 }),
+  );
   const si = indexOf(screen);
   assert.equal(isPresentational(si, si.byId.get(`${R}::src/ui/LandingScreen.tsx::LandingScreen`)!), false);
 });
@@ -415,15 +629,25 @@ test('isCoverable: manifest-only, plumbing and UI primitives are out of the deno
   const index = indexOf(shopUi());
   const at = (id: string) => index.byId.get(id)!;
   // out
-  assert.equal(isCoverable(index, at(`${R}::page::/orders/legacy`)), false, 'a designed-but-unbuilt screen has no source to test');
+  assert.equal(
+    isCoverable(index, at(`${R}::page::/orders/legacy`)),
+    false,
+    'a designed-but-unbuilt screen has no source to test',
+  );
   assert.equal(isCoverable(index, at(`${R}::${BTN}::cx`)), false, 'plumbing is not a thing a test is owed');
   assert.equal(isCoverable(index, at(`${R}::${BTN}::Button`)), false);
   assert.equal(isCoverable(index, at(`${R}::${BTN}::Spinner`)), false);
   assert.equal(isCoverable(index, at(`${R}::flow::place-order`)), false, 'a flow is not a kind a test covers');
   // in
-  for (const id of [`${R}::page::/orders`, `${R}::route::POST /orders`, `${R}::${SVC}::placeOrder`,
-    `${R}::${SVC}::refundOrder`, `${R}::${FORM}::OrderForm`, `${R}::${CLIENT}::apiPost`,
-    SHELL]) {
+  for (const id of [
+    `${R}::page::/orders`,
+    `${R}::route::POST /orders`,
+    `${R}::${SVC}::placeOrder`,
+    `${R}::${SVC}::refundOrder`,
+    `${R}::${FORM}::OrderForm`,
+    `${R}::${CLIENT}::apiPost`,
+    SHELL,
+  ]) {
     assert.equal(isCoverable(index, at(id)), true, `${id} is coverable`);
   }
 });
@@ -432,19 +656,32 @@ test('computeMetric: the denominator is the coverable set — primitives, plumbi
   const index = indexOf(shopUi());
   const m = computeMetric(index, 'test-coverage');
   // 11 nodes of a coverable kind; 4 of them fail the predicate
-  const ofCoverableKind = [...index.byId.values()]
-    .filter((n) => ['function', 'component', 'page', 'route', 'guard', 'rule'].includes(n.kind)).length;
+  const ofCoverableKind = [...index.byId.values()].filter((n) =>
+    ['function', 'component', 'page', 'route', 'guard', 'rule'].includes(n.kind),
+  ).length;
   assert.equal(ofCoverableKind, 11);
   assert.equal(m.denominator, 7);
   assert.match(m.scopeLabel, /7 coverable nodes across the whole workspace/);
   const named = new Set([...m.evidence, ...m.gaps].map((e) => e.nodeId));
-  for (const out of [`${R}::page::/orders/legacy`, `${R}::${BTN}::cx`, `${R}::${BTN}::Button`, `${R}::${BTN}::Spinner`]) {
+  for (const out of [
+    `${R}::page::/orders/legacy`,
+    `${R}::${BTN}::cx`,
+    `${R}::${BTN}::Button`,
+    `${R}::${BTN}::Spinner`,
+  ]) {
     assert.equal(named.has(out), false, `${out} is neither evidence nor a gap — it is not measured at all`);
   }
   // the five that are in and untested are named as gaps, never dropped silently
-  assert.deepEqual(m.gaps.map((g) => g.nodeId).sort(), [
-    `${R}::route::POST /orders`, `${R}::${CLIENT}::apiPost`, `${R}::${FORM}::OrderForm`, `${R}::${SVC}::refundOrder`, SHELL,
-  ].sort());
+  assert.deepEqual(
+    m.gaps.map((g) => g.nodeId).sort(),
+    [
+      `${R}::route::POST /orders`,
+      `${R}::${CLIENT}::apiPost`,
+      `${R}::${FORM}::OrderForm`,
+      `${R}::${SVC}::refundOrder`,
+      SHELL,
+    ].sort(),
+  );
   // and the journey fold reads the same predicate
   const facts = coverageFor(index, [...index.byId.keys()], { kind: 'workspace', label: 'the shop' });
   assert.equal(facts.metric.denominator, 7);
@@ -465,7 +702,12 @@ test('one journey scope: the fold, the matrix row, a test detail and computeMetr
   // (1) the journey fold · (2) the catalogue matrix row · (3) computeMetric on the same list
   const fold = journeySummary(index, j, screensFor(index, entry)).coverage!.journey;
   const row = testsSurface(index, null).journeys.find((r) => r.flowId === entry)!;
-  const m = computeMetric(index, 'test-coverage', { kind: 'flow', label: 'Place an order', flowId: entry, nodeIds: ids });
+  const m = computeMetric(index, 'test-coverage', {
+    kind: 'flow',
+    label: 'Place an order',
+    flowId: entry,
+    nodeIds: ids,
+  });
   assert.equal(fold.metric.denominator, row.coverage.metric.denominator);
   assert.equal(fold.metric.denominator, m.denominator);
   assert.equal(fold.metric.scopeLabel, row.coverage.metric.scopeLabel);
@@ -473,7 +715,10 @@ test('one journey scope: the fold, the matrix row, a test detail and computeMetr
   assert.equal(fold.metric.numerator, m.numerator);
   // (4) a test's flow list is the same scope: it finds the flow through a node inside it
   const detail = testDetail(index, `${R}::test::src/orders.spec.ts::placeOrder totals the lines`)!;
-  assert.deepEqual(detail.journeys.map((x) => x.id), [entry]);
+  assert.deepEqual(
+    detail.journeys.map((x) => x.id),
+    [entry],
+  );
 });
 
 test('the journey scope takes the flow’s full screen list, never the capped one a band drew', () => {
@@ -528,36 +773,66 @@ test('one evidence word, from the fold: an observed class carried only by a cove
   // attribution (visual swarm 2026-09-24; the acceptance's own ranked item 3).
   // The fold decides it now, once, and hands out the catalog key.
   const runOnly = flowFacts(shop({ withObserved: true, freshness: 'unchanged' }));
-  assert.equal(runOnly.chip, 'observed', 'the class is the edge\'s and does not move');
+  assert.equal(runOnly.chip, 'observed', "the class is the edge's and does not move");
   assert.equal(runOnly.counts.tests.observed, 0, 'no results report named a case here');
   assert.ok(runOnly.counts.tests.runLevel > 0, 'a coverage report did see it');
   assert.equal(runOnly.observedBy, 'runs');
-  assert.deepEqual(runOnly.evidenceWord, { cls: 'observed', key: 'tests.evidence.runSeen', biz: 'journey.biz.testsRun.runOnly' },
-    'the class stays observed and the word names the run — downgrading to *reached* would drop real evidence');
+  assert.deepEqual(
+    runOnly.evidenceWord,
+    { cls: 'observed', key: 'tests.evidence.runSeen', biz: 'journey.biz.testsRun.runOnly' },
+    'the class stays observed and the word names the run — downgrading to *reached* would drop real evidence',
+  );
 
   // a case a results report named earns the case's word: the same fixture with one
   // observed edge on the unit *case* rather than only on the run
   const named = shop({ withObserved: true, freshness: 'unchanged' });
   named.nodes.push({
-    id: `${R}::test::src/orders.spec.ts::places an order end to end`, kind: 'test', name: 'places an order end to end',
-    tags: ['test', 'test:unit'], loc: { repo: R, path: 'src/orders.spec.ts', line: 20 },
+    id: `${R}::test::src/orders.spec.ts::places an order end to end`,
+    kind: 'test',
+    name: 'places an order end to end',
+    tags: ['test', 'test:unit'],
+    loc: { repo: R, path: 'src/orders.spec.ts', line: 20 },
     test: {
-      level: 'unit', runner: 'vitest', suite: [], file: 'src/orders.spec.ts',
+      level: 'unit',
+      runner: 'vitest',
+      suite: [],
+      file: 'src/orders.spec.ts',
       run: { id: 'r1', at: '2026-09-10T09:00:00.000Z', status: 'passed', freshness: 'unchanged', stale: false },
     },
   } as GraphNode);
-  named.edges.push(edge('covers', `${R}::test::src/orders.spec.ts::places an order end to end`, `${R}::${SVC}::placeOrder`,
-    { evidence: 'observed', runId: 'r1', lines: 3 }, { status: 'resolved', technique: 'coverage-report', confidence: 'HIGH' }));
+  named.edges.push(
+    edge(
+      'covers',
+      `${R}::test::src/orders.spec.ts::places an order end to end`,
+      `${R}::${SVC}::placeOrder`,
+      { evidence: 'observed', runId: 'r1', lines: 3 },
+      { status: 'resolved', technique: 'coverage-report', confidence: 'HIGH' },
+    ),
+  );
   const byCase = flowFacts(named);
   assert.equal(byCase.counts.tests.observed > 0, true, 'a results report named a case');
   assert.equal(byCase.observedBy, 'tests');
-  assert.deepEqual(byCase.evidenceWord, { cls: 'observed', key: 'journey.evidence.observed', biz: 'journey.biz.testsRun.observed' });
+  assert.deepEqual(byCase.evidenceWord, {
+    cls: 'observed',
+    key: 'journey.evidence.observed',
+    biz: 'journey.biz.testsRun.observed',
+  });
 
   // the words exist, in both registers, wherever the fold may point
-  for (const k of ['journey.evidence.observed', 'journey.evidence.reached', 'journey.evidence.declared',
-    'journey.evidence.stale', 'tests.evidence.runSeen', 'tests.evidence.runSeenStale', 'journey.absent.noneIndexed',
-    'journey.biz.testsRun.none', 'journey.biz.testsRun.observed', 'journey.biz.testsRun.runOnly',
-    'journey.biz.testsRun.stale', 'journey.biz.testsRun.runOnlyStale']) {
+  for (const k of [
+    'journey.evidence.observed',
+    'journey.evidence.reached',
+    'journey.evidence.declared',
+    'journey.evidence.stale',
+    'tests.evidence.runSeen',
+    'tests.evidence.runSeenStale',
+    'journey.absent.noneIndexed',
+    'journey.biz.testsRun.none',
+    'journey.biz.testsRun.observed',
+    'journey.biz.testsRun.runOnly',
+    'journey.biz.testsRun.stale',
+    'journey.biz.testsRun.runOnlyStale',
+  ]) {
     assert.ok(STRINGS[k], `${k} is not in the catalog — the fold points at a word nothing can print`);
   }
 });
@@ -571,19 +846,45 @@ test('the evidence word is the four classes and nothing else — a stale run kee
   // engineer's blocker): every reference-app screen whose only run was a coverage
   // report wore `VERIFIED · STALE` above `0 observed`. *Verified* means a
   // results report named a case; a coverage report says *seen by a coverage run*.
-  assert.deepEqual(evidenceWord('observed-stale', 'runs'), { cls: 'stale', key: 'tests.evidence.runSeenStale', biz: 'journey.biz.testsRun.runOnlyStale' });
-  assert.deepEqual(evidenceWord('observed-stale', 'tests'), { cls: 'stale', key: 'journey.evidence.stale', biz: 'journey.biz.testsRun.stale' });
+  assert.deepEqual(evidenceWord('observed-stale', 'runs'), {
+    cls: 'stale',
+    key: 'tests.evidence.runSeenStale',
+    biz: 'journey.biz.testsRun.runOnlyStale',
+  });
+  assert.deepEqual(evidenceWord('observed-stale', 'tests'), {
+    cls: 'stale',
+    key: 'journey.evidence.stale',
+    biz: 'journey.biz.testsRun.stale',
+  });
   for (const chip of ['observed', 'observed-stale'] as const) {
-    assert.equal(/verified/i.test(STRINGS[evidenceWord(chip, 'runs').key]!.professional), false,
-      `a coverage report alone must never print *verified* (${chip})`);
+    assert.equal(
+      /verified/i.test(STRINGS[evidenceWord(chip, 'runs').key]!.professional),
+      false,
+      `a coverage report alone must never print *verified* (${chip})`,
+    );
   }
-  assert.deepEqual(evidenceWord('reached'), { cls: 'reached', key: 'journey.evidence.reached', biz: 'journey.biz.testsRun.none' });
-  assert.deepEqual(evidenceWord('declared'), { cls: 'declared', key: 'journey.evidence.declared', biz: 'journey.biz.testsRun.none' });
+  assert.deepEqual(evidenceWord('reached'), {
+    cls: 'reached',
+    key: 'journey.evidence.reached',
+    biz: 'journey.biz.testsRun.none',
+  });
+  assert.deepEqual(evidenceWord('declared'), {
+    cls: 'declared',
+    key: 'journey.evidence.declared',
+    biz: 'journey.biz.testsRun.none',
+  });
   assert.deepEqual(evidenceWord('none'), { cls: 'none', key: 'journey.absent.noneIndexed' });
-  const classes = new Set((['none', 'declared', 'reached', 'observed', 'observed-stale'] as const)
-    .flatMap((c) => [evidenceWord(c, 'tests').cls, evidenceWord(c, 'runs').cls]));
-  assert.deepEqual([...classes].sort(), ['declared', 'none', 'observed', 'reached', 'stale'],
-    'a fifth evidence class is the failure mode this phase existed to remove');
+  const classes = new Set(
+    (['none', 'declared', 'reached', 'observed', 'observed-stale'] as const).flatMap((c) => [
+      evidenceWord(c, 'tests').cls,
+      evidenceWord(c, 'runs').cls,
+    ]),
+  );
+  assert.deepEqual(
+    [...classes].sort(),
+    ['declared', 'none', 'observed', 'reached', 'stale'],
+    'a fifth evidence class is the failure mode this phase existed to remove',
+  );
 });
 
 test('a flow with nothing built never wears an earned chip: the evidence is named as shared', () => {
@@ -624,12 +925,22 @@ test('the coverage sentence names every level it counts and calls a report a rep
   const g = shop({ withObserved: true, freshness: 'unchanged' });
   // one integration case over the same service function
   g.nodes.push({
-    id: `${R}::test::src/orders.int.spec.ts::places and refunds`, kind: 'test', name: 'places and refunds',
-    tags: ['test', 'test:integration'], loc: { repo: R, path: 'src/orders.int.spec.ts', line: 3 },
+    id: `${R}::test::src/orders.int.spec.ts::places and refunds`,
+    kind: 'test',
+    name: 'places and refunds',
+    tags: ['test', 'test:integration'],
+    loc: { repo: R, path: 'src/orders.int.spec.ts', line: 3 },
     test: { level: 'integration', runner: 'vitest', suite: [], file: 'src/orders.int.spec.ts' },
   } as GraphNode);
-  g.edges.push(edge('covers', `${R}::test::src/orders.int.spec.ts::places and refunds`, `${R}::${SVC}::placeOrder`,
-    { evidence: 'static' }, { status: 'resolved', technique: 'import-resolution', confidence: 'HIGH' }));
+  g.edges.push(
+    edge(
+      'covers',
+      `${R}::test::src/orders.int.spec.ts::places and refunds`,
+      `${R}::${SVC}::placeOrder`,
+      { evidence: 'static' },
+      { status: 'resolved', technique: 'import-resolution', confidence: 'HIGH' },
+    ),
+  );
   const facts = flowFacts(g);
   const c = facts.counts.tests;
   assert.equal(c.integration, 1, 'the fixture has one integration case');
@@ -661,8 +972,20 @@ test('e2eVia names the other journeys whose scope holds the lifting node', () =>
   const g = shop({ e2eBody: true });
   // a second journey through the same route
   g.nodes.push(
-    { id: `${R}::flow::refund`, kind: 'flow', name: 'Refund an order', tags: [], design: { status: 'both', origin: 'manifest', id: 'ORD-02' } } as GraphNode,
-    { id: `${R}::page::/refunds`, kind: 'page', name: '/refunds', tags: [], loc: { repo: R, path: 'src/ui/RefundPage.tsx', line: 3 } } as GraphNode,
+    {
+      id: `${R}::flow::refund`,
+      kind: 'flow',
+      name: 'Refund an order',
+      tags: [],
+      design: { status: 'both', origin: 'manifest', id: 'ORD-02' },
+    } as GraphNode,
+    {
+      id: `${R}::page::/refunds`,
+      kind: 'page',
+      name: '/refunds',
+      tags: [],
+      loc: { repo: R, path: 'src/ui/RefundPage.tsx', line: 3 },
+    } as GraphNode,
   );
   g.edges.push(
     edge('renders', `${R}::flow::refund`, `${R}::page::/refunds`, { line: 1 }),
@@ -670,7 +993,10 @@ test('e2eVia names the other journeys whose scope holds the lifting node', () =>
   );
   const facts = flowFacts(g);
   assert.equal(facts.e2eVia!.nodeId, `${R}::route::POST /orders`);
-  assert.deepEqual(facts.e2eVia!.sharedWith.map((f) => f.name), ['Refund an order']);
+  assert.deepEqual(
+    facts.e2eVia!.sharedWith.map((f) => f.name),
+    ['Refund an order'],
+  );
 });
 
 test('exactness is whole-scope: a fresh run plus a file no report looked at is still a floor', () => {
@@ -680,7 +1006,10 @@ test('exactness is whole-scope: a fresh run plus a file no report looked at is s
   assert.equal(exact.uncertainty, undefined);
 
   // one observed-fresh edge, the rest declared, and a member's file outside the report
-  const partial = computeMetric(indexOf(shop({ withObserved: true, freshness: 'unchanged', runFiles: [SVC] })), 'test-coverage');
+  const partial = computeMetric(
+    indexOf(shop({ withObserved: true, freshness: 'unchanged', runFiles: [SVC] })),
+    'test-coverage',
+  );
   assert.equal(partial.bound, 'floor');
   assert.deepEqual(partial.uncertainty!.filesUncovered, [UI]);
   assert.match(partial.uncertainty!.note, /in no fresh coverage report/);
@@ -700,16 +1029,22 @@ test('exactness is whole-scope: a fresh run plus a file no report looked at is s
 test('excluded reconciles to zero: the coverable kinds in scope are the denominator plus the four reasons', () => {
   const index = indexOf(shopUi());
   const m = computeMetric(index, 'test-coverage');
-  const ofCoverableKind = [...index.byId.values()]
-    .filter((n) => ['function', 'component', 'page', 'route', 'guard', 'rule'].includes(n.kind)).length;
+  const ofCoverableKind = [...index.byId.values()].filter((n) =>
+    ['function', 'component', 'page', 'route', 'guard', 'rule'].includes(n.kind),
+  ).length;
   const { manifestOnly, plumbing, presentational, declaredOnly } = m.excluded;
   assert.equal(m.denominator + manifestOnly + plumbing + presentational + declaredOnly, ofCoverableKind);
   assert.deepEqual(m.excluded, { manifestOnly: 1, plumbing: 1, presentational: 2, declaredOnly: 0 });
 
   // a declared-but-unbuilt route is its own reason, never folded into manifest-only
   const g = shopUi();
-  g.nodes.push({ id: `${R}::route::DELETE /orders/{id}`, kind: 'route', name: 'DELETE /orders/{id}', tags: [],
-    contract: { status: 'spec-only', apiId: `${R}::api::x` } } as GraphNode);
+  g.nodes.push({
+    id: `${R}::route::DELETE /orders/{id}`,
+    kind: 'route',
+    name: 'DELETE /orders/{id}',
+    tags: [],
+    contract: { status: 'spec-only', apiId: `${R}::api::x` },
+  } as GraphNode);
   const m2 = computeMetric(indexOf(g), 'test-coverage');
   assert.deepEqual(m2.excluded, { manifestOnly: 1, plumbing: 1, presentational: 2, declaredOnly: 1 });
   assert.equal(m2.denominator, m.denominator);
@@ -718,12 +1053,23 @@ test('excluded reconciles to zero: the coverable kinds in scope are the denomina
 test('metric v2: integration is its own part, and a value stored under v1 says the definition changed', () => {
   const g = shop({ withObserved: true });
   g.nodes.push({
-    id: `${R}::test::src/orders.int.spec.ts::refunds against the db`, kind: 'test', name: 'refunds against the db',
-    tags: ['test', 'test:integration'], loc: { repo: R, path: 'src/orders.int.spec.ts', line: 3 }, group: 'src/orders.int.spec.ts',
+    id: `${R}::test::src/orders.int.spec.ts::refunds against the db`,
+    kind: 'test',
+    name: 'refunds against the db',
+    tags: ['test', 'test:integration'],
+    loc: { repo: R, path: 'src/orders.int.spec.ts', line: 3 },
+    group: 'src/orders.int.spec.ts',
     test: { level: 'integration', runner: 'vitest', suite: [], file: 'src/orders.int.spec.ts' },
   } as GraphNode);
-  g.edges.push(edge('covers', `${R}::test::src/orders.int.spec.ts::refunds against the db`, `${R}::${SVC}::refundOrder`,
-    { evidence: 'static' }, { status: 'resolved', technique: 'import-resolution', confidence: 'HIGH' }));
+  g.edges.push(
+    edge(
+      'covers',
+      `${R}::test::src/orders.int.spec.ts::refunds against the db`,
+      `${R}::${SVC}::refundOrder`,
+      { evidence: 'static' },
+      { status: 'resolved', technique: 'import-resolution', confidence: 'HIGH' },
+    ),
+  );
   const index = indexOf(g);
   const m = computeMetric(index, 'test-coverage');
   assert.equal(METRICS['test-coverage']!.version, 2);
@@ -743,7 +1089,10 @@ test('metric v2: integration is its own part, and a value stored under v1 says t
   const restated = computeMetric(index, 'test-coverage', { kind: 'workspace' }, { storedVersion: 1 });
   assert.equal(restated.definitionChanged!.fromVersion, 1);
   assert.match(restated.definitionChanged!.was, /integration tests counted inside the `unit` part/);
-  assert.equal(computeMetric(index, 'test-coverage', { kind: 'workspace' }, { storedVersion: 2 }).definitionChanged, undefined);
+  assert.equal(
+    computeMetric(index, 'test-coverage', { kind: 'workspace' }, { storedVersion: 2 }).definitionChanged,
+    undefined,
+  );
 });
 
 test('the gap and evidence lists are uncapped for JSON and capped only when a text printer asks', () => {
@@ -759,7 +1108,14 @@ test('the gap and evidence lists are uncapped for JSON and capped only when a te
 test('suite tallies keep flaky out of passed and out of unknown', () => {
   const g = shop();
   const unit = g.nodes.find((n) => n.name === 'placeOrder totals the lines')!;
-  unit.test!.run = { id: 'r9', at: '2026-09-12T09:00:00.000Z', status: 'flaky', retries: 2, freshness: 'unknown', stale: false };
+  unit.test!.run = {
+    id: 'r9',
+    at: '2026-09-12T09:00:00.000Z',
+    status: 'flaky',
+    retries: 2,
+    freshness: 'unknown',
+    stale: false,
+  };
   const s = testsSurface(indexOf(g), null);
   const suite = s.suites.find((x) => x.file === 'src/orders.spec.ts')!;
   assert.equal(suite.counts.flaky, 1);
@@ -770,9 +1126,12 @@ test('suite tallies keep flaky out of passed and out of unknown', () => {
 
 // ── the farsight-tests-matrix v1 contract (A2.6) ───────────────────────────
 
-const MATRIX_SCHEMA = () => JSON.parse(readFileSync(join(here, '..', '..', '..', 'schemas', 'farsight-tests-matrix-v1.schema.json'), 'utf8'));
+const MATRIX_SCHEMA = () =>
+  JSON.parse(readFileSync(join(here, '..', '..', '..', 'schemas', 'farsight-tests-matrix-v1.schema.json'), 'utf8'));
 const IDENTITY = {
-  sync: 7, source_commit: 'abc1234', source_digest: { [R]: 'd1g35700' },
+  sync: 7,
+  source_commit: 'abc1234',
+  source_digest: { [R]: 'd1g35700' },
   farsight: 'farsight 0.0.0 · built 1970-01-01T00:00:00.000Z · workspace',
   generated_at: '2026-09-22T00:00:00.000Z',
 };
@@ -798,7 +1157,10 @@ test('farsight-tests-matrix v1: the document validates against the schema file',
 
 test('testsIdentity: what the graph recorded, and nothing it did not (B3.1)', () => {
   // the full case: sync, commit and a per-repo content digest all read off the graph's meta
-  const full = testsIdentity({ sync: 7, commit: 'abc1234', repos: { [R]: { files: 3, sourceHash: 'h', sourceDigest: 'd1g35700' } } }, 'build-line');
+  const full = testsIdentity(
+    { sync: 7, commit: 'abc1234', repos: { [R]: { files: 3, sourceHash: 'h', sourceDigest: 'd1g35700' } } },
+    'build-line',
+  );
   assert.equal(full.sync, 7);
   assert.equal(full.source_commit, 'abc1234');
   assert.deepEqual(full.source_digest, { [R]: 'd1g35700' });
@@ -849,7 +1211,9 @@ test('farsight-tests-matrix v1: the rows sort by every column, so the same graph
 test('farsight-tests-matrix v1: `static` prints as reached, and unknown freshness leaves `stale` null', () => {
   const index = indexOf(shop({ withObserved: true, e2eBody: true }));
   const rows = testsMatrixRows(index, testsSurface(index, null), IDENTITY);
-  const unit = rows.find((r) => r.test_id.endsWith('placeOrder totals the lines') && r.node_id === `${R}::${SVC}::placeOrder`)!;
+  const unit = rows.find(
+    (r) => r.test_id.endsWith('placeOrder totals the lines') && r.node_id === `${R}::${SVC}::placeOrder`,
+  )!;
   // the graph stores `static`; every consumer reads *reached*
   assert.equal(unit.evidence_class, 'reached');
   assert.equal(unit.technique, 'import-resolution');
@@ -890,8 +1254,8 @@ test('verifiedThrough: a table is reached through its accessors, and the ref nam
   const through = verifiedThrough(index, table);
   assert.equal(through.length, 1);
   assert.equal(through[0]!.id, `${R}::test::src/orders.spec.ts::placeOrder totals the lines`);
-  assert.equal(through[0]!.via, `${R}::${SVC}::placeOrder`);         // the accessor that reached it
-  assert.equal(through[0]!.reaches.nodeId, table);                    // what it verifies, through that accessor
+  assert.equal(through[0]!.via, `${R}::${SVC}::placeOrder`); // the accessor that reached it
+  assert.equal(through[0]!.reaches.nodeId, table); // what it verifies, through that accessor
   assert.equal(through[0]!.evidence, 'static');
   // refundOrder reads the table too, but no test reaches it: an absence, not a row
   assert.ok(!through.some((t) => t.via === `${R}::${SVC}::refundOrder`));
@@ -911,13 +1275,37 @@ test('the detail fold carries per-edge technique, confidence, the twin note and 
   const unit = `${R}::test::src/orders.spec.ts::placeOrder totals the lines`;
   // the production accessor was picked by method name over an in-memory double:
   // the note lives on the `calls` edge, and the detail row prints it
-  g.edges.push(edge('calls', `${R}::${SVC}::refundOrder`, `${R}::${SVC}::placeOrder`, { line: 25 },
-    { status: 'heuristic', technique: 'method-name', confidence: 'MEDIUM',
-      note: 'in-memory twin set aside: InMemoryOrders.placeOrder', alternatives: [`${R}::src/test/InMemoryOrders.ts::placeOrder`] }));
+  g.edges.push(
+    edge(
+      'calls',
+      `${R}::${SVC}::refundOrder`,
+      `${R}::${SVC}::placeOrder`,
+      { line: 25 },
+      {
+        status: 'heuristic',
+        technique: 'method-name',
+        confidence: 'MEDIUM',
+        note: 'in-memory twin set aside: InMemoryOrders.placeOrder',
+        alternatives: [`${R}::src/test/InMemoryOrders.ts::placeOrder`],
+      },
+    ),
+  );
   // a second, weak reach: a URL literal, LOW — a class is not a confidence
-  g.edges.push(edge('covers', unit, `${R}::route::POST /orders`, { evidence: 'static', line: 9 },
-    { status: 'heuristic', technique: 'route-literal', confidence: 'LOW', note: 'a URL literal in the test',
-      alternatives: [`${R}::route::POST /orders/legacy`] }));
+  g.edges.push(
+    edge(
+      'covers',
+      unit,
+      `${R}::route::POST /orders`,
+      { evidence: 'static', line: 9 },
+      {
+        status: 'heuristic',
+        technique: 'route-literal',
+        confidence: 'LOW',
+        note: 'a URL literal in the test',
+        alternatives: [`${R}::route::POST /orders/legacy`],
+      },
+    ),
+  );
   const index = indexOf(g);
   const d = testDetail(index, unit)!;
 
@@ -938,7 +1326,10 @@ test('the detail fold carries per-edge technique, confidence, the twin note and 
 
   // a coverage report observed nodes this case reaches; it named no case, so the
   // observation is listed as the run's, never as this test's
-  assert.equal(d.covers.some((c) => c.evidence === 'observed'), false);
+  assert.equal(
+    d.covers.some((c) => c.evidence === 'observed'),
+    false,
+  );
   assert.equal(d.alsoObserved!.length, 1);
   assert.equal(d.alsoObserved![0]!.id, `${R}::test::run:unit:shop`);
   assert.equal(d.alsoObserved![0]!.runLevel, true);
@@ -958,8 +1349,14 @@ test('an inactive case shows its edges marked and no observed one; an orphan say
   // .skip: the case is listed, its edges are marked, and nothing it touches is observed by it
   assert.equal(d.test.inactive, true);
   assert.ok(d.covers.length >= 3);
-  assert.ok(d.covers.every((c) => c.inactive), 'the flag rides on the case as well as the edge');
-  assert.equal(d.covers.some((c) => c.evidence === 'observed'), false);
+  assert.ok(
+    d.covers.every((c) => c.inactive),
+    'the flag rides on the case as well as the edge',
+  );
+  assert.equal(
+    d.covers.some((c) => c.evidence === 'observed'),
+    false,
+  );
   // the fixture's e2e test declares ORD-99, which nothing answers to
   assert.equal(d.orphan!.reason, 'unresolved-claim');
   assert.deepEqual(d.orphan!.declares, ['ORD-99']);
@@ -969,9 +1366,17 @@ test('an inactive case shows its edges marked and no observed one; an orphan say
 
   // a test that lands on nothing reads the other reason
   const lone = { ...g };
-  lone.nodes = [...g.nodes, { id: `${R}::test::src/lone.spec.ts::proves nothing here`, kind: 'test', name: 'proves nothing here',
-    tags: ['test', 'test:unit'], loc: { repo: R, path: 'src/lone.spec.ts', line: 2 },
-    test: { level: 'unit', runner: 'vitest', suite: [], file: 'src/lone.spec.ts' } } as GraphNode];
+  lone.nodes = [
+    ...g.nodes,
+    {
+      id: `${R}::test::src/lone.spec.ts::proves nothing here`,
+      kind: 'test',
+      name: 'proves nothing here',
+      tags: ['test', 'test:unit'],
+      loc: { repo: R, path: 'src/lone.spec.ts', line: 2 },
+      test: { level: 'unit', runner: 'vitest', suite: [], file: 'src/lone.spec.ts' },
+    } as GraphNode,
+  ];
   const li = indexOf(lone);
   const orphan = testDetail(li, `${R}::test::src/lone.spec.ts::proves nothing here`)!;
   assert.equal(orphan.orphan!.reason, 'covers-nothing');
@@ -982,8 +1387,20 @@ test('an observed edge carries how the coverage row met the node, and the match 
   const g = shop({ withObserved: true, freshness: 'unchanged' });
   const run = `${R}::test::run:unit:shop`;
   // the weakest of the three joins: a different name, one line away
-  g.edges.push(edge('covers', run, `${R}::${SVC}::refundOrder`, { evidence: 'observed', match: 'line±1' },
-    { status: 'heuristic', technique: 'coverage-report', confidence: 'LOW', note: 'matched by line ±1 — the name differs' }));
+  g.edges.push(
+    edge(
+      'covers',
+      run,
+      `${R}::${SVC}::refundOrder`,
+      { evidence: 'observed', match: 'line±1' },
+      {
+        status: 'heuristic',
+        technique: 'coverage-report',
+        confidence: 'LOW',
+        note: 'matched by line ±1 — the name differs',
+      },
+    ),
+  );
   const d = testDetail(indexOf(g), run)!;
   const weak = d.covers.find((c) => c.nodeId === `${R}::${SVC}::refundOrder`)!;
   assert.equal(weak.match, 'line±1');

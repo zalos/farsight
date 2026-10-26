@@ -22,7 +22,16 @@ export const PRECONDITION_TAG = 'precondition';
 
 /** The classes in the order a reader meets them: who, the record, then policy, then the technical checks. */
 export const GATE_CLASS_ORDER: readonly GateClass[] = [
-  'identity', 'authorisation', 'record-state', 'completeness', 'integrity', 'data-protection', 'input', 'platform', 'configuration', 'action-gate',
+  'identity',
+  'authorisation',
+  'record-state',
+  'completeness',
+  'integrity',
+  'data-protection',
+  'input',
+  'platform',
+  'configuration',
+  'action-gate',
 ];
 export const GATE_TIERS: readonly GateTier[] = ['business', 'policy', 'technical'];
 
@@ -34,26 +43,46 @@ export const GATE_TIERS: readonly GateTier[] = ['business', 'policy', 'technical
  * grouping of the list, not a tier.
  */
 export const TIER_OF_CLASS: Record<GateClass, GateTier> = {
-  identity: 'policy', authorisation: 'business', 'record-state': 'business', completeness: 'business',
-  integrity: 'business', 'data-protection': 'policy',
-  input: 'technical', platform: 'technical', configuration: 'technical',
+  identity: 'policy',
+  authorisation: 'business',
+  'record-state': 'business',
+  completeness: 'business',
+  integrity: 'business',
+  'data-protection': 'policy',
+  input: 'technical',
+  platform: 'technical',
+  configuration: 'technical',
   // an action marked as a gate is the action: never folded, never counted as a gate
   'action-gate': 'business',
 };
 
 // Read off the words the team wrote (the `@guard` label after the colon) and the declaring name — first match wins.
 const CLASS_WORDS: [GateClass, RegExp][] = [
-  ['data-protection', /\bbank|\biban\b|account number|\bpii\b|gdpr|personal data|privacy|redact|forbidden.?account|card number/i],
-  ['platform', /csrf|same.?origin|rate.?limit|throttl|multipart|upload (size|limit)|body size|path.?id|id shape|\bcors\b|content.?type|return.?to|redirect target|problem/i],
+  [
+    'data-protection',
+    /\bbank|\biban\b|account number|\bpii\b|gdpr|personal data|privacy|redact|forbidden.?account|card number/i,
+  ],
+  [
+    'platform',
+    /csrf|same.?origin|rate.?limit|throttl|multipart|upload (size|limit)|body size|path.?id|id shape|\bcors\b|content.?type|return.?to|redirect target|problem/i,
+  ],
   ['integrity', /four.?eyes|duplicate|idempot|dedup|second (person|approver|pair)|agrees|checksum|signature|tamper/i],
   ['completeness', /readiness|complete|required (field|doc)|missing|attachment|requirement/i],
   ['record-state', /state machine|transition|lifecycle|\bstatus\b|\bstate\b/i],
-  ['authorisation', /\brole|\bscope|permission|\bowner|ownership|\badmin|tenant|\baccess\b|\bmay\b|allowed|approver|entitle/i],
-  ['identity', /session|signed.?in|sign.?in|log.?in|authenticat|\bauth\b|token|jwt|principal|\buser\b|magic.?link|\botp\b/i],
+  [
+    'authorisation',
+    /\brole|\bscope|permission|\bowner|ownership|\badmin|tenant|\baccess\b|\bmay\b|allowed|approver|entitle/i,
+  ],
+  [
+    'identity',
+    /session|signed.?in|sign.?in|log.?in|authenticat|\bauth\b|token|jwt|principal|\buser\b|magic.?link|\botp\b/i,
+  ],
 ];
 
 /** The class a gate is: a precondition's own, an action marked as a gate, a config check, a schema's input shape, else read off its words. */
-export function gateClass(node: Pick<GraphNode, 'kind' | 'name' | 'tags' | 'precondition' | 'snippet' | 'loc' | 'gateTier'>): GateClass {
+export function gateClass(
+  node: Pick<GraphNode, 'kind' | 'name' | 'tags' | 'precondition' | 'snippet' | 'loc' | 'gateTier'>,
+): GateClass {
   if (node.precondition) return node.precondition.class;
   const tags = node.tags ?? [];
   if (tags.includes(ACTION_GATE_TAG)) return 'action-gate';
@@ -80,7 +109,11 @@ export function gateClass(node: Pick<GraphNode, 'kind' | 'name' | 'tags' | 'prec
 export type TierFrom = 'class' | 'config' | 'annotation';
 
 /** The tier a gate is in, and why: an override on the node (config or annotation) wins over its class. */
-export function gateTierOf(node: Parameters<typeof gateClass>[0]): { tier: GateTier; class: GateClass; tierFrom: TierFrom } {
+export function gateTierOf(node: Parameters<typeof gateClass>[0]): {
+  tier: GateTier;
+  class: GateClass;
+  tierFrom: TierFrom;
+} {
   const cls = gateClass(node);
   if (node.gateTier) return { tier: node.gateTier.tier, class: cls, tierFrom: node.gateTier.from };
   // a precondition's own `tier` was the parser's copy of the class mapping, never an override: the class decides,

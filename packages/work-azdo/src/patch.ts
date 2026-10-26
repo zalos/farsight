@@ -8,7 +8,11 @@ import type { Intent, StateCategory } from '@farsight/work';
 import { joinTags, splitTags, LINK_REL_FOR, STATE_CATEGORY_MAP, type TypeInfo } from './map.js';
 import { markdownToHtml } from './html.js';
 
-export interface PatchOp { op: 'add' | 'remove' | 'replace' | 'test'; path: string; value?: unknown }
+export interface PatchOp {
+  op: 'add' | 'remove' | 'replace' | 'test';
+  path: string;
+  value?: unknown;
+}
 
 /** What the provider read from the tracker just before building the patch. */
 export interface CurrentItem {
@@ -32,7 +36,12 @@ export type PatchResult = { ops: PatchOp[] } | { error: string };
 export const PATCH_ACTIONS = ['edit', 'assign', 'transition', 'link', 'label'] as const;
 
 /** Resolve a transition target: a named state, or the one reachable state of a category. */
-export function transitionTarget(type: TypeInfo, from: string, to?: StateCategory, toName?: string): { state: string } | { error: string } {
+export function transitionTarget(
+  type: TypeInfo,
+  from: string,
+  to?: StateCategory,
+  toName?: string,
+): { state: string } | { error: string } {
   const reachable = (type.transitions[from] ?? []).filter((s) => s !== from);
   if (!type.states.has(from)) return { error: `${type.name} items have no state ${from}` };
   if (toName) {
@@ -51,10 +60,12 @@ export function transitionTarget(type: TypeInfo, from: string, to?: StateCategor
 /** Build the patch for one intent against the item as just read. */
 export function buildPatch(intent: Intent, cur: CurrentItem, ctx: PatchContext): PatchResult {
   const base = Number(intent.baseRevision ?? cur.rev);
-  if (!Number.isFinite(base)) return { error: `the base revision ${intent.baseRevision} is not an Azure DevOps revision` };
+  if (!Number.isFinite(base))
+    return { error: `the base revision ${intent.baseRevision} is not an Azure DevOps revision` };
   const ops: PatchOp[] = [{ op: 'test', path: '/rev', value: base }];
   const p = intent.payload ?? {};
-  const setField = (ref: string, value: unknown) => ops.push({ op: cur.fields[ref] === undefined ? 'add' : 'replace', path: `/fields/${ref}`, value });
+  const setField = (ref: string, value: unknown) =>
+    ops.push({ op: cur.fields[ref] === undefined ? 'add' : 'replace', path: `/fields/${ref}`, value });
   switch (intent.action) {
     case 'edit': {
       const fields = p.fields ?? {};
@@ -78,18 +89,21 @@ export function buildPatch(intent: Intent, cur: CurrentItem, ctx: PatchContext):
           setField('System.Description', fmt === 'markdown' ? md : markdownToHtml(md));
           continue;
         }
-        if (name === 'state' || name === 'assignee' || name === 'parent') return { error: `${name} is changed by its own action, not an edit` };
+        if (name === 'state' || name === 'assignee' || name === 'parent')
+          return { error: `${name} is changed by its own action, not an edit` };
         const ref = ctx.fieldRef(name);
         if (!ref) return { error: `${name} is not a field this project has` };
-        if (v === null || v === undefined) { if (cur.fields[ref] !== undefined) ops.push({ op: 'remove', path: `/fields/${ref}` }); }
-        else setField(ref, v);
+        if (v === null || v === undefined) {
+          if (cur.fields[ref] !== undefined) ops.push({ op: 'remove', path: `/fields/${ref}` });
+        } else setField(ref, v);
       }
       return { ops };
     }
     case 'assign': {
       const a = p.assignee;
       if (a === null || a === undefined || a === '') {
-        if (cur.fields['System.AssignedTo'] !== undefined) ops.push({ op: 'remove', path: '/fields/System.AssignedTo' });
+        if (cur.fields['System.AssignedTo'] !== undefined)
+          ops.push({ op: 'remove', path: '/fields/System.AssignedTo' });
         else return { error: 'the item has no assignee to remove' };
         return { ops };
       }

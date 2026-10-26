@@ -10,7 +10,14 @@ import { t } from '../strings.js';
  * @group Stewardship
  */
 export function mountStewardship(route, el) {
-  el.innerHTML = '<div class="set-wrap"><h1>' + esc(t('nav.stewardship')) + '</h1>'
-    + '<div class="set-sec ph-sec"><h2>' + esc(t('ph.stewardship.title')) + '</h2>'
-    + '<p class="ph-body">' + esc(t('ph.stewardship.body')) + '</p></div></div>';
+  el.innerHTML =
+    '<div class="set-wrap"><h1>' +
+    esc(t('nav.stewardship')) +
+    '</h1>' +
+    '<div class="set-sec ph-sec"><h2>' +
+    esc(t('ph.stewardship.title')) +
+    '</h2>' +
+    '<p class="ph-body">' +
+    esc(t('ph.stewardship.body')) +
+    '</p></div></div>';
 }

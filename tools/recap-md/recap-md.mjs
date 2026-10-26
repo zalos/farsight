@@ -26,21 +26,35 @@ function parseArgs(argv) {
   const opts = [];
   let operands = null;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--') { operands = argv.slice(i + 1); break; }
+    if (argv[i] === '--') {
+      operands = argv.slice(i + 1);
+      break;
+    }
     opts.push(argv[i]);
   }
   for (let j = 0; j < opts.length; j++) {
     const a = opts[j];
-    if (a === '--help' || a === '-h') { out.help = true; return out; }
-    else if (a === '--mode') { out.mode = opts[++j]; }
-    else if (a === '--speak') { out.speak = true; }
-    else if (a === '--voice') { out.voice = opts[++j]; }
-    else if (a === '--speed') { out.speed = opts[++j]; }
-    else if (a === '-') { throw usage("put the input after '--', e.g. recap-md --mode recap -- -"); }
-    else if (a.startsWith('-')) { throw usage(`unknown option '${a}'.`); }
-    else { throw usage(`unexpected argument '${a}'. Put the input path after '--', e.g. recap-md --mode recap -- ${a}`); }
+    if (a === '--help' || a === '-h') {
+      out.help = true;
+      return out;
+    } else if (a === '--mode') {
+      out.mode = opts[++j];
+    } else if (a === '--speak') {
+      out.speak = true;
+    } else if (a === '--voice') {
+      out.voice = opts[++j];
+    } else if (a === '--speed') {
+      out.speed = opts[++j];
+    } else if (a === '-') {
+      throw usage("put the input after '--', e.g. recap-md --mode recap -- -");
+    } else if (a.startsWith('-')) {
+      throw usage(`unknown option '${a}'.`);
+    } else {
+      throw usage(`unexpected argument '${a}'. Put the input path after '--', e.g. recap-md --mode recap -- ${a}`);
+    }
   }
-  if (out.mode !== 'spoken' && out.mode !== 'recap') throw usage(`--mode must be 'spoken' or 'recap' (got '${out.mode}').`);
+  if (out.mode !== 'spoken' && out.mode !== 'recap')
+    throw usage(`--mode must be 'spoken' or 'recap' (got '${out.mode}').`);
   if (operands === null) throw usage("missing '--' before the input path (use: recap-md [options] -- <file|->).");
   if (operands.length === 0) throw usage("no input given after '--'.");
   if (operands.length > 1) throw usage('only one input path is allowed.');
@@ -55,7 +69,7 @@ function parseArgs(argv) {
  */
 function printHelp() {
   process.stdout.write(
-`recap-md — rewrite content as natural spoken narration with a local LLM.
+    `recap-md — rewrite content as natural spoken narration with a local LLM.
 
 Usage:
   recap-md --mode spoken|recap [--speak] [--voice <id>] [--speed <f>] -- <file>
@@ -83,7 +97,8 @@ Examples:
   recap-md --mode recap -- README.md
   cat NOTES.md | recap-md --mode spoken -- -
   recap-md --mode recap --speak -- README.md
-`);
+`,
+  );
 }
 
 /**
@@ -139,14 +154,14 @@ function readStdin() {
  */
 function buildMessages(mode, content) {
   const spoken =
-    'You are a narration rewriter. Rewrite the user\'s document exactly as it would be ' +
+    "You are a narration rewriter. Rewrite the user's document exactly as it would be " +
     'spoken aloud in natural, flowing, conversational English. Remove every markdown-ism ' +
     '(headings, bullets, links, code fences, emphasis markers). Expand abbreviations and ' +
     'acronyms into spoken words. Add natural transitions between ideas so it reads smoothly ' +
     'when heard. Keep every piece of key information — do not summarize or drop content. ' +
     'Output only the rewritten narration, with no preamble, notes, or markdown.';
   const recap =
-    'You are a spoken-style summarizer. Produce a concise summary of the user\'s document ' +
+    "You are a spoken-style summarizer. Produce a concise summary of the user's document " +
     'as it would be spoken aloud, between 150 and 250 words. Use natural, flowing, ' +
     'conversational English with no markdown formatting of any kind. Capture the main points ' +
     'and key takeaways. Output only the spoken summary, with no preamble, notes, or markdown.';
@@ -174,7 +189,7 @@ async function callModel(model, messages) {
   } catch (e) {
     throw new Error(
       `recap-md: cannot reach Ollama at ${base} — is it running? ` +
-      `Try 'brew services start ollama'. (${e && e.message ? e.message : e})`,
+        `Try 'brew services start ollama'. (${e && e.message ? e.message : e})`,
     );
   }
   if (!res.ok) {
@@ -231,7 +246,9 @@ function speakText(text, voice, speed) {
       resolve(127);
     });
     child.on('close', (code) => resolve(code == null ? 1 : code));
-    child.stdin.on('error', () => { /* speak-md may exit early; ignore broken pipe */ });
+    child.stdin.on('error', () => {
+      /* speak-md may exit early; ignore broken pipe */
+    });
     child.stdin.write(text);
     child.stdin.end();
   });
@@ -246,13 +263,14 @@ function emit(event, model) {
   try {
     const dir = process.env.MODELHUB_DIR || join(homedir(), '.local', 'share', 'modelhub');
     mkdirSync(dir, { recursive: true });
-    const line = JSON.stringify({
-      ts: Math.floor(Date.now() / 1000),
-      source: 'tool',
-      tool: 'recap-md',
-      model,
-      event,
-    }) + '\n';
+    const line =
+      JSON.stringify({
+        ts: Math.floor(Date.now() / 1000),
+        source: 'tool',
+        tool: 'recap-md',
+        model,
+        event,
+      }) + '\n';
     appendFileSync(join(dir, 'events.jsonl'), line);
   } catch {
     /* fail-silent: telemetry must never affect the tool */
@@ -288,7 +306,10 @@ async function main() {
     throw e;
   }
 
-  if (args.help) { printHelp(); return 0; }
+  if (args.help) {
+    printHelp();
+    return 0;
+  }
 
   const content = readInput(args.file);
   const model = process.env.MODELHUB_LLM || DEFAULT_MODEL;

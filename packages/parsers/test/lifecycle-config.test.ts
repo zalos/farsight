@@ -8,7 +8,18 @@ import type { GraphNode } from '@farsight/core';
 
 function graph(): GraphNode[] {
   return [
-    { id: 'a::table::invoices', kind: 'table', name: 'invoices', tags: [], lifecycle: { field: 'status', statuses: ['draft', 'open'], transitions: [], provenance: [{ kind: 'union', path: 'apps/billing/db.ts', line: 1 }] } },
+    {
+      id: 'a::table::invoices',
+      kind: 'table',
+      name: 'invoices',
+      tags: [],
+      lifecycle: {
+        field: 'status',
+        statuses: ['draft', 'open'],
+        transitions: [],
+        provenance: [{ kind: 'union', path: 'apps/billing/db.ts', line: 1 }],
+      },
+    },
     { id: 'a::table::ledger', kind: 'table', name: 'ledger', tags: [] },
   ] as GraphNode[];
 }
@@ -20,11 +31,26 @@ function ws(files: { path: string; dir: string; root: boolean; config: Record<st
 
 test('words for declared statuses and an overlay on a table the graph has; the rest are notes', () => {
   const nodes = graph();
-  const w = ws([{ path: 'farsight.config.json', dir: '.', root: true, config: { lifecycle: {
-    invoices: { views: { billing: { 'Being drafted': ['draft'], Sent: ['open', 'sent'] } }, overlays: [{ name: 'Posted', table: 'ledger', when: 'a row' }, { name: 'Reviewed', table: 'reviews', when: 'open' }] },
-    customers: { views: { billing: { X: ['y'] } } },
-    ledger: { views: { billing: { X: ['y'] } } },
-  } } }]);
+  const w = ws([
+    {
+      path: 'farsight.config.json',
+      dir: '.',
+      root: true,
+      config: {
+        lifecycle: {
+          invoices: {
+            views: { billing: { 'Being drafted': ['draft'], Sent: ['open', 'sent'] } },
+            overlays: [
+              { name: 'Posted', table: 'ledger', when: 'a row' },
+              { name: 'Reviewed', table: 'reviews', when: 'open' },
+            ],
+          },
+          customers: { views: { billing: { X: ['y'] } } },
+          ledger: { views: { billing: { X: ['y'] } } },
+        },
+      },
+    },
+  ]);
   assert.equal(applyLifecycleConfig(nodes, w), 1);
   const names = nodes[0]!.lifecycle!.names!;
   assert.deepEqual(names.views, { billing: { draft: 'Being drafted', open: 'Sent' } });
@@ -37,22 +63,43 @@ test('words for declared statuses and an overlay on a table the graph has; the r
   assert.match(notes, /the code declares no statuses for ledger/);
 });
 
-test('a nested file names only records declared under its folder, and its word stands over the root\'s', () => {
+test("a nested file names only records declared under its folder, and its word stands over the root's", () => {
   const nodes = graph();
   const w = ws([
-    { path: 'farsight.config.json', dir: '.', root: true, config: { lifecycle: { invoices: { views: { billing: { Drafting: ['draft'] } } } } } },
-    { path: 'apps/billing/farsight.config.json', dir: 'apps/billing', root: false, config: { lifecycle: { invoices: { views: { billing: { 'Being drafted': ['draft'] } } } } } },
-    { path: 'apps/other/farsight.config.json', dir: 'apps/other', root: false, config: { lifecycle: { invoices: { views: { billing: { Nope: ['draft'] } } } } } },
+    {
+      path: 'farsight.config.json',
+      dir: '.',
+      root: true,
+      config: { lifecycle: { invoices: { views: { billing: { Drafting: ['draft'] } } } } },
+    },
+    {
+      path: 'apps/billing/farsight.config.json',
+      dir: 'apps/billing',
+      root: false,
+      config: { lifecycle: { invoices: { views: { billing: { 'Being drafted': ['draft'] } } } } },
+    },
+    {
+      path: 'apps/other/farsight.config.json',
+      dir: 'apps/other',
+      root: false,
+      config: { lifecycle: { invoices: { views: { billing: { Nope: ['draft'] } } } } },
+    },
   ]);
   applyLifecycleConfig(nodes, w);
   assert.equal(nodes[0]!.lifecycle!.names!.views.billing!.draft, 'Being drafted');
   assert.deepEqual(nodes[0]!.lifecycle!.names!.from, ['farsight.config.json', 'apps/billing/farsight.config.json']);
-  assert.deepEqual(w.meta.conflicts.map((c) => [c.kind, c.kept]), [['lifecycle', 'apps/billing/farsight.config.json']]);
+  assert.deepEqual(
+    w.meta.conflicts.map((c) => [c.kind, c.kept]),
+    [['lifecycle', 'apps/billing/farsight.config.json']],
+  );
   assert.match(w.meta.notes.join('\n'), /declared outside apps\/other/);
 });
 
 test('no lifecycle block, nothing changes', () => {
   const nodes = graph();
-  assert.equal(applyLifecycleConfig(nodes, ws([{ path: 'farsight.config.json', dir: '.', root: true, config: {} }])), 0);
+  assert.equal(
+    applyLifecycleConfig(nodes, ws([{ path: 'farsight.config.json', dir: '.', root: true, config: {} }])),
+    0,
+  );
   assert.equal(nodes[0]!.lifecycle!.names, undefined);
 });

@@ -25,20 +25,28 @@ function tempRepo(files: Record<string, string>): string {
 }
 
 const ingest = (files: Record<string, string>, repoName: string) =>
-  ingestRepo(tempRepo({ 'package.json': `{"name":"${repoName}"}`, ...files }), { repoName, openapi: false, design: false, tests: false });
+  ingestRepo(tempRepo({ 'package.json': `{"name":"${repoName}"}`, ...files }), {
+    repoName,
+    openapi: false,
+    design: false,
+    tests: false,
+  });
 
 test('a withTx callback is the caller’s own work: the writes stay on the function and carry tx', async () => {
-  const g = await ingest({
-    'src/approvals.ts': [
-      'export async function withTx(fn: () => Promise<void>) { return fn(); }',
-      'export async function approveInvoice(id: string) {',
-      '  await withTx(async () => {',
-      '    await db.approvals.insert({ id });',
-      '    await db.invoices.update({ id });',
-      '  });',
-      '}',
-    ].join('\n'),
-  }, 'txrepo');
+  const g = await ingest(
+    {
+      'src/approvals.ts': [
+        'export async function withTx(fn: () => Promise<void>) { return fn(); }',
+        'export async function approveInvoice(id: string) {',
+        '  await withTx(async () => {',
+        '    await db.approvals.insert({ id });',
+        '    await db.invoices.update({ id });',
+        '  });',
+        '}',
+      ].join('\n'),
+    },
+    'txrepo',
+  );
   const from = 'txrepo::src/approvals.ts::approveInvoice';
   const writes = g.edges.filter((e) => e.kind === 'writes' && e.from === from);
   assert.deepEqual(writes.map((e) => e.to).sort(), ['txrepo::table::approvals', 'txrepo::table::invoices']);
@@ -47,32 +55,40 @@ test('a withTx callback is the caller’s own work: the writes stay on the funct
     assert.equal(e.meta?.deferred, undefined, 'a call argument is never deferred — never write deferred:false');
   }
   // the argument callback is not a node: the transaction belongs to the function that opened it
-  assert.equal(g.nodes.find((n) => n.id.startsWith(from + '.')), undefined);
-  assert.ok(g.edges.some((e) => e.kind === 'calls' && e.from === from && e.to === 'txrepo::src/approvals.ts::withTx'),
-    'approveInvoice still calls withTx');
+  assert.equal(
+    g.nodes.find((n) => n.id.startsWith(from + '.')),
+    undefined,
+  );
+  assert.ok(
+    g.edges.some((e) => e.kind === 'calls' && e.from === from && e.to === 'txrepo::src/approvals.ts::withTx'),
+    'approveInvoice still calls withTx',
+  );
 });
 
 test('a property-value callback becomes its own node: the host gets one deferred edge, the work is the callback’s', async () => {
-  const g = await ingest({
-    'src/container.ts': [
-      "import { OutboxWorker } from './worker';",
-      'export function buildContainer() {',
-      '  return new OutboxWorker({',
-      '    hooks: {',
-      '      /** Marks the invoice synced once the ERP accepted it. */',
-      '      invoiceApproved: async () => { await db.invoices.update({ synced: true }); },',
-      '    },',
-      '    log: (m: string) => console.log(m),',
-      '  });',
-      '}',
-    ].join('\n'),
-    'src/worker.ts': [
-      'export class OutboxWorker {',
-      '  constructor(private readonly deps: { hooks?: { invoiceApproved?: () => Promise<void> }; log?: (m: string) => void }) {}',
-      '  async drain() { await this.deps.hooks?.invoiceApproved?.(); }',
-      '}',
-    ].join('\n'),
-  }, 'hookrepo');
+  const g = await ingest(
+    {
+      'src/container.ts': [
+        "import { OutboxWorker } from './worker';",
+        'export function buildContainer() {',
+        '  return new OutboxWorker({',
+        '    hooks: {',
+        '      /** Marks the invoice synced once the ERP accepted it. */',
+        '      invoiceApproved: async () => { await db.invoices.update({ synced: true }); },',
+        '    },',
+        '    log: (m: string) => console.log(m),',
+        '  });',
+        '}',
+      ].join('\n'),
+      'src/worker.ts': [
+        'export class OutboxWorker {',
+        '  constructor(private readonly deps: { hooks?: { invoiceApproved?: () => Promise<void> }; log?: (m: string) => void }) {}',
+        '  async drain() { await this.deps.hooks?.invoiceApproved?.(); }',
+        '}',
+      ].join('\n'),
+    },
+    'hookrepo',
+  );
   const byId = new Map(g.nodes.map((n) => [n.id, n]));
   const host = 'hookrepo::src/container.ts::buildContainer';
   const hook = 'hookrepo::src/container.ts::buildContainer.hooks.invoiceApproved';
@@ -99,11 +115,16 @@ test('a property-value callback becomes its own node: the host gets one deferred
   const write = g.edges.find((e) => e.kind === 'writes' && e.from === hook && e.to === 'hookrepo::table::invoices');
   assert.ok(write, 'the callback writes invoices');
   assert.equal(write!.meta?.deferred, undefined);
-  assert.equal(g.edges.some((e) => e.from === host && e.to === 'hookrepo::table::invoices'), false,
-    'the container does not touch invoices — its callback does');
+  assert.equal(
+    g.edges.some((e) => e.from === host && e.to === 'hookrepo::table::invoices'),
+    false,
+    'the container does not touch invoices — its callback does',
+  );
 
   // 4. the class method that runs it reaches it through the constructor binding
-  const run = g.edges.find((e) => e.kind === 'calls' && e.from === 'hookrepo::src/worker.ts::OutboxWorker.drain' && e.to === hook);
+  const run = g.edges.find(
+    (e) => e.kind === 'calls' && e.from === 'hookrepo::src/worker.ts::OutboxWorker.drain' && e.to === hook,
+  );
   assert.ok(run, 'this.deps.hooks?.invoiceApproved?.() reaches the bound callback');
   assert.equal(run!.resolution?.technique, 'hook-binding');
   assert.equal(run!.resolution?.status, 'heuristic');
@@ -114,69 +135,90 @@ test('a property-value callback becomes its own node: the host gets one deferred
 });
 
 test('a class that copies the options object matches on the full path; an unbound hook call stays an absence', async () => {
-  const g = await ingest({
-    'src/dispatch.ts': [
-      'export class Dispatcher {',
-      '  private hooks: { ping?: () => void; pong?: () => void };',
-      '  constructor(opts: { hooks: { ping?: () => void; pong?: () => void } }) { this.hooks = opts.hooks; }',
-      '  run() { this.hooks.ping?.(); }',
-      '  other() { this.hooks.pong?.(); }',
-      '}',
-    ].join('\n'),
-    'src/wire.ts': [
-      "import { Dispatcher } from './dispatch';",
-      'export function wire() {',
-      '  return new Dispatcher({ hooks: { ping: () => { db.pings.insert({}); } } });',
-      '}',
-    ].join('\n'),
-  }, 'fullpath');
+  const g = await ingest(
+    {
+      'src/dispatch.ts': [
+        'export class Dispatcher {',
+        '  private hooks: { ping?: () => void; pong?: () => void };',
+        '  constructor(opts: { hooks: { ping?: () => void; pong?: () => void } }) { this.hooks = opts.hooks; }',
+        '  run() { this.hooks.ping?.(); }',
+        '  other() { this.hooks.pong?.(); }',
+        '}',
+      ].join('\n'),
+      'src/wire.ts': [
+        "import { Dispatcher } from './dispatch';",
+        'export function wire() {',
+        '  return new Dispatcher({ hooks: { ping: () => { db.pings.insert({}); } } });',
+        '}',
+      ].join('\n'),
+    },
+    'fullpath',
+  );
   const ping = 'fullpath::src/wire.ts::wire.hooks.ping';
   assert.ok(g.nodes.some((n) => n.id === ping));
-  const run = g.edges.find((e) => e.kind === 'calls' && e.from === 'fullpath::src/dispatch.ts::Dispatcher.run' && e.to === ping);
+  const run = g.edges.find(
+    (e) => e.kind === 'calls' && e.from === 'fullpath::src/dispatch.ts::Dispatcher.run' && e.to === ping,
+  );
   assert.ok(run, 'this.hooks.ping() matches the binding path `hooks.ping` in full');
   assert.equal(run!.resolution?.technique, 'hook-binding');
   // `pong` was never bound: no edge is invented for it
-  assert.equal(g.edges.some((e) => e.from === 'fullpath::src/dispatch.ts::Dispatcher.other' && e.kind === 'calls'), false);
+  assert.equal(
+    g.edges.some((e) => e.from === 'fullpath::src/dispatch.ts::Dispatcher.other' && e.kind === 'calls'),
+    false,
+  );
 });
 
 test('a transaction inside a callback belongs to the callback: tx on its edges, deferred only on the handover', async () => {
-  const g = await ingest({
-    'src/repos.ts': ['export class PgContractorRepository {', '  async setContractorBcVendor(id: string) { return id; }', '}'].join('\n'),
-    'src/build.ts': [
-      "import { Sync } from './sync';",
-      'export function build() {',
-      '  return new Sync({',
-      '    hooks: {',
-      '      vendorCreated: async () => {',
-      '        await db.withOps(async (repos: any) => { await repos.contractors.setContractorBcVendor("x"); });',
-      '      },',
-      '    },',
-      '  });',
-      '}',
-    ].join('\n'),
-    'src/sync.ts': [
-      'export class Sync {',
-      '  constructor(private readonly deps: { hooks?: { vendorCreated?: () => Promise<void> } }) {}',
-      '  async go() { await this.deps.hooks?.vendorCreated?.(); }',
-      '}',
-    ].join('\n'),
-  }, 'nested');
+  const g = await ingest(
+    {
+      'src/repos.ts': [
+        'export class PgContractorRepository {',
+        '  async setContractorBcVendor(id: string) { return id; }',
+        '}',
+      ].join('\n'),
+      'src/build.ts': [
+        "import { Sync } from './sync';",
+        'export function build() {',
+        '  return new Sync({',
+        '    hooks: {',
+        '      vendorCreated: async () => {',
+        '        await db.withOps(async (repos: any) => { await repos.contractors.setContractorBcVendor("x"); });',
+        '      },',
+        '    },',
+        '  });',
+        '}',
+      ].join('\n'),
+      'src/sync.ts': [
+        'export class Sync {',
+        '  constructor(private readonly deps: { hooks?: { vendorCreated?: () => Promise<void> } }) {}',
+        '  async go() { await this.deps.hooks?.vendorCreated?.(); }',
+        '}',
+      ].join('\n'),
+    },
+    'nested',
+  );
   const host = 'nested::src/build.ts::build';
   const cb = 'nested::src/build.ts::build.hooks.vendorCreated';
   const target = 'nested::src/repos.ts::PgContractorRepository.setContractorBcVendor';
   // the inner arrow is a call argument, not a property: no node of its own
-  assert.equal(g.nodes.some((n) => n.id.startsWith(cb + '.')), false);
+  assert.equal(
+    g.nodes.some((n) => n.id.startsWith(cb + '.')),
+    false,
+  );
   const inner = g.edges.find((e) => e.kind === 'calls' && e.from === cb && e.to === target);
   assert.ok(inner, 'the work inside withOps is the callback’s');
   assert.equal(inner!.meta?.tx, true);
   assert.equal(inner!.meta?.deferred, undefined);
-  assert.equal(g.edges.some((e) => e.from === host && e.to === target), false);
+  assert.equal(
+    g.edges.some((e) => e.from === host && e.to === target),
+    false,
+  );
   // exactly one deferred edge in the whole walk: the handover
   const deferred = g.edges.filter((e) => e.meta?.deferred === true);
-  assert.deepEqual(deferred.map((e) => `${e.from} -> ${e.to}`).sort(), [
-    `${host} -> ${cb}`,
-    `nested::src/sync.ts::Sync.go -> ${cb}`,
-  ].sort());
+  assert.deepEqual(
+    deferred.map((e) => `${e.from} -> ${e.to}`).sort(),
+    [`${host} -> ${cb}`, `nested::src/sync.ts::Sync.go -> ${cb}`].sort(),
+  );
 });
 
 // ── A1.4: the start-up builder and the env schema ───────────────────────────
@@ -184,17 +226,20 @@ test('a transaction inside a callback belongs to the callback: tx on its edges, 
 // builder; an env/config schema is a rule of the code, never a gate a person passes.
 
 test('a `??=` singleton in a Symbol.for file tags its builder `setup`, and the edge into it carries origin: setup', async () => {
-  const g = await ingest({
-    'src/container.ts': [
-      "const KEY = Symbol.for('x.container');",
-      'function holder(): { p?: Promise<unknown> } { return ((globalThis as any)[KEY] ??= {}); }',
-      'function build() { return createPgDb(); }',
-      'function createPgDb() { return db.clients.findMany(); }',
-      'export function getContainer() {',
-      '  return (holder().p ??= build().catch(() => null));',
-      '}',
-    ].join('\n'),
-  }, 'setuprepo');
+  const g = await ingest(
+    {
+      'src/container.ts': [
+        "const KEY = Symbol.for('x.container');",
+        'function holder(): { p?: Promise<unknown> } { return ((globalThis as any)[KEY] ??= {}); }',
+        'function build() { return createPgDb(); }',
+        'function createPgDb() { return db.clients.findMany(); }',
+        'export function getContainer() {',
+        '  return (holder().p ??= build().catch(() => null));',
+        '}',
+      ].join('\n'),
+    },
+    'setuprepo',
+  );
   const byId = new Map(g.nodes.map((n) => [n.id, n]));
   const F = (n: string) => `setuprepo::src/container.ts::${n}`;
   assert.ok(byId.get(F('build'))?.tags.includes('setup'), 'the right-hand side of the `??=` is the builder');
@@ -213,13 +258,16 @@ test('a `??=` singleton in a Symbol.for file tags its builder `setup`, and the e
 });
 
 test('the same `??=` shape without Symbol.for / globalThis tags nothing: the heuristic does not widen', async () => {
-  const g = await ingest({
-    'src/cache.ts': [
-      'const slot: { p?: unknown } = {};',
-      'function build() { return 1; }',
-      'export function value() { return (slot.p ??= build()); }',
-    ].join('\n'),
-  }, 'nosingleton');
+  const g = await ingest(
+    {
+      'src/cache.ts': [
+        'const slot: { p?: unknown } = {};',
+        'function build() { return 1; }',
+        'export function value() { return (slot.p ??= build()); }',
+      ].join('\n'),
+    },
+    'nosingleton',
+  );
   const byId = new Map(g.nodes.map((n) => [n.id, n]));
   assert.equal(byId.get('nosingleton::src/cache.ts::build')?.tags.includes('setup'), false);
   const call = g.edges.find((e) => e.kind === 'calls' && e.to === 'nosingleton::src/cache.ts::build');
@@ -228,31 +276,51 @@ test('the same `??=` shape without Symbol.for / globalThis tags nothing: the heu
 });
 
 test('a right-hand side that is not a call to a same-file function tags nothing', async () => {
-  const g = await ingest({
-    'src/slots.ts': [
-      "const KEY = Symbol.for('x.slots');",
-      "import { remote } from './remote';",
-      'function local() { return 1; }',
-      'const store: any = (globalThis as any)[KEY] ??= {};',
-      'export function a() { return (store.x ??= remote()); }',       // imported, not same-file
-      'export function b() { return (store.y ??= { made: local }); }', // an object literal, not a call
-      'export function c() { return (store.z ??= new Map()); }',       // a constructor, not a declared function
-    ].join('\n'),
-    'src/remote.ts': 'export function remote() { return 2; }',
-  }, 'narrow');
+  const g = await ingest(
+    {
+      'src/slots.ts': [
+        "const KEY = Symbol.for('x.slots');",
+        "import { remote } from './remote';",
+        'function local() { return 1; }',
+        'const store: any = (globalThis as any)[KEY] ??= {};',
+        'export function a() { return (store.x ??= remote()); }', // imported, not same-file
+        'export function b() { return (store.y ??= { made: local }); }', // an object literal, not a call
+        'export function c() { return (store.z ??= new Map()); }', // a constructor, not a declared function
+      ].join('\n'),
+      'src/remote.ts': 'export function remote() { return 2; }',
+    },
+    'narrow',
+  );
   const byId = new Map(g.nodes.map((n) => [n.id, n]));
-  assert.equal(byId.get('narrow::src/remote.ts::remote')?.tags.includes('setup'), false, 'an imported callee is not a same-file declaration');
-  assert.equal(byId.get('narrow::src/slots.ts::local')?.tags.includes('setup'), false, 'a function merely named in an object literal is not a builder');
-  assert.equal(g.nodes.some((n) => n.tags.includes('setup')), false, 'nothing in the repo is start-up');
+  assert.equal(
+    byId.get('narrow::src/remote.ts::remote')?.tags.includes('setup'),
+    false,
+    'an imported callee is not a same-file declaration',
+  );
+  assert.equal(
+    byId.get('narrow::src/slots.ts::local')?.tags.includes('setup'),
+    false,
+    'a function merely named in an object literal is not a builder',
+  );
+  assert.equal(
+    g.nodes.some((n) => n.tags.includes('setup')),
+    false,
+    'nothing in the repo is start-up',
+  );
 });
 
 test('env and config schemas are tagged `env-schema`; an ordinary schema is not', async () => {
-  const g = await ingest({
-    'src/env.ts': "import { z } from 'zod';\nexport const webEnvSchema = z.object({ PORT: z.string() });\nexport const other = z.object({ a: z.string() });",
-    'src/server-env.ts': "import { z } from 'zod';\nexport const runtime = z.object({ HOST: z.string() });",
-    'src/config.ts': "import { z } from 'zod';\nexport const settings = z.object({ tz: z.string() });",
-    'src/schemas.ts': "import { z } from 'zod';\nexport const fooConfigSchema = z.object({ a: z.string() });\nexport const invoiceSchema = z.object({ id: z.string() });",
-  }, 'schemas');
+  const g = await ingest(
+    {
+      'src/env.ts':
+        "import { z } from 'zod';\nexport const webEnvSchema = z.object({ PORT: z.string() });\nexport const other = z.object({ a: z.string() });",
+      'src/server-env.ts': "import { z } from 'zod';\nexport const runtime = z.object({ HOST: z.string() });",
+      'src/config.ts': "import { z } from 'zod';\nexport const settings = z.object({ tz: z.string() });",
+      'src/schemas.ts':
+        "import { z } from 'zod';\nexport const fooConfigSchema = z.object({ a: z.string() });\nexport const invoiceSchema = z.object({ id: z.string() });",
+    },
+    'schemas',
+  );
   const tagged = (id: string) => g.nodes.find((n) => n.id === id)?.tags.includes('env-schema');
   assert.equal(tagged('schemas::src/env.ts::webEnvSchema'), true, 'by name and by basename');
   assert.equal(tagged('schemas::src/env.ts::other'), true, 'every schema in env.ts describes the process');
@@ -268,25 +336,28 @@ test('env and config schemas are tagged `env-schema`; an ordinary schema is not'
 // parser could not. A node is only ever created because an edge reaches it.
 
 test('an SDK binding used inside a class reaches that system; `pg` never makes a node', async () => {
-  const g = await ingest({
-    'src/ocr.ts': [
-      "import DocumentIntelligence from '@azure-rest/ai-document-intelligence';",
-      'export class AzureOcr {',
-      '  extract(f: unknown) { return DocumentIntelligence(f); }',
-      '}',
-    ].join('\n'),
-    'src/db.ts': [
-      "import { Pool } from 'pg';",
-      'export function connect() { return new Pool(); }',
-    ].join('\n'),
-  }, 'sdkrepo');
+  const g = await ingest(
+    {
+      'src/ocr.ts': [
+        "import DocumentIntelligence from '@azure-rest/ai-document-intelligence';",
+        'export class AzureOcr {',
+        '  extract(f: unknown) { return DocumentIntelligence(f); }',
+        '}',
+      ].join('\n'),
+      'src/db.ts': ["import { Pool } from 'pg';", 'export function connect() { return new Pool(); }'].join('\n'),
+    },
+    'sdkrepo',
+  );
   const extId = 'sdkrepo::external::Azure Document Intelligence';
   const ext = g.nodes.find((n) => n.id === extId);
   assert.ok(ext, 'the SDK the class uses is a system of its own');
   assert.equal(ext!.kind, 'external');
   assert.deepEqual(ext!.tags, ['external', 'ocr']);
   assert.deepEqual(ext!.external, {
-    kind: 'ocr', source: 'sdk', via: 'AzureOcr', ref: '@azure-rest/ai-document-intelligence',
+    kind: 'ocr',
+    source: 'sdk',
+    via: 'AzureOcr',
+    ref: '@azure-rest/ai-document-intelligence',
   });
 
   const e = g.edges.find((x) => x.kind === 'http' && x.to === extId);
@@ -299,19 +370,32 @@ test('an SDK binding used inside a class reaches that system; `pg` never makes a
   assert.equal(e!.meta?.via, 'sdk');
 
   // Postgres is the records row, never a third party — the table says node: false
-  assert.deepEqual(g.nodes.filter((n) => n.kind === 'external').map((n) => n.name), ['Azure Document Intelligence']);
+  assert.deepEqual(
+    g.nodes.filter((n) => n.kind === 'external').map((n) => n.name),
+    ['Azure Document Intelligence'],
+  );
 });
 
 test('an SDK import nothing uses makes nothing', async () => {
-  const g = await ingest({
-    'src/unused.ts': [
-      "import DocumentIntelligence from '@azure-rest/ai-document-intelligence';",
-      "import { BlobServiceClient } from '@azure/storage-blob';",
-      'export function nothingHere() { return 1; }',
-    ].join('\n'),
-  }, 'bareimport');
-  assert.deepEqual(g.nodes.filter((n) => n.kind === 'external'), [], 'an import is not a use');
-  assert.equal(g.edges.some((e) => e.resolution?.technique === 'sdk-import'), false);
+  const g = await ingest(
+    {
+      'src/unused.ts': [
+        "import DocumentIntelligence from '@azure-rest/ai-document-intelligence';",
+        "import { BlobServiceClient } from '@azure/storage-blob';",
+        'export function nothingHere() { return 1; }',
+      ].join('\n'),
+    },
+    'bareimport',
+  );
+  assert.deepEqual(
+    g.nodes.filter((n) => n.kind === 'external'),
+    [],
+    'an import is not a use',
+  );
+  assert.equal(
+    g.edges.some((e) => e.resolution?.technique === 'sdk-import'),
+    false,
+  );
 });
 
 const ERP_FILES = {
@@ -342,34 +426,59 @@ test('a non-literal fetch in a class whose base URL is a constant reaches that h
   assert.equal(e!.resolution?.confidence, 'MEDIUM');
   assert.equal(e!.meta?.method, 'POST');
   // the URL is not a literal, so no `unknown` stub is invented for it either
-  assert.equal(g.nodes.some((n) => n.kind === 'unknown'), false);
+  assert.equal(
+    g.nodes.some((n) => n.kind === 'unknown'),
+    false,
+  );
 });
 
 test('an unresolvable host constant makes nothing: no node, no edge', async () => {
-  const g = await ingest({
-    'src/client.ts': [
-      'export class Blind {',
-      '  base: string;',
-      '  constructor() { this.base = `${MISSING_HOST}/v1`; }', // MISSING_HOST is declared in no file this ingest saw
-      '  go(u: string) { return fetch(u); }',
-      '}',
-    ].join('\n'),
-  }, 'noconst');
-  assert.deepEqual(g.nodes.filter((n) => n.kind === 'external'), [], 'a constant that cannot be followed is an absence');
+  const g = await ingest(
+    {
+      'src/client.ts': [
+        'export class Blind {',
+        '  base: string;',
+        '  constructor() { this.base = `${MISSING_HOST}/v1`; }', // MISSING_HOST is declared in no file this ingest saw
+        '  go(u: string) { return fetch(u); }',
+        '}',
+      ].join('\n'),
+    },
+    'noconst',
+  );
+  assert.deepEqual(
+    g.nodes.filter((n) => n.kind === 'external'),
+    [],
+    'a constant that cannot be followed is an absence',
+  );
 });
 
 test('a `<path>::<Class>` declaration renames and re-kinds the external the parser found', async () => {
-  const g = await ingest({
-    ...ERP_FILES,
-    'farsight.config.json': JSON.stringify({
-      externals: [{ import: 'src/erpClient.ts::ErpClient', name: 'Example ERP', kind: 'erp' }],
-    }),
-  }, 'cfgrepo');
+  const g = await ingest(
+    {
+      ...ERP_FILES,
+      'farsight.config.json': JSON.stringify({
+        externals: [{ import: 'src/erpClient.ts::ErpClient', name: 'Example ERP', kind: 'erp' }],
+      }),
+    },
+    'cfgrepo',
+  );
   const externals = g.nodes.filter((n) => n.kind === 'external');
-  assert.deepEqual(externals.map((n) => n.name), ['Example ERP'], 'still one node — renamed, not doubled');
-  assert.deepEqual(externals[0]!.external, {
-    kind: 'erp', source: 'config', via: 'ErpClient', ref: 'ERP_HOST', store: true,
-  }, 'the declaration says what it is; the constant is still how it was found; an ERP is a store by its kind');
+  assert.deepEqual(
+    externals.map((n) => n.name),
+    ['Example ERP'],
+    'still one node — renamed, not doubled',
+  );
+  assert.deepEqual(
+    externals[0]!.external,
+    {
+      kind: 'erp',
+      source: 'config',
+      via: 'ErpClient',
+      ref: 'ERP_HOST',
+      store: true,
+    },
+    'the declaration says what it is; the constant is still how it was found; an ERP is a store by its kind',
+  );
   assert.deepEqual(externals[0]!.tags, ['external', 'erp']);
   const e = g.edges.find((x) => x.kind === 'http' && x.to === externals[0]!.id);
   assert.ok(e, 'the edge the parser detected is still there');
@@ -378,58 +487,89 @@ test('a `<path>::<Class>` declaration renames and re-kinds the external the pars
 });
 
 test('a declaration for a class nothing was detected for: one external, one edge per fetching method', async () => {
-  const g = await ingest({
-    'src/clients.ts': [
-      'export class MailClient {',
-      '  async post(url: string) { return fetch(url, { method: "POST" }); }',
-      '  async peek(url: string) { return fetch(url); }',
-      '  format(x: string) { return x.trim(); }',
-      '}',
-      'export class QuietClient {',
-      '  ping() { return 1; }',
-      '}',
-    ].join('\n'),
-    'farsight.config.json': JSON.stringify({
-      externals: [
-        { import: 'src/clients.ts::MailClient', name: 'Mail Service', kind: 'email' },
-        { import: 'src/clients.ts::QuietClient', name: 'Never Reached', kind: 'http' },
-      ],
-    }),
-  }, 'declrepo');
+  const g = await ingest(
+    {
+      'src/clients.ts': [
+        'export class MailClient {',
+        '  async post(url: string) { return fetch(url, { method: "POST" }); }',
+        '  async peek(url: string) { return fetch(url); }',
+        '  format(x: string) { return x.trim(); }',
+        '}',
+        'export class QuietClient {',
+        '  ping() { return 1; }',
+        '}',
+      ].join('\n'),
+      'farsight.config.json': JSON.stringify({
+        externals: [
+          { import: 'src/clients.ts::MailClient', name: 'Mail Service', kind: 'email' },
+          { import: 'src/clients.ts::QuietClient', name: 'Never Reached', kind: 'http' },
+        ],
+      }),
+    },
+    'declrepo',
+  );
   const externals = g.nodes.filter((n) => n.kind === 'external');
-  assert.deepEqual(externals.map((n) => n.name), ['Mail Service'],
-    'a declared class with no fetch at all has no call site to hang an edge on');
+  assert.deepEqual(
+    externals.map((n) => n.name),
+    ['Mail Service'],
+    'a declared class with no fetch at all has no call site to hang an edge on',
+  );
   assert.deepEqual(externals[0]!.external, {
-    kind: 'email', source: 'config', via: 'MailClient', ref: 'src/clients.ts::MailClient',
+    kind: 'email',
+    source: 'config',
+    via: 'MailClient',
+    ref: 'src/clients.ts::MailClient',
   });
-  const froms = g.edges.filter((e) => e.kind === 'http' && e.to === externals[0]!.id).map((e) => e.from).sort();
-  assert.deepEqual(froms, ['declrepo::src/clients.ts::MailClient.peek', 'declrepo::src/clients.ts::MailClient.post'],
-    'every method that fetches reaches the declared system; the one that does not is left alone');
+  const froms = g.edges
+    .filter((e) => e.kind === 'http' && e.to === externals[0]!.id)
+    .map((e) => e.from)
+    .sort();
+  assert.deepEqual(
+    froms,
+    ['declrepo::src/clients.ts::MailClient.peek', 'declrepo::src/clients.ts::MailClient.post'],
+    'every method that fetches reaches the declared system; the one that does not is left alone',
+  );
   const e = g.edges.find((x) => x.kind === 'http' && x.to === externals[0]!.id);
   assert.equal(e!.resolution?.technique, 'annotation-scan');
   assert.equal(e!.resolution?.status, 'resolved');
 });
 
 test('an absolute-literal fetch and the constant-host rule agree on one node for the host', async () => {
-  const g = await ingest({
-    'src/hosts.ts': "export const API_HOST = 'https://api.example.com';",
-    'src/api.ts': [
-      "import { API_HOST } from './hosts';",
-      'export class ApiClient {',
-      '  constructor() { this.base = `${API_HOST}/v1`; }',
-      '  send(a: { url: string }) { return fetch(a.url); }',
-      '}',
-      "export function ping() { return fetch('https://api.example.com/x'); }",
-    ].join('\n'),
-  }, 'onehost');
+  const g = await ingest(
+    {
+      'src/hosts.ts': "export const API_HOST = 'https://api.example.com';",
+      'src/api.ts': [
+        "import { API_HOST } from './hosts';",
+        'export class ApiClient {',
+        '  constructor() { this.base = `${API_HOST}/v1`; }',
+        '  send(a: { url: string }) { return fetch(a.url); }',
+        '}',
+        "export function ping() { return fetch('https://api.example.com/x'); }",
+      ].join('\n'),
+    },
+    'onehost',
+  );
   const externals = g.nodes.filter((n) => n.kind === 'external');
-  assert.deepEqual(externals.map((n) => n.name), ['api.example.com'], 'one host is one node');
-  assert.deepEqual(externals[0]!.external, { kind: 'http', source: 'host', via: 'ApiClient', ref: 'API_HOST' },
-    'the provenance merges onto the node the literal fetch made');
+  assert.deepEqual(
+    externals.map((n) => n.name),
+    ['api.example.com'],
+    'one host is one node',
+  );
+  assert.deepEqual(
+    externals[0]!.external,
+    { kind: 'http', source: 'host', via: 'ApiClient', ref: 'API_HOST' },
+    'the provenance merges onto the node the literal fetch made',
+  );
   assert.ok(externals[0]!.tags.includes('external') && externals[0]!.tags.includes('http'));
-  const froms = g.edges.filter((e) => e.kind === 'http' && e.to === externals[0]!.id).map((e) => e.from).sort();
-  assert.deepEqual(froms, ['onehost::src/api.ts::ApiClient.send', 'onehost::src/api.ts::ping'],
-    'both call sites reach it, each with its own resolution');
+  const froms = g.edges
+    .filter((e) => e.kind === 'http' && e.to === externals[0]!.id)
+    .map((e) => e.from)
+    .sort();
+  assert.deepEqual(
+    froms,
+    ['onehost::src/api.ts::ApiClient.send', 'onehost::src/api.ts::ping'],
+    'both call sites reach it, each with its own resolution',
+  );
 });
 
 // ── A1.6: interface-typed dispatch ─────────────────────────────────────────
@@ -440,24 +580,27 @@ test('an absolute-literal fetch and the constant-host rule agree on one node for
 // absence with a name on it rather than a guess by method name.
 
 test('a class-typed parameter and a class-typed field dispatch through the type — even for a method the built-in filter hides', async () => {
-  const g = await ingest({
-    'src/transport.ts': [
-      'export interface EmailTransport { send(to: string): Promise<void> }',
-      'export class AcsEmailTransport implements EmailTransport { async send(to: string) { await db.sends.insert({ to }); } }',
-      'export class FileEmailTransport implements EmailTransport { async send(to: string) { return; } }',
-    ].join('\n'),
-    'src/notifier.ts': [
-      "import type { EmailTransport } from './transport';",
-      'export class Notifier {',
-      '  constructor(private readonly transport: EmailTransport) {}',
-      '  async send(to: string) { await this.transport.send(to); }',
-      '}',
-    ].join('\n'),
-    'src/auth.ts': [
-      "import { Notifier } from './notifier';",
-      "export function notify(n: Notifier) { return n.send('x'); }",
-    ].join('\n'),
-  }, 'notif');
+  const g = await ingest(
+    {
+      'src/transport.ts': [
+        'export interface EmailTransport { send(to: string): Promise<void> }',
+        'export class AcsEmailTransport implements EmailTransport { async send(to: string) { await db.sends.insert({ to }); } }',
+        'export class FileEmailTransport implements EmailTransport { async send(to: string) { return; } }',
+      ].join('\n'),
+      'src/notifier.ts': [
+        "import type { EmailTransport } from './transport';",
+        'export class Notifier {',
+        '  constructor(private readonly transport: EmailTransport) {}',
+        '  async send(to: string) { await this.transport.send(to); }',
+        '}',
+      ].join('\n'),
+      'src/auth.ts': [
+        "import { Notifier } from './notifier';",
+        "export function notify(n: Notifier) { return n.send('x'); }",
+      ].join('\n'),
+    },
+    'notif',
+  );
   const N = 'notif::src/notifier.ts::Notifier.send';
   const acs = 'notif::src/transport.ts::AcsEmailTransport.send';
   const file = 'notif::src/transport.ts::FileEmailTransport.send';
@@ -471,16 +614,28 @@ test('a class-typed parameter and a class-typed field dispatch through the type 
   assert.equal(into!.resolution?.confidence, 'MEDIUM', 'one implementer is still a syntax-level guess');
   assert.equal(into!.meta?.via, 'interface');
   assert.equal(into!.meta?.iface, 'Notifier');
-  assert.equal(into!.resolution?.alternatives, undefined, 'nothing was set aside — the key is absent, never an empty list');
+  assert.equal(
+    into!.resolution?.alternatives,
+    undefined,
+    'nothing was set aside — the key is absent, never an empty list',
+  );
   assert.equal(into!.resolution?.note, 'the receiver is declared as the class Notifier');
 
   // the constructor parameter property is a typed field: `this.transport.send` is the interface
   const out = g.edges.filter((e) => e.kind === 'calls' && e.from === N);
-  assert.deepEqual(out.map((e) => e.to).sort(), [acs, file].sort(), 'both production transports are drawn, neither is picked');
+  assert.deepEqual(
+    out.map((e) => e.to).sort(),
+    [acs, file].sort(),
+    'both production transports are drawn, neither is picked',
+  );
   for (const e of out) {
     assert.equal(e.resolution?.technique, 'interface');
     assert.equal(e.meta?.iface, 'EmailTransport');
-    assert.deepEqual(e.resolution?.alternatives, [e.to === acs ? file : acs], 'the other implementer is printed, never walked');
+    assert.deepEqual(
+      e.resolution?.alternatives,
+      [e.to === acs ? file : acs],
+      'the other implementer is printed, never walked',
+    );
   }
   // the work below the seam is still the implementer's own
   assert.ok(g.edges.some((e) => e.kind === 'writes' && e.from === acs && e.to === 'notif::table::sends'));
@@ -508,64 +663,98 @@ test('several production implementers mean several edges; the double is set asid
   const from = 'ocrrepo::src/pipeline.ts::processDocument';
 
   const out = g.edges.filter((e) => e.kind === 'calls' && e.from === from);
-  assert.deepEqual(out.map((e) => e.to).sort(), [azure, llm].sort(), 'two production implementers, two edges — no pick');
+  assert.deepEqual(
+    out.map((e) => e.to).sort(),
+    [azure, llm].sort(),
+    'two production implementers, two edges — no pick',
+  );
   for (const e of out) {
     assert.equal(e.resolution?.technique, 'interface');
     assert.equal(e.resolution?.confidence, 'MEDIUM');
-    assert.deepEqual(e.resolution?.alternatives?.slice().sort(), [mock, e.to === azure ? llm : azure].sort(),
-      'every implementer this build saw is named, the sibling included');
+    assert.deepEqual(
+      e.resolution?.alternatives?.slice().sort(),
+      [mock, e.to === azure ? llm : azure].sort(),
+      'every implementer this build saw is named, the sibling included',
+    );
     assert.match(String(e.resolution?.note), /^3 classes implement Ocr; in-memory \/ mock twins set aside$/);
   }
-  assert.equal(g.edges.some((e) => e.to === mock), false, 'no edge to the double');
+  assert.equal(
+    g.edges.some((e) => e.to === mock),
+    false,
+    'no edge to the double',
+  );
 
   // a destructured parameter binds a name the annotation never names: the type is not
   // read, so nothing is claimed about it either way (01 §2.3.5, the ObjectPattern rule)
   const pattern = 'ocrrepo::src/pipeline.ts::readInvoice';
-  assert.equal(g.edges.some((e) => e.from === pattern), false, 'no edge, and no crash');
-  assert.equal(g.nodes.find((n) => n.id === pattern)?.tags.includes('unresolved:interface'), false,
-    'the type was never read, so the absence is not an unfollowed interface');
+  assert.equal(
+    g.edges.some((e) => e.from === pattern),
+    false,
+    'no edge, and no crash',
+  );
+  assert.equal(
+    g.nodes.find((n) => n.id === pattern)?.tags.includes('unresolved:interface'),
+    false,
+    'the type was never read, so the absence is not an unfollowed interface',
+  );
 });
 
 test('a type reached through a barrel, and a path walked through an inline literal, resolve the same way', async () => {
-  const g = await ingest({
-    'src/ocr/provider.ts': OCR_FILES['src/ocr.ts'],
-    'src/ocr/index.ts': "export type { Ocr } from './provider';\nexport * from './provider';",
-    'src/read.ts': [
-      "import type { Ocr } from './ocr';",
-      'export function readInvoice(args: { provider: Ocr }) { return args.provider.extract(1); }',
-    ].join('\n'),
-  }, 'barrel');
+  const g = await ingest(
+    {
+      'src/ocr/provider.ts': OCR_FILES['src/ocr.ts'],
+      'src/ocr/index.ts': "export type { Ocr } from './provider';\nexport * from './provider';",
+      'src/read.ts': [
+        "import type { Ocr } from './ocr';",
+        'export function readInvoice(args: { provider: Ocr }) { return args.provider.extract(1); }',
+      ].join('\n'),
+    },
+    'barrel',
+  );
   const out = g.edges.filter((e) => e.kind === 'calls' && e.from === 'barrel::src/read.ts::readInvoice');
-  assert.deepEqual(out.map((e) => e.to).sort(),
+  assert.deepEqual(
+    out.map((e) => e.to).sort(),
     ['barrel::src/ocr/provider.ts::AzureOcr.extract', 'barrel::src/ocr/provider.ts::LlmOcr.extract'].sort(),
-    '`export type { Ocr }` is followed like any re-export, and `args.provider` is one hop of the path');
+    '`export type { Ocr }` is followed like any re-export, and `args.provider` is one hop of the path',
+  );
   assert.equal(out[0]!.meta?.iface, 'Ocr');
 });
 
 test('a type nothing implements is an absence with a name on it — never a fall back to the method-name guess', async () => {
-  const g = await ingest({
-    'src/ports.ts': 'export interface Clock { tick(): number }',
-    'src/ticker.ts': 'export class Ticker { tick() { return 1; } }', // declares tick, implements nothing, named for nothing
-    'src/use.ts': [
-      "import type { Clock } from './ports';",
-      'export function stamp(c: Clock) { return c.tick(); }',
-    ].join('\n'),
-  }, 'noimpl');
+  const g = await ingest(
+    {
+      'src/ports.ts': 'export interface Clock { tick(): number }',
+      'src/ticker.ts': 'export class Ticker { tick() { return 1; } }', // declares tick, implements nothing, named for nothing
+      'src/use.ts': [
+        "import type { Clock } from './ports';",
+        'export function stamp(c: Clock) { return c.tick(); }',
+      ].join('\n'),
+    },
+    'noimpl',
+  );
   const stamp = 'noimpl::src/use.ts::stamp';
-  assert.equal(g.edges.some((e) => e.from === stamp && e.kind === 'calls'), false,
-    'the one class that declares tick is not a Clock: the type removed that guess');
-  assert.ok(g.nodes.find((n) => n.id === stamp)?.tags.includes('unresolved:interface'),
-    'the caller carries the absence so a journey can say it');
+  assert.equal(
+    g.edges.some((e) => e.from === stamp && e.kind === 'calls'),
+    false,
+    'the one class that declares tick is not a Clock: the type removed that guess',
+  );
+  assert.ok(
+    g.nodes.find((n) => n.id === stamp)?.tags.includes('unresolved:interface'),
+    'the caller carries the absence so a journey can say it',
+  );
 });
 
 test('an untyped receiver is still resolved by method name, exactly as before', async () => {
-  const g = await ingest({
-    'src/outbox.ts': [
-      'export class PgBcOutboxRepository { async enqueue(job: unknown) { await db.bc_outbox.insert(job); } }',
-      'export class InMemoryBcOutboxRepository { async enqueue(job: unknown) { return; } }',
-    ].join('\n'),
-    'src/submit.ts': 'export async function submit(c) { await c.outbox.enqueue(1); }',
-  }, 'untyped');
+  const g = await ingest(
+    {
+      'src/outbox.ts': [
+        'export class PgBcOutboxRepository { async enqueue(job: unknown) { await db.bc_outbox.insert(job); } }',
+        'export class InMemoryBcOutboxRepository { async enqueue(job: unknown) { return; } }',
+      ].join('\n'),
+      'src/submit.ts': 'export async function submit(c) { await c.outbox.enqueue(1); }',
+    },
+    'untyped',
+  );
   const e = g.edges.find((x) => x.kind === 'calls' && x.from === 'untyped::src/submit.ts::submit');
   assert.ok(e, 'c.outbox.enqueue still resolves — the typed rule must not lose it (01 §0.2)');
   assert.equal(e!.to, 'untyped::src/outbox.ts::PgBcOutboxRepository.enqueue');
@@ -574,32 +763,41 @@ test('an untyped receiver is still resolved by method name, exactly as before', 
 });
 
 test('the name-suffix fallback fires only when nobody declared themselves', async () => {
-  const g = await ingest({
-    'src/foo.ts': [
-      'export interface FooRepository { insert(x: unknown): void }',
-      'export class PgFooRepository { insert(x: unknown) { return x; } }', // no implements clause
-    ].join('\n'),
-    'src/bar.ts': [
-      'export interface BarRepository { insert(x: unknown): void }',
-      'export class PgBarRepository implements BarRepository { insert(x: unknown) { return x; } }',
-      'export class SpecialBarRepository { insert(x: unknown) { return x; } }', // named for it, declares nothing
-    ].join('\n'),
-    'src/use.ts': [
-      "import type { FooRepository } from './foo';",
-      "import type { BarRepository } from './bar';",
-      'export function addFoo(r: FooRepository) { r.insert(1); }',
-      'export function addBar(r: BarRepository) { r.insert(2); }',
-    ].join('\n'),
-  }, 'suffix');
+  const g = await ingest(
+    {
+      'src/foo.ts': [
+        'export interface FooRepository { insert(x: unknown): void }',
+        'export class PgFooRepository { insert(x: unknown) { return x; } }', // no implements clause
+      ].join('\n'),
+      'src/bar.ts': [
+        'export interface BarRepository { insert(x: unknown): void }',
+        'export class PgBarRepository implements BarRepository { insert(x: unknown) { return x; } }',
+        'export class SpecialBarRepository { insert(x: unknown) { return x; } }', // named for it, declares nothing
+      ].join('\n'),
+      'src/use.ts': [
+        "import type { FooRepository } from './foo';",
+        "import type { BarRepository } from './bar';",
+        'export function addFoo(r: FooRepository) { r.insert(1); }',
+        'export function addBar(r: BarRepository) { r.insert(2); }',
+      ].join('\n'),
+    },
+    'suffix',
+  );
   const foo = g.edges.filter((e) => e.kind === 'calls' && e.from === 'suffix::src/use.ts::addFoo');
-  assert.deepEqual(foo.map((e) => e.to), ['suffix::src/foo.ts::PgFooRepository.insert'],
-    'a class named for the interface that declares the method is the structural fallback');
+  assert.deepEqual(
+    foo.map((e) => e.to),
+    ['suffix::src/foo.ts::PgFooRepository.insert'],
+    'a class named for the interface that declares the method is the structural fallback',
+  );
   assert.equal(foo[0]!.resolution?.technique, 'interface');
   assert.equal(foo[0]!.resolution?.alternatives, undefined);
 
   const bar = g.edges.filter((e) => e.kind === 'calls' && e.from === 'suffix::src/use.ts::addBar');
-  assert.deepEqual(bar.map((e) => e.to), ['suffix::src/bar.ts::PgBarRepository.insert'],
-    'an `implements` match stops the name guess: the similarly named class is not drawn');
+  assert.deepEqual(
+    bar.map((e) => e.to),
+    ['suffix::src/bar.ts::PgBarRepository.insert'],
+    'an `implements` match stops the name guess: the similarly named class is not drawn',
+  );
 });
 
 // ── A1.9: the goldens on examples/invoice-app ───────────────────────────────
@@ -609,7 +807,10 @@ test('the name-suffix fallback fires only when nobody declared themselves', asyn
 // (01 §2.6). One ingest, shared by the blocks below.
 
 let invoiceGraph: Awaited<ReturnType<typeof ingestRepo>> | undefined;
-const invoiceApp = async () => (invoiceGraph ??= await ingestRepo(resolve(import.meta.dirname, '../../../examples/invoice-app'), { repoName: 'invoice-app' }));
+const invoiceApp = async () =>
+  (invoiceGraph ??= await ingestRepo(resolve(import.meta.dirname, '../../../examples/invoice-app'), {
+    repoName: 'invoice-app',
+  }));
 
 const S = (p: string) => `invoice-app::src/server/${p}`;
 const APPROVE_ROUTE = 'invoice-app::route::POST /invoices/:id/approve';
@@ -633,7 +834,11 @@ test('invoice-app · R1: the @guard that also works — a gate on the route, a t
     assert.equal(e.meta?.tx, true, 'a write inside withTx carries the transaction flag');
     assert.equal(e.meta?.deferred, undefined, 'a call argument is never deferred');
   }
-  assert.equal(g.nodes.some((n) => n.id.startsWith(approve.id + '.')), false, 'the withTx callback is not a node of its own');
+  assert.equal(
+    g.nodes.some((n) => n.id.startsWith(approve.id + '.')),
+    false,
+    'the withTx callback is not a node of its own',
+  );
 });
 
 test('invoice-app · R2/R3: the container hands work over once, and the boot is named', async () => {
@@ -650,12 +855,19 @@ test('invoice-app · R2/R3: the container hands work over once, and the boot is 
   assert.equal(cb.docs, 'Marks the invoice synced once the approval reached the ledger.');
   const handover = g.edges.find((e) => e.kind === 'calls' && e.from === build && e.to === hook)!;
   assert.equal(handover.meta?.deferred, true);
-  const hookWrite = g.edges.find((e) => e.kind === 'writes' && e.from === hook && e.to === 'invoice-app::table::invoices')!;
+  const hookWrite = g.edges.find(
+    (e) => e.kind === 'writes' && e.from === hook && e.to === 'invoice-app::table::invoices',
+  )!;
   assert.ok(hookWrite, 'the callback is what touches invoices');
   assert.equal(hookWrite.meta?.deferred, undefined);
-  assert.equal(g.edges.some((e) => e.from === build && e.to === 'invoice-app::table::invoices'), false,
-    'the container builder itself writes nothing');
-  const run = g.edges.find((e) => e.kind === 'calls' && e.from === S('container.ts::OutboxWorker.drain') && e.to === hook)!;
+  assert.equal(
+    g.edges.some((e) => e.from === build && e.to === 'invoice-app::table::invoices'),
+    false,
+    'the container builder itself writes nothing',
+  );
+  const run = g.edges.find(
+    (e) => e.kind === 'calls' && e.from === S('container.ts::OutboxWorker.drain') && e.to === hook,
+  )!;
   assert.ok(run, 'this.deps.hooks?.invoiceApproved?.() reaches what the constructor was handed');
   assert.equal(run.resolution?.technique, 'hook-binding');
   assert.equal(run.meta?.deferred, true);
@@ -663,9 +875,19 @@ test('invoice-app · R2/R3: the container hands work over once, and the boot is 
 
   // R3 — the `??=` singleton names the builder, and the config declaration agrees
   assert.ok(byId.get(build)!.tags.includes('setup'));
-  assert.equal(byId.get(build)!.tags.filter((t) => t === 'setup').length, 1, 'the heuristic and the declaration agree; the tag lands once');
-  assert.equal(byId.get(S('container.ts::getContainer'))!.tags.includes('setup'), false, 'the accessor is not the builder');
-  const intoBuild = g.edges.find((e) => e.kind === 'calls' && e.from === S('container.ts::getContainer') && e.to === build)!;
+  assert.equal(
+    byId.get(build)!.tags.filter((t) => t === 'setup').length,
+    1,
+    'the heuristic and the declaration agree; the tag lands once',
+  );
+  assert.equal(
+    byId.get(S('container.ts::getContainer'))!.tags.includes('setup'),
+    false,
+    'the accessor is not the builder',
+  );
+  const intoBuild = g.edges.find(
+    (e) => e.kind === 'calls' && e.from === S('container.ts::getContainer') && e.to === build,
+  )!;
   assert.equal(intoBuild.meta?.origin, 'setup');
   const intoEnv = g.edges.find((e) => e.kind === 'calls' && e.from === build && e.to === S('config/env.ts::loadEnv'))!;
   assert.equal(intoEnv.meta?.origin, 'setup', 'the closure grows to the function only the builder calls');
@@ -680,7 +902,12 @@ test('invoice-app · R4/R5: the SDK, the constant host renamed by config, and th
   // R4a — the SDK specifier names the system; the class that used the binding reaches it
   const azure = externals.find((n) => n.name === 'Azure Document Intelligence')!;
   assert.equal(azure.id, 'invoice-app::external::Azure Document Intelligence');
-  assert.deepEqual(azure.external, { kind: 'ocr', source: 'sdk', via: 'AzureOcr', ref: '@azure-rest/ai-document-intelligence' });
+  assert.deepEqual(azure.external, {
+    kind: 'ocr',
+    source: 'sdk',
+    via: 'AzureOcr',
+    ref: '@azure-rest/ai-document-intelligence',
+  });
   assert.deepEqual(azure.tags, ['external', 'ocr']);
   const toAzure = g.edges.find((e) => e.kind === 'http' && e.to === azure.id)!;
   assert.equal(toAzure.from, S('ocr.ts::AzureOcr.extract'));
@@ -689,26 +916,43 @@ test('invoice-app · R4/R5: the SDK, the constant host renamed by config, and th
 
   // R4b — a non-literal fetch behind a constant host, named and re-kinded by the declaration
   const erp = externals.find((n) => n.name === 'Example ERP')!;
-  assert.deepEqual(erp.external, { kind: 'erp', source: 'config', via: 'ErpClient', ref: 'ERP_HOST', store: true },
-    'farsight.config.json says what it is; the constant is still how it was found; an ERP is a store by its kind');
+  assert.deepEqual(
+    erp.external,
+    { kind: 'erp', source: 'config', via: 'ErpClient', ref: 'ERP_HOST', store: true },
+    'farsight.config.json says what it is; the constant is still how it was found; an ERP is a store by its kind',
+  );
   assert.deepEqual(erp.tags, ['external', 'erp']);
   const toErp = g.edges.find((e) => e.kind === 'http' && e.to === erp.id)!;
   assert.equal(toErp.from, S('erpClient.ts::ErpClient.request'));
   assert.equal(toErp.resolution?.technique, 'constant-host');
   assert.equal(toErp.meta?.method, 'POST');
-  assert.equal(g.nodes.some((n) => n.kind === 'unknown'), false, 'an assembled URL invents no stub');
+  assert.equal(
+    g.nodes.some((n) => n.kind === 'unknown'),
+    false,
+    'an assembled URL invents no stub',
+  );
 
   // R5 — an interface-typed receiver reaches the production implementer, the double is printed
   const ocr = g.edges.filter((e) => e.kind === 'calls' && e.from === S('ocr.ts::readInvoice'));
-  assert.deepEqual(ocr.map((e) => e.to), [S('ocr.ts::AzureOcr.extract')]);
+  assert.deepEqual(
+    ocr.map((e) => e.to),
+    [S('ocr.ts::AzureOcr.extract')],
+  );
   assert.equal(ocr[0]!.resolution?.technique, 'interface');
   assert.equal(ocr[0]!.meta?.iface, 'Ocr');
   assert.deepEqual(ocr[0]!.resolution?.alternatives, [S('ocr.ts::MockOcr.extract')]);
-  assert.equal(g.edges.some((e) => e.to === S('ocr.ts::MockOcr.extract')), false, 'no edge to the stand-in');
+  assert.equal(
+    g.edges.some((e) => e.to === S('ocr.ts::MockOcr.extract')),
+    false,
+    'no edge to the stand-in',
+  );
 
   // R5 again, for a method the built-in filter hides: `send`
   const notify = g.edges.filter((e) => e.kind === 'calls' && e.from === S('notify.ts::notifyApproved'));
-  assert.deepEqual(notify.map((e) => e.to), [S('notify.ts::EmailNotifier.send')]);
+  assert.deepEqual(
+    notify.map((e) => e.to),
+    [S('notify.ts::EmailNotifier.send')],
+  );
   assert.equal(notify[0]!.meta?.iface, 'Notifier');
   assert.deepEqual(notify[0]!.resolution?.alternatives, [S('notify.ts::FakeNotifier.send')]);
 });
@@ -737,26 +981,31 @@ test('invoice-app · R7: declared plumbing folds whatever it says about itself; 
   assert.equal(marker.helper, true, 'declared plumbing is a helper whatever it says about itself');
 
   // and the transaction the guard opened is what the records row shows
-  const records = sum.segments[0]!.markers.filter((m) => m.kind === 'record').map((m) => m.name).sort();
+  const records = sum.segments[0]!.markers.filter((m) => m.kind === 'record')
+    .map((m) => m.name)
+    .sort();
   assert.deepEqual(records, ['approvals', 'invoices']);
 });
 
 test('a hook slot typed by a named interface still resolves to its binding — the type has no implementer, the object literal does', async () => {
-  const f = await ingest({
-    'src/worker.ts': `
+  const f = await ingest(
+    {
+      'src/worker.ts': `
 export interface Hooks { invoiceCreated?: (e: { id: string }) => Promise<void> }
 export class Worker {
   constructor(private readonly deps: { hooks?: Hooks; log: (m: string) => void }) {}
   async execute() { await this.deps.hooks?.invoiceCreated?.({ id: 'x' }); this.deps.log('done'); }
 }
 `,
-    'src/container.ts': `
+      'src/container.ts': `
 import { Worker } from './worker';
 export function build() {
   return new Worker({ hooks: { invoiceCreated: async (e) => { console.log(e.id); } }, log: (m) => console.log(m) });
 }
 `,
-  }, 'namedhooks');
+    },
+    'namedhooks',
+  );
   const byId = new Map(f.nodes.map((n) => [n.id, n]));
   const exec = 'namedhooks::src/worker.ts::Worker.execute';
   const hook = 'namedhooks::src/container.ts::build.hooks.invoiceCreated';
@@ -767,16 +1016,22 @@ export function build() {
   assert.equal(e!.meta?.deferred, true);
   assert.ok(!byId.get(exec)!.tags.includes('unresolved:interface'), 'a bound hook is not an unresolved interface');
   // the slot nobody bound is still an honest absence
-  const f2 = await ingest({
-    'src/worker.ts': `
+  const f2 = await ingest(
+    {
+      'src/worker.ts': `
 export interface Hooks { ping?: () => void }
 export class Worker { constructor(private readonly deps: { hooks?: Hooks }) {} run() { this.deps.hooks?.ping?.(); } }
 `,
-    'src/container.ts': `import { Worker } from './worker'; export function build() { return new Worker({}); }`,
-  }, 'unboundhooks');
+      'src/container.ts': `import { Worker } from './worker'; export function build() { return new Worker({}); }`,
+    },
+    'unboundhooks',
+  );
   const run = f2.nodes.find((n) => n.id === 'unboundhooks::src/worker.ts::Worker.run')!;
   assert.ok(run.tags.includes('unresolved:interface'));
-  assert.equal(f2.edges.some((x) => x.from === run.id && x.kind === 'calls'), false);
+  assert.equal(
+    f2.edges.some((x) => x.from === run.id && x.kind === 'calls'),
+    false,
+  );
 });
 
 // A script and the running app bind the same hook name. The reference app (2026-09-25): the
@@ -824,22 +1079,38 @@ test('a script that shares a hook name with the app is tooling: LOW, and off the
   assert.match(String(intoScript!.resolution?.note), /tooling \(scripts\/\*\*\)/);
   const intoApp = g.edges.find((e) => e.kind === 'calls' && e.from === drain && e.to === appLog);
   assert.equal(intoApp!.resolution?.confidence, 'MEDIUM', 'the app’s own binding keeps its confidence');
-  const scriptCallsApp = g.edges.find((e) => e.kind === 'calls' && e.from === 'toolrepo::scripts/pilot.ts::main' && e.to === drain);
-  if (scriptCallsApp) assert.notEqual(scriptCallsApp.resolution?.confidence, 'LOW', 'a script calling the app is a real call');
+  const scriptCallsApp = g.edges.find(
+    (e) => e.kind === 'calls' && e.from === 'toolrepo::scripts/pilot.ts::main' && e.to === drain,
+  );
+  if (scriptCallsApp)
+    assert.notEqual(scriptCallsApp.resolution?.confidence, 'LOW', 'a script calling the app is a real call');
 
   const index = buildIndex(g.nodes, g.edges);
   const walked = journey(index, drain).steps.map((s) => s.nodeId);
   assert.ok(walked.includes(appLog), 'the runtime log is on the path');
   assert.equal(walked.includes(scriptLog), false, 'the script’s log is not');
   const sum = journeySummary(index, journey(index, drain), screensFor(index, byId.get(drain)!));
-  assert.equal(JSON.stringify(sum).includes('scripts/'), false, 'nothing from scripts/ reaches the summary (afterwards included)');
+  assert.equal(
+    JSON.stringify(sum).includes('scripts/'),
+    false,
+    'nothing from scripts/ reaches the summary (afterwards included)',
+  );
 });
 
 test('tooling is configurable: `tooling: []` turns it off, and other globs can be named', async () => {
   const off = await ingest(collision({ tooling: [] }), 'tooloff');
-  const edge = off.edges.find((e) => e.to === 'tooloff::scripts/pilot.ts::main.log' && e.from === 'tooloff::src/worker.ts::OutboxWorker.drain');
+  const edge = off.edges.find(
+    (e) => e.to === 'tooloff::scripts/pilot.ts::main.log' && e.from === 'tooloff::src/worker.ts::OutboxWorker.drain',
+  );
   assert.equal(edge!.resolution?.confidence, 'MEDIUM');
-  assert.equal(off.nodes.some((n) => n.tags.includes('tooling')), false);
+  assert.equal(
+    off.nodes.some((n) => n.tags.includes('tooling')),
+    false,
+  );
   const other = await ingest(collision({ tooling: ['tools/**'] }), 'toolother');
-  assert.equal(other.nodes.some((n) => n.tags.includes('tooling')), false, 'only the named globs are tooling once the config names some');
+  assert.equal(
+    other.nodes.some((n) => n.tags.includes('tooling')),
+    false,
+    'only the named globs are tooling once the config names some',
+  );
 });

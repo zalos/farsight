@@ -16,36 +16,83 @@ type AnyRec = Record<string, any>; // eslint-disable-line @typescript-eslint/no-
 const graph = SYN.synthesize(SYN.parseArgs(['--preset', 'small']));
 const nodes: AnyRec[] = graph.nodes;
 // stand-ins for store.js bizName / bizLabel (the module touches window): any deterministic name works for the proof
-const bizLabel = (n: AnyRec) => (n.facets && n.facets.business && n.facets.business.label) || String(n.name || '').replace(/([a-z])([A-Z])/g, '$1 $2');
+const bizLabel = (n: AnyRec) =>
+  (n.facets && n.facets.business && n.facets.business.label) ||
+  String(n.name || '').replace(/([a-z])([A-Z])/g, '$1 $2');
 const bizName = (n: AnyRec) => bizLabel(n).replace(/[_-]/g, ' ');
 const repoOf = (n: AnyRec) => (n.loc && n.loc.repo) || String(n.id).split('::')[0];
 
 /** shell.js searchNodes's node half as it was before the index (projects are ranked apart, unchanged). */
 function naive(q: string, repos: Set<string> | null) {
-  const raw = String(q || '').trim().toLowerCase();
+  const raw = String(q || '')
+    .trim()
+    .toLowerCase();
   const terms = raw.split(/\s+/).filter(Boolean);
   if (!terms.length) return [];
-  return nodes.filter((n) => (!repos || repos.has(repoOf(n))) && n.kind !== 'module' && n.kind !== 'package').map((n) => {
-    const name = String(n.name || '').toLowerCase();
-    const ident = name.split(':')[0]!.trim();
-    const tail = String(n.id || '').split('::').pop()!.toLowerCase();
-    const words = bizName(n).toLowerCase();
-    const label = bizLabel(n).toLowerCase();
-    const hay = (name + ' ' + words + ' ' + label + ' ' + (n.tags || []).join(' ') + ' ' + (n.docs || '') + ' ' + ((n.loc && n.loc.path) || '')).toLowerCase();
-    let score = 0;
-    if (ident === raw || tail === raw || name === raw || words === raw || label === raw) score += 100;
-    for (const term of terms) {
-      if (ident === term || words === term || label === term) score += 10;
-      else if (ident.includes(term) || name.includes(term) || words.includes(term) || label.includes(term)) score += 5;
-      else if ((n.tags || []).some((x: string) => x.includes(term))) score += 4;
-      else if (hay.includes(term)) score += 1;
-    }
-    if (score > 0) score += M.KIND_BONUS[n.kind] || 0;
-    return { n, score };
-  }).filter((r) => r.score > 0).sort((a, b) => b.score - a.score).slice(0, 12).map((r) => [r.n.id, r.score]);
+  return nodes
+    .filter((n) => (!repos || repos.has(repoOf(n))) && n.kind !== 'module' && n.kind !== 'package')
+    .map((n) => {
+      const name = String(n.name || '').toLowerCase();
+      const ident = name.split(':')[0]!.trim();
+      const tail = String(n.id || '')
+        .split('::')
+        .pop()!
+        .toLowerCase();
+      const words = bizName(n).toLowerCase();
+      const label = bizLabel(n).toLowerCase();
+      const hay = (
+        name +
+        ' ' +
+        words +
+        ' ' +
+        label +
+        ' ' +
+        (n.tags || []).join(' ') +
+        ' ' +
+        (n.docs || '') +
+        ' ' +
+        ((n.loc && n.loc.path) || '')
+      ).toLowerCase();
+      let score = 0;
+      if (ident === raw || tail === raw || name === raw || words === raw || label === raw) score += 100;
+      for (const term of terms) {
+        if (ident === term || words === term || label === term) score += 10;
+        else if (ident.includes(term) || name.includes(term) || words.includes(term) || label.includes(term))
+          score += 5;
+        else if ((n.tags || []).some((x: string) => x.includes(term))) score += 4;
+        else if (hay.includes(term)) score += 1;
+      }
+      if (score > 0) score += M.KIND_BONUS[n.kind] || 0;
+      return { n, score };
+    })
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 12)
+    .map((r) => [r.n.id, r.score]);
 }
-const QUERIES = ['i', 'in', 'inv', 'invo', 'invoice', 'invoice p', 'invoice panel', 'list', 'listInvoice', 'ux', 'src01', 'flow',
-  'approve a', 'billing', 'contract-9.spec', 'zzz', 'Refund', 'getcustomer', 'the', 'GET /api', '/api/invoices'];
+const QUERIES = [
+  'i',
+  'in',
+  'inv',
+  'invo',
+  'invoice',
+  'invoice p',
+  'invoice panel',
+  'list',
+  'listInvoice',
+  'ux',
+  'src01',
+  'flow',
+  'approve a',
+  'billing',
+  'contract-9.spec',
+  'zzz',
+  'Refund',
+  'getcustomer',
+  'the',
+  'GET /api',
+  '/api/invoices',
+];
 
 test('every query ranks what the per-node scan ranked', () => {
   const index = M.buildSearchIndex(nodes, { bizName, bizLabel, repoOf });
@@ -70,7 +117,10 @@ test('typed one key at a time, the narrowed answer is the full answer', () => {
   }
   // a new scope is not narrowed from the last one
   const one = new Set(['src00']);
-  assert.deepEqual(M.searchIndex(index, 'invoice', one).hits.map((h: AnyRec) => [h.n.id, h.score]), naive('invoice', one));
+  assert.deepEqual(
+    M.searchIndex(index, 'invoice', one).hits.map((h: AnyRec) => [h.n.id, h.score]),
+    naive('invoice', one),
+  );
 });
 
 test('a keystroke over the folded strings is well under the palette budget', () => {
@@ -83,17 +133,43 @@ test('a keystroke over the folded strings is well under the palette budget', () 
 
 test('fast travel finds a storyline by its name or id, outranks a journey on a tie, and lands on the Map', () => {
   const metas = {
-    app: { storylines: [{ id: 'invoice', name: 'An invoice, end to end', description: 'From upload to payment.', journeys: ['a', 'b'], branches: [{ id: 'c' }] }] },
-    other: { storylines: [{ id: 'invoice', name: 'A duplicate id' }, { id: 'vendor', name: 'A vendor account', journeys: ['x'] }] },
+    app: {
+      storylines: [
+        {
+          id: 'invoice',
+          name: 'An invoice, end to end',
+          description: 'From upload to payment.',
+          journeys: ['a', 'b'],
+          branches: [{ id: 'c' }],
+        },
+      ],
+    },
+    other: {
+      storylines: [
+        { id: 'invoice', name: 'A duplicate id' },
+        { id: 'vendor', name: 'A vendor account', journeys: ['x'] },
+      ],
+    },
   };
   const items = M.storylineTravelItems(metas, null);
-  assert.deepEqual(items.map((x: AnyRec) => [x.id, x.repo, x.hash, x.steps, x.branches]), [
-    ['storyline:invoice', 'app', '#/map?storyline=invoice', 2, 1],
-    ['storyline:vendor', 'other', '#/map?storyline=vendor', 1, 0],
-  ], 'one row per storyline id');
-  assert.deepEqual(M.storylineTravelItems(metas, new Set(['other'])).map((x: AnyRec) => x.storyline), ['invoice', 'vendor'], 'scope narrows');
+  assert.deepEqual(
+    items.map((x: AnyRec) => [x.id, x.repo, x.hash, x.steps, x.branches]),
+    [
+      ['storyline:invoice', 'app', '#/map?storyline=invoice', 2, 1],
+      ['storyline:vendor', 'other', '#/map?storyline=vendor', 1, 0],
+    ],
+    'one row per storyline id',
+  );
+  assert.deepEqual(
+    M.storylineTravelItems(metas, new Set(['other'])).map((x: AnyRec) => x.storyline),
+    ['invoice', 'vendor'],
+    'scope narrows',
+  );
   const inv = items[0];
-  const score = (q: string) => { const raw = q.toLowerCase(); return M.scoreStoryline(inv, raw, raw.split(/\s+/)); };
+  const score = (q: string) => {
+    const raw = q.toLowerCase();
+    return M.scoreStoryline(inv, raw, raw.split(/\s+/));
+  };
   assert.ok(score('invoice') > 0);
   assert.ok(score('invoice') > 100, 'an exact id is an exact hit');
   assert.ok(score('end to end') > 0);

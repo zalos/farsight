@@ -37,14 +37,25 @@ import { emptyHtml } from '../lib/empty-state.js';
 
 /** True while the business lens is on: file names, runners, globs and hashes stay out.
  * @group Tests tab */
-function biz() { return currentLens() === 'business'; }
+function biz() {
+  return currentLens() === 'business';
+}
 
 /** The four lists the surface carries, in the order board 05 draws them. */
 const VIEWS = ['matrix', 'suites', 'orphans', 'freshness'];
 /** The level filter the server applies to `sources` and `suites`. */
 const LEVELS = ['all', 'unit', 'integration', 'e2e'];
 /** Blind spots in the order a reader needs them: a missing artefact first, a missing digest last. */
-const GAP_RANK = ['missing-artefact', 'unreadable', 'empty', 'unresolved-claim', 'unjoined-each', 'digest-changed', 'no-digest', 'no-config'];
+const GAP_RANK = [
+  'missing-artefact',
+  'unreadable',
+  'empty',
+  'unresolved-claim',
+  'unjoined-each',
+  'digest-changed',
+  'no-digest',
+  'no-config',
+];
 /** The catalog word for each gap kind, and the class that shapes its label. */
 const GAP_WORD = {
   'missing-artefact': ['tests.bsKind.missingArtefact', 'missing'],
@@ -60,8 +71,21 @@ const GAP_WORD = {
 // Each chip's class, and the one opener that gives it its tip: the word, its
 // define and its Grammar Book entry (lib/counted.js defAttrs) — a tip a reader
 // can open with a click or a key, where a `title` gave a hover-only bubble.
-const EV_CLS = { observed: 'ev observed', stale: 'ev stale', reached: 'ev reached', declared: 'ev declared', none: 'ev absent' };
-const ST_CLS = { passed: 'st passed', failed: 'st failed', skipped: 'st skipped', flaky: 'st flaky', unknown: 'st unknown', notrun: 'st notrun' };
+const EV_CLS = {
+  observed: 'ev observed',
+  stale: 'ev stale',
+  reached: 'ev reached',
+  declared: 'ev declared',
+  none: 'ev absent',
+};
+const ST_CLS = {
+  passed: 'st passed',
+  failed: 'st failed',
+  skipped: 'st skipped',
+  flaky: 'st flaky',
+  unknown: 'st unknown',
+  notrun: 'st notrun',
+};
 const DG_CLS = { unchanged: 'tst-dg unchanged', changed: 'tst-dg changed', unknown: 'tst-dg missing' };
 
 /** A chip's opening tag with its word's tip (none when the word has no define).
@@ -76,13 +100,13 @@ function tipOf(key) {
 }
 const CASES_OPEN = '<ul class="tst-cases" role="list">';
 
-let DATA = null;          // the last payload — folds redraw from it, never refetch
+let DATA = null; // the last payload — folds redraw from it, never refetch
 let VIEW = 'matrix';
 let LEVEL = 'all';
-let DETAIL = null;        // #/tests/<id>
-let SCOPED = null;        // { flow, seg, action, node } — the cell a journey's door was opened from
-let SCOPED_DATA = null;   // its answer: the cell's coverage and its cases, each with its own word
-const OPEN = new Set();   // which folds are open, by key
+let DETAIL = null; // #/tests/<id>
+let SCOPED = null; // { flow, seg, action, node } — the cell a journey's door was opened from
+let SCOPED_DATA = null; // its answer: the cell's coverage and its cases, each with its own word
+const OPEN = new Set(); // which folds are open, by key
 
 /** `?scope=` for /api/tests, from the viewer's multi-select scope.
  * @group Tests tab */
@@ -111,7 +135,11 @@ function suiteName(s) {
   const title = (s.cases || []).map((c) => (c.suite || [])[0]).find(Boolean);
   // a describe named after the function it tests is still an identifier
   if (title) return /^[\w.$]+$/.test(title) ? humanize(title) : unCode(title);
-  const base = String(s.file || '').split('/').pop().replace(/\.(pw\.)?(spec|test)\.[tj]sx?$/, '').replace(/\.[tj]sx?$/, '');
+  const base = String(s.file || '')
+    .split('/')
+    .pop()
+    .replace(/\.(pw\.)?(spec|test)\.[tj]sx?$/, '')
+    .replace(/\.[tj]sx?$/, '');
   return humanize(base);
 }
 
@@ -139,8 +167,12 @@ export function mountTests(route, el) {
   SCOPED_DATA = null;
   DATA = null;
   OPEN.clear();
-  el.innerHTML = '<div class="tst-wrap">' + stripHtml(null, !!DETAIL) + '<div id="tst-body"><p class="set-note">'
-    + esc(t('tests.loading')) + '</p></div></div>';
+  el.innerHTML =
+    '<div class="tst-wrap">' +
+    stripHtml(null, !!DETAIL) +
+    '<div id="tst-body"><p class="set-note">' +
+    esc(t('tests.loading')) +
+    '</p></div></div>';
   // #/tests/<id> asks for that one test; the catalogue is a different request
   // and the page must not imply the whole scope was measured to draw it
   (DETAIL ? loadDetail() : load()).catch(() => {
@@ -159,7 +191,8 @@ function scopedFromHash() {
   const qi = h.indexOf('?');
   if (qi < 0) return null;
   const q = new URLSearchParams(h.slice(qi + 1));
-  const flow = q.get('flow'), node = q.get('node');
+  const flow = q.get('flow'),
+    node = q.get('node');
   if (!flow && !node) return null;
   const num = (k) => (q.get(k) != null && /^\d+$/.test(q.get(k)) ? Number(q.get(k)) : null);
   return { flow, node, seg: num('seg'), action: num('action') };
@@ -170,7 +203,9 @@ function scopedFromHash() {
 function scopedUrl(sc) {
   if (sc.node) return '/api/tests?node=' + encodeURIComponent(sc.node);
   const base = '/api/tests?flow=' + encodeURIComponent(sc.flow);
-  return sc.seg != null ? base + '&seg=' + sc.seg + (sc.action != null ? '&action=' + sc.action : '') : base + '&lean=1&cases=1';
+  return sc.seg != null
+    ? base + '&seg=' + sc.seg + (sc.action != null ? '&action=' + sc.action : '')
+    : base + '&lean=1&cases=1';
 }
 
 /** Fetch the catalogue for the current scope and level, then draw it.
@@ -178,19 +213,33 @@ function scopedUrl(sc) {
 async function load() {
   if (SCOPED) {
     // the cell first: it is what the reader came for, and the catalogue under it is the context
-    SCOPED_DATA = await fetch(scopedUrl(SCOPED)).then((r) => (r.ok ? r.json() : { error: String(r.status) })).catch(() => ({ error: 'fetch' }));
+    SCOPED_DATA = await fetch(scopedUrl(SCOPED))
+      .then((r) => (r.ok ? r.json() : { error: String(r.status) }))
+      .catch(() => ({ error: 'fetch' }));
   }
   // lean: the page prints counts, so the per-node lists behind them stay on the server (folds.ts leanJourneyRow)
-  const q = '?scope=' + encodeURIComponent(scopeParam()) + (LEVEL !== 'all' ? '&level=' + encodeURIComponent(LEVEL) : '') + '&lean=1';
+  const q =
+    '?scope=' +
+    encodeURIComponent(scopeParam()) +
+    (LEVEL !== 'all' ? '&level=' + encodeURIComponent(LEVEL) : '') +
+    '&lean=1';
   const r = await fetch('/api/tests' + q);
   const d = await r.json().catch(() => null);
   if (!r.ok || !d || d.error) {
     const b = document.getElementById('tst-body');
     if (b) {
-      b.innerHTML = '<p class="set-note">' + esc(t('sys.testsFailed')) + '</p>'
-        + '<p class="set-note"><span class="mono">' + esc(String(r.status)) + '</span>'
-        + (d && d.error ? ' <span class="mono">' + esc(d.error) + '</span>' : '') + '</p>'
-        + '<p class="tst-gap"><button class="tst-showall" onclick="testsRetry()">' + esc(t('tests.retry')) + '</button></p>';
+      b.innerHTML =
+        '<p class="set-note">' +
+        esc(t('sys.testsFailed')) +
+        '</p>' +
+        '<p class="set-note"><span class="mono">' +
+        esc(String(r.status)) +
+        '</span>' +
+        (d && d.error ? ' <span class="mono">' + esc(d.error) + '</span>' : '') +
+        '</p>' +
+        '<p class="tst-gap"><button class="tst-showall" onclick="testsRetry()">' +
+        esc(t('tests.retry')) +
+        '</button></p>';
     }
     return;
   }
@@ -215,7 +264,10 @@ export function testsRefresh(reason) {
   const wrap = document.querySelector('.tst-wrap');
   if (!wrap) return;
   // words only, or a detail page that names one test by id and is not scoped
-  if (DATA && (reason === 'lens' || reason === 'register' || (DETAIL && reason === 'scope'))) { redraw(); return; }
+  if (DATA && (reason === 'lens' || reason === 'register' || (DETAIL && reason === 'scope'))) {
+    redraw();
+    return;
+  }
   const body = document.getElementById('tst-body');
   if (body) body.innerHTML = '<p class="set-note">' + esc(t('tests.loading')) + '</p>';
   DATA = null;
@@ -231,7 +283,10 @@ export function testsRefresh(reason) {
 function redraw() {
   const wrap = document.querySelector('.tst-wrap');
   if (!wrap || !DATA) return;
-  if (DETAIL) { wrap.innerHTML = stripHtml(DATA, true) + '<div id="tst-body">' + detailHtml(DATA) + '</div>'; return; }
+  if (DETAIL) {
+    wrap.innerHTML = stripHtml(DATA, true) + '<div id="tst-body">' + detailHtml(DATA) + '</div>';
+    return;
+  }
   wrap.innerHTML = stripHtml(DATA, false) + '<div id="tst-body"></div>';
   renderBody();
 }
@@ -258,10 +313,16 @@ function renderBody() {
     b.innerHTML = '<div class="tst-sec">' + emptyHtml('tests') + '</div>' + blindSection(d);
     return;
   }
-  b.innerHTML = scopedHtml() + kpisHtml(d) + sourcesHtml(d)
-    + (VIEW === 'matrix' ? matrixHtml(d)
-      : VIEW === 'suites' ? suitesHtml(d)
-        : VIEW === 'orphans' ? orphansHtml(d)
+  b.innerHTML =
+    scopedHtml() +
+    kpisHtml(d) +
+    sourcesHtml(d) +
+    (VIEW === 'matrix'
+      ? matrixHtml(d)
+      : VIEW === 'suites'
+        ? suitesHtml(d)
+        : VIEW === 'orphans'
+          ? orphansHtml(d)
           : freshnessHtml(d));
 }
 
@@ -276,20 +337,60 @@ function renderBody() {
  */
 function stripHtml(d, detail) {
   if (detail) {
-    return '<div class="tst-strip"><h1>' + esc(t('nav.tests')) + '</h1>'
-      + '<p class="sub">' + esc(t('tests.sub')) + '</p>'
-      + (d ? identHtml(d) : '') + '</div>';
+    return (
+      '<div class="tst-strip"><h1>' +
+      esc(t('nav.tests')) +
+      '</h1>' +
+      '<p class="sub">' +
+      esc(t('tests.sub')) +
+      '</p>' +
+      (d ? identHtml(d) : '') +
+      '</div>'
+    );
   }
-  const views = VIEWS.map((v) => '<button class="' + (v === VIEW ? 'on' : '') + '"' + tipAttrs({ key: 'tests.view.' + v, noFocus: true })
-    + ' onclick="testsGo(\'' + v + '\',\'' + LEVEL + '\')">'
-    + esc(t('tests.view.' + v)) + (v === 'orphans' && d && d.counts ? ' · <span class="cnt">' + d.counts.orphans + '</span>' : '') + '</button>').join('');
-  const levels = LEVELS.map((l) => '<button class="' + (l === LEVEL ? 'on' : '') + '"' + tipAttrs({ key: 'tests.level.' + l, noFocus: true })
-    + ' onclick="testsGo(\'' + VIEW + '\',\'' + l + '\')">'
-    + esc(t('tests.level.' + l)) + '</button>').join('');
-  return '<div class="tst-strip"><h1>' + esc(t('nav.tests')) + '</h1>'
-    + '<p class="sub">' + esc(t('tests.sub')) + '</p>'
-    + (d ? identHtml(d) + countsLineHtml(d) : '')
-    + '<div class="tst-views">' + views + '</div><div class="tst-views">' + levels + '</div></div>';
+  const views = VIEWS.map(
+    (v) =>
+      '<button class="' +
+      (v === VIEW ? 'on' : '') +
+      '"' +
+      tipAttrs({ key: 'tests.view.' + v, noFocus: true }) +
+      ' onclick="testsGo(\'' +
+      v +
+      "','" +
+      LEVEL +
+      '\')">' +
+      esc(t('tests.view.' + v)) +
+      (v === 'orphans' && d && d.counts ? ' · <span class="cnt">' + d.counts.orphans + '</span>' : '') +
+      '</button>',
+  ).join('');
+  const levels = LEVELS.map(
+    (l) =>
+      '<button class="' +
+      (l === LEVEL ? 'on' : '') +
+      '"' +
+      tipAttrs({ key: 'tests.level.' + l, noFocus: true }) +
+      ' onclick="testsGo(\'' +
+      VIEW +
+      "','" +
+      l +
+      '\')">' +
+      esc(t('tests.level.' + l)) +
+      '</button>',
+  ).join('');
+  return (
+    '<div class="tst-strip"><h1>' +
+    esc(t('nav.tests')) +
+    '</h1>' +
+    '<p class="sub">' +
+    esc(t('tests.sub')) +
+    '</p>' +
+    (d ? identHtml(d) + countsLineHtml(d) : '') +
+    '<div class="tst-views">' +
+    views +
+    '</div><div class="tst-views">' +
+    levels +
+    '</div></div>'
+  );
 }
 
 /** Which graph these numbers came from: source commit, build, sync, content digest.
@@ -303,11 +404,27 @@ function identHtml(d) {
     .replace('{build}', build)
     .replace('{n}', id.sync != null ? String(id.sync) : unknown);
   // the business lens reads which sync; the commit, the build and the digests are a developer's
-  if (biz()) return '<span class="ident">' + esc(t('tip.sync').replace('{n}', id.sync != null ? String(id.sync) : unknown)) + '</span>';
-  const dig = Object.entries(id.source_digest || {}).map(([repo, v]) => repo + ' ' + v).join(' · ');
-  return '<span class="ident">' + esc(line) + '</span>'
-    + (dig ? '<span class="ident"' + tipOf('tests.digestLine') + '>'
-      + esc(t('tests.digestLine').replace('{list}', dig)) + '</span>' : '');
+  if (biz())
+    return (
+      '<span class="ident">' +
+      esc(t('tip.sync').replace('{n}', id.sync != null ? String(id.sync) : unknown)) +
+      '</span>'
+    );
+  const dig = Object.entries(id.source_digest || {})
+    .map(([repo, v]) => repo + ' ' + v)
+    .join(' · ');
+  return (
+    '<span class="ident">' +
+    esc(line) +
+    '</span>' +
+    (dig
+      ? '<span class="ident"' +
+        tipOf('tests.digestLine') +
+        '>' +
+        esc(t('tests.digestLine').replace('{list}', dig)) +
+        '</span>'
+      : '')
+  );
 }
 
 /**
@@ -325,17 +442,46 @@ function countsLineHtml(d) {
   bits.push(k.cases ? countedHtml(k.cases, api) : esc(countWords('count.unit.cases', c.cases || 0)));
   if (!biz()) bits.push(k.files ? countedHtml(k.files, api) : esc(countWords('count.unit.specFiles', c.files || 0)));
   const nj = (d.journeys || []).length;
-  bits.push('<span' + plainTip(nj, 'surf.unit.journeys', 'count.scope.workspace', api) + '>' + esc(countWords('surf.unit.journeys', nj)) + '</span>');
-  bits.push(k.sources ? countedHtml(k.sources, api) : esc(countWords('count.unit.sources', new Set((d.sources || []).map((s) => s.repo)).size)));
+  bits.push(
+    '<span' +
+      plainTip(nj, 'surf.unit.journeys', 'count.scope.workspace', api) +
+      '>' +
+      esc(countWords('surf.unit.journeys', nj)) +
+      '</span>',
+  );
+  bits.push(
+    k.sources
+      ? countedHtml(k.sources, api)
+      : esc(countWords('count.unit.sources', new Set((d.sources || []).map((s) => s.repo)).size)),
+  );
   if (d.reports && !biz()) {
-    bits.push('<span' + plainTip(d.reports.length, 'tests.reportsRead', 'count.scope.workspace', api) + '>'
-      + esc(t('tests.reportsRead').replace('{n}', String(d.reports.length))) + '</span>');
+    bits.push(
+      '<span' +
+        plainTip(d.reports.length, 'tests.reportsRead', 'count.scope.workspace', api) +
+        '>' +
+        esc(t('tests.reportsRead').replace('{n}', String(d.reports.length))) +
+        '</span>',
+    );
   }
-  const all = d.countsAll && d.level && d.level !== 'all'
-    ? '<span class="counts all"' + plainTip(d.countsAll.cases, 'surf.allLevels', 'count.scope.workspace', api) + '>'
-      + esc(t('surf.allLevels').replace('{n}', String(d.countsAll.cases))) + '</span>' : '';
-  return '<span class="counts">' + bits.join(' · ') + '</span>' + all
-    + '<span class="counts"' + tipOf('tests.scope') + '>' + esc(t('tests.scope').replace('{label}', scopeLabel())) + '</span>';
+  const all =
+    d.countsAll && d.level && d.level !== 'all'
+      ? '<span class="counts all"' +
+        plainTip(d.countsAll.cases, 'surf.allLevels', 'count.scope.workspace', api) +
+        '>' +
+        esc(t('surf.allLevels').replace('{n}', String(d.countsAll.cases))) +
+        '</span>'
+      : '';
+  return (
+    '<span class="counts">' +
+    bits.join(' · ') +
+    '</span>' +
+    all +
+    '<span class="counts"' +
+    tipOf('tests.scope') +
+    '>' +
+    esc(t('tests.scope').replace('{label}', scopeLabel())) +
+    '</span>'
+  );
 }
 
 /** Move to a view / level without losing the other.
@@ -347,7 +493,8 @@ export function testsGo(view, level) {
 /** Open or close one fold and redraw the body.
  * @group Tests tab */
 export function testsFold(key) {
-  if (OPEN.has(key)) OPEN.delete(key); else OPEN.add(key);
+  if (OPEN.has(key)) OPEN.delete(key);
+  else OPEN.add(key);
   renderBody();
 }
 
@@ -399,71 +546,185 @@ function kpisHtml(d) {
   const api = '/api/tests';
   const by = levelTotals(d);
   const e2eTally = { reached: 0, observed: 0, declared: 0, none: 0 };
-  (d.journeys || []).forEach((r) => { if (e2eTally[r.e2e] != null) e2eTally[r.e2e]++; });
+  (d.journeys || []).forEach((r) => {
+    if (e2eTally[r.e2e] != null) e2eTally[r.e2e]++;
+  });
   const withBody = e2eTally.reached + e2eTally.observed;
   const runners = [...new Set((d.sources || []).map((s) => s.runner).filter(Boolean))].join(' · ');
   const levels = Object.keys(by).sort();
-  const newest = levels.map((l) => by[l].lastRun).filter(Boolean).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
+  const newest = levels
+    .map((l) => by[l].lastRun)
+    .filter(Boolean)
+    .sort((a, b) => (a.at < b.at ? 1 : -1))[0];
   const filtered = LEVEL !== 'all';
 
   let html = '<div class="tst-kpis">';
   // 1 — the one denominator, never without its scope label or its bound. Under a
   //     level the fold's own part for that level is the number (`counted.reached`):
   //     the page never divides for itself.
-  const reachedTip = m && m.denominator != null
-    ? plainTip(m.numerator, 'count.unit.reached', 'count.scope.selection', api,
-      [[t('tests.kpi.reached'), m.numerator], [t('surf.notReached'), m.denominator - m.numerator]], 'tests.kpi.reached', { m: m.denominator })
-    : '';
-  html += '<div class="tst-kpi"><span class="hud-label"' + tipOf('tests.kpi.reached') + '>'
-    + esc(t('tests.kpi.reached')) + '</span>'
-    + (filtered && k.reached
-      ? '<span class="v">' + countedHtml(k.reached, api, { words: k.reached.n }) + ' <small>'
-      + esc(countWords(k.reached.unit, k.reached.n, k.reached.of).replace(String(k.reached.n), '').trim()) + '</small></span>'
-      : '<span class="v"><span class="cnt-n"' + reachedTip + '>' + esc(metricText(m)) + '</span>'
-        + (m && m.scopeLabel ? ' <small>' + esc(m.scopeLabel) + '</small>' : '') + '</span>')
-    + '<span class="s">' + (boundNote(m) ? '<span' + tipOf('tests.metric.floor') + '>' + esc(boundNote(m)) + '</span>' : '')
-    + (m && m.excluded ? (boundNote(m) ? ' · ' : '') + '<span' + tipOf('tests.excluded') + '>' + esc(t('tests.excluded')
-      .replace('{m}', String(m.excluded.manifestOnly || 0)).replace('{p}', String(m.excluded.plumbing || 0))
-      .replace('{c}', String(m.excluded.presentational || 0)).replace('{d}', String(m.excluded.declaredOnly || 0))) + '</span>' : '')
-    + '</span></div>';
+  const reachedTip =
+    m && m.denominator != null
+      ? plainTip(
+          m.numerator,
+          'count.unit.reached',
+          'count.scope.selection',
+          api,
+          [
+            [t('tests.kpi.reached'), m.numerator],
+            [t('surf.notReached'), m.denominator - m.numerator],
+          ],
+          'tests.kpi.reached',
+          { m: m.denominator },
+        )
+      : '';
+  html +=
+    '<div class="tst-kpi"><span class="hud-label"' +
+    tipOf('tests.kpi.reached') +
+    '>' +
+    esc(t('tests.kpi.reached')) +
+    '</span>' +
+    (filtered && k.reached
+      ? '<span class="v">' +
+        countedHtml(k.reached, api, { words: k.reached.n }) +
+        ' <small>' +
+        esc(countWords(k.reached.unit, k.reached.n, k.reached.of).replace(String(k.reached.n), '').trim()) +
+        '</small></span>'
+      : '<span class="v"><span class="cnt-n"' +
+        reachedTip +
+        '>' +
+        esc(metricText(m)) +
+        '</span>' +
+        (m && m.scopeLabel ? ' <small>' + esc(m.scopeLabel) + '</small>' : '') +
+        '</span>') +
+    '<span class="s">' +
+    (boundNote(m) ? '<span' + tipOf('tests.metric.floor') + '>' + esc(boundNote(m)) + '</span>' : '') +
+    (m && m.excluded
+      ? (boundNote(m) ? ' · ' : '') +
+        '<span' +
+        tipOf('tests.excluded') +
+        '>' +
+        esc(
+          t('tests.excluded')
+            .replace('{m}', String(m.excluded.manifestOnly || 0))
+            .replace('{p}', String(m.excluded.plumbing || 0))
+            .replace('{c}', String(m.excluded.presentational || 0))
+            .replace('{d}', String(m.excluded.declaredOnly || 0)),
+        ) +
+        '</span>'
+      : '') +
+    '</span></div>';
   // 2 — what was read out of the spec files: the selection's cases, split by
   //     level; under a level, that level's and the unfiltered total named apart
   const cases = (d.counts && d.counts.cases) || 0;
   const perLevel = filtered
-    ? esc(t('tests.level.' + LEVEL)) + (d.countsAll ? ' · <span' + plainTip(d.countsAll.cases, 'surf.allLevels', 'count.scope.workspace', api) + '>'
-      + esc(t('surf.allLevels').replace('{n}', String(d.countsAll.cases))) + '</span>' : '')
-    : esc(t('tests.kpi.indexedSub')
-      .replace('{unit}', String((by.unit && by.unit.cases) || 0))
-      .replace('{integration}', String((by.integration && by.integration.cases) || 0))
-      .replace('{e2e}', String((by.e2e && by.e2e.cases) || 0)));
-  const files = k.files ? countedHtml(k.files, api) : esc(countWords('count.unit.specFiles', (d.counts && d.counts.files) || 0));
-  const repos = k.sources ? countedHtml(k.sources, api) : esc(countWords('count.unit.sources', new Set((d.sources || []).map((s) => s.repo)).size));
-  html += '<div class="tst-kpi"><span class="hud-label"' + tipOf('tests.kpi.indexed') + '>'
-    + esc(t('tests.kpi.indexed')) + '</span>'
-    + '<span class="v">' + (k.cases ? countedHtml(k.cases, api, { words: cases }) : esc(String(cases))) + ' <small>' + perLevel + '</small></span>'
-    + '<span class="s">' + (biz() ? repos : files + ' · ' + repos + ' · ' + esc(runners || t('journey.absent.notIndexed'))) + '</span></div>';
+    ? esc(t('tests.level.' + LEVEL)) +
+      (d.countsAll
+        ? ' · <span' +
+          plainTip(d.countsAll.cases, 'surf.allLevels', 'count.scope.workspace', api) +
+          '>' +
+          esc(t('surf.allLevels').replace('{n}', String(d.countsAll.cases))) +
+          '</span>'
+        : '')
+    : esc(
+        t('tests.kpi.indexedSub')
+          .replace('{unit}', String((by.unit && by.unit.cases) || 0))
+          .replace('{integration}', String((by.integration && by.integration.cases) || 0))
+          .replace('{e2e}', String((by.e2e && by.e2e.cases) || 0)),
+      );
+  const files = k.files
+    ? countedHtml(k.files, api)
+    : esc(countWords('count.unit.specFiles', (d.counts && d.counts.files) || 0));
+  const repos = k.sources
+    ? countedHtml(k.sources, api)
+    : esc(countWords('count.unit.sources', new Set((d.sources || []).map((s) => s.repo)).size));
+  html +=
+    '<div class="tst-kpi"><span class="hud-label"' +
+    tipOf('tests.kpi.indexed') +
+    '>' +
+    esc(t('tests.kpi.indexed')) +
+    '</span>' +
+    '<span class="v">' +
+    (k.cases ? countedHtml(k.cases, api, { words: cases }) : esc(String(cases))) +
+    ' <small>' +
+    perLevel +
+    '</small></span>' +
+    '<span class="s">' +
+    (biz() ? repos : files + ' · ' + repos + ' · ' + esc(runners || t('journey.absent.notIndexed'))) +
+    '</span></div>';
   // 3 — journeys an end-to-end test body actually reaches; a header claim is not one
-  const tally = [['journey.flowE2e.reached', e2eTally.reached], ['journey.flowE2e.observed', e2eTally.observed]];
-  html += '<div class="tst-kpi"><span class="hud-label"' + tipOf('tests.kpi.flowsE2e') + '>'
-    + esc(t('tests.kpi.flowsE2e')) + '</span>'
-    + '<span class="v"><span class="cnt-n"' + plainTip(withBody, 'surf.unit.journeys', 'count.scope.workspace', api, tally.map(([key, n]) => [t(key), n]), 'tests.kpi.flowsE2e') + '>'
-    + esc(String(withBody)) + '</span> <small>' + esc(t('tests.kpi.flowsE2eSub')
-      .replace('{reached}', String(e2eTally.reached)).replace('{observed}', String(e2eTally.observed))
-      .replace('{declared}', String(e2eTally.declared)).replace('{none}', String(e2eTally.none))) + '</small></span>'
-    + '<span class="s">' + esc(def('tests.kpi.flowsE2e') || '') + '</span></div>';
+  const tally = [
+    ['journey.flowE2e.reached', e2eTally.reached],
+    ['journey.flowE2e.observed', e2eTally.observed],
+  ];
+  html +=
+    '<div class="tst-kpi"><span class="hud-label"' +
+    tipOf('tests.kpi.flowsE2e') +
+    '>' +
+    esc(t('tests.kpi.flowsE2e')) +
+    '</span>' +
+    '<span class="v"><span class="cnt-n"' +
+    plainTip(
+      withBody,
+      'surf.unit.journeys',
+      'count.scope.workspace',
+      api,
+      tally.map(([key, n]) => [t(key), n]),
+      'tests.kpi.flowsE2e',
+    ) +
+    '>' +
+    esc(String(withBody)) +
+    '</span> <small>' +
+    esc(
+      t('tests.kpi.flowsE2eSub')
+        .replace('{reached}', String(e2eTally.reached))
+        .replace('{observed}', String(e2eTally.observed))
+        .replace('{declared}', String(e2eTally.declared))
+        .replace('{none}', String(e2eTally.none)),
+    ) +
+    '</small></span>' +
+    '<span class="s">' +
+    esc(def('tests.kpi.flowsE2e') || '') +
+    '</span></div>';
   // 4 — the runs per level: when, and whether the run still speaks for this code.
   //     The verdicts are on each source's card below (`sources[].runs`).
-  html += '<div class="tst-kpi"><span class="hud-label"' + tipOf('tests.kpi.lastRuns') + '>'
-    + esc(t('tests.kpi.lastRuns')) + '</span>'
-    + '<span class="v">' + (newest ? esc(newest.at.slice(0, 10))
-      : tagOpen(EV_CLS.none, 'journey.absent.notIndexed') + sym('absent') + esc(t('journey.absent.notIndexed')) + '</span>') + '</span>'
-    + '<span class="s">' + levels.map((l) => esc(t('tests.level.' + l)) + ' · '
-      + (by[l].cards.some((c) => c.fresh)
-        // one answer per card — a level with two runners has two runs, each with its own freshness fact
-        ? by[l].cards.filter((c) => c.fresh && c.fresh.ranAt).map((c) => (by[l].cards.length > 1 && !biz() ? '<span class="mono">' + esc(c.runner) + '</span> ' : '')
-          + esc(c.fresh.ranAt.slice(0, 10)) + ' ' + freshDgHtml(c.fresh)).join(' · ')
-        : by[l].lastRun ? esc(by[l].lastRun.at.slice(0, 10)) + ' ' + dgHtml(by[l].lastRun.freshness, by[l].lastRun.changedBy)
-        : tagOpen(EV_CLS.none, 'journey.absent.notIndexed') + esc(t('journey.absent.notIndexed')) + '</span>')).join('<br>') + '</span></div>';
+  html +=
+    '<div class="tst-kpi"><span class="hud-label"' +
+    tipOf('tests.kpi.lastRuns') +
+    '>' +
+    esc(t('tests.kpi.lastRuns')) +
+    '</span>' +
+    '<span class="v">' +
+    (newest
+      ? esc(newest.at.slice(0, 10))
+      : tagOpen(EV_CLS.none, 'journey.absent.notIndexed') +
+        sym('absent') +
+        esc(t('journey.absent.notIndexed')) +
+        '</span>') +
+    '</span>' +
+    '<span class="s">' +
+    levels
+      .map(
+        (l) =>
+          esc(t('tests.level.' + l)) +
+          ' · ' +
+          (by[l].cards.some((c) => c.fresh)
+            ? // one answer per card — a level with two runners has two runs, each with its own freshness fact
+              by[l].cards
+                .filter((c) => c.fresh && c.fresh.ranAt)
+                .map(
+                  (c) =>
+                    (by[l].cards.length > 1 && !biz() ? '<span class="mono">' + esc(c.runner) + '</span> ' : '') +
+                    esc(c.fresh.ranAt.slice(0, 10)) +
+                    ' ' +
+                    freshDgHtml(c.fresh),
+                )
+                .join(' · ')
+            : by[l].lastRun
+              ? esc(by[l].lastRun.at.slice(0, 10)) + ' ' + dgHtml(by[l].lastRun.freshness, by[l].lastRun.changedBy)
+              : tagOpen(EV_CLS.none, 'journey.absent.notIndexed') + esc(t('journey.absent.notIndexed')) + '</span>'),
+      )
+      .join('<br>') +
+    '</span></div>';
   // 5 — what could not be read, by kind: the artefacts first
   html += gapsKpiHtml(d);
   return html + '</div>';
@@ -472,35 +733,74 @@ function kpisHtml(d) {
 /** The blind-spot card. `gaps` absent = no repo in scope recorded a list; `[]` = the pass named nothing.
  * @group Tests tab */
 function gapsKpiHtml(d) {
-  const open = '<div class="tst-kpi' + (d.gaps && d.gaps.length ? ' warn' : '') + '"><span class="hud-label"'
-    + tipOf('tests.kpi.gaps') + '>' + esc(t('tests.kpi.gaps')) + '</span>';
+  const open =
+    '<div class="tst-kpi' +
+    (d.gaps && d.gaps.length ? ' warn' : '') +
+    '"><span class="hud-label"' +
+    tipOf('tests.kpi.gaps') +
+    '>' +
+    esc(t('tests.kpi.gaps')) +
+    '</span>';
   if (d.gaps && d.gaps.length) {
     // one entry per kind, in the order a reader needs them, with how many
     // artefacts carry it — never the same word twice
     const byKind = new Map();
     foldGaps(d.gaps).forEach((g) => byKind.set(g.kind, (byKind.get(g.kind) || 0) + g.n));
-    const key = byKind.size === 1 && d.gaps.length === 1 ? 'tests.kpi.gapsOne'
-      : byKind.size === 1 ? 'tests.kpi.gapsKindOne' : 'tests.kpi.gapsKinds';
-    return open + '<span class="v">' + esc(t(key)
-      .replace('{kinds}', String(byKind.size)).replace('{n}', String(d.gaps.length))) + '</span>'
-      + '<span class="s">' + [...byKind.entries()].slice(0, 4).map(([kind, n]) => esc(t((GAP_WORD[kind] || GAP_WORD.unreadable)[0])
-        + (n > 1 ? ' ×' + n : ''))).join(' · ') + '</span></div>';
+    const key =
+      byKind.size === 1 && d.gaps.length === 1
+        ? 'tests.kpi.gapsOne'
+        : byKind.size === 1
+          ? 'tests.kpi.gapsKindOne'
+          : 'tests.kpi.gapsKinds';
+    return (
+      open +
+      '<span class="v">' +
+      esc(t(key).replace('{kinds}', String(byKind.size)).replace('{n}', String(d.gaps.length))) +
+      '</span>' +
+      '<span class="s">' +
+      [...byKind.entries()]
+        .slice(0, 4)
+        .map(([kind, n]) => esc(t((GAP_WORD[kind] || GAP_WORD.unreadable)[0]) + (n > 1 ? ' ×' + n : '')))
+        .join(' · ') +
+      '</span></div>'
+    );
   }
   if (d.gaps) {
-    return open + '<span class="v">' + esc(t('tests.gapsNone')) + '</span>'
-      + '<span class="s">' + esc(def('tests.gapsNone') || '') + '</span></div>';
+    return (
+      open +
+      '<span class="v">' +
+      esc(t('tests.gapsNone')) +
+      '</span>' +
+      '<span class="s">' +
+      esc(def('tests.gapsNone') || '') +
+      '</span></div>'
+    );
   }
   const bs = d.blindSpots || [];
-  return open + '<span class="v">' + (bs.length ? esc(t('tests.kpi.gapsFindings').replace('{n}', String(bs.length)))
-    : '<span class="ev absent">' + sym('absent') + esc(t('journey.absent.noneIndexed')) + '</span>') + '</span>'
-    + '<span class="s">' + esc(t('tests.gapsAbsent')) + '</span></div>';
+  return (
+    open +
+    '<span class="v">' +
+    (bs.length
+      ? esc(t('tests.kpi.gapsFindings').replace('{n}', String(bs.length)))
+      : '<span class="ev absent">' + sym('absent') + esc(t('journey.absent.noneIndexed')) + '</span>') +
+    '</span>' +
+    '<span class="s">' +
+    esc(t('tests.gapsAbsent')) +
+    '</span></div>'
+  );
 }
 
 // ── one card per source and level ─────────────────────────────────────────
 
 /** The verdict word per bucket of `sources[].runs`, and the class that shapes it. */
-const RUN_PARTS = [['passed', 'count.part.passed'], ['failed', 'count.part.failed'], ['flaky', 'count.part.flaky'],
-  ['skipped', 'count.part.skipped'], ['unknown', 'tests.run.unknown'], ['noRun', 'count.part.noRun']];
+const RUN_PARTS = [
+  ['passed', 'count.part.passed'],
+  ['failed', 'count.part.failed'],
+  ['flaky', 'count.part.flaky'],
+  ['skipped', 'count.part.skipped'],
+  ['unknown', 'tests.run.unknown'],
+  ['noRun', 'count.part.noRun'],
+];
 
 /**
  * A source card's first line — did it pass, and is that still true of this
@@ -519,12 +819,35 @@ function verdictLineHtml(c) {
   const bits = RUN_PARTS.filter(([k]) => runs[k]).map(([k, key]) => {
     const cls = k === 'noRun' ? 'notrun' : k;
     const words = key === 'tests.run.unknown' ? runs[k] + ' ' + t(key) : countWords(key, runs[k]);
-    return '<span class="' + ST_CLS[cls] + '"' + plainTip(runs[k], key === 'tests.run.unknown' ? 'count.unit.cases' : key, 'count.scope.source', api, rows, 'tests.run.' + (cls === 'notrun' ? 'notRun' : cls)) + '>'
-      + esc(words) + '</span>';
+    return (
+      '<span class="' +
+      ST_CLS[cls] +
+      '"' +
+      plainTip(
+        runs[k],
+        key === 'tests.run.unknown' ? 'count.unit.cases' : key,
+        'count.scope.source',
+        api,
+        rows,
+        'tests.run.' + (cls === 'notrun' ? 'notRun' : cls),
+      ) +
+      '>' +
+      esc(words) +
+      '</span>'
+    );
   });
   if (!bits.length) return '';
-  return '<div class="tst-verdict">' + bits.join(' · ') + (c.fresh ? ' · ' + freshDgHtml(c.fresh) : c.lastRun ? ' · ' + dgHtml(c.lastRun.freshness, c.lastRun.changedBy) : '') + '</div>'
-    + declaredLineHtml(c);
+  return (
+    '<div class="tst-verdict">' +
+    bits.join(' · ') +
+    (c.fresh
+      ? ' · ' + freshDgHtml(c.fresh)
+      : c.lastRun
+        ? ' · ' + dgHtml(c.lastRun.freshness, c.lastRun.changedBy)
+        : '') +
+    '</div>' +
+    declaredLineHtml(c)
+  );
 }
 
 /**
@@ -540,8 +863,16 @@ function declaredLineHtml(c) {
   if (!k || !k.n) return '';
   const api = '/api/tests';
   const rows = (k.breakdown || []).map((p) => [countWords(p.key, p.n).replace(String(p.n), '').trim(), p.n]);
-  const parts = (k.breakdown || []).filter((p) => p.n).map((p) => '<span' + plainTip(p.n, p.key, 'count.scope.source', api, rows, p.key) + '>'
-    + esc(countWords(p.key, p.n)) + '</span>');
+  const parts = (k.breakdown || [])
+    .filter((p) => p.n)
+    .map(
+      (p) =>
+        '<span' +
+        plainTip(p.n, p.key, 'count.scope.source', api, rows, p.key) +
+        '>' +
+        esc(countWords(p.key, p.n)) +
+        '</span>',
+    );
   return '<div class="tst-decl">' + countedHtml(k, api) + (parts.length ? ' · ' + parts.join(' · ') : '') + '</div>';
 }
 
@@ -554,36 +885,70 @@ function sourcesHtml(d) {
   const cards = d.sources || [];
   if (!cards.length) return '';
   const api = '/api/tests';
-  const projectsOf = (repo, level) => [...new Set((d.suites || [])
-    .filter((s) => s.repo === repo && s.level === level && s.project).map((s) => s.project))];
-  return '<div class="tst-sec"><h2>' + esc(t('tests.sec.sources')) + '</h2></div><div class="tst-cards">'
-    + cards.map((c) => {
-      const projects = biz() ? [] : projectsOf(c.repo, c.level);
-      const k = c.counted || {};
-      const files = k.files ? countedHtml(k.files, api) : esc(countWords('count.unit.specFiles', c.files));
-      const cases = k.cases ? countedHtml(k.cases, api) : esc(countWords('count.unit.cases', c.cases));
-      const line = (biz() ? cases : files + ' · ' + cases)
-        + (projects.length ? ' · ' + esc(projects.join(' · ')) : '');
-      const gaps = cardGaps(d.gaps || [], c);
-      return '<div class="tst-card"><div class="t">' + esc(c.repo) + ' · ' + esc(t('tests.level.' + c.level))
-        + (biz() ? '' : tagOpen('ev reached', 'tests.runner') + esc(c.runner) + '</span>') + '</div>'
-        + verdictLineHtml(c)
-        + '<div class="sub">' + line + '</div>'
-        + '<div class="kv">' + (c.fresh && c.fresh.ranAt
-          ? '<span>' + esc(c.fresh.ranAt.slice(0, 10)) + '</span>' + freshDgHtml(c.fresh)
-          : c.lastRun
-          ? '<span>' + esc(c.lastRun.at.slice(0, 10)) + '</span>' + dgHtml(c.lastRun.freshness, c.lastRun.changedBy)
-          : tagOpen(EV_CLS.none, 'journey.absent.notIndexed') + sym('absent') + esc(t('journey.absent.notIndexed')) + '</span>') + '</div>'
-        // the card's one freshness fact as its sentence — both sides of *stale*, or *current as of sync N*, or
-        // *no source digest* with the recipe — never two answers on one card (finding 2)
-        + (c.fresh ? freshLineHtml(c.fresh) + (c.fresh.recipe && !(biz() && c.fresh.recipe === 'fresh.recipe.stamp') ? '<p class="tst-gap">' + esc(t(c.fresh.recipe)) + '</p>' : '')
-          : '<p class="tst-gap">' + mdCode(c.freshness) + '</p>')
-        // one line per finding's shape, with how many artefacts carry it: the unit
-        // card used to repeat one sentence per coverage report
-        + foldGaps(gaps).map((g) => '<p class="tst-gap bad">' + sym('warning') + ' ' + mdCode(g.text)
-          + (g.n > 1 ? ' <b class="mono">×' + g.n + '</b>' : '') + '</p>').join('')
-        + '</div>';
-    }).join('') + '</div>';
+  const projectsOf = (repo, level) => [
+    ...new Set((d.suites || []).filter((s) => s.repo === repo && s.level === level && s.project).map((s) => s.project)),
+  ];
+  return (
+    '<div class="tst-sec"><h2>' +
+    esc(t('tests.sec.sources')) +
+    '</h2></div><div class="tst-cards">' +
+    cards
+      .map((c) => {
+        const projects = biz() ? [] : projectsOf(c.repo, c.level);
+        const k = c.counted || {};
+        const files = k.files ? countedHtml(k.files, api) : esc(countWords('count.unit.specFiles', c.files));
+        const cases = k.cases ? countedHtml(k.cases, api) : esc(countWords('count.unit.cases', c.cases));
+        const line =
+          (biz() ? cases : files + ' · ' + cases) + (projects.length ? ' · ' + esc(projects.join(' · ')) : '');
+        const gaps = cardGaps(d.gaps || [], c);
+        return (
+          '<div class="tst-card"><div class="t">' +
+          esc(c.repo) +
+          ' · ' +
+          esc(t('tests.level.' + c.level)) +
+          (biz() ? '' : tagOpen('ev reached', 'tests.runner') + esc(c.runner) + '</span>') +
+          '</div>' +
+          verdictLineHtml(c) +
+          '<div class="sub">' +
+          line +
+          '</div>' +
+          '<div class="kv">' +
+          (c.fresh && c.fresh.ranAt
+            ? '<span>' + esc(c.fresh.ranAt.slice(0, 10)) + '</span>' + freshDgHtml(c.fresh)
+            : c.lastRun
+              ? '<span>' + esc(c.lastRun.at.slice(0, 10)) + '</span>' + dgHtml(c.lastRun.freshness, c.lastRun.changedBy)
+              : tagOpen(EV_CLS.none, 'journey.absent.notIndexed') +
+                sym('absent') +
+                esc(t('journey.absent.notIndexed')) +
+                '</span>') +
+          '</div>' +
+          // the card's one freshness fact as its sentence — both sides of *stale*, or *current as of sync N*, or
+          // *no source digest* with the recipe — never two answers on one card (finding 2)
+          (c.fresh
+            ? freshLineHtml(c.fresh) +
+              (c.fresh.recipe && !(biz() && c.fresh.recipe === 'fresh.recipe.stamp')
+                ? '<p class="tst-gap">' + esc(t(c.fresh.recipe)) + '</p>'
+                : '')
+            : '<p class="tst-gap">' + mdCode(c.freshness) + '</p>') +
+          // one line per finding's shape, with how many artefacts carry it: the unit
+          // card used to repeat one sentence per coverage report
+          foldGaps(gaps)
+            .map(
+              (g) =>
+                '<p class="tst-gap bad">' +
+                sym('warning') +
+                ' ' +
+                mdCode(g.text) +
+                (g.n > 1 ? ' <b class="mono">×' + g.n + '</b>' : '') +
+                '</p>',
+            )
+            .join('') +
+          '</div>'
+        );
+      })
+      .join('') +
+    '</div>'
+  );
 }
 
 // ── the journeys × tests matrix ───────────────────────────────────────────
@@ -600,9 +965,18 @@ function evChipHtml(cls, wordKey) {
 function freshDgHtml(f) {
   const map = { current: 'unchanged', stale: 'changed', 'no-digest': 'unknown' };
   const fr = map[f.state] || 'unknown';
-  const key = fr === 'changed' && f.changedBy === 'working-tree' ? 'tests.freshness.changedTree' : 'tests.freshness.' + fr;
-  return '<span class="' + esc(DG_CLS[fr]) + '"' + freshAttrs(f, { noFocus: true }) + '>'
-    + (fr === 'unchanged' ? sym('live') : fr === 'changed' ? sym('stale') : sym('warning')) + esc(t(key)) + '</span>';
+  const key =
+    fr === 'changed' && f.changedBy === 'working-tree' ? 'tests.freshness.changedTree' : 'tests.freshness.' + fr;
+  return (
+    '<span class="' +
+    esc(DG_CLS[fr]) +
+    '"' +
+    freshAttrs(f, { noFocus: true }) +
+    '>' +
+    (fr === 'unchanged' ? sym('live') : fr === 'changed' ? sym('stale') : sym('warning')) +
+    esc(t(key)) +
+    '</span>'
+  );
 }
 
 /**
@@ -633,9 +1007,12 @@ function dgHtml(freshness, changedBy) {
   // a `changed` run on the commit it ran at: the working tree differs from HEAD —
   // never words that imply a commit the Changes spine will not show
   const key = f === 'changed' && changedBy === 'working-tree' ? 'tests.freshness.changedTree' : 'tests.freshness.' + f;
-  return tagOpen(DG_CLS[f], key)
-    + (f === 'unchanged' ? sym('live') : f === 'changed' ? sym('stale') : sym('warning'))
-    + esc(t(key)) + '</span>';
+  return (
+    tagOpen(DG_CLS[f], key) +
+    (f === 'unchanged' ? sym('live') : f === 'changed' ? sym('stale') : sym('warning')) +
+    esc(t(key)) +
+    '</span>'
+  );
 }
 
 /** How many screens of a journey have code behind them, as one word.
@@ -643,8 +1020,12 @@ function dgHtml(freshness, changedBy) {
 function builtWord(row) {
   const built = row.built || 0;
   const total = row.screens || 0;
-  const key = total > 0 && built >= total ? 'journey.status.built'
-    : built > 0 ? 'journey.status.partly' : 'journey.status.designedNotBuilt';
+  const key =
+    total > 0 && built >= total
+      ? 'journey.status.built'
+      : built > 0
+        ? 'journey.status.partly'
+        : 'journey.status.designedNotBuilt';
   return t(key).replace('{n}', String(built)).replace('{m}', String(total));
 }
 
@@ -662,12 +1043,21 @@ function liftHtml(row) {
   const repo = parts[0] || '';
   const shared = (via.sharedWith || []).map((f) => f.name).join(' · ');
   // the business lens names the node by its business name, never its route or identifier
-  const node = biz() && S.BYID[via.nodeId] ? bizName(S.BYID[via.nodeId]) : (via.name || via.nodeId);
-  return '<span class="tst-lift">' + esc(t('tests.via').replace('{node}', node))
-    + (via.testName ? ' · <a href="#/tests/' + encodeURIComponent(via.testId) + '">' + esc(via.testName) + '</a>' : '')
-    + (file ? '<span class="loc"> ' + esc(file) + (via.line ? ':' + via.line : '') + '</span>' + vsl(repo, file, via.line || 1) : '')
-    + (shared ? '<span class="shared"> ' + esc(t('tests.sharedWith').replace('{flow}', shared)) + '</span>' : '')
-    + '</span>';
+  const node = biz() && S.BYID[via.nodeId] ? bizName(S.BYID[via.nodeId]) : via.name || via.nodeId;
+  return (
+    '<span class="tst-lift">' +
+    esc(t('tests.via').replace('{node}', node)) +
+    (via.testName ? ' · <a href="#/tests/' + encodeURIComponent(via.testId) + '">' + esc(via.testName) + '</a>' : '') +
+    (file
+      ? '<span class="loc"> ' +
+        esc(file) +
+        (via.line ? ':' + via.line : '') +
+        '</span>' +
+        vsl(repo, file, via.line || 1)
+      : '') +
+    (shared ? '<span class="shared"> ' + esc(t('tests.sharedWith').replace('{flow}', shared)) + '</span>' : '') +
+    '</span>'
+  );
 }
 
 /**
@@ -698,12 +1088,23 @@ function evidenceCellHtml(row) {
   const word = evidenceWord(c).key;
   // one chip with the count, *over this journey*, the word and the skips (lib/test-chip.js, round 2026-10-10)
   const tchip = testChipHtml(c, { api: '/api/tests', cls: 'tst-tchip' });
-  let html = tchip ? tchip : c.freshness && c.freshness.state !== 'none'
-    ? '<span class="' + esc(EV_CLS[cls]) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev: evidenceWord(c), obs: c.observation || null, fresh: c.freshness } }) + '>'
-      + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'none' ? sym('absent') : '') + esc(t(word)) + '</span>'
-    : evChipHtml(cls, word);
+  let html = tchip
+    ? tchip
+    : c.freshness && c.freshness.state !== 'none'
+      ? '<span class="' +
+        esc(EV_CLS[cls]) +
+        '"' +
+        tipAttrs({ id: 'jrnEvidence', args: { ev: evidenceWord(c), obs: c.observation || null, fresh: c.freshness } }) +
+        '>' +
+        (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'none' ? sym('absent') : '') +
+        esc(t(word)) +
+        '</span>'
+      : evChipHtml(cls, word);
   if (runOnly) {
-    html += '<span class="tst-lift">' + esc(t(tests.runLevel === 1 ? 'tests.runOnlyOne' : 'tests.runOnly').replace('{n}', String(tests.runLevel))) + '</span>';
+    html +=
+      '<span class="tst-lift">' +
+      esc(t(tests.runLevel === 1 ? 'tests.runOnlyOne' : 'tests.runOnly').replace('{n}', String(tests.runLevel))) +
+      '</span>';
   }
   if (chip && !(row.built || 0)) html += '<span class="tst-lift">' + esc(t('tests.row.noScreenBuilt')) + '</span>';
   html += runsLineHtml(c, !!tchip);
@@ -724,9 +1125,19 @@ function runsLineHtml(c, chipped) {
   const o = c.observation;
   const bits = [];
   // a chip above already printed the cases with their scope and their skips: the line keeps the run's date and freshness
-  if (runs && runs.n && !chipped) bits.push('<span class="hud-label"' + tipOf('journey.tests.theirRuns') + '>' + esc(t('journey.tests.theirRuns')) + '</span> ' + countedHtml(runs, '/api/tests'));
-  if (o && o.at) bits.push('<span class="mono">' + esc(o.at.slice(0, 10)) + ' </span>' + dgHtml(o.freshness, o.changedBy));
-  if (c.run && c.run.projects && c.run.projects.length && !biz()) bits.push('<span class="mono">' + esc(c.run.projects.join(' · ')) + '</span>');
+  if (runs && runs.n && !chipped)
+    bits.push(
+      '<span class="hud-label"' +
+        tipOf('journey.tests.theirRuns') +
+        '>' +
+        esc(t('journey.tests.theirRuns')) +
+        '</span> ' +
+        countedHtml(runs, '/api/tests'),
+    );
+  if (o && o.at)
+    bits.push('<span class="mono">' + esc(o.at.slice(0, 10)) + ' </span>' + dgHtml(o.freshness, o.changedBy));
+  if (c.run && c.run.projects && c.run.projects.length && !biz())
+    bits.push('<span class="mono">' + esc(c.run.projects.join(' · ')) + '</span>');
   return bits.length ? '<span class="tst-lift tst-runs">' + bits.join(' · ') + '</span>' : '';
 }
 
@@ -741,24 +1152,60 @@ function scopedHtml() {
   if (!SCOPED) return '';
   const d = SCOPED_DATA;
   const back = '<a href="#/tests">' + esc(t('tests.scoped.all')) + '</a>';
-  if (!d || d.error) return '<div class="tst-sec tst-scoped"><p class="set-note">' + esc(t('sys.testsFailed')) + ' · ' + back + '</p></div>';
+  if (!d || d.error)
+    return (
+      '<div class="tst-sec tst-scoped"><p class="set-note">' + esc(t('sys.testsFailed')) + ' · ' + back + '</p></div>'
+    );
   const cov = d.coverage || null;
   const flow = d.flow || SCOPED.flow;
-  const name = d.node ? (biz() ? bizName(d.node) : d.node.name)
-    : d.label ? (d.flowName ? d.flowName + ' · ' : '') + d.label
-      : (flow && S.BYID && S.BYID[flow] ? (biz() ? bizName(S.BYID[flow]) : S.BYID[flow].name) : flow || '');
+  const name = d.node
+    ? biz()
+      ? bizName(d.node)
+      : d.node.name
+    : d.label
+      ? (d.flowName ? d.flowName + ' · ' : '') + d.label
+      : flow && S.BYID && S.BYID[flow]
+        ? biz()
+          ? bizName(S.BYID[flow])
+          : S.BYID[flow].name
+        : flow || '';
   const cases = d.cases || [];
   const ew = cov ? evidenceWord(cov) : { cls: 'none', key: 'journey.absent.noneIndexed' };
-  const head = '<h2 data-scope="' + esc(cov && cov.counted && cov.counted.tests ? cov.counted.tests.scope : '') + '">'
-    + esc(t('tests.scoped.head').replace('{scope}', name)) + '</h2>';
+  const head =
+    '<h2 data-scope="' +
+    esc(cov && cov.counted && cov.counted.tests ? cov.counted.tests.scope : '') +
+    '">' +
+    esc(t('tests.scoped.head').replace('{scope}', name)) +
+    '</h2>';
   const tchip = cov ? testChipHtml(cov, { api: '/api/tests', cls: 'tst-tchip' }) : '';
-  const verdict = '<div class="tst-gap tst-scoped-verdict">' + (tchip || evChipHtml(ew.cls, ew.key))
-    + (cov ? ' ' + runsLineHtml(cov, !!tchip) : '') + '</div>'
-    + '<p class="tst-gap">' + (flow ? '<a href="' + esc(mapStopHash(flow, { screen: SCOPED.seg != null ? SCOPED.seg + 1 : null, action: SCOPED.action != null ? SCOPED.action + 1 : null })) + '">' + esc(t('tests.scoped.journey')) + '</a> · ' : '') + back + '</p>';
+  const verdict =
+    '<div class="tst-gap tst-scoped-verdict">' +
+    (tchip || evChipHtml(ew.cls, ew.key)) +
+    (cov ? ' ' + runsLineHtml(cov, !!tchip) : '') +
+    '</div>' +
+    '<p class="tst-gap">' +
+    (flow
+      ? '<a href="' +
+        esc(
+          mapStopHash(flow, {
+            screen: SCOPED.seg != null ? SCOPED.seg + 1 : null,
+            action: SCOPED.action != null ? SCOPED.action + 1 : null,
+          }),
+        ) +
+        '">' +
+        esc(t('tests.scoped.journey')) +
+        '</a> · '
+      : '') +
+    back +
+    '</p>';
   const CAP = 200;
   const list = cases.length
-    ? CASES_OPEN + cases.slice(0, CAP).map(scopedCaseHtml).join('') + '</ul>'
-      + (cases.length > CAP ? '<p class="tst-gap">' + esc(t('journey.moreChips').replace('{n}', String(cases.length - CAP))) + '</p>' : '')
+    ? CASES_OPEN +
+      cases.slice(0, CAP).map(scopedCaseHtml).join('') +
+      '</ul>' +
+      (cases.length > CAP
+        ? '<p class="tst-gap">' + esc(t('journey.moreChips').replace('{n}', String(cases.length - CAP))) + '</p>'
+        : '')
     : '<p class="set-note">' + esc(t('journey.absent.noneIndexed')) + '</p>';
   return '<div class="tst-sec tst-scoped">' + head + verdict + list + '</div>';
 }
@@ -770,11 +1217,32 @@ function scopedCaseHtml(c) {
   // a declaration word already says the run passed; any other word has the run beside it
   const implied = w.key === 'tests.evidence.declaredPassed' || w.key === 'tests.evidence.declaredPassedStale';
   const st = ST_CLS[c.status] ? c.status : c.status ? 'unknown' : 'notrun';
-  const status = implied ? '' : ' ' + tagOpen(ST_CLS[st], 'tests.run.' + (st === 'notrun' ? 'notRun' : st)) + esc(t(st === 'notrun' ? 'tests.run.notRun' : 'tests.run.' + st)) + '</span>';
-  const where = !biz() && c.loc && c.loc.path ? '<span class="loc"> ' + esc(c.loc.path) + (c.loc.line ? ':' + c.loc.line : '') + '</span>' : '';
-  return '<li data-case="' + esc(c.id) + '"><a href="#/tests/' + encodeURIComponent(c.id) + '">' + esc(c.name) + '</a> '
-    + '<span class="mono">' + esc(t('tests.level.' + c.level)) + '</span> '
-    + evChipHtml(w.cls, w.key) + status + where + '</li>';
+  const status = implied
+    ? ''
+    : ' ' +
+      tagOpen(ST_CLS[st], 'tests.run.' + (st === 'notrun' ? 'notRun' : st)) +
+      esc(t(st === 'notrun' ? 'tests.run.notRun' : 'tests.run.' + st)) +
+      '</span>';
+  const where =
+    !biz() && c.loc && c.loc.path
+      ? '<span class="loc"> ' + esc(c.loc.path) + (c.loc.line ? ':' + c.loc.line : '') + '</span>'
+      : '';
+  return (
+    '<li data-case="' +
+    esc(c.id) +
+    '"><a href="#/tests/' +
+    encodeURIComponent(c.id) +
+    '">' +
+    esc(c.name) +
+    '</a> ' +
+    '<span class="mono">' +
+    esc(t('tests.level.' + c.level)) +
+    '</span> ' +
+    evChipHtml(w.cls, w.key) +
+    status +
+    where +
+    '</li>'
+  );
 }
 
 /** One journey row: what is built, what evidence exists, the metric with its scope, the counts, what is missing.
@@ -783,8 +1251,14 @@ function matrixRowHtml(row, business, e2eCol = true) {
   const c = row.coverage || {};
   const m = c.metric;
   const tests = (c.counts && c.counts.tests) || {};
-  const e2eCls = row.e2e === 'observed' ? 'observed' : row.e2e === 'reached' ? 'reached'
-    : row.e2e === 'declared' ? 'declared' : 'none';
+  const e2eCls =
+    row.e2e === 'observed'
+      ? 'observed'
+      : row.e2e === 'reached'
+        ? 'reached'
+        : row.e2e === 'declared'
+          ? 'declared'
+          : 'none';
   // a lean answer carries the lists' lengths, a full one the lists
   const declared = row.declaredCount != null ? row.declaredCount : (row.declared || []).length;
   const reached = row.inferredCount != null ? row.inferredCount : (row.inferred || []).length;
@@ -792,28 +1266,79 @@ function matrixRowHtml(row, business, e2eCol = true) {
   const runs = tests.runLevel || 0;
   const decl = tests.declaredPassed || 0;
   const zero = m && m.value == null;
-  return '<tr' + (zero ? ' class="zero"' : '') + '>'
-    + '<td><span class="t"><a href="#/map/' + encodeURIComponent(row.flowId) + '">' + esc(row.name) + '</a></span>'
-    + (business ? '' : '<span class="tst-lift">' + esc(row.flowId) + '</span>') + '</td>'
-    + '<td class="mono"><span' + plainTip(row.built || 0, 'journey.status.partly', 'journey.scopeAll', '/api/tests', null, 'tests.col.screens', { m: row.screens || 0 }) + '>'
-    + esc(builtWord(row)) + '</span></td>'
-    + '<td>' + evidenceCellHtml(row) + '</td>'
-    + (e2eCol ? '<td>' + evChipHtml(e2eCls, 'journey.flowE2e.' + (row.e2e || 'none')) + liftHtml(row) + '</td>' : '')
-    + '<td><span class="tst-den"><b' + (m && m.denominator != null ? plainTip(m.numerator, 'count.unit.reached', 'journey.scopeAll', '/api/tests', null, 'tests.col.reached', { m: m.denominator }) : '') + '>'
-    + esc(metricText(m)) + '</b> ' + esc((m && m.scopeLabel) || '') + '</span>'
-    + (boundNote(m) ? '<span class="tst-lift"' + tipOf('tests.metric.floor') + '>' + esc(boundNote(m)) + '</span>' : '') + '</td>'
-    + (business ? '' : '<td class="num"><b' + plainTip(declared, 'tests.col.declared', 'journey.scopeAll', '/api/tests') + '>' + declared + '</b></td>'
-      + '<td class="num"><b' + plainTip(reached, 'tests.col.reachedTests', 'journey.scopeAll', '/api/tests') + '>' + reached + '</b></td>'
-      + '<td class="num">' + (obs || runs
-        // the observed split, each part only when it is not zero, and the scope it counts over on the chip:
-        // `0 tests · 29 passed, by their own declaration` read as a contradiction (swarm round 2, finding 1.5)
-        ? '<span data-tchip class="tchip" data-scope="journey.scopeAll"' + tipOf(decl ? 'tests.observedSplitDecl' : 'tests.observedSplit') + '>'
-          + [[obs - decl, 'tests.obsPart.cases'], [decl, 'tests.obsPart.declared'], [runs, 'tests.obsPart.runs']]
-            .filter((p) => p[0] > 0).map((p) => esc(t(p[1]).replace('{n}', String(p[0])))).join(' · ')
-          + '<span class="tc-sep"> · </span>' + scopeWordHtml('count.over.journey') + '</span>'
-        : '<span class="dim">' + esc(t('journey.absent.noneIndexed')) + '</span>') + '</td>')
-    + '<td><div class="tst-gap' + (row.e2e === 'none' || row.e2e === 'declared' ? ' bad' : '') + '">'
-    + esc(business ? unCode(row.gap || '') : (row.gap || '')) + '</div></td></tr>';
+  return (
+    '<tr' +
+    (zero ? ' class="zero"' : '') +
+    '>' +
+    '<td><span class="t"><a href="#/map/' +
+    encodeURIComponent(row.flowId) +
+    '">' +
+    esc(row.name) +
+    '</a></span>' +
+    (business ? '' : '<span class="tst-lift">' + esc(row.flowId) + '</span>') +
+    '</td>' +
+    '<td class="mono"><span' +
+    plainTip(row.built || 0, 'journey.status.partly', 'journey.scopeAll', '/api/tests', null, 'tests.col.screens', {
+      m: row.screens || 0,
+    }) +
+    '>' +
+    esc(builtWord(row)) +
+    '</span></td>' +
+    '<td>' +
+    evidenceCellHtml(row) +
+    '</td>' +
+    (e2eCol ? '<td>' + evChipHtml(e2eCls, 'journey.flowE2e.' + (row.e2e || 'none')) + liftHtml(row) + '</td>' : '') +
+    '<td><span class="tst-den"><b' +
+    (m && m.denominator != null
+      ? plainTip(m.numerator, 'count.unit.reached', 'journey.scopeAll', '/api/tests', null, 'tests.col.reached', {
+          m: m.denominator,
+        })
+      : '') +
+    '>' +
+    esc(metricText(m)) +
+    '</b> ' +
+    esc((m && m.scopeLabel) || '') +
+    '</span>' +
+    (boundNote(m) ? '<span class="tst-lift"' + tipOf('tests.metric.floor') + '>' + esc(boundNote(m)) + '</span>' : '') +
+    '</td>' +
+    (business
+      ? ''
+      : '<td class="num"><b' +
+        plainTip(declared, 'tests.col.declared', 'journey.scopeAll', '/api/tests') +
+        '>' +
+        declared +
+        '</b></td>' +
+        '<td class="num"><b' +
+        plainTip(reached, 'tests.col.reachedTests', 'journey.scopeAll', '/api/tests') +
+        '>' +
+        reached +
+        '</b></td>' +
+        '<td class="num">' +
+        (obs || runs
+          ? // the observed split, each part only when it is not zero, and the scope it counts over on the chip:
+            // `0 tests · 29 passed, by their own declaration` read as a contradiction (swarm round 2, finding 1.5)
+            '<span data-tchip class="tchip" data-scope="journey.scopeAll"' +
+            tipOf(decl ? 'tests.observedSplitDecl' : 'tests.observedSplit') +
+            '>' +
+            [
+              [obs - decl, 'tests.obsPart.cases'],
+              [decl, 'tests.obsPart.declared'],
+              [runs, 'tests.obsPart.runs'],
+            ]
+              .filter((p) => p[0] > 0)
+              .map((p) => esc(t(p[1]).replace('{n}', String(p[0]))))
+              .join(' · ') +
+            '<span class="tc-sep"> · </span>' +
+            scopeWordHtml('count.over.journey') +
+            '</span>'
+          : '<span class="dim">' + esc(t('journey.absent.noneIndexed')) + '</span>') +
+        '</td>') +
+    '<td><div class="tst-gap' +
+    (row.e2e === 'none' || row.e2e === 'declared' ? ' bad' : '') +
+    '">' +
+    esc(business ? unCode(row.gap || '') : row.gap || '') +
+    '</div></td></tr>'
+  );
 }
 
 /** The matrix: one row per journey in scope, and the caveat that its rows do not add up.
@@ -822,32 +1347,62 @@ function matrixHtml(d) {
   const business = currentLens() === 'business';
   // under a unit or integration filter the e2e column would say *no e2e* of every row: it is the level's rows, not the e2e word
   const e2eCol = LEVEL === 'all' || LEVEL === 'e2e';
-  const cols = (business
-    ? ['journey', 'screens', 'evidence', 'e2e', 'reached', 'missing']
-    : ['journey', 'screens', 'evidence', 'e2e', 'reached', 'declared', 'reachedTests', 'observed', 'missing']).filter((c) => e2eCol || c !== 'e2e');
-  const flow = SCOPED && SCOPED_DATA && !SCOPED_DATA.error ? (SCOPED_DATA.flow || SCOPED.flow) : null;
+  const cols = (
+    business
+      ? ['journey', 'screens', 'evidence', 'e2e', 'reached', 'missing']
+      : ['journey', 'screens', 'evidence', 'e2e', 'reached', 'declared', 'reachedTests', 'observed', 'missing']
+  ).filter((c) => e2eCol || c !== 'e2e');
+  const flow = SCOPED && SCOPED_DATA && !SCOPED_DATA.error ? SCOPED_DATA.flow || SCOPED.flow : null;
   const all = d.journeys || [];
   const rows = flow && all.some((r) => r.flowId === flow) ? all.filter((r) => r.flowId === flow) : all;
   // every word a row can wear, the run-seen pair included: a chip the legend
   // does not show is a chip a reader has to guess at
-  const legend = ['declared', 'reached', 'observed', 'stale']
-    .map((cls) => evChipHtml(cls, 'journey.evidence.' + cls)).join('')
-    + evChipHtml('observed', 'tests.evidence.declaredPassed')
-    + evChipHtml('observed', 'tests.evidence.runSeen') + evChipHtml('stale', 'tests.evidence.runSeenStale');
-  return '<div class="tst-sec"><h2>' + esc(t('tests.view.matrix'))
-    + '<span class="tst-legend">' + legend + '</span></h2>'
-    + '<p class="tst-gap">' + esc(t('tests.matrixSub')) + ' · ' + esc(t('tests.noSum')) + '</p>'
-    + (rows.length
-      ? '<table class="tst-table"><thead><tr>' + cols.map((c) => '<th' + tipOf('tests.col.' + c) + '>'
-        + esc(t('tests.col.' + c)) + '</th>').join('') + '</tr></thead><tbody>'
-        + rows.map((r) => matrixRowHtml(r, business, e2eCol)).join('') + '</tbody></table>'
-      : '<p class="set-note">' + esc(t('tests.noJourneys')) + '</p>')
+  const legend =
+    ['declared', 'reached', 'observed', 'stale'].map((cls) => evChipHtml(cls, 'journey.evidence.' + cls)).join('') +
+    evChipHtml('observed', 'tests.evidence.declaredPassed') +
+    evChipHtml('observed', 'tests.evidence.runSeen') +
+    evChipHtml('stale', 'tests.evidence.runSeenStale');
+  return (
+    '<div class="tst-sec"><h2>' +
+    esc(t('tests.view.matrix')) +
+    '<span class="tst-legend">' +
+    legend +
+    '</span></h2>' +
+    '<p class="tst-gap">' +
+    esc(t('tests.matrixSub')) +
+    ' · ' +
+    esc(t('tests.noSum')) +
+    '</p>' +
+    (rows.length
+      ? '<table class="tst-table"><thead><tr>' +
+        cols.map((c) => '<th' + tipOf('tests.col.' + c) + '>' + esc(t('tests.col.' + c)) + '</th>').join('') +
+        '</tr></thead><tbody>' +
+        rows.map((r) => matrixRowHtml(r, business, e2eCol)).join('') +
+        '</tbody></table>'
+      : '<p class="set-note">' + esc(t('tests.noJourneys')) + '</p>') +
     // the level filter filters the rows: the journeys no case of that level reaches are left out, and counted
-    + (d.journeysLeftOut ? '<p class="tst-gap" data-left-out="' + d.journeysLeftOut + '"' + tipOf('tests.levelRows') + '>'
-      + esc(t('tests.levelRows').replace('{n}', String(d.journeysLeftOut)).replace('{level}', t('tests.level.' + LEVEL))) + '</p>' : '')
-    + '<p class="tst-gap"><a href="/api/tests/matrix?scope=' + encodeURIComponent(scopeParam())
-    + '&amp;format=csv"' + tipAttrs({ key: 'tests.exportCsv', noFocus: true }) + '>' + esc(t('tests.exportCsv')) + '</a></p>'
-    + '</div>';
+    (d.journeysLeftOut
+      ? '<p class="tst-gap" data-left-out="' +
+        d.journeysLeftOut +
+        '"' +
+        tipOf('tests.levelRows') +
+        '>' +
+        esc(
+          t('tests.levelRows')
+            .replace('{n}', String(d.journeysLeftOut))
+            .replace('{level}', t('tests.level.' + LEVEL)),
+        ) +
+        '</p>'
+      : '') +
+    '<p class="tst-gap"><a href="/api/tests/matrix?scope=' +
+    encodeURIComponent(scopeParam()) +
+    '&amp;format=csv"' +
+    tipAttrs({ key: 'tests.exportCsv', noFocus: true }) +
+    '>' +
+    esc(t('tests.exportCsv')) +
+    '</a></p>' +
+    '</div>'
+  );
 }
 
 // ── suites ────────────────────────────────────────────────────────────────
@@ -856,9 +1411,20 @@ function matrixHtml(d) {
  * @group Tests tab */
 function verdictsHtml(counts) {
   if (!counts) return '';
-  return ['passed', 'failed', 'skipped', 'flaky', 'unknown'].filter((k) => counts[k])
-    .map((k) => '<span class="' + ST_CLS[k] + '"' + plainTip(counts[k], 'tests.run.' + k, 'surf.scope.file', '/api/tests', null, 'tests.run.' + k) + '>'
-      + counts[k] + ' ' + esc(t('tests.run.' + k)) + '</span>')
+  return ['passed', 'failed', 'skipped', 'flaky', 'unknown']
+    .filter((k) => counts[k])
+    .map(
+      (k) =>
+        '<span class="' +
+        ST_CLS[k] +
+        '"' +
+        plainTip(counts[k], 'tests.run.' + k, 'surf.scope.file', '/api/tests', null, 'tests.run.' + k) +
+        '>' +
+        counts[k] +
+        ' ' +
+        esc(t('tests.run.' + k)) +
+        '</span>',
+    )
     .join(' ');
 }
 
@@ -869,17 +1435,44 @@ function caseRowHtml(s, c) {
   const word = st === 'notrun' ? t('tests.run.notRun') : t('tests.run.' + st);
   // the row above names the file; a case says which line of it
   if (biz()) {
-    return '<li><a href="#/tests/' + encodeURIComponent(c.id) + '">' + esc(c.name) + '</a> '
-      + tagOpen(ST_CLS[st], 'tests.run.' + (st === 'notrun' ? 'notRun' : st)) + esc(word) + '</span></li>';
+    return (
+      '<li><a href="#/tests/' +
+      encodeURIComponent(c.id) +
+      '">' +
+      esc(c.name) +
+      '</a> ' +
+      tagOpen(ST_CLS[st], 'tests.run.' + (st === 'notrun' ? 'notRun' : st)) +
+      esc(word) +
+      '</span></li>'
+    );
   }
-  return '<li><a href="#/tests/' + encodeURIComponent(c.id) + '">' + esc(c.name) + '</a>'
-    + '<span class="loc">:' + c.line + '</span>' + vsl(s.repo, s.file, c.line)
-    + ' ' + tagOpen(ST_CLS[st], 'tests.run.' + (st === 'notrun' ? 'notRun' : st)) + esc(word) + '</span>'
-    + '<span class="mono"> ' + esc(t('tests.case.covers').replace('{n}', String(c.covers))) + '</span>'
-    + (c.declares && c.declares.length ? '<span class="mono"> ' + esc(c.declares.join(' · ')) + '</span>' : '')
-    + (c.unresolved && c.unresolved.length ? '<span class="tst-lift">' + sym('warning') + ' '
-      + esc(t('tests.orphan.unresolved').replace('{v}', c.unresolved.join(' · '))) + '</span>' : '')
-    + '</li>';
+  return (
+    '<li><a href="#/tests/' +
+    encodeURIComponent(c.id) +
+    '">' +
+    esc(c.name) +
+    '</a>' +
+    '<span class="loc">:' +
+    c.line +
+    '</span>' +
+    vsl(s.repo, s.file, c.line) +
+    ' ' +
+    tagOpen(ST_CLS[st], 'tests.run.' + (st === 'notrun' ? 'notRun' : st)) +
+    esc(word) +
+    '</span>' +
+    '<span class="mono"> ' +
+    esc(t('tests.case.covers').replace('{n}', String(c.covers))) +
+    '</span>' +
+    (c.declares && c.declares.length ? '<span class="mono"> ' + esc(c.declares.join(' · ')) + '</span>' : '') +
+    (c.unresolved && c.unresolved.length
+      ? '<span class="tst-lift">' +
+        sym('warning') +
+        ' ' +
+        esc(t('tests.orphan.unresolved').replace('{v}', c.unresolved.join(' · '))) +
+        '</span>'
+      : '') +
+    '</li>'
+  );
 }
 
 /** One row per spec file and, when opened, its cases with their claims and verdicts.
@@ -887,29 +1480,61 @@ function caseRowHtml(s, c) {
 function suitesHtml(d) {
   const suites = d.suites || [];
   if (!suites.length) {
-    return '<div class="tst-sec"><h2>' + esc(t('tests.view.suites')) + '</h2>'
-      + emptyHtml('tests') + '</div>';
+    return '<div class="tst-sec"><h2>' + esc(t('tests.view.suites')) + '</h2>' + emptyHtml('tests') + '</div>';
   }
   // a source column, and the rows grouped by it: Farsight's own end-to-end specs
   // used to sit between two client apps', told apart only by the shape
   // of a path (pass swarm 2026-09-25)
   const cols = ['source', 'suite', 'level', 'cases', 'verdicts', 'lastRun'];
-  const order = suites.map((s, i) => ({ s, i })).sort((a, b) => a.s.repo.localeCompare(b.s.repo) || a.s.file.localeCompare(b.s.file));
-  let html = '<div class="tst-sec"><h2>' + esc(t('tests.view.suites')) + '</h2>'
-    + '<table class="tst-table tst-suites"><thead><tr>' + cols.map((c) => '<th' + tipOf('tests.col.' + c) + '>'
-      + esc(t('tests.col.' + c)) + '</th>').join('') + '</tr></thead><tbody>';
+  const order = suites
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => a.s.repo.localeCompare(b.s.repo) || a.s.file.localeCompare(b.s.file));
+  let html =
+    '<div class="tst-sec"><h2>' +
+    esc(t('tests.view.suites')) +
+    '</h2>' +
+    '<table class="tst-table tst-suites"><thead><tr>' +
+    cols.map((c) => '<th' + tipOf('tests.col.' + c) + '>' + esc(t('tests.col.' + c)) + '</th>').join('') +
+    '</tr></thead><tbody>';
   order.forEach(({ s, i }) => {
     const key = 'suite' + i;
     const open = OPEN.has(key);
-    html += '<tr' + (open ? ' class="on"' : '') + '><td class="src">' + esc(s.repo) + '</td>'
-      + '<td><button class="tst-showall" onclick="testsFold(\'' + key + '\')">'
-      + esc(t(open ? 'tests.fold.hide' : 'tests.fold.cases').replace('{n}', String(s.cases.length))) + '</button>'
-      + (biz() ? '<span class="nm"> ' + esc(suiteName(s)) + '</span>' : '<span class="loc"> ' + esc(s.file) + '</span>' + vsl(s.repo, s.file, 1)) + '</td>'
-      + '<td class="mono">' + esc(t('tests.level.' + s.level)) + (biz() ? '' : ' · ' + esc(s.runner) + (s.project ? ' · ' + esc(s.project) : '')) + '</td>'
-      + '<td class="num"><b' + plainTip(s.counts.cases, 'count.unit.cases', 'surf.scope.file', '/api/tests') + '>' + s.counts.cases + '</b></td>'
-      + '<td>' + (verdictsHtml(s.counts) || tagOpen('dim', 'journey.absent.notIndexed') + esc(t('journey.absent.notIndexed')) + '</span>') + '</td>'
-      + '<td>' + (s.lastRun ? '<span class="mono">' + esc(s.lastRun.at.slice(0, 10)) + ' </span>' + dgHtml(s.lastRun.freshness, s.lastRun.changedBy)
-        : tagOpen('dim', 'journey.absent.notIndexed') + esc(t('journey.absent.notIndexed')) + '</span>') + '</td></tr>';
+    html +=
+      '<tr' +
+      (open ? ' class="on"' : '') +
+      '><td class="src">' +
+      esc(s.repo) +
+      '</td>' +
+      '<td><button class="tst-showall" onclick="testsFold(\'' +
+      key +
+      '\')">' +
+      esc(t(open ? 'tests.fold.hide' : 'tests.fold.cases').replace('{n}', String(s.cases.length))) +
+      '</button>' +
+      (biz()
+        ? '<span class="nm"> ' + esc(suiteName(s)) + '</span>'
+        : '<span class="loc"> ' + esc(s.file) + '</span>' + vsl(s.repo, s.file, 1)) +
+      '</td>' +
+      '<td class="mono">' +
+      esc(t('tests.level.' + s.level)) +
+      (biz() ? '' : ' · ' + esc(s.runner) + (s.project ? ' · ' + esc(s.project) : '')) +
+      '</td>' +
+      '<td class="num"><b' +
+      plainTip(s.counts.cases, 'count.unit.cases', 'surf.scope.file', '/api/tests') +
+      '>' +
+      s.counts.cases +
+      '</b></td>' +
+      '<td>' +
+      (verdictsHtml(s.counts) ||
+        tagOpen('dim', 'journey.absent.notIndexed') + esc(t('journey.absent.notIndexed')) + '</span>') +
+      '</td>' +
+      '<td>' +
+      (s.lastRun
+        ? '<span class="mono">' +
+          esc(s.lastRun.at.slice(0, 10)) +
+          ' </span>' +
+          dgHtml(s.lastRun.freshness, s.lastRun.changedBy)
+        : tagOpen('dim', 'journey.absent.notIndexed') + esc(t('journey.absent.notIndexed')) + '</span>') +
+      '</td></tr>';
     if (open) {
       html += '<tr><td colspan="6">' + CASES_OPEN + s.cases.map((c) => caseRowHtml(s, c)).join('') + '</ul></td></tr>';
     }
@@ -922,22 +1547,48 @@ function suitesHtml(d) {
 /** Tests whose claims and reaches land on nothing this build knows — not bad tests.
  * @group Tests tab */
 function orphansHtml(d) {
-  const rows = (d.orphans || []).slice()
-    .sort((a, b) => a.file.localeCompare(b.file) || (a.line || 0) - (b.line || 0));
-  let html = '<div class="tst-sec"><h2>' + esc(t('tests.view.orphans')) + '</h2>'
-    + '<p class="tst-gap">' + esc(t('tests.orphansNote')) + '</p>';
+  const rows = (d.orphans || []).slice().sort((a, b) => a.file.localeCompare(b.file) || (a.line || 0) - (b.line || 0));
+  let html =
+    '<div class="tst-sec"><h2>' +
+    esc(t('tests.view.orphans')) +
+    '</h2>' +
+    '<p class="tst-gap">' +
+    esc(t('tests.orphansNote')) +
+    '</p>';
   if (!rows.length) return html + '<p class="set-note">' + esc(t('tests.noOrphans')) + '</p></div>';
   // what a test declares is written as code (`@covers` values): not the business lens's column
   const cols = biz() ? ['test', 'reason'] : ['test', 'reason', 'claim'];
-  html += '<table class="tst-table"><thead><tr>' + cols.map((c) => '<th' + tipOf('tests.col.' + c) + '>'
-    + esc(t('tests.col.' + c)) + '</th>').join('') + '</tr></thead><tbody>';
+  html +=
+    '<table class="tst-table"><thead><tr>' +
+    cols.map((c) => '<th' + tipOf('tests.col.' + c) + '>' + esc(t('tests.col.' + c)) + '</th>').join('') +
+    '</tr></thead><tbody>';
   for (const o of rows) {
     const repo = String(o.testId || '').split('::')[0] || '';
-    html += '<tr><td><a href="#/tests/' + encodeURIComponent(o.testId) + '">' + esc(o.name) + '</a>'
-      + (biz() ? '' : '<span class="loc"> ' + esc(o.file) + (o.line ? ':' + o.line : '') + '</span>' + vsl(repo, o.file, o.line || 1)) + '</td>'
-      + '<td>' + esc(t(o.reason === 'unresolved-claim' ? 'tests.orphan.unresolvedReason' : 'tests.orphan.coversNothing')) + '</td>'
-      + (biz() ? '' : '<td class="mono">' + (o.declares && o.declares.length ? esc(o.declares.join(' · '))
-        : '<span class="dim">' + esc(t('journey.absent.noneIndexed')) + '</span>') + '</td>') + '</tr>';
+    html +=
+      '<tr><td><a href="#/tests/' +
+      encodeURIComponent(o.testId) +
+      '">' +
+      esc(o.name) +
+      '</a>' +
+      (biz()
+        ? ''
+        : '<span class="loc"> ' +
+          esc(o.file) +
+          (o.line ? ':' + o.line : '') +
+          '</span>' +
+          vsl(repo, o.file, o.line || 1)) +
+      '</td>' +
+      '<td>' +
+      esc(t(o.reason === 'unresolved-claim' ? 'tests.orphan.unresolvedReason' : 'tests.orphan.coversNothing')) +
+      '</td>' +
+      (biz()
+        ? ''
+        : '<td class="mono">' +
+          (o.declares && o.declares.length
+            ? esc(o.declares.join(' · '))
+            : '<span class="dim">' + esc(t('journey.absent.noneIndexed')) + '</span>') +
+          '</td>') +
+      '</tr>';
   }
   return html + '</tbody></table></div>';
 }
@@ -951,8 +1602,11 @@ function addsHtml(r) {
   if (r.joined != null) bits.push(t('tests.rep.joined').replace('{n}', String(r.joined)));
   if (r.edges != null) bits.push(t('tests.rep.edges').replace('{n}', String(r.edges)));
   if (r.eachJoined || r.eachUnjoined) {
-    bits.push(t('tests.rep.each').replace('{j}', String(r.eachJoined || 0))
-      .replace('{t}', String((r.eachJoined || 0) + (r.eachUnjoined || 0))));
+    bits.push(
+      t('tests.rep.each')
+        .replace('{j}', String(r.eachJoined || 0))
+        .replace('{t}', String((r.eachJoined || 0) + (r.eachUnjoined || 0))),
+    );
   }
   if (r.unjoined) bits.push(t('tests.rep.unjoined').replace('{n}', String(r.unjoined)));
   if (!bits.length) bits.push(t('tests.rep.nothing'));
@@ -963,10 +1617,18 @@ function addsHtml(r) {
  * @group Tests tab */
 function reasonHtml(r) {
   if (!r.reason || r.reason === 'ok') return '';
-  const key = r.reason === 'no-match' ? 'tests.blind.missing'
-    : r.reason === 'empty' ? 'tests.blind.empty'
-      : r.reason === 'no-digest' ? 'tests.blind.digest'
-        : r.reason === 'digest-changed' ? (r.changedBy === 'working-tree' ? 'tests.freshness.changedTree' : 'tests.freshness.changed') : 'tests.blind.unreadable';
+  const key =
+    r.reason === 'no-match'
+      ? 'tests.blind.missing'
+      : r.reason === 'empty'
+        ? 'tests.blind.empty'
+        : r.reason === 'no-digest'
+          ? 'tests.blind.digest'
+          : r.reason === 'digest-changed'
+            ? r.changedBy === 'working-tree'
+              ? 'tests.freshness.changedTree'
+              : 'tests.freshness.changed'
+            : 'tests.blind.unreadable';
   return '<span class="tst-lift">' + sym('warning') + ' ' + esc(t(key)) + '</span>';
 }
 
@@ -991,31 +1653,68 @@ function reportsHtml(d) {
   // developer's facts; the business lens keeps which level, how many matched,
   // when, and whether the run still speaks for this code
   const b = biz();
-  const cols = b ? ['level', 'matched', 'lastRun', 'digest'] : ['level', 'kind', 'glob', 'matched', 'lastRun', 'digest', 'adds'];
-  let html = '<table class="tst-table"><thead><tr>' + cols.map((c) => '<th' + tipOf('tests.col.' + c) + '>'
-    + esc(t('tests.col.' + c)) + '</th>').join('') + '</tr></thead><tbody>';
+  const cols = b
+    ? ['level', 'matched', 'lastRun', 'digest']
+    : ['level', 'kind', 'glob', 'matched', 'lastRun', 'digest', 'adds'];
+  let html =
+    '<table class="tst-table"><thead><tr>' +
+    cols.map((c) => '<th' + tipOf('tests.col.' + c) + '>' + esc(t('tests.col.' + c)) + '</th>').join('') +
+    '</tr></thead><tbody>';
   let gi = 0;
   for (const [, list] of groups) {
     const head = list[0];
-    const key = 'rep' + (gi++);
+    const key = 'rep' + gi++;
     const open = OPEN.has(key);
     // the group's freshness, folded: one word per value with how many carry it
     const fresh = {};
-    list.forEach((r) => { fresh[r.freshness || 'unknown'] = (fresh[r.freshness || 'unknown'] || 0) + 1; });
+    list.forEach((r) => {
+      fresh[r.freshness || 'unknown'] = (fresh[r.freshness || 'unknown'] || 0) + 1;
+    });
     const odd = list.filter((r) => r.reason && r.reason !== 'ok');
     const ok = list.filter((r) => !r.reason || r.reason === 'ok');
-    html += '<tr class="on"><td class="mono">' + esc(t('tests.level.' + head.level)) + '</td>'
-      + (b ? '' : '<td class="mono">' + esc(head.kind) + ' · ' + esc(head.runner) + '</td>'
-        + '<td class="mono">' + esc(head.glob || '') + '</td>')
-      + '<td class="num"><b>' + esc(matchedWord(head.matched != null ? head.matched : list.length)) + '</b> '
-      + (ok.length > 1 && !b
-        ? '<button class="tst-showall" onclick="testsFold(\'' + key + '\')">'
-          + esc(t(open ? 'tests.fold.hide' : 'tests.blind.fold').replace('{n}', String(ok.length))) + '</button>'
-        : '') + '</td>'
-      + '<td class="mono">' + esc((list.map((r) => r.mtime).filter(Boolean).sort().pop() || '').slice(0, 10)) + '</td>'
-      + '<td>' + Object.keys(fresh).map((f) => dgHtml(f)
-        + (fresh[f] > 1 ? '<span class="mono"> ×' + fresh[f] + '</span>' : '')).join(' ') + '</td>'
-      + (b ? '' : '<td class="mono"></td>') + '</tr>';
+    html +=
+      '<tr class="on"><td class="mono">' +
+      esc(t('tests.level.' + head.level)) +
+      '</td>' +
+      (b
+        ? ''
+        : '<td class="mono">' +
+          esc(head.kind) +
+          ' · ' +
+          esc(head.runner) +
+          '</td>' +
+          '<td class="mono">' +
+          esc(head.glob || '') +
+          '</td>') +
+      '<td class="num"><b>' +
+      esc(matchedWord(head.matched != null ? head.matched : list.length)) +
+      '</b> ' +
+      (ok.length > 1 && !b
+        ? '<button class="tst-showall" onclick="testsFold(\'' +
+          key +
+          '\')">' +
+          esc(t(open ? 'tests.fold.hide' : 'tests.blind.fold').replace('{n}', String(ok.length))) +
+          '</button>'
+        : '') +
+      '</td>' +
+      '<td class="mono">' +
+      esc(
+        (
+          list
+            .map((r) => r.mtime)
+            .filter(Boolean)
+            .sort()
+            .pop() || ''
+        ).slice(0, 10),
+      ) +
+      '</td>' +
+      '<td>' +
+      Object.keys(fresh)
+        .map((f) => dgHtml(f) + (fresh[f] > 1 ? '<span class="mono"> ×' + fresh[f] + '</span>' : ''))
+        .join(' ') +
+      '</td>' +
+      (b ? '' : '<td class="mono"></td>') +
+      '</tr>';
     if (b) continue;
     // a report that could not be read is never folded away
     for (const r of odd) html += reportRowHtml(r);
@@ -1027,12 +1726,26 @@ function reportsHtml(d) {
 /** One matched report file: where it is, its run id, when it ran, whether its digest still matches, what it added.
  * @group Tests tab */
 function reportRowHtml(r) {
-  return '<tr><td></td><td></td><td class="mono"><span class="loc">' + esc(r.path || '') + '</span>'
-    + (r.path ? vsl(r.repo, r.path, 1) : '') + reasonHtml(r) + '</td>'
-    + '<td class="mono">' + esc(r.runId || '') + '</td>'
-    + '<td class="mono">' + esc((r.mtime || '').slice(0, 10)) + '</td>'
-    + '<td>' + dgHtml(r.freshness, r.changedBy) + '</td>'
-    + '<td class="mono">' + addsHtml(r) + '</td></tr>';
+  return (
+    '<tr><td></td><td></td><td class="mono"><span class="loc">' +
+    esc(r.path || '') +
+    '</span>' +
+    (r.path ? vsl(r.repo, r.path, 1) : '') +
+    reasonHtml(r) +
+    '</td>' +
+    '<td class="mono">' +
+    esc(r.runId || '') +
+    '</td>' +
+    '<td class="mono">' +
+    esc((r.mtime || '').slice(0, 10)) +
+    '</td>' +
+    '<td>' +
+    dgHtml(r.freshness, r.changedBy) +
+    '</td>' +
+    '<td class="mono">' +
+    addsHtml(r) +
+    '</td></tr>'
+  );
 }
 
 /** Blind spots folded by shape: the same finding on n artefacts is one row with its list.
@@ -1043,7 +1756,15 @@ function foldGaps(gaps) {
     const shape = String(g.text || '').replace(/`[^`]*`/g, '`…`');
     const key = [g.kind, g.level || '', g.reportKind || '', g.glob || '', shape].join(' · ');
     if (!by.has(key)) {
-      by.set(key, { kind: g.kind, level: g.level, reportKind: g.reportKind, glob: g.glob, text: g.text, paths: [], n: 0 });
+      by.set(key, {
+        kind: g.kind,
+        level: g.level,
+        reportKind: g.reportKind,
+        glob: g.glob,
+        text: g.text,
+        paths: [],
+        n: 0,
+      });
     }
     const e = by.get(key);
     e.n++;
@@ -1061,25 +1782,55 @@ function foldGaps(gaps) {
 function blindSection(d) {
   let html = '<div class="tst-sec"><h2>' + esc(t('tests.kpi.gaps')) + '</h2>';
   if (!d.gaps) {
-    return html + '<p class="set-note">' + esc(t('tests.gapsAbsent')) + '</p>'
-      + (d.blindSpots || []).map((s) => '<div class="tst-bs"><span class="k">' + esc(t('tests.bsKind.recorded'))
-        + '</span><span class="v">' + mdCode(s) + '</span><span class="n"></span></div>').join('')
-      + '</div>';
+    return (
+      html +
+      '<p class="set-note">' +
+      esc(t('tests.gapsAbsent')) +
+      '</p>' +
+      (d.blindSpots || [])
+        .map(
+          (s) =>
+            '<div class="tst-bs"><span class="k">' +
+            esc(t('tests.bsKind.recorded')) +
+            '</span><span class="v">' +
+            mdCode(s) +
+            '</span><span class="n"></span></div>',
+        )
+        .join('') +
+      '</div>'
+    );
   }
   if (!d.gaps.length) return html + '<p class="set-note">' + esc(t('tests.gapsNone')) + '</p></div>';
   foldGaps(d.gaps).forEach((g, i) => {
     const key = 'gap' + i;
     const open = OPEN.has(key);
     const word = GAP_WORD[g.kind] || GAP_WORD.unreadable;
-    html += '<div class="tst-bs' + (g.n > 1 && !open ? ' folded' : '') + '">'
-      + tagOpen('k ' + word[1], word[0]) + esc(t(word[0])) + '</span>'
-      + '<span class="v">' + mdCode(g.text)
-      + (g.paths.length && (open || g.n === 1) && !biz() ? '<br><span class="mono">' + esc(g.paths.join(' · ')) + '</span>' : '')
-      + (g.n > 1 ? '<br><button class="tst-showall" onclick="testsFold(\'' + key + '\')">'
-        + esc(t(open ? 'tests.fold.hide' : 'tests.blind.fold').replace('{n}', String(g.n))) + '</button>' : '')
-      + '</span>'
-      + '<span class="n">' + esc([g.level ? t('tests.level.' + g.level) : '', biz() ? '' : g.reportKind || ''].filter(Boolean).join(' · ')
-        + (g.n > 1 ? ' ×' + g.n : '')) + '</span></div>';
+    html +=
+      '<div class="tst-bs' +
+      (g.n > 1 && !open ? ' folded' : '') +
+      '">' +
+      tagOpen('k ' + word[1], word[0]) +
+      esc(t(word[0])) +
+      '</span>' +
+      '<span class="v">' +
+      mdCode(g.text) +
+      (g.paths.length && (open || g.n === 1) && !biz()
+        ? '<br><span class="mono">' + esc(g.paths.join(' · ')) + '</span>'
+        : '') +
+      (g.n > 1
+        ? '<br><button class="tst-showall" onclick="testsFold(\'' +
+          key +
+          '\')">' +
+          esc(t(open ? 'tests.fold.hide' : 'tests.blind.fold').replace('{n}', String(g.n))) +
+          '</button>'
+        : '') +
+      '</span>' +
+      '<span class="n">' +
+      esc(
+        [g.level ? t('tests.level.' + g.level) : '', biz() ? '' : g.reportKind || ''].filter(Boolean).join(' · ') +
+          (g.n > 1 ? ' ×' + g.n : ''),
+      ) +
+      '</span></div>';
   });
   return html + '</div>';
 }
@@ -1096,12 +1847,23 @@ function freshnessHtml(d) {
       lines.push(t('tests.import.cmd').split('{repo}').join(repo).replace('{level}', level));
     }
   }
-  return '<div class="tst-sec"><h2>' + esc(t('tests.view.freshness')) + '</h2>'
-    + '<p class="tst-gap">' + esc(def('tests.view.freshness') || '') + '</p>'
-    + reportsHtml(d) + '</div>'
-    + blindSection(d)
-    + '<div class="tst-sec"><h2>' + esc(t('tests.sec.recipe')) + '</h2>'
-    + '<pre class="tst-cmd">' + esc(lines.join('\n')) + '</pre></div>';
+  return (
+    '<div class="tst-sec"><h2>' +
+    esc(t('tests.view.freshness')) +
+    '</h2>' +
+    '<p class="tst-gap">' +
+    esc(def('tests.view.freshness') || '') +
+    '</p>' +
+    reportsHtml(d) +
+    '</div>' +
+    blindSection(d) +
+    '<div class="tst-sec"><h2>' +
+    esc(t('tests.sec.recipe')) +
+    '</h2>' +
+    '<pre class="tst-cmd">' +
+    esc(lines.join('\n')) +
+    '</pre></div>'
+  );
 }
 
 // ── one test's own page: #/tests/<id> (03 §4.2, board 06) ─────────────────
@@ -1124,8 +1886,16 @@ function freshnessHtml(d) {
 
 /** A glyph per covered kind — the node's shape, so a reader sorts the list by eye. */
 const KIND_SYM = {
-  page: 'screen', component: 'screen', flow: 'start', route: 'api', api: 'api',
-  table: 'record', queue: 'message', external: 'external', guard: 'gate', rule: 'shield',
+  page: 'screen',
+  component: 'screen',
+  flow: 'start',
+  route: 'api',
+  api: 'api',
+  table: 'record',
+  queue: 'message',
+  external: 'external',
+  guard: 'gate',
+  rule: 'shield',
 };
 const NOTE_OPEN_PLAIN = '<span class="tst-d-note">';
 
@@ -1144,11 +1914,19 @@ async function loadDetail() {
   const wrap = document.querySelector('.tst-wrap');
   if (!r.ok || !d || d.error || !d.covers) {
     if (wrap) {
-      wrap.innerHTML = stripHtml(null, true)
-        + '<div id="tst-body"><div class="tst-sec"><p class="set-note">'
-        + esc(t(r.status === 404 ? 'tests.detail.notFound' : 'sys.testsFailed')) + '</p>'
-        + '<p class="tst-lift mono">' + esc(DETAIL) + '</p>'
-        + '<p class="tst-gap"><a href="' + tHref('matrix', 'all') + '">← ' + esc(t('tests.detail.back')) + '</a></p></div></div>';
+      wrap.innerHTML =
+        stripHtml(null, true) +
+        '<div id="tst-body"><div class="tst-sec"><p class="set-note">' +
+        esc(t(r.status === 404 ? 'tests.detail.notFound' : 'sys.testsFailed')) +
+        '</p>' +
+        '<p class="tst-lift mono">' +
+        esc(DETAIL) +
+        '</p>' +
+        '<p class="tst-gap"><a href="' +
+        tHref('matrix', 'all') +
+        '">← ' +
+        esc(t('tests.detail.back')) +
+        '</a></p></div></div>';
     }
     return;
   }
@@ -1163,32 +1941,60 @@ function dtlHeadHtml(d) {
   const loc = d.loc || {};
   const projects = [...new Set((tr.runs || []).map((r) => r.project).filter(Boolean))];
   const bits = [];
-  bits.push('<span class="mono">' + esc(t('tests.detail.ident')
-    .replace('{level}', t('tests.level.' + tr.level)).replace('{runner}', tr.runner || '')) + '</span>');
+  bits.push(
+    '<span class="mono">' +
+      esc(
+        t('tests.detail.ident')
+          .replace('{level}', t('tests.level.' + tr.level))
+          .replace('{runner}', tr.runner || ''),
+      ) +
+      '</span>',
+  );
   if ((tr.suite || []).length) {
     bits.push('<span class="mono">' + esc(t('tests.detail.suite').replace('{path}', tr.suite.join(' › '))) + '</span>');
   }
   if (projects.length) {
-    bits.push(tagOpen('pj', 'tests.detail.projects')
-      + esc(t('tests.detail.projects').replace('{list}', projects.join(' · '))) + '</span>');
+    bits.push(
+      tagOpen('pj', 'tests.detail.projects') +
+        esc(t('tests.detail.projects').replace('{list}', projects.join(' · '))) +
+        '</span>',
+    );
   }
-  return '<div class="tst-sec tst-d-head">'
-    + '<p class="tst-gap"><a href="' + tHref('matrix', 'all') + '">← ' + esc(t('tests.detail.back')) + '</a></p>'
-    + '<h2>' + esc(d.name) + '</h2>'
-    + '<div class="tst-d-path">'
-    + (tr.file ? '<span class="loc">' + esc(tr.file) + (loc.line ? ':' + loc.line : '') + '</span>'
-      + vsl(d.repo, tr.file, loc.line || 1) : '')
-    + bits.join('')
-    + (tr.runLevel ? tagOpen(EV_CLS.declared, 'tests.detail.runLevel')
-      + esc(t('tests.detail.runLevel')) + '</span>' : '')
-    + (tr.inactive ? tagOpen(EV_CLS.none, 'tests.detail.inactive') + sym('absent')
-      + esc(t('tests.detail.inactive')) + '</span>' : '')
-    + '</div>'
-    + (tr.runLevel && (tr.files || []).length
-      ? '<p class="tst-gap">' + esc(t('tests.detail.runLevelFiles').replace('{n}', String(tr.files.length))) + '</p>' : '')
-    + '<p class="tst-lift mono">' + esc(d.id) + '</p>'
-    + (d.docs ? '<p class="tst-gap">' + mdCode(d.docs) + '</p>' : '')
-    + '</div>';
+  return (
+    '<div class="tst-sec tst-d-head">' +
+    '<p class="tst-gap"><a href="' +
+    tHref('matrix', 'all') +
+    '">← ' +
+    esc(t('tests.detail.back')) +
+    '</a></p>' +
+    '<h2>' +
+    esc(d.name) +
+    '</h2>' +
+    '<div class="tst-d-path">' +
+    (tr.file
+      ? '<span class="loc">' +
+        esc(tr.file) +
+        (loc.line ? ':' + loc.line : '') +
+        '</span>' +
+        vsl(d.repo, tr.file, loc.line || 1)
+      : '') +
+    bits.join('') +
+    (tr.runLevel
+      ? tagOpen(EV_CLS.declared, 'tests.detail.runLevel') + esc(t('tests.detail.runLevel')) + '</span>'
+      : '') +
+    (tr.inactive
+      ? tagOpen(EV_CLS.none, 'tests.detail.inactive') + sym('absent') + esc(t('tests.detail.inactive')) + '</span>'
+      : '') +
+    '</div>' +
+    (tr.runLevel && (tr.files || []).length
+      ? '<p class="tst-gap">' + esc(t('tests.detail.runLevelFiles').replace('{n}', String(tr.files.length))) + '</p>'
+      : '') +
+    '<p class="tst-lift mono">' +
+    esc(d.id) +
+    '</p>' +
+    (d.docs ? '<p class="tst-gap">' + mdCode(d.docs) + '</p>' : '') +
+    '</div>'
+  );
 }
 
 /** The @covers values exactly as the source writes them — resolved or not.
@@ -1203,21 +2009,44 @@ function dtlClaimsHtml(d) {
   if (!declares.length && !d.orphan) return '';
   let html = '<div class="tst-sec tst-d-claimsec"><h2>' + esc(t('tests.detail.asWritten')) + '</h2>';
   if (!declares.length) {
-    html += '<p class="tst-gap">' + tagOpen(EV_CLS.none, 'tests.detail.none.declared')
-      + sym('absent') + esc(t('journey.absent.noneIndexed')) + '</span> '
-      + esc(t('tests.detail.none.declared')) + '</p>';
+    html +=
+      '<p class="tst-gap">' +
+      tagOpen(EV_CLS.none, 'tests.detail.none.declared') +
+      sym('absent') +
+      esc(t('journey.absent.noneIndexed')) +
+      '</span> ' +
+      esc(t('tests.detail.none.declared')) +
+      '</p>';
   } else {
-    html += '<div class="tst-d-claims">' + declares.map((v) => '<span class="tst-d-claim'
-      + (unresolved.has(v) ? ' bad' : '') + '">' + (unresolved.has(v) ? sym('warning') + ' ' : '')
-      + esc(v) + '</span>').join('') + '</div>';
+    html +=
+      '<div class="tst-d-claims">' +
+      declares
+        .map(
+          (v) =>
+            '<span class="tst-d-claim' +
+            (unresolved.has(v) ? ' bad' : '') +
+            '">' +
+            (unresolved.has(v) ? sym('warning') + ' ' : '') +
+            esc(v) +
+            '</span>',
+        )
+        .join('') +
+      '</div>';
   }
   if (unresolved.size) {
-    html += '<p class="tst-gap bad">' + esc(t('tests.orphan.unresolved')
-      .replace('{v}', [...unresolved].join(' · '))) + '</p>';
+    html +=
+      '<p class="tst-gap bad">' +
+      esc(t('tests.orphan.unresolved').replace('{v}', [...unresolved].join(' · '))) +
+      '</p>';
   }
   if (d.orphan && d.orphan.reason === 'covers-nothing') {
-    html += '<p class="tst-gap bad">' + esc(t('tests.orphan.coversNothing')) + '</p>'
-      + '<p class="tst-gap">' + esc(t('tests.orphansNote')) + '</p>';
+    html +=
+      '<p class="tst-gap bad">' +
+      esc(t('tests.orphan.coversNothing')) +
+      '</p>' +
+      '<p class="tst-gap">' +
+      esc(t('tests.orphansNote')) +
+      '</p>';
   }
   return html + '</div>';
 }
@@ -1233,28 +2062,49 @@ function dtlCoverRowHtml(c, d) {
   // the class is the edge's and is never downgraded; `stale` is the same
   // observed class said with the code having moved under it since the run
   const stale = c.evidence === 'observed' && run && run.freshness === 'changed';
-  const chipCls = c.evidence === 'observed' ? (stale ? 'stale' : 'observed')
-    : c.evidence === 'static' ? 'reached' : 'declared';
-  return '<div class="tst-d-row">'
-    + '<span class="sym">' + glyph + '</span>'
-    + '<span class="nm"><span class="t">' + esc(c.name) + '</span>'
-    + '<span class="cn">' + esc(c.nodeId) + '</span></span>'
-    + '<span class="via">' + how
-    + (c.note ? NOTE_OPEN_PLAIN + esc(c.note) + '</span>' : '')
-    + (c.match ? '<span class="tst-lift">' + esc(t('tests.detail.match').replace('{how}', c.match)) + '</span>' : '')
-    + (c.twin ? tagOpen('tst-d-twin', 'tests.detail.twin')
-      + esc(t('tests.detail.twin').replace('{note}', c.twin.note)) + '</span>' : '')
-    + (c.alternatives && c.alternatives.length
-      ? tagOpen('tst-d-twin', 'tests.detail.alternatives')
-        + esc(t('tests.detail.alternatives').replace('{list}', c.alternatives.join(' · '))) + '</span>' : '')
-    + '</span>'
-    + '<span class="ch">' + evChipHtml(chipCls, 'journey.evidence.' + chipCls)
-    + (c.inactive ? '<span class="tst-lift">' + esc(t('tests.detail.inactive')) + '</span>' : '') + '</span>'
-    + '<span class="lk">' + (c.loc && c.loc.path
-      ? '<span class="loc">' + esc(c.loc.path) + (c.loc.line ? ':' + c.loc.line : '') + '</span>'
-        + vsl(repo, c.loc.path, (c.loc.line || 1))
-      : '') + '</span>'
-    + '</div>';
+  const chipCls =
+    c.evidence === 'observed' ? (stale ? 'stale' : 'observed') : c.evidence === 'static' ? 'reached' : 'declared';
+  return (
+    '<div class="tst-d-row">' +
+    '<span class="sym">' +
+    glyph +
+    '</span>' +
+    '<span class="nm"><span class="t">' +
+    esc(c.name) +
+    '</span>' +
+    '<span class="cn">' +
+    esc(c.nodeId) +
+    '</span></span>' +
+    '<span class="via">' +
+    how +
+    (c.note ? NOTE_OPEN_PLAIN + esc(c.note) + '</span>' : '') +
+    (c.match ? '<span class="tst-lift">' + esc(t('tests.detail.match').replace('{how}', c.match)) + '</span>' : '') +
+    (c.twin
+      ? tagOpen('tst-d-twin', 'tests.detail.twin') +
+        esc(t('tests.detail.twin').replace('{note}', c.twin.note)) +
+        '</span>'
+      : '') +
+    (c.alternatives && c.alternatives.length
+      ? tagOpen('tst-d-twin', 'tests.detail.alternatives') +
+        esc(t('tests.detail.alternatives').replace('{list}', c.alternatives.join(' · '))) +
+        '</span>'
+      : '') +
+    '</span>' +
+    '<span class="ch">' +
+    evChipHtml(chipCls, 'journey.evidence.' + chipCls) +
+    (c.inactive ? '<span class="tst-lift">' + esc(t('tests.detail.inactive')) + '</span>' : '') +
+    '</span>' +
+    '<span class="lk">' +
+    (c.loc && c.loc.path
+      ? '<span class="loc">' +
+        esc(c.loc.path) +
+        (c.loc.line ? ':' + c.loc.line : '') +
+        '</span>' +
+        vsl(repo, c.loc.path, c.loc.line || 1)
+      : '') +
+    '</span>' +
+    '</div>'
+  );
 }
 
 /** What a report saw of the nodes this case reaches, when no report named the case itself.
@@ -1262,19 +2112,39 @@ function dtlCoverRowHtml(c, d) {
 function dtlAlsoHtml(d) {
   const also = d.alsoObserved || [];
   if (!also.length) return '';
-  return '<p class="tst-gap">' + esc(t(also.length === 1 ? 'tests.runOnlyOne' : 'tests.runOnly').replace('{n}', String(also.length))) + '</p>'
-    + '<ul class="tst-cases" role="list">' + also.map((o) => '<li>'
-      + '<a href="#/tests/' + encodeURIComponent(o.id) + '">' + esc(o.name) + '</a>'
-      + (o.runLevel ? ' ' + tagOpen(EV_CLS.declared, 'tests.detail.runLevel')
-        + esc(t('tests.detail.runLevel')) + '</span>' : '')
-      + '<span class="mono"> ' + esc(t('tests.level.' + o.level)) + ' · '
-      + esc(t('tests.detail.byRun').replace('{n}', String(o.nodes))) + '</span></li>').join('') + '</ul>';
+  return (
+    '<p class="tst-gap">' +
+    esc(t(also.length === 1 ? 'tests.runOnlyOne' : 'tests.runOnly').replace('{n}', String(also.length))) +
+    '</p>' +
+    '<ul class="tst-cases" role="list">' +
+    also
+      .map(
+        (o) =>
+          '<li>' +
+          '<a href="#/tests/' +
+          encodeURIComponent(o.id) +
+          '">' +
+          esc(o.name) +
+          '</a>' +
+          (o.runLevel
+            ? ' ' + tagOpen(EV_CLS.declared, 'tests.detail.runLevel') + esc(t('tests.detail.runLevel')) + '</span>'
+            : '') +
+          '<span class="mono"> ' +
+          esc(t('tests.level.' + o.level)) +
+          ' · ' +
+          esc(t('tests.detail.byRun').replace('{n}', String(o.nodes))) +
+          '</span></li>',
+      )
+      .join('') +
+    '</ul>'
+  );
 }
 
 /** One evidence group: its rows, or the absence word with the reason it is empty.
  * @group Tests tab */
 function dtlGroupHtml(d, g) {
-  const rows = (d.covers || []).filter((c) => c.evidence === g.edge)
+  const rows = (d.covers || [])
+    .filter((c) => c.evidence === g.edge)
     .sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
   const techniques = [...new Set(rows.map((c) => c.technique).filter(Boolean))];
   const run = (d.test || {}).run;
@@ -1288,20 +2158,35 @@ function dtlGroupHtml(d, g) {
     const skipped = g.cls === 'observed' && !!run && run.status === 'skipped';
     // a report is not a case: it has no author to declare and no body to reach,
     // so the two silences above the observed group are one fact, said once
-    const key = 'tests.detail.none.'
-      + ((d.test || {}).runLevel && g.cls !== 'observed' ? 'runLevel' : g.cls);
-    body = '<div class="tst-d-empty">' + tagOpen(EV_CLS.none, key)
-      + sym('absent') + esc(t('journey.absent.noneIndexed')) + '</span> '
-      + esc(t(key))
-      + (skipped ? '<p class="tst-gap bad">' + esc(t('tests.detail.skippedNoObserved')) + '</p>' : '')
-      + (g.cls === 'observed' ? dtlAlsoHtml(d) : '') + '</div>';
+    const key = 'tests.detail.none.' + ((d.test || {}).runLevel && g.cls !== 'observed' ? 'runLevel' : g.cls);
+    body =
+      '<div class="tst-d-empty">' +
+      tagOpen(EV_CLS.none, key) +
+      sym('absent') +
+      esc(t('journey.absent.noneIndexed')) +
+      '</span> ' +
+      esc(t(key)) +
+      (skipped ? '<p class="tst-gap bad">' + esc(t('tests.detail.skippedNoObserved')) + '</p>' : '') +
+      (g.cls === 'observed' ? dtlAlsoHtml(d) : '') +
+      '</div>';
   }
-  return '<div class="tst-d-grp' + (rows.length ? '' : ' dashed') + '">'
-    + '<div class="gh"><span class="hud-label">' + esc(t('tests.detail.' + g.cls)) + '</span>'
-    + '<span class="n">' + esc(t('tests.detail.edges').replace('{n}', String(rows.length))) + '</span>'
-    + tagOpen('how', 'tests.detail.how.' + g.cls) + esc(t('tests.detail.how.' + g.cls))
-    + (techniques.length ? ' — ' + esc(techniques.join(' · ')) : '') + '</span></div>'
-    + body + '</div>';
+  return (
+    '<div class="tst-d-grp' +
+    (rows.length ? '' : ' dashed') +
+    '">' +
+    '<div class="gh"><span class="hud-label">' +
+    esc(t('tests.detail.' + g.cls)) +
+    '</span>' +
+    '<span class="n">' +
+    esc(t('tests.detail.edges').replace('{n}', String(rows.length))) +
+    '</span>' +
+    tagOpen('how', 'tests.detail.how.' + g.cls) +
+    esc(t('tests.detail.how.' + g.cls)) +
+    (techniques.length ? ' — ' + esc(techniques.join(' · ')) : '') +
+    '</span></div>' +
+    body +
+    '</div>'
+  );
 }
 
 /** One run: which project, what it said, when, against which code, out of which report.
@@ -1309,44 +2194,72 @@ function dtlGroupHtml(d, g) {
 function dtlRunCardHtml(r) {
   const st = ST_CLS[r.status] ? r.status : 'unknown';
   const secs = r.durationMs != null ? (r.durationMs / 1000).toFixed(1) : null;
-  return '<div class="tst-d-run' + (st === 'failed' ? ' failed' : '') + '">'
-    + (r.project ? '<span class="pj">' + esc(r.project) + '</span>' : '')
-    + '<span class="ln">' + tagOpen(ST_CLS[st], 'tests.run.' + st)
-    + esc(t('tests.run.' + st)) + '</span>'
-    + '<span class="mono">' + esc((r.at || '').slice(0, 16).replace('T', ' ')) + '</span>'
-    + (secs ? '<span class="mono">' + esc(t('tests.detail.duration').replace('{s}', secs)) + '</span>' : '')
-    + (r.retries ? '<span class="mono">' + esc(t('tests.detail.retries').replace('{n}', String(r.retries))) + '</span>' : '')
-    + '</span>'
-    + '<span class="ln">' + dgHtml(r.freshness, r.changedBy)
-    + (r.join === 'each-template'
+  return (
+    '<div class="tst-d-run' +
+    (st === 'failed' ? ' failed' : '') +
+    '">' +
+    (r.project ? '<span class="pj">' + esc(r.project) + '</span>' : '') +
+    '<span class="ln">' +
+    tagOpen(ST_CLS[st], 'tests.run.' + st) +
+    esc(t('tests.run.' + st)) +
+    '</span>' +
+    '<span class="mono">' +
+    esc((r.at || '').slice(0, 16).replace('T', ' ')) +
+    '</span>' +
+    (secs ? '<span class="mono">' + esc(t('tests.detail.duration').replace('{s}', secs)) + '</span>' : '') +
+    (r.retries
+      ? '<span class="mono">' + esc(t('tests.detail.retries').replace('{n}', String(r.retries))) + '</span>'
+      : '') +
+    '</span>' +
+    '<span class="ln">' +
+    dgHtml(r.freshness, r.changedBy) +
+    (r.join === 'each-template'
       ? '<span class="mono">' + esc(t('tests.detail.joinEach').replace('{n}', String(r.rows || 0))) + '</span>'
-      : r.join === 'exact' ? '<span class="mono">' + esc(t('tests.detail.join')) + '</span>' : '')
-    + '</span>'
-    + (r.report ? '<span class="ln"><span class="loc">'
-      + esc(t('tests.detail.report').replace('{path}', r.report)) + '</span></span>' : '')
-    + '</div>';
+      : r.join === 'exact'
+        ? '<span class="mono">' + esc(t('tests.detail.join')) + '</span>'
+        : '') +
+    '</span>' +
+    (r.report
+      ? '<span class="ln"><span class="loc">' +
+        esc(t('tests.detail.report').replace('{path}', r.report)) +
+        '</span></span>'
+      : '') +
+    '</div>'
+  );
 }
 
 /** The runs, one card per project, and the rule that turns several into one verdict.
  * @group Tests tab */
 function dtlRunsHtml(d) {
   const tr = d.test || {};
-  const runs = (tr.runs && tr.runs.length ? tr.runs : tr.run ? [tr.run] : []).slice()
+  const runs = (tr.runs && tr.runs.length ? tr.runs : tr.run ? [tr.run] : [])
+    .slice()
     .sort((a, b) => String(a.project || '').localeCompare(String(b.project || '')));
   let html = '<div class="tst-sec"><h2>' + esc(t('tests.detail.runs')) + '</h2>';
   if (!runs.length) {
-    return html + '<p class="tst-gap">' + tagOpen(ST_CLS.notrun, 'tests.run.notRun')
-      + esc(t('tests.run.notRun')) + '</span></p></div>';
+    return (
+      html +
+      '<p class="tst-gap">' +
+      tagOpen(ST_CLS.notrun, 'tests.run.notRun') +
+      esc(t('tests.run.notRun')) +
+      '</span></p></div>'
+    );
   }
   html += '<div class="tst-d-runs">' + runs.map((r) => dtlRunCardHtml(r)).join('') + '</div>';
   if (runs.length > 1) {
     const statuses = [...new Set(runs.map((r) => r.status))];
     const fold = tr.run ? tr.run.status : statuses[0];
     const word = t('tests.run.' + (ST_CLS[fold] ? fold : 'unknown'));
-    html += '<p class="tst-gap' + (statuses.length > 1 ? ' bad' : '') + '">'
-      + esc(statuses.length > 1
-        ? t('tests.detail.weakest').split('{status}').join(word).replace('{status2}', word)
-        : t('tests.detail.agree').replace('{n}', String(runs.length))) + '</p>';
+    html +=
+      '<p class="tst-gap' +
+      (statuses.length > 1 ? ' bad' : '') +
+      '">' +
+      esc(
+        statuses.length > 1
+          ? t('tests.detail.weakest').split('{status}').join(word).replace('{status2}', word)
+          : t('tests.detail.agree').replace('{n}', String(runs.length)),
+      ) +
+      '</p>';
   }
   return html + '</div>';
 }
@@ -1355,23 +2268,49 @@ function dtlRunsHtml(d) {
  * @group Tests tab */
 function dtlJourneysHtml(d) {
   const js = d.journeys || [];
-  return '<div class="tst-sec"><h2>' + esc(t('tests.detail.journeys')) + '</h2>'
-    + (js.length
-      ? '<ul class="tst-cases" role="list">' + js.map((j) => '<li><a href="#/map/'
-        + encodeURIComponent(j.id) + '">' + esc(j.name) + '</a>'
-        + '<span class="tst-lift mono">' + esc(j.id) + '</span></li>').join('') + '</ul>'
-      : '<p class="tst-gap">' + tagOpen(EV_CLS.none, 'tests.detail.journeysNone')
-        + sym('absent') + esc(t('journey.absent.noneIndexed')) + '</span> '
-        + esc(t('tests.detail.journeysNone')) + '</p>')
-    + '</div>';
+  return (
+    '<div class="tst-sec"><h2>' +
+    esc(t('tests.detail.journeys')) +
+    '</h2>' +
+    (js.length
+      ? '<ul class="tst-cases" role="list">' +
+        js
+          .map(
+            (j) =>
+              '<li><a href="#/map/' +
+              encodeURIComponent(j.id) +
+              '">' +
+              esc(j.name) +
+              '</a>' +
+              '<span class="tst-lift mono">' +
+              esc(j.id) +
+              '</span></li>',
+          )
+          .join('') +
+        '</ul>'
+      : '<p class="tst-gap">' +
+        tagOpen(EV_CLS.none, 'tests.detail.journeysNone') +
+        sym('absent') +
+        esc(t('journey.absent.noneIndexed')) +
+        '</span> ' +
+        esc(t('tests.detail.journeysNone')) +
+        '</p>') +
+    '</div>'
+  );
 }
 
 /** One test's page: what it is, what it claims, what it reaches, what ran.
  * @group Tests tab */
 function detailHtml(d) {
-  return dtlHeadHtml(d) + dtlClaimsHtml(d)
-    + '<div class="tst-d-grps">' + DETAIL_GROUPS.map((g) => dtlGroupHtml(d, g)).join('') + '</div>'
-    + dtlRunsHtml(d) + dtlJourneysHtml(d);
+  return (
+    dtlHeadHtml(d) +
+    dtlClaimsHtml(d) +
+    '<div class="tst-d-grps">' +
+    DETAIL_GROUPS.map((g) => dtlGroupHtml(d, g)).join('') +
+    '</div>' +
+    dtlRunsHtml(d) +
+    dtlJourneysHtml(d)
+  );
 }
 
 expose({ mountTests, testsGo, testsFold, testsRetry });

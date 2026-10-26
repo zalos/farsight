@@ -17,7 +17,10 @@ test.describe('journey open — header and filters stay clickable', () => {
    */
   test('a nav tab click leaves the journey for that surface', async ({ page }) => {
     await openBillingCycle(page);
-    await page.getByRole('navigation', { name: 'Surfaces' }).getByRole('button', { name: 'Tests', exact: true }).click({ timeout: 5_000 });
+    await page
+      .getByRole('navigation', { name: 'Surfaces' })
+      .getByRole('button', { name: 'Tests', exact: true })
+      .click({ timeout: 5_000 });
     await expect(page).toHaveURL(/#\/tests/);
   });
 

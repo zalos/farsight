@@ -9,9 +9,20 @@ test('shared keychain transport cannot bypass Echo reference restrictions or ori
   const origin = 'https://models.example.com';
   await pinCredentialOrigin(ref, origin);
   let calls = 0;
-  const runner = async () => { calls++; return 'synthetic-value'; };
-  for (const forbidden of ['env:ECHO_SYNTHETIC_SECRET', 'keychain:farsight/work-account', 'keychain:farsight-echo/provider/account', 'literal-private-value']) {
-    await assert.rejects(resolveSecret(forbidden, { platform: 'darwin', runner, origin }), (error: Error) => !error.message.includes(forbidden));
+  const runner = async () => {
+    calls++;
+    return 'synthetic-value';
+  };
+  for (const forbidden of [
+    'env:ECHO_SYNTHETIC_SECRET',
+    'keychain:farsight/work-account',
+    'keychain:farsight-echo/provider/account',
+    'literal-private-value',
+  ]) {
+    await assert.rejects(
+      resolveSecret(forbidden, { platform: 'darwin', runner, origin }),
+      (error: Error) => !error.message.includes(forbidden),
+    );
   }
   await assert.rejects(resolveSecret(ref, { platform: 'darwin', runner }));
   await assert.rejects(resolveSecret(ref, { platform: 'darwin', runner, origin: 'https://other.example.com' }));
@@ -27,7 +38,24 @@ test('Echo masks transport details and refuses empty or multiline values', async
   const origin = 'https://models.example.com';
   await pinCredentialOrigin(ref, origin);
   for (const value of ['', 'line one\nline two', 'line one\rline two']) {
-    await assert.rejects(resolveSecret(ref, { platform: 'linux', origin, runner: async () => value }), (error: Error) => error.message === echoConfigWord('echo.secret.unavailable'));
+    await assert.rejects(
+      resolveSecret(ref, { platform: 'linux', origin, runner: async () => value }),
+      (error: Error) => error.message === echoConfigWord('echo.secret.unavailable'),
+    );
   }
-  await assert.rejects(resolveSecret(ref, { platform: 'linux', origin, runner: async () => { throw Object.assign(new Error('synthetic-private-output'), { code: 'ENOENT', stdout: 'synthetic-private-output' }); } }), (error: Error) => error.message === echoConfigWord('echo.secret.unavailable') && !JSON.stringify(error).includes('synthetic-private-output'));
+  await assert.rejects(
+    resolveSecret(ref, {
+      platform: 'linux',
+      origin,
+      runner: async () => {
+        throw Object.assign(new Error('synthetic-private-output'), {
+          code: 'ENOENT',
+          stdout: 'synthetic-private-output',
+        });
+      },
+    }),
+    (error: Error) =>
+      error.message === echoConfigWord('echo.secret.unavailable') &&
+      !JSON.stringify(error).includes('synthetic-private-output'),
+  );
 });

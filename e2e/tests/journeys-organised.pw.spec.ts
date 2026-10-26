@@ -14,7 +14,9 @@ import { test, expect, gotoReady } from './support';
 
 type AnyRec = Record<string, any>;
 const here = dirname(fileURLToPath(import.meta.url));
-const MANIFEST = JSON.parse(readFileSync(join(here, '..', '..', 'examples', 'invoice-app', 'docs', 'design', 'screens.json'), 'utf8'));
+const MANIFEST = JSON.parse(
+  readFileSync(join(here, '..', '..', 'examples', 'invoice-app', 'docs', 'design', 'screens.json'), 'utf8'),
+);
 const FLOW = 'invoice-app::flow::billing-cycle';
 
 /** The tree the page itself drew from — the same module instance the surfaces read. */
@@ -32,44 +34,61 @@ test.describe('journeys organised by persona and group', () => {
    * @covers packages/server/public/app/lib/journeys-model.js::treeFrom
    * @covers GET /api/design
    */
-  test('the front door lists every journey under a persona heading, in the order the manifest declares', async ({ page }) => {
+  test('the front door lists every journey under a persona heading, in the order the manifest declares', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/journeys');
     const section = page.locator('.jrn-org');
     await expect(section.locator('.jrn-persona').first()).toBeVisible();
     const tree = await pageTree(page);
     // every flow of the manifest is listed, each under at least one persona
-    const listed = new Set(tree.personas.flatMap((p: AnyRec) => p.groups.flatMap((g: AnyRec) => g.journeys.map((j: AnyRec) => j.id))));
+    const listed = new Set(
+      tree.personas.flatMap((p: AnyRec) => p.groups.flatMap((g: AnyRec) => g.journeys.map((j: AnyRec) => j.id))),
+    );
     expect([...listed].sort()).toEqual(MANIFEST.flows.map((f: AnyRec) => f.id).sort());
     expect(tree.counts.journeys.n).toBe(MANIFEST.flows.length);
     // the page draws the tree's order, persona by persona
-    const drawn = await section.locator('.jrn-persona').evaluateAll((ps) => ps.map((p) => ({
-      persona: (p as HTMLElement).dataset['persona'],
-      names: [...p.querySelectorAll('.dsg-flow-name')].map((n) => n.textContent),
-    })));
-    expect(drawn).toEqual(tree.personas.map((p: AnyRec) => ({ persona: p.id, names: p.groups.flatMap((g: AnyRec) => g.journeys.map((j: AnyRec) => j.name)) })));
+    const drawn = await section.locator('.jrn-persona').evaluateAll((ps) =>
+      ps.map((p) => ({
+        persona: (p as HTMLElement).dataset['persona'],
+        names: [...p.querySelectorAll('.dsg-flow-name')].map((n) => n.textContent),
+      })),
+    );
+    expect(drawn).toEqual(
+      tree.personas.map((p: AnyRec) => ({
+        persona: p.id,
+        names: p.groups.flatMap((g: AnyRec) => g.journeys.map((j: AnyRec) => j.name)),
+      })),
+    );
     // the order rule, against the manifest on disk: inside a group, `order` ascending, ties and absences in manifest order
     const at = new Map(MANIFEST.flows.map((f: AnyRec, i: number) => [f.id, i]));
-    for (const p of tree.personas) for (const g of p.groups) {
-      const ids = g.journeys.map((j: AnyRec) => j.id);
-      const want = ids.slice().sort((a: string, b: string) => {
-        const fa = MANIFEST.flows[at.get(a) as number], fb = MANIFEST.flows[at.get(b) as number];
-        const oa = typeof fa.order === 'number' ? fa.order : Infinity, ob = typeof fb.order === 'number' ? fb.order : Infinity;
-        return (oa === ob ? 0 : oa < ob ? -1 : 1) || (at.get(a) as number) - (at.get(b) as number);
-      });
-      expect(ids, `${p.id}/${g.id} in declared order`).toEqual(want);
-    }
+    for (const p of tree.personas)
+      for (const g of p.groups) {
+        const ids = g.journeys.map((j: AnyRec) => j.id);
+        const want = ids.slice().sort((a: string, b: string) => {
+          const fa = MANIFEST.flows[at.get(a) as number],
+            fb = MANIFEST.flows[at.get(b) as number];
+          const oa = typeof fa.order === 'number' ? fa.order : Infinity,
+            ob = typeof fb.order === 'number' ? fb.order : Infinity;
+          return (oa === ob ? 0 : oa < ob ? -1 : 1) || (at.get(a) as number) - (at.get(b) as number);
+        });
+        expect(ids, `${p.id}/${g.id} in declared order`).toEqual(want);
+      }
     // declared personas keep the manifest's order, ahead of any undeclared one
     const declared = tree.personas.filter((p: AnyRec) => p.declared).map((p: AnyRec) => p.id);
-    expect(declared).toEqual((MANIFEST.personas || []).map((p: AnyRec) => p.id).filter((id: string) => declared.includes(id)));
+    expect(declared).toEqual(
+      (MANIFEST.personas || []).map((p: AnyRec) => p.id).filter((id: string) => declared.includes(id)),
+    );
     // a group heading is drawn exactly where a persona has more than one group
     for (const p of tree.personas) {
-      await expect(section.locator(`.jrn-persona[data-persona="${p.id}"] .jrn-ghead`)).toHaveCount(p.groups.length > 1 ? p.groups.length : 0);
+      await expect(section.locator(`.jrn-persona[data-persona="${p.id}"] .jrn-ghead`)).toHaveCount(
+        p.groups.length > 1 ? p.groups.length : 0,
+      );
     }
     // the per-manifest design card keeps its counts and screens, and no longer lists the flows
     await expect(page.locator('.dsg-card .api-count').first()).toBeVisible();
     await expect(page.locator('.dsg-card .dsg-flow')).toHaveCount(0);
   });
-
 });
 
 test.describe('journeys organised by persona and group, as the fixture declares them', () => {
@@ -82,14 +101,21 @@ test.describe('journeys organised by persona and group, as the fixture declares 
    * @covers packages/server/public/app/surfaces/journeys.js::jrnToggleGroup
    * @covers GET /api/journeys
    */
-  test('groups fold and stay folded; a journey for two people is under each, counted once in the total', async ({ page }) => {
+  test('groups fold and stay folded; a journey for two people is under each, counted once in the total', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/journeys');
     const billing = page.locator('.jrn-persona[data-persona="billing"]');
     await expect(billing.locator('.jrn-pname')).toHaveText('Billing');
     await expect(billing.locator('.jrn-gname')).toHaveText(['Invoices', 'Review and send']);
     // order 1 before order 2; the config's placement moved Draft and send out of Invoices
-    await expect(billing.locator('.jrn-group[data-group="invoices"] .dsg-flow-name')).toHaveText(['Billing cycle', 'Start a new invoice']);
-    await expect(billing.locator('.jrn-group[data-group="review"] .dsg-flow-name')).toHaveText(['Draft and send an invoice']);
+    await expect(billing.locator('.jrn-group[data-group="invoices"] .dsg-flow-name')).toHaveText([
+      'Billing cycle',
+      'Start a new invoice',
+    ]);
+    await expect(billing.locator('.jrn-group[data-group="review"] .dsg-flow-name')).toHaveText([
+      'Draft and send an invoice',
+    ]);
     // Operations has one group: no group heading, the card straight under the persona
     const ops = page.locator('.jrn-persona[data-persona="ops"]');
     await expect(ops.locator('.jrn-ghead')).toHaveCount(0);
@@ -114,15 +140,21 @@ test.describe('journeys organised by persona and group, as the fixture declares 
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await expect(billing.locator('.jrn-group[data-group="invoices"] .jrn-gbody')).toBeHidden();
     await page.reload();
-    await expect(page.locator('.jrn-persona[data-persona="billing"] .jrn-group[data-group="invoices"] .jrn-gtoggle')).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.locator('.jrn-persona[data-persona="billing"] .jrn-group[data-group="review"] .jrn-gbody')).toBeVisible();
+    await expect(
+      page.locator('.jrn-persona[data-persona="billing"] .jrn-group[data-group="invoices"] .jrn-gtoggle'),
+    ).toHaveAttribute('aria-expanded', 'false');
+    await expect(
+      page.locator('.jrn-persona[data-persona="billing"] .jrn-group[data-group="review"] .jrn-gbody'),
+    ).toBeVisible();
   });
 
   /** @covers packages/server/public/app/lib/journeys-tree.js::jrnOrgCountsHtml */
-  test('the business lens prints the same counts, in people\'s words, with no endpoint', async ({ page }) => {
+  test("the business lens prints the same counts, in people's words, with no endpoint", async ({ page }) => {
     await gotoReady(page, '#/journeys?lens=business');
     await expect(page.locator('.jrn-org > .set-note .jrn-org-n')).toHaveText(['4 journeys', '2 personas', '3 groups']);
-    await expect(page.locator('.jrn-persona[data-persona="billing"] .jrn-pcount')).toHaveText('3 journeys · 1 of 3 journeys built');
+    await expect(page.locator('.jrn-persona[data-persona="billing"] .jrn-pcount')).toHaveText(
+      '3 journeys · 1 of 3 journeys built',
+    );
     // the count sits below the state of play now: scroll it in first, so the scroll's own event cannot close the tip
     const n = page.locator('.jrn-org > .set-note .jrn-org-n').first();
     await n.scrollIntoViewIfNeeded();
@@ -148,7 +180,7 @@ test.describe('journeys organised by persona and group, as the fixture declares 
   });
 
   /** @covers packages/server/public/app/surfaces/map-stops.js::forLineHtml */
-  test('the open journey\'s head on the Map says who it is for and its group', async ({ page }) => {
+  test("the open journey's head on the Map says who it is for and its group", async ({ page }) => {
     const DS = 'invoice-app::flow::draft-and-send';
     await gotoReady(page, '#/map/' + encodeURIComponent(DS) + '?layout=screens');
     const org = page.locator(`.map-jhead[data-flow="${DS}"] .for`);
@@ -157,11 +189,15 @@ test.describe('journeys organised by persona and group, as the fixture declares 
     await expect(org).toContainText('with Operations');
     await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=screens');
     // the billing cycle's discard screen is the operator's too
-    await expect(page.locator(`.map-jhead[data-flow="${FLOW}"] .for`)).toHaveText('For Billing · Invoices with Operations');
+    await expect(page.locator(`.map-jhead[data-flow="${FLOW}"] .for`)).toHaveText(
+      'For Billing · Invoices with Operations',
+    );
   });
 
   /** @covers packages/server/public/app/surfaces/portfolio.js::render */
-  test('the Portfolio draws one table per persona and group, in the same order, with the same pin', async ({ page }) => {
+  test('the Portfolio draws one table per persona and group, in the same order, with the same pin', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/portfolio');
     const sections = page.locator('.pf-persona');
     await expect(sections).toHaveCount(2);
@@ -169,7 +205,10 @@ test.describe('journeys organised by persona and group, as the fixture declares 
     const billing = sections.nth(0);
     await expect(billing.locator('.pf-group')).toHaveCount(2);
     await expect(billing.locator('table')).toHaveCount(2);
-    await expect(billing.locator('table').nth(0).locator('td:first-child a')).toHaveText(['Billing cycle', 'Start a new invoice']);
+    await expect(billing.locator('table').nth(0).locator('td:first-child a')).toHaveText([
+      'Billing cycle',
+      'Start a new invoice',
+    ]);
     // the pin is the tree's, one per persona: Billing cycle for Billing, the one journey for Operations
     await expect(billing.locator('tr.pinned td:first-child a')).toHaveText(['Billing cycle']);
     await expect(sections.nth(1).locator('tr.pinned td:first-child a')).toHaveText(['Draft and send an invoice']);
@@ -180,13 +219,19 @@ test.describe('journeys organised by persona and group, as the fixture declares 
    * @covers packages/server/public/app/lib/map-model.js::layoutDistricts
    * @covers packages/server/public/app/surfaces/map.js::drawEchoes
    */
-  test('the Map bands by persona: the tree\'s order, the shared journey drawn once with a card in the other band', async ({ page }) => {
+  test("the Map bands by persona: the tree's order, the shared journey drawn once with a card in the other band", async ({
+    page,
+  }) => {
     await gotoReady(page, '#/portfolio');
     await page.evaluate(() => {
       const S = (window as any).S;
-      S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+      S.SETTINGS = Object.assign({}, S.SETTINGS, {
+        flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+      });
     });
-    await page.evaluate(() => { location.hash = '#/map'; });
+    await page.evaluate(() => {
+      location.hash = '#/map';
+    });
     // Band by on the toolbar's second row: folded to its current value only when the row is too narrow for it
     if (await page.locator('.map-band-cur').isVisible()) {
       await page.locator('.map-band-cur').click();
@@ -215,13 +260,19 @@ test.describe('journeys organised by persona and group, as the fixture declares 
 test.describe('storylines', () => {
   const STORY = (MANIFEST.storylines || [])[0] as AnyRec;
   // the steps are the bare ids; an entry written as { id, branchOf, when } is a branch (swarm-fixes 2026-10-05 §6)
-  const STEPS = (STORY.journeys as (string | AnyRec)[]).filter((e) => typeof e === 'string' || !e.branchOf).map((e) => `invoice-app::flow::${typeof e === 'string' ? e : e.id}`);
-  const BRANCHES = (STORY.journeys as (string | AnyRec)[]).filter((e): e is AnyRec => typeof e !== 'string' && !!e.branchOf);
+  const STEPS = (STORY.journeys as (string | AnyRec)[])
+    .filter((e) => typeof e === 'string' || !e.branchOf)
+    .map((e) => `invoice-app::flow::${typeof e === 'string' ? e : e.id}`);
+  const BRANCHES = (STORY.journeys as (string | AnyRec)[]).filter(
+    (e): e is AnyRec => typeof e !== 'string' && !!e.branchOf,
+  );
   const NAME = (id: string) => MANIFEST.flows.find((f: AnyRec) => `invoice-app::flow::${f.id}` === id).name;
   async function mapOn(page: Page): Promise<void> {
     await page.evaluate(() => {
       const S = (window as any).S;
-      S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+      S.SETTINGS = Object.assign({}, S.SETTINGS, {
+        flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+      });
     });
   }
 
@@ -229,39 +280,54 @@ test.describe('storylines', () => {
    * @covers packages/server/public/app/surfaces/journeys.js::jrnStorylinesHtml
    * @covers GET /api/journeys
    */
-  test('the front door draws a Storylines section above the personas: the journeys numbered in order, the Map and the first journey', async ({ page }) => {
+  test('the front door draws a Storylines section above the personas: the journeys numbered in order, the Map and the first journey', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/portfolio');
     await mapOn(page);
-    await page.evaluate(() => { location.hash = '#/journeys'; });
+    await page.evaluate(() => {
+      location.hash = '#/journeys';
+    });
     const card = page.locator(`.jrn-story[data-storyline="${STORY.id}"]`);
     await expect(card).toBeVisible();
     await expect(card.locator('.dsg-flow-name')).toHaveText(STORY.name);
-    await expect(card.locator('.jrn-story-steps .jrn-story-step')).toHaveText(STEPS.map((id, i) => `${i + 1}${NAME(id)}`));
+    await expect(card.locator('.jrn-story-steps .jrn-story-step')).toHaveText(
+      STEPS.map((id, i) => `${i + 1}${NAME(id)}`),
+    );
     await expect(card.locator('.jrn-pcount')).toContainText(`${STEPS.length + BRANCHES.length} journeys`);
     // above the personas
     const above = await page.evaluate(() => {
-      const a = document.querySelector('.jrn-stories'), b = document.querySelector('.jrn-org');
-      return !!(a && b && (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING));
+      const a = document.querySelector('.jrn-stories'),
+        b = document.querySelector('.jrn-org');
+      return !!(a && b && a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     });
     expect(above).toBe(true);
     await expect(card.locator('.jrn-story-map')).toHaveAttribute('href', `#/map?storyline=${STORY.id}`);
     await card.getByRole('button', { name: 'open the first journey' }).click();
-    await expect(page).toHaveURL(new RegExp('#/map/' + encodeURIComponent(STEPS[0]!).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    await expect(page).toHaveURL(
+      new RegExp('#/map/' + encodeURIComponent(STEPS[0]!).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    );
     await expect(page.locator('.map-crumbs')).toContainText(NAME(STEPS[0]!));
   });
 
   /** @covers packages/server/public/app/surfaces/map-stops.js::storyNavHtml */
-  test('the journey\'s head on the Map says storyline · step n of m, and ‹ › open the journeys before and after it', async ({ page }) => {
+  test("the journey's head on the Map says storyline · step n of m, and ‹ › open the journeys before and after it", async ({
+    page,
+  }) => {
     // on the street the district's head; a ‹ › door opens the journey at the register's own view — hybrid: its table
     const street = (id: string) => page.locator(`.map-jhead[data-flow="${id}"] .story`);
     const table = (id: string) => page.locator(`.map-jhead[data-flow="${id}"] .story`);
     await gotoReady(page, '#/map/' + encodeURIComponent(STEPS[0]!) + '?layout=screens');
     await expect(street(STEPS[0]!)).toContainText(STORY.name);
     await expect(street(STEPS[0]!)).toContainText(`step 1 of ${STEPS.length}`);
-    await street(STEPS[0]!).getByRole('link', { name: new RegExp(`after this one.*${NAME(STEPS[1]!)}`) }).click();
+    await street(STEPS[0]!)
+      .getByRole('link', { name: new RegExp(`after this one.*${NAME(STEPS[1]!)}`) })
+      .click();
     await expect(page.locator('.map-crumbs')).toContainText(NAME(STEPS[1]!));
     await expect(table(STEPS[1]!)).toContainText(`step 2 of ${STEPS.length}`);
-    await table(STEPS[1]!).getByRole('link', { name: /before this one/ }).click();
+    await table(STEPS[1]!)
+      .getByRole('link', { name: /before this one/ })
+      .click();
     await expect(page.locator('.map-crumbs')).toContainText(NAME(STEPS[0]!));
   });
 
@@ -270,21 +336,30 @@ test.describe('storylines', () => {
    * @covers packages/server/public/app/surfaces/map.js::applyStoryline
    * @covers packages/server/public/app/lib/map-model.js::storylineModel
    */
-  test('the Map draws one storyline as one band in its order, numbered, with then lines at the board, and the link carries it', async ({ page }) => {
+  test('the Map draws one storyline as one band in its order, numbered, with then lines at the board, and the link carries it', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/portfolio');
     await mapOn(page);
-    await page.evaluate(() => { location.hash = '#/map'; });
+    await page.evaluate(() => {
+      location.hash = '#/map';
+    });
     await expect(page.locator('.map-district')).toHaveCount(MANIFEST.flows.length);
     // the picker on the toolbar's second row (folded to its current value only when the row is too narrow)
     if (await page.locator('.map-story-cur').isVisible()) await page.locator('.map-story-cur').click();
     await page.locator(`.map-story-pick [data-storyline="${STORY.id}"]`).click();
-    await expect(page.locator(`.map-story-pick [data-storyline="${STORY.id}"]`)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator(`.map-story-pick [data-storyline="${STORY.id}"]`)).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await expect(page).toHaveURL(new RegExp(`[?&]storyline=${STORY.id}(&|$)`));
     await expect(page.locator('.map-band.story .w')).toHaveText([STORY.name]);
     await expect(page.locator('.map-band.story .n')).toHaveText(`${STEPS.length + BRANCHES.length} journeys`);
     // only its journeys, in its order, numbered (a branch draws after the steps, with no number of its own)
     await expect(page.locator('.map-district')).toHaveCount(STEPS.length + BRANCHES.length);
-    expect(await page.locator('.map-district').evaluateAll((ds) => ds.map((d) => (d as HTMLElement).dataset['flow']))).toEqual(STEPS.concat(BRANCHES.map((b) => `invoice-app::flow::${b.id}`)));
+    expect(
+      await page.locator('.map-district').evaluateAll((ds) => ds.map((d) => (d as HTMLElement).dataset['flow'])),
+    ).toEqual(STEPS.concat(BRANCHES.map((b) => `invoice-app::flow::${b.id}`)));
     await expect(page.locator('.map-dcover .map-step:not(.branch)')).toHaveText(STEPS.map((_, i) => String(i + 1)));
     // at the board altitude the then lines are drawn without a hover — one from each step to the next
     await expect(page.locator('.map-world')).toHaveClass(/lvl-nb/);
@@ -304,7 +379,12 @@ test.describe('storylines', () => {
     await fresh.goto('/' + '#/portfolio');
     await expect(fresh.locator('#stats')).not.toHaveText('loading…');
     await mapOn(fresh);
-    await fresh.evaluate((h) => { location.hash = h; }, url.slice(url.indexOf('#')));
+    await fresh.evaluate(
+      (h) => {
+        location.hash = h;
+      },
+      url.slice(url.indexOf('#')),
+    );
     await expect(fresh.locator('.map-band.story .w')).toHaveText([STORY.name]);
     await expect(fresh.locator('.map-district')).toHaveCount(STEPS.length + BRANCHES.length);
     await fresh.close();
@@ -320,33 +400,47 @@ test.describe('storylines', () => {
    * @covers packages/server/public/app/lib/map-model.js::placeBranches
    * @covers packages/server/public/app/surfaces/map.js::branchLineHtml
    * @covers packages/server/public/app/surfaces/journeys.js::jrnStorylinesHtml
-     */
-  test('a declared branch draws off its step: below it on the Map with its condition on the line, indented on the front door, and in the header', async ({ page }) => {
+   */
+  test('a declared branch draws off its step: below it on the Map with its condition on the line, indented on the front door, and in the header', async ({
+    page,
+  }) => {
     const B = BRANCHES[0]!;
     expect(B, 'the example manifest declares a branch').toBeTruthy();
-    const id = `invoice-app::flow::${B.id}`, of = `invoice-app::flow::${B.branchOf}`;
+    const id = `invoice-app::flow::${B.id}`,
+      of = `invoice-app::flow::${B.branchOf}`;
     await gotoReady(page, '#/portfolio');
     await mapOn(page);
-    await page.evaluate((s) => { location.hash = '#/map?storyline=' + s; }, STORY.id);
+    await page.evaluate((s) => {
+      location.hash = '#/map?storyline=' + s;
+    }, STORY.id);
     const card = page.locator(`.map-district[data-flow="${id}"]`);
     await expect(card).toHaveClass(/\bbranch\b/);
     await expect(card.locator('.map-dcover .map-branch-when')).toContainText(`when ${B.when}`);
     // below the step it leaves from
-    const [a, b] = await Promise.all([page.locator(`.map-district[data-flow="${of}"]`).boundingBox(), card.boundingBox()]);
+    const [a, b] = await Promise.all([
+      page.locator(`.map-district[data-flow="${of}"]`).boundingBox(),
+      card.boundingBox(),
+    ]);
     expect(b!.y).toBeGreaterThan(a!.y + a!.height);
     // the line down carries the condition at the board; a dashed line goes back to the step it rejoins
     const down = page.locator(`.map-links g[data-link="branch"][data-from="${of}"][data-to="${id}"]`);
     await expect(down).toHaveCount(1);
     await expect(down.locator('.lbl')).not.toHaveClass(/\boff\b/);
     await expect(down.locator('text')).toHaveText(`when ${B.when}`);
-    await expect(page.locator(`.map-links g[data-link="rejoin"][data-from="${id}"][data-to="invoice-app::flow::${B.rejoins}"]`)).toHaveCount(1);
+    await expect(
+      page.locator(`.map-links g[data-link="rejoin"][data-from="${id}"][data-to="invoice-app::flow::${B.rejoins}"]`),
+    ).toHaveCount(1);
     // the band's evidence: one count over its journeys
-    await expect(page.locator('.map-band.story .map-band-head .ev')).toContainText(`of ${STEPS.length + BRANCHES.length} journeys with a run`);
+    await expect(page.locator('.map-band.story .map-band-head .ev')).toContainText(
+      `of ${STEPS.length + BRANCHES.length} journeys with a run`,
+    );
     // every card carries a picture or the placeholder, never an empty box
     const thumbs = page.locator('.map-dcover .map-thumb');
     await expect(thumbs).toHaveCount(STEPS.length + BRANCHES.length);
     // the front door: indented under the chain, with its condition and its way back
-    await page.evaluate(() => { location.hash = '#/journeys'; });
+    await page.evaluate(() => {
+      location.hash = '#/journeys';
+    });
     const row = page.locator(`.jrn-story[data-storyline="${STORY.id}"] .jrn-story-branch[data-branch="${B.id}"]`);
     await expect(row).toContainText(`branch of ${NAME(of)}`);
     await expect(row.locator('.when')).toHaveText(`when ${B.when}`);
@@ -355,7 +449,9 @@ test.describe('storylines', () => {
     // the journey's head on the Map names what it branches off and when; ‹ opens that step
     await row.locator('a.jrn-story-step').click();
     await expect(page.locator('.map-crumbs')).toContainText(NAME(id));
-    await page.evaluate((f) => { location.hash = '#/map/' + encodeURIComponent(f) + '?layout=screens'; }, id);
+    await page.evaluate((f) => {
+      location.hash = '#/map/' + encodeURIComponent(f) + '?layout=screens';
+    }, id);
     const line = page.locator(`.map-jhead[data-flow="${id}"] .story`);
     await expect(line).toContainText(`branch of ${NAME(of)} · when ${B.when}`);
     await line.getByRole('link', { name: /before this one/ }).click();
@@ -363,10 +459,14 @@ test.describe('storylines', () => {
   });
 
   /** @covers packages/server/public/app/surfaces/map.js::unknownStorylineHtml */
-  test('a storyline nobody declares is said so, with the ones there are as doors — never every journey', async ({ page }) => {
+  test('a storyline nobody declares is said so, with the ones there are as doors — never every journey', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/portfolio');
     await mapOn(page);
-    await page.evaluate(() => { location.hash = '#/map?storyline=nope'; });
+    await page.evaluate(() => {
+      location.hash = '#/map?storyline=nope';
+    });
     const note = page.locator('.map-note .map-story-unknown');
     await expect(note).toContainText('No storyline called “nope” is declared here.');
     await expect(page.locator('.map-district')).toHaveCount(0);
@@ -403,7 +503,9 @@ test.describe('journeys organised, on a server with no /api/journeys', () => {
     const section = page.locator('.jrn-org');
     await expect(section.locator('.jrn-persona')).toHaveCount(2);
     const live = await section.innerText();
-    await page.route(/\/api\/journeys(\?|$)/, (r) => r.fulfill({ status: 404, json: { error: 'an older server: no such route' } }));
+    await page.route(/\/api\/journeys(\?|$)/, (r) =>
+      r.fulfill({ status: 404, json: { error: 'an older server: no such route' } }),
+    );
     await page.reload();
     await expect(section.locator('.jrn-persona')).toHaveCount(2);
     expect(await section.innerText()).toBe(live);

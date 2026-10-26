@@ -11,7 +11,9 @@ const FLOW = 'invoice-app::flow::billing-cycle';
 const GATE = 'invoice-app::guard::requireScope(billing:read)';
 const enc = encodeURIComponent;
 
-function card(page: Page) { return page.locator('.fs-tip .gc[data-gc="' + GATE + '"]'); }
+function card(page: Page) {
+  return page.locator('.fs-tip .gc[data-gc="' + GATE + '"]');
+}
 
 /**
  * @covers packages/server/public/app/lib/gate-card.js::openGateCard
@@ -20,11 +22,16 @@ function card(page: Page) { return page.locator('.fs-tip .gc[data-gc="' + GATE +
  * @covers GET /api/gate
  * @covers GET /api/source
  */
-test('a gate on the journey opens its card: sentence, scope, code, the calls it guards, the tests, the doors', async ({ page }) => {
+test('a gate on the journey opens its card: sentence, scope, code, the calls it guards, the tests, the doors', async ({
+  page,
+}) => {
   await gotoReady(page, '#/map/' + enc(FLOW) + '?layout=table&lens=hybrid');
   const row = page.locator('.map-table .jrn-gl-row[data-gate-card="' + GATE + '"]').first();
   // the doors are on the row itself
-  await expect(row.locator('a.dd-door.editor')).toHaveAttribute('href', /^vscode:\/\/file\/.+src\/server\/routes\.ts:\d+$/);
+  await expect(row.locator('a.dd-door.editor')).toHaveAttribute(
+    'href',
+    /^vscode:\/\/file\/.+src\/server\/routes\.ts:\d+$/,
+  );
   await row.locator('.jrn-gl-w').click();
   const c = card(page);
   await expect(c).toBeVisible();
@@ -36,7 +43,10 @@ test('a gate on the journey opens its card: sentence, scope, code, the calls it 
   await expect(calls).toHaveCount(2);
   await expect(calls.first().locator('a.dd-door').first()).toHaveText('read the contract');
   await expect(c.locator('h4', { hasText: /the tests that reach it/i })).toBeVisible();
-  await expect(c.locator('.gc-doors a.dd-door', { hasText: 'see it on the code map' })).toHaveAttribute('href', '#/codemap?node=' + enc(GATE));
+  await expect(c.locator('.gc-doors a.dd-door', { hasText: 'see it on the code map' })).toHaveAttribute(
+    'href',
+    '#/codemap?node=' + enc(GATE),
+  );
   // Esc closes it
   await page.keyboard.press('Escape');
   await expect(c).toHaveCount(0);
@@ -55,7 +65,9 @@ test('Enter on a focused gate opens the card, Esc closes it and the focus comes 
 });
 
 /** @covers packages/server/public/app/lib/gate-card.js::gateCardHtml */
-test('in the business register the card keeps the sentence, the scope and the tests, and no door into code', async ({ page }) => {
+test('in the business register the card keeps the sentence, the scope and the tests, and no door into code', async ({
+  page,
+}) => {
   await gotoReady(page, '#/map/' + enc(FLOW) + '?layout=table&lens=business');
   const row = page.locator('.map-table .jrn-gl-row[data-gate-card="' + GATE + '"]').first();
   await expect(row.locator('a.dd-door')).toHaveCount(0);
@@ -92,7 +104,10 @@ test('the code map: a gate in the inspector opens the same card', async ({ page 
 test('the card survives the inspector drawing again under it', async ({ page }) => {
   const ROUTE = 'invoice-app::route::GET /invoices';
   await gotoReady(page, '#/codemap?node=' + enc(ROUTE) + '&lens=hybrid');
-  await page.route('**/api/gate?*', async (r) => { await new Promise((res) => setTimeout(res, 900)); await r.continue(); });
+  await page.route('**/api/gate?*', async (r) => {
+    await new Promise((res) => setTimeout(res, 900));
+    await r.continue();
+  });
   const rc = page.locator('#inspector .rulecard[data-gate-card="' + GATE + '"]').first();
   await expect(rc).toBeVisible();
   // the gate's name, not the card's centre: the centre can land on the row's ⧉ editor link (CI run 37461063645,

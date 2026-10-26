@@ -2,13 +2,18 @@
 let active = false;
 
 export class ModelBusyError extends Error {
-  constructor() { super('busy'); }
+  constructor() {
+    super('busy');
+  }
 }
 
 /** Hold ownership until the actual operation settles, even when its caller has already disconnected. */
 export async function withModelOperation<T>(operation: () => Promise<T>): Promise<T> {
   if (active) throw new ModelBusyError();
   active = true;
-  try { return await operation(); }
-  finally { active = false; }
+  try {
+    return await operation();
+  } finally {
+    active = false;
+  }
 }

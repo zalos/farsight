@@ -16,24 +16,34 @@ async function mapOn(page: Page) {
   await gotoReady(page, '#/portfolio');
   await page.evaluate(() => {
     const S = (window as any).S;
-    S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+    S.SETTINGS = Object.assign({}, S.SETTINGS, {
+      flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+    });
   });
 }
 async function go(page: Page, hash: string) {
-  await page.evaluate((h) => { location.hash = h; }, hash);
+  await page.evaluate((h) => {
+    location.hash = h;
+  }, hash);
 }
 /** What has the keyboard: its class and the journey, screen or tool it names. */
 async function focused(page: Page): Promise<string> {
   return page.evaluate(() => {
     const a = document.activeElement as HTMLElement | null;
     if (!a) return '';
-    return (a.classList[0] || a.tagName) + ':' + (a.dataset.enter || a.dataset.name || a.dataset.act || a.dataset.l || a.dataset.kind || '');
+    return (
+      (a.classList[0] || a.tagName) +
+      ':' +
+      (a.dataset.enter || a.dataset.name || a.dataset.act || a.dataset.l || a.dataset.kind || '')
+    );
   });
 }
 /** The board's transform as numbers. */
 async function transform(page: Page): Promise<{ tx: number; ty: number; s: number }> {
   return page.evaluate(() => {
-    const m = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)\s*scale\(([-\d.]+)\)/.exec((document.querySelector('.map-world') as HTMLElement).style.transform)!;
+    const m = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)\s*scale\(([-\d.]+)\)/.exec(
+      (document.querySelector('.map-world') as HTMLElement).style.transform,
+    )!;
     return { tx: +m[1], ty: +m[2], s: +m[3] };
   });
 }
@@ -96,7 +106,9 @@ test.describe('map — keyboard, fast travel and links', () => {
    * @covers packages/server/public/app/surfaces/map.js::mapKey
    * @covers packages/server/public/app/surfaces/map.js::panBy
    */
-  test('j / k walk the street\'s screens; Enter opens one; Tab reaches a call and Enter opens its card; arrows pan', async ({ page }) => {
+  test("j / k walk the street's screens; Enter opens one; Tab reaches a call and Enter opens its card; arrows pan", async ({
+    page,
+  }) => {
     await mapOn(page);
     await go(page, STREET + '?plumb=1');
     await expect(page.locator(`.map-district[data-flow="${FLOW}"] .map-scr`)).toHaveCount(3);
@@ -120,7 +132,10 @@ test.describe('map — keyboard, fast travel and links', () => {
     await expect(scr(1)).toBeFocused();
     // Tab goes on from the screens to the calls under them
     let at = '';
-    for (let i = 0; i < 30 && !at.startsWith('map-pl'); i++) { await page.keyboard.press('Tab'); at = await focused(page); }
+    for (let i = 0; i < 30 && !at.startsWith('map-pl'); i++) {
+      await page.keyboard.press('Tab');
+      at = await focused(page);
+    }
     expect(at).toBe('map-pl:call');
     await page.keyboard.press('Enter');
     await expect(page.locator('.map-xcard')).toBeVisible();
@@ -136,7 +151,9 @@ test.describe('map — keyboard, fast travel and links', () => {
     const after = await transform(page);
     expect(after.tx - before.tx).toBeCloseTo(160, 0);
     expect(after.ty).toBeCloseTo(before.ty, 3);
-    await expect.poll(() => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1]).get('x'))).not.toBeNull();
+    await expect
+      .poll(() => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1]).get('x')))
+      .not.toBeNull();
   });
 
   /**
@@ -147,7 +164,11 @@ test.describe('map — keyboard, fast travel and links', () => {
    * @covers packages/server/public/app/share.js::shareLink
    * @covers packages/server/public/app/shell.js::parseRoute
    */
-  test('the link is the picture: pan, zoom and a card, copy the link, a fresh page opens the same view', async ({ page, context, browser }) => {
+  test('the link is the picture: pan, zoom and a card, copy the link, a fresh page opens the same view', async ({
+    page,
+    context,
+    browser,
+  }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await mapOn(page);
     await go(page, STREET + '?plumb=1');
@@ -198,7 +219,9 @@ test.describe('map — keyboard, fast travel and links', () => {
    * @covers packages/server/public/app/shell.js::renderPalette
    * @covers packages/server/public/app/surfaces/map.js::mapTravel
    */
-  test('⌘K started on the Map arrives on the Map: a journey is its street, a screen opens on its journey', async ({ page }) => {
+  test('⌘K started on the Map arrives on the Map: a journey is its street, a screen opens on its journey', async ({
+    page,
+  }) => {
     await mapOn(page);
     await go(page, '#/map');
     await expect(page.locator('.map-dcover')).toHaveCount(4);
@@ -212,7 +235,9 @@ test.describe('map — keyboard, fast travel and links', () => {
     // the row names where Enter goes
     await expect(first.locator('.pdest')).toHaveText(/map/i);
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(new RegExp('#/map/' + reEsc(encodeURIComponent('invoice-app::flow::draft-and-send')) + '(\\?|$)'));
+    await expect(page).toHaveURL(
+      new RegExp('#/map/' + reEsc(encodeURIComponent('invoice-app::flow::draft-and-send')) + '(\\?|$)'),
+    );
     await expect(page.locator('.map-world')).toHaveClass(/lvl-st/);
     await expect(page.locator('.map-crumb')).toContainText('Draft and send');
     // a screen: its journey's street with the screen open
@@ -225,7 +250,9 @@ test.describe('map — keyboard, fast travel and links', () => {
   });
 
   /** @covers packages/server/public/app/shell.js::travelTarget */
-  test('⌘K away from the Map arrives on the Map too: a journey opens at the register\'s own view (hybrid: its table)', async ({ page }) => {
+  test("⌘K away from the Map arrives on the Map too: a journey opens at the register's own view (hybrid: its table)", async ({
+    page,
+  }) => {
     await mapOn(page);
     await page.keyboard.press('ControlOrMeta+k');
     const palette = page.getByRole('dialog', { name: 'Search' });

@@ -32,13 +32,19 @@ async function call(name: string, args: Record<string, unknown> = {}): Promise<s
   const res = await client.callTool({ name, arguments: args });
   const content = (res.content ?? []) as { type: string; text?: string }[];
   expect(res.isError ?? false, `${name} returned an error: ${content.map((c) => c.text).join('\n')}`).toBe(false);
-  return content.filter((c) => c.type === 'text').map((c) => c.text).join('\n');
+  return content
+    .filter((c) => c.type === 'text')
+    .map((c) => c.text)
+    .join('\n');
 }
 
 function portInUse(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const s = createConnection({ port, host: '127.0.0.1' });
-    s.once('connect', () => { s.destroy(); resolve(true); });
+    s.once('connect', () => {
+      s.destroy();
+      resolve(true);
+    });
     s.once('error', () => resolve(false));
   });
 }
@@ -48,7 +54,9 @@ const base = `http://127.0.0.1:${SYNC_PORT}`;
 test.beforeAll(async () => {
   ws = makeWorkspace('mcp') as Ws;
   // every tool: this spec drives refresh_graph, which is outside the core tier (round 2026-10-10, proposal 9)
-  const env = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => typeof e[1] === 'string'));
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter((e): e is [string, string] => typeof e[1] === 'string'),
+  );
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [CLI, 'mcp', '--graph', ws.graph],
@@ -74,13 +82,38 @@ test.describe('MCP data flow', () => {
    * @covers packages/mcp/src/tiers.ts::resolveTier
    */
   test('by default the server lists the core tier, and the session-start context is a resource', async () => {
-    const env = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => typeof e[1] === 'string' && e[0] !== 'FARSIGHT_TOOLS'));
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(
+        (e): e is [string, string] => typeof e[1] === 'string' && e[0] !== 'FARSIGHT_TOOLS',
+      ),
+    );
     const core = new Client({ name: 'farsight-e2e-core', version: '0.0.0' });
-    await core.connect(new StdioClientTransport({ command: process.execPath, args: [CLI, 'mcp', '--graph', ws.graph], cwd: ws.dir, stderr: 'ignore', env }));
+    await core.connect(
+      new StdioClientTransport({
+        command: process.execPath,
+        args: [CLI, 'mcp', '--graph', ws.graph],
+        cwd: ws.dir,
+        stderr: 'ignore',
+        env,
+      }),
+    );
     try {
       const { tools } = await core.listTools();
       expect(tools.map((t) => t.name).sort()).toEqual([
-        'ask', 'decisions', 'describe_node', 'expand', 'gate', 'graph_overview', 'impact_of', 'journey', 'journeys', 'roles', 'search_graph', 'test_coverage', 'tools', 'trace_flow',
+        'ask',
+        'decisions',
+        'describe_node',
+        'expand',
+        'gate',
+        'graph_overview',
+        'impact_of',
+        'journey',
+        'journeys',
+        'roles',
+        'search_graph',
+        'test_coverage',
+        'tools',
+        'trace_flow',
       ]);
       const ctx = await core.readResource({ uri: 'farsight://context' });
       const text = (ctx.contents[0] as { text: string }).text;
@@ -95,7 +128,15 @@ test.describe('MCP data flow', () => {
   test('the server lists the tools agents depend on', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name);
-    for (const t of ['graph_overview', 'search_graph', 'describe_node', 'test_coverage', 'refresh_graph', 'journey', 'impact_of']) {
+    for (const t of [
+      'graph_overview',
+      'search_graph',
+      'describe_node',
+      'test_coverage',
+      'refresh_graph',
+      'journey',
+      'impact_of',
+    ]) {
       expect(names).toContain(t);
     }
   });
@@ -118,7 +159,7 @@ test.describe('MCP data flow', () => {
   });
 
   /** @covers packages/mcp/src/run.ts::runMcpServer */
-  test('test_coverage carries the fixture\'s observed e2e run for a flow', async () => {
+  test("test_coverage carries the fixture's observed e2e run for a flow", async () => {
     const catalogue = await call('test_coverage', { level: 'e2e' });
     expect(catalogue).toContain('billing.pw.spec.ts');
     const raw = JSON.parse(await call('test_coverage', { flow: 'billing-cycle', raw: true }));
@@ -131,27 +172,43 @@ test.describe('MCP data flow', () => {
    * @covers POST /api/sync
    * @covers GET /graph
    */
-  test('a function added to the source appears through refresh_graph and through the server\'s /api/sync', async ({ request }) => {
-    expect(await portInUse(SYNC_PORT), `port ${SYNC_PORT} is taken — this spec will not test someone else's server`).toBe(false);
-    server = spawn(process.execPath, [CLI, 'serve', ws.graph, '--port', String(SYNC_PORT)], { cwd: ws.dir, stdio: 'ignore' });
-    await expect.poll(async () => (await request.get(`${base}/api/version`).catch(() => null))?.ok() ?? false, { timeout: 15_000 }).toBe(true);
+  test("a function added to the source appears through refresh_graph and through the server's /api/sync", async ({
+    request,
+  }) => {
+    expect(
+      await portInUse(SYNC_PORT),
+      `port ${SYNC_PORT} is taken — this spec will not test someone else's server`,
+    ).toBe(false);
+    server = spawn(process.execPath, [CLI, 'serve', ws.graph, '--port', String(SYNC_PORT)], {
+      cwd: ws.dir,
+      stdio: 'ignore',
+    });
+    await expect
+      .poll(async () => (await request.get(`${base}/api/version`).catch(() => null))?.ok() ?? false, {
+        timeout: 15_000,
+      })
+      .toBe(true);
 
-    const nodeIds = async () => ((await (await request.get(`${base}/graph`)).json()).nodes as { id: string }[]).map((n) => n.id);
+    const nodeIds = async () =>
+      ((await (await request.get(`${base}/graph`)).json()).nodes as { id: string }[]).map((n) => n.id);
     expect(await nodeIds()).not.toContain(PROBE_ID);
     expect(await call('search_graph', { query: PROBE })).not.toContain(PROBE_ID);
 
     // the change: one new exported function in the fixture copy
-    appendFileSync(join(ws.repoDir, 'src/server/taxEngine.ts'), [
-      '',
-      '/**',
-      ' * Added by the MCP e2e spec to prove a source change reaches every surface.',
-      ' * @business A flat surcharge the e2e suite adds and then looks for.',
-      ' */',
-      `export function ${PROBE}(amount: number): number {`,
-      '  return amount + 1;',
-      '}',
-      '',
-    ].join('\n'));
+    appendFileSync(
+      join(ws.repoDir, 'src/server/taxEngine.ts'),
+      [
+        '',
+        '/**',
+        ' * Added by the MCP e2e spec to prove a source change reaches every surface.',
+        ' * @business A flat surcharge the e2e suite adds and then looks for.',
+        ' */',
+        `export function ${PROBE}(amount: number): number {`,
+        '  return amount + 1;',
+        '}',
+        '',
+      ].join('\n'),
+    );
 
     // MCP: refresh_graph re-ingests the recorded root in place and saves graph.json
     const refreshed = await call('refresh_graph');

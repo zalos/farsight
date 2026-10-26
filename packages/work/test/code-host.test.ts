@@ -4,7 +4,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { codeHostPolicy, agentsMayRead, rangesOfFilePatch, decidePost, type CodeHostSource } from '../dist/index.js';
 
-const src = (over: Partial<CodeHostSource> = {}): CodeHostSource => ({ id: 'gh', type: 'code-host', host: 'github', repo: 'example-org/invoice-app', ...over });
+const src = (over: Partial<CodeHostSource> = {}): CodeHostSource => ({
+  id: 'gh',
+  type: 'code-host',
+  host: 'github',
+  repo: 'example-org/invoice-app',
+  ...over,
+});
 
 test('default deny: no allow list, no grant', () => {
   assert.equal(codeHostPolicy(src(), 'read', 'human').verdict.allowed, false);
@@ -31,13 +37,26 @@ test('an edit source grants people what it lists, and a post waits for a person'
 
 test('the host is not asked when the policy says no', async () => {
   let asked = false;
-  const d = await decidePost(src(), 'human', async () => { asked = true; throw new Error('no'); }, async () => { throw new Error('no'); });
+  const d = await decidePost(
+    src(),
+    'human',
+    async () => {
+      asked = true;
+      throw new Error('no');
+    },
+    async () => {
+      throw new Error('no');
+    },
+  );
   assert.equal(d.allowed, false);
   assert.equal(asked, false);
   assert.match(d.verdicts.tracker.reason, /not asked/);
 });
 
 test('a file patch becomes new-side ranges', () => {
-  assert.deepEqual(rangesOfFilePatch('@@ -1,3 +1,4 @@\n a\n+b\n@@ -20 +21,0 @@\n-x'), [[1, 4], [21, 21]]);
+  assert.deepEqual(rangesOfFilePatch('@@ -1,3 +1,4 @@\n a\n+b\n@@ -20 +21,0 @@\n-x'), [
+    [1, 4],
+    [21, 21],
+  ]);
   assert.deepEqual(rangesOfFilePatch(undefined), []);
 });

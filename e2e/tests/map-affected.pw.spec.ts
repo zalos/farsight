@@ -15,25 +15,34 @@ const ZOD = 'invoice-app::package::zod';
 const LIST_PAGE = 'invoice-app::page::/invoices';
 
 /** Identifier-shaped tokens — the journey-numbers bar. */
-const IDENTIFIER = new RegExp([
-  String.raw`\b[a-z]+[A-Z][A-Za-z0-9]*\b`,
-  String.raw`\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b`,
-  String.raw`\b[a-z0-9]+_[a-z0-9_]+\b`,
-  String.raw`\b[A-Z0-9]+_[A-Z0-9_]+\b`,
-  String.raw`(?:^|[\s(])\/[\w.:{}\-]+`,
-  String.raw`\b(?:GET|POST|PUT|PATCH|DELETE)\b`,
-  String.raw`\b[\w-]+\.(?:spec|test|pw)\b`,
-  String.raw`\.(?:tsx?|jsx?|mjs|json)\b`,
-].join('|'), 'g');
+const IDENTIFIER = new RegExp(
+  [
+    String.raw`\b[a-z]+[A-Z][A-Za-z0-9]*\b`,
+    String.raw`\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b`,
+    String.raw`\b[a-z0-9]+_[a-z0-9_]+\b`,
+    String.raw`\b[A-Z0-9]+_[A-Z0-9_]+\b`,
+    String.raw`(?:^|[\s(])\/[\w.:{}\-]+`,
+    String.raw`\b(?:GET|POST|PUT|PATCH|DELETE)\b`,
+    String.raw`\b[\w-]+\.(?:spec|test|pw)\b`,
+    String.raw`\.(?:tsx?|jsx?|mjs|json)\b`,
+  ].join('|'),
+  'g',
+);
 
 async function mapOn(page: Page, lens = 'hybrid') {
   await gotoReady(page, '#/portfolio?lens=' + lens);
   await page.evaluate(() => {
     const S = (window as any).S;
-    S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+    S.SETTINGS = Object.assign({}, S.SETTINGS, {
+      flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+    });
   });
 }
-async function go(page: Page, hash: string) { await page.evaluate((h) => { location.hash = h; }, hash); }
+async function go(page: Page, hash: string) {
+  await page.evaluate((h) => {
+    location.hash = h;
+  }, hash);
+}
 const scr = (page: Page, index: number) => page.locator(`.map-scr[data-flow="${FLOW}"][data-index="${index}"]`);
 
 test.describe('map — the Affected mode', () => {
@@ -44,7 +53,9 @@ test.describe('map — the Affected mode', () => {
    * @covers packages/server/public/app/surfaces/map.js::mapEscape
    * @covers GET /api/impact
    */
-  test('a call seeded from the explore card dims the screen that does not call it and badges the ones that do', async ({ page }) => {
+  test('a call seeded from the explore card dims the screen that does not call it and badges the ones that do', async ({
+    page,
+  }) => {
     await mapOn(page);
     await go(page, STREET + '?plumb=1');
     await expect(scr(page, 2)).toBeVisible();
@@ -84,7 +95,8 @@ test.describe('map — the Affected mode', () => {
     const districts = page.locator('.map-district');
     await expect(districts).toHaveCount(4); // + Get paid (lane moves)
     await expect(page.locator('.map-district.aff-hit')).toHaveCount(3);
-    for (const d of await page.locator('.map-district.aff-hit').all()) await expect(d.locator('.map-dcover .map-affb')).toHaveText('reached at hop 1');
+    for (const d of await page.locator('.map-district.aff-hit').all())
+      await expect(d.locator('.map-dcover .map-affb')).toHaveText('reached at hop 1');
     await expect(page.locator('.map-affbar')).toContainText('in 3 journeys');
   });
 
@@ -93,9 +105,14 @@ test.describe('map — the Affected mode', () => {
    * @covers packages/server/public/app/surfaces/map-affected.js::affectedTabCount
    * @covers packages/server/public/app/lib/map-affected-model.js::hopGroups
    */
-  test('the property\'s Affected tab lists journeys, screens, calls and tests per distance, with the floor and the stops', async ({ page }) => {
+  test("the property's Affected tab lists journeys, screens, calls and tests per distance, with the floor and the stops", async ({
+    page,
+  }) => {
     await mapOn(page);
-    await go(page, STREET + '?node=' + encodeURIComponent(LIST_PAGE) + '&affected=' + encodeURIComponent(TABLE) + '&ahops=3');
+    await go(
+      page,
+      STREET + '?node=' + encodeURIComponent(LIST_PAGE) + '&affected=' + encodeURIComponent(TABLE) + '&ahops=3',
+    );
     const tab = page.locator('#mp-tab-affected');
     await expect(tab).toBeVisible();
     // four screen rows on three journeys, two pages: a screen several journeys share is counted once (round 2)
@@ -107,7 +124,9 @@ test.describe('map — the Affected mode', () => {
     await expect(body.locator('.mp-affbound')).toContainText('≥ a floor');
     // per distance: their own path meets it, then what uses it directly holds the first tests
     await expect(body.locator('.mp-affgroup[data-hop="0"] .mp-affhop')).toHaveText('its path meets it');
-    await expect(body.locator('.mp-affgroup[data-hop="1"] .mp-affsub', { hasText: 'tests first met here' })).toBeVisible();
+    await expect(
+      body.locator('.mp-affgroup[data-hop="1"] .mp-affsub', { hasText: 'tests first met here' }),
+    ).toBeVisible();
     await expect(body.locator('.mp-affgroup[data-hop="2"]')).toContainText('POST /invoices');
     await expect(body.locator('.mp-affstops')).toBeVisible();
     // the distance stepper rides in the link
@@ -131,7 +150,9 @@ test.describe('map — the Affected mode', () => {
   });
 
   /** @covers packages/server/public/app/surfaces/map.js::writeHash */
-  test('the link round-trips the mode: the same link opens the same dimmed picture at the same distance', async ({ page }) => {
+  test('the link round-trips the mode: the same link opens the same dimmed picture at the same distance', async ({
+    page,
+  }) => {
     await mapOn(page);
     await go(page, STREET + '?plumb=1&affected=' + encodeURIComponent(ROUTE));
     await expect(scr(page, 2)).toHaveClass(/aff-dim/);
@@ -143,9 +164,13 @@ test.describe('map — the Affected mode', () => {
     await gotoReady(fresh, '#/portfolio');
     await fresh.evaluate(() => {
       const S = (window as any).S;
-      S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+      S.SETTINGS = Object.assign({}, S.SETTINGS, {
+        flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+      });
     });
-    await fresh.evaluate((h) => { location.hash = h; }, new URL(link).hash);
+    await fresh.evaluate((h) => {
+      location.hash = h;
+    }, new URL(link).hash);
     await expect(fresh.locator('.map-affhops button[data-h="4"]')).toHaveAttribute('aria-pressed', 'true');
     await expect(fresh.locator(`.map-scr[data-flow="${FLOW}"][data-index="2"]`)).toHaveClass(/aff-dim/);
     await fresh.close();

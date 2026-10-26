@@ -55,10 +55,14 @@ export function storyIdOf(titleOrMetaId: string, exportName: string): string {
  * `/index` dropped, and a last segment that repeats its folder dropped.
  */
 export function autoTitleOf(fileUnderBase: string, prefix = ''): string {
-  let p = fileUnderBase.replace(/\\/g, '/').replace(/\.(stories|story)\.[cm]?[jt]sx?$/, '').replace(/\.mdx$/, '');
+  let p = fileUnderBase
+    .replace(/\\/g, '/')
+    .replace(/\.(stories|story)\.[cm]?[jt]sx?$/, '')
+    .replace(/\.mdx$/, '');
   p = p.replace(/\/index$/, '');
   const parts = [...(prefix ? prefix.split('/') : []), ...p.split('/')].filter(Boolean);
-  if (parts.length > 1 && parts[parts.length - 1]!.toLowerCase() === parts[parts.length - 2]!.toLowerCase()) parts.pop();
+  if (parts.length > 1 && parts[parts.length - 1]!.toLowerCase() === parts[parts.length - 2]!.toLowerCase())
+    parts.pop();
   return parts.join('/');
 }
 
@@ -147,7 +151,13 @@ export interface StorybookStatus {
   error?: string;
   checkedAt: string;
   /** the index's counts — present only when reached */
-  counts?: { stories: number; docs: number; resolved: number; unresolved: number; via: Partial<Record<StoryResolutionVia, number>> };
+  counts?: {
+    stories: number;
+    docs: number;
+    resolved: number;
+    unresolved: number;
+    via: Partial<Record<StoryResolutionVia, number>>;
+  };
   /** `resolved` of `stories + docs`, typed — the breakdown says how many of each were matched (docs/COUNTS.md) */
   counted?: { matched: Counted };
   unresolved?: StoryEntryResolution[];
@@ -172,13 +182,19 @@ export function storybooksOf(
   for (const [repo, m] of Object.entries(meta ?? {}).sort((a, b) => a[0].localeCompare(b[0]))) {
     for (const ref of m.storybooks ?? []) {
       const o = overrides[repo];
-      out.push({ repo, ref: o?.url ? { ...ref, url: o.url, urlFrom: 'config', ...(o.command ? { command: o.command } : {}) } : ref });
+      out.push({
+        repo,
+        ref: o?.url ? { ...ref, url: o.url, urlFrom: 'config', ...(o.command ? { command: o.command } : {}) } : ref,
+      });
     }
   }
   return out;
 }
 
-type Fetcher = (url: string, init?: { signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
+type Fetcher = (
+  url: string,
+  init?: { signal?: AbortSignal },
+) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
 const PROBE_CACHE = new Map<string, { at: number; result: ProbeResult }>();
 const PROBE_TTL_MS = 3000;
@@ -196,7 +212,10 @@ export interface ProbeResult {
  * `reachable: false` with the reason — never a throw. Cached for a few seconds
  * so an inspector click does not re-read a 200 KB index.
  */
-export async function probeStorybook(url: string, opts: { timeoutMs?: number; fresh?: boolean; fetcher?: Fetcher } = {}): Promise<ProbeResult> {
+export async function probeStorybook(
+  url: string,
+  opts: { timeoutMs?: number; fresh?: boolean; fetcher?: Fetcher } = {},
+): Promise<ProbeResult> {
   const now = Date.now();
   const hit = PROBE_CACHE.get(url);
   if (!opts.fresh && hit && now - hit.at < PROBE_TTL_MS) return hit.result;
@@ -207,19 +226,33 @@ export async function probeStorybook(url: string, opts: { timeoutMs?: number; fr
   } else {
     const f: Fetcher = opts.fetcher ?? (globalThis.fetch as unknown as Fetcher);
     try {
-      const res = await f(`${url.replace(/\/+$/, '')}/index.json`, { signal: AbortSignal.timeout(opts.timeoutMs ?? 1500) });
+      const res = await f(`${url.replace(/\/+$/, '')}/index.json`, {
+        signal: AbortSignal.timeout(opts.timeoutMs ?? 1500),
+      });
       if (!res.ok) result = { reachable: false, error: `http ${res.status}`, checkedAt };
       else {
-        const doc = (await res.json()) as { entries?: Record<string, StorybookIndexEntry>; stories?: Record<string, StorybookIndexEntry> };
+        const doc = (await res.json()) as {
+          entries?: Record<string, StorybookIndexEntry>;
+          stories?: Record<string, StorybookIndexEntry>;
+        };
         const entries = doc?.entries ?? doc?.stories;
-        result = entries && typeof entries === 'object'
-          ? { reachable: true, entries: Object.values(entries).filter((e) => e && typeof e.id === 'string'), checkedAt }
-          : { reachable: false, error: 'not a Storybook index', checkedAt };
+        result =
+          entries && typeof entries === 'object'
+            ? {
+                reachable: true,
+                entries: Object.values(entries).filter((e) => e && typeof e.id === 'string'),
+                checkedAt,
+              }
+            : { reachable: false, error: 'not a Storybook index', checkedAt };
       }
     } catch (err) {
       const e = err as { name?: string; cause?: { code?: string }; message?: string };
-      const why = e?.name === 'TimeoutError' || e?.name === 'AbortError' ? 'timeout'
-        : e?.cause?.code === 'ECONNREFUSED' ? 'refused' : (e?.cause?.code ?? e?.message ?? 'unreachable');
+      const why =
+        e?.name === 'TimeoutError' || e?.name === 'AbortError'
+          ? 'timeout'
+          : e?.cause?.code === 'ECONNREFUSED'
+            ? 'refused'
+            : (e?.cause?.code ?? e?.message ?? 'unreachable');
       result = { reachable: false, error: String(why), checkedAt };
     }
   }
@@ -274,7 +307,12 @@ export function mapStoryIndex(
 
   const out: StoryEntryResolution[] = [];
   const titleNode = new Map<string, string>();
-  const base = (e: StorybookIndexEntry): StoryEntryResolution => ({ id: e.id, title: e.title, name: e.name, type: e.type === 'docs' ? 'docs' : 'story' });
+  const base = (e: StorybookIndexEntry): StoryEntryResolution => ({
+    id: e.id,
+    title: e.title,
+    name: e.name,
+    type: e.type === 'docs' ? 'docs' : 'story',
+  });
   for (const e of entries) {
     if (e.type === 'docs') continue;
     const r = base(e);
@@ -289,8 +327,10 @@ export function mapStoryIndex(
       const leaf = leafOf(e.title);
       const named = (list: GraphNode[]) => list.filter((n) => n.name.replace(/\s+/g, '').toLowerCase() === leaf);
       if (comps.length === 1) Object.assign(r, { nodeId: comps[0]!.id, via: 'component-path' });
-      else if (named(comps).length === 1) Object.assign(r, { nodeId: named(comps)[0]!.id, via: 'component-path+title' });
-      else if (!comps.length && named(here).length === 1) Object.assign(r, { nodeId: named(here)[0]!.id, via: 'component-path+title' });
+      else if (named(comps).length === 1)
+        Object.assign(r, { nodeId: named(comps)[0]!.id, via: 'component-path+title' });
+      else if (!comps.length && named(here).length === 1)
+        Object.assign(r, { nodeId: named(here)[0]!.id, via: 'component-path+title' });
       else if (comps.length > 1) Object.assign(r, { reason: 'ambiguous', candidates: comps.map((n) => n.id) });
       else Object.assign(r, { reason: 'no-node-at-path' });
     } else {
@@ -323,14 +363,21 @@ export function mapStoryIndex(
 export async function storybookLive(
   nodes: GraphNode[],
   meta: Record<string, StoriesMeta> | undefined,
-  opts: { overrides?: Record<string, { url?: string; command?: string }>; fresh?: boolean; timeoutMs?: number; fetcher?: Fetcher; repos?: Set<string> | null } = {},
+  opts: {
+    overrides?: Record<string, { url?: string; command?: string }>;
+    fresh?: boolean;
+    timeoutMs?: number;
+    fetcher?: Fetcher;
+    repos?: Set<string> | null;
+  } = {},
 ): Promise<StoriesAnswer> {
   const byNode: Record<string, LiveStory[]> = {};
   const books = storybooksOf(meta, opts.overrides).filter((b) => !opts.repos || opts.repos.has(b.repo));
 
   // a story no glob placed belongs to its repo's Storybook when the repo has exactly one
   const soleBook = new Map<string, string>();
-  for (const [repo, m] of Object.entries(meta ?? {})) if (m.storybooks?.length === 1) soleBook.set(repo, m.storybooks[0]!.configDir);
+  for (const [repo, m] of Object.entries(meta ?? {}))
+    if (m.storybooks?.length === 1) soleBook.set(repo, m.storybooks[0]!.configDir);
   // the graph's own stories first: they exist whether or not anything runs
   const graphIds = new Map<string, Set<string>>(); // repo|configDir → story ids
   for (const n of nodes) {
@@ -343,9 +390,17 @@ export async function storybookLive(
       if (!graphIds.has(key)) graphIds.set(key, new Set());
       graphIds.get(key)!.add(s.id);
       return {
-        id: s.id, name: s.name, type: 'story', repo, inGraph: true, live: false,
-        ...(s.title ? { title: s.title } : {}), ...(book ? { storybook: book } : {}),
-        ...(s.docs ? { docs: s.docs } : {}), file: s.file, line: s.line,
+        id: s.id,
+        name: s.name,
+        type: 'story',
+        repo,
+        inGraph: true,
+        live: false,
+        ...(s.title ? { title: s.title } : {}),
+        ...(book ? { storybook: book } : {}),
+        ...(s.docs ? { docs: s.docs } : {}),
+        file: s.file,
+        line: s.line,
       };
     });
   }
@@ -354,15 +409,34 @@ export async function storybookLive(
   for (const { repo, ref } of books) {
     const inGraphIds = graphIds.get(`${repo}|${ref.configDir}`) ?? new Set<string>();
     const status: StorybookStatus = {
-      repo, configDir: ref.configDir, root: ref.root, source: ref.source, reachable: false,
-      checkedAt: new Date().toISOString(), inGraph: inGraphIds.size,
-      ...(ref.name ? { name: ref.name } : {}), ...(ref.url ? { url: ref.url } : {}),
-      ...(ref.urlFrom ? { urlFrom: ref.urlFrom } : {}), ...(ref.command ? { command: ref.command } : {}),
+      repo,
+      configDir: ref.configDir,
+      root: ref.root,
+      source: ref.source,
+      reachable: false,
+      checkedAt: new Date().toISOString(),
+      inGraph: inGraphIds.size,
+      ...(ref.name ? { name: ref.name } : {}),
+      ...(ref.url ? { url: ref.url } : {}),
+      ...(ref.urlFrom ? { urlFrom: ref.urlFrom } : {}),
+      ...(ref.command ? { command: ref.command } : {}),
     };
-    if (!ref.url) { status.error = 'no url'; storybooks.push(status); continue; }
-    const probe = await probeStorybook(ref.url, { fresh: opts.fresh, timeoutMs: opts.timeoutMs, fetcher: opts.fetcher });
+    if (!ref.url) {
+      status.error = 'no url';
+      storybooks.push(status);
+      continue;
+    }
+    const probe = await probeStorybook(ref.url, {
+      fresh: opts.fresh,
+      timeoutMs: opts.timeoutMs,
+      fetcher: opts.fetcher,
+    });
     status.checkedAt = probe.checkedAt;
-    if (!probe.reachable || !probe.entries) { status.error = probe.error ?? 'unreachable'; storybooks.push(status); continue; }
+    if (!probe.reachable || !probe.entries) {
+      status.error = probe.error ?? 'unreachable';
+      storybooks.push(status);
+      continue;
+    }
     status.reachable = true;
     const resolved = mapStoryIndex(probe.entries, ref, repo, nodes);
     const via: Partial<Record<StoryResolutionVia, number>> = {};
@@ -375,7 +449,19 @@ export async function storybookLive(
       const have = list.find((s) => s.id === r.id);
       const frame = storyFrameUrl(ref.url, r.id, r.type === 'docs' ? 'docs' : 'story');
       if (have) Object.assign(have, { live: true, frame, via: r.via, storybook: have.storybook ?? ref.configDir });
-      else list.push({ id: r.id, name: r.name, title: r.title, type: r.type, repo, storybook: ref.configDir, inGraph: false, live: true, frame, via: r.via });
+      else
+        list.push({
+          id: r.id,
+          name: r.name,
+          title: r.title,
+          type: r.type,
+          repo,
+          storybook: ref.configDir,
+          inGraph: false,
+          live: true,
+          frame,
+          via: r.via,
+        });
     }
     const unresolved = resolved.filter((r) => !r.nodeId);
     status.counts = {
@@ -387,14 +473,20 @@ export async function storybookLive(
     };
     const matchedStories = resolved.filter((r) => r.nodeId && r.type === 'story').length;
     status.counted = {
-      matched: counted(resolved.length - unresolved.length, 'count.unit.indexEntries', 'count.scope.storybook', 'storybookLive().storybooks[].counts.resolved', {
-        of: resolved.length,
-        bizUnit: 'count.unit.indexEntries',
-        breakdown: [
-          { key: 'stories.count', n: matchedStories },
-          { key: 'count.unit.docsPages', n: resolved.length - unresolved.length - matchedStories },
-        ],
-      }),
+      matched: counted(
+        resolved.length - unresolved.length,
+        'count.unit.indexEntries',
+        'count.scope.storybook',
+        'storybookLive().storybooks[].counts.resolved',
+        {
+          of: resolved.length,
+          bizUnit: 'count.unit.indexEntries',
+          breakdown: [
+            { key: 'stories.count', n: matchedStories },
+            { key: 'count.unit.docsPages', n: resolved.length - unresolved.length - matchedStories },
+          ],
+        },
+      ),
     };
     status.unresolved = unresolved;
     status.notListed = [...inGraphIds].filter((id) => !listed.has(id)).sort();
@@ -456,7 +548,11 @@ export function storyParts(index: GraphIndex, nodeId: string, hops = 2): string[
 export function storyCounts(index: GraphIndex, nodeId: string, byNode?: Record<string, LiveStory[]>): StoryCounts {
   const listOf = (id: string): { stories: number; docs: number } => {
     const live = byNode?.[id];
-    if (live) return { stories: live.filter((x) => x.type === 'story').length, docs: live.filter((x) => x.type === 'docs').length };
+    if (live)
+      return {
+        stories: live.filter((x) => x.type === 'story').length,
+        docs: live.filter((x) => x.type === 'docs').length,
+      };
     return { stories: index.byId.get(id)?.stories?.length ?? 0, docs: 0 };
   };
   const own = listOf(nodeId);
@@ -464,15 +560,25 @@ export function storyCounts(index: GraphIndex, nodeId: string, byNode?: Record<s
   const parts = partIds.map((id) => ({ id, n: listOf(id).stories })).filter((p) => p.n > 0);
   const src = byNode ? 'storybookLive().byNode' : 'GraphNode.stories';
   return {
-    own: counted(own.stories, 'stories.count', 'count.scope.component', `${src} (type story)`, { bizUnit: 'stories.count' }),
-    docs: counted(own.docs, 'count.unit.docsPages', 'count.scope.component', `${src} (type docs)`, { bizUnit: 'count.unit.docsPages' }),
-    parts: counted(parts.reduce((a, p) => a + p.n, 0), 'count.unit.partStories', 'count.scope.parts', `storyParts() → ${src}`, {
-      bizUnit: 'count.unit.partStories',
-      breakdown: parts.map((p) => {
-        const n = index.byId.get(p.id);
-        return { key: 'stories.count', n: p.n, label: n?.facets?.business?.label ?? n?.name ?? p.id };
-      }),
+    own: counted(own.stories, 'stories.count', 'count.scope.component', `${src} (type story)`, {
+      bizUnit: 'stories.count',
     }),
+    docs: counted(own.docs, 'count.unit.docsPages', 'count.scope.component', `${src} (type docs)`, {
+      bizUnit: 'count.unit.docsPages',
+    }),
+    parts: counted(
+      parts.reduce((a, p) => a + p.n, 0),
+      'count.unit.partStories',
+      'count.scope.parts',
+      `storyParts() → ${src}`,
+      {
+        bizUnit: 'count.unit.partStories',
+        breakdown: parts.map((p) => {
+          const n = index.byId.get(p.id);
+          return { key: 'stories.count', n: p.n, label: n?.facets?.business?.label ?? n?.name ?? p.id };
+        }),
+      },
+    ),
     partIds: parts.map((p) => p.id),
   };
 }

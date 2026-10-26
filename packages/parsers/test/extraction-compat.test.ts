@@ -17,7 +17,12 @@ function freezeTimes(dir: string): void {
 }
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
-for (const [name, example] of [['tsjs', 'invoice-app'], ['java', 'spring-invoice-api'], ['workspace', 'nx-workspace'], ['mixed', '']] as const) {
+for (const [name, example] of [
+  ['tsjs', 'invoice-app'],
+  ['java', 'spring-invoice-api'],
+  ['workspace', 'nx-workspace'],
+  ['mixed', ''],
+] as const) {
   test(`package extraction preserves ${name} structure, evidence and enrichment`, async () => {
     const temp = mkdtempSync(join(tmpdir(), 'parser-compat-'));
     try {
@@ -36,7 +41,8 @@ for (const [name, example] of [['tsjs', 'invoice-app'], ['java', 'spring-invoice
       // This fixture intentionally declares a plumbing folder it does not contain. Keep the historical
       // graph baseline intact, but require the new diagnostic in both retained metadata and ingest output.
       if (name === 'workspace') {
-        const warning = 'apps/billing-web/farsight.config.json → plumbing: "src/plumbing/**" matches no indexed source file (missing, ignored, excluded or unsupported).';
+        const warning =
+          'apps/billing-web/farsight.config.json → plumbing: "src/plumbing/**" matches no indexed source file (missing, ignored, excluded or unsupported).';
         expected.meta.config.notes.push(warning);
         expected.specErrors = [warning];
       }
@@ -55,6 +61,8 @@ for (const [name, example] of [['tsjs', 'invoice-app'], ['java', 'spring-invoice
         expected.specErrors = warnings;
       }
       assert.deepEqual(actual, expected);
-    } finally { rmSync(temp, { recursive: true, force: true }); }
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
   });
 }

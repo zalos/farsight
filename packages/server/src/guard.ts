@@ -62,12 +62,13 @@ export function refuseRequest(req: GuardRequest): string | null {
     try {
       const o = new URL(origin);
       ok = o.protocol === 'http:' && host !== undefined && o.host === host.trim().toLowerCase();
-    } catch { /* `null` or garbage: not this server */ }
+    } catch {
+      /* `null` or garbage: not this server */
+    }
     if (!ok) return `a ${req.method} from another origin is refused (Origin: ${origin.slice(0, 80)})`;
   }
   return null;
 }
-
 
 // ── a read-only session (`farsight serve --read-only`, and every `--as-of` serve) ──
 //
@@ -95,7 +96,11 @@ export function isWriteRoute(method: string | undefined, url: string): boolean {
 }
 
 /** The refusal a read-only server sends for a write route (403), or null when the request may proceed. */
-export function refuseWrite(readOnly: ReadOnlyWhy | null | undefined, method: string | undefined, url: string): string | null {
+export function refuseWrite(
+  readOnly: ReadOnlyWhy | null | undefined,
+  method: string | undefined,
+  url: string,
+): string | null {
   if (!readOnly || !isWriteRoute(method, url)) return null;
   return readOnly === 'as-of'
     ? 'this server is read-only: it serves an --as-of snapshot, so settings, syncs and work-item writes are refused'

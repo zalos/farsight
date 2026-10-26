@@ -9,39 +9,39 @@ export const WORK_SCHEMA = 'farsight-work v1' as const;
 
 /** Providers v1 knows. Additive: 'github' | 'linear' | 'manifest' later; 'fixture' is the recorded CI provider. */
 export const WORK_PROVIDERS = ['jira', 'azure-devops', 'fixture'] as const;
-export type WorkProviderId = typeof WORK_PROVIDERS[number];
+export type WorkProviderId = (typeof WORK_PROVIDERS)[number];
 
 /** Type category — decided once by the provider from the tracker's own type/hierarchy, never from a name. */
 export const WORK_TYPES = ['epic', 'feature', 'story', 'task', 'bug', 'other'] as const;
-export type WorkType = typeof WORK_TYPES[number];
+export type WorkType = (typeof WORK_TYPES)[number];
 
 /**
  * State category — decided from the tracker's own category field, never a state name
  * (ADO *Resolved* → in-progress, name kept). Surfaces print `state.name` beside it.
  */
 export const STATE_CATEGORIES = ['todo', 'in-progress', 'done', 'removed'] as const;
-export type StateCategory = typeof STATE_CATEGORIES[number];
+export type StateCategory = (typeof STATE_CATEGORIES)[number];
 
 export const BODY_FORMATS = ['markdown', 'html', 'adf', 'wiki'] as const;
-export type BodyFormat = typeof BODY_FORMATS[number];
+export type BodyFormat = (typeof BODY_FORMATS)[number];
 
 export const LINK_KINDS = ['parent', 'child', 'relates', 'blocks', 'blocked-by', 'duplicates', 'other'] as const;
-export type LinkKind = typeof LINK_KINDS[number];
+export type LinkKind = (typeof LINK_KINDS)[number];
 
 export const ESTIMATE_UNITS = ['points', 'hours', 'days'] as const;
-export type EstimateUnit = typeof ESTIMATE_UNITS[number];
+export type EstimateUnit = (typeof ESTIMATE_UNITS)[number];
 
 /** §7.2 — the closed action set. No provider adds an eighth; one that cannot declares it and the gate denies. */
 export const WORK_ACTIONS = ['comment', 'edit', 'assign', 'transition', 'link', 'label', 'create'] as const;
-export type WorkAction = typeof WORK_ACTIONS[number];
+export type WorkAction = (typeof WORK_ACTIONS)[number];
 
 /** Who asked for a write (§7.4). */
 export const PRINCIPALS = ['human', 'agent'] as const;
-export type Principal = typeof PRINCIPALS[number];
+export type Principal = (typeof PRINCIPALS)[number];
 
 /** Outbox life of an intent (§5). */
 export const INTENT_STATES = ['queued', 'applying', 'confirmed', 'conflict', 'denied', 'failed'] as const;
-export type IntentState = typeof INTENT_STATES[number];
+export type IntentState = (typeof INTENT_STATES)[number];
 
 export interface Person {
   /** Jira accountId · ADO descriptor (fallback id). Stable; names are not. */

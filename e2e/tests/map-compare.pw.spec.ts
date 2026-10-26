@@ -17,7 +17,11 @@ async function freePort(): Promise<number> {
   return new Promise((res, rej) => {
     const s = createServer();
     s.once('error', rej);
-    s.listen(0, '127.0.0.1', () => { const a = s.address(); const p = typeof a === 'object' && a ? a.port : 0; s.close(() => res(p)); });
+    s.listen(0, '127.0.0.1', () => {
+      const a = s.address();
+      const p = typeof a === 'object' && a ? a.port : 0;
+      s.close(() => res(p));
+    });
   });
 }
 
@@ -27,10 +31,17 @@ test.describe('two syncs of the invoice storyline', () => {
     const ws = await makeCompareWorkspace();
     cleanup = ws.cleanup;
     const port = await freePort();
-    server = spawn(process.execPath, [CLI, 'serve', ws.graph, '--port', String(port)], { cwd: ws.dir, stdio: 'ignore' });
+    server = spawn(process.execPath, [CLI, 'serve', ws.graph, '--port', String(port)], {
+      cwd: ws.dir,
+      stdio: 'ignore',
+    });
     base = `http://localhost:${port}/`;
     for (let i = 0; i < 100; i++) {
-      try { if ((await fetch(base + 'api/version')).ok) return; } catch { /* not yet */ }
+      try {
+        if ((await fetch(base + 'api/version')).ok) return;
+      } catch {
+        /* not yet */
+      }
       await new Promise((r) => setTimeout(r, 100));
     }
     throw new Error('the compare workspace server never answered');
@@ -50,7 +61,9 @@ test.describe('two syncs of the invoice storyline', () => {
    * @covers packages/server/public/app/surfaces/map-compare.js::paintCompareCovers
    * @covers packages/server/public/app/lib/compare-model.js::chipsFor
    */
-  test('the chain: a chip per kind on the cards, every change in the panel with its door, counted over the storyline', async ({ page }) => {
+  test('the chain: a chip per kind on the cards, every change in the panel with its door, counted over the storyline', async ({
+    page,
+  }) => {
     await go(page, '#/map?storyline=invoice&compare=1..2');
     const panel = page.locator('.map-cmp');
     await expect(panel).toBeVisible();
@@ -60,7 +73,9 @@ test.describe('two syncs of the invoice storyline', () => {
     await expect(panel.locator('.map-cmp-count')).toContainText('over this storyline, between the two syncs');
     await expect(panel.locator('.map-cmp-count')).toContainText('built 1 · gate 2 · writer 1 · contract 1 · verdict 2');
     await expect(panel.locator('.map-cmp-item.k-built .map-cmp-say')).toHaveText('Discard draft is now built');
-    await expect(panel.locator('.map-cmp-item.k-gate .map-cmp-say code').first()).toHaveText('requireScope (billing:admin)');
+    await expect(panel.locator('.map-cmp-item.k-gate .map-cmp-say code').first()).toHaveText(
+      'requireScope (billing:admin)',
+    );
     // every change has its door
     await expect(panel.locator('.map-cmp-item .map-cmp-door')).toHaveCount(7);
     await expect(panel.locator('.map-cmp-item.k-contract a.map-cmp-door')).toHaveAttribute('href', /#\/apis\//);
@@ -70,9 +85,16 @@ test.describe('two syncs of the invoice storyline', () => {
     // the cards: Billing cycle is now built, gained two gates and a writer, its contract moved and its verdict too
     const billing = page.locator('.map-dcover[data-enter="invoice-app::flow::billing-cycle"] .map-cmp-chip');
     await expect(billing).toHaveText(['now built · 3 of 3', '+2 gates', '+1 writer', 'contract · 1 changed', /→/]);
-    await expect(page.locator('.map-dcover[data-enter="invoice-app::flow::new-invoice"] .map-cmp-chip')).toHaveText(['+1 gate', /→/]);
+    await expect(page.locator('.map-dcover[data-enter="invoice-app::flow::new-invoice"] .map-cmp-chip')).toHaveText([
+      '+1 gate',
+      /→/,
+    ]);
     // the board draws the later sync: no screen is waiting to be built
-    const sum = await page.evaluate(async () => (await (await fetch('/api/journey?entry=invoice-app::flow::billing-cycle&steps=0')).json()).summary.counted.built);
+    const sum = await page.evaluate(
+      async () =>
+        (await (await fetch('/api/journey?entry=invoice-app::flow::billing-cycle&steps=0')).json()).summary.counted
+          .built,
+    );
     expect([sum.n, sum.of]).toEqual([3, 3]);
   });
 
@@ -81,8 +103,12 @@ test.describe('two syncs of the invoice storyline', () => {
     const panel = page.locator('.map-cmp');
     await expect(panel.locator('.map-cmp-item')).toHaveCount(7);
     await expect(panel.locator('.map-cmp-say code')).toHaveCount(0);
-    await expect(panel.locator('.map-cmp-item.k-gate .map-cmp-say').first()).toHaveText('Discard draft gained a check: billing:admin');
-    await expect(page.locator('.map-dcover[data-enter="invoice-app::flow::new-invoice"] .map-cmp-chip').first()).toHaveText('+1 check');
+    await expect(panel.locator('.map-cmp-item.k-gate .map-cmp-say').first()).toHaveText(
+      'Discard draft gained a check: billing:admin',
+    );
+    await expect(
+      page.locator('.map-dcover[data-enter="invoice-app::flow::new-invoice"] .map-cmp-chip').first(),
+    ).toHaveText('+1 check');
   });
 
   /** @covers packages/server/public/app/surfaces/map-compare.js::paintCompareLanes */

@@ -27,9 +27,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
-  GraphStore, buildIndex, setFreshnessMeta, stitchHttp, designSurface, apiSurface, testsSurface,
-  flowStatusWord, journey, journeySummary, screensFor, journeyTree,
-  type GraphIndex, type GraphMeta, type GraphNode, type GraphEdge,
+  GraphStore,
+  buildIndex,
+  setFreshnessMeta,
+  stitchHttp,
+  designSurface,
+  apiSurface,
+  testsSurface,
+  flowStatusWord,
+  journey,
+  journeySummary,
+  screensFor,
+  journeyTree,
+  type GraphIndex,
+  type GraphMeta,
+  type GraphNode,
+  type GraphEdge,
 } from '@farsight/core';
 import { ingestRepo } from '@farsight/parsers';
 
@@ -77,7 +90,9 @@ async function waitReady(): Promise<void> {
       await r.arrayBuffer();
       if (r.ok) return;
       last = `HTTP ${r.status}`;
-    } catch (err) { last = (err as Error).message; }
+    } catch (err) {
+      last = (err as Error).message;
+    }
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error(`the server never answered on port ${port} (${last}):\n${childLog}`);
@@ -97,15 +112,20 @@ before(async () => {
   stitchHttp(store);
   store.save(graphPath);
 
-  const data = JSON.parse(readFileSync(graphPath, 'utf8')) as { nodes: GraphNode[]; edges: GraphEdge[]; meta: GraphMeta };
+  const data = JSON.parse(readFileSync(graphPath, 'utf8')) as {
+    nodes: GraphNode[];
+    edges: GraphEdge[];
+    meta: GraphMeta;
+  };
   index = buildIndex(data.nodes, data.edges);
   meta = data.meta;
   // the fold reads the code side of every freshness fact from the graph's meta, as the server does
   setFreshnessMeta(index, data.meta);
 
   port = await freePort();
-  const boot = `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n`
-    + `serveGraph(${JSON.stringify(graphPath)}, ${port}, ${JSON.stringify(work)});\n`;
+  const boot =
+    `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n` +
+    `serveGraph(${JSON.stringify(graphPath)}, ${port}, ${JSON.stringify(work)});\n`;
   child = spawn(process.execPath, ['--input-type=module', '-e', boot], {
     cwd: work,
     // MODELHUB_DIR: serveGraph rotates the event stream on boot — keep it in the temp dir.
@@ -115,8 +135,12 @@ before(async () => {
   }) as ChildProcessWithoutNullStreams;
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (d: string) => { childLog += d; });
-  child.stderr.on('data', (d: string) => { childLog += d; });
+  child.stdout.on('data', (d: string) => {
+    childLog += d;
+  });
+  child.stderr.on('data', (d: string) => {
+    childLog += d;
+  });
   await waitReady();
 });
 
@@ -127,7 +151,11 @@ after(async () => {
     await Promise.race([gone, new Promise((r) => setTimeout(r, 2000))]);
     if (child.exitCode == null) child.kill('SIGKILL');
   }
-  try { rmSync(work, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ }
+  try {
+    rmSync(work, { recursive: true, force: true });
+  } catch {
+    /* a temp dir that outlives the run is not a failure */
+  }
 });
 
 // ── comparing an endpoint with its fold ───────────────────────────────────
@@ -140,12 +168,17 @@ async function api(path: string): Promise<any> {
 }
 
 /** The fold's value as the wire carries it: JSON is the transport, not the fact. */
-function wire<T>(v: T): any { return JSON.parse(JSON.stringify(v)); }
+function wire<T>(v: T): any {
+  return JSON.parse(JSON.stringify(v));
+}
 
 /** One named fact. The message says which number disagreed and what both sides say. */
 function same(label: string, got: unknown, want: unknown): void {
-  assert.deepStrictEqual(got, want,
-    `${label}: the endpoint says ${JSON.stringify(got)}, the core fold computes ${JSON.stringify(want)}`);
+  assert.deepStrictEqual(
+    got,
+    want,
+    `${label}: the endpoint says ${JSON.stringify(got)}, the core fold computes ${JSON.stringify(want)}`,
+  );
 }
 
 /** Every key of a counts object, named one at a time. */
@@ -166,7 +199,7 @@ function sameMetric(label: string, got: any, want: any): void {
 // ─────────────────────────────────────────────────────────────────────────
 
 describe('/api/journeys is journeyTree()', () => {
-  test('the tree — personas, groups, journeys in order, every count — is the fold\'s, whole and scoped', async () => {
+  test("the tree — personas, groups, journeys in order, every count — is the fold's, whole and scoped", async () => {
     const body = await api('/api/journeys');
     same('scope', body.scope, 'all');
     same('tree', body.tree, wire(journeyTree(index, meta.journeys, null)));
@@ -176,16 +209,33 @@ describe('/api/journeys is journeyTree()', () => {
     same('a scope with no source', other.tree.counts.journeys.n, 0);
   });
 
-  test('the example manifest\'s organisation reaches the wire: declared order, the config placement, one flow under two personas', async () => {
+  test("the example manifest's organisation reaches the wire: declared order, the config placement, one flow under two personas", async () => {
     const { tree } = await api('/api/journeys');
-    same('personas in declared order', tree.personas.map((p: any) => p.name), ['Billing', 'Operations']);
-    same('billing groups', tree.personas[0].groups.map((g: any) => `${g.name}: ${g.journeys.map((j: any) => j.id).join(', ')}`),
-      ['Invoices: billing-cycle, new-invoice', 'Review and send: draft-and-send']);
+    same(
+      'personas in declared order',
+      tree.personas.map((p: any) => p.name),
+      ['Billing', 'Operations'],
+    );
+    same(
+      'billing groups',
+      tree.personas[0].groups.map((g: any) => `${g.name}: ${g.journeys.map((j: any) => j.id).join(', ')}`),
+      ['Invoices: billing-cycle, new-invoice', 'Review and send: draft-and-send'],
+    );
     same('journeys counted once', tree.counts.journeys.n, 4);
     same('the placement says who moved it', tree.personas[1].groups[0].journeys[0].placedBy, 'farsight.config.json');
     // every flow the design surface lists is in the tree, and nothing else is
-    const flows = designSurface(index, null).flatMap((d) => d.flows.map((f) => f.nodeId)).sort();
-    same('the tree holds the design surface\'s flows', [...new Set(tree.personas.flatMap((p: any) => p.groups.flatMap((g: any) => g.journeys.map((j: any) => j.nodeId))))].sort(), flows);
+    const flows = designSurface(index, null)
+      .flatMap((d) => d.flows.map((f) => f.nodeId))
+      .sort();
+    same(
+      "the tree holds the design surface's flows",
+      [
+        ...new Set(
+          tree.personas.flatMap((p: any) => p.groups.flatMap((g: any) => g.journeys.map((j: any) => j.nodeId))),
+        ),
+      ].sort(),
+      flows,
+    );
   });
 
   test('/api/journey (singular) still answers a walk — the two routes share a prefix', async () => {
@@ -195,19 +245,27 @@ describe('/api/journeys is journeyTree()', () => {
 });
 
 describe('/api/design is designSurface()', () => {
-  test('the screen and flow counts on the card are the fold\'s counts', async () => {
+  test("the screen and flow counts on the card are the fold's counts", async () => {
     const body = await api('/api/design');
     const fold = wire(designSurface(index, null));
-    same('design sources', body.designs.map((d: any) => d.id), fold.map((d: any) => d.id));
+    same(
+      'design sources',
+      body.designs.map((d: any) => d.id),
+      fold.map((d: any) => d.id),
+    );
     for (const [i, d] of fold.entries()) sameCounts(`designs[${d.id}].counts`, body.designs[i].counts, d.counts);
   });
 
-  test('every flow row\'s built / total / status is the fold\'s, and the status word follows from those numbers', async () => {
+  test("every flow row's built / total / status is the fold's, and the status word follows from those numbers", async () => {
     const body = await api('/api/design');
     const fold = wire(designSurface(index, null));
     for (const [i, d] of fold.entries()) {
       const rows = body.designs[i].flows;
-      same(`designs[${d.id}].flows`, rows.map((f: any) => f.id), d.flows.map((f: any) => f.id));
+      same(
+        `designs[${d.id}].flows`,
+        rows.map((f: any) => f.id),
+        d.flows.map((f: any) => f.id),
+      );
       for (const [j, f] of d.flows.entries()) {
         const row = rows[j];
         same(`flow ${f.id}.built`, row.built, f.built);
@@ -219,8 +277,11 @@ describe('/api/design is designSurface()', () => {
         assert.ok(row.built <= row.total, `flow ${f.id}: built ${row.built} exceeds total ${row.total}`);
         // ... and the status word the front door prints is the one those numbers make
         const word = flowStatusWord(row.built, row.total);
-        same(`flow ${f.id} — the word for ${row.built} of ${row.total}`,
-          word.key === 'journey.status.built', row.status === 'both');
+        same(
+          `flow ${f.id} — the word for ${row.built} of ${row.total}`,
+          word.key === 'journey.status.built',
+          row.status === 'both',
+        );
       }
       same(`designs[${d.id}].counts.flows`, body.designs[i].counts.flows, rows.length);
     }
@@ -238,10 +299,14 @@ describe('/api/design is designSurface()', () => {
 });
 
 describe('/api/apis is apiSurface()', () => {
-  test('the operations counts on the card are the fold\'s counts', async () => {
+  test("the operations counts on the card are the fold's counts", async () => {
     const body = await api('/api/apis');
     const fold = wire(apiSurface(index, null));
-    same('api surfaces', body.apis.map((a: any) => a.id), fold.map((a: any) => a.id));
+    same(
+      'api surfaces',
+      body.apis.map((a: any) => a.id),
+      fold.map((a: any) => a.id),
+    );
     for (const [i, a] of fold.entries()) {
       sameCounts(`apis[${a.id}].counts`, body.apis[i].counts, a.counts);
       same(`apis[${a.id}].operations listed`, body.apis[i].operations.length, a.counts.operations);
@@ -254,16 +319,23 @@ describe('/api/apis is apiSurface()', () => {
       const c = a.counts;
       same(`apis[${a.id}]: implemented vs operations − notImplemented`, c.implemented, c.operations - c.notImplemented);
       same(`apis[${a.id}]: declared + undocumented vs operations`, c.declared + c.undocumented, c.operations);
-      same(`apis[${a.id}]: drift vs the drift on its operations`,
-        c.drift, a.operations.reduce((s: number, o: any) => s + o.drift.length, 0));
+      same(
+        `apis[${a.id}]: drift vs the drift on its operations`,
+        c.drift,
+        a.operations.reduce((s: number, o: any) => s + o.drift.length, 0),
+      );
     }
   });
 
-  test('the detail endpoint\'s operations are the fold\'s operations', async () => {
+  test("the detail endpoint's operations are the fold's operations", async () => {
     const fold = wire(apiSurface(index, null));
     for (const a of fold) {
       const detail = await api(`/api/apis/${encodeURIComponent(a.id)}`);
-      same(`/api/apis/${a.id} operations`, detail.operations.map((o: any) => o.routeId), a.operations.map((o: any) => o.routeId));
+      same(
+        `/api/apis/${a.id} operations`,
+        detail.operations.map((o: any) => o.routeId),
+        a.operations.map((o: any) => o.routeId),
+      );
       for (const [i, o] of a.operations.entries()) {
         same(`${a.id} ${o.name}.status`, detail.operations[i].status, o.status);
         same(`${a.id} ${o.name}.drift`, detail.operations[i].drift, o.drift);
@@ -274,21 +346,25 @@ describe('/api/apis is apiSurface()', () => {
 });
 
 describe('/api/tests is testsSurface()', () => {
-  test('the catalogue counts, the metric and the blind spots are the fold\'s', async () => {
+  test("the catalogue counts, the metric and the blind spots are the fold's", async () => {
     const body = await api('/api/tests');
     const fold = wire(testsSurface(index, null, meta.tests));
     sameCounts('tests.counts', body.counts, fold.counts);
     sameMetric('tests.metric', body.metric, fold.metric);
     same('tests.blindSpots', body.blindSpots, fold.blindSpots);
     // nothing else in the payload drifted either
-    assert.deepStrictEqual(body.sources, fold.sources, '/api/tests: the source cards differ from the fold\'s');
-    assert.deepStrictEqual(body.orphans, fold.orphans, '/api/tests: the orphans differ from the fold\'s');
+    assert.deepStrictEqual(body.sources, fold.sources, "/api/tests: the source cards differ from the fold's");
+    assert.deepStrictEqual(body.orphans, fold.orphans, "/api/tests: the orphans differ from the fold's");
   });
 
-  test('every matrix row\'s denominator, bound and evidence word are the fold\'s', async () => {
+  test("every matrix row's denominator, bound and evidence word are the fold's", async () => {
     const body = await api('/api/tests');
     const fold = wire(testsSurface(index, null, meta.tests));
-    same('tests.journeys', body.journeys.map((r: any) => r.flowId), fold.journeys.map((r: any) => r.flowId));
+    same(
+      'tests.journeys',
+      body.journeys.map((r: any) => r.flowId),
+      fold.journeys.map((r: any) => r.flowId),
+    );
     for (const [i, r] of fold.journeys.entries()) {
       const row = body.journeys[i];
       same(`row ${r.flowId}.screens`, row.screens, r.screens);
@@ -300,10 +376,10 @@ describe('/api/tests is testsSurface()', () => {
       sameMetric(`row ${r.flowId}.coverage.metric`, row.coverage.metric, r.coverage.metric);
       same(`row ${r.flowId}.gap`, row.gap, r.gap);
     }
-    assert.deepStrictEqual(body.journeys, fold.journeys, '/api/tests: a matrix row differs from the fold\'s');
+    assert.deepStrictEqual(body.journeys, fold.journeys, "/api/tests: a matrix row differs from the fold's");
   });
 
-  test('a scoped catalogue is the scoped fold, not the whole graph\'s numbers', async () => {
+  test("a scoped catalogue is the scoped fold, not the whole graph's numbers", async () => {
     const body = await api('/api/tests?scope=invoice-app');
     const fold = wire(testsSurface(index, new Set(['invoice-app']), meta.tests));
     sameCounts('tests?scope=invoice-app counts', body.counts, fold.counts);
@@ -312,17 +388,25 @@ describe('/api/tests is testsSurface()', () => {
     same('tests?scope=not-a-source counts.cases', none.counts.cases, 0);
   });
 
-  test('?flow= answers with that row\'s own coverage, not a second computation', async () => {
+  test("?flow= answers with that row's own coverage, not a second computation", async () => {
     const fold = wire(testsSurface(index, null, meta.tests));
     for (const r of fold.journeys) {
       const body = await api(`/api/tests?flow=${encodeURIComponent(r.flowId)}`);
-      same(`?flow=${r.flowId} rows`, body.journeys.map((x: any) => x.flowId), [r.flowId]);
-      assert.deepStrictEqual(body.coverage, r.coverage, `?flow=${r.flowId}: the coverage differs from the matrix row's`);
+      same(
+        `?flow=${r.flowId} rows`,
+        body.journeys.map((x: any) => x.flowId),
+        [r.flowId],
+      );
+      assert.deepStrictEqual(
+        body.coverage,
+        r.coverage,
+        `?flow=${r.flowId}: the coverage differs from the matrix row's`,
+      );
     }
   });
 });
 
-describe('the front door\'s cells cannot overclaim (swarm 2026-09-23)', () => {
+describe("the front door's cells cannot overclaim (swarm 2026-09-23)", () => {
   test('the operations cell counts only operations code calls, and says the rest are declared', async () => {
     // `7 called` for seven operations no code implements: the cell counted every
     // action, and an action exists for a declared operation whether or not code
@@ -336,7 +420,10 @@ describe('the front door\'s cells cannot overclaim (swarm 2026-09-23)', () => {
       const sum = jn.summary;
       const via = new Map<number, string>();
       const nodeOf = new Map<number, string>();
-      for (const st of jn.steps || []) { via.set(st.order, st.via); nodeOf.set(st.order, st.nodeId); }
+      for (const st of jn.steps || []) {
+        via.set(st.order, st.via);
+        nodeOf.set(st.order, st.nodeId);
+      }
       const segs = sum.segments || [];
       const actions = segs.flatMap((sg: any) => (sg.moments || []).filter((mo: any) => mo.callStep != null));
       const real = actions.filter((mo: any) => via.get(mo.callStep) !== 'planned');
@@ -346,7 +433,9 @@ describe('the front door\'s cells cannot overclaim (swarm 2026-09-23)', () => {
       // user can do` above nine cards captioned *actions 1–9 again*.
       const called = new Set(real.map((mo: any) => nodeOf.get(mo.callStep)));
       const declared = new Set(
-        actions.filter((mo: any) => via.get(mo.callStep) === 'planned').map((mo: any) => nodeOf.get(mo.callStep))
+        actions
+          .filter((mo: any) => via.get(mo.callStep) === 'planned')
+          .map((mo: any) => nodeOf.get(mo.callStep))
           .concat(segs.flatMap((sg: any) => (sg.declaredOnly || []).map((d: any) => d.routeId ?? d.op)))
           .filter((id: string) => !called.has(id)),
       );
@@ -355,15 +444,23 @@ describe('the front door\'s cells cannot overclaim (swarm 2026-09-23)', () => {
       same(`${f.nodeId}: counts.again`, sum.counts.again, real.filter((mo: any) => mo.repeat).length);
       // the occurrences are not lost: an operation called once and repeated twice
       // is one operation and two more runs of it, and the two numbers say so
-      assert.ok(sum.counts.called + sum.counts.again >= real.length,
-        `${f.nodeId}: the operations and the repeats lose a call between them`);
+      assert.ok(
+        sum.counts.called + sum.counts.again >= real.length,
+        `${f.nodeId}: the operations and the repeats lose a call between them`,
+      );
       // no operation is counted on both sides of the split
-      assert.equal([...called].some((id) => declared.has(id as string)), false,
-        `${f.nodeId}: an operation is counted as called and as declared`);
+      assert.equal(
+        [...called].some((id) => declared.has(id as string)),
+        false,
+        `${f.nodeId}: an operation is counted as called and as declared`,
+      );
       // and the cell's absence word is earned: nothing called means nothing built called it
       if (!sum.counts.called) {
-        assert.equal(actions.every((mo: any) => via.get(mo.callStep) === 'planned'), true,
-          `${f.nodeId}: counts.called is 0 while an action's call step is real code`);
+        assert.equal(
+          actions.every((mo: any) => via.get(mo.callStep) === 'planned'),
+          true,
+          `${f.nodeId}: counts.called is 0 while an action's call step is real code`,
+        );
       }
     }
   });
@@ -377,7 +474,10 @@ describe('the front door\'s cells cannot overclaim (swarm 2026-09-23)', () => {
     for (const f of flows) {
       const cov = (await api(`/api/tests?flow=${encodeURIComponent(f.nodeId)}`)).coverage;
       const nothingBuilt = (f.total || 0) > 0 && !(f.built || 0);
-      if (cov.chip === 'none') { same(`${f.nodeId}: no chip, no qualifier`, cov.sharedEvidence, undefined); continue; }
+      if (cov.chip === 'none') {
+        same(`${f.nodeId}: no chip, no qualifier`, cov.sharedEvidence, undefined);
+        continue;
+      }
       same(`${f.nodeId}: sharedEvidence present`, !!cov.sharedEvidence, nothingBuilt);
       if (cov.sharedEvidence) same(`${f.nodeId}: sharedEvidence.screens`, cov.sharedEvidence.screens, f.total);
     }
@@ -388,11 +488,18 @@ describe('the front door\'s cells cannot overclaim (swarm 2026-09-23)', () => {
     // literal, stamped route-literal LOW — to the word *verified* (blocker 6).
     const body = await api('/api/tests');
     for (const r of body.journeys) {
-      same(`row ${r.flowId}: verifiedEndToEnd is the observed rung and nothing weaker`,
-        r.verifiedEndToEnd, r.e2e === 'observed');
-      same(`row ${r.flowId}: the row's boolean is the coverage fold's`,
-        r.verifiedEndToEnd, r.coverage.verifiedEndToEnd);
-      if (r.e2e === 'reached') assert.equal(r.verifiedEndToEnd, false, `row ${r.flowId}: static evidence is not a verification`);
+      same(
+        `row ${r.flowId}: verifiedEndToEnd is the observed rung and nothing weaker`,
+        r.verifiedEndToEnd,
+        r.e2e === 'observed',
+      );
+      same(
+        `row ${r.flowId}: the row's boolean is the coverage fold's`,
+        r.verifiedEndToEnd,
+        r.coverage.verifiedEndToEnd,
+      );
+      if (r.e2e === 'reached')
+        assert.equal(r.verifiedEndToEnd, false, `row ${r.flowId}: static evidence is not a verification`);
     }
   });
 
@@ -402,15 +509,31 @@ describe('the front door\'s cells cannot overclaim (swarm 2026-09-23)', () => {
     const body = await api('/api/tests');
     for (const r of body.journeys) {
       const c = r.coverage.counts.tests;
-      const folded = [c.unit + c.integration, c.unit + c.runLevel, c.unit + c.integration + c.runLevel]
-        .filter((n) => n !== c.unit);
+      const folded = [c.unit + c.integration, c.unit + c.runLevel, c.unit + c.integration + c.runLevel].filter(
+        (n) => n !== c.unit,
+      );
       for (const n of folded) {
-        assert.equal(r.coverage.note.includes(`${n} unit`), false,
-          `row ${r.flowId}: the sentence says "${n} unit" while the count line says ${c.unit} unit`);
+        assert.equal(
+          r.coverage.note.includes(`${n} unit`),
+          false,
+          `row ${r.flowId}: the sentence says "${n} unit" while the count line says ${c.unit} unit`,
+        );
       }
-      if (c.unit) assert.ok(r.coverage.note.includes(`${c.unit} unit test`), `row ${r.flowId}: the sentence drops the unit count`);
-      if (c.integration) assert.ok(r.coverage.note.includes(`${c.integration} integration test`), `row ${r.flowId}: the sentence hides ${c.integration} integration case(s)`);
-      if (c.runLevel) assert.ok(r.coverage.note.includes(`${c.runLevel} run-level coverage report`), `row ${r.flowId}: the sentence counts a report as a test`);
+      if (c.unit)
+        assert.ok(
+          r.coverage.note.includes(`${c.unit} unit test`),
+          `row ${r.flowId}: the sentence drops the unit count`,
+        );
+      if (c.integration)
+        assert.ok(
+          r.coverage.note.includes(`${c.integration} integration test`),
+          `row ${r.flowId}: the sentence hides ${c.integration} integration case(s)`,
+        );
+      if (c.runLevel)
+        assert.ok(
+          r.coverage.note.includes(`${c.runLevel} run-level coverage report`),
+          `row ${r.flowId}: the sentence counts a report as a test`,
+        );
     }
   });
 
@@ -425,21 +548,40 @@ describe('the front door\'s cells cannot overclaim (swarm 2026-09-23)', () => {
     // so the guard is at the source.
     const read = (f: string): string => readFileSync(join(repoRoot, 'packages/server/public/app/surfaces', f), 'utf8');
     // the count line moved with the journey page's drawing to lib/journey-draw.js: the Map's table prints it in its head
-    const header = readFileSync(join(repoRoot, 'packages/server/public/app/lib/journey-draw.js'), 'utf8').split('function jrnHeaderHtml(')[1]?.split('\nfunction ')[0] ?? '';
+    const header =
+      readFileSync(join(repoRoot, 'packages/server/public/app/lib/journey-draw.js'), 'utf8')
+        .split('function jrnHeaderHtml(')[1]
+        ?.split('\nfunction ')[0] ?? '';
     assert.ok(header, 'jrnHeaderHtml is gone — this guard needs rewriting, not deleting');
-    assert.match(header, /C\('actions'\)/, 'the header must print the typed count of actions (the fold\'s `called`), not the moments');
-    assert.match(header, /cnt\.called/, 'and fall back to the fold\'s `called` on a server with no typed counts');
+    assert.match(
+      header,
+      /C\('actions'\)/,
+      "the header must print the typed count of actions (the fold's `called`), not the moments",
+    );
+    assert.match(header, /cnt\.called/, "and fall back to the fold's `called` on a server with no typed counts");
     for (const rel of ['again', 'declaredNotCalled', 'actionStops']) {
-      assert.match(header, new RegExp(`C\\('${rel}'\\)`), `the actions tip must name \`${rel}\` beside the actions, from the same fold`);
+      assert.match(
+        header,
+        new RegExp(`C\\('${rel}'\\)`),
+        `the actions tip must name \`${rel}\` beside the actions, from the same fold`,
+      );
     }
-    assert.match(header, /C\('notInWords'\)/, 'one concept, one number: the conditions not in plain language are the typed whole in every lens');
+    assert.match(
+      header,
+      /C\('notInWords'\)/,
+      'one concept, one number: the conditions not in plain language are the typed whole in every lens',
+    );
     // the separators are text, not only CSS: pasted into a ticket this line read
     // `19 actions3 DECLARED ONLYVERIFIED BY A RUNE2E REACHED`
-    assert.match(header, /<span class="jrn-hsep"> · <\/span>/, 'the groups are joined by a separator that is real text');
+    assert.match(
+      header,
+      /<span class="jrn-hsep"> · <\/span>/,
+      'the groups are joined by a separator that is real text',
+    );
     assert.match(header, /join\(' · '\)/, 'and the items inside a group too');
   });
 
-  test('both surfaces read the flow\'s evidence word off the same field', async () => {
+  test("both surfaces read the flow's evidence word off the same field", async () => {
     // The flow status table said *verified by a run* and the journey header said
     // *reached by tests* for one flow at one sync: two rungs of one ladder, because
     // one surface printed the chip and the other derived a word from `e2e`
@@ -448,7 +590,10 @@ describe('the front door\'s cells cannot overclaim (swarm 2026-09-23)', () => {
     // checked at the source, on the two functions that print the word.
     const read = (f: string): string => readFileSync(join(repoRoot, 'packages/server/public/app/surfaces', f), 'utf8');
     // the count line moved with the journey page's drawing to lib/journey-draw.js: the Map's table prints it in its head
-    const header = readFileSync(join(repoRoot, 'packages/server/public/app/lib/journey-draw.js'), 'utf8').split('function jrnHeaderHtml(')[1]?.split('\nfunction ')[0] ?? '';
+    const header =
+      readFileSync(join(repoRoot, 'packages/server/public/app/lib/journey-draw.js'), 'utf8')
+        .split('function jrnHeaderHtml(')[1]
+        ?.split('\nfunction ')[0] ?? '';
     assert.ok(header, 'jrnHeaderHtml is gone — this guard needs rewriting, not deleting');
     // Since the visual swarm of 2026-09-24 the word itself comes from the fold
     // (`coverage.evidenceWord`), because printing the chip was not enough: two of
@@ -456,13 +601,16 @@ describe('the front door\'s cells cannot overclaim (swarm 2026-09-23)', () => {
     // coverage reports says *seen by a coverage run*, so eight of ten flows read
     // one word on the front door and another on the Tests tab.
     assert.match(header, /evidenceWord\(cov\)/, 'the journey header must take its evidence word from the fold');
-    assert.doesNotMatch(header, /journey\.evidence\.' \+ /,
-      'the journey header is assembling the ladder word itself again: two surfaces, two rungs, one flow');
+    assert.doesNotMatch(
+      header,
+      /journey\.evidence\.' \+ /,
+      'the journey header is assembling the ladder word itself again: two surfaces, two rungs, one flow',
+    );
     const cell = read('portfolio.js').split('function testedCell(')[1]?.split('\nfunction ')[0] ?? '';
     assert.ok(cell, 'testedCell is gone — this guard needs rewriting, not deleting');
     assert.match(cell, /evidenceWord\(c\)/, 'the flow status table must take its evidence word from the fold');
     assert.doesNotMatch(cell, /journey\.evidence\.' \+ /, 'the flow status table is assembling the word itself again');
-    assert.match(cell, /sharedEvidence/, 'and it must respect the fold\'s shared-evidence qualifier');
+    assert.match(cell, /sharedEvidence/, "and it must respect the fold's shared-evidence qualifier");
     const tab = read('tests.js').split('function evidenceCellHtml(')[1]?.split('\nfunction ')[0] ?? '';
     assert.ok(tab, 'evidenceCellHtml is gone — this guard needs rewriting, not deleting');
     assert.match(tab, /evidenceWord\(c\)/, 'the Tests tab must take its evidence word from the same fold');
@@ -470,7 +618,7 @@ describe('the front door\'s cells cannot overclaim (swarm 2026-09-23)', () => {
 });
 
 describe('one denominator (clarity phase §3.6)', () => {
-  test('a flow\'s coverage sentence is the same number and the same label in the journey, in the matrix and in the core fold', async () => {
+  test("a flow's coverage sentence is the same number and the same label in the journey, in the matrix and in the core fold", async () => {
     const fold = wire(testsSurface(index, null, meta.tests));
     for (const r of fold.journeys) {
       const id = r.flowId;

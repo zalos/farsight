@@ -7,10 +7,32 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  buildIndex, workNodeOf, workNodeId, parseWorkNodeId, tracksEdgeOf, applyWorkToFragment, workToFragment, strongestLinks,
-  detectWorkKeysFallback, commitKeysOf, mergeSubjectBranch, hunksOfPatch, nodesTouched,
-  itemsByState, itemsByType, itemSummaryOf, touchedCount, workFindings, filterWorkItems, countedProblems, impactOf,
-  WORK_LINK_VIAS, COMMIT_KEY_VIAS, WORK_FINDING_KINDS, COUNT_SCOPES, STRINGS,
+  buildIndex,
+  workNodeOf,
+  workNodeId,
+  parseWorkNodeId,
+  tracksEdgeOf,
+  applyWorkToFragment,
+  workToFragment,
+  strongestLinks,
+  detectWorkKeysFallback,
+  commitKeysOf,
+  mergeSubjectBranch,
+  hunksOfPatch,
+  nodesTouched,
+  itemsByState,
+  itemsByType,
+  itemSummaryOf,
+  touchedCount,
+  workFindings,
+  filterWorkItems,
+  countedProblems,
+  impactOf,
+  WORK_LINK_VIAS,
+  COMMIT_KEY_VIAS,
+  WORK_FINDING_KINDS,
+  COUNT_SCOPES,
+  STRINGS,
 } from '../dist/index.js';
 import type { GraphFragment, GraphNode, WorkItemFacts, WorkLinkFact } from '../dist/index.js';
 import { validate } from './validate.ts';
@@ -19,15 +41,21 @@ const here = dirname(fileURLToPath(import.meta.url));
 const schema = (n: string) => JSON.parse(readFileSync(join(here, '..', '..', '..', 'schemas', n), 'utf8'));
 
 const item = (key: string, state: string, extra: Partial<WorkItemFacts> = {}): WorkItemFacts => ({
-  id: workNodeId('jira-test', key), source: 'jira-test', provider: 'jira', key,
+  id: workNodeId('jira-test', key),
+  source: 'jira-test',
+  provider: 'jira',
+  key,
   url: `https://example.atlassian.net/browse/${key}`,
-  type: { name: 'Story', category: 'story' }, title: `Title of ${key}`,
+  type: { name: 'Story', category: 'story' },
+  title: `Title of ${key}`,
   state: { name: state === 'todo' ? 'To Do' : state === 'done' ? 'Done' : 'In Progress', category: state },
-  labels: [], updated: '2026-09-30T00:00:00Z', ...extra,
+  labels: [],
+  updated: '2026-09-30T00:00:00Z',
+  ...extra,
 });
 
 const fn = (name: string, path: string, line: number): GraphNode =>
-  ({ id: `app::${path}::${name}`, kind: 'function', name, tags: [], loc: { repo: 'app', path, line } } as GraphNode);
+  ({ id: `app::${path}::${name}`, kind: 'function', name, tags: [], loc: { repo: 'app', path, line } }) as GraphNode;
 
 test('a work node: id work::<source>::<key>, name = key, business label = title, tags, a tracker link, no loc', () => {
   const n = workNodeOf(item('KAN-3', 'in-progress', { assignee: { id: 'u1', name: 'Ada Okafor' } }));
@@ -86,23 +114,61 @@ test('impact never walks a tracks edge: a work item is not a dependent of the co
   const a = fn('a', 'src/a.ts', 1);
   const b = fn('b', 'src/b.ts', 1);
   const f: GraphFragment = { repo: 'app', nodes: [a, b], edges: [{ id: 'c', kind: 'calls', from: b.id, to: a.id }] };
-  applyWorkToFragment(f, [item('KAN-1', 'todo')], [{ work: 'work::jira-test::KAN-1', node: a.id, via: 'declared', tier: 'HIGH' }]);
+  applyWorkToFragment(
+    f,
+    [item('KAN-1', 'todo')],
+    [{ work: 'work::jira-test::KAN-1', node: a.id, via: 'declared', tier: 'HIGH' }],
+  );
   const r = impactOf(buildIndex(f.nodes, f.edges), a.id, { hops: 3 });
-  assert.deepEqual(r.hops.flatMap((h) => h.nodes.map((n) => n.kind)), ['function']);
+  assert.deepEqual(
+    r.hops.flatMap((h) => h.nodes.map((n) => n.kind)),
+    ['function'],
+  );
 });
 
 test('key detection: known projects, merge subjects, URLs, branches — and SHA-256 / #12 are not keys', () => {
   const opts = { projects: ['KAN'] };
-  assert.deepEqual(detectWorkKeysFallback('KAN-1: add login', 'subject', opts).map((d) => d.key), ['KAN-1']);
-  assert.deepEqual(detectWorkKeysFallback('hash with SHA-256 and UTF-8', 'subject', { projects: ['SHA', 'KAN'] }), [], 'false friends refused even when configured');
+  assert.deepEqual(
+    detectWorkKeysFallback('KAN-1: add login', 'subject', opts).map((d) => d.key),
+    ['KAN-1'],
+  );
+  assert.deepEqual(
+    detectWorkKeysFallback('hash with SHA-256 and UTF-8', 'subject', { projects: ['SHA', 'KAN'] }),
+    [],
+    'false friends refused even when configured',
+  );
   assert.deepEqual(detectWorkKeysFallback('fix #12', 'subject', {}), [], 'no ADO source: #12 is not a work item');
-  assert.deepEqual(detectWorkKeysFallback('fix #12 and AB#40', 'subject', { ado: true }).map((d) => d.key), ['12', '40']);
-  assert.deepEqual(detectWorkKeysFallback('feature/kan-2-thing', 'branch', opts).map((d) => d.key), ['KAN-2']);
-  assert.deepEqual(detectWorkKeysFallback('feature/kan-2-thing', 'branch', {}), [], 'a branch key needs a configured project');
-  assert.deepEqual(detectWorkKeysFallback('KAN-1 with no configured project', 'subject', {}), [], 'no configured project: no Jira key');
-  assert.deepEqual(detectWorkKeysFallback('screens INV-01 and INV-02 built', 'subject', { projects: ['INV'] }), [], 'a design screen name is not a work key');
-  assert.deepEqual(detectWorkKeysFallback('INV-3 list', 'subject', { projects: ['INV'] }).map((d) => d.key), ['INV-3']);
-  assert.deepEqual(detectWorkKeysFallback('users/jared/4711-fix', 'branch', { ado: true }).map((d) => d.key), ['4711']);
+  assert.deepEqual(
+    detectWorkKeysFallback('fix #12 and AB#40', 'subject', { ado: true }).map((d) => d.key),
+    ['12', '40'],
+  );
+  assert.deepEqual(
+    detectWorkKeysFallback('feature/kan-2-thing', 'branch', opts).map((d) => d.key),
+    ['KAN-2'],
+  );
+  assert.deepEqual(
+    detectWorkKeysFallback('feature/kan-2-thing', 'branch', {}),
+    [],
+    'a branch key needs a configured project',
+  );
+  assert.deepEqual(
+    detectWorkKeysFallback('KAN-1 with no configured project', 'subject', {}),
+    [],
+    'no configured project: no Jira key',
+  );
+  assert.deepEqual(
+    detectWorkKeysFallback('screens INV-01 and INV-02 built', 'subject', { projects: ['INV'] }),
+    [],
+    'a design screen name is not a work key',
+  );
+  assert.deepEqual(
+    detectWorkKeysFallback('INV-3 list', 'subject', { projects: ['INV'] }).map((d) => d.key),
+    ['INV-3'],
+  );
+  assert.deepEqual(
+    detectWorkKeysFallback('users/jared/4711-fix', 'branch', { ado: true }).map((d) => d.key),
+    ['4711'],
+  );
   const url = detectWorkKeysFallback('see https://x.atlassian.net/browse/KAN-9 please', 'body', opts);
   assert.deepEqual(url, [{ key: 'KAN-9', provider: 'jira', form: 'url' }]);
   const ado = detectWorkKeysFallback('https://dev.azure.com/org/Proj/_workitems/edit/77', 'body', { ado: true });
@@ -110,23 +176,64 @@ test('key detection: known projects, merge subjects, URLs, branches — and SHA-
 
   assert.equal(mergeSubjectBranch("Merge branch 'feature/KAN-1-x'"), 'feature/KAN-1-x');
   assert.equal(mergeSubjectBranch('Merge pull request #12 from org/KAN-4-y'), 'org/KAN-4-y');
-  const merge = commitKeysOf({ subject: 'Merge pull request #12 from org/KAN-4-y', merge: true }, [], { projects: ['KAN'], ado: true });
-  assert.deepEqual(merge, [{ key: 'KAN-4', provider: 'jira', via: 'merge-subject', ref: 'org/KAN-4-y' }], 'the PR number is never a work item');
-  const squash = commitKeysOf({ subject: 'chore(e2e): retire the old suite AB#7 (#58)' }, [], { projects: ['KAN'], ado: true });
-  assert.deepEqual(squash.map((k) => k.key), ['7'], 'a squash merge\'s trailing (#58) is the PR number, not work item 58');
-  const both = commitKeysOf({ subject: 'KAN-1 tidy', body: 'Refs https://x.atlassian.net/browse/KAN-5' }, ['feature/KAN-2-x'], opts);
-  assert.deepEqual(both.map((k) => `${k.key}:${k.via}`), ['KAN-1:subject', 'KAN-5:url', 'KAN-2:branch']);
+  const merge = commitKeysOf({ subject: 'Merge pull request #12 from org/KAN-4-y', merge: true }, [], {
+    projects: ['KAN'],
+    ado: true,
+  });
+  assert.deepEqual(
+    merge,
+    [{ key: 'KAN-4', provider: 'jira', via: 'merge-subject', ref: 'org/KAN-4-y' }],
+    'the PR number is never a work item',
+  );
+  const squash = commitKeysOf({ subject: 'chore(e2e): retire the old suite AB#7 (#58)' }, [], {
+    projects: ['KAN'],
+    ado: true,
+  });
+  assert.deepEqual(
+    squash.map((k) => k.key),
+    ['7'],
+    "a squash merge's trailing (#58) is the PR number, not work item 58",
+  );
+  const both = commitKeysOf(
+    { subject: 'KAN-1 tidy', body: 'Refs https://x.atlassian.net/browse/KAN-5' },
+    ['feature/KAN-2-x'],
+    opts,
+  );
+  assert.deepEqual(
+    both.map((k) => `${k.key}:${k.via}`),
+    ['KAN-1:subject', 'KAN-5:url', 'KAN-2:branch'],
+  );
 });
 
 test('hunks → nodes: the definition a changed line sits in, not every function in the file', () => {
   const patch = [
-    'diff --git a/src/a.ts b/src/a.ts', '--- a/src/a.ts', '+++ b/src/a.ts',
-    '@@ -12,2 +12,3 @@ function two', '+x', '@@ -40 +41,0 @@', '-y',
-    'diff --git a/img.png b/img.png', 'Binary files differ',
+    'diff --git a/src/a.ts b/src/a.ts',
+    '--- a/src/a.ts',
+    '+++ b/src/a.ts',
+    '@@ -12,2 +12,3 @@ function two',
+    '+x',
+    '@@ -40 +41,0 @@',
+    '-y',
+    'diff --git a/img.png b/img.png',
+    'Binary files differ',
   ].join('\n');
   const hunks = hunksOfPatch(patch);
-  assert.deepEqual(hunks, [{ path: 'src/a.ts', ranges: [[12, 14], [41, 41]] }]);
-  const nodes = [fn('one', 'src/a.ts', 1), fn('two', 'src/a.ts', 10), fn('three', 'src/a.ts', 20), fn('four', 'src/a.ts', 38), fn('other', 'src/b.ts', 1)];
+  assert.deepEqual(hunks, [
+    {
+      path: 'src/a.ts',
+      ranges: [
+        [12, 14],
+        [41, 41],
+      ],
+    },
+  ]);
+  const nodes = [
+    fn('one', 'src/a.ts', 1),
+    fn('two', 'src/a.ts', 10),
+    fn('three', 'src/a.ts', 20),
+    fn('four', 'src/a.ts', 38),
+    fn('other', 'src/b.ts', 1),
+  ];
   const r = nodesTouched(nodes, hunks[0]!);
   assert.deepEqual(r.nodes.map((n) => n.name).sort(), ['four', 'two']);
   assert.equal(r.fileOnly, false);
@@ -136,13 +243,31 @@ test('hunks → nodes: the definition a changed line sits in, not every function
 });
 
 test('the folds: counts are Counteds that sum, and the two findings carry both provenances', () => {
-  const items = [item('KAN-1', 'todo'), item('KAN-2', 'done'), item('KAN-3', 'in-progress', { type: { name: 'Bug', category: 'bug' } })];
+  const items = [
+    item('KAN-1', 'todo'),
+    item('KAN-2', 'done'),
+    item('KAN-3', 'in-progress', { type: { name: 'Bug', category: 'bug' } }),
+  ];
   const byState = itemsByState(items, 'count.scope.workspace', 'test');
   assert.deepEqual(countedProblems(byState), []);
-  assert.deepEqual(byState.breakdown!.map((p) => [p.key, p.n]), [['count.part.workTodo', 1], ['count.part.workInProgress', 1], ['count.part.workDone', 1]]);
+  assert.deepEqual(
+    byState.breakdown!.map((p) => [p.key, p.n]),
+    [
+      ['count.part.workTodo', 1],
+      ['count.part.workInProgress', 1],
+      ['count.part.workDone', 1],
+    ],
+  );
   assert.deepEqual(countedProblems(itemsByType(items, 'journey.scopeAll', 'test')), []);
 
-  const screen = { id: 'app::page::/signup', kind: 'page', name: '/signup', tags: [], design: { status: 'design-only', origin: 'manifest', id: 'ON-01' }, facets: { business: { label: 'Sign up' } } } as GraphNode;
+  const screen = {
+    id: 'app::page::/signup',
+    kind: 'page',
+    name: '/signup',
+    tags: [],
+    design: { status: 'design-only', origin: 'manifest', id: 'ON-01' },
+    facets: { business: { label: 'Sign up' } },
+  } as GraphNode;
   const index = buildIndex([screen, fn('a', 'src/a.ts', 1)], []);
   const links: WorkLinkFact[] = [
     { work: items[1]!.id, node: screen.id, via: 'declared', tier: 'HIGH' },
@@ -161,7 +286,10 @@ test('the folds: counts are Counteds that sum, and the two findings carry both p
   assert.equal(done.length, 1);
   assert.equal(done[0]!.kind, 'done-not-built');
   assert.equal(done[0]!.text, 'KAN-2 is done; its screen Sign up is not built');
-  assert.deepEqual(done[0]!.provenances.map((p) => p.source), ['tracker', 'code']);
+  assert.deepEqual(
+    done[0]!.provenances.map((p) => p.source),
+    ['tracker', 'code'],
+  );
   const todo = workFindings(items[0]!, index, { links, commits: 4 });
   assert.equal(todo[0]!.text, 'KAN-1 is to do; 4 commits name it');
   const one = workFindings(items[0]!, index, { links, commits: 1 })[0]!;
@@ -170,9 +298,18 @@ test('the folds: counts are Counteds that sum, and the two findings carry both p
   assert.equal(todo[0]!.provenances[1]!.what, '4 commits on the history spine name KAN-1');
   assert.deepEqual(workFindings(items[2]!, index, { links, commits: 9 }), []);
 
-  assert.deepEqual(filterWorkItems(items, links, { node: screen.id }, index).map((i) => i.key), ['KAN-2']);
-  assert.deepEqual(filterWorkItems(items, links, { q: 'kan-3' }, index).map((i) => i.key), ['KAN-3']);
-  assert.deepEqual(filterWorkItems(items, links, { state: 'todo' }, index).map((i) => i.key), ['KAN-1']);
+  assert.deepEqual(
+    filterWorkItems(items, links, { node: screen.id }, index).map((i) => i.key),
+    ['KAN-2'],
+  );
+  assert.deepEqual(
+    filterWorkItems(items, links, { q: 'kan-3' }, index).map((i) => i.key),
+    ['KAN-3'],
+  );
+  assert.deepEqual(
+    filterWorkItems(items, links, { state: 'todo' }, index).map((i) => i.key),
+    ['KAN-1'],
+  );
 });
 
 test('every work.* string has both registers, and every counted unit a define and a {n}', () => {

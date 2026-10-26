@@ -10,7 +10,9 @@ test.describe('the state of play', () => {
    * @covers packages/server/public/app/lib/state-of-play.js::mountStateOfPlay
    * @covers packages/core/src/state-of-play.ts::stateOfPlay
    */
-  test('three columns, every number with a tip and a re-check, the history sentence with both halves', async ({ page }) => {
+  test('three columns, every number with a tip and a re-check, the history sentence with both halves', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/journeys');
     const card = page.locator('#sop-card');
     await expect(card.locator('.sop-col')).toHaveCount(3);
@@ -27,7 +29,9 @@ test.describe('the state of play', () => {
     expect(await ns.count()).toBeGreaterThan(8);
     for (const n of await ns.all()) await expect(n).toHaveAttribute('data-tip-id', 'number');
     // the history: one sentence, both halves
-    await expect(card.locator('.sop-hist')).toContainText(/\d+ commits? read into history · \d+ ingested by a sync · \d+ not yet/);
+    await expect(card.locator('.sop-hist')).toContainText(
+      /\d+ commits? read into history · \d+ ingested by a sync · \d+ not yet/,
+    );
     // a re-check door names its command in its tip
     const re = card.locator('.sop-re').first();
     await expect(re).toHaveAttribute('data-cmd', /^farsight /);

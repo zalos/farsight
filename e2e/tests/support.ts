@@ -13,9 +13,7 @@ import { test as base, expect, type Page } from '@playwright/test';
  * `/api/design/image`, which answers 404 when no FIGMA_TOKEN is set. The viewer
  * falls back to its placeholder, but the browser still logs the 404.
  */
-const KNOWN_HTTP_NOISE: RegExp[] = [
-  /\/api\/design\/image\?/,
-];
+const KNOWN_HTTP_NOISE: RegExp[] = [/\/api\/design\/image\?/];
 
 type Fixtures = {
   expectedHttpErrors: RegExp[];
@@ -28,24 +26,38 @@ type Fixtures = {
 export const test = base.extend<Fixtures>({
   expectedHttpErrors: [[], { option: true }],
   mapLegendSeen: [true, { option: true }],
-  mapLegendInit: [async ({ page, mapLegendSeen }, use) => {
-    if (mapLegendSeen) await page.addInitScript(() => { try { localStorage.setItem('fs-map-legend-seen', '1'); } catch { /* no storage: the legend opens */ } });
-    await use();
-  }, { auto: true }],
-  pageErrors: [async ({ page, expectedHttpErrors }, use) => {
-    const errors: string[] = [];
-    const allowed = [...KNOWN_HTTP_NOISE, ...expectedHttpErrors];
-    page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-    page.on('console', (m) => {
-      // a failed fetch is judged by its response below, where the URL is known
-      if (m.type() === 'error' && !m.text().startsWith('Failed to load resource')) errors.push(`console: ${m.text()}`);
-    });
-    page.on('response', (r) => {
-      if (r.status() >= 400 && !allowed.some((re) => re.test(r.url()))) errors.push(`http ${r.status()}: ${r.url()}`);
-    });
-    await use(errors);
-    expect(errors, 'page errors, console errors and unexpected HTTP errors').toEqual([]);
-  }, { auto: true }],
+  mapLegendInit: [
+    async ({ page, mapLegendSeen }, use) => {
+      if (mapLegendSeen)
+        await page.addInitScript(() => {
+          try {
+            localStorage.setItem('fs-map-legend-seen', '1');
+          } catch {
+            /* no storage: the legend opens */
+          }
+        });
+      await use();
+    },
+    { auto: true },
+  ],
+  pageErrors: [
+    async ({ page, expectedHttpErrors }, use) => {
+      const errors: string[] = [];
+      const allowed = [...KNOWN_HTTP_NOISE, ...expectedHttpErrors];
+      page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+      page.on('console', (m) => {
+        // a failed fetch is judged by its response below, where the URL is known
+        if (m.type() === 'error' && !m.text().startsWith('Failed to load resource'))
+          errors.push(`console: ${m.text()}`);
+      });
+      page.on('response', (r) => {
+        if (r.status() >= 400 && !allowed.some((re) => re.test(r.url()))) errors.push(`http ${r.status()}: ${r.url()}`);
+      });
+      await use(errors);
+      expect(errors, 'page errors, console errors and unexpected HTTP errors').toEqual([]);
+    },
+    { auto: true },
+  ],
 });
 
 export { expect };
@@ -75,7 +87,10 @@ export async function openBillingCycle(page: Page): Promise<void> {
 
 /** The fixture's Billing cycle on the Map at one layout of the journey stop (`screens` · `table`), in a register. */
 export async function openJourneyAt(page: Page, layout: 'screens' | 'table', lens = 'hybrid'): Promise<void> {
-  await gotoReady(page, '#/map/' + encodeURIComponent('invoice-app::flow::billing-cycle') + '?layout=' + layout + '&lens=' + lens);
+  await gotoReady(
+    page,
+    '#/map/' + encodeURIComponent('invoice-app::flow::billing-cycle') + '?layout=' + layout + '&lens=' + lens,
+  );
   if (layout === 'table') await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();
   else await expect(page.locator('.map-scr').first()).toBeVisible();
 }

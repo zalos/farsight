@@ -17,11 +17,18 @@ test('a non-tracker grant shape is decided with its own target check', () => {
     { actions: ['dispose'], principals: ['agent'], rules: ['js/sql'] },
     { actions: ['dispose'], principals: ['agent'], confirm: 'never' },
   ];
-  const miss = (rule: string) => (g: Grant) => (g.rules && !g.rules.includes(rule) ? `the grant does not cover ${rule}` : null);
+  const miss = (rule: string) => (g: Grant) =>
+    g.rules && !g.rules.includes(rule) ? `the grant does not cover ${rule}` : null;
   const d = decideGrants(grants, 'dispose', 'agent', { miss: miss('js/xss') });
   assert.equal(d.verdict.allowed, true);
   assert.equal(d.grant, grants[1]);
   assert.equal(d.requiresConfirmation, false);
-  assert.deepEqual(decideGrants(grants, 'promote', 'agent').verdict, { allowed: false, reason: 'no grant allows promote' });
-  assert.equal(decideGrants(grants.slice(0, 1), 'dispose', 'agent', { miss: miss('js/xss') }).verdict.reason, 'the grant does not cover js/xss');
+  assert.deepEqual(decideGrants(grants, 'promote', 'agent').verdict, {
+    allowed: false,
+    reason: 'no grant allows promote',
+  });
+  assert.equal(
+    decideGrants(grants.slice(0, 1), 'dispose', 'agent', { miss: miss('js/xss') }).verdict.reason,
+    'the grant does not cover js/xss',
+  );
 });

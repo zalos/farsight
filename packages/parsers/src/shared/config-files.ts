@@ -26,10 +26,27 @@
  */
 import { join, posix, relative } from 'node:path';
 import type {
-  ApplyConfigOptions, ConfigMeta, ExternalDecl, FarsightConfig, GraphEdge, GraphNode, JourneysConfig,
-  StorybookConfig, StoreDecl, TestReportConfig, TestsConfigBlock,
+  ApplyConfigOptions,
+  ConfigMeta,
+  ExternalDecl,
+  FarsightConfig,
+  GraphEdge,
+  GraphNode,
+  JourneysConfig,
+  StorybookConfig,
+  StoreDecl,
+  TestReportConfig,
+  TestsConfigBlock,
 } from '@farsight/core';
-import { applyConfig, applyRouteGuards, readConfigFile, scopeOfDir, stringList, CONFIG_FIELDS, ROOT_ONLY_CONFIG_FIELDS } from '@farsight/core';
+import {
+  applyConfig,
+  applyRouteGuards,
+  readConfigFile,
+  scopeOfDir,
+  stringList,
+  CONFIG_FIELDS,
+  ROOT_ONLY_CONFIG_FIELDS,
+} from '@farsight/core';
 import { collectFiles } from './files.js';
 import type { IngestOptions } from '../types.js';
 
@@ -37,7 +54,12 @@ import type { IngestOptions } from '../types.js';
 export const CONFIG_FILE = 'farsight.config.json';
 
 /** One config file of a source. `dir` is its folder, repo-relative and posix; `'.'` for the root. */
-export interface ConfigFile { path: string; dir: string; config: FarsightConfig; root: boolean }
+export interface ConfigFile {
+  path: string;
+  dir: string;
+  config: FarsightConfig;
+  root: boolean;
+}
 
 /**
  * One `stores[]` declaration and the file that gave it: `dir` is that file's folder (`'.'` for the
@@ -83,7 +105,9 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
     found = collectFiles(repoRoot, ['.json'], options, (base) => base !== CONFIG_FILE)
       .map((abs) => relative(repoRoot, abs).replace(/\\/g, '/'))
       .filter((rel) => rel !== CONFIG_FILE);
-  } catch { /* an unreadable source has no nested configs to offer */ }
+  } catch {
+    /* an unreadable source has no nested configs to offer */
+  }
   found.sort((a, b) => depthOf(posix.dirname(a)) - depthOf(posix.dirname(b)) || a.localeCompare(b));
   paths.push(...found);
 
@@ -91,7 +115,10 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
     const root = path === CONFIG_FILE;
     const read = readConfigFile(join(repoRoot, path));
     if ('missing' in read) continue;
-    if ('error' in read) { meta.notes.push(`${path} ${read.error}; it was not applied.`); continue; }
+    if ('error' in read) {
+      meta.notes.push(`${path} ${read.error}; it was not applied.`);
+      continue;
+    }
     const dir = root ? '.' : posix.dirname(path);
     const config = read.config;
     const fields: string[] = [];
@@ -126,7 +153,12 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
   for (const f of ws.files) {
     for (const [key, e] of Object.entries(f.config.glossary ?? {})) {
       if (!e || typeof e.label !== 'string' || !e.label.trim() || words.has(key)) continue;
-      words.set(key, { key, label: e.label, ...(typeof e.description === 'string' && e.description.trim() ? { description: e.description } : {}), file: f.path });
+      words.set(key, {
+        key,
+        label: e.label,
+        ...(typeof e.description === 'string' && e.description.trim() ? { description: e.description } : {}),
+        file: f.path,
+      });
     }
   }
   if (words.size) meta.glossary = [...words.values()];
@@ -143,7 +175,9 @@ export function rebasePath(dir: string, value: string, where: string, notes: str
   const raw = value.trim().replace(/\\/g, '/');
   if (!raw) return undefined;
   if (raw.startsWith('/') || /^[A-Za-z]:/.test(raw) || raw.includes('\0')) {
-    notes.push(`${where} ${JSON.stringify(value.slice(0, 200))} is an absolute path; a nested farsight.config.json names paths relative to its folder, so it was ignored.`);
+    notes.push(
+      `${where} ${JSON.stringify(value.slice(0, 200))} is an absolute path; a nested farsight.config.json names paths relative to its folder, so it was ignored.`,
+    );
     return undefined;
   }
   const joined = posix.normalize(`${dir}/${raw}`);
@@ -164,12 +198,21 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
   const notes = meta.notes;
 
   const list = (dir: string, values: string[] | undefined, where: string) =>
-    (Array.isArray(values) ? values : []).filter((v): v is string => typeof v === 'string').map((v) => rebasePath(dir, v, where, notes)).filter((v): v is string => !!v);
+    (Array.isArray(values) ? values : [])
+      .filter((v): v is string => typeof v === 'string')
+      .map((v) => rebasePath(dir, v, where, notes))
+      .filter((v): v is string => !!v);
   const union = (a: string[] | undefined, b: string[]) => [...new Set([...(a ?? []), ...b])];
   /** `results` / `coverage` / `report`: one string stays one string, a list stays a list */
-  const rebaseOneOrMany = (dir: string, v: string | string[] | undefined, where: string): string | string[] | undefined => {
+  const rebaseOneOrMany = (
+    dir: string,
+    v: string | string[] | undefined,
+    where: string,
+  ): string | string[] | undefined => {
     if (v === undefined) return undefined;
-    const out = stringList(v).map((x) => rebasePath(dir, x, where, notes)).filter((x): x is string => !!x);
+    const out = stringList(v)
+      .map((x) => rebasePath(dir, x, where, notes))
+      .filter((x): x is string => !!x);
     if (!out.length) return undefined;
     return Array.isArray(v) ? out : out[0];
   };
@@ -178,7 +221,8 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
   const externals: ExternalDecl[] = [...(Array.isArray(root.externals) ? root.externals : [])];
   const stores: StoreDecl[] = [...(Array.isArray(root.stores) ? root.stores : [])];
   // a party has no import: it is keyed by its name
-  const extKey = (e: ExternalDecl) => (typeof e.import === 'string' ? e.import : `party:${String(e.name ?? '').toLowerCase()}`);
+  const extKey = (e: ExternalDecl) =>
+    typeof e.import === 'string' ? e.import : `party:${String(e.name ?? '').toLowerCase()}`;
   const externalFrom = new Map<string, string>(externals.map((e) => [extKey(e), rootFile!.path]));
   const storeFrom = new Map<string, string>(stores.map((s) => [s.name, rootFile!.path]));
   const storeDecl = new Map<string, StoreDecl>();
@@ -196,7 +240,8 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
         for (const k of ['manifest', 'path'] as const) {
           if (typeof d[k] !== 'string') continue;
           const p = rebasePath(f.dir, d[k]!, where(`design.${k}`), notes);
-          if (p) out[k] = p; else delete out[k];
+          if (p) out[k] = p;
+          else delete out[k];
         }
         return out.manifest || out.path || out.url ? [out] : [];
       });
@@ -208,7 +253,8 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
         const out = { ...d };
         if (typeof d.path === 'string') {
           const p = rebasePath(f.dir, d.path, where('openapi.path'), notes);
-          if (p) out.path = p; else delete out.path;
+          if (p) out.path = p;
+          else delete out.path;
         }
         return out.path || out.url ? [out] : [];
       });
@@ -216,11 +262,15 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
     }
     if (c.tests && typeof c.tests === 'object') {
       const t: TestsConfigBlock = { ...(merged.tests ?? {}) };
-      if (c.tests.include !== undefined) t.include = union(t.include, list(f.dir, c.tests.include, where('tests.include')));
-      if (c.tests.exclude !== undefined) t.exclude = union(t.exclude, list(f.dir, c.tests.exclude, where('tests.exclude')));
+      if (c.tests.include !== undefined)
+        t.include = union(t.include, list(f.dir, c.tests.include, where('tests.include')));
+      if (c.tests.exclude !== undefined)
+        t.exclude = union(t.exclude, list(f.dir, c.tests.exclude, where('tests.exclude')));
       for (const level of LEVELS) {
         const given = c.tests[level];
-        const blocks = (Array.isArray(given) ? given : given ? [given] : []).filter((b): b is TestReportConfig => !!b && typeof b === 'object');
+        const blocks = (Array.isArray(given) ? given : given ? [given] : []).filter(
+          (b): b is TestReportConfig => !!b && typeof b === 'object',
+        );
         if (!blocks.length) continue;
         const rebased = blocks.map((b) => {
           const out: TestReportConfig = { ...(b.runner ? { runner: b.runner } : {}) };
@@ -237,13 +287,16 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
       merged.tests = t;
     }
     if (c.storybook && typeof c.storybook === 'object') {
-      const given = (Array.isArray(c.storybook) ? c.storybook : [c.storybook]).filter((s): s is StorybookConfig => !!s && typeof s === 'object');
+      const given = (Array.isArray(c.storybook) ? c.storybook : [c.storybook]).filter(
+        (s): s is StorybookConfig => !!s && typeof s === 'object',
+      );
       const rebased = given.map((s) => {
         const out: StorybookConfig = { ...s };
         for (const k of ['configDir', 'root'] as const) {
           if (typeof s[k] !== 'string') continue;
           const p = rebasePath(f.dir, s[k]!, where(`storybook.${k}`), notes);
-          if (p) out[k] = p; else delete out[k];
+          if (p) out[k] = p;
+          else delete out[k];
         }
         // a nested file's Storybook without a configDir is the one in its own folder
         if (out.configDir === undefined) out.configDir = `${f.dir}/.storybook`;
@@ -258,7 +311,10 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
         if (e.kind === 'party' && typeof e.import !== 'string' && typeof e.name === 'string') {
           const k = extKey(e);
           const first = externalFrom.get(k);
-          if (first) { addConflict(meta, 'external', e.name, [first, f.path], first); continue; }
+          if (first) {
+            addConflict(meta, 'external', e.name, [first, f.path], first);
+            continue;
+          }
           externalFrom.set(k, f.path);
           externals.push({ ...e });
           continue;
@@ -273,7 +329,10 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
           imp = `${p}${e.import.slice(sep)}`;
         }
         const first = externalFrom.get(imp);
-        if (first) { addConflict(meta, 'external', imp, [first, f.path], first); continue; }
+        if (first) {
+          addConflict(meta, 'external', imp, [first, f.path], first);
+          continue;
+        }
         externalFrom.set(imp, f.path);
         externals.push({ ...e, import: imp });
       }
@@ -311,13 +370,28 @@ function dedupeBy<T>(items: T[], key: (t: T) => string): T[] {
 }
 
 /** Record that two files disagree about `key` (for the store pass, which runs after the files are read). */
-export function recordConflict(ws: WorkspaceConfig, kind: ConfigMeta['conflicts'][number]['kind'], key: string, files: string[], kept: string): void {
+export function recordConflict(
+  ws: WorkspaceConfig,
+  kind: ConfigMeta['conflicts'][number]['kind'],
+  key: string,
+  files: string[],
+  kept: string,
+): void {
   addConflict(ws.meta, kind, key, files, kept);
 }
 
-function addConflict(meta: ConfigMeta, kind: ConfigMeta['conflicts'][number]['kind'], key: string, files: string[], kept: string): void {
+function addConflict(
+  meta: ConfigMeta,
+  kind: ConfigMeta['conflicts'][number]['kind'],
+  key: string,
+  files: string[],
+  kept: string,
+): void {
   const had = meta.conflicts.find((c) => c.kind === kind && c.key === key);
-  if (had) { for (const f of files) if (!had.files.includes(f)) had.files.push(f); return; }
+  if (had) {
+    for (const f of files) if (!had.files.includes(f)) had.files.push(f);
+    return;
+  }
   meta.conflicts.push({ kind, key, files: [...new Set(files)], kept });
 }
 
@@ -335,7 +409,9 @@ function glossaryConflicts(files: ConfigFile[]): ConfigMeta['conflicts'] {
   const out: ConfigMeta['conflicts'] = [];
   const keys = new Set(files.flatMap((f) => Object.keys(f.config.glossary ?? {})));
   for (const key of [...keys].sort()) {
-    const givers = files.filter((f) => f.config.glossary && Object.prototype.hasOwnProperty.call(f.config.glossary, key));
+    const givers = files.filter(
+      (f) => f.config.glossary && Object.prototype.hasOwnProperty.call(f.config.glossary, key),
+    );
     for (let i = 0; i < givers.length; i++) {
       for (let j = i + 1; j < givers.length; j++) {
         const [a, b] = [givers[i]!, givers[j]!];
@@ -372,7 +448,14 @@ export function applyWorkspaceConfig(nodes: GraphNode[], edges: GraphEdge[], ws:
     const opts: ApplyConfigOptions = {
       ...(f.root ? {} : { scope: scopeOfDir(f.dir) }),
       guarded: new Set(guardedBy.keys()),
-      onGuardConflict: (node) => addConflict(ws.meta, 'guard', node.name.split(': ')[0]!, [guardedBy.get(node.id)!, f.path], guardedBy.get(node.id)!),
+      onGuardConflict: (node) =>
+        addConflict(
+          ws.meta,
+          'guard',
+          node.name.split(': ')[0]!,
+          [guardedBy.get(node.id)!, f.path],
+          guardedBy.get(node.id)!,
+        ),
     };
     const { guarded } = applyConfig(nodes, matcherFields(f.config), edges, opts);
     for (const id of guarded) guardedBy.set(id, f.path);
@@ -382,15 +465,19 @@ export function applyWorkspaceConfig(nodes: GraphNode[], edges: GraphEdge[], ws:
 
 /** Route-shaped guard matchers again, after the OpenAPI pass added its routes — each file over its own folder. */
 export function applyWorkspaceRouteGuards(nodes: GraphNode[], edges: GraphEdge[], ws: WorkspaceConfig): void {
-  for (const f of ws.files) applyRouteGuards(nodes, matcherFields(f.config), edges, f.root ? undefined : scopeOfDir(f.dir));
+  for (const f of ws.files)
+    applyRouteGuards(nodes, matcherFields(f.config), edges, f.root ? undefined : scopeOfDir(f.dir));
 }
 
 /** Only the node-matcher fields: plumbing is rebased into `merged` and applied once from there. */
 function matcherFields(c: FarsightConfig): FarsightConfig {
   return {
-    ...(c.tags ? { tags: c.tags } : {}), ...(c.glossary ? { glossary: c.glossary } : {}), ...(c.guards ? { guards: c.guards } : {}),
+    ...(c.tags ? { tags: c.tags } : {}),
+    ...(c.glossary ? { glossary: c.glossary } : {}),
+    ...(c.guards ? { guards: c.guards } : {}),
     ...(c.gateTiers ? { gateTiers: c.gateTiers } : {}),
-    ...(c.entrypoints ? { entrypoints: c.entrypoints } : {}), ...(c.setup ? { setup: c.setup } : {}),
+    ...(c.entrypoints ? { entrypoints: c.entrypoints } : {}),
+    ...(c.setup ? { setup: c.setup } : {}),
   };
 }
 
@@ -399,10 +486,15 @@ function matcherFields(c: FarsightConfig): FarsightConfig {
  * are applied: the root file's first (it applies to every manifest), then each nested file whose
  * folder holds the manifest, nearest last — so a nearer block's override is the one that stands.
  */
-export function journeysConfigFor(ws: WorkspaceConfig, manifestPath: string): { from: string; dir: string; journeys: JourneysConfig }[] {
+export function journeysConfigFor(
+  ws: WorkspaceConfig,
+  manifestPath: string,
+): { from: string; dir: string; journeys: JourneysConfig }[] {
   const p = manifestPath.replace(/\\/g, '/').replace(/^\.\//, '');
-  return ws.files
-    // a URL manifest sits in no folder, so only the root's block reaches it
-    .filter((f) => !!f.config.journeys && (f.root || (!isUrl(p) && p.startsWith(`${f.dir}/`))))
-    .map((f) => ({ from: f.path, dir: f.dir, journeys: f.config.journeys! }));
+  return (
+    ws.files
+      // a URL manifest sits in no folder, so only the root's block reaches it
+      .filter((f) => !!f.config.journeys && (f.root || (!isUrl(p) && p.startsWith(`${f.dir}/`))))
+      .map((f) => ({ from: f.path, dir: f.dir, journeys: f.config.journeys! }))
+  );
 }

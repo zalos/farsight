@@ -23,7 +23,12 @@ function tempRepo(files: Record<string, string>): string {
   return dir;
 }
 const ingest = (files: Record<string, string>) =>
-  ingestRepo(tempRepo({ 'package.json': '{"name":"h"}', ...files }), { repoName: 'h', openapi: false, design: false, tests: false });
+  ingestRepo(tempRepo({ 'package.json': '{"name":"h"}', ...files }), {
+    repoName: 'h',
+    openapi: false,
+    design: false,
+    tests: false,
+  });
 
 /** GET and POST on one path, PUT / PATCH / DELETE on an item path. */
 const SERVER = [
@@ -60,7 +65,7 @@ const CLIENT = {
     "export function putNested(id: string) { return fetch(`/api/v1/submissions/${id}`, withAuth(ctx, json({ method: 'PUT' }))); }",
     // verb-named helpers, no literal at the call
     "export function createByVerb(body: unknown) { return fetch('/api/v1/submissions', post(ctx, body)); }",
-    "export function removeByVerb(id: string) { return fetch(`/api/v1/submissions/${id}`, del(ctx)); }",
+    'export function removeByVerb(id: string) { return fetch(`/api/v1/submissions/${id}`, del(ctx)); }',
     // negative: a helper with no literal and a name that is not a verb
     "export function unknownMethod(init: RequestInit) { return fetch('/api/v1/submissions', withAuth(ctx, init)); }",
   ].join('\n'),
@@ -110,7 +115,7 @@ test('a helper with no literal and a non-verb name stays method assumed — neve
   assert.deepEqual(unknown?.resolution?.candidates, ['h::route::POST /api/v1/submissions']);
 });
 
-test('a fetch wrapper whose init a helper builds: the helper\'s literal, else the caller\'s', async () => {
+test("a fetch wrapper whose init a helper builds: the helper's literal, else the caller's", async () => {
   const g = await ingest({
     'src/server.ts': SERVER,
     'src/api/init.ts': CLIENT['src/api/init.ts'],
@@ -146,8 +151,10 @@ test('a fetch wrapper whose init a helper builds: the helper\'s literal, else th
 test('the invoice-app example keeps its http edges', async () => {
   const here = dirname(fileURLToPath(import.meta.url));
   const g = await ingestRepo(resolve(here, '../../../examples/invoice-app'), { repoName: 'invoice-app' });
-  const http = g.edges.filter((e) => e.kind === 'http')
-    .map((e) => `${e.meta?.method ?? '?'}${e.meta?.methodAssumed ? '~' : ''} ${e.from} -> ${e.to}`).sort();
+  const http = g.edges
+    .filter((e) => e.kind === 'http')
+    .map((e) => `${e.meta?.method ?? '?'}${e.meta?.methodAssumed ? '~' : ''} ${e.from} -> ${e.to}`)
+    .sort();
   assert.deepEqual(http, INVOICE_HTTP);
 });
 

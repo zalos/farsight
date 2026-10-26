@@ -12,8 +12,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildIndex, journey, journeySummary, screensFor, flowScreenIds, journeyScope, coverageFor, stepCoverage,
-  testsSurface, storyCounts, STRINGS, COUNT_SCOPES, countedProblems, countedText, countedLine, evidenceWord,
+  buildIndex,
+  journey,
+  journeySummary,
+  screensFor,
+  flowScreenIds,
+  journeyScope,
+  coverageFor,
+  stepCoverage,
+  testsSurface,
+  storyCounts,
+  STRINGS,
+  COUNT_SCOPES,
+  countedProblems,
+  countedText,
+  countedLine,
+  evidenceWord,
 } from '../dist/index.js';
 import type { GraphNode, GraphEdge, OperationContract, BranchPoint, Counted, JourneySummary } from '../dist/index.js';
 
@@ -26,7 +40,10 @@ const BIZ_BANNED = /\b(steps?|cuts?|seams?|beats?|moments?|truncated|helpers?|ho
 function allCounted(v: unknown, path = '$', out: [string, Counted][] = []): [string, Counted][] {
   if (!v || typeof v !== 'object') return out;
   const o = v as Record<string, unknown>;
-  if (typeof o.n === 'number' && typeof o.unit === 'string' && typeof o.scope === 'string') { out.push([path, o as unknown as Counted]); return out; }
+  if (typeof o.n === 'number' && typeof o.unit === 'string' && typeof o.scope === 'string') {
+    out.push([path, o as unknown as Counted]);
+    return out;
+  }
   for (const [k, x] of Object.entries(o)) allCounted(x, `${path}.${k}`, out);
   return out;
 }
@@ -37,7 +54,11 @@ function assertSound(v: unknown, label: string): number {
     assert.deepEqual(countedProblems(c, `${label}${path.slice(1)}`), []);
     if (c.bizUnit) {
       for (const reg of ['hud', 'professional'] as const) {
-        assert.equal(BIZ_BANNED.test(STRINGS[c.bizUnit]![reg]), false, `${path}: bizUnit ${c.bizUnit} counts in a developer's unit`);
+        assert.equal(
+          BIZ_BANNED.test(STRINGS[c.bizUnit]![reg]),
+          false,
+          `${path}: bizUnit ${c.bizUnit} counts in a developer's unit`,
+        );
       }
     }
   }
@@ -51,21 +72,28 @@ test('every scope a count may carry is in the catalog, defined, and printable in
     const e = STRINGS[k];
     assert.ok(e, `${k} is not in the catalog`);
     assert.ok(e!.define && e!.define.length > 30, `${k} has no define: a scope nobody can look up`);
-    for (const reg of ['hud', 'professional'] as const) assert.equal(BIZ_BANNED.test(e![reg]), false, `${k} counts in a developer's unit`);
+    for (const reg of ['hud', 'professional'] as const)
+      assert.equal(BIZ_BANNED.test(e![reg]), false, `${k} counts in a developer's unit`);
   }
   // every count.* key — scopes, units, parts — may be printed in any lens
   for (const [k, e] of Object.entries(STRINGS)) {
     if (!k.startsWith('count.')) continue;
-    for (const reg of ['hud', 'professional'] as const) assert.equal(BIZ_BANNED.test(e[reg]), false, `${k} counts in a developer's unit`);
+    for (const reg of ['hud', 'professional'] as const)
+      assert.equal(BIZ_BANNED.test(e[reg]), false, `${k} counts in a developer's unit`);
     // count.over.* are the scopes' chip words (round 2026-10-10): words, not numbers
-    if (!k.endsWith('One') && !k.startsWith('count.scope.') && !k.startsWith('count.over.')) assert.match(e.professional, /\{n\}/, `${k} prints no number`);
+    if (!k.endsWith('One') && !k.startsWith('count.scope.') && !k.startsWith('count.over.'))
+      assert.match(e.professional, /\{n\}/, `${k} prints no number`);
   }
 });
 
 test('countedProblems catches a breakdown that is not a partition, an unknown key and a scope outside the list', () => {
   const ok: Counted = { n: 3, unit: 'journey.countActions', scope: 'journey.scopeAll', source: 'x' };
   assert.deepEqual(countedProblems(ok), []);
-  assert.equal(countedProblems({ ...ok, breakdown: [{ key: 'count.part.guards', n: 1 }] }).length, 1, 'parts must sum to n');
+  assert.equal(
+    countedProblems({ ...ok, breakdown: [{ key: 'count.part.guards', n: 1 }] }).length,
+    1,
+    'parts must sum to n',
+  );
   assert.equal(countedProblems({ ...ok, unit: 'nope.key' }).length, 1);
   assert.equal(countedProblems({ ...ok, scope: 'journey.bizTabs' }).length, 1, 'a scope outside COUNT_SCOPES');
   assert.equal(countedText(ok), '3 actions across this journey');
@@ -80,21 +108,54 @@ const API = `${R}::api::openapi.yaml`;
 const FLOW = `${R}::flow::thing`;
 const C = 'api/client.ts';
 const fn = (name: string, path: string, line: number, extra: Partial<GraphNode> = {}): GraphNode =>
-  ({ id: `${R}::${path}::${name}`, kind: 'function', name, tags: [], loc: { repo: R, path, line }, ...extra }) as GraphNode;
+  ({
+    id: `${R}::${path}::${name}`,
+    kind: 'function',
+    name,
+    tags: [],
+    loc: { repo: R, path, line },
+    ...extra,
+  }) as GraphNode;
 const comp = (name: string, path: string, line: number, extra: Partial<GraphNode> = {}): GraphNode =>
-  ({ id: `${R}::${path}::${name}`, kind: 'component', name, tags: [], loc: { repo: R, path, line }, ...extra }) as GraphNode;
+  ({
+    id: `${R}::${path}::${name}`,
+    kind: 'component',
+    name,
+    tags: [],
+    loc: { repo: R, path, line },
+    ...extra,
+  }) as GraphNode;
 const page = (name: string, line: number, operations: string[], extra: Partial<GraphNode> = {}): GraphNode =>
   ({
-    id: `${R}::page::${name}`, kind: 'page', name, tags: [], loc: { repo: R, path: 'ui/router.tsx', line },
-    design: { id: `SCR-${line}`, status: 'both', origin: 'manifest', operations }, ...extra,
+    id: `${R}::page::${name}`,
+    kind: 'page',
+    name,
+    tags: [],
+    loc: { repo: R, path: 'ui/router.tsx', line },
+    design: { id: `SCR-${line}`, status: 'both', origin: 'manifest', operations },
+    ...extra,
   }) as GraphNode;
 const route = (name: string, line: number, operationId: string): GraphNode =>
   ({
-    id: `${R}::route::${name}`, kind: 'route', name, tags: [], loc: { repo: R, path: 'server/routes.ts', line },
-    contract: { status: 'both', apiId: API, summary: `${operationId} summary`, spec: { operationId } } as OperationContract,
+    id: `${R}::route::${name}`,
+    kind: 'route',
+    name,
+    tags: [],
+    loc: { repo: R, path: 'server/routes.ts', line },
+    contract: {
+      status: 'both',
+      apiId: API,
+      summary: `${operationId} summary`,
+      spec: { operationId },
+    } as OperationContract,
   }) as GraphNode;
-const e = (kind: GraphEdge['kind'], from: string, to: string, line: number): GraphEdge =>
-  ({ id: `${kind}|${from}|${to}|${line}`, kind, from, to, meta: { line } });
+const e = (kind: GraphEdge['kind'], from: string, to: string, line: number): GraphEdge => ({
+  id: `${kind}|${from}|${to}|${line}`,
+  kind,
+  from,
+  to,
+  meta: { line },
+});
 
 /**
  * Three screens: `/things` lists; `/things/new` lists again (a re-visit) and
@@ -105,25 +166,52 @@ const e = (kind: GraphEdge['kind'], from: string, to: string, line: number): Gra
 function threeScreens(): { nodes: GraphNode[]; edges: GraphEdge[] } {
   const S = 'server/svc.ts';
   const branches: BranchPoint[] = [
-    { kind: 'if', line: 10, condition: 'thing.size > limit', business: 'A big thing needs a second look',
-      arms: [{ label: 'then', requires: 'thing.size > limit', line: 10, endLine: 14, business: 'Over the limit' }] },
-    { kind: 'if', line: 20, condition: 'session.role !== "admin"', exits: true, arms: [{ label: 'then', requires: 'session.role !== "admin"', line: 20, endLine: 24 }] },
-    { kind: 'if', line: 30, condition: 'env.FEATURE_X', arms: [{ label: 'then', requires: 'env.FEATURE_X', line: 30, endLine: 34 }] },
+    {
+      kind: 'if',
+      line: 10,
+      condition: 'thing.size > limit',
+      business: 'A big thing needs a second look',
+      arms: [{ label: 'then', requires: 'thing.size > limit', line: 10, endLine: 14, business: 'Over the limit' }],
+    },
+    {
+      kind: 'if',
+      line: 20,
+      condition: 'session.role !== "admin"',
+      exits: true,
+      arms: [{ label: 'then', requires: 'session.role !== "admin"', line: 20, endLine: 24 }],
+    },
+    {
+      kind: 'if',
+      line: 30,
+      condition: 'env.FEATURE_X',
+      arms: [{ label: 'then', requires: 'env.FEATURE_X', line: 30, endLine: 34 }],
+    },
   ];
   const nodes: GraphNode[] = [
     { id: FLOW, kind: 'flow', name: 'Do a thing', tags: [] } as GraphNode,
     { id: API, kind: 'api', name: 'Thing API', tags: [] } as GraphNode,
-    page('/things', 8, ['listThings', 'deleteThing'], { facets: { business: { description: 'See every thing you have.' } } } as Partial<GraphNode>),
+    page('/things', 8, ['listThings', 'deleteThing'], {
+      facets: { business: { description: 'See every thing you have.' } },
+    } as Partial<GraphNode>),
     page('/things/new', 9, ['listThings', 'createThing', 'deleteThing']),
     page('/done', 10, []),
-    comp('ThingList', 'ui/ThingList.tsx', 3), comp('NewThing', 'ui/NewThing.tsx', 3),
-    fn('listThings', C, 4), fn('createThing', C, 10),
-    route('GET /things', 5, 'listThings'), route('POST /things', 9, 'createThing'), route('DELETE /things/:id', 14, 'deleteThing'),
-    fn('listThings', S, 6), fn('createThing', S, 5, { branches }),
-    fn('review', S, 60), fn('refuse', S, 70), fn('flagged', S, 80),
+    comp('ThingList', 'ui/ThingList.tsx', 3),
+    comp('NewThing', 'ui/NewThing.tsx', 3),
+    fn('listThings', C, 4),
+    fn('createThing', C, 10),
+    route('GET /things', 5, 'listThings'),
+    route('POST /things', 9, 'createThing'),
+    route('DELETE /things/:id', 14, 'deleteThing'),
+    fn('listThings', S, 6),
+    fn('createThing', S, 5, { branches }),
+    fn('review', S, 60),
+    fn('refuse', S, 70),
+    fn('flagged', S, 80),
   ];
   const edges: GraphEdge[] = [
-    e('renders', FLOW, `${R}::page::/things`, 1), e('renders', FLOW, `${R}::page::/things/new`, 2), e('renders', FLOW, `${R}::page::/done`, 3),
+    e('renders', FLOW, `${R}::page::/things`, 1),
+    e('renders', FLOW, `${R}::page::/things/new`, 2),
+    e('renders', FLOW, `${R}::page::/done`, 3),
     e('renders', `${R}::page::/things`, `${R}::ui/ThingList.tsx::ThingList`, 8),
     e('renders', `${R}::page::/things/new`, `${R}::ui/NewThing.tsx::NewThing`, 9),
     e('calls', `${R}::ui/ThingList.tsx::ThingList`, `${R}::${C}::listThings`, 12),
@@ -147,7 +235,9 @@ function fold(g = threeScreens()): JourneySummary {
 
 test('every count the journey fold hands out is sound: known words, a define, a listed scope, a partition', () => {
   const sum = fold();
-  const n = assertSound(sum.counted, 'journey') + sum.segments.reduce((a, sg) => a + assertSound(sg.counted, `segment ${sg.index}`), 0);
+  const n =
+    assertSound(sum.counted, 'journey') +
+    sum.segments.reduce((a, sg) => a + assertSound(sg.counted, `segment ${sg.index}`), 0);
   // 20 since the data-stores pass: `stores` joined the header counts; 21 since the map pass: `screensReached`;
   // 22 and 8 per screen since the gate card (swarm-fixes 2026-10-05): `configChecks`, counted apart from the gates;
   // 24 and 10 since the gates lane (2026-10-10): `gatesBusiness` + `gatesTechnical`, a partition of `gates`
@@ -165,7 +255,13 @@ test('screens declared and screens reached are two numbers with two names, and t
   const q = sum.counted!;
   assert.equal(q.screens.n, sum.user.length, 'screens are the ones the journey names');
   assert.equal(q.screensReached.n, 3, 'the walk reaches all three');
-  assert.deepEqual(q.screens.breakdown!.map((p) => [p.key, p.n]), [['count.part.screensReached', 3], ['count.part.screensNotReached', 0]]);
+  assert.deepEqual(
+    q.screens.breakdown!.map((p) => [p.key, p.n]),
+    [
+      ['count.part.screensReached', 3],
+      ['count.part.screensNotReached', 0],
+    ],
+  );
   assert.notEqual(q.screens.unit, q.screensReached.unit, 'two numbers must carry two names');
   // a fourth screen the journey names and nothing on the walk leads to: named, not reached
   const g = threeScreens();
@@ -175,7 +271,10 @@ test('screens declared and screens reached are two numbers with two names, and t
   const s2 = journeySummary(index, journey(index, FLOW), named);
   assert.equal(s2.counted!.screens.n, 4);
   assert.equal(s2.counted!.screensReached.n, 3);
-  assert.deepEqual(s2.counted!.screens.breakdown!.map((p) => p.n), [3, 1]);
+  assert.deepEqual(
+    s2.counted!.screens.breakdown!.map((p) => p.n),
+    [3, 1],
+  );
   assert.deepEqual(countedProblems(s2.counted!.screens), []);
   assert.deepEqual(countedProblems(s2.counted!.screensReached), []);
 });
@@ -187,8 +286,8 @@ test('actions and stops are two numbers with two names — and the stops contain
   const sum = fold();
   const q = sum.counted!;
   const moments = sum.segments.flatMap((sg) => sg.moments);
-  assert.equal(q.actions.n, sum.counts.called, 'the header\'s actions are the fold\'s called operations');
-  assert.equal(q.actionStops.n, moments.length, 'the stops are every column the drill\'s rail draws');
+  assert.equal(q.actions.n, sum.counts.called, "the header's actions are the fold's called operations");
+  assert.equal(q.actionStops.n, moments.length, "the stops are every column the drill's rail draws");
   assert.notEqual(q.actions.unit, q.actionStops.unit, 'two numbers must carry two names');
   const [calledStops, declaredStops, noCall] = q.actionStops.breakdown!.map((p) => p.n);
   assert.equal(calledStops, q.actions.n + q.again.n, 'the calls the code makes = the actions + the ones made again');
@@ -203,7 +302,7 @@ test('actions and stops are two numbers with two names — and the stops contain
   assert.match(STRINGS['journey.drill.actionOf']!.professional, /^stop \{n\} of \{t\}/);
 });
 
-test('the Sheet\'s columns are the stops, and actions + again + declared + nothing to call = stops', () => {
+test("the Sheet's columns are the stops, and actions + again + declared + nothing to call = stops", () => {
   // swarm 2026-10-05 (finding 3): *5 actions* above a Sheet of 6 numbered columns, *15 actions*
   // beside *stop 1 of 23*. The columns are the stops (`counted.actionStops`, the number the
   // Sheet's corner prints); the header's actions are one named part of them.
@@ -212,9 +311,12 @@ test('the Sheet\'s columns are the stops, and actions + again + declared + nothi
   const columns = sum.segments.reduce((a, sg) => a + sg.moments.length, 0);
   assert.equal(q.actionStops.n, columns, 'the number above the Sheet is its columns');
   const [calledStops, declaredStops, noCall] = q.actionStops.breakdown!.map((p) => p.n);
-  assert.equal(calledStops + declaredStops + noCall, columns, 'the stops\' split adds up to the columns');
-  assert.equal(q.actions.n + q.again.n + declaredStops + noCall, columns,
-    'the header\'s actions reconcile with the columns through named parts — never a silent difference');
+  assert.equal(calledStops + declaredStops + noCall, columns, "the stops' split adds up to the columns");
+  assert.equal(
+    q.actions.n + q.again.n + declaredStops + noCall,
+    columns,
+    "the header's actions reconcile with the columns through named parts — never a silent difference",
+  );
   assert.ok(q.actions.n < columns, 'more columns than actions here, which is why they carry two names');
 });
 
@@ -225,10 +327,20 @@ test('conditions not in plain language are one number in every register, and the
   const q = sum.counted!;
   const un = sum.business.untranslated;
   assert.equal(q.notInWords.n, un.count + un.guardsUnlabelled);
-  assert.deepEqual(q.notInWords.breakdown!.map((p) => [p.key, p.n]), [['journey.untranslated', un.count], ['count.part.gateConditions', un.guardsUnlabelled]]);
+  assert.deepEqual(
+    q.notInWords.breakdown!.map((p) => [p.key, p.n]),
+    [
+      ['journey.untranslated', un.count],
+      ['count.part.gateConditions', un.guardsUnlabelled],
+    ],
+  );
   assert.equal(q.notInWords.n, 2, 'the flag and the unlabelled gate condition');
   assert.ok(q.notInWords.bizUnit && q.notInWords.unit, 'printed in every lens');
-  assert.equal(sum.segments.reduce((a, sg) => a + sg.counted!.notInWords.n, 0), q.notInWords.n, 'the screens partition the journey\'s number');
+  assert.equal(
+    sum.segments.reduce((a, sg) => a + sg.counted!.notInWords.n, 0),
+    q.notInWords.n,
+    "the screens partition the journey's number",
+  );
   // the gate condition is the same population in both breakdowns it appears in
   const gateInDecisions = q.decisions.breakdown!.find((p) => p.key === 'count.part.gateConditions')!;
   assert.equal(gateInDecisions.n, un.guardsUnlabelled);
@@ -239,15 +351,26 @@ test('conditions not in plain language are one number in every register, and the
 
 test('gates count gates and validation rules, and say so', () => {
   const g = threeScreens();
-  g.nodes.push({ id: `${R}::guard::requireSession`, kind: 'guard', name: 'requireSession', tags: [] } as GraphNode,
-    { id: `${R}::rule::ThingSchema`, kind: 'rule', name: 'ThingSchema', tags: [] } as GraphNode);
-  g.edges.push(e('guards', `${R}::guard::requireSession`, `${R}::route::POST /things`, 1),
-    e('validates', `${R}::rule::ThingSchema`, `${R}::route::POST /things`, 1));
+  g.nodes.push(
+    { id: `${R}::guard::requireSession`, kind: 'guard', name: 'requireSession', tags: [] } as GraphNode,
+    { id: `${R}::rule::ThingSchema`, kind: 'rule', name: 'ThingSchema', tags: [] } as GraphNode,
+  );
+  g.edges.push(
+    e('guards', `${R}::guard::requireSession`, `${R}::route::POST /things`, 1),
+    e('validates', `${R}::rule::ThingSchema`, `${R}::route::POST /things`, 1),
+  );
   const sum = fold(g);
   const q = sum.counted!;
   assert.equal(q.gates.n, sum.counts.gates);
-  assert.equal(q.gates.breakdown!.reduce((a, p) => a + p.n, 0), q.gates.n);
-  assert.match(STRINGS['journey.countGates']!.professional, /gates & rules/, 'the header\'s word names both kinds, like the lane\'s tab');
+  assert.equal(
+    q.gates.breakdown!.reduce((a, p) => a + p.n, 0),
+    q.gates.n,
+  );
+  assert.match(
+    STRINGS['journey.countGates']!.professional,
+    /gates & rules/,
+    "the header's word names both kinds, like the lane's tab",
+  );
 });
 
 test('In words counts the lines its view draws — never 0 above words', () => {
@@ -256,7 +379,11 @@ test('In words counts the lines its view draws — never 0 above words', () => {
   // one line per screen (a sentence, or the name) + one per decision in words
   const decisionsInWords = sum.business.decisions.filter((d) => d.class === 'business').length;
   assert.equal(q.n, sum.segments.length + decisionsInWords);
-  assert.deepEqual(q.breakdown!.map((p) => p.n), [1, 2, decisionsInWords], '/things has a sentence, the other two print their names');
+  assert.deepEqual(
+    q.breakdown!.map((p) => p.n),
+    [1, 2, decisionsInWords],
+    '/things has a sentence, the other two print their names',
+  );
   assert.ok(q.n > 0);
 });
 
@@ -264,34 +391,119 @@ test('In words counts the lines its view draws — never 0 above words', () => {
 
 const S2 = 'src/orders.ts';
 const shopFn = (name: string, line: number): GraphNode =>
-  ({ id: `shop::${S2}::${name}`, kind: 'function', name, tags: [], loc: { repo: 'shop', path: S2, line, endLine: line + 4 } }) as GraphNode;
+  ({
+    id: `shop::${S2}::${name}`,
+    kind: 'function',
+    name,
+    tags: [],
+    loc: { repo: 'shop', path: S2, line, endLine: line + 4 },
+  }) as GraphNode;
 const ce = (from: string, to: string, meta: GraphEdge['meta'], technique: string): GraphEdge =>
-  ({ id: `covers|${from}|${to}`, kind: 'covers', from, to, meta, resolution: { status: 'resolved', technique, confidence: 'MEDIUM' } } as GraphEdge);
+  ({
+    id: `covers|${from}|${to}`,
+    kind: 'covers',
+    from,
+    to,
+    meta,
+    resolution: { status: 'resolved', technique, confidence: 'MEDIUM' },
+  }) as GraphEdge;
 
 /** One flow, one page, one route, one function; an e2e that declares it, a unit that imports it, and a coverage report that saw it run before the code changed. */
 function shop(): { nodes: GraphNode[]; edges: GraphEdge[] } {
   const nodes: GraphNode[] = [
     { id: 'shop::flow::order', kind: 'flow', name: 'Order', tags: [] } as GraphNode,
-    { id: 'shop::page::/orders', kind: 'page', name: '/orders', tags: [], loc: { repo: 'shop', path: 'src/ui/Orders.tsx', line: 1 } } as GraphNode,
-    { id: 'shop::route::POST /orders', kind: 'route', name: 'POST /orders', tags: [], loc: { repo: 'shop', path: S2, line: 2 } } as GraphNode,
+    {
+      id: 'shop::page::/orders',
+      kind: 'page',
+      name: '/orders',
+      tags: [],
+      loc: { repo: 'shop', path: 'src/ui/Orders.tsx', line: 1 },
+    } as GraphNode,
+    {
+      id: 'shop::route::POST /orders',
+      kind: 'route',
+      name: 'POST /orders',
+      tags: [],
+      loc: { repo: 'shop', path: S2, line: 2 },
+    } as GraphNode,
     shopFn('placeOrder', 10),
-    { id: 'shop::test::e2e/o.pw.spec.ts::orders', kind: 'test', name: 'orders', tags: ['test'], loc: { repo: 'shop', path: 'e2e/o.pw.spec.ts', line: 3 },
-      test: { level: 'e2e', runner: 'playwright', suite: [], file: 'e2e/o.pw.spec.ts' } } as GraphNode,
-    { id: 'shop::test::e2e/other.pw.spec.ts::elsewhere', kind: 'test', name: 'elsewhere', tags: ['test'], loc: { repo: 'shop', path: 'e2e/other.pw.spec.ts', line: 3 },
-      test: { level: 'e2e', runner: 'playwright', suite: [], file: 'e2e/other.pw.spec.ts' } } as GraphNode,
-    { id: 'shop::test::src/o.spec.ts::totals', kind: 'test', name: 'totals', tags: ['test'], loc: { repo: 'shop', path: 'src/o.spec.ts', line: 3 },
-      test: { level: 'unit', runner: 'vitest', suite: [], file: 'src/o.spec.ts', run: { id: 'r1', at: '2026-09-25T00:00:00.000Z', status: 'skipped', freshness: 'unknown', stale: false } } } as GraphNode,
-    { id: 'shop::test::run:unit:shop', kind: 'test', name: 'unit run', tags: ['test'],
-      test: { level: 'unit', runner: 'vitest', suite: [], file: 'coverage/coverage-final.json', runLevel: true, files: [S2],
-        run: { id: 'r2', at: '2026-09-22T00:00:00.000Z', status: 'unknown', freshness: 'changed', stale: true, sourceDigest: 'old' } } } as GraphNode,
+    {
+      id: 'shop::test::e2e/o.pw.spec.ts::orders',
+      kind: 'test',
+      name: 'orders',
+      tags: ['test'],
+      loc: { repo: 'shop', path: 'e2e/o.pw.spec.ts', line: 3 },
+      test: { level: 'e2e', runner: 'playwright', suite: [], file: 'e2e/o.pw.spec.ts' },
+    } as GraphNode,
+    {
+      id: 'shop::test::e2e/other.pw.spec.ts::elsewhere',
+      kind: 'test',
+      name: 'elsewhere',
+      tags: ['test'],
+      loc: { repo: 'shop', path: 'e2e/other.pw.spec.ts', line: 3 },
+      test: { level: 'e2e', runner: 'playwright', suite: [], file: 'e2e/other.pw.spec.ts' },
+    } as GraphNode,
+    {
+      id: 'shop::test::src/o.spec.ts::totals',
+      kind: 'test',
+      name: 'totals',
+      tags: ['test'],
+      loc: { repo: 'shop', path: 'src/o.spec.ts', line: 3 },
+      test: {
+        level: 'unit',
+        runner: 'vitest',
+        suite: [],
+        file: 'src/o.spec.ts',
+        run: { id: 'r1', at: '2026-09-25T00:00:00.000Z', status: 'skipped', freshness: 'unknown', stale: false },
+      },
+    } as GraphNode,
+    {
+      id: 'shop::test::run:unit:shop',
+      kind: 'test',
+      name: 'unit run',
+      tags: ['test'],
+      test: {
+        level: 'unit',
+        runner: 'vitest',
+        suite: [],
+        file: 'coverage/coverage-final.json',
+        runLevel: true,
+        files: [S2],
+        run: {
+          id: 'r2',
+          at: '2026-09-22T00:00:00.000Z',
+          status: 'unknown',
+          freshness: 'changed',
+          stale: true,
+          sourceDigest: 'old',
+        },
+      },
+    } as GraphNode,
   ];
   const edges: GraphEdge[] = [
     { id: 'r1', kind: 'renders', from: 'shop::flow::order', to: 'shop::page::/orders', meta: { line: 1 } } as GraphEdge,
-    { id: 'h1', kind: 'http', from: 'shop::page::/orders', to: 'shop::route::POST /orders', meta: { line: 2 } } as GraphEdge,
-    { id: 'c1', kind: 'calls', from: 'shop::route::POST /orders', to: `shop::${S2}::placeOrder`, meta: { line: 3 } } as GraphEdge,
+    {
+      id: 'h1',
+      kind: 'http',
+      from: 'shop::page::/orders',
+      to: 'shop::route::POST /orders',
+      meta: { line: 2 },
+    } as GraphEdge,
+    {
+      id: 'c1',
+      kind: 'calls',
+      from: 'shop::route::POST /orders',
+      to: `shop::${S2}::placeOrder`,
+      meta: { line: 3 },
+    } as GraphEdge,
     ce('shop::test::e2e/o.pw.spec.ts::orders', 'shop::page::/orders', { evidence: 'declared' }, 'annotation-scan'),
     ce('shop::test::src/o.spec.ts::totals', `shop::${S2}::placeOrder`, { evidence: 'static' }, 'import-resolution'),
-    ce('shop::test::run:unit:shop', `shop::${S2}::placeOrder`, { evidence: 'observed', runId: 'r2' }, 'coverage-report'),
+    ce(
+      'shop::test::run:unit:shop',
+      `shop::${S2}::placeOrder`,
+      { evidence: 'observed', runId: 'r2' },
+      'coverage-report',
+    ),
   ];
   return { nodes, edges };
 }
@@ -310,13 +522,24 @@ test('a coverage report alone never earns *verified*: its word, its run and its 
   assert.equal(/verified/i.test(STRINGS[f.evidenceWord.key]!.professional), false);
   assert.equal(f.evidenceWord.biz, 'journey.biz.testsRun.runOnlyStale');
   // the run beside the word is the run that earned it — not the skipped case
-  assert.deepEqual(f.observation, { by: 'runs', at: '2026-09-22T00:00:00.000Z', status: 'unknown', freshness: 'changed', cases: 0, reports: 1 });
-  assert.equal(f.run?.status, 'skipped', 'the covering cases\' own last run stays where it was, for compatibility');
+  assert.deepEqual(f.observation, {
+    by: 'runs',
+    at: '2026-09-22T00:00:00.000Z',
+    status: 'unknown',
+    freshness: 'changed',
+    cases: 0,
+    reports: 1,
+  });
+  assert.equal(f.run?.status, 'skipped', "the covering cases' own last run stays where it was, for compatibility");
   // the counts: one e2e case reaches the flow — the other e2e case is in the source, not here
   assert.equal(f.counted!.e2e.n, f.counts.tests.e2e);
   assert.equal(f.counted!.e2e.n, 1);
   assert.equal(f.counted!.e2e.scope, 'journey.scopeAll');
-  assert.deepEqual(f.counted!.e2e.breakdown!.map((p) => p.n), [1, 0, 0], 'declared only · reached · seen in a run');
+  assert.deepEqual(
+    f.counted!.e2e.breakdown!.map((p) => p.n),
+    [1, 0, 0],
+    'declared only · reached · seen in a run',
+  );
   assert.equal(f.counted!.observed.n, 0, '0 cases observed');
   assert.equal(f.counted!.runReports.n, 1, 'one report, counted as a report');
   assertSound(f.counted, 'flow coverage');
@@ -356,12 +579,19 @@ test('the level filter holds every count to the level, and keeps the unfiltered 
   const all = testsSurface(index, null, undefined);
   const e2e = testsSurface(index, null, undefined, { level: 'e2e' });
   assert.equal(e2e.counts.cases, 2);
-  assert.equal(e2e.counts.cases, e2e.sources.reduce((a, c) => a + c.cases, 0), 'the header is the sum of the cards under it');
+  assert.equal(
+    e2e.counts.cases,
+    e2e.sources.reduce((a, c) => a + c.cases, 0),
+    'the header is the sum of the cards under it',
+  );
   assert.equal(e2e.counts.files, 2);
   assert.deepEqual(e2e.countsAll, all.counts, 'nothing lost: the whole scope rides beside');
   assert.equal(e2e.counted!.cases.scope, 'count.scope.selection');
   assert.equal(all.counted!.cases.scope, 'count.scope.workspace');
-  assert.deepEqual(e2e.counted!.cases.breakdown!.map((p) => p.n), [0, 0, 2]);
+  assert.deepEqual(
+    e2e.counted!.cases.breakdown!.map((p) => p.n),
+    [0, 0, 2],
+  );
   assert.ok(e2e.suites.every((s) => s.level === 'e2e'));
   assertSound(e2e.counted, 'tests e2e');
   assertSound(all.sources, 'tests sources');
@@ -372,13 +602,25 @@ test('the level filter holds every count to the level, and keeps the unfiltered 
 
 // ── stories: own, docs pages and the parts' stories are three numbers ──────
 
-test('a screen with no story of its own counts its parts\' stories apart, and docs pages are not stories', () => {
+test("a screen with no story of its own counts its parts' stories apart, and docs pages are not stories", () => {
   const story = (id: string) => ({ id, name: id, file: 'x.stories.tsx', line: 1 });
   const nodes: GraphNode[] = [
     { id: 'a::page::/submit', kind: 'page', name: '/submit', tags: [] } as GraphNode,
-    { id: 'a::c::Wizard', kind: 'component', name: 'Wizard', tags: [], stories: [story('w1'), story('w2')] } as unknown as GraphNode,
+    {
+      id: 'a::c::Wizard',
+      kind: 'component',
+      name: 'Wizard',
+      tags: [],
+      stories: [story('w1'), story('w2')],
+    } as unknown as GraphNode,
     { id: 'a::c::Strip', kind: 'component', name: 'Strip', tags: [], stories: [story('s1')] } as unknown as GraphNode,
-    { id: 'a::c::Button', kind: 'component', name: 'Button', tags: ['plumbing'], stories: [story('b1')] } as unknown as GraphNode,
+    {
+      id: 'a::c::Button',
+      kind: 'component',
+      name: 'Button',
+      tags: ['plumbing'],
+      stories: [story('b1')],
+    } as unknown as GraphNode,
   ];
   const edges: GraphEdge[] = [
     { id: '1', kind: 'renders', from: 'a::page::/submit', to: 'a::c::Wizard' } as GraphEdge,
@@ -389,13 +631,28 @@ test('a screen with no story of its own counts its parts\' stories apart, and do
   const page = storyCounts(index, 'a::page::/submit');
   assert.equal(page.own.n, 0, 'no story renders the page itself');
   assert.equal(page.parts.n, 3, 'Wizard 2 + Strip 1; the plumbing Button is skipped');
-  assert.deepEqual(page.parts.breakdown!.map((p) => [p.label, p.n]), [['Wizard', 2], ['Strip', 1]]);
+  assert.deepEqual(
+    page.parts.breakdown!.map((p) => [p.label, p.n]),
+    [
+      ['Wizard', 2],
+      ['Strip', 1],
+    ],
+  );
   assert.notEqual(page.own.scope, page.parts.scope, 'own and parts print different scopes');
   // with a live index: 3 stories and a docs page are 3 stories and 1 docs page — 4 tabs
-  const live = { 'a::c::Strip': [
-    ...['s1', 's2', 's3'].map((id) => ({ id, name: id, type: 'story' as const, repo: 'a', inGraph: true, live: true })),
-    { id: 'd', name: 'Docs', type: 'docs' as const, repo: 'a', inGraph: false, live: true },
-  ] };
+  const live = {
+    'a::c::Strip': [
+      ...['s1', 's2', 's3'].map((id) => ({
+        id,
+        name: id,
+        type: 'story' as const,
+        repo: 'a',
+        inGraph: true,
+        live: true,
+      })),
+      { id: 'd', name: 'Docs', type: 'docs' as const, repo: 'a', inGraph: false, live: true },
+    ],
+  };
   const strip = storyCounts(index, 'a::c::Strip', live);
   assert.equal(strip.own.n, 3);
   assert.equal(strip.docs.n, 1);
@@ -431,7 +688,11 @@ function defineProblems(d: string, keys: ReadonlySet<string>): string[] {
   const ph = d.match(/\{[A-Za-z]\w*\}/);
   if (ph) out.push(`a placeholder ${ph[0]} nothing fills — t() leaves defines as written`);
   for (const m of d.matchAll(/\b[a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+\b/g)) {
-    out.push(keys.has(m[0]) ? `the catalog key ${m[0]}` : `the dotted identifier ${m[0]} (a key, a file or a member — not words)`);
+    out.push(
+      keys.has(m[0])
+        ? `the catalog key ${m[0]}`
+        : `the dotted identifier ${m[0]} (a key, a file or a member — not words)`,
+    );
   }
   return out;
 }
@@ -455,7 +716,10 @@ test('the define rules catch what the swarm read', () => {
   assert.ok(defineProblems('The same finding on {n} artefacts.', keys).length);
   assert.ok(defineProblems('Declared in .farsight/settings.json.', keys).length, 'a file name is not words either');
   // what a person would write passes: numbers, quotes, a plus sign, an ellipsis, dashes
-  assert.deepEqual(defineProblems('Actions + this is how many times an action runs — “verified · stale”, 3 of 4… A.B is fine.', keys), []);
+  assert.deepEqual(
+    defineProblems('Actions + this is how many times an action runs — “verified · stale”, 3 of 4… A.B is fine.', keys),
+    [],
+  );
 });
 
 test('a singular carries its plural’s define, word for word — never a pointer to another entry', () => {

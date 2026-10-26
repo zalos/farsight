@@ -12,7 +12,14 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import {
-  gitLog, gitTags, gitShallow, gitHeadRef, gitHead, gitPrefix, normalizeRepoPath, DEFAULT_MAX_COMMITS,
+  gitLog,
+  gitTags,
+  gitShallow,
+  gitHeadRef,
+  gitHead,
+  gitPrefix,
+  normalizeRepoPath,
+  DEFAULT_MAX_COMMITS,
 } from '../dist/shared/git.js';
 import type { GitCommit, GitFileChange } from '../dist/shared/git.js';
 
@@ -29,7 +36,10 @@ function tempDir(prefix: string): string {
 function git(dir: string, args: string[], at?: string): string {
   const env = { ...process.env, ...(at ? { GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at } : {}) };
   return execFileSync('git', ['-C', dir, '-c', 'commit.gpgsign=false', ...args], {
-    env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: 30_000,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    encoding: 'utf8',
+    timeout: 30_000,
   }).trim();
 }
 
@@ -50,7 +60,8 @@ const T4 = '2026-03-01T00:00:00+0000';
 const T5 = '2026-04-01T00:00:00+0000';
 
 /** 20 lines, so a one-line edit renames at a high-but-not-perfect similarity. */
-const LINES = (tag: string) => Array.from({ length: 20 }, (_, i) => `export const ${tag}${i} = ${i};`).join('\n') + '\n';
+const LINES = (tag: string) =>
+  Array.from({ length: 20 }, (_, i) => `export const ${tag}${i} = ${i};`).join('\n') + '\n';
 /** Real NUL bytes, which is how git itself decides a file is binary. */
 const BINARY = Buffer.concat([Buffer.from('\x89PNG\r\n\x1a\n'), Buffer.alloc(64), Buffer.from([1, 2, 3, 0, 255])]);
 /** A subject that would shift a field in any whitespace- or line-delimited format. */
@@ -96,9 +107,9 @@ function fixture(): string {
 
   git(dir, ['commit', '-q', '--allow-empty', '-m', 'chore: an empty commit'], T5);
 
-  git(dir, ['tag', '1.0.0', c1]);                                    // lightweight, bare semver
-  git(dir, ['tag', '-a', 'v1.1.0', '-m', 'release 1.1.0'], T5);      // annotated, v-prefixed
-  git(dir, ['tag', 'nightly']);                                      // neither scheme
+  git(dir, ['tag', '1.0.0', c1]); // lightweight, bare semver
+  git(dir, ['tag', '-a', 'v1.1.0', '-m', 'release 1.1.0'], T5); // annotated, v-prefixed
+  git(dir, ['tag', 'nightly']); // neither scheme
   return dir;
 }
 
@@ -189,7 +200,10 @@ test('gitLog: an add and a modify carry their counts', () => {
 });
 
 test('gitLog: a binary file reports that its counts are unknowable, not zero', () => {
-  for (const [subject, status] of [['feat: the first commit', 'A'], [NASTY, 'M']] as const) {
+  for (const [subject, status] of [
+    ['feat: the first commit', 'A'],
+    [NASTY, 'M'],
+  ] as const) {
     const row = fileAt(commits().get(subject)!, 'assets/logo.png');
     assert.equal(row.status, status);
     assert.equal(row.binary, true, 'numstat said `-`');
@@ -209,7 +223,7 @@ test('gitLog: paths are repo-root-relative even when read from a subdirectory', 
       assert.doesNotMatch(f.path, /^\//, `${f.path} must not be absolute`);
       assert.doesNotMatch(f.path, /^\.\//, `${f.path} must not be prefixed with ./`);
       assert.doesNotMatch(f.path, /\\/, 'forward slashes only, so it can join loc.path');
-      assert.notEqual(f.path, '', 'a rename never leaves numstat\'s empty path field behind');
+      assert.notEqual(f.path, '', "a rename never leaves numstat's empty path field behind");
     }
   }
   // A dotfile is a legitimate repo-relative path and must survive untouched.
@@ -239,7 +253,10 @@ test('gitLog: max bounds the walk and truncated is exact at the boundary', () =>
 test('gitLog: since bounds the walk by date', () => {
   const recent = gitLog(REPO, { since: '2026-03-15T00:00:00+0000' });
   assert.ok(recent.available);
-  assert.deepEqual(recent.commits.map((c) => c.subject), ['chore: an empty commit']);
+  assert.deepEqual(
+    recent.commits.map((c) => c.subject),
+    ['chore: an empty commit'],
+  );
 });
 
 // ------------------------------------------------------- the absences, by name
@@ -284,7 +301,8 @@ test('gitLog: a missing git binary is its own reason, not a failed repository', 
     assert.equal(log.reason, 'no-git', 'the tool is missing — the repository is fine');
     assert.equal(gitHead(REPO), undefined, 'and the cli.ts contract still returns a value');
   } finally {
-    if (path === undefined) delete process.env['PATH']; else process.env['PATH'] = path;
+    if (path === undefined) delete process.env['PATH'];
+    else process.env['PATH'] = path;
   }
 });
 
@@ -304,7 +322,11 @@ test('gitTags: annotated and lightweight tags both dereference to commits, with 
 
   const annotated = by.get('v1.1.0')!;
   assert.equal(annotated.annotated, true);
-  assert.equal(annotated.scheme, 'v-prefixed', 'a real repository carries both schemes at once — hence a declared release');
+  assert.equal(
+    annotated.scheme,
+    'v-prefixed',
+    'a real repository carries both schemes at once — hence a declared release',
+  );
   assert.equal(annotated.sha, commits().get('chore: an empty commit')!.sha, 'dereferenced past the tag object');
   assert.notEqual(annotated.sha, git(REPO, ['rev-parse', 'v1.1.0']), 'the tag object sha is not the commit sha');
 
@@ -320,7 +342,8 @@ test('gitShallow: a full repository is not shallow, a --depth 1 clone is', () =>
 
   const dest = join(tempDir('farsight-shallow-'), 'clone');
   execFileSync('git', ['clone', '-q', '--depth', '1', `file://${REPO}`, dest], {
-    stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 60_000,
   });
   const shallow = gitShallow(dest);
   assert.ok(shallow.available);

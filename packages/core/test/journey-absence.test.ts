@@ -14,7 +14,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildIndex, journey, journeySummary, screensFor, stepCoverage, STRINGS, ABSENCE_WORDS, ABSENCE_KINDS, absenceWord,
+  buildIndex,
+  journey,
+  journeySummary,
+  screensFor,
+  stepCoverage,
+  STRINGS,
+  ABSENCE_WORDS,
+  ABSENCE_KINDS,
+  absenceWord,
 } from '../dist/index.js';
 import type { GraphNode, GraphEdge, OperationContract, JourneySummary } from '../dist/index.js';
 
@@ -28,11 +36,25 @@ const fn = (name: string, path: string, line: number): GraphNode =>
   ({ id: `${R}::${path}::${name}`, kind: 'function', name, tags: [], loc: { repo: R, path, line } }) as GraphNode;
 const route = (name: string, line: number, operationId: string): GraphNode =>
   ({
-    id: `${R}::route::${name}`, kind: 'route', name, tags: [], loc: { repo: R, path: 'server/routes.ts', line },
-    contract: { status: 'both', apiId: API, summary: `${operationId} summary`, spec: { operationId } } as OperationContract,
+    id: `${R}::route::${name}`,
+    kind: 'route',
+    name,
+    tags: [],
+    loc: { repo: R, path: 'server/routes.ts', line },
+    contract: {
+      status: 'both',
+      apiId: API,
+      summary: `${operationId} summary`,
+      spec: { operationId },
+    } as OperationContract,
   }) as GraphNode;
-const e = (kind: GraphEdge['kind'], from: string, to: string, line: number): GraphEdge =>
-  ({ id: `${kind}|${from}|${to}|${line}`, kind, from, to, meta: { line } });
+const e = (kind: GraphEdge['kind'], from: string, to: string, line: number): GraphEdge => ({
+  id: `${kind}|${from}|${to}|${line}`,
+  kind,
+  from,
+  to,
+  meta: { line },
+});
 const id = (path: string, name: string) => `${R}::${path}::${name}`;
 
 /**
@@ -44,11 +66,30 @@ function things(): { nodes: GraphNode[]; edges: GraphEdge[] } {
   const nodes: GraphNode[] = [
     { id: FLOW, kind: 'flow', name: 'Things', tags: [] } as GraphNode,
     { id: API, kind: 'api', name: 'Thing API', tags: [] } as GraphNode,
-    { id: `${R}::page::/things`, kind: 'page', name: '/things', tags: [], loc: { repo: R, path: 'ui/router.tsx', line: 3 } } as GraphNode,
-    { id: id('ui/Things.tsx', 'Things'), kind: 'component', name: 'Things', tags: [], loc: { repo: R, path: 'ui/Things.tsx', line: 1 } } as GraphNode,
-    fn('listThings', C, 4), fn('pingThing', C, 8), fn('createThing', C, 12),
-    route('GET /things', 5, 'listThings'), route('GET /ping', 6, 'pingThing'), route('POST /things', 7, 'createThing'),
-    fn('listThings', SV, 3), fn('ping', SV, 9), fn('createThing', SV, 14), fn('persist', SV, 20),
+    {
+      id: `${R}::page::/things`,
+      kind: 'page',
+      name: '/things',
+      tags: [],
+      loc: { repo: R, path: 'ui/router.tsx', line: 3 },
+    } as GraphNode,
+    {
+      id: id('ui/Things.tsx', 'Things'),
+      kind: 'component',
+      name: 'Things',
+      tags: [],
+      loc: { repo: R, path: 'ui/Things.tsx', line: 1 },
+    } as GraphNode,
+    fn('listThings', C, 4),
+    fn('pingThing', C, 8),
+    fn('createThing', C, 12),
+    route('GET /things', 5, 'listThings'),
+    route('GET /ping', 6, 'pingThing'),
+    route('POST /things', 7, 'createThing'),
+    fn('listThings', SV, 3),
+    fn('ping', SV, 9),
+    fn('createThing', SV, 14),
+    fn('persist', SV, 20),
     { id: `${R}::table::things`, kind: 'table', name: 'things', tags: [] } as GraphNode,
   ];
   const edges: GraphEdge[] = [
@@ -82,26 +123,41 @@ const action = (sum: JourneySummary, op: string) => {
 };
 
 test('the six absence words are a closed set, each a catalog key with a define', () => {
-  assert.deepEqual([...ABSENCE_WORDS], ['noneIndexed', 'notBuilt', 'notInvolved', 'notReached', 'notIndexed', 'notTranslated'],
-    'six words — adding a seventh is the failure mode the clarity phase existed to remove');
-  const absentKeys = Object.keys(STRINGS).filter((k) => k.startsWith('journey.absent.')).map((k) => k.slice('journey.absent.'.length));
+  assert.deepEqual(
+    [...ABSENCE_WORDS],
+    ['noneIndexed', 'notBuilt', 'notInvolved', 'notReached', 'notIndexed', 'notTranslated'],
+    'six words — adding a seventh is the failure mode the clarity phase existed to remove',
+  );
+  const absentKeys = Object.keys(STRINGS)
+    .filter((k) => k.startsWith('journey.absent.'))
+    .map((k) => k.slice('journey.absent.'.length));
   assert.deepEqual(absentKeys.sort(), [...ABSENCE_WORDS].sort(), 'the catalog carries exactly the six');
   // the two a journey cell is most often read with say which fact they name
   for (const w of ['noneIndexed', 'notInvolved', 'notReached']) {
-    assert.ok((STRINGS[`journey.absent.${w}`]!.define ?? '').length > 30, `journey.absent.${w} has no define: its fact cannot be looked up`);
+    assert.ok(
+      (STRINGS[`journey.absent.${w}`]!.define ?? '').length > 30,
+      `journey.absent.${w} has no define: its fact cannot be looked up`,
+    );
   }
 });
 
 test('the rule: none indexed is about the journey, not reached about a cut, not involved about this action', () => {
   assert.equal(absenceWord({ inJourney: false, cutBefore: false }), 'noneIndexed');
-  assert.equal(absenceWord({ inJourney: false, cutBefore: true }), 'noneIndexed', 'a kind the journey has none of is none indexed whatever the walk did');
+  assert.equal(
+    absenceWord({ inJourney: false, cutBefore: true }),
+    'noneIndexed',
+    'a kind the journey has none of is none indexed whatever the walk did',
+  );
   assert.equal(absenceWord({ inJourney: true, cutBefore: true }), 'notReached');
   assert.equal(absenceWord({ inJourney: true, cutBefore: false }), 'notInvolved');
 });
 
 test('an action that does not touch a layer the journey has reads *not involved* — never *none indexed*', () => {
   const sum = fold();
-  assert.ok(sum.systems.some((r) => r.key === 'records'), 'the journey reads and writes a table');
+  assert.ok(
+    sum.systems.some((r) => r.key === 'records'),
+    'the journey reads and writes a table',
+  );
   const { sg, mo } = action(sum, 'pingThing');
   // the Sheet printed *none indexed* here, the Timeline *not involved*
   assert.equal(sg.absent!.moments[mo.index]!.records, 'notInvolved');
@@ -114,8 +170,9 @@ test('an action that does not touch a layer the journey has reads *not involved*
 
 test('a kind the whole journey has none of reads *none indexed* on every action and on the journey', () => {
   const sum = fold();
-  assert.equal(sum.absentKinds!.messages, 'noneIndexed', 'no queue anywhere: the drill\'s always-present Messages row');
-  for (const sg of sum.segments) for (const mo of sg.moments) assert.equal(sg.absent!.kinds[mo.index]!.messages, 'noneIndexed');
+  assert.equal(sum.absentKinds!.messages, 'noneIndexed', "no queue anywhere: the drill's always-present Messages row");
+  for (const sg of sum.segments)
+    for (const mo of sg.moments) assert.equal(sg.absent!.kinds[mo.index]!.messages, 'noneIndexed');
   assert.equal(sum.absentKinds!.records, undefined, 'the journey has records');
 });
 
@@ -124,7 +181,10 @@ test('a walk cut inside an action says *not reached* for the layers past the cut
   const full = fold();
   const cut = fold(6);
   const c = action(cut, 'createThing');
-  assert.ok(c.sg.cutPoints.some((p) => p.moment === c.mo.index), 'the create action carries a cut');
+  assert.ok(
+    c.sg.cutPoints.some((p) => p.moment === c.mo.index),
+    'the create action carries a cut',
+  );
   assert.equal(c.sg.absent!.moments[c.mo.index]!.records, 'notReached', 'the table persist writes lies past the cut');
   assert.equal(c.sg.absent!.kinds[c.mo.index]!.records, 'notReached');
   // without the cut the same action writes the table: no absence
@@ -146,14 +206,19 @@ test('one word per (action, layer) fact across every shape a view consumes', () 
         for (const r of sum.systems) {
           const browserOpen = r.kind === 'repo' && r.side === 'ux' && !!mo.component;
           // rows · sheet · drill: every empty cell has exactly one word, every used one none
-          if (used.has(r.key) || browserOpen) assert.equal(cell[r.key], undefined, `${r.key} is used in action ${mo.index}`);
+          if (used.has(r.key) || browserOpen)
+            assert.equal(cell[r.key], undefined, `${r.key} is used in action ${mo.index}`);
           else assert.ok(ABSENCE_WORDS.includes(cell[r.key]!), `${r.key} in action ${mo.index} has no word`);
         }
         // the storyboard's ledger (by kind) says what the rows say, for a kind with one system
         for (const k of ABSENCE_KINDS) {
           const rows = sum.systems.filter((r) => r.kind === k);
           if (rows.length !== 1) continue;
-          assert.equal(a.kinds[mo.index]![k], cell[rows[0]!.key], `${k}: ledger and rows disagree on action ${mo.index}`);
+          assert.equal(
+            a.kinds[mo.index]![k],
+            cell[rows[0]!.key],
+            `${k}: ledger and rows disagree on action ${mo.index}`,
+          );
         }
       }
       // the ladder's folded column for a system the whole screen leaves empty: *not reached*
@@ -161,7 +226,11 @@ test('one word per (action, layer) fact across every shape a view consumes', () 
       for (const [key, w] of Object.entries(a.screen)) {
         const cells = sg.moments.map((mo) => a.moments[mo.index]![key]);
         assert.ok(cells.every(Boolean), `${key} is folded on the ladder but used by an action`);
-        assert.equal(w, cells.includes('notReached') ? 'notReached' : 'notInvolved', `${key}: ladder and rows disagree`);
+        assert.equal(
+          w,
+          cells.includes('notReached') ? 'notReached' : 'notInvolved',
+          `${key}: ladder and rows disagree`,
+        );
         assert.ok(kindOf.has(key));
       }
     }
@@ -179,22 +248,71 @@ test('one word per (action, layer) fact across every shape a view consumes', () 
 test('a step no test reaches, inside an action tests do reach: two scopes, each named, never one bare word', () => {
   const S2 = 'src/orders.ts';
   const f2 = (name: string, line: number): GraphNode =>
-    ({ id: `shop::${S2}::${name}`, kind: 'function', name, tags: [], loc: { repo: 'shop', path: S2, line, endLine: line + 4 } }) as GraphNode;
+    ({
+      id: `shop::${S2}::${name}`,
+      kind: 'function',
+      name,
+      tags: [],
+      loc: { repo: 'shop', path: S2, line, endLine: line + 4 },
+    }) as GraphNode;
   const nodes: GraphNode[] = [
     { id: 'shop::flow::order', kind: 'flow', name: 'Order', tags: [] } as GraphNode,
-    { id: 'shop::page::/orders', kind: 'page', name: '/orders', tags: [], loc: { repo: 'shop', path: 'src/ui/Orders.tsx', line: 1 } } as GraphNode,
-    { id: 'shop::route::POST /orders', kind: 'route', name: 'POST /orders', tags: [], loc: { repo: 'shop', path: S2, line: 2 } } as GraphNode,
-    f2('placeOrder', 10), f2('audit', 30),
-    { id: 'shop::test::src/o.spec.ts::totals', kind: 'test', name: 'totals', tags: ['test'], loc: { repo: 'shop', path: 'src/o.spec.ts', line: 3 },
-      test: { level: 'unit', runner: 'vitest', suite: [], file: 'src/o.spec.ts' } } as GraphNode,
+    {
+      id: 'shop::page::/orders',
+      kind: 'page',
+      name: '/orders',
+      tags: [],
+      loc: { repo: 'shop', path: 'src/ui/Orders.tsx', line: 1 },
+    } as GraphNode,
+    {
+      id: 'shop::route::POST /orders',
+      kind: 'route',
+      name: 'POST /orders',
+      tags: [],
+      loc: { repo: 'shop', path: S2, line: 2 },
+    } as GraphNode,
+    f2('placeOrder', 10),
+    f2('audit', 30),
+    {
+      id: 'shop::test::src/o.spec.ts::totals',
+      kind: 'test',
+      name: 'totals',
+      tags: ['test'],
+      loc: { repo: 'shop', path: 'src/o.spec.ts', line: 3 },
+      test: { level: 'unit', runner: 'vitest', suite: [], file: 'src/o.spec.ts' },
+    } as GraphNode,
   ];
   const edges: GraphEdge[] = [
     { id: 'r1', kind: 'renders', from: 'shop::flow::order', to: 'shop::page::/orders', meta: { line: 1 } } as GraphEdge,
-    { id: 'h1', kind: 'http', from: 'shop::page::/orders', to: 'shop::route::POST /orders', meta: { line: 2 } } as GraphEdge,
-    { id: 'c1', kind: 'calls', from: 'shop::route::POST /orders', to: `shop::${S2}::placeOrder`, meta: { line: 3 } } as GraphEdge,
-    { id: 'c2', kind: 'calls', from: `shop::${S2}::placeOrder`, to: `shop::${S2}::audit`, meta: { line: 12 } } as GraphEdge,
-    { id: 'covers|t|p', kind: 'covers', from: 'shop::test::src/o.spec.ts::totals', to: `shop::${S2}::placeOrder`, meta: { evidence: 'static' },
-      resolution: { status: 'resolved', technique: 'import-resolution', confidence: 'MEDIUM' } } as GraphEdge,
+    {
+      id: 'h1',
+      kind: 'http',
+      from: 'shop::page::/orders',
+      to: 'shop::route::POST /orders',
+      meta: { line: 2 },
+    } as GraphEdge,
+    {
+      id: 'c1',
+      kind: 'calls',
+      from: 'shop::route::POST /orders',
+      to: `shop::${S2}::placeOrder`,
+      meta: { line: 3 },
+    } as GraphEdge,
+    {
+      id: 'c2',
+      kind: 'calls',
+      from: `shop::${S2}::placeOrder`,
+      to: `shop::${S2}::audit`,
+      meta: { line: 12 },
+    } as GraphEdge,
+    {
+      id: 'covers|t|p',
+      kind: 'covers',
+      from: 'shop::test::src/o.spec.ts::totals',
+      to: `shop::${S2}::placeOrder`,
+      meta: { evidence: 'static' },
+      resolution: { status: 'resolved', technique: 'import-resolution', confidence: 'MEDIUM' },
+    } as GraphEdge,
   ];
   const index = buildIndex(nodes, edges);
   const j = journey(index, 'shop::flow::order');
@@ -210,12 +328,13 @@ test('a step no test reaches, inside an action tests do reach: two scopes, each 
   const own = stepCoverage(index, `shop::${S2}::audit`);
   assert.ok(!own || !own.counted || own.counted.tests.n === 0, 'no test reaches audit itself');
   const place = stepCoverage(index, `shop::${S2}::placeOrder`)!;
-  assert.equal(place.counted!.tests.scope, 'count.scope.node', 'a step\'s own number is scoped to the part alone');
+  assert.equal(place.counted!.tests.scope, 'count.scope.node', "a step's own number is scoped to the part alone");
   assert.notEqual(place.counted!.tests.scope, act.counted.tests.scope, 'two numbers, two printed scopes');
   // the sentence the step's foot prints beside its absence names the wider scope and says the two differ
   const wider = STRINGS['journey.tests.widerScope']!;
   assert.match(wider.professional, /\{n\}/);
   assert.match(wider.professional, /action/);
   assert.ok((wider.define ?? '').length > 30);
-  for (const s of ['count.scope.action', 'count.scope.node', 'journey.scopeHere']) assert.ok(STRINGS[s], `${s} is the scope a foot prints`);
+  for (const s of ['count.scope.action', 'count.scope.node', 'journey.scopeHere'])
+    assert.ok(STRINGS[s], `${s} is the scope a foot prints`);
 });

@@ -17,14 +17,14 @@ import { decideGrants, type GrantDecision } from './gate.js';
 import { resolveSecret, SecretUnavailable } from './secrets.js';
 
 export const CODE_HOST_ACTIONS = ['read', 'comment', 'check'] as const;
-export type CodeHostAction = typeof CODE_HOST_ACTIONS[number];
+export type CodeHostAction = (typeof CODE_HOST_ACTIONS)[number];
 export const CODE_HOSTS = ['github', 'azure-devops'] as const;
 
 /** One `sources[]` entry of `.farsight/settings.json` with `type: 'code-host'`. */
 export interface CodeHostSource {
   id: string;
   type: 'code-host';
-  host: typeof CODE_HOSTS[number];
+  host: (typeof CODE_HOSTS)[number];
   /** `owner/name` on GitHub */
   repo: string;
   /** the graph source this repository is (default: the repo's name after the slash) */
@@ -47,15 +47,25 @@ export function loadCodeHostSources(workspace: string): CodeHostSource[] {
   if (!existsSync(file)) return [];
   try {
     const s = JSON.parse(readFileSync(file, 'utf8')) as { sources?: Record<string, unknown>[] };
-    return (s.sources ?? []).filter((x) => x.type === 'code-host' && x.enabled !== false) as unknown as CodeHostSource[];
+    return (s.sources ?? []).filter(
+      (x) => x.type === 'code-host' && x.enabled !== false,
+    ) as unknown as CodeHostSource[];
   } catch {
     return [];
   }
 }
 
 /** Verdict 1 for a code host: the source's `allow` lists as grants, decided by the shared gate. */
-export function codeHostPolicy(src: CodeHostSource | undefined, action: CodeHostAction, who: 'human' | 'agent'): GrantDecision<unknown> {
-  if (!src) return { verdict: { allowed: false, reason: 'no code-host source in .farsight/settings.json names this repository' }, requiresConfirmation: false };
+export function codeHostPolicy(
+  src: CodeHostSource | undefined,
+  action: CodeHostAction,
+  who: 'human' | 'agent',
+): GrantDecision<unknown> {
+  if (!src)
+    return {
+      verdict: { allowed: false, reason: 'no code-host source in .farsight/settings.json names this repository' },
+      requiresConfirmation: false,
+    };
   if (action !== 'read' && (src.mode ?? 'read-only') !== 'edit') {
     return { verdict: { allowed: false, reason: 'this code-host source is read-only' }, requiresConfirmation: false };
   }
@@ -75,11 +85,27 @@ export function agentsMayRead(sources: CodeHostSource[]): boolean {
 // ── the host ───────────────────────────────────────────────────────────────
 
 export interface PullRequest {
-  number: number; title: string; url: string; state: string; draft: boolean;
-  base: string; head: string; headSha: string; baseSha: string;
+  number: number;
+  title: string;
+  url: string;
+  state: string;
+  draft: boolean;
+  base: string;
+  head: string;
+  headSha: string;
+  baseSha: string;
 }
-export interface PullCommit { sha: string; subject: string; at: string; author?: string }
-export interface PullFile { path: string; status: string; ranges: [number, number][] }
+export interface PullCommit {
+  sha: string;
+  subject: string;
+  at: string;
+  author?: string;
+}
+export interface PullFile {
+  path: string;
+  status: string;
+  ranges: [number, number][];
+}
 
 /** How the host is called: with a token (the keychain), the GitHub CLI (`--via gh`), or with nothing (public reads). */
 export type HostVia = 'token' | 'gh' | 'none';
@@ -87,20 +113,38 @@ export type HostVia = 'token' | 'gh' | 'none';
 type Call = (method: string, path: string, body?: unknown) => Promise<{ status: number; json: unknown }>;
 
 function ghCall(): Call {
-  return (method, path, body) => new Promise((resolve, reject) => {
-    const args = ['api', '--method', method, '-H', 'Accept: application/vnd.github+json', path.replace(/^\//, ''), ...(body ? ['--input', '-'] : [])];
-    const child = execFile('gh', args, { timeout: 30_000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout) => {
-      if (err && !stdout) {
-        const code = (err as NodeJS.ErrnoException).code;
-        reject(new Error(code === 'ENOENT' ? 'the GitHub CLI (gh) is not installed' : `gh api ${method} ${path} failed`));
-        return;
+  return (method, path, body) =>
+    new Promise((resolve, reject) => {
+      const args = [
+        'api',
+        '--method',
+        method,
+        '-H',
+        'Accept: application/vnd.github+json',
+        path.replace(/^\//, ''),
+        ...(body ? ['--input', '-'] : []),
+      ];
+      const child = execFile('gh', args, { timeout: 30_000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout) => {
+        if (err && !stdout) {
+          const code = (err as NodeJS.ErrnoException).code;
+          reject(
+            new Error(code === 'ENOENT' ? 'the GitHub CLI (gh) is not installed' : `gh api ${method} ${path} failed`),
+          );
+          return;
+        }
+        let json: unknown = null;
+        try {
+          json = stdout ? JSON.parse(String(stdout)) : null;
+        } catch {
+          /* not JSON */
+        }
+        resolve({ status: err ? 400 : 200, json });
+      });
+      if (body) {
+        child.stdin?.write(JSON.stringify(body));
+        child.stdin?.end();
       }
-      let json: unknown = null;
-      try { json = stdout ? JSON.parse(String(stdout)) : null; } catch { /* not JSON */ }
-      resolve({ status: err ? 400 : 200, json });
     });
-    if (body) { child.stdin?.write(JSON.stringify(body)); child.stdin?.end(); }
-  });
 }
 
 function fetchCall(api: string, token: string | undefined): Call {
@@ -108,7 +152,9 @@ function fetchCall(api: string, token: string | undefined): Call {
     const r = await fetch(api.replace(/\/$/, '') + path, {
       method,
       headers: {
-        Accept: 'application/vnd.github+json', 'User-Agent': 'farsight', 'X-GitHub-Api-Version': '2022-11-28',
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'farsight',
+        'X-GitHub-Api-Version': '2022-11-28',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(body ? { 'Content-Type': 'application/json' } : {}),
       },
@@ -116,7 +162,11 @@ function fetchCall(api: string, token: string | undefined): Call {
     });
     const text = await r.text();
     let json: unknown = null;
-    try { json = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      /* not JSON */
+    }
     return { status: r.status, json };
   };
 }
@@ -134,7 +184,14 @@ export function rangesOfFilePatch(patch: string | undefined): [number, number][]
   return out;
 }
 
-const STATUS_LETTER: Record<string, string> = { added: 'A', modified: 'M', removed: 'D', renamed: 'R', copied: 'C', changed: 'M' };
+const STATUS_LETTER: Record<string, string> = {
+  added: 'A',
+  modified: 'M',
+  removed: 'D',
+  renamed: 'R',
+  copied: 'C',
+  changed: 'M',
+};
 
 export interface GitHubHost {
   via: HostVia;
@@ -148,21 +205,33 @@ export interface GitHubHost {
   /** one comment carrying `marker`, created or edited in place → its url */
   upsertComment(n: number, marker: string, body: string): Promise<{ url: string; updated: boolean }>;
   /** a commit status on the head (the check) */
-  status(sha: string, state: 'success' | 'failure' | 'pending' | 'error', description: string, context: string, url?: string): Promise<void>;
+  status(
+    sha: string,
+    state: 'success' | 'failure' | 'pending' | 'error',
+    description: string,
+    context: string,
+    url?: string,
+  ): Promise<void>;
 }
 
 /** A GitHub host for `owner/name`. The token is only ever passed in from secrets.ts. */
 export function githubHost(repo: string, opts: { via: HostVia; token?: string; api?: string }): GitHubHost {
-  const call = opts.via === 'gh' ? ghCall() : fetchCall(opts.api ?? 'https://api.github.com', opts.via === 'token' ? opts.token : undefined);
+  const call =
+    opts.via === 'gh'
+      ? ghCall()
+      : fetchCall(opts.api ?? 'https://api.github.com', opts.via === 'token' ? opts.token : undefined);
   const ok = async (method: string, path: string, body?: unknown) => {
     const r = await call(method, path, body);
-    if (r.status >= 300) throw new Error(`${method} ${path} answered ${r.status}${(r.json as { message?: string })?.message ? `: ${(r.json as { message: string }).message}` : ''}`);
+    if (r.status >= 300)
+      throw new Error(
+        `${method} ${path} answered ${r.status}${(r.json as { message?: string })?.message ? `: ${(r.json as { message: string }).message}` : ''}`,
+      );
     return r.json as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   };
   const paged = async (path: string) => {
     const out: unknown[] = [];
     for (let page = 1; page <= 30; page++) {
-      const rows = await ok('GET', `${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`) as unknown[];
+      const rows = (await ok('GET', `${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`)) as unknown[];
       out.push(...rows);
       if (rows.length < 100) break;
     }
@@ -172,24 +241,43 @@ export function githubHost(repo: string, opts: { via: HostVia; token?: string; a
     via: opts.via,
     async who() {
       if (opts.via === 'none') return null;
-      try { return String((await ok('GET', '/user')).login ?? '') || null; } catch { return null; }
+      try {
+        return String((await ok('GET', '/user')).login ?? '') || null;
+      } catch {
+        return null;
+      }
     },
     async pr(n) {
       const p = await ok('GET', `/repos/${repo}/pulls/${n}`);
       return {
-        number: p.number, title: p.title, url: p.html_url, state: p.merged_at ? 'merged' : p.state, draft: !!p.draft,
-        base: p.base?.ref, head: p.head?.ref, headSha: p.head?.sha, baseSha: p.base?.sha,
+        number: p.number,
+        title: p.title,
+        url: p.html_url,
+        state: p.merged_at ? 'merged' : p.state,
+        draft: !!p.draft,
+        base: p.base?.ref,
+        head: p.head?.ref,
+        headSha: p.head?.sha,
+        baseSha: p.base?.sha,
       };
     },
     async commits(n) {
       return (await paged(`/repos/${repo}/pulls/${n}/commits`)).map((c) => ({
-        sha: c.sha, subject: String(c.commit?.message ?? '').split('\n')[0]!, at: c.commit?.committer?.date ?? c.commit?.author?.date ?? '',
-        ...(c.author?.login ? { author: c.author.login } : c.commit?.author?.name ? { author: c.commit.author.name } : {}),
+        sha: c.sha,
+        subject: String(c.commit?.message ?? '').split('\n')[0]!,
+        at: c.commit?.committer?.date ?? c.commit?.author?.date ?? '',
+        ...(c.author?.login
+          ? { author: c.author.login }
+          : c.commit?.author?.name
+            ? { author: c.commit.author.name }
+            : {}),
       }));
     },
     async files(n) {
       return (await paged(`/repos/${repo}/pulls/${n}/files`)).map((f) => ({
-        path: f.filename, status: STATUS_LETTER[f.status] ?? 'M', ranges: rangesOfFilePatch(f.patch),
+        path: f.filename,
+        status: STATUS_LETTER[f.status] ?? 'M',
+        ranges: rangesOfFilePatch(f.patch),
       }));
     },
     async canWrite() {
@@ -214,41 +302,74 @@ export function githubHost(repo: string, opts: { via: HostVia; token?: string; a
       return { url: r.html_url, updated: false };
     },
     async status(sha, state, description, context, url) {
-      await ok('POST', `/repos/${repo}/statuses/${sha}`, { state, description: description.slice(0, 140), context, ...(url ? { target_url: url } : {}) });
+      await ok('POST', `/repos/${repo}/statuses/${sha}`, {
+        state,
+        description: description.slice(0, 140),
+        context,
+        ...(url ? { target_url: url } : {}),
+      });
     },
   };
 }
 
 /** Open the host the way the person asked: `--via gh`, else the keychain token, else no credential (public reads only). */
-export async function openGitHub(src: CodeHostSource | undefined, repo: string, opts: { viaGh?: boolean } = {}): Promise<{ host: GitHubHost; credential: Verdict }> {
+export async function openGitHub(
+  src: CodeHostSource | undefined,
+  repo: string,
+  opts: { viaGh?: boolean } = {},
+): Promise<{ host: GitHubHost; credential: Verdict }> {
   if (opts.viaGh) {
     const host = githubHost(repo, { via: 'gh' });
     const login = await host.who();
-    return { host, credential: login ? { allowed: true, reason: `the GitHub CLI's own login (${login}), because --via gh was passed` } : { allowed: false, reason: 'the GitHub CLI is not logged in (gh auth login)' } };
+    return {
+      host,
+      credential: login
+        ? { allowed: true, reason: `the GitHub CLI's own login (${login}), because --via gh was passed` }
+        : { allowed: false, reason: 'the GitHub CLI is not logged in (gh auth login)' },
+    };
   }
   const ref = src?.auth?.secret;
-  if (!ref) return { host: githubHost(repo, { via: 'none', ...(src?.api ? { api: src.api } : {}) }), credential: { allowed: false, reason: 'no credential: the code-host source names no auth.secret (keychain:farsight/github-<org>)' } };
+  if (!ref)
+    return {
+      host: githubHost(repo, { via: 'none', ...(src?.api ? { api: src.api } : {}) }),
+      credential: {
+        allowed: false,
+        reason: 'no credential: the code-host source names no auth.secret (keychain:farsight/github-<org>)',
+      },
+    };
   let token: string;
   try {
     token = await resolveSecret(ref);
   } catch (err) {
     const why = err instanceof SecretUnavailable ? err.message : 'the secret could not be read';
-    return { host: githubHost(repo, { via: 'none', ...(src?.api ? { api: src.api } : {}) }), credential: { allowed: false, reason: why } };
+    return {
+      host: githubHost(repo, { via: 'none', ...(src?.api ? { api: src.api } : {}) }),
+      credential: { allowed: false, reason: why },
+    };
   }
   const host = githubHost(repo, { via: 'token', token, ...(src?.api ? { api: src.api } : {}) });
   const login = await host.who();
-  return { host, credential: login ? { allowed: true, reason: `the token in ${ref} acts as ${login}` } : { allowed: false, reason: `the token in ${ref} was refused by the host` } };
+  return {
+    host,
+    credential: login
+      ? { allowed: true, reason: `the token in ${ref} acts as ${login}` }
+      : { allowed: false, reason: `the token in ${ref} was refused by the host` },
+  };
 }
 
 /** The three verdicts of one post, ANDed. The host is not asked when the policy already said no. */
 export async function decidePost(
-  src: CodeHostSource | undefined, who: 'human' | 'agent', open: () => Promise<{ host: GitHubHost; credential: Verdict }>, pr: () => Promise<PullRequest>,
+  src: CodeHostSource | undefined,
+  who: 'human' | 'agent',
+  open: () => Promise<{ host: GitHubHost; credential: Verdict }>,
+  pr: () => Promise<PullRequest>,
 ): Promise<{ verdicts: Verdicts; allowed: boolean; requiresConfirmation: boolean; host?: GitHubHost }> {
   const policy = codeHostPolicy(src, 'comment', who);
   const check = codeHostPolicy(src, 'check', who);
-  const pv: Verdict = policy.verdict.allowed && !check.verdict.allowed
-    ? { allowed: false, reason: `comment granted, check not: ${check.verdict.reason}` }
-    : policy.verdict;
+  const pv: Verdict =
+    policy.verdict.allowed && !check.verdict.allowed
+      ? { allowed: false, reason: `comment granted, check not: ${check.verdict.reason}` }
+      : policy.verdict;
   if (!pv.allowed) {
     const no = { allowed: false, reason: 'not asked — the policy denied it first' };
     return { verdicts: { policy: pv, tracker: no, credential: no }, allowed: false, requiresConfirmation: false };
@@ -261,12 +382,18 @@ export async function decidePost(
   let tracker: Verdict;
   try {
     const p = await pr();
-    tracker = p.state !== 'open'
-      ? { allowed: false, reason: `pull request #${p.number} is ${p.state}` }
-      : await host.canWrite();
+    tracker =
+      p.state !== 'open'
+        ? { allowed: false, reason: `pull request #${p.number} is ${p.state}` }
+        : await host.canWrite();
   } catch (err) {
     tracker = { allowed: false, reason: `the host did not answer: ${(err as Error).message}` };
   }
   const allowed = pv.allowed && tracker.allowed && credential.allowed;
-  return { verdicts: { policy: pv, tracker, credential }, allowed, requiresConfirmation: allowed && (policy.requiresConfirmation || check.requiresConfirmation), host };
+  return {
+    verdicts: { policy: pv, tracker, credential },
+    allowed,
+    requiresConfirmation: allowed && (policy.requiresConfirmation || check.requiresConfirmation),
+    host,
+  };
 }

@@ -11,21 +11,30 @@ const STREET = '#/map/' + encodeURIComponent(FLOW);
 const CHROME_BUDGET = 170;
 
 /** The chrome rows and the journey head, measured from the stage's top to the head's bottom. */
-const chromeHeight = (page: Page) => page.evaluate(() => {
-  const st = document.querySelector('.map-stage')!.getBoundingClientRect();
-  const hd = document.querySelector<HTMLElement>('.map-jhead')!;
-  return Math.round(hd.getBoundingClientRect().bottom - st.top);
-});
+const chromeHeight = (page: Page) =>
+  page.evaluate(() => {
+    const st = document.querySelector('.map-stage')!.getBoundingClientRect();
+    const hd = document.querySelector<HTMLElement>('.map-jhead')!;
+    return Math.round(hd.getBoundingClientRect().bottom - st.top);
+  });
 
-for (const [W, H] of [[1920, 1050], [1440, 900], [1280, 800]]) {
+for (const [W, H] of [
+  [1920, 1050],
+  [1440, 900],
+  [1280, 800],
+]) {
   test.describe(`the Map's space at ${W}`, () => {
-    test.beforeEach(async ({ page }) => { await page.setViewportSize({ width: W, height: H }); });
+    test.beforeEach(async ({ page }) => {
+      await page.setViewportSize({ width: W, height: H });
+    });
 
     /**
      * @covers packages/server/public/app/surfaces/map.js::headBarHtml
      * @covers packages/server/public/app/surfaces/map.js::foldHead
      */
-    test('the chrome and the journey head take at most 170 px, in every register; line 1 is one line', async ({ page }) => {
+    test('the chrome and the journey head take at most 170 px, in every register; line 1 is one line', async ({
+      page,
+    }) => {
       for (const lens of ['business', 'hybrid', 'code']) {
         for (const layout of ['screens', 'table'] as const) {
           if (lens === 'code' && layout === 'table') continue;
@@ -38,7 +47,9 @@ for (const [W, H] of [[1920, 1050], [1440, 900], [1280, 800]]) {
           const l1 = await page.evaluate(() => {
             const el = document.querySelector<HTMLElement>('.map-jhead .jh-l1')!;
             const r = el.getBoundingClientRect();
-            const kids = [...el.querySelectorAll<HTMLElement>('.nm, .agg > *, .jrn-count > *')].filter((k) => k.offsetWidth);
+            const kids = [...el.querySelectorAll<HTMLElement>('.nm, .agg > *, .jrn-count > *')].filter(
+              (k) => k.offsetWidth,
+            );
             return { h: r.height, left: kids.filter((k) => k.getBoundingClientRect().left < r.left - 1).length };
           });
           expect(l1.h).toBeLessThan(30);
@@ -53,7 +64,7 @@ for (const [W, H] of [[1920, 1050], [1440, 900], [1280, 800]]) {
  * @covers packages/server/public/app/surfaces/map.js::openAbout
  * @covers packages/server/public/app/surfaces/map.js::foldHead
  */
-test('the head\'s +n lists what it folded, and its click opens the whole row in the dock', async ({ page }) => {
+test("the head's +n lists what it folded, and its click opens the whole row in the dock", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openJourneyAt(page, 'screens');
   const more = page.locator('.map-jhead .jh-more');
@@ -68,7 +79,7 @@ test('the head\'s +n lists what it folded, and its click opens the whole row in 
 });
 
 /** @covers packages/server/public/app/surfaces/map-lanes.js::lanesHtml */
-test('the invoice storyline\'s lanes fit 1440×900 at ×1.0 whole, and the legend lies flat', async ({ page }) => {
+test("the invoice storyline's lanes fit 1440×900 at ×1.0 whole, and the legend lies flat", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await gotoReady(page, '#/map?storyline=invoice&layout=lanes');
   await expect(page.locator('.map-lanes .ln-stage').first()).toBeVisible();
@@ -77,20 +88,34 @@ test('the invoice storyline\'s lanes fit 1440×900 at ×1.0 whole, and the legen
     const board = document.querySelector('.map-board')!.getBoundingClientRect();
     const lanes = document.querySelector('.map-lanes')!.getBoundingClientRect();
     const leg = document.querySelector('.map-lanes .ln-legend')!.getBoundingClientRect();
-    return { inside: lanes.top >= board.top - 1 && lanes.bottom <= board.bottom + 1 && lanes.left >= board.left - 1 && lanes.right <= board.right + 1, leg: [leg.width, leg.height] };
+    return {
+      inside:
+        lanes.top >= board.top - 1 &&
+        lanes.bottom <= board.bottom + 1 &&
+        lanes.left >= board.left - 1 &&
+        lanes.right <= board.right + 1,
+      leg: [leg.width, leg.height],
+    };
   });
   expect(fit.inside).toBe(true);
   expect(fit.leg[0]).toBeGreaterThan(fit.leg[1]);
   // a stage card's name is one line, at the street card's size
-  const names = await page.locator('.map-lanes .ln-stage .nm').evaluateAll((els) => els.map((e) => [e.getBoundingClientRect().height, parseFloat(getComputedStyle(e).fontSize)]));
-  for (const [h, fs] of names) { expect(h).toBeLessThan(fs * 1.8); expect(fs).toBeLessThanOrEqual(13); }
+  const names = await page
+    .locator('.map-lanes .ln-stage .nm')
+    .evaluateAll((els) => els.map((e) => [e.getBoundingClientRect().height, parseFloat(getComputedStyle(e).fontSize)]));
+  for (const [h, fs] of names) {
+    expect(h).toBeLessThan(fs * 1.8);
+    expect(fs).toBeLessThanOrEqual(13);
+  }
 });
 
 /**
  * @covers packages/server/public/app/surfaces/map.js::drawJourneyLanes
  * @covers packages/server/public/app/surfaces/map-lanes.js::lanesHtml
  */
-test('one journey\'s lanes draw at ×1.0 under the head with no scroll, the lifecycle not drawn twice', async ({ page }) => {
+test("one journey's lanes draw at ×1.0 under the head with no scroll, the lifecycle not drawn twice", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await gotoReady(page, STREET + '?layout=lanes');
   const host = page.locator('.map-jlanes-host');
@@ -107,7 +132,7 @@ test('one journey\'s lanes draw at ×1.0 under the head with no scroll, the life
 });
 
 /** @covers packages/server/public/app/surfaces/map.js::onCanvasChange */
-test('under the street\'s reading floor every card keeps its picture and a verdict on one line', async ({ page }) => {
+test("under the street's reading floor every card keeps its picture and a verdict on one line", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await gotoReady(page, STREET + '?layout=screens&plumb=1');
   await expect(page.locator('.map-scr').first()).toBeVisible();
@@ -122,22 +147,32 @@ test('under the street\'s reading floor every card keeps its picture and a verdi
     await page.waitForTimeout(60);
   }
   await expect(page.locator('.map-world')).toHaveClass(/\bst-floor\b/);
-  await expect.poll(async () => {
-    const r = await page.evaluate(() => {
-      const ev = [...document.querySelectorAll<HTMLElement>('.map-world.st-floor .map-scr .tc-ev, .map-world.st-floor .map-scr .tc-nb')].filter((e) => e.offsetHeight);
-      const thumbs = [...document.querySelectorAll<HTMLElement>('.map-world.st-floor .map-scr .map-thumbwrap')].map((e) => e.getBoundingClientRect().height);
-      return {
-        n: ev.length,
-        wrapped: ev.filter((e) => e.offsetHeight >= 2 * parseFloat(getComputedStyle(e).fontSize) * 1.3).length,
-        thumb: Math.min(...thumbs),
-      };
-    });
-    return r.n > 0 && r.wrapped === 0 && r.thumb >= 48;
-  }).toBe(true);
+  await expect
+    .poll(async () => {
+      const r = await page.evaluate(() => {
+        const ev = [
+          ...document.querySelectorAll<HTMLElement>(
+            '.map-world.st-floor .map-scr .tc-ev, .map-world.st-floor .map-scr .tc-nb',
+          ),
+        ].filter((e) => e.offsetHeight);
+        const thumbs = [...document.querySelectorAll<HTMLElement>('.map-world.st-floor .map-scr .map-thumbwrap')].map(
+          (e) => e.getBoundingClientRect().height,
+        );
+        return {
+          n: ev.length,
+          wrapped: ev.filter((e) => e.offsetHeight >= 2 * parseFloat(getComputedStyle(e).fontSize) * 1.3).length,
+          thumb: Math.min(...thumbs),
+        };
+      });
+      return r.n > 0 && r.wrapped === 0 && r.thumb >= 48;
+    })
+    .toBe(true);
 });
 
 /** @covers packages/server/public/app/surfaces/map-stops.js::stripHtml */
-test('the action stop\'s screen strip is one line of numbered names, the picture in each one\'s tip', async ({ page }) => {
+test("the action stop's screen strip is one line of numbered names, the picture in each one's tip", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await gotoReady(page, STREET + '?screen=2&action=1');
   const strip = page.locator('.map-act-strip');

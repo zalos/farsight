@@ -52,12 +52,16 @@ export const TIP_LEAVE_MS = 280;
 export const TIP_QUICK_MS = 450;
 export const TIP_HOVER_GAP = 14;
 /** True when a trigger sits in a hover-mode container. */
-function hoverMode(el) { return !!(el && el.closest && el.closest('[data-tip-mode="hover"]')); }
+function hoverMode(el) {
+  return !!(el && el.closest && el.closest('[data-tip-mode="hover"]'));
+}
 
 /** What makes an element a trigger. */
 export const TIP_SELECTOR = '[data-tip],[data-tip-text],[data-tip-id]';
-const INTERACTIVE = 'a[href],button,input,select,textarea,label,summary,[role="button"],[role="tab"],[role="link"],[contenteditable="true"]';
-const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+const INTERACTIVE =
+  'a[href],button,input,select,textarea,label,summary,[role="button"],[role="tab"],[role="link"],[contenteditable="true"]';
+const FOCUSABLE =
+  'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 // ── the pure part: words, builders and placement (node --test covers these) ──
 
@@ -72,7 +76,11 @@ export function word(v) {
 
 /** True in the business lens, where a tip carries no code identifier. */
 export function isBusiness() {
-  try { return currentLens() === 'business'; } catch (err) { return false; }
+  try {
+    return currentLens() === 'business';
+  } catch (err) {
+    return false;
+  }
 }
 
 /** Fill `{n}`-style placeholders. */
@@ -112,7 +120,7 @@ export function sourceText(src) {
   if (!src) return '';
   if (typeof src === 'string') return word(src);
   const sync = src.sync != null ? t('tip.sync').replace('{n}', src.sync) : '';
-  const parts = [isBusiness() ? '' : (src.api || ''), sync, src.note ? word(src.note) : ''].filter(Boolean);
+  const parts = [isBusiness() ? '' : src.api || '', sync, src.note ? word(src.note) : ''].filter(Boolean);
   return parts.join(' · ');
 }
 
@@ -136,17 +144,32 @@ export function tableTip({ columns, rows, caption } = {}) {
   const biz = isBusiness();
   const cols = (columns || []).map((c) => (c && typeof c === 'object' ? c : { label: c }));
   const keep = cols.map((c) => !(biz && c.code));
-  const body = (rows || []).map((r) => (Array.isArray(r) ? { cells: r } : r))
+  const body = (rows || [])
+    .map((r) => (Array.isArray(r) ? { cells: r } : r))
     .filter((r) => r && !(biz && r.code))
     .map((r) => {
       const cells = r.cells.filter((_, i) => !cols.length || keep[i]);
       const html = cells.map((c, i) => cellHtml(c, !cols.length && i === 0 && cells.length > 1 ? 'th' : 'td')).join('');
       return '<tr' + (r.code ? ' class="tip-code"' : '') + '>' + html + '</tr>';
-    }).join('');
+    })
+    .join('');
   if (!body) return '';
-  const head = cols.length ? '<thead><tr>' + cols.filter((_, i) => keep[i]).map((c) => '<th' + (c.num ? ' class="n"' : '') + '>' + esc(word(c.label)) + '</th>').join('') + '</tr></thead>' : '';
-  return (caption ? '<div class="tip-cap">' + esc(word(caption)) + '</div>' : '')
-    + '<table class="tip-tbl">' + head + '<tbody>' + body + '</tbody></table>';
+  const head = cols.length
+    ? '<thead><tr>' +
+      cols
+        .filter((_, i) => keep[i])
+        .map((c) => '<th' + (c.num ? ' class="n"' : '') + '>' + esc(word(c.label)) + '</th>')
+        .join('') +
+      '</tr></thead>'
+    : '';
+  return (
+    (caption ? '<div class="tip-cap">' + esc(word(caption)) + '</div>' : '') +
+    '<table class="tip-tbl">' +
+    head +
+    '<tbody>' +
+    body +
+    '</tbody></table>'
+  );
 }
 
 /** Links: `[{ label, href, code, note }]`. `#/…` routes and `vscode://` links;
@@ -155,12 +178,30 @@ export function linksTip(links) {
   const biz = isBusiness();
   const items = (links || []).filter((l) => l && safeHref(l.href) && !(biz && l.code));
   if (!items.length) return '';
-  return '<ul class="tip-links">' + items.map((l) => '<li' + (l.code ? ' class="tip-code"' : '') + '><a href="' + esc(safeHref(l.href)) + '">'
-    + esc(word(l.label)) + '</a>' + (l.note ? ' <span class="tip-d">' + esc(word(l.note)) + '</span>' : '') + '</li>').join('') + '</ul>';
+  return (
+    '<ul class="tip-links">' +
+    items
+      .map(
+        (l) =>
+          '<li' +
+          (l.code ? ' class="tip-code"' : '') +
+          '><a href="' +
+          esc(safeHref(l.href)) +
+          '">' +
+          esc(word(l.label)) +
+          '</a>' +
+          (l.note ? ' <span class="tip-d">' + esc(word(l.note)) + '</span>' : '') +
+          '</li>',
+      )
+      .join('') +
+    '</ul>'
+  );
 }
 
 /** The route that opens the Grammar Book at one entry. */
-export function grammarHref(key) { return '#/grammar?key=' + encodeURIComponent(key); }
+export function grammarHref(key) {
+  return '#/grammar?key=' + encodeURIComponent(key);
+}
 
 /**
  * A heading built at runtime from a catalog word: its placeholders filled from `vars`, and any that nothing
@@ -174,9 +215,13 @@ export function filledHeading(w, vars) {
 
 /** A catalog word as a rich tip: heading, define, and the book's entry. */
 export function defTip(key, vars) {
-  return '<div class="tip-h">' + esc(filledHeading(word(key), vars)) + '</div>'
-    + (def(key) ? '<p class="tip-p">' + esc(def(key)) + '</p>' : '')
-    + linksTip([{ label: 'tip.grammar', href: grammarHref(key) }]);
+  return (
+    '<div class="tip-h">' +
+    esc(filledHeading(word(key), vars)) +
+    '</div>' +
+    (def(key) ? '<p class="tip-p">' + esc(def(key)) + '</p>' : '') +
+    linksTip([{ label: 'tip.grammar', href: grammarHref(key) }])
+  );
 }
 
 /**
@@ -196,18 +241,28 @@ export function numberTip({ count, of, vars, scope, source, breakdown, grammarKe
   const known = of && S.STRINGS && S.STRINGS[of];
   const oneKey = of && count === 1 && S.STRINGS && S.STRINGS[of + 'One'] ? of + 'One' : of;
   const words = of ? fill(word(oneKey), Object.assign({ n: count }, vars || {})) : '';
-  const head = words && /\d/.test(words) ? esc(words)
-    : '<b class="tip-n">' + esc(count == null ? '' : String(count)) + '</b>' + (words ? ' ' + esc(words) : '');
+  const head =
+    words && /\d/.test(words)
+      ? esc(words)
+      : '<b class="tip-n">' + esc(count == null ? '' : String(count)) + '</b>' + (words ? ' ' + esc(words) : '');
   const rows = [
     ['tip.counts', known ? def(of) : ''],
     ['tip.scope', word(scope)],
     ['tip.source', sourceText(source)],
   ].filter((r) => r[1]);
   const book = grammarKey || (known ? of : '');
-  return '<div class="tip-h">' + head + '</div>'
-    + (rows.length ? '<dl class="tip-dl">' + rows.map((r) => '<dt>' + esc(word(r[0])) + '</dt><dd>' + esc(r[1]) + '</dd>').join('') + '</dl>' : '')
-    + (breakdown ? tableTip(Object.assign({ caption: 'tip.breakdown' }, breakdown)) : '')
-    + (book ? linksTip([{ label: 'tip.grammar', href: grammarHref(book) }]) : '');
+  return (
+    '<div class="tip-h">' +
+    head +
+    '</div>' +
+    (rows.length
+      ? '<dl class="tip-dl">' +
+        rows.map((r) => '<dt>' + esc(word(r[0])) + '</dt><dd>' + esc(r[1]) + '</dd>').join('') +
+        '</dl>'
+      : '') +
+    (breakdown ? tableTip(Object.assign({ caption: 'tip.breakdown' }, breakdown)) : '') +
+    (book ? linksTip([{ label: 'tip.grammar', href: grammarHref(book) }]) : '')
+  );
 }
 
 /**
@@ -256,7 +311,12 @@ export function tipAttrs(o = {}) {
   if (o.key) a += ' data-tip="' + esc(o.key) + '"';
   else if (o.text) a += ' data-tip-text="' + esc(o.text) + '"';
   else if (o.number) a += ' data-tip-id="number" data-tip-args="' + esc(JSON.stringify(o.number)) + '"';
-  else if (o.id) a += ' data-tip-id="' + esc(o.id) + '"' + (o.args != null ? ' data-tip-args="' + esc(JSON.stringify(o.args)) + '"' : '');
+  else if (o.id)
+    a +=
+      ' data-tip-id="' +
+      esc(o.id) +
+      '"' +
+      (o.args != null ? ' data-tip-args="' + esc(JSON.stringify(o.args)) + '"' : '');
   if (o.tipKey) a += ' data-tip-key="' + esc(o.tipKey) + '"';
   if (!o.noFocus) a += ' tabindex="0"';
   return a;
@@ -265,11 +325,18 @@ export function tipAttrs(o = {}) {
 /** The same, onto an element that already exists (chrome drawn by hand). */
 export function setTip(el, o = {}) {
   if (!el) return;
-  ['tip', 'tipText', 'tipId', 'tipArgs', 'tipKey'].forEach((k) => { delete el.dataset[k]; });
+  ['tip', 'tipText', 'tipId', 'tipArgs', 'tipKey'].forEach((k) => {
+    delete el.dataset[k];
+  });
   if (o.key) el.dataset.tip = o.key;
   else if (o.text) el.dataset.tipText = o.text;
-  else if (o.number) { el.dataset.tipId = 'number'; el.dataset.tipArgs = JSON.stringify(o.number); }
-  else if (o.id) { el.dataset.tipId = o.id; if (o.args != null) el.dataset.tipArgs = JSON.stringify(o.args); }
+  else if (o.number) {
+    el.dataset.tipId = 'number';
+    el.dataset.tipArgs = JSON.stringify(o.number);
+  } else if (o.id) {
+    el.dataset.tipId = o.id;
+    if (o.args != null) el.dataset.tipArgs = JSON.stringify(o.args);
+  }
   if (o.tipKey) el.dataset.tipKey = o.tipKey;
   if (!el.matches(FOCUSABLE) && !el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
 }
@@ -283,7 +350,9 @@ const BUILDERS = new Map();
  * viewer's idiom — escape what you interpolate) or a DOM Node, or nothing to
  * open no tip. It runs when the tip opens, so it reads live state.
  */
-export function registerTip(name, builder) { BUILDERS.set(name, builder); }
+export function registerTip(name, builder) {
+  BUILDERS.set(name, builder);
+}
 
 registerTip('number', (el, args) => numberTip(args || {}));
 registerTip('table', (el, args) => tableTip(args || {}));
@@ -298,7 +367,11 @@ export function tipContentFor(el) {
     const fn = BUILDERS.get(d.tipId);
     if (!fn) return null;
     let args = null;
-    try { args = d.tipArgs ? JSON.parse(d.tipArgs) : null; } catch (err) { args = null; }
+    try {
+      args = d.tipArgs ? JSON.parse(d.tipArgs) : null;
+    } catch (err) {
+      args = null;
+    }
     const content = fn(el, args);
     return content ? { rich: true, content } : null;
   }
@@ -312,7 +385,9 @@ export function tipContentFor(el) {
 let layer = null;
 /** The open tip: its trigger, its kind, whether a click pinned it, how it opened. */
 const st = { el: null, rich: false, pinned: false, via: '', sig: '', describedBy: null };
-let hoverTimer = 0, leaveTimer = 0, pendingEl = null;
+let hoverTimer = 0,
+  leaveTimer = 0,
+  pendingEl = null;
 /**
  * The trigger a click just went to: its hover tip does not open again until the pointer has left it (round-3 swarm —
  * a click on LANES, *next ›* or a layout redrew the control under a still pointer and its tip opened over the board).
@@ -335,11 +410,25 @@ export function quietHoverTips(ms = 300) {
 /** A trigger's identity, so a redraw's copy of it can be found again. */
 function sigOf(el) {
   const d = el.dataset || {};
-  return [el.id || '', d.tipKey || '', d.tip || '', d.tipText || '', d.tipId || '', d.tipKey ? '' : (d.tipArgs || '')].join('|');
+  return [
+    el.id || '',
+    d.tipKey || '',
+    d.tip || '',
+    d.tipText || '',
+    d.tipId || '',
+    d.tipKey ? '' : d.tipArgs || '',
+  ].join('|');
 }
-function isInteractive(el) { return !!(el && el.closest && el.closest(INTERACTIVE)); }
-function visible(el) { const r = el.getBoundingClientRect(); return (r.width > 0 || r.height > 0) && !el.closest('[inert]'); }
-function focusablesIn(el) { return [...el.querySelectorAll(FOCUSABLE)].filter((n) => visible(n)); }
+function isInteractive(el) {
+  return !!(el && el.closest && el.closest(INTERACTIVE));
+}
+function visible(el) {
+  const r = el.getBoundingClientRect();
+  return (r.width > 0 || r.height > 0) && !el.closest('[inert]');
+}
+function focusablesIn(el) {
+  return [...el.querySelectorAll(FOCUSABLE)].filter((n) => visible(n));
+}
 
 function ensureLayer() {
   if (layer && document.body.contains(layer)) return layer;
@@ -356,18 +445,25 @@ function ensureLayer() {
  * tests from the service), so it takes the room the page has and its body scrolls inside it rather than run off the
  * bottom of the window (round-3 swarm: the card could not be scrolled to its tests).
  */
-export function repositionTip() { if (st.el && layer && !layer.hidden) position(); }
+export function repositionTip() {
+  if (st.el && layer && !layer.hidden) position();
+}
 
 /** True while a tip is open (the Escape ladder asks). */
-export function tipOpen() { return !!st.el && !!layer && !layer.hidden; }
+export function tipOpen() {
+  return !!st.el && !!layer && !layer.hidden;
+}
 /** The open tip's trigger, or null. */
-export function tipAnchor() { return tipOpen() ? st.el : null; }
+export function tipAnchor() {
+  return tipOpen() ? st.el : null;
+}
 
 function position() {
   if (!st.el || !layer) return;
   const body = layer.querySelector('.tip-body');
   if (body) body.style.maxHeight = '';
-  layer.style.left = '0px'; layer.style.top = '0px';
+  layer.style.left = '0px';
+  layer.style.top = '0px';
   const r = st.el.getBoundingClientRect();
   const s = { width: layer.offsetWidth, height: layer.offsetHeight };
   // a rail of rows (the Map property's tabs) keeps its tips beside it, so a tip never covers the rows being read or
@@ -385,10 +481,16 @@ function position() {
       return;
     }
   }
-  const p = placeTip(r, s, { width: window.innerWidth, height: window.innerHeight }, hoverMode(st.el) ? { gap: TIP_HOVER_GAP } : {});
+  const p = placeTip(
+    r,
+    s,
+    { width: window.innerWidth, height: window.innerHeight },
+    hoverMode(st.el) ? { gap: TIP_HOVER_GAP } : {},
+  );
   if (p.maxHeight != null && body) body.style.maxHeight = Math.max(60, p.maxHeight - 20) + 'px';
   layer.style.left = p.left + 'px';
-  layer.style.top = (p.side === 'top' ? r.top - (hoverMode(st.el) ? TIP_HOVER_GAP : 8) - layer.offsetHeight : p.top) + 'px';
+  layer.style.top =
+    (p.side === 'top' ? r.top - (hoverMode(st.el) ? TIP_HOVER_GAP : 8) - layer.offsetHeight : p.top) + 'px';
   layer.dataset.side = p.side;
   layer.style.setProperty('--tip-arrow', p.arrow + 'px');
 }
@@ -431,11 +533,16 @@ function fillLayer(content, rich, label) {
 export function showTip(el, content, opts = {}) {
   if (!el || content == null || content === '') return;
   ensureLayer();
-  clearTimeout(leaveTimer); clearTimeout(hoverTimer);
+  clearTimeout(leaveTimer);
+  clearTimeout(hoverTimer);
   if (st.el && st.el !== el) hideTip();
   const rich = opts.rich !== false;
   if (st.el === el && st.describedBy !== null) restoreDescribedBy();
-  st.el = el; st.rich = rich; st.pinned = !!opts.pinned; st.via = opts.via || 'api'; st.sig = sigOf(el);
+  st.el = el;
+  st.rich = rich;
+  st.pinned = !!opts.pinned;
+  st.via = opts.via || 'api';
+  st.sig = sigOf(el);
   fillLayer(content, rich, opts.label);
   layer.className = 'fs-tip ' + (rich ? 'rich' : 'simple') + (st.pinned ? ' pinned' : '');
   if (!rich) {
@@ -459,10 +566,25 @@ function restoreDescribedBy() {
 export function hideTip(opts = {}) {
   clearTimeout(leaveTimer);
   const el = st.el;
-  if (el) { restoreDescribedBy(); el.classList.remove('tip-on'); }
-  st.el = null; st.pinned = false; st.via = ''; st.sig = '';
-  if (layer) { layer.hidden = true; layer.innerHTML = ''; }
-  if (opts.focusTrigger && el && el.isConnected) { try { el.focus({ preventScroll: true }); } catch (err) { /* nothing to focus */ } }
+  if (el) {
+    restoreDescribedBy();
+    el.classList.remove('tip-on');
+  }
+  st.el = null;
+  st.pinned = false;
+  st.via = '';
+  st.sig = '';
+  if (layer) {
+    layer.hidden = true;
+    layer.innerHTML = '';
+  }
+  if (opts.focusTrigger && el && el.isConnected) {
+    try {
+      el.focus({ preventScroll: true });
+    } catch (err) {
+      /* nothing to focus */
+    }
+  }
 }
 
 /** Open the tip a trigger declares. Returns true when one opened. */
@@ -476,7 +598,9 @@ function openFor(el, opts = {}) {
 function scheduleLeave() {
   clearTimeout(leaveTimer);
   if (st.pinned) return;
-  leaveTimer = setTimeout(() => { if (!st.pinned) hideTip(); }, TIP_LEAVE_MS);
+  leaveTimer = setTimeout(() => {
+    if (!st.pinned) hideTip();
+  }, TIP_LEAVE_MS);
 }
 
 function cancelPending() {
@@ -486,12 +610,25 @@ function cancelPending() {
 }
 
 function onPointerOver(e) {
-  lastPt.x = e.clientX; lastPt.y = e.clientY;
-  if (layer && layer.contains(e.target)) { clearTimeout(leaveTimer); return; }
+  lastPt.x = e.clientX;
+  lastPt.y = e.clientY;
+  if (layer && layer.contains(e.target)) {
+    clearTimeout(leaveTimer);
+    return;
+  }
   const trg = e.target.closest && e.target.closest(TIP_SELECTOR);
-  if (!trg) { clickedSig = ''; return; }
-  if (trg === st.el) { clearTimeout(leaveTimer); return; }
-  if (clickedSig) { if (sigOf(trg) === clickedSig) return; clickedSig = ''; }
+  if (!trg) {
+    clickedSig = '';
+    return;
+  }
+  if (trg === st.el) {
+    clearTimeout(leaveTimer);
+    return;
+  }
+  if (clickedSig) {
+    if (sigOf(trg) === clickedSig) return;
+    clickedSig = '';
+  }
   if (trg === pendingEl) return;
   if (e.pointerType === 'touch') return;
   if (Date.now() < quietUntil) return;
@@ -503,18 +640,21 @@ function onPointerOver(e) {
   pendingEl = trg;
   trg.classList.add('tip-pending');
   const warm = st.el && !st.pinned;
-  hoverTimer = setTimeout(() => {
-    let el = pendingEl;
-    cancelPending();
-    if (Date.now() < quietUntil) return;
-    // the trigger may have been redrawn while the pointer rested on it
-    if (el && !el.isConnected) {
-      const under = document.elementFromPoint(lastPt.x, lastPt.y);
-      const again = under && under.closest && under.closest(TIP_SELECTOR);
-      el = again && sigOf(again) === sigOf(el) ? again : null;
-    }
-    if (el && el.getAttribute('aria-expanded') !== 'true') openFor(el, { via: 'hover' });
-  }, warm ? TIP_WARM_MS : hoverMode(trg) ? TIP_QUICK_MS : TIP_HOVER_MS);
+  hoverTimer = setTimeout(
+    () => {
+      let el = pendingEl;
+      cancelPending();
+      if (Date.now() < quietUntil) return;
+      // the trigger may have been redrawn while the pointer rested on it
+      if (el && !el.isConnected) {
+        const under = document.elementFromPoint(lastPt.x, lastPt.y);
+        const again = under && under.closest && under.closest(TIP_SELECTOR);
+        el = again && sigOf(again) === sigOf(el) ? again : null;
+      }
+      if (el && el.getAttribute('aria-expanded') !== 'true') openFor(el, { via: 'hover' });
+    },
+    warm ? TIP_WARM_MS : hoverMode(trg) ? TIP_QUICK_MS : TIP_HOVER_MS,
+  );
 }
 
 function onPointerOut(e) {
@@ -525,7 +665,8 @@ function onPointerOut(e) {
   const inTrg = (n) => !!(n && st.el.contains(n));
   if ((inTrg(e.target) || inTip(e.target)) && !inTrg(to) && !inTip(to)) {
     // a simple tip is not interactive: leaving its trigger closes it straight away
-    if (!st.rich) hideTip(); else scheduleLeave();
+    if (!st.rich) hideTip();
+    else scheduleLeave();
   }
 }
 
@@ -539,9 +680,15 @@ export function pinTip(el) {
 function onClick(e) {
   const tgt = e.target;
   if (layer && layer.contains(tgt)) {
-    if (tgt.closest('.tip-x')) { hideTip({ focusTrigger: true }); return; }
+    if (tgt.closest('.tip-x')) {
+      hideTip({ focusTrigger: true });
+      return;
+    }
     if (tgt.closest('a[href]')) setTimeout(() => hideTip(), 0);
-    else if (st.el) { st.pinned = true; layer.classList.add('pinned'); }
+    else if (st.el) {
+      st.pinned = true;
+      layer.classList.add('pinned');
+    }
     return;
   }
   const trg = tgt.closest && tgt.closest(TIP_SELECTOR);
@@ -549,7 +696,10 @@ function onClick(e) {
   cancelPending();
   clickedSig = trg ? sigOf(trg) : '';
   // in a hover-mode container a click is for what the trigger sits on; the tip already showed on hover
-  if (trg && hoverMode(trg)) { if (st.el) hideTip(); return; }
+  if (trg && hoverMode(trg)) {
+    if (st.el) hideTip();
+    return;
+  }
   if (trg && !isInteractive(trg)) {
     cancelPending();
     if (st.el === trg && st.pinned) hideTip();
@@ -602,13 +752,23 @@ export function tipKeydown(e) {
     const f = focusablesIn(layer).filter((n) => !n.classList.contains('tip-x'));
     const x = layer.querySelector('.tip-x');
     const stops = x ? [...f, x] : f;
-    if (!e.shiftKey && a === st.el && stops.length) { e.preventDefault(); stops[0].focus(); return true; }
+    if (!e.shiftKey && a === st.el && stops.length) {
+      e.preventDefault();
+      stops[0].focus();
+      return true;
+    }
     if (layer.contains(a)) {
       const i = stops.indexOf(a);
-      if (e.shiftKey && i <= 0) { e.preventDefault(); st.el.focus(); return true; }
+      if (e.shiftKey && i <= 0) {
+        e.preventDefault();
+        st.el.focus();
+        return true;
+      }
       if (!e.shiftKey && i === stops.length - 1) {
         // leave through the trigger: focus it and let the browser take the next stop after it
-        const el = st.el; hideTip(); el.focus({ preventScroll: true });
+        const el = st.el;
+        hideTip();
+        el.focus({ preventScroll: true });
         return true;
       }
     }
@@ -629,7 +789,8 @@ function onMutate() {
   raf = 0;
   stopTriggers();
   if (!st.el || st.el.isConnected) return;
-  const sig = st.sig, old = st.el;
+  const sig = st.sig,
+    old = st.el;
   let again = null;
   if (old.id) {
     const byId = document.getElementById(old.id);
@@ -640,13 +801,24 @@ function onMutate() {
     // a card opened on an element that is not itself a trigger (the gate card, lib/gate-card.js) names its anchor:
     // a redraw that put the same anchor back moves the open card onto it, its content untouched
     const key = old.getAttribute && old.getAttribute('data-tip-anchor');
-    const same = key ? [...document.querySelectorAll('[data-tip-anchor]')].find((n) => n.getAttribute('data-tip-anchor') === key && visible(n)) : null;
-    if (same) { st.el = same; st.sig = sigOf(same); same.classList.add('tip-on'); position(); return; }
+    const same = key
+      ? [...document.querySelectorAll('[data-tip-anchor]')].find(
+          (n) => n.getAttribute('data-tip-anchor') === key && visible(n),
+        )
+      : null;
+    if (same) {
+      st.el = same;
+      st.sig = sigOf(same);
+      same.classList.add('tip-on');
+      position();
+      return;
+    }
     hideTip();
     return;
   }
   const keep = { pinned: st.pinned, via: st.via };
-  st.el = null; st.describedBy = null;
+  st.el = null;
+  st.describedBy = null;
   if (!openFor(again, keep)) hideTip();
 }
 
@@ -661,7 +833,9 @@ export function initTips() {
   document.addEventListener('click', onClick, true);
   document.addEventListener('scroll', onScroll, true);
   document.addEventListener('focusin', onFocusIn, true);
-  window.addEventListener('resize', () => { if (st.el) hideTip(); });
+  window.addEventListener('resize', () => {
+    if (st.el) hideTip();
+  });
   stopTriggers();
   new MutationObserver((list) => {
     if (list.every((m) => layer && layer.contains(m.target))) return;

@@ -60,7 +60,9 @@ const ANIM_MS = 450;
 const DRAG_PX = 3;
 
 /** The level a scale reads as on the Map: `'nb'` (neighbourhood) or `'st'` (street). */
-export function levelOf(s) { return s < LEVEL_NB ? 'nb' : 'st'; }
+export function levelOf(s) {
+  return s < LEVEL_NB ? 'nb' : 'st';
+}
 
 /**
  * A wheel event's delta in pixels: lines and pages converted, and shift + a
@@ -69,8 +71,12 @@ export function levelOf(s) { return s < LEVEL_NB ? 'nb' : 'st'; }
  */
 export function normaliseWheel(e, pageH = 800) {
   const unit = e.deltaMode === 1 ? LINE_PX : e.deltaMode === 2 ? pageH : 1;
-  let dx = (e.deltaX || 0) * unit, dy = (e.deltaY || 0) * unit;
-  if (e.shiftKey && !dx && dy && !(e.ctrlKey || e.metaKey)) { dx = dy; dy = 0; }
+  let dx = (e.deltaX || 0) * unit,
+    dy = (e.deltaY || 0) * unit;
+  if (e.shiftKey && !dx && dy && !(e.ctrlKey || e.metaKey)) {
+    dx = dy;
+    dy = 0;
+  }
   return { dx, dy };
 }
 
@@ -82,7 +88,9 @@ export function wheelFactor(dy) {
 }
 
 /** Whether scale `s` is at `stop` (within STOP_EPS). */
-export function atStop(stop, s) { return !!stop && Math.abs(s - stop.s) <= stop.s * STOP_EPS; }
+export function atStop(stop, s) {
+  return !!stop && Math.abs(s - stop.s) <= stop.s * STOP_EPS;
+}
 
 /** The next stop past `s` going `dir` (+1 in, −1 out), skipping one `s` is already at; null when none. */
 export function nextStop(stops, s, dir) {
@@ -98,10 +106,13 @@ export function nextStop(stops, s, dir) {
  */
 export function clampPan(tx, ty, s, box, w, h, margin = 120) {
   if (!box || !(box.w > 0) || !(box.h > 0) || !(w > 0) || !(h > 0)) return { tx, ty };
-  const mx = Math.min(margin, box.w * s, w / 2), my = Math.min(margin, box.h * s, h / 2);
+  const mx = Math.min(margin, box.w * s, w / 2),
+    my = Math.min(margin, box.h * s, h / 2);
   // the box's right edge never left of mx, its left edge never right of w − mx (and the same down)
-  const txMin = mx - (box.x + box.w) * s, txMax = w - mx - box.x * s;
-  const tyMin = my - (box.y + box.h) * s, tyMax = h - my - box.y * s;
+  const txMin = mx - (box.x + box.w) * s,
+    txMax = w - mx - box.x * s;
+  const tyMin = my - (box.y + box.h) * s,
+    tyMax = h - my - box.y * s;
   return { tx: Math.min(txMax, Math.max(txMin, tx)), ty: Math.min(tyMax, Math.max(tyMin, ty)) };
 }
 
@@ -114,7 +125,8 @@ export function settle(stops, from, to, skip = null) {
   const dir = to > from ? 1 : to < from ? -1 : 0;
   if (!dir) return { s: to, stop: null };
   const keep = (x) => x && x.s > 0 && !(skip && x.id === skip.id && Math.abs(x.s - skip.s) <= skip.s * STOP_EPS);
-  const hit = (stops || []).filter(keep)
+  const hit = (stops || [])
+    .filter(keep)
     .filter((x) => (dir > 0 ? x.s > from && x.s <= to : x.s < from && x.s >= to))
     .sort((a, b) => (dir > 0 ? a.s - b.s : b.s - a.s))[0];
   return hit ? { s: hit.s, stop: hit } : { s: to, stop: null };
@@ -156,18 +168,33 @@ export function attachCanvas(stage, world, opts = {}) {
   const maxS = () => Math.max(minS(), val(opts.max, MAX_SCALE));
   const clampS = (s) => Math.min(maxS(), Math.max(minS(), s));
   const rect = () => stage.getBoundingClientRect();
-  const centre = () => { const r = rect(); return { x: r.width / 2, y: r.height / 2 }; };
+  const centre = () => {
+    const r = rect();
+    return { x: r.width / 2, y: r.height / 2 };
+  };
   const stopsAt = (anchor) => {
     const list = opts.stops ? opts.stops(anchor || centre()) || [] : [];
-    return list.filter((x) => x && x.s > 0).map((x) => ({ ...x, s: clampS(x.s) })).sort((a, b) => a.s - b.s);
+    return list
+      .filter((x) => x && x.s > 0)
+      .map((x) => ({ ...x, s: clampS(x.s) }))
+      .sort((a, b) => a.s - b.s);
   };
 
   function apply(anim) {
     // the owner's world box stays partly on the stage, whatever moved it
     if (opts.bounds) {
       const r = rect();
-      const c = clampPan(st.tx, st.ty, st.s, opts.bounds(), r.width, r.height, opts.boundsMargin != null ? opts.boundsMargin : 120);
-      st.tx = c.tx; st.ty = c.ty;
+      const c = clampPan(
+        st.tx,
+        st.ty,
+        st.s,
+        opts.bounds(),
+        r.width,
+        r.height,
+        opts.boundsMargin != null ? opts.boundsMargin : 120,
+      );
+      st.tx = c.tx;
+      st.ty = c.ty;
     }
     if (anim) {
       world.classList.add('anim');
@@ -194,43 +221,70 @@ export function attachCanvas(stage, world, opts = {}) {
     if (!opts.snapTargets || st.s < val(opts.armFrom, 0)) return null;
     const r = rect();
     if (!r.height) return null;
-    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const cx = r.left + r.width / 2,
+      cy = r.top + r.height / 2;
     const cover = opts.snapCover != null ? opts.snapCover : SNAP_COVER;
     // the box the world will have once an animation lands, not the one mid-flight
     const k = st.s;
     for (const el of opts.snapTargets() || []) {
       const b = boxOf(el);
       if (!b) continue;
-      const left = r.left + st.tx + b.x * k, top = r.top + st.ty + b.y * k, w = b.w * k, h = b.h * k;
+      const left = r.left + st.tx + b.x * k,
+        top = r.top + st.ty + b.y * k,
+        w = b.w * k,
+        h = b.h * k;
       if (left <= cx && left + w >= cx && top <= cy && top + h >= cy && h >= cover * r.height) return el;
     }
     return null;
   }
   /** An element's box in world units, from its offsets up to the world (transforms on the way ignored). */
   function boxOf(el) {
-    let x = 0, y = 0, n = el;
-    while (n && n !== world) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
+    let x = 0,
+      y = 0,
+      n = el;
+    while (n && n !== world) {
+      x += n.offsetLeft;
+      y += n.offsetTop;
+      n = n.offsetParent;
+    }
     if (n !== world) return null;
     return { x, y, w: el.offsetWidth, h: el.offsetHeight };
   }
   function rearm() {
     const a = armedNow();
-    if (a !== armed) { armed = a; if (opts.onArm) opts.onArm(a); }
+    if (a !== armed) {
+      armed = a;
+      if (opts.onArm) opts.onArm(a);
+    }
   }
 
   /** Put the stage point (px, py) at scale ns without moving the world point under it. */
   function zoomTo(px, py, ns, anim) {
     ns = clampS(ns);
-    const wx = (px - st.tx) / st.s, wy = (py - st.ty) / st.s;
-    st.s = ns; st.tx = px - wx * ns; st.ty = py - wy * ns;
+    const wx = (px - st.tx) / st.s,
+      wy = (py - st.ty) / st.s;
+    st.s = ns;
+    st.tx = px - wx * ns;
+    st.ty = py - wy * ns;
     apply(anim);
   }
   /** Zoom by `factor` keeping the stage point (px, py) fixed — no stops, no gesture. */
-  function zoomAt(px, py, factor, anim) { zoomTo(px, py, st.s * factor, anim); }
+  function zoomAt(px, py, factor, anim) {
+    zoomTo(px, py, st.s * factor, anim);
+  }
 
   // ── gestures: one zoom gesture at a time, held by the first stop it crosses ──
   function begin(kind, anchor) {
-    if (!g) g = { kind, anchor, held: null, heldDir: 0, armedAt: armed, net: 0, from: stopsAt(anchor).find((x) => atStop(x, st.s)) || null };
+    if (!g)
+      g = {
+        kind,
+        anchor,
+        held: null,
+        heldDir: 0,
+        armedAt: armed,
+        net: 0,
+        from: stopsAt(anchor).find((x) => atStop(x, st.s)) || null,
+      };
     g.anchor = anchor;
     return g;
   }
@@ -242,13 +296,18 @@ export function attachCanvas(stage, world, opts = {}) {
     gs.net += Math.log(factor);
     if (gs.held) {
       if (dir === gs.heldDir) return;
-      gs.from = gs.held; gs.held = null; gs.heldDir = 0;
+      gs.from = gs.held;
+      gs.held = null;
+      gs.heldDir = 0;
     }
     const want = clampS(st.s * factor);
     // the stop the gesture began at (or was last held at, before it reversed) may be left
     const r = settle(stopsAt(gs.anchor), st.s, want, gs.from);
     gs.from = null;
-    if (r.stop) { gs.held = r.stop; gs.heldDir = dir; }
+    if (r.stop) {
+      gs.held = r.stop;
+      gs.heldDir = dir;
+    }
     zoomTo(px, py, r.s, false);
   }
   function endGesture(delay = 10) {
@@ -275,28 +334,43 @@ export function attachCanvas(stage, world, opts = {}) {
    * Past the last stop it zooms by KEY_STEP about the centre.
    */
   function zoomStep(dir, anim = true) {
-    if (dir > 0 && armed && opts.onSnap) { opts.onSnap(armed); return; }
+    if (dir > 0 && armed && opts.onSnap) {
+      opts.onSnap(armed);
+      return;
+    }
     const c = centre();
     const n = nextStop(stopsAt(c), st.s, dir);
     if (n) {
-      if (n.frame) n.frame(c, 'step'); else zoomTo(c.x, c.y, n.s, anim);
+      if (n.frame) n.frame(c, 'step');
+      else zoomTo(c.x, c.y, n.s, anim);
       if (opts.onStop) opts.onStop(n, 'step');
     } else zoomTo(c.x, c.y, st.s * (dir > 0 ? KEY_STEP : 1 / KEY_STEP), anim);
     clearTimeout(endT);
-    endT = setTimeout(() => { if (opts.onGestureEnd) opts.onGestureEnd(); }, anim ? ANIM_MS + 40 : 0);
+    endT = setTimeout(
+      () => {
+        if (opts.onGestureEnd) opts.onGestureEnd();
+      },
+      anim ? ANIM_MS + 40 : 0,
+    );
   }
   /** Zoom about the stage's centre by a factor, no stops (for owners that want a plain zoom). */
   function zoomBy(factor, anim = true) {
     const c = centre();
     zoomAt(c.x, c.y, factor, anim);
     clearTimeout(endT);
-    endT = setTimeout(() => { if (opts.onGestureEnd) opts.onGestureEnd(); }, anim ? ANIM_MS + 40 : 0);
+    endT = setTimeout(
+      () => {
+        if (opts.onGestureEnd) opts.onGestureEnd();
+      },
+      anim ? ANIM_MS + 40 : 0,
+    );
   }
   /** Centre the world point (x, y) at scale s. */
   function centerOn(x, y, s, anim) {
     const r = rect();
     st.s = clampS(s);
-    st.tx = r.width / 2 - x * st.s; st.ty = r.height / 2 - y * st.s;
+    st.tx = r.width / 2 - x * st.s;
+    st.ty = r.height / 2 - y * st.s;
     apply(anim);
   }
   /** Fit the world box into the stage, leaving `pad` px (and `top` more at the top), never above `max`. */
@@ -315,10 +389,13 @@ export function attachCanvas(stage, world, opts = {}) {
     return { x: (r.width / 2 - st.tx) / st.s, y: (r.height / 2 - st.ty) / st.s, w: r.width / st.s, h: r.height / st.s };
   }
   /** A stage point (px) in world units. */
-  function toWorld(px, py) { return { x: (px - st.tx) / st.s, y: (py - st.ty) / st.s }; }
+  function toWorld(px, py) {
+    return { x: (px - st.tx) / st.s, y: (py - st.ty) / st.s };
+  }
   /** An element's centre in world units. */
   function worldCenter(el) {
-    const r = rect(), b = el.getBoundingClientRect();
+    const r = rect(),
+      b = el.getBoundingClientRect();
     return { x: (b.left + b.width / 2 - r.left - st.tx) / st.s, y: (b.top + b.height / 2 - r.top - st.ty) / st.s };
   }
 
@@ -326,7 +403,10 @@ export function attachCanvas(stage, world, opts = {}) {
   function onDown(e) {
     if (e.button != null && e.button !== 0 && e.pointerType === 'mouse') return;
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (ptrs.size === 1) { dragged = false; downAt = { x: e.clientX, y: e.clientY }; }
+    if (ptrs.size === 1) {
+      dragged = false;
+      downAt = { x: e.clientX, y: e.clientY };
+    }
     if (ptrs.size === 2) {
       const [a, b] = [...ptrs.values()];
       pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) };
@@ -342,10 +422,18 @@ export function attachCanvas(stage, world, opts = {}) {
       if (!dragged && downAt && Math.abs(cur.x - downAt.x) + Math.abs(cur.y - downAt.y) > DRAG_PX) {
         dragged = true;
         // captured only once a drag starts, so a plain click still lands on what was clicked
-        try { stage.setPointerCapture(e.pointerId); } catch { /* the pointer already left */ }
+        try {
+          stage.setPointerCapture(e.pointerId);
+        } catch {
+          /* the pointer already left */
+        }
         stage.classList.add('drag');
       }
-      if (dragged) { st.tx += cur.x - prev.x; st.ty += cur.y - prev.y; apply(false); }
+      if (dragged) {
+        st.tx += cur.x - prev.x;
+        st.ty += cur.y - prev.y;
+        apply(false);
+      }
     } else if (ptrs.size === 2 && pinch) {
       const [a, b] = [...ptrs.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
@@ -360,13 +448,23 @@ export function attachCanvas(stage, world, opts = {}) {
     if (ptrs.size < 2) pinch = null;
     if (ptrs.size === 0) {
       stage.classList.remove('drag');
-      if (dragged) { suppressClick = true; setTimeout(() => { suppressClick = false; }, 0); endGesture(10); }
+      if (dragged) {
+        suppressClick = true;
+        setTimeout(() => {
+          suppressClick = false;
+        }, 0);
+        endGesture(10);
+      }
       downAt = null;
     }
   }
   // a drag ends in a click on whatever was under the pointer; it is not one
   function onClickCapture(e) {
-    if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; }
+    if (suppressClick) {
+      e.stopPropagation();
+      e.preventDefault();
+      suppressClick = false;
+    }
   }
 
   // ── wheel: plain scrolls pan, ⌘/Ctrl zooms ───────────────────────
@@ -379,20 +477,31 @@ export function attachCanvas(stage, world, opts = {}) {
     const r = rect();
     const { dx, dy } = normaliseWheel(e, r.height);
     if (e.ctrlKey || e.metaKey) gestureZoom('wheel', e.clientX - r.left, e.clientY - r.top, wheelFactor(dy));
-    else { st.tx -= dx; st.ty -= dy; apply(false); begin('wheel', { x: e.clientX - r.left, y: e.clientY - r.top }); }
+    else {
+      st.tx -= dx;
+      st.ty -= dy;
+      apply(false);
+      begin('wheel', { x: e.clientX - r.left, y: e.clientY - r.top });
+    }
     clearTimeout(wheelT);
     wheelT = setTimeout(() => endGesture(0), WHEEL_END_MS);
   }
   // ── Safari's trackpad pinch ─────────────────────────────────────
   let gScale = 1;
-  function onGestureStart(e) { e.preventDefault(); gScale = 1; }
+  function onGestureStart(e) {
+    e.preventDefault();
+    gScale = 1;
+  }
   function onGestureChange(e) {
     e.preventDefault();
     const r = rect();
     gestureZoom('gesture', e.clientX - r.left, e.clientY - r.top, e.scale / gScale);
     gScale = e.scale;
   }
-  function onGestureEnd(e) { e.preventDefault(); endGesture(10); }
+  function onGestureEnd(e) {
+    e.preventDefault();
+    endGesture(10);
+  }
 
   stage.addEventListener('pointerdown', onDown);
   stage.addEventListener('pointermove', onMove);
@@ -405,7 +514,9 @@ export function attachCanvas(stage, world, opts = {}) {
   stage.addEventListener('gestureend', onGestureEnd);
 
   function destroy() {
-    clearTimeout(wheelT); clearTimeout(animT); clearTimeout(endT);
+    clearTimeout(wheelT);
+    clearTimeout(animT);
+    clearTimeout(endT);
     stage.removeEventListener('pointerdown', onDown);
     stage.removeEventListener('pointermove', onMove);
     stage.removeEventListener('pointerup', onUp);
@@ -429,12 +540,29 @@ export function attachCanvas(stage, world, opts = {}) {
     stopAt: (anchor) => stopsAt(anchor).find((x) => atStop(x, st.s)) || null,
     /** True while a zoom or pan gesture is in progress. */
     inGesture: () => !!g,
-    set(tx, ty, s, anim) { st.tx = tx; st.ty = ty; st.s = clampS(s); apply(anim); },
+    set(tx, ty, s, anim) {
+      st.tx = tx;
+      st.ty = ty;
+      st.s = clampS(s);
+      apply(anim);
+    },
     /** Shift the world by (dx, dy) screen px without animating — a relayout keeping something in place. */
-    shift(dx, dy) { st.tx += dx; st.ty += dy; apply(false); },
+    shift(dx, dy) {
+      st.tx += dx;
+      st.ty += dy;
+      apply(false);
+    },
     /** Re-ask which target is armed (after the owner redrew what `snapTargets` returns). */
     rearm,
-    zoomAt, zoomTo, zoomBy, zoomStep, centerOn, fit, viewCenter, toWorld, worldCenter,
+    zoomAt,
+    zoomTo,
+    zoomBy,
+    zoomStep,
+    centerOn,
+    fit,
+    viewCenter,
+    toWorld,
+    worldCenter,
     destroy,
   };
 }

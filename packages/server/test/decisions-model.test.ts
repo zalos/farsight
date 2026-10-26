@@ -7,7 +7,15 @@ import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 (globalThis as any).window = (globalThis as any).window ?? globalThis;
-(globalThis as any).document = (globalThis as any).document ?? { addEventListener() {}, querySelector() { return null; }, querySelectorAll() { return []; } };
+(globalThis as any).document = (globalThis as any).document ?? {
+  addEventListener() {},
+  querySelector() {
+    return null;
+  },
+  querySelectorAll() {
+    return [];
+  },
+};
 const { indexDecisions } = await import(join(here, '..', 'public', 'app', 'lib', 'decisions.js'));
 
 test('decisions are indexed by every node they bear on, and by source and id', () => {
@@ -16,8 +24,14 @@ test('decisions are indexed by every node they bear on, and by source and id', (
     { repo: 'r', id: 'D2', declared: false, nodes: ['r::a'], sites: [{ path: 'x.ts', line: 3, symbol: 'FLAG' }] },
   ];
   const ix = indexDecisions(rows);
-  assert.deepEqual(ix.byNode.get('r::a').map((r: any) => r.id), ['D1', 'D2']);
-  assert.deepEqual(ix.byNode.get('r::b').map((r: any) => r.id), ['D1']);
+  assert.deepEqual(
+    ix.byNode.get('r::a').map((r: any) => r.id),
+    ['D1', 'D2'],
+  );
+  assert.deepEqual(
+    ix.byNode.get('r::b').map((r: any) => r.id),
+    ['D1'],
+  );
   assert.equal(ix.byId.get('r|D2').declared, false);
   assert.equal(ix.byNode.get('r::c'), undefined);
 });

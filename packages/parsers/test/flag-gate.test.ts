@@ -24,11 +24,21 @@ function tempRepo(files: Record<string, string>): string {
   return dir;
 }
 const ingest = (files: Record<string, string>): Promise<GraphFragment> =>
-  ingestRepo(tempRepo({ 'package.json': '{"name":"f"}', ...files }), { repoName: 'f', openapi: false, design: false, tests: false, stories: false, projects: false });
+  ingestRepo(tempRepo({ 'package.json': '{"name":"f"}', ...files }), {
+    repoName: 'f',
+    openapi: false,
+    design: false,
+    tests: false,
+    stories: false,
+    projects: false,
+  });
 const table = (g: GraphFragment, name: string): GraphNode => g.nodes.find((n) => n.id === `f::table::${name}`)!;
 const call = (g: GraphFragment, from: string, to: string): GraphEdge[] =>
   g.edges.filter((e) => e.kind === 'calls' && e.from.endsWith(`::${from}`) && e.to.endsWith(`::${to}`));
-const moves = (n: GraphNode) => n.lifecycle!.transitions.map((x) => `${x.from ?? '·'}>${x.to}@${x.by.split('::').pop()}/${x.via}${x.when ? `?${x.when}` : ''}`);
+const moves = (n: GraphNode) =>
+  n.lifecycle!.transitions.map(
+    (x) => `${x.from ?? '·'}>${x.to}@${x.by.split('::').pop()}/${x.via}${x.when ? `?${x.when}` : ''}`,
+  );
 
 const REPO = {
   'src/migrations.ts': [

@@ -11,14 +11,34 @@
 // a module-private WeakMap keyed by the session — never on the session itself.
 import { t } from '@farsight/core';
 import type {
-  WorkProvider, Capabilities, Session, SourceConfig, Secret, Schema, SchemaState, PullPage, Cursor, Scope,
-  WorkItem, WorkAction, Intent, ApplyResult, ProviderVerdict,
+  WorkProvider,
+  Capabilities,
+  Session,
+  SourceConfig,
+  Secret,
+  Schema,
+  SchemaState,
+  PullPage,
+  Cursor,
+  Scope,
+  WorkItem,
+  WorkAction,
+  Intent,
+  ApplyResult,
+  ProviderVerdict,
 } from '@farsight/work';
 import { createAzdoHttp, AzdoHttpError, type AzdoHttp, type Fetcher } from './http.js';
 import { authorizerFor, type AuthOptions } from './auth.js';
 import {
-  typeInfo, schemaType, schemaLinkTypes, fieldMap, mapWorkItem, mapComment, mapUpdates,
-  type TypeInfo, type MapContext,
+  typeInfo,
+  schemaType,
+  schemaLinkTypes,
+  fieldMap,
+  mapWorkItem,
+  mapComment,
+  mapUpdates,
+  type TypeInfo,
+  type MapContext,
 } from './map.js';
 import { buildPatch, type CurrentItem } from './patch.js';
 import { markdownToHtml } from './html.js';
@@ -81,14 +101,19 @@ export function normalizeOrg(org: string): string {
 const keyOf = (workId: string) => workId.slice(workId.lastIndexOf('::') + 2);
 const wiqlString = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
-interface CursorState { v: 1; p: Record<string, { t?: string; since: string }> }
+interface CursorState {
+  v: 1;
+  p: Record<string, { t?: string; since: string }>;
+}
 
 function readCursor(c: Cursor | null): CursorState | null {
   if (!c) return null;
   try {
     const j = JSON.parse(c);
     if (j && j.v === 1 && typeof j.p === 'object') return j as CursorState;
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
   throw new Error('the Azure DevOps cursor is not one this provider wrote — pull again from the start');
 }
 
@@ -109,14 +134,24 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
     if (!cfg.org) throw new Error(`source ${cfg.id}: an Azure DevOps source names its org URL (org)`);
     const org = normalizeOrg(cfg.org);
     const auth = await authorizerFor(cfg, secret, opts);
-    const http = createAzdoHttp({ base: org, authorization: auth.header, fetcher: opts.fetcher, sleep: opts.sleep, timeoutMs: opts.timeoutMs, now: opts.now });
+    const http = createAzdoHttp({
+      base: org,
+      authorization: auth.header,
+      fetcher: opts.fetcher,
+      sleep: opts.sleep,
+      timeoutMs: opts.timeoutMs,
+      now: opts.now,
+    });
 
     // version probe: the newest connectionData the server answers caps the rest
     let cd: any;
     let probed = '';
     for (const v of ['7.1-preview.1', '7.0-preview.1', '6.0-preview.1', '5.0-preview.1']) {
-      try { cd = (await http.request({ path: '/_apis/connectionData', apiVersion: v })).body; probed = v; break; }
-      catch (err) {
+      try {
+        cd = (await http.request({ path: '/_apis/connectionData', apiVersion: v })).body;
+        probed = v;
+        break;
+      } catch (err) {
         if (err instanceof AzdoHttpError && (err.status === 400 || err.status === 404)) continue;
         throw err;
       }
@@ -129,14 +164,27 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
 
     const projects = cfg.scope?.projects ?? [];
     if (!projects.length) throw new Error(`source ${cfg.id}: scope.projects names at least one Azure DevOps project`);
-    const internal: Internal = { http, cfg, org, apiVersion, commentsVersion, commentsMarkdown, projects, projectIds: new Map(), areaTokens: new Map() };
+    const internal: Internal = {
+      http,
+      cfg,
+      org,
+      apiVersion,
+      commentsVersion,
+      commentsMarkdown,
+      projects,
+      projectIds: new Map(),
+      areaTokens: new Map(),
+    };
 
     const u = cd.authenticatedUser ?? {};
     const session: Session = {
       sourceId: cfg.id,
       provider: 'azure-devops',
       endpoint: org,
-      user: { id: u.subjectDescriptor ?? u.id ?? 'unknown', name: u.providerDisplayName ?? u.customDisplayName ?? 'unknown' },
+      user: {
+        id: u.subjectDescriptor ?? u.id ?? 'unknown',
+        name: u.providerDisplayName ?? u.customDisplayName ?? 'unknown',
+      },
       apiVersion,
       commentsApiVersion: commentsVersion,
       deploymentType: cd.deploymentType,
@@ -152,23 +200,49 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
     const p = i.projects[0]!;
     let ids: number[];
     try {
-      const r = await i.http.request({ idempotent: true, method: 'POST', path: `/${encodeURIComponent(p)}/_apis/wit/wiql`, apiVersion: i.apiVersion, query: { $top: 5 },
-        body: { query: 'SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project ORDER BY [System.ChangedDate] DESC' } });
+      const r = await i.http.request({
+        idempotent: true,
+        method: 'POST',
+        path: `/${encodeURIComponent(p)}/_apis/wit/wiql`,
+        apiVersion: i.apiVersion,
+        query: { $top: 5 },
+        body: {
+          query:
+            'SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project ORDER BY [System.ChangedDate] DESC',
+        },
+      });
       ids = (r.body?.workItems ?? []).map((x: any) => x.id);
     } catch (err) {
-      if (err instanceof AzdoHttpError && (err.status === 401 || err.status === 403)) return { read: false, write: false, detail: err.message };
+      if (err instanceof AzdoHttpError && (err.status === 401 || err.status === 403))
+        return { read: false, write: false, detail: err.message };
       throw err;
     }
     if (!probeWrite) return { read: true, write: false, detail: w('work.azdo.cred.notChecked') };
     for (const id of ids) {
       try {
-        const cur = (await i.http.request({ path: `/_apis/wit/workitems/${id}`, apiVersion: i.apiVersion, query: { fields: 'System.Title' } })).body;
-        await i.http.request({ idempotent: true, method: 'PATCH', path: `/_apis/wit/workitems/${id}`, apiVersion: i.apiVersion, query: { validateOnly: true },
+        const cur = (
+          await i.http.request({
+            path: `/_apis/wit/workitems/${id}`,
+            apiVersion: i.apiVersion,
+            query: { fields: 'System.Title' },
+          })
+        ).body;
+        await i.http.request({
+          idempotent: true,
+          method: 'PATCH',
+          path: `/_apis/wit/workitems/${id}`,
+          apiVersion: i.apiVersion,
+          query: { validateOnly: true },
           contentType: 'application/json-patch+json',
-          body: [{ op: 'test', path: '/rev', value: cur.rev }, { op: 'replace', path: '/fields/System.Title', value: cur.fields?.['System.Title'] ?? '' }] });
+          body: [
+            { op: 'test', path: '/rev', value: cur.rev },
+            { op: 'replace', path: '/fields/System.Title', value: cur.fields?.['System.Title'] ?? '' },
+          ],
+        });
         return { read: true, write: true, detail: w('work.azdo.cred.canWrite', { key: id }) };
       } catch (err) {
-        if (err instanceof AzdoHttpError && (err.status === 401 || err.status === 403)) return { read: true, write: false, detail: w('work.azdo.cred.readOnly', { key: id }) };
+        if (err instanceof AzdoHttpError && (err.status === 401 || err.status === 403))
+          return { read: true, write: false, detail: w('work.azdo.cred.readOnly', { key: id }) };
         // a rule failure on this item (e.g. a state its type lacks) says nothing about the credential: try the next
       }
     }
@@ -213,28 +287,41 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
       for (const f of fm) {
         if (!f.canonical) continue;
         const list = fieldRefs.get(f.canonical) ?? [];
-        if (!list.includes(f.id)) (f.origin === 'declared' ? list.unshift(f.id) : list.push(f.id));
+        if (!list.includes(f.id)) f.origin === 'declared' ? list.unshift(f.id) : list.push(f.id);
         fieldRefs.set(f.canonical, list);
       }
       schemaFields = mergeFields(schemaFields, fm);
       // iterations of the project's default team → dates by path (best effort: a team may be unset)
       const imap = new Map<string, { start?: string; end?: string }>();
       try {
-        const iv = (await http.request({ path: `${P}/_apis/work/teamsettings/iterations`, apiVersion })).body?.value ?? [];
-        for (const it of iv) imap.set(it.path, { start: it.attributes?.startDate ?? undefined, end: it.attributes?.finishDate ?? undefined });
-      } catch { /* no default team settings: iterations keep their names only */ }
+        const iv =
+          (await http.request({ path: `${P}/_apis/work/teamsettings/iterations`, apiVersion })).body?.value ?? [];
+        for (const it of iv)
+          imap.set(it.path, {
+            start: it.attributes?.startDate ?? undefined,
+            end: it.attributes?.finishDate ?? undefined,
+          });
+      } catch {
+        /* no default team settings: iterations keep their names only */
+      }
       iterations.set(pr.name, imap);
       // area classification nodes → chained CSS tokens by area path
       const tokens = new Map<string, string>();
       try {
-        const root = (await http.request({ path: `${P}/_apis/wit/classificationnodes/Areas`, apiVersion, query: { $depth: 14 } })).body;
+        const root = (
+          await http.request({ path: `${P}/_apis/wit/classificationnodes/Areas`, apiVersion, query: { $depth: 14 } })
+        ).body;
         const walk = (n: any, path: string, chain: string) => {
-          const token = chain ? `${chain}:vstfs:///Classification/Node/${n.identifier}` : `vstfs:///Classification/Node/${n.identifier}`;
+          const token = chain
+            ? `${chain}:vstfs:///Classification/Node/${n.identifier}`
+            : `vstfs:///Classification/Node/${n.identifier}`;
           tokens.set(path, token);
           for (const c of n.children ?? []) walk(c, `${path}\\${c.name}`, token);
         };
         if (root?.identifier) walk(root, root.name, '');
-      } catch { /* permission check falls back to "could not ask" */ }
+      } catch {
+        /* permission check falls back to "could not ask" */
+      }
       i.areaTokens.set(pr.name, tokens);
     }
     const rel = (await http.request({ path: '/_apis/wit/workitemrelationtypes', apiVersion })).body?.value ?? [];
@@ -273,27 +360,52 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
     const missing: number[] = [];
     for (let k = 0; k < ids.length; k += BATCH) {
       const chunk = ids.slice(k, k + BATCH);
-      const r = await i.http.request({ idempotent: true, method: 'POST', path: '/_apis/wit/workitemsbatch', apiVersion: i.apiVersion,
-        body: { ids: chunk, $expand: 'relations', errorPolicy: 'omit' } });
+      const r = await i.http.request({
+        idempotent: true,
+        method: 'POST',
+        path: '/_apis/wit/workitemsbatch',
+        apiVersion: i.apiVersion,
+        body: { ids: chunk, $expand: 'relations', errorPolicy: 'omit' },
+      });
       const vals: any[] = r.body?.value ?? [];
-      vals.forEach((v, n) => { if (v) found.push(v); else missing.push(chunk[n]!); });
+      vals.forEach((v, n) => {
+        if (v) found.push(v);
+        else missing.push(chunk[n]!);
+      });
     }
     return { found, missing };
   }
 
   /** Drain the reporting feed to its end; returns the watermark and what moved. */
-  async function drainFeed(i: Internal, project: string, token: string | undefined): Promise<{ token: string; changed: Set<number>; deleted: Set<number> }> {
+  async function drainFeed(
+    i: Internal,
+    project: string,
+    token: string | undefined,
+  ): Promise<{ token: string; changed: Set<number>; deleted: Set<number> }> {
     const changed = new Set<number>();
     const deleted = new Set<number>();
     let t = token;
     for (let guard = 0; guard < 10_000; guard++) {
-      const r = await i.http.request({ path: `/${encodeURIComponent(project)}/_apis/wit/reporting/workitemrevisions`, apiVersion: i.apiVersion,
-        query: { continuationToken: t, includeDeleted: true, includeLatestOnly: true, fields: 'System.Id,System.IsDeleted,System.Rev' } });
+      const r = await i.http.request({
+        path: `/${encodeURIComponent(project)}/_apis/wit/reporting/workitemrevisions`,
+        apiVersion: i.apiVersion,
+        query: {
+          continuationToken: t,
+          includeDeleted: true,
+          includeLatestOnly: true,
+          fields: 'System.Id,System.IsDeleted,System.Rev',
+        },
+      });
       for (const v of r.body?.values ?? []) {
         const id = Number(v.id ?? v.fields?.['System.Id']);
         if (!Number.isFinite(id)) continue;
-        if (v.fields?.['System.IsDeleted'] === true) { deleted.add(id); changed.delete(id); }
-        else { changed.add(id); deleted.delete(id); }
+        if (v.fields?.['System.IsDeleted'] === true) {
+          deleted.add(id);
+          changed.delete(id);
+        } else {
+          changed.add(id);
+          deleted.delete(id);
+        }
       }
       if (r.body?.continuationToken) t = r.body.continuationToken;
       if (r.body?.isLastBatch !== false) break;
@@ -302,14 +414,26 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
     return { token: t, changed, deleted };
   }
 
-  async function wiqlIds(i: Internal, project: string, where: string, timePrecision = false): Promise<{ ids: number[]; asOf?: string }> {
+  async function wiqlIds(
+    i: Internal,
+    project: string,
+    where: string,
+    timePrecision = false,
+  ): Promise<{ ids: number[]; asOf?: string }> {
     const ids: number[] = [];
     let last = 0;
     let asOf: string | undefined;
     for (;;) {
-      const r = await i.http.request({ idempotent: true, method: 'POST', path: `/${encodeURIComponent(project)}/_apis/wit/wiql`, apiVersion: i.apiVersion,
+      const r = await i.http.request({
+        idempotent: true,
+        method: 'POST',
+        path: `/${encodeURIComponent(project)}/_apis/wit/wiql`,
+        apiVersion: i.apiVersion,
         query: { $top: WIQL_TOP, timePrecision: timePrecision || undefined },
-        body: { query: `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project${where} AND [System.Id] > ${last} ORDER BY [System.Id] ASC` } });
+        body: {
+          query: `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project${where} AND [System.Id] > ${last} ORDER BY [System.Id] ASC`,
+        },
+      });
       asOf ??= r.body?.asOf;
       const page: number[] = (r.body?.workItems ?? []).map((x: any) => x.id);
       ids.push(...page);
@@ -338,7 +462,11 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
       if (!was) {
         // the watermark first, then the ids: anything changed between the two is fetched twice, never missed
         let token: string | undefined;
-        try { token = (await drainFeed(i, project, undefined)).token; } catch (err) { if (isAuth(err)) throw err; }
+        try {
+          token = (await drainFeed(i, project, undefined)).token;
+        } catch (err) {
+          if (isAuth(err)) throw err;
+        }
         const q = await wiqlIds(i, project, areaClause(scope));
         ids = q.ids;
         if (q.asOf) since = q.asOf;
@@ -364,7 +492,12 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
         } else fedBy = 'wiql';
         if (fedBy === 'wiql') {
           // fallback: no hard deletes seen this way, and a query is the rate-limit trigger Microsoft names
-          const q = await wiqlIds(i, project, `${areaClause(scope)} AND [System.ChangedDate] > ${wiqlString(was.since)}`, true);
+          const q = await wiqlIds(
+            i,
+            project,
+            `${areaClause(scope)} AND [System.ChangedDate] > ${wiqlString(was.since)}`,
+            true,
+          );
           ids = q.ids;
           next.p[project] = { ...(keepToken ? { t: keepToken } : {}), since: q.asOf ?? since };
         }
@@ -394,12 +527,17 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
     for (let guard = 0; guard < 1000; guard++) {
       let r;
       try {
-        r = await i.http.request({ path: `/${encodeURIComponent(project)}/_apis/wit/workItems/${id}/comments`, apiVersion: i.commentsVersion,
-          query: { continuationToken: token, $top: 200 } });
+        r = await i.http.request({
+          path: `/${encodeURIComponent(project)}/_apis/wit/workItems/${id}/comments`,
+          apiVersion: i.commentsVersion,
+          query: { continuationToken: token, $top: 200 },
+        });
       } catch (err) {
         // a retired preview: fall back to 7.1-preview.4 (text only) once
         if (err instanceof AzdoHttpError && err.status === 400 && i.commentsVersion !== COMMENTS_71) {
-          i.commentsVersion = COMMENTS_71; i.commentsMarkdown = false; continue;
+          i.commentsVersion = COMMENTS_71;
+          i.commentsMarkdown = false;
+          continue;
         }
         throw err;
       }
@@ -413,7 +551,11 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
   async function updates(i: Internal, project: string, id: string): Promise<any[]> {
     const out: any[] = [];
     for (let skip = 0; ; skip += 200) {
-      const r = await i.http.request({ path: `/${encodeURIComponent(project)}/_apis/wit/workItems/${id}/updates`, apiVersion: i.apiVersion, query: { $top: 200, $skip: skip || undefined } });
+      const r = await i.http.request({
+        path: `/${encodeURIComponent(project)}/_apis/wit/workItems/${id}/updates`,
+        apiVersion: i.apiVersion,
+        query: { $top: 200, $skip: skip || undefined },
+      });
       const v: any[] = r.body?.value ?? [];
       out.push(...v);
       if (v.length < 200) break;
@@ -440,31 +582,46 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
   async function can(s: Session, item: WorkItem, action: WorkAction): Promise<ProviderVerdict> {
     const i = inner(s);
     const ctx = await ensureContext(s);
-    if (!AZDO_CAPABILITIES.actions!.includes(action)) return { allowed: false, reason: w('work.azdo.says.cannotCreate') };
+    if (!AZDO_CAPABILITIES.actions!.includes(action))
+      return { allowed: false, reason: w('work.azdo.says.cannotCreate') };
     const project = String((item.raw as any)?.fields?.['System.TeamProject'] ?? i.projects[0]);
     const ti = ctx.types.get(project)?.get(item.type.name);
     if (item.fields?.stateUndefinedByType || (ti && !ti.states.has(item.state.name))) {
-      return { allowed: false, reason: w('work.azdo.says.stateUndefined', { state: item.state.name, type: item.type.name }) };
+      return {
+        allowed: false,
+        reason: w('work.azdo.says.stateUndefined', { state: item.state.name, type: item.type.name }),
+      };
     }
     if (action === 'transition' && ti) {
       const reachable = (ti.transitions[item.state.name] ?? []).filter((x) => x !== item.state.name);
-      if (!reachable.length) return { allowed: false, reason: w('work.azdo.says.noMove', { type: item.type.name, state: item.state.name }) };
+      if (!reachable.length)
+        return { allowed: false, reason: w('work.azdo.says.noMove', { type: item.type.name, state: item.state.name }) };
     }
     const areaToken = i.areaTokens.get(project)?.get(item.area ?? project);
     if (!areaToken) return { allowed: true, reason: w('work.azdo.says.unasked', { why: 'the area is not known' }) };
     const evaluations = [{ securityNamespaceId: CSS_NAMESPACE, token: areaToken, permissions: CSS_WORK_ITEM_WRITE }];
     const pid = i.projectIds.get(project);
-    if (action === 'label' && pid) evaluations.push({ securityNamespaceId: TAGGING_NAMESPACE, token: `/${pid}`, permissions: TAGGING_CREATE });
+    if (action === 'label' && pid)
+      evaluations.push({ securityNamespaceId: TAGGING_NAMESPACE, token: `/${pid}`, permissions: TAGGING_CREATE });
     let values: boolean[];
     try {
-      const r = await i.http.request({ idempotent: true, method: 'POST', path: '/_apis/security/permissionevaluationbatch', apiVersion: i.apiVersion,
-        body: { alwaysAllowAdministrators: false, evaluations } });
+      const r = await i.http.request({
+        idempotent: true,
+        method: 'POST',
+        path: '/_apis/security/permissionevaluationbatch',
+        apiVersion: i.apiVersion,
+        body: { alwaysAllowAdministrators: false, evaluations },
+      });
       values = (r.body?.evaluations ?? []).map((e: any) => e.value === true);
     } catch (err) {
-      return { allowed: true, reason: w('work.azdo.says.unasked', { why: err instanceof AzdoHttpError ? err.reason : 'no answer' }) };
+      return {
+        allowed: true,
+        reason: w('work.azdo.says.unasked', { why: err instanceof AzdoHttpError ? err.reason : 'no answer' }),
+      };
     }
     if (!values[0]) return { allowed: false, reason: w('work.azdo.says.notOnArea', { area: item.area ?? project }) };
-    if (action === 'label' && values[1] === false) return { allowed: true, reason: w('work.azdo.says.existingTagsOnly') };
+    if (action === 'label' && values[1] === false)
+      return { allowed: true, reason: w('work.azdo.says.existingTagsOnly') };
     return { allowed: true, reason: w('work.azdo.says.yes') };
   }
 
@@ -477,28 +634,57 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
     let cur: any;
     try {
       cur = (await i.http.request({ path: `/_apis/wit/workitems/${id}`, apiVersion: i.apiVersion })).body;
-    } catch (err) { return failed(err); }
+    } catch (err) {
+      return failed(err);
+    }
     const base = intent.baseRevision;
     if (base !== undefined && String(cur.rev) !== String(base)) {
-      return { ok: false, conflict: true, revision: String(cur.rev), error: w('work.azdo.conflict', { base, now: cur.rev }) };
+      return {
+        ok: false,
+        conflict: true,
+        revision: String(cur.rev),
+        error: w('work.azdo.conflict', { base, now: cur.rev }),
+      };
     }
     const project = String(cur.fields?.['System.TeamProject']);
 
     if (intent.action === 'comment') {
       const text = String(intent.payload?.body ?? '');
       if (!text.trim()) return { ok: false, error: 'a comment has words' };
-      if (validateOnly) return { ok: true, revision: String(cur.rev), raw: { checked: 'revision only', note: w('work.azdo.dryRun.comment') } };
+      if (validateOnly)
+        return {
+          ok: true,
+          revision: String(cur.rev),
+          raw: { checked: 'revision only', note: w('work.azdo.dryRun.comment') },
+        };
       try {
         const md = i.commentsMarkdown;
-        const r = await i.http.request({ method: 'POST', path: `/${encodeURIComponent(project)}/_apis/wit/workItems/${id}/comments`,
-          apiVersion: i.commentsVersion, query: md ? { format: 'markdown' } : {},
-          body: { text: md ? text : markdownToHtml(text) } });
-        const after = (await i.http.request({ path: `/_apis/wit/workitems/${id}`, apiVersion: i.apiVersion, query: { fields: 'System.Rev' } })).body;
+        const r = await i.http.request({
+          method: 'POST',
+          path: `/${encodeURIComponent(project)}/_apis/wit/workItems/${id}/comments`,
+          apiVersion: i.commentsVersion,
+          query: md ? { format: 'markdown' } : {},
+          body: { text: md ? text : markdownToHtml(text) },
+        });
+        const after = (
+          await i.http.request({
+            path: `/_apis/wit/workitems/${id}`,
+            apiVersion: i.apiVersion,
+            query: { fields: 'System.Rev' },
+          })
+        ).body;
         return { ok: true, revision: String(after?.rev ?? ''), raw: r.body };
-      } catch (err) { return failed(err); }
+      } catch (err) {
+        return failed(err);
+      }
     }
 
-    const current: CurrentItem = { id, rev: cur.rev, fields: cur.fields ?? {}, multilineFieldsFormat: cur.multilineFieldsFormat };
+    const current: CurrentItem = {
+      id,
+      rev: cur.rev,
+      fields: cur.fields ?? {},
+      multilineFieldsFormat: cur.multilineFieldsFormat,
+    };
     const built = buildPatch(intent, current, {
       org: i.org,
       type: ctx.types.get(project)?.get(String(cur.fields?.['System.WorkItemType'])),
@@ -506,24 +692,45 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
     });
     if ('error' in built) return { ok: false, error: built.error };
     try {
-      const r = await i.http.request({ idempotent: validateOnly, method: 'PATCH', path: `/_apis/wit/workitems/${id}`, apiVersion: i.apiVersion,
-        query: validateOnly ? { validateOnly: true } : {}, contentType: 'application/json-patch+json', body: built.ops });
+      const r = await i.http.request({
+        idempotent: validateOnly,
+        method: 'PATCH',
+        path: `/_apis/wit/workitems/${id}`,
+        apiVersion: i.apiVersion,
+        query: validateOnly ? { validateOnly: true } : {},
+        contentType: 'application/json-patch+json',
+        body: built.ops,
+      });
       if (validateOnly) return { ok: true, revision: String(cur.rev), raw: { validateOnly: true, ops: built.ops } };
       // re-read after the write: the engine replaces the cached item with what the tracker now says
-      const after = (await i.http.request({ path: `/_apis/wit/workitems/${id}`, apiVersion: i.apiVersion, query: { fields: 'System.Rev' } })).body;
+      const after = (
+        await i.http.request({
+          path: `/_apis/wit/workitems/${id}`,
+          apiVersion: i.apiVersion,
+          query: { fields: 'System.Rev' },
+        })
+      ).body;
       return { ok: true, revision: String(after?.rev ?? r.body?.rev ?? ''), raw: r.body };
-    } catch (err) { return failed(err); }
+    } catch (err) {
+      return failed(err);
+    }
   }
 
   function failed(err: unknown): ApplyResult {
     if (err instanceof AzdoHttpError) {
       const conflict = err.status === 412 || err.typeKey === 'TestPatchOperationFailedException';
-      const r: ApplyResult = { ok: false, error: err.serverMessage ? `${err.reason}: ${err.serverMessage}` : err.message };
+      const r: ApplyResult = {
+        ok: false,
+        error: err.serverMessage ? `${err.reason}: ${err.serverMessage}` : err.message,
+      };
       if (conflict) r.conflict = true;
       r.raw = { status: err.status, typeKey: err.typeKey };
       return r;
     }
-    return { ok: false, error: (err as Error)?.name === 'AzdoAuthUnavailable' ? (err as Error).message : 'the write did not complete' };
+    return {
+      ok: false,
+      error: (err as Error)?.name === 'AzdoAuthUnavailable' ? (err as Error).message : 'the write did not complete',
+    };
   }
 
   return {
