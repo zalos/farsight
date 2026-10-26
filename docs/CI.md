@@ -204,11 +204,26 @@ pnpm exec playwright install chromium   # once per @playwright/test version
 pnpm e2e
 ```
 
-`pnpm lint:commits --message 'fix(cli): …'` tries a PR title against the `commits` job's rule; the `commit-msg` hook
-that `pnpm install` installs (`scripts/install-hooks.mjs`) runs the same check on every local commit.
-
 `node .claude/skills/e2e-playwright/scripts/check-e2e-setup.mjs` checks the e2e prerequisites before a run.
 Set `CI=1` to get the runner's Playwright behaviour: `test.only` fails the run, and a failed test is retried once.
+
+## Git hooks and existing installs
+
+`pnpm lint:commits --message 'fix(cli): …'` tries a PR title against the `commits` job's rule. On branches with
+`lefthook.yml`, `pnpm install` installs pre-commit's main-branch guard, formatting and lint, plus the commit-msg lint
+(`scripts/install-hooks.mjs`). A branch without `lefthook.yml` silently skips these checks: lefthook exits 0 without
+a warning. Such a branch relies on CI's `commits` check until it rebases. Never commit on main from a worktree whose
+branch predates lefthook.
+
+Linked worktrees share one hooks directory. Installing from a worktree embeds that worktree's absolute lefthook
+binary path in the shared hooks; removing the worktree breaks those hooks. After this PR merges, run `pnpm install`
+once in the primary checkout so the hooks point at a lasting path. Keep `no_auto_install: true` so commits cannot
+rewrite shared hooks. Never name Git LFS hooks (`pre-push`, `post-checkout`, `post-commit`, `post-merge`) in
+`lefthook.yml`, and never pop a `lefthook auto backup` stash entry.
+
+After pulling this change into an existing worktree, run `pnpm install --config.confirm-modules-purge=false` once.
+The changed `.npmrc` hoist settings make pnpm 9 ask to purge `node_modules`; without a terminal, it can silently exit
+0 without installing. The flag allows the purge and completes installation. CI's fresh install is unaffected.
 
 ## The perf suite
 

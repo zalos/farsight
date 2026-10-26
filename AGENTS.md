@@ -95,9 +95,16 @@ The Claude preview/dev server is defined in `.claude/launch.json` (name: `farsig
 ## Gotchas that have bitten before
 
 - **Lefthook and linked worktrees:** `lefthook.yml` must never name the Git LFS hooks (`pre-push`, `post-checkout`,
-  `post-commit`, `post-merge`). Keep `no_auto_install: true`: 37 worktrees share one hooks directory, so a commit
-  must not rewrite everybody's hooks. Never pop a `lefthook auto backup` stash entry; the stash stack is shared too.
+  `post-commit`, `post-merge`). Linked worktrees share one hooks directory; keep `no_auto_install: true` so a commit
+  cannot rewrite everybody's hooks. Never pop a `lefthook auto backup` stash entry; the stash stack is shared too.
   `pnpm install` explicitly installs the two managed hooks; pre-commit formats and re-stages eligible JS/TS files.
+  An install from a worktree embeds that worktree's absolute lefthook binary path in the shared hooks, which breaks
+  when the worktree is removed. After this PR merges, run `pnpm install` once in the primary checkout so the hooks
+  point at a lasting path. A branch without `lefthook.yml` silently skips the commit-msg lint and main-branch guard;
+  it relies on CI's `commits` check until it rebases. Never commit on main from a worktree whose branch predates lefthook.
+- **Changed pnpm hoisting:** after pulling this change into an existing worktree, run
+  `pnpm install --config.confirm-modules-purge=false` once. With changed `.npmrc` hoist settings, pnpm 9 asks to purge
+  `node_modules`; a non-TTY shell can silently exit 0 without installing. CI's fresh install is unaffected.
 - **The CI lint check:** `pnpm format:check` and `pnpm lint` run when runtime checks are selected; `style` PRs also
   prove AST equivalence against their merge base. The lead adds `lint` to required checks after its first green run.
 - **Restart the server after rebuilding packages** (and re-pack + `npm install -g` when a consumer runs the global `farsight`; `farsight status` / `farsight --version` / MCP `graph_overview` say which build is live and what to do). The running server holds compiled modules in memory but serves the viewer files from disk, so after a reinstall the browser runs NEW viewer code against OLD `/api/*` (symptoms: raw `journey.*` string keys, a journey band without `moments`) until the process is restarted; `/api/sync` will use stale parser code until restart too. Then reload the browser page (it caches `/graph` from load time).

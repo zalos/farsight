@@ -52,8 +52,8 @@ Conventional too (the `commit-msg` hook `pnpm install` installs runs `scripts/li
 CI runs the same over `base..head`), but they are **working notes**: commit often, stage by path (never `git add -A`),
 and do not rewrite or polish them — the squash folds them. A `Merge main into …` commit from `git merge main` is
 skipped by the lint. Never `git stash` (one stash stack serves every worktree; two agents' pops crossed once).
-Never pop a `lefthook auto backup` entry either. Keep `no_auto_install: true` in `lefthook.yml` (37 worktrees share
-the hooks directory), and never name the LFS hooks there: pre-push, post-checkout, post-commit or post-merge.
+Never pop a `lefthook auto backup` entry either. Linked worktrees share one hooks directory; keep
+`no_auto_install: true` in `lefthook.yml`, and never name the LFS hooks there: pre-push, post-checkout, post-commit or post-merge.
 
 ## Release PRs
 

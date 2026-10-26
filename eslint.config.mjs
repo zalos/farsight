@@ -76,7 +76,14 @@ export default defineConfig([
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ['packages/*/{src,test,scripts}/**', 'scripts/**', 'e2e/**', 'tools/**', '*.config.mjs'],
+    files: [
+      'packages/*/{src,test,scripts}/**',
+      'scripts/**',
+      'e2e/**',
+      'tools/**',
+      '.claude/**/*.{js,mjs}',
+      '*.config.mjs',
+    ],
     languageOptions: { globals: globals.node },
   },
   { files: ['**/*.cjs'], languageOptions: { sourceType: 'commonjs', globals: globals.node } },

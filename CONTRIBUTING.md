@@ -30,7 +30,8 @@ Thanks for helping. This page is the short version; the project contract (princi
   after the scope or a `BREAKING CHANGE:` footer marks a breaking change. No full stop, under 120 characters.
 - **Commits on the branch** are conventional too, but they are working notes — commit often, don't polish, the squash
   folds them. `pnpm install` installs lefthook's pre-commit and commit-msg hooks (`scripts/install-hooks.mjs`);
-  pre-commit rejects main and formats/re-stages eligible JS/TS before ESLint, while commit-msg checks the shape.
+  on branches with `lefthook.yml`, pre-commit rejects main and formats/re-stages eligible JS/TS before ESLint,
+  while commit-msg checks the shape. See [hook rollout and existing installs](docs/CI.md#git-hooks-and-existing-installs).
   Git LFS's hooks stay, and `.gitmessage` is the commit template; `pnpm lint:commits
   --message 'fix(cli): …'` tries a subject by hand.
 - Open the pull request against `main`. **CI must be green** before it is merged (`ci.yml`, see
@@ -64,9 +65,9 @@ Per-PR checklist:
 - [ ] For a `style:` PR, `pnpm verify:format -- <merge-base> <head>` reports no changed programs or
   added/deleted/renamed JS/TS files. Review comment warnings (`--strict-comments` makes them fail).
 
-Linked worktrees share hooks: never add Git LFS hook names (`pre-push`, `post-checkout`, `post-commit`, `post-merge`)
-to `lefthook.yml`; keep `no_auto_install: true` so one of the 37 worktrees cannot rewrite everyone's hooks at commit
-time. Never pop a `lefthook auto backup` stash entry. Run `pnpm install` in a new worktree before committing.
+Linked worktrees share one hooks directory: never add Git LFS hook names (`pre-push`, `post-checkout`, `post-commit`,
+`post-merge`) to `lefthook.yml`; keep `no_auto_install: true` so a commit cannot rewrite everyone's hooks.
+Never pop a `lefthook auto backup` stash entry. Run `pnpm install` in a new worktree before committing.
 
 ## Where things live
 
@@ -90,6 +91,10 @@ Initech; Ada Okafor, Ben Lindqvist, Pat Reviewer) and reserved names (`example.c
 `keychain:farsight/<provider>-<instance>`, never as a value in a file or an environment variable.
 
 ## Local config
+
+After pulling this change into an existing worktree, run `pnpm install --config.confirm-modules-purge=false` once.
+The `.npmrc` hoist settings require pnpm 9 to purge `node_modules`; in a non-TTY shell its confirmation can silently
+exit 0 without installing. The flag allows that purge and completes the install. CI's fresh install is unaffected.
 
 Local configuration stays on your disk and is gitignored; the repository carries a scrubbed example twin of each
 file. **Copy `X.example` to `X`, edit `X`, and never commit a value from it.**
