@@ -1,6 +1,6 @@
 ---
 name: git-pr-flow
-description: How a change reaches Farsight's main — a branch, Conventional Commits along the way, a pull request whose title is the one commit that lands (PRs are squash-merged; title = subject, body = message), CI's six required checks (affected checks · validate · e2e · echo-package · secrets · commits), and `gh pr merge --squash`. Loads when committing, writing a PR title or body, merging a PR, opening a release PR, or when a merge or a check is refused.
+description: How a change reaches Farsight's main — a branch, Conventional Commits along the way, a pull request whose title is the one commit that lands (PRs are squash-merged; title = subject, body = message), CI's seven required checks after lint's first green run (affected checks · lint · validate · e2e · echo-package · secrets · commits), and `gh pr merge --squash`. Loads when committing, writing a PR title or body, merging a PR, opening a release PR, or when a merge or a check is refused.
 allowed-tools: Bash Read Grep
 ---
 
@@ -15,13 +15,20 @@ line `scripts/changelog.mjs` prints in `CHANGELOG.md` and the release notes. Eve
 ```sh
 git switch -c feat/<what>                       # feat/ fix/ docs/ chore/ — never work on main
 # … commit as you go: type(scope): what changed — the commit-msg hook checks the shape
+pnpm format:check && pnpm lint                  # formatting + new correctness errors
+pnpm verify:format -- <merge-base> <head>       # style PRs only: no changed programs
 pnpm build && pnpm typecheck && pnpm -r test && pnpm lint:strings && pnpm e2e   # exactly what CI runs
 pnpm lint:commits --message 'feat(server): the title you will give the PR'      # the title is the commit
 git push -u origin HEAD
 gh pr create --base main --title 'feat(server): …' --body-file <body.md>        # body = .github/PULL_REQUEST_TEMPLATE.md
-gh pr checks <n> --watch                        # affected checks · validate · e2e · echo-package · secrets · commits, all required
+gh pr checks <n> --watch                        # affected checks · lint · validate · e2e · echo-package · secrets · commits
 gh pr merge <n> --squash                        # keep the PR title; the branch is deleted on merge
 ```
+
+The lead makes `lint` required after its first green run; until then the six existing required checks stay in force.
+Run affected checks from `docs/CI.md`. Every PR checks formatting/lint and its exact title; style PRs also prove AST
+equivalence and remove only their area's temporary `.prettierignore` entry. `pnpm lint:report` includes warnings;
+after fixing frozen errors deliberately, `pnpm lint --prune-suppressions` updates their baseline.
 
 ## The title (the rule CI's `commits` job enforces)
 
@@ -45,6 +52,8 @@ Conventional too (the `commit-msg` hook `pnpm install` installs runs `scripts/li
 CI runs the same over `base..head`), but they are **working notes**: commit often, stage by path (never `git add -A`),
 and do not rewrite or polish them — the squash folds them. A `Merge main into …` commit from `git merge main` is
 skipped by the lint. Never `git stash` (one stash stack serves every worktree; two agents' pops crossed once).
+Never pop a `lefthook auto backup` entry either. Keep `no_auto_install: true` in `lefthook.yml` (37 worktrees share
+the hooks directory), and never name the LFS hooks there: pre-push, post-checkout, post-commit or post-merge.
 
 ## Release PRs
 

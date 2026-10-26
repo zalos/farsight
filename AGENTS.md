@@ -55,6 +55,11 @@ pnpm install && pnpm build          # build all packages (tsc, topological)
 pnpm -r typecheck                   # typecheck everything
 pnpm -r test                        # node --test suites (build first — tests import dist/)
 pnpm lint:strings                   # viewer string/symbol grammar gate
+pnpm format                         # format eligible JS/TS only; remove a temporary ignore line in its style PR
+pnpm format:check                   # Prettier (JS/TS only; .prettierignore lists areas awaiting style PRs)
+pnpm lint                          # ESLint errors; existing violations frozen in eslint-suppressions.json
+pnpm lint:report                   # include structure warnings; prune fixed debt with pnpm lint --prune-suppressions
+pnpm verify:format -- origin/main   # style PRs: prove changed JS/TS programs are AST-equivalent
 pnpm e2e                            # Playwright e2e (build first): real `serve` on a fixture graph at :4510 + the MCP data-flow spec (:4511); stamps e2e/test-results/results.json, which the dogfood `tests.e2e` block reads. No MSW (ADR 8) — faults via page.route; see .claude/skills/e2e-playwright
 node packages/cli/dist/cli.js --version                  # which build: version · built · commit (also MCP graph_overview, /api/version, the HUD sync-chip tooltip)
 node packages/cli/dist/cli.js status [--port 4477]       # is anything out of date: installed build vs the server on the port vs the build that wrote the graph, + the check/update/restart/reingest steps (exit 1 when action is needed); the same recipe ends MCP graph_overview, rides on /api/version as `install`/`currency`, and puts RESTART on the HUD sync chip
@@ -89,6 +94,12 @@ The Claude preview/dev server is defined in `.claude/launch.json` (name: `farsig
 
 ## Gotchas that have bitten before
 
+- **Lefthook and linked worktrees:** `lefthook.yml` must never name the Git LFS hooks (`pre-push`, `post-checkout`,
+  `post-commit`, `post-merge`). Keep `no_auto_install: true`: 37 worktrees share one hooks directory, so a commit
+  must not rewrite everybody's hooks. Never pop a `lefthook auto backup` stash entry; the stash stack is shared too.
+  `pnpm install` explicitly installs the two managed hooks; pre-commit formats and re-stages eligible JS/TS files.
+- **The CI lint check:** `pnpm format:check` and `pnpm lint` run when runtime checks are selected; `style` PRs also
+  prove AST equivalence against their merge base. The lead adds `lint` to required checks after its first green run.
 - **Restart the server after rebuilding packages** (and re-pack + `npm install -g` when a consumer runs the global `farsight`; `farsight status` / `farsight --version` / MCP `graph_overview` say which build is live and what to do). The running server holds compiled modules in memory but serves the viewer files from disk, so after a reinstall the browser runs NEW viewer code against OLD `/api/*` (symptoms: raw `journey.*` string keys, a journey band without `moments`) until the process is restarted; `/api/sync` will use stale parser code until restart too. Then reload the browser page (it caches `/graph` from load time).
 - **A machine with two Node prefixes has two global `farsight` installs** (say, the default shell's Node and a separate Node 24 runtime). `npm install -g` updates only the prefix of the `node` on PATH, so after a pack run it under **both** (`which -a farsight` to check), or a workspace whose `.mcp.json` resolves the other prefix keeps a weeks-old CLI while `farsight --version` in your shell looks current.
 - **To see a viewer change, run `node packages/cli/dist/cli.js serve` from the workspace — never the global `farsight serve`**, which bundles its own copy of `public/app` and quietly serves old viewer files. This has produced false negatives that were believed for a while.
