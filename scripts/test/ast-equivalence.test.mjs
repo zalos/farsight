@@ -18,6 +18,9 @@ const same = [
   ['import spacing', "import{a}from'm'", "import { a } from 'm';"],
   ['stray semicolons', 'const x = 1;', ';const x = 1;;;'],
   ['numeric separators', 'const x = 1_000;', 'const x = 1000;'],
+  ['logical OR regrouping', 'a || b || (c || d);', 'a || b || c || d;'],
+  ['logical AND regrouping', '(a && b) && c;', 'a && (b && c);'],
+  ['nullish regrouping', 'a ?? (b ?? c);', 'a ?? b ?? c;'],
 ];
 
 const different = [
@@ -31,6 +34,17 @@ const different = [
   ['automatic semicolon insertion', 'a\n(b)', 'a;\n(b)'],
   ['added braces', 'if (a) b();', 'if (a) { b(); }'],
   ['loop declaration kind', 'for (const x of xs) f(x);', 'for (let x of xs) f(x);'],
+  ['mixed logical grouping', '(a || b) && c;', 'a || b && c;'],
+  ['addition grouping', 'a + (b + c);', 'a + b + c;'],
+  ['logical operator boundary', 'a || (b && c);', '(a || b) && c;'],
+  ['nullish operator boundary', 'a ?? (b || c);', '(a ?? b) || c;'],
+  ['logical operand order', 'a || b || c;', 'a || c || b;'],
+  ['subtraction grouping', '(a - b) - c;', 'a - (b - c);'],
+  ['multiplication grouping', 'a * (b * c);', 'a * b * c;'],
+  ['comparison grouping', '(a < b) < c;', 'a < (b < c);'],
+  ['bitwise OR grouping', 'a | (b | c);', 'a | b | c;'],
+  ['bitwise AND grouping', 'a & (b & c);', 'a & b & c;'],
+  ['bitwise XOR grouping', 'a ^ (b ^ c);', 'a ^ b ^ c;'],
 ];
 
 for (const [name, before, after] of same) {

@@ -38,6 +38,21 @@ export function shape(path, text) {
       case K.RegularExpressionLiteral: {
         const i = n.text.lastIndexOf('/'); out.push('R:' + n.text.slice(0, i + 1) + [...n.text.slice(i + 1)].sort().join('')); return;
       }
+      case K.BinaryExpression: {
+        const operator = n.operatorToken.kind;
+        if (operator !== K.BarBarToken && operator !== K.AmpersandAmpersandToken && operator !== K.QuestionQuestionToken) break;
+        // Only these same-operator chains preserve operand order and short-circuiting across regrouping.
+        out.push('(LogicalChain:' + K[operator]);
+        const operand = child => {
+          while (child.kind === K.ParenthesizedExpression) child = child.expression;
+          if (child.kind === K.BinaryExpression && child.operatorToken.kind === operator) {
+            operand(child.left); operand(child.right);
+          } else visit(child);
+        };
+        operand(n);
+        out.push(')');
+        return;
+      }
     }
     // Flags that carry meaning but are not child nodes: let/const/using, an optional chain's extent, namespaces.
     const flags = n.flags & FLAGS;
