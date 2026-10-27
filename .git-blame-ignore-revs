@@ -1,0 +1,8 @@
+# style(sentinel): format with Prettier (#201)
+b14394571c21ee6014b25d01f697ab68cb6eb2cd
+
+# style(scripts): format with Prettier (#204)
+9d108e34e2263e3a16019e3a0f2e63a287604d73
+
+# style: format the remaining packages with Prettier (#206)
+b32b70e578619bb710c77ce194d02fa1ae961b6e
