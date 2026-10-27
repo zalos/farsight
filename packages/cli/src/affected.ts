@@ -16,13 +16,12 @@ import {
   setFreshnessMeta,
   journeyTree,
   affectedRange,
-  countedText,
   readinessCsvRows,
   buildLine,
   t,
   unknownStorylineText,
 } from '@farsight/core';
-import type { AffectedV1, TestsMatrixIdentity, Readiness } from '@farsight/core';
+import type { AffectedV1, TestsMatrixIdentity } from '@farsight/core';
 import {
   loadCodeHostSources,
   openGitHub,
