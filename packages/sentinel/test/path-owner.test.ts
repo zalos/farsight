@@ -3,27 +3,21 @@ import { pathOwnerFixture } from './path-owner-helpers.ts';
 // producer authority is fabricated. Source files are removed before preparation and later execution.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync, linkSync, chmodSync } from 'node:fs';
+import { writeFileSync, symlinkSync, linkSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { commitRepo, scratch, needsStore } from './snapshot-helpers.ts';
+import { scratch, needsStore } from './snapshot-helpers.ts';
 import { scratchUnder, removeScratch } from './lease-helpers.ts';
-import { PATHS_APP } from './paths-fixtures.ts';
 import { openStore } from '../dist/store/index.js';
-import { initWorkspace } from '../dist/cli/init.js';
 import {
-  workspaceOf,
   adoptWorkspaceSettings,
   adoptedPolicy,
-  promoteRulePack,
   prepareWorkspacePaths,
   runPlan,
   fullReportIn,
   previewReport,
   followWorkspaceRun,
 } from '../dist/service/local.js';
-import { planWorkspaceCanonical, executeRun } from '../dist/service/canonical.js';
-import { builtinPackDir } from '../dist/service/package-paths.js';
 import { loadPlan } from '../dist/execution/plans.js';
 import { readPathRequestFile } from '../dist/service/path-request-file.js';
 import { preparePathTask, acceptPathTask } from '../dist/service/path-task.js';

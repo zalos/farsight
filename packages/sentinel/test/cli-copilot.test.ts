@@ -16,14 +16,9 @@ import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { connect } from 'node:net';
 import { scratch } from './snapshot-helpers.ts';
-import {
-  renderNativeCopilotWire,
-  NativeCopilotDecoder,
-  NativeCopilotStderrClassifier,
-} from '../dist/review/providers/cli-copilot-wire.js';
+import { renderNativeCopilotWire, NativeCopilotStderrClassifier } from '../dist/review/providers/cli-copilot-wire.js';
 import {
   COPILOT_NATIVE_PROFILE,
-  qualifyNativeCopilot,
   qualifyInstalledNativeCopilot,
   nativeCopilotSetup,
   cleanupNativeCopilotSetup,
@@ -31,8 +26,6 @@ import {
   projectNativeCopilotSelector,
   readNativeCopilotSelector,
 } from '../dist/review/providers/cli-copilot-profile.js';
-import { NativeCopilotError, copilotFailureEvent } from '../dist/review/providers/errors.js';
-import { ModelCallError } from '../dist/review/providers/broker.js';
 import { nativeCopilotCall, copilotInvocationArguments } from '../dist/review/providers/cli-copilot-call.js';
 import { openNativeCopilotProxy, nativeCopilotClientHello } from '../dist/review/providers/cli-copilot-proxy.js';
 import { parseSettings, effectivePolicy } from '../dist/policy/settings.js';
@@ -41,7 +34,6 @@ import { canonicalDigest } from '../dist/policy/digest.js';
 import { DEFAULT_SETTINGS } from '../dist/policy/settings.js';
 import { BudgetLedger } from '../dist/review/providers/budget.js';
 import { ModelBroker, envelopeIntent } from '../dist/review/providers/broker.js';
-import { ReceiptBook } from '../dist/policy/receipts.js';
 import { resolveReviewModel } from '../dist/review/providers/selection.js';
 const model = COPILOT_NATIVE_PROFILE.model,
   di = 'sha256:' + 'a'.repeat(64),
@@ -228,7 +220,7 @@ const local = process.env.SENTINEL_COPILOT_CODE === '1';
 test(
   'actual existing Copilot private config and fixed keychain/trust reads grant no general HOME access or writable code; mutated closure refuses',
   { skip: !local && 'explicit existing pinned Copilot code qualification; no authentication' },
-  async (t) => {
+  async (_t) => {
     assert.equal(process.platform, 'darwin');
     assert.equal(process.arch, 'arm64');
     const timing = { deadlineAt: Date.now() + 20000 },

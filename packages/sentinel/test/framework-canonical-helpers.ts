@@ -1,6 +1,6 @@
 // Genuine adopted owner settings and promoted installed packs; actual capture/parse/inventory and Coordinator.
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openStore } from '../dist/store/index.js';
 import { initWorkspace } from '../dist/cli/init.js';

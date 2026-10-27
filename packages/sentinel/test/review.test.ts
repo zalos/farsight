@@ -196,7 +196,7 @@ test('partitions come from the captured inventory alone: sorted, bounded, stable
 
 test('the broker serves exact captured bytes within its scope, and refuses everything else as data', async () => {
   const f = files(SRC);
-  const withheld = (p: string, s: { startByte: number }) => (p === 'src/b.ts' ? 'withhold' : 'allow') as const;
+  const withheld = (p: string, _s: { startByte: number }) => (p === 'src/b.ts' ? 'withhold' : 'allow') as const;
   const b = new EvidenceBroker(
     { snapshotId: 'snap-1', sourceId: 'web', files: f.members, rules: [], paths: [] },
     LIMITS,

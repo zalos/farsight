@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, readdirSync, writeFileSync, renameSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from '../dist/cli/args.js';
 import { openStore } from '../dist/store/index.js';

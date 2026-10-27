@@ -4,12 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import { join } from 'node:path';
-import {
-  watchOwnedCgroupMemory,
-  cgroupMemoryIo,
-  CGROUP_MEMORY_BOUNDS,
-  cgroupMemoryFailure,
-} from '../dist/execution/cgroup-memory.js';
+import { cgroupMemoryIo, CGROUP_MEMORY_BOUNDS, cgroupMemoryFailure } from '../dist/execution/cgroup-memory.js';
 import { ContainerBackend, LABELS } from '../dist/execution/isolation.js';
 import { currentHost } from '../dist/store/runtime.js';
 
