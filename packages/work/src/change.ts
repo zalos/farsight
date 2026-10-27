@@ -143,6 +143,7 @@ export async function readChange(o: {
     } catch (err) {
       throw new Error(
         `could not read pull request #${n} of ${repo}: ${(err as Error).message}${o.viaGh ? '' : ' (a private repository needs a credential: auth.secret on the code-host source, or --via gh)'}`,
+        { cause: err },
       );
     }
     let history: { sha: string; at: string }[];
@@ -191,6 +192,11 @@ export async function readChange(o: {
     const history = logRows(git(o.root, ['log', '-n', '500', '--format=%H%x09%cI', to]));
     return { range: { kind: 'commits', from, to }, commits, files, history };
   } catch (err) {
-    throw new Error(`git could not read ${from}..${to} in ${o.root}: ${String((err as Error).message).split('\n')[0]}`);
+    throw new Error(
+      `git could not read ${from}..${to} in ${o.root}: ${String((err as Error).message).split('\n')[0]}`,
+      {
+        cause: err,
+      },
+    );
   }
 }
