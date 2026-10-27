@@ -70,7 +70,10 @@ export interface ReportStructuralPaths {
 }
 
 /** A readable label captured from pinned context, so a recipient never looks one up in today's graph. */
-export type PlaceLabel = RegisterText;
+export interface PlaceLabel extends RegisterText {
+  business: RegisterText['business'];
+  code: RegisterText['code'];
+}
 
 /** @maxItems 512 */
 export type ScreenIds = NodeId[];
