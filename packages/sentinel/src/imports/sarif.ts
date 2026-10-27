@@ -527,6 +527,7 @@ export function classifyUri(uri: string): { status: 'relative' | 'absolute' | 'r
     } catch {
       return { status: 'rejected', path: null };
     }
+    // eslint-disable-next-line no-control-regex -- Decoded SARIF path segments must reject control characters before joining.
     if (!s || s === '.' || s === '..' || s.includes('/') || s.includes('\\') || /[\u0000-\u001f\u007f]/.test(s))
       return { status: 'rejected', path: null };
     segments.push(s);

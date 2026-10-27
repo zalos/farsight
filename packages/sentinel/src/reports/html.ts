@@ -9,13 +9,16 @@ import { inspectionText } from './inspection.js';
 import { COUNT_ORDER, countText, defineOf, wordOf, labelKey } from './words.js';
 
 export function esc(text: string): string {
-  return text
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  return (
+    text
+      // eslint-disable-next-line no-control-regex -- Strip nonprinting controls while preserving HTML text whitespace.
+      .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+  );
 }
 const anchor = (prefix: string, id: string) => `${prefix}-${id.replace(/[^A-Za-z0-9_-]/g, '-')}`;
 

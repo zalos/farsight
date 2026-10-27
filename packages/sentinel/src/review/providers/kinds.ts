@@ -55,6 +55,7 @@ const object = (v: unknown): Record<string, unknown> | null =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 const count = (v: unknown): number | null => (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null);
 const modelName = (v: unknown): string | null =>
+  // eslint-disable-next-line no-control-regex -- Provider model names must exclude control characters.
   typeof v === 'string' && v.length > 0 && v.length <= MAX_MODEL && !/[\u0000-\u001f\u007f]/.test(v) ? v : null;
 
 /** The one request body for a chat call. */

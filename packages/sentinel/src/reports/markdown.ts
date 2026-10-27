@@ -8,16 +8,20 @@ import { COUNT_ORDER, countText, wordOf, defineOf, labelKey } from './words.js';
 
 /** Escapes Markdown control characters and strips anything that could start HTML. */
 export function md(text: string): string {
-  return text
-    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')
-    .replace(/([\\`*_{}[\]()#+\-.!|>~])/g, '\\$1')
-    .replace(/</g, '&lt;')
-    .replace(/\r?\n/g, ' ');
+  return (
+    text
+      // eslint-disable-next-line no-control-regex -- Strip controls that could alter Markdown rendering, preserving tabs and newlines.
+      .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')
+      .replace(/([\\`*_{}[\]()#+\-.!|>~])/g, '\\$1')
+      .replace(/</g, '&lt;')
+      .replace(/\r?\n/g, ' ')
+  );
 }
 
 function fence(text: string): string {
   const longest = Math.max(2, ...[...text.matchAll(/`+/g)].map((m) => m[0].length));
   const f = '`'.repeat(longest + 1);
+  // eslint-disable-next-line no-control-regex -- Fenced report text strips nonprinting controls while retaining tabs and newlines.
   return `${f}text\n${text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')}\n${f}`;
 }
 

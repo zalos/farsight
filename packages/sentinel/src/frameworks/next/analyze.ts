@@ -158,6 +158,7 @@ const byPath = <T extends { relativePath: string }>(a: T, b: T) =>
 
 /** A frontier scope: `<sourceId>:<path>`, or a digest of the path when it holds characters a scope may not. */
 const scope = (sourceId: string, path: string) =>
+  // eslint-disable-next-line no-control-regex -- Hash paths containing controls or line separators instead of exposing them in scope labels.
   /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(path)
     ? `${sourceId}:#${sha(path).slice(7, 31)}`
     : `${sourceId}:${path}`;

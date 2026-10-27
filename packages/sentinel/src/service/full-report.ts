@@ -624,7 +624,7 @@ export function tokensOf(text: string): string[] {
     add(t);
     add(t.replace(/\.[A-Za-z0-9]{1,8}$/, ''));
   }
-  for (const t of text.split(/[\s"'`=,;#(){}\[\]<>]+/)) add(t);
+  for (const t of text.split(/[\s"'`=,;#(){}[\]<>]+/)) add(t);
   for (const t of text.split(/[^A-Za-z0-9]+/)) add(t, MIN_RUN);
   return [...out];
 }
